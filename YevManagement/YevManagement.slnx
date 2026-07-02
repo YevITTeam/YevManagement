@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Yev.API/Yev.API.csproj" />
+  <Project Path="Yev.DTOs/Yev.DTOs.csproj" Id="7e41f97a-ef03-4ac9-9c05-75c89afe01f2" />
+  <Project Path="Yev.Models/Yev.Entities.csproj" />
+  <Project Path="Yev.Repositories/Yev.Repositories.csproj" />
+  <Project Path="Yev.Services/Yev.Services.csproj" />
+</Solution>
