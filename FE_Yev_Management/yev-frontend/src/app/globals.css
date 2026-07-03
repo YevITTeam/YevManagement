@@ -3,7 +3,9 @@
 
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background-color: #F8FAFC;
+  color: #0F172A;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   font-family: Arial, Helvetica, sans-serif;
 }
