@@ -5,7 +5,7 @@ import "./globals.css";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-import Header from "@/components/layout/Header"; 
+import Header from "@/modules/common/components/Header";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,23 +22,23 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <body className={`${inter.className} bg-gray-50 min-h-screen flex flex-col`}>
-        
+
         <Header />
 
         <main className="flex-grow">
           {children}
         </main>
 
-        <ToastContainer 
-          position="top-right" 
-          autoClose={3000} 
+        <ToastContainer
+          position="top-right"
+          autoClose={3000}
           hideProgressBar={false}
           newestOnTop={true}
           closeOnClick
           pauseOnHover
           theme="light"
         />
-        
+
       </body>
     </html>
   );
