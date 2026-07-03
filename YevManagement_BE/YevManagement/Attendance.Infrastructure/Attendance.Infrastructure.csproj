@@ -6,4 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Attendance.Application\Attendance.Application.csproj" />
+    <ProjectReference Include="..\Attendance.Domain\Attendance.Domain.csproj" />
+    <ProjectReference Include="..\Shared.Infrastructure\Shared.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>

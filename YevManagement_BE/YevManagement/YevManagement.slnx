@@ -1,3 +1,30 @@
 <Solution>
-  <Project Path="Api/Api.csproj" />
+  <Folder Name="/src/" />
+  <Folder Name="/src/host/">
+    <Project Path="CompanySystem.HostApi/CompanySystem.HostApi.csproj" Id="f00f50f5-84bd-4dca-a18f-b665f9d51598" />
+  </Folder>
+  <Folder Name="/src/modules/" />
+  <Folder Name="/src/modules/Asset/">
+    <Project Path="Asset.Api/Asset.Api.csproj" Id="1b33ecea-b1f4-4de8-ae0a-96e7ecb8fbb9" />
+    <Project Path="Asset.Application/Asset.Application.csproj" Id="aa9d1479-7358-4719-b8a0-546e4860110a" />
+    <Project Path="Asset.Domain/Asset.Domain.csproj" Id="9491b217-6e7d-40b7-9493-132a93cc7b0a" />
+    <Project Path="Asset.Infrastructure/Asset.Infrastructure.csproj" Id="a7b39778-92b3-4048-b207-40a00ea25efe" />
+  </Folder>
+  <Folder Name="/src/modules/Attendance/">
+    <Project Path="Attendance.Api/Attendance.Api.csproj" Id="5b1b891f-8583-496c-9b15-d565416bedf3" />
+    <Project Path="Attendance.Application/Attendance.Application.csproj" Id="74eed42c-d56a-4974-82ec-3680dfb0d7d3" />
+    <Project Path="Attendance.Domain/Attendance.Domain.csproj" Id="4736d01b-6551-4d03-8b6b-14567a99e8f9" />
+    <Project Path="Attendance.Infrastructure/Attendance.Infrastructure.csproj" Id="0f007f42-2c16-4ee3-998b-b7856ef2cd84" />
+  </Folder>
+  <Folder Name="/src/modules/Identity/">
+    <Project Path="Identity.Api/Identity.Api.csproj" Id="9ec7d7fe-6ba5-427e-93ec-2117c9c24807" />
+    <Project Path="Identity.Application/Identity.Application.csproj" Id="8f61bcbf-6abe-4f14-9f61-6867bcd92715" />
+    <Project Path="Identity.Domain/Identity.Domain.csproj" Id="71f0e543-8921-43bb-bd82-9d992f2862ab" />
+    <Project Path="Indentity.Infrastructure/Indentity.Infrastructure.csproj" Id="5bdf4117-755d-4834-b987-0145654ef8e3" />
+  </Folder>
+  <Folder Name="/src/shared/">
+    <Project Path="Shared.Application/Shared.Application.csproj" Id="982fead2-7cd5-498f-ab7b-b58c4a3075c9" />
+    <Project Path="Shared.Core/Shared.Core.csproj" Id="25013e87-edd6-47d8-8004-e6ca137e4771" />
+    <Project Path="Shared.Infrastructure/Shared.Infrastructure.csproj" Id="cd883cc6-3dbe-4775-b1be-91264b5ee89d" />
+  </Folder>
 </Solution>
