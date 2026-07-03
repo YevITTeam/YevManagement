@@ -11,8 +11,5 @@
   <ItemGroup>
     <ProjectReference Include="..\Asset.Application\Asset.Application.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Controllers\" />
-  </ItemGroup>
 
 </Project>
