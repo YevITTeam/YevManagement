@@ -1,38 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Edit2, Save, Search, ShieldCheck } from "lucide-react";
 import { AdminApi } from "@/api/admin.api";
 import { AuthApi } from "@/api/auth.api";
 import { UserDto, RoleDto } from "@/types/auth.dto";
-import { toast } from 'react-toastify';
+import { toast } from "react-toastify";
+import RoleSelectModal from "./RoleSelectModal";
 
 interface Props {
     isOpen: boolean;
-    onClose: () => void;
+    onClose?: () => void;
 }
 
 export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [users, setUsers] = useState<UserDto[]>([]);
     const [roles, setRoles] = useState<RoleDto[]>([]);
     const [currentUser, setCurrentUser] = useState<UserDto | null>(null);
-
-    // Lưu trạng thái các quyền đang được tick của từng user: { [userId]: [roleId1, roleId2] }
     const [selectedRolesMap, setSelectedRolesMap] = useState<Record<number, number[]>>({});
     const [isLoading, setIsLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [openRoleModalUserId, setOpenRoleModalUserId] = useState<number | null>(null);
 
-    const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
-
-    // Load dữ liệu khi mở Modal
-    useEffect(() => {
-        if (isOpen) {
-            fetchData();
-        }
-    }, [isOpen]);
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-
             const [usersData, rolesData, meData] = await Promise.all([
                 AdminApi.getUsers(),
                 AdminApi.getRoles(),
@@ -43,45 +35,61 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
             setRoles(rolesData);
             setCurrentUser(meData);
 
-            // Khởi tạo state checkbox dựa trên dữ liệu từ DB
             const initialRoleMap: Record<number, number[]> = {};
             usersData.forEach((user: UserDto) => {
-                // Ánh xạ từ mảng string (tên quyền) sang mảng ID quyền
                 const userRoleIds = rolesData
                     .filter((r: RoleDto) => user.roles.includes(r.roleName))
                     .map((r: RoleDto) => r.id);
                 initialRoleMap[user.id] = userRoleIds;
             });
             setSelectedRolesMap(initialRoleMap);
-
         } catch (error) {
             console.error("Lỗi tải dữ liệu:", error);
             toast.warn("Không thể tải dữ liệu. Vui lòng thử lại!");
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
-    // Xử lý khi click vào 1 checkbox
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const timer = window.setTimeout(() => {
+            void fetchData();
+        }, 0);
+
+        return () => window.clearTimeout(timer);
+    }, [fetchData, isOpen]);
+
+    const filteredUsers = useMemo(() => {
+        const term = searchTerm.trim().toLowerCase();
+        if (!term) return users;
+
+        return users.filter((user) => {
+            return (
+                user.userName.toLowerCase().includes(term) ||
+                user.fullName.toLowerCase().includes(term)
+            );
+        });
+    }, [users, searchTerm]);
+
     const handleCheckboxChange = (userId: number, roleId: number, isChecked: boolean) => {
         setSelectedRolesMap((prev) => {
             const currentRoles = prev[userId] || [];
             if (isChecked) {
                 return { ...prev, [userId]: [...currentRoles, roleId] };
-            } else {
-                return { ...prev, [userId]: currentRoles.filter((id) => id !== roleId) };
             }
+            return { ...prev, [userId]: currentRoles.filter((id) => id !== roleId) };
         });
     };
 
-    // Xử lý khi bấm nút "Cập nhật" trên 1 dòng
     const handleSave = async (userId: number) => {
         try {
             const roleIds = selectedRolesMap[userId] || [];
             await AdminApi.updateUserRoles({ userId, roleIds });
             toast.success("Cập nhật quyền thành công!");
             await fetchData();
-        } catch (error) {
+        } catch {
             toast.error("Cập nhật thất bại!");
         }
     };
@@ -89,110 +97,157 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-70 flex items-center justify-center  bg-opacity-50 backdrop-blur">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="space-y-6">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2">
+                        <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
+                            <ShieldCheck className="h-4 w-4" />
+                            Quản lý phân quyền
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-semibold text-slate-900">Phân quyền người dùng</h2>
+                            <p className="text-sm text-slate-500">
+                                Cập nhật vai trò cho từng tài khoản bằng bảng danh sách trực quan.
+                            </p>
+                        </div>
+                    </div>
 
-                {/* Header Modal */}
-                <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                    <h2 className="text-xl font-bold text-gray-800">Quản lý Phân quyền Người dùng</h2>
-                    <button onClick={onClose} className="cursor-pointer text-gray-400 hover:text-red-500 transition text-2xl leading-none">
-                        &times;
-                    </button>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Tổng người dùng</p>
+                            <p className="text-lg font-semibold text-slate-900">{users.length}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Tổng vai trò</p>
+                            <p className="text-lg font-semibold text-slate-900">{roles.length}</p>
+                        </div>
+                        {onClose && (
+                            <button
+                                onClick={onClose}
+                                className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-red-300 hover:text-red-500"
+                            >
+                                Đóng
+                            </button>
+                        )}
+                    </div>
                 </div>
 
-                {/* Nội dung bảng */}
-                <div className="p-6 overflow-y-auto flex-grow">
-                    {isLoading ? (
-                        <div className="flex justify-center items-center py-10 text-gray-500">Đang tải dữ liệu...</div>
-                    ) : (
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider">
-                                    <th className="p-3 border-b w-1/4">Tài khoản</th>
-                                    <th className="p-3 border-b w-2/5">Họ tên</th>
-                                    <th className="p-3 border-b w-1/5">Chọn Quyền</th>
-                                    <th className="p-3 border-b text-center w-auto">Thao tác</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {users.map((u) => {
-                                    // KIỂM TRA: Có phải là chính bản thân người đang thao tác không?
-                                    const isSelf = currentUser?.userName === u.userName;
-                                    const currentSelectedIds = selectedRolesMap[u.id] || [];
-
-                                    return (
-                                        <tr key={u.id} className={`border-b hover:bg-gray-50 ${isSelf ? "bg-red-50/30" : ""}`}>
-                                            <td className="p-3 font-medium text-gray-800">
-                                                {u.userName}
-                                                {isSelf && <span className="ml-2 text-xs text-red-500 font-bold">(Bạn)</span>}
-                                            </td>
-                                            <td className="p-3 text-gray-600">{u.fullName}</td>
-
-                                            {/* Cột hiển thị Checkbox cho phép chọn nhiều Role */}
-                                            <td className="p-3 relative">
-                                                <div className="relative">
-                                                    {/* Nút bấm để mở/đóng dropdown */}
-                                                    <button
-                                                        onClick={() => setOpenDropdownId(openDropdownId === u.id ? null : u.id)}
-                                                        disabled={isSelf}
-                                                        className=" px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-left flex justify-between items-center hover:border-blue-500 transition"
-                                                    >
-                                                        <span className="truncate text-gray-700">
-                                                            {currentSelectedIds.length > 0
-                                                                ? `${currentSelectedIds.length} quyền đã chọn`
-                                                                : "Chọn quyền..."}
-                                                        </span>
-                                                        <span className="text-xs">▼</span>
-                                                    </button>
-
-                                                    {/* Dropdown menu */}
-                                                    {openDropdownId === u.id && (
-                                                        <>
-                                                            {/* Overlay để click ra ngoài là đóng */}
-                                                            <div className="fixed inset-0 z-10" onClick={() => setOpenDropdownId(null)}></div>
-
-                                                            <div className="absolute z-20 top-full mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl p-2 max-h-60 overflow-y-auto">
-                                                                {roles.map((r) => (
-                                                                    <label
-                                                                        key={r.id}
-                                                                        className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
-                                                                    >
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={currentSelectedIds.includes(r.id)}
-                                                                            onChange={(e) => handleCheckboxChange(u.id, r.id, e.target.checked)}
-                                                                            className="w-4 h-4 text-blue-600 rounded border-gray-300"
-                                                                        />
-                                                                        <span className="text-sm text-gray-700">{r.roleName}</span>
-                                                                    </label>
-                                                                ))}
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </td>
-
-                                            <td className="p-3 text-center">
-                                                <button
-                                                    onClick={() => handleSave(u.id)}
-                                                    disabled={isSelf}
-                                                    className={`cursor-pointer px-4 py-1.5 rounded-md text-sm font-semibold text-white shadow-sm transition 
-                                                        ${isSelf
-                                                            ? "bg-gray-300 cursor-not-allowed"
-                                                            : "bg-blue-600 hover:bg-blue-700 active:scale-95"
-                                                        }`}
-                                                >
-                                                    Cập nhật
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    )}
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative w-full sm:max-w-sm">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                            value={searchTerm}
+                            onChange={(event) => setSearchTerm(event.target.value)}
+                            placeholder="Tìm tên tài khoản hoặc họ tên"
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white"
+                        />
+                    </div>
                 </div>
             </div>
+
+            {isLoading ? (
+                <div className="flex min-h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm text-slate-500 shadow-sm">
+                    Đang tải dữ liệu...
+                </div>
+            ) : (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="hidden border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600 md:grid md:grid-cols-[1.4fr_1.2fr_0.8fr]">
+                        <div>Người dùng</div>
+                        <div>Vai trò</div>
+                        <div className="text-right">Thao tác</div>
+                    </div>
+
+                    <div className="divide-y divide-slate-100">
+                        {filteredUsers.length === 0 ? (
+                            <div className="px-4 py-10 text-center text-sm text-slate-500">
+                                Không tìm thấy người dùng phù hợp.
+                            </div>
+                        ) : (
+                            filteredUsers.map((user) => {
+                                const isSelf = currentUser?.userName === user.userName;
+                                const currentSelectedIds = selectedRolesMap[user.id] || [];
+
+                                return (
+                                    <div
+                                        key={user.id}
+                                        className={`grid gap-4 px-4 py-4 md:grid-cols-[1.4fr_1.2fr_0.8fr] ${isSelf ? "bg-rose-50/40" : "bg-white"}`}
+                                    >
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-base font-semibold text-slate-800">
+                                                    {user.fullName || user.userName}
+                                                </span>
+                                                {isSelf && (
+                                                    <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-600">
+                                                        Bạn
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-slate-500">{user.userName}</p>
+                                        </div>
+
+                                        <div className="flex flex-col gap-3">
+                                            <button
+                                                onClick={() => setOpenRoleModalUserId(user.id)}
+                                                disabled={isSelf}
+                                                className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition ${isSelf
+                                                    ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                                                    : "border-slate-200 bg-white text-slate-700 hover:border-blue-500 hover:bg-blue-50"
+                                                    }`}
+                                            >
+                                                <span className="flex flex-wrap gap-2">
+                                                    {currentSelectedIds.length > 0 ? (
+                                                        currentSelectedIds.map((roleId) => {
+                                                            const role = roles.find((item) => item.id === roleId);
+                                                            return role ? (
+                                                                <span
+                                                                    key={role.id}
+                                                                    className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
+                                                                >
+                                                                    {role.roleName}
+                                                                </span>
+                                                            ) : null;
+                                                        })
+                                                    ) : (
+                                                        <span className="text-sm text-slate-400">Chọn vai trò...</span>
+                                                    )}
+                                                </span>
+                                                <Edit2 className="cursor-pointer h-4 w-4 flex-shrink-0" />
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center justify-end">
+                                            <button
+                                                onClick={() => handleSave(user.id)}
+                                                disabled={isSelf}
+                                                className={`inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${isSelf
+                                                    ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                                                    : "bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98]"
+                                                    }`}
+                                            >
+                                                <Save className="h-4 w-4" />
+                                                <span>Cập nhật</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Modal để chọn vai trò */}
+            {openRoleModalUserId !== null && (
+                <RoleSelectModal
+                    isOpen={true}
+                    roles={roles}
+                    selectedRoleIds={selectedRolesMap[openRoleModalUserId] || []}
+                    onRoleChange={(roleId, isChecked) => handleCheckboxChange(openRoleModalUserId, roleId, isChecked)}
+                    onClose={() => setOpenRoleModalUserId(null)}
+                />
+            )}
         </div>
     );
 }
