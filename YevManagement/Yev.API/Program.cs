@@ -22,7 +22,7 @@ builder.Services.AddOpenApi();
 
 // Đăng ký DbContext từ tầng API, ép cấu hình sử dụng SQL Server
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("PCManagementConnection")));
 
 //Đăng ký DI cho các Repository và Service
 builder.Services.AddInfrastructureAndServices();
