@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AuthApi } from "@/api/auth.api";
-import { UserDto } from "@/types/auth.dto";
+import { AuthApi } from "@/modules/auth/api/auth.api";
+import type { UserDto } from "@/modules/auth/types/auth.dto";
 
 export default function Header() {
   const [user, setUser] = useState<UserDto | null>(null);
@@ -30,7 +30,7 @@ export default function Header() {
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          
+
           {/* Logo / Tên hệ thống */}
           <div className="flex-shrink-0 flex items-center">
             <Link href="/" className="text-2xl font-black text-blue-600 tracking-tight">
@@ -61,7 +61,7 @@ export default function Header() {
                     <p className="text-sm font-bold text-gray-800">{user.fullName}</p>
                     <p className="text-xs text-gray-500">{user.userName}</p>
                   </div>
-                  
+
                   {/* Avatar tạo tự động từ chữ cái đầu của tên */}
                   <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-blue-500 to-blue-400 flex items-center justify-center text-white text-lg font-bold shadow-inner">
                     {user.fullName.charAt(0).toUpperCase()}

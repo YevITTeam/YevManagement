@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import UserRoleModal from "@/components/admin/UserRoleModal";
-import RoleList from "@/components/admin/roles/RoleList";
+import UserRoleModal from "@/modules/auth/components/UserRoleModal";
+import RoleList from "@/modules/auth/components/roles/RoleList";
 
 export default function AdminDashboard() {
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);

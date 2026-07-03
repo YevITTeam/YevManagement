@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Search, X } from "lucide-react";
-import { RoleDto } from "@/types/auth.dto";
+import { RoleDto } from "@/modules/auth/types/auth.dto";
 
 interface Props {
     isOpen: boolean;

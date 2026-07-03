@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminApi } from "@/api/admin.api";
-import { RoleDto, CreateRoleDto } from "@/types/auth.dto";
+import { AdminApi } from "@/modules/auth/api/admin.api";
+import type { RoleDto, CreateRoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleForm from "./RoleForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";

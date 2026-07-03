@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Edit2, Save, Search, ShieldCheck } from "lucide-react";
-import { AdminApi } from "@/api/admin.api";
-import { AuthApi } from "@/api/auth.api";
-import { UserDto, RoleDto } from "@/types/auth.dto";
+import { AdminApi } from "@/modules/auth/api/admin.api";
+import { AuthApi } from "@/modules/auth/api/auth.api";
+import type { UserDto, RoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleSelectModal from "./RoleSelectModal";
 
