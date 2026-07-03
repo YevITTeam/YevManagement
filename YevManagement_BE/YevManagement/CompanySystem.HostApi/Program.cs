@@ -1,3 +1,4 @@
+using CompanySystem.HostApi.Configurations;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,6 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+// Configure dependency injection for Identity and Asset modules
+builder.Services.AddDIConfig(builder.Configuration);
 
 var app = builder.Build();
 

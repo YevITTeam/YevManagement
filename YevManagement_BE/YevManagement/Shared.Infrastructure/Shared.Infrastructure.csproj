@@ -19,8 +19,4 @@
     </PackageReference>
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Shared.Core\Shared.Core.csproj" />
-  </ItemGroup>
-
 </Project>

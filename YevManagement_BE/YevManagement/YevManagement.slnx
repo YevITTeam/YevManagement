@@ -20,7 +20,7 @@
     <Project Path="Identity.Api/Identity.Api.csproj" Id="9ec7d7fe-6ba5-427e-93ec-2117c9c24807" />
     <Project Path="Identity.Application/Identity.Application.csproj" Id="8f61bcbf-6abe-4f14-9f61-6867bcd92715" />
     <Project Path="Identity.Domain/Identity.Domain.csproj" Id="71f0e543-8921-43bb-bd82-9d992f2862ab" />
-    <Project Path="Indentity.Infrastructure/Indentity.Infrastructure.csproj" Id="5bdf4117-755d-4834-b987-0145654ef8e3" />
+    <Project Path="Indentity.Infrastructure/Identity.Infrastructure.csproj" Id="5bdf4117-755d-4834-b987-0145654ef8e3" />
   </Folder>
   <Folder Name="/src/shared/">
     <Project Path="Shared.Application/Shared.Application.csproj" Id="982fead2-7cd5-498f-ab7b-b58c4a3075c9" />
