@@ -1,5 +1,5 @@
 ﻿using Asset.Infrastructure.Context;
-using CompanySystem.HostApi.Middlewares;
+//using CompanySystem.HostApi.Middlewares;
 using Identity.Infrastructure.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
@@ -33,9 +33,9 @@ namespace CompanySystem.HostApi.Configurations
             .WithScopedLifetime()
             );
 
-            services.AddScoped<IClaimsTransformation, MyClaimsTransformation>();
+            //services.AddScoped<IClaimsTransformation, MyClaimsTransformation>();
 
-            // Register IHttpContextAccessor so we can read HttpContext in services (for example to get remote IP)
+            // Register IHttpContextAccessor
             services.AddHttpContextAccessor();
 
             return services;

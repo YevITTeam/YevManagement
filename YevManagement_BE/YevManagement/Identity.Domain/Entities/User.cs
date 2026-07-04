@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Identity.Domain.Entities;
 
-public partial class User
+public class User
 {
     public int Id { get; set; }
 
@@ -13,9 +13,9 @@ public partial class User
 
     public DateTime CreatedAt { get; set; }
 
-    public string? LastLoginIp { get; set; }
-
     public string? DeviceName { get; set; }
 
     public virtual ICollection<Role> Roles { get; set; } = new List<Role>();
+
+    public virtual ICollection<LoginUserIP> LoginUserIPs { get; set; } = new List<LoginUserIP>();
 }

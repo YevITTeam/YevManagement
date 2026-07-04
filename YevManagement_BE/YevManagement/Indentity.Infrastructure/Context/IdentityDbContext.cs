@@ -20,6 +20,8 @@ public partial class IdentityDbContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public virtual DbSet<LoginUserIP> LoginUserIPs { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Role>(entity =>
@@ -30,7 +32,6 @@ public partial class IdentityDbContext : DbContext
         modelBuilder.Entity<User>(entity =>
         {
             entity.Property(e => e.DeviceName).HasMaxLength(100);
-            entity.Property(e => e.LastLoginIp).HasMaxLength(45);
             entity.Property(e => e.UserName).HasMaxLength(100);
 
             entity.HasMany(d => d.Roles).WithMany(p => p.Users)
