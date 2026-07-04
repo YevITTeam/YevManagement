@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { label: "Thiết bị", href: "pc" },
-  { label: "Chi nhánh", href: "pc/branches" },
-  { label: "Loại thiết bị", href: "pc/device-types" },
-  { label: "IP", href: "pc/ips" },
-  { label: "Phần mềm", href: "pc/softwares" },
-  { label: "Nhà cung cấp", href: "pc/suppliers" },
+  { label: "Thiết bị", href: "/pc" },
+  { label: "Chi nhánh", href: "/pc/branches" },
+  { label: "Loại thiết bị", href: "/pc/device-types" },
+  { label: "IP", href: "/pc/ips" },
+  { label: "Phần mềm", href: "/pc/softwares" },
+  { label: "Nhà cung cấp", href: "/pc/suppliers" },
 ];
 
 export default function PcManagerSidebar() {
