@@ -3,9 +3,20 @@
 
 
 body {
-  background-color: #F8FAFC;
-  color: #0F172A;
+  margin: 0;
+  background-color: #f7f9fb;
+  color: #191c1e;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Hanken Grotesk", Arial, Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select {
+  font: inherit;
 }

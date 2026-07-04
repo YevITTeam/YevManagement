@@ -4,53 +4,59 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { label: "Thiết bị", href: "/pc" },
-  { label: "Chi nhánh", href: "/pc/branches" },
-  { label: "Loại thiết bị", href: "/pc/device-types" },
-  { label: "IP", href: "/pc/ips" },
-  { label: "Phần mềm", href: "/pc/softwares" },
-  { label: "Nhà cung cấp", href: "/pc/suppliers" },
+  { label: "Tổng quan", href: "/pc", icon: "◈" },
+  { label: "Quản lý Tài sản", href: "/pc", icon: "▣" },
+  { label: "Quản lý IP", href: "/pc/ips", icon: "◌" },
+  { label: "Cấu hình Hệ thống", href: "/pc/device-types", icon: "⚙" },
+  { label: "Nhật ký Hoạt động", href: "/pc/branches", icon: "☰" },
 ];
 
 export default function PcManagerSidebar() {
   const pathname = usePathname() || "";
 
   return (
-    <aside className="w-60 shrink-0 border-r border-slate-200 bg-white shadow-sm">
-      <div className="flex h-full flex-col justify-between">
-        <div>
-          <div className="border-b border-slate-200 px-6 py-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">PC Manager</p>
-            <h2 className="mt-3 text-2xl font-semibold text-slate-900">Quan ly PC</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Dieu huong nhanh den cac trang quan ly thiet bi, chi nhanh, IP, phan mem va nha cung cap.
-            </p>
+    <aside className="fixed left-0 top-0 z-20 flex h-screen w-64 flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6">
+      <div className="px-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center bg-[#e3000f] text-lg font-bold text-white">
+            Y
           </div>
-
-          <nav className="px-4 py-6">
-            <div className="space-y-2">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`block rounded-2xl px-4 py-3 text-sm font-medium transition ${isActive
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-                      }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
-          </nav>
+          <div>
+            <div className="text-lg font-semibold text-[#191c1e]">YAZAKI IT</div>
+            <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">Management Suite</div>
+          </div>
         </div>
+      </div>
 
-        <div className="border-t border-slate-200 px-6 py-5 bg-slate-50">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Ban mau giao dien</p>
-          <p className="mt-2 text-sm text-slate-600">Du lieu mock de hoan thien giao dien truoc khi ket noi API.</p>
+      <nav className="mt-8 flex-1 overflow-y-auto">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 border-l-4 px-5 py-3 text-sm font-medium transition ${isActive
+                  ? "border-[#e3000f] bg-[#eceef0] text-[#191c1e]"
+                  : "border-transparent text-[#5e3f3a] hover:bg-[#eceef0] hover:text-[#191c1e]"
+                }`}
+            >
+              <span className="text-lg">{item.icon}</span>
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="mt-auto border-t border-[#e0e3e5] px-5 pt-4">
+        <div className="flex items-center gap-3 rounded-none bg-white p-3">
+          <div className="flex h-9 w-9 items-center justify-center bg-[#e3000f] text-sm font-semibold text-white">
+            QT
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-[#191c1e]">Quản trị viên</div>
+            <div className="text-xs text-[#5e3f3a]">Phòng IT</div>
+          </div>
         </div>
       </div>
     </aside>
