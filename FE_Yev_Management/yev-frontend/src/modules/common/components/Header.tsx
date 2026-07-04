@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
 
 export default function Header() {
+  const pathname = usePathname() || "";
+  const hasSidebar = pathname.startsWith("/pc");
   const [user, setUser] = useState<UserDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -27,52 +30,52 @@ export default function Header() {
   const isAdmin = user?.roles?.includes("Admin");
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-
-          {/* Logo / Tên hệ thống */}
-          <div className="flex-shrink-0 flex items-center">
-            <Link href="/" className="text-2xl font-black text-blue-600 tracking-tight">
-              YEV Management<span className="text-gray-800">Portal</span>
-            </Link>
+    <header
+      className={`sticky top-0 z-30 border-b border-[#e0e3e5] bg-[#f7f9fb]/95 backdrop-blur transition-all duration-300 ${hasSidebar ? "w-[calc(100%-16rem)] ml-auto" : "w-full"
+        }`}
+    >
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <Link href="/" className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center bg-[#e3000f] text-lg font-bold text-white shadow-sm">
+            Y
           </div>
+          <div className="leading-tight">
+            <div className="text-base font-semibold text-[#191c1e]">YEV Management</div>
+            <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">
+              Asset Management Suite
+            </div>
+          </div>
+        </Link>
 
-          {/* Khu vực bên phải: Menu và User Info */}
-          <div className="flex items-center gap-4">
-            {isLoading ? (
-              // Hiệu ứng loading skeleton khi đang chờ API
-              <div className="h-8 w-48 bg-gray-100 animate-pulse rounded-md"></div>
-            ) : user ? (
-              <>
-                {/* NÚT ADMIN: Chỉ render ra HTML khi thỏa mãn điều kiện isAdmin */}
-                {isAdmin && (
-                  <Link
-                    href="/admin"
-                    className="text-sm font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-md transition-all duration-200 border border-red-100 shadow-sm"
-                  >
-                    ⚙️ Trang quản trị Admin
-                  </Link>
-                )}
+        <div className="flex items-center gap-3">
+          {isLoading ? (
+            <div className="h-9 w-40 animate-pulse rounded-md bg-[#eceef0]" />
+          ) : user ? (
+            <>
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className="hidden items-center gap-2 rounded-none border border-[#e3000f]/15 bg-[#fff5f5] px-3 py-2 text-sm font-semibold text-[#e3000f] transition hover:border-[#e3000f]/30 hover:bg-[#ffe8e8] sm:flex"
+                >
+                  <span className="text-base">⚙</span>
+                  <span>Admin</span>
+                </Link>
+              )}
 
-                {/* Thông tin người dùng */}
-                <div className="flex items-center gap-3 border-l border-gray-200 pl-4 ml-2">
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-gray-800">{user.fullName}</p>
-                    <p className="text-xs text-gray-500">{user.userName}</p>
-                  </div>
-
-                  {/* Avatar tạo tự động từ chữ cái đầu của tên */}
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-blue-500 to-blue-400 flex items-center justify-center text-white text-lg font-bold shadow-inner">
-                    {user.fullName.charAt(0).toUpperCase()}
-                  </div>
+              <div className="flex items-center gap-3 border-l border-[#e0e3e5] pl-3">
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-[#191c1e]">{user.fullName}</p>
+                  <p className="text-xs text-[#5e3f3a]">{user.userName}</p>
                 </div>
-              </>
-            ) : (
-              <span className="text-sm font-medium text-gray-500">Chưa đăng nhập</span>
-            )}
-          </div>
 
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#191c1e] text-sm font-semibold text-white">
+                  {user.fullName?.charAt(0)?.toUpperCase() ?? "U"}
+                </div>
+              </div>
+            </>
+          ) : (
+            <span className="text-sm font-medium text-[#5e3f3a]">Chưa đăng nhập</span>
+          )}
         </div>
       </div>
     </header>

@@ -2,20 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  Building2,
+  Computer,
+  HardDrive,
+  Monitor,
+  Package,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 
 const navItems = [
-  { label: "Tổng quan", href: "/pc", icon: "◈" },
-  { label: "Quản lý Tài sản", href: "/pc", icon: "▣" },
-  { label: "Quản lý IP", href: "/pc/ips", icon: "◌" },
-  { label: "Cấu hình Hệ thống", href: "/pc/device-types", icon: "⚙" },
-  { label: "Nhật ký Hoạt động", href: "/pc/branches", icon: "☰" },
+  { label: "Quản lý Tài sản", href: "/pc", icon: Computer }, // Đã bỏ dấu '/' ở cuối
+  { label: "Quản lý IP", href: "/pc/ips", icon: Monitor },
+  { label: "Quản lý loại thiết bị", href: "/pc/device-types", icon: HardDrive },
+  { label: "Quản lý chi nhánh", href: "/pc/branches", icon: Building2 },
+  { label: "Quản lý phần mềm", href: "/pc/softwares", icon: ShieldCheck },
+  { label: "Quản lý nhà cung cấp", href: "/pc/suppliers", icon: Package },
 ];
 
 export default function PcManagerSidebar() {
   const pathname = usePathname() || "";
 
   return (
-    <aside className="fixed left-0 top-0 z-20 flex h-screen w-64 flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6">
       <div className="px-5">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center bg-[#e3000f] text-lg font-bold text-white">
@@ -30,18 +40,24 @@ export default function PcManagerSidebar() {
 
       <nav className="mt-8 flex-1 overflow-y-auto">
         {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+          // Logic tách riêng cho route gốc "/pc" để tránh highlight sai ở các route con
+          const isActive = item.href === "/pc"
+            ? pathname === item.href
+            : pathname === item.href || pathname.startsWith(item.href + "/");
 
           return (
             <Link
-              key={item.href}
+              key={item.label} // Sử dụng item.label làm key để tránh lỗi trùng lặp key nếu có href giống nhau
               href={item.href}
               className={`flex items-center gap-3 border-l-4 px-5 py-3 text-sm font-medium transition ${isActive
-                  ? "border-[#e3000f] bg-[#eceef0] text-[#191c1e]"
-                  : "border-transparent text-[#5e3f3a] hover:bg-[#eceef0] hover:text-[#191c1e]"
+                ? "border-[#e3000f] bg-[#eceef0] text-[#191c1e]"
+                : "border-transparent text-[#5e3f3a] hover:bg-[#eceef0] hover:text-[#191c1e]"
                 }`}
             >
-              <span className="text-lg">{item.icon}</span>
+              <item.icon
+                size={18}
+                className={isActive ? "text-[#e3000f]" : "text-[#5e3f3a]"}
+              />
               <span>{item.label}</span>
             </Link>
           );

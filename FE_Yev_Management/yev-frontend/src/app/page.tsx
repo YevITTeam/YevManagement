@@ -4,29 +4,29 @@ import { LayoutGrid, Cpu, FileText, Notebook, BarChart3 } from "lucide-react";
 
 export default function Home() {
   const menuItems = [
-    { 
-      title: "Quản lý thiết bị", 
-      desc: "Theo dõi, kiểm kê tài sản", 
-      link: "#", 
-      icon: <Cpu className="w-8 h-8" /> 
+    {
+      title: "Quản lý thiết bị",
+      desc: "Theo dõi, kiểm kê tài sản",
+      link: "/pc",
+      icon: <Cpu className="w-8 h-8" />
     },
-    { 
-      title: "Quản lý hợp đồng", 
-      desc: "Soạn thảo và lưu trữ hồ sơ", 
-      link: "#", 
-      icon: <FileText className="w-8 h-8" /> 
+    {
+      title: "Quản lý hợp đồng",
+      desc: "Soạn thảo và lưu trữ hồ sơ",
+      link: "#",
+      icon: <FileText className="w-8 h-8" />
     },
-    { 
-      title: "Quản lý tăng ca", 
-      desc: "Đăng ký hoặc phê duyệt tăng ca", 
-      link: "#", 
-      icon: <Notebook className="w-8 h-8" /> 
+    {
+      title: "Quản lý tăng ca",
+      desc: "Đăng ký hoặc phê duyệt tăng ca",
+      link: "#",
+      icon: <Notebook className="w-8 h-8" />
     },
-    { 
-      title: "Báo cáo thống kê", 
-      desc: "Xem số liệu tổng quan", 
-      link: "#", 
-      icon: <BarChart3 className="w-8 h-8" /> 
+    {
+      title: "Báo cáo thống kê",
+      desc: "Xem số liệu tổng quan",
+      link: "#",
+      icon: <BarChart3 className="w-8 h-8" />
     },
   ];
 
@@ -50,7 +50,7 @@ export default function Home() {
             <div className="mb-4 text-blue-600 transition-colors group-hover:text-blue-700">
               {item.icon}
             </div>
-            
+
             <h3 className="text-lg font-bold text-gray-800 group-hover:text-blue-600 transition-colors">
               {item.title}
             </h3>
