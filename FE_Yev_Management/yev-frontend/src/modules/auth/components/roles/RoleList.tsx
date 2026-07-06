@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminApi } from "@/modules/auth/api/admin.api";
 import type { RoleDto, CreateRoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleForm from "./RoleForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { AuthApi } from "../../api/auth.api";
 
 export default function RoleList() {
     const [roles, setRoles] = useState<RoleDto[]>([]);
@@ -20,7 +20,7 @@ export default function RoleList() {
     const fetchRoles = async () => {
         setLoading(true);
         try {
-            const data = await AdminApi.getRoles();
+            const data = await AuthApi.getAllRoles();
             setRoles(data);
         } catch (err) {
             console.error(err);
@@ -36,7 +36,7 @@ export default function RoleList() {
 
     const handleCreate = async (data: CreateRoleDto) => {
         try {
-            await AdminApi.createRoles(data);
+            await AuthApi.createRole(data.roleName, data.description);
             toast.success("Tạo quyền thành công");
             setShowCreate(false);
             await fetchRoles();
@@ -49,7 +49,7 @@ export default function RoleList() {
     const handleUpdate = async (data: CreateRoleDto, id?: number) => {
         if (!id) return;
         try {
-            await AdminApi.updateRoles(String(id), data);
+            await AuthApi.updateRole(id, data.roleName, data.description);
             toast.success("Cập nhật quyền thành công");
             setEditing(null);
             await fetchRoles();
@@ -61,7 +61,7 @@ export default function RoleList() {
 
     const handleDelete = async (id: number) => {
         try {
-            await AdminApi.deleteRoles(String(id));
+            await AuthApi.deleteRole(id);
             toast.success("Xoá thành công");
             await fetchRoles();
         } catch (err) {
