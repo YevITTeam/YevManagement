@@ -4,6 +4,7 @@ export interface UserDto {
   id: number;
   userName: string;
   fullName: string;
+  deviceName: string;
   roles: string[];
 }
 

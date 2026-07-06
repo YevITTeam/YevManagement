@@ -3,7 +3,7 @@ import type { UserDto } from "@/modules/auth/types/auth.dto";
 
 const ENDPOINTS = {
   AUTH: {
-    ME: "/auth/me",
+    windowsLogin: "/Auth/windows-login",
   },
   ADMIN: {
     USERS: "/admin/users",
@@ -16,7 +16,10 @@ const ENDPOINTS = {
 } as const;
 
 export const AuthApi = {
-  getMe: () => api.get<UserDto>(ENDPOINTS.AUTH.ME),
+  windowsLogin: async () => {
+    const response = await api.post<any>(ENDPOINTS.AUTH.windowsLogin);
+    return response.data?.user as UserDto;
+  },
 };
 
 export { ENDPOINTS };
