@@ -1,7 +1,5 @@
 ﻿using Asset.Infrastructure.Context;
 using Identity.Infrastructure.Authentication;
-
-//using CompanySystem.HostApi.Middlewares;
 using Identity.Infrastructure.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;

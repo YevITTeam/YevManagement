@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using Asset.Domain;
+using Asset.Domain.Entities;
+using Asset.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Asset.Infrastructure.Context;
@@ -18,23 +19,27 @@ public partial class AssetDbContext : DbContext
 
     public virtual DbSet<AuditTrail> AuditTrails { get; set; }
 
-    public virtual DbSet<CauHinhThietBi> CauHinhThietBis { get; set; }
+    public virtual DbSet<Branch> Branches { get; set; }
 
-    public virtual DbSet<ChiNhanh> ChiNhanhs { get; set; }
+    public virtual DbSet<Device> Devices { get; set; }
 
-    public virtual DbSet<DiaChiIp> DiaChiIps { get; set; }
+    public virtual DbSet<DeviceConfiguration> DeviceConfigurations { get; set; }
 
-    public virtual DbSet<LichSuChuyenDoi> LichSuChuyenDois { get; set; }
+    public virtual DbSet<DeviceSoftware> DeviceSoftwares { get; set; }
 
-    public virtual DbSet<LoaiThietBi> LoaiThietBis { get; set; }
+    public virtual DbSet<DeviceType> DeviceTypes { get; set; }
 
-    public virtual DbSet<NhaCungCap> NhaCungCaps { get; set; }
+    public virtual DbSet<IpAddress> IpAddresses { get; set; }
 
-    public virtual DbSet<PhanMem> PhanMems { get; set; }
+    public virtual DbSet<Software> Softwares { get; set; }
 
-    public virtual DbSet<ThietBi> ThietBis { get; set; }
+    public virtual DbSet<Supplier> Suppliers { get; set; }
 
-    public virtual DbSet<ThietBiPhanMem> ThietBiPhanMems { get; set; }
+    public virtual DbSet<TransferHistory> TransferHistories { get; set; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
+        => optionsBuilder.UseSqlServer("Server=DASVRFAST;Database=YevPCManagement;User Id=yev.app;Password=Yazaki@2026;TrustServerCertificate=True;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,22 +50,63 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.TableName).HasMaxLength(100);
         });
 
-        modelBuilder.Entity<CauHinhThietBi>(entity =>
+        modelBuilder.Entity<Branch>(entity =>
         {
-            entity.HasIndex(e => e.ThietBiId, "IX_CauHinhThietBis_ThietBiId").IsUnique();
+            entity.HasKey(e => e.Id).HasName("PK_ChiNhanhs");
+
+            entity.HasIndex(e => e.BranchCode, "IX_ChiNhanhs_MaChiNhanh").IsUnique();
+
+            entity.Property(e => e.BranchCode).HasMaxLength(50);
+            entity.Property(e => e.BranchName).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<Device>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ThietBis");
+
+            entity.HasIndex(e => e.BranchId, "IX_ThietBis_ChiNhanhId");
+
+            entity.HasIndex(e => e.DeviceTypeId, "IX_ThietBis_LoaiThietBiId");
+
+            entity.HasIndex(e => e.DeviceCode, "IX_ThietBis_MaMay").IsUnique();
+
+            entity.HasIndex(e => e.SupplierId, "IX_ThietBis_NhaCungCapId");
+
+            entity.Property(e => e.DeviceCode).HasMaxLength(50);
+            entity.Property(e => e.DeviceName).HasMaxLength(255);
+            entity.Property(e => e.Email).HasMaxLength(255);
+            entity.Property(e => e.Manager).HasMaxLength(150);
+            entity.Property(e => e.Note).HasMaxLength(500);
+
+            entity.HasOne(d => d.Branch).WithMany(p => p.Devices)
+                .HasForeignKey(d => d.BranchId)
+                .HasConstraintName("FK_ThietBis_ChiNhanhs_ChiNhanhId");
+
+            entity.HasOne(d => d.DeviceType).WithMany(p => p.Devices)
+                .HasForeignKey(d => d.DeviceTypeId)
+                .HasConstraintName("FK_ThietBis_LoaiThietBis_LoaiThietBiId");
+
+            entity.HasOne(d => d.Supplier).WithMany(p => p.Devices)
+                .HasForeignKey(d => d.SupplierId)
+                .HasConstraintName("FK_ThietBis_NhaCungCaps_NhaCungCapId");
+        });
+
+        modelBuilder.Entity<DeviceConfiguration>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_CauHinhThietBis");
+
+            entity.HasIndex(e => e.DeviceId, "IX_CauHinhThietBis_ThietBiId").IsUnique();
 
             entity.Property(e => e.Cpu)
                 .HasMaxLength(150)
                 .HasColumnName("CPU");
-            entity.Property(e => e.GhiChu).HasMaxLength(150);
+            entity.Property(e => e.HardDrive).HasMaxLength(150);
             entity.Property(e => e.Headphone).HasMaxLength(150);
             entity.Property(e => e.Keyboard).HasMaxLength(150);
             entity.Property(e => e.Mainboard).HasMaxLength(150);
             entity.Property(e => e.Monitor).HasMaxLength(150);
             entity.Property(e => e.Mouse).HasMaxLength(150);
-            entity.Property(e => e.Ocung)
-                .HasMaxLength(150)
-                .HasColumnName("OCung");
+            entity.Property(e => e.Note).HasMaxLength(150);
             entity.Property(e => e.Os)
                 .HasMaxLength(150)
                 .HasColumnName("OS");
@@ -78,31 +124,54 @@ public partial class AssetDbContext : DbContext
                 .HasMaxLength(150)
                 .HasColumnName("VGA");
 
-            entity.HasOne(d => d.ThietBi).WithOne(p => p.CauHinhThietBi).HasForeignKey<CauHinhThietBi>(d => d.ThietBiId);
+            entity.HasOne(d => d.Device).WithOne(p => p.DeviceConfiguration)
+                .HasForeignKey<DeviceConfiguration>(d => d.DeviceId)
+                .HasConstraintName("FK_CauHinhThietBis_ThietBis_ThietBiId");
         });
 
-        modelBuilder.Entity<ChiNhanh>(entity =>
+        modelBuilder.Entity<DeviceSoftware>(entity =>
         {
-            entity.HasIndex(e => e.MaChiNhanh, "IX_ChiNhanhs_MaChiNhanh").IsUnique();
+            entity.HasKey(e => new { e.DeviceId, e.SoftwareId }).HasName("PK_ThietBi_PhanMems");
 
-            entity.Property(e => e.MaChiNhanh).HasMaxLength(50);
-            entity.Property(e => e.TenChiNhanh).HasMaxLength(255);
+            entity.HasIndex(e => e.SoftwareId, "IX_ThietBi_PhanMems_PhanMemId");
+
+            entity.Property(e => e.LicenseKey).HasMaxLength(255);
+
+            entity.HasOne(d => d.Device).WithMany(p => p.DeviceSoftwares)
+                .HasForeignKey(d => d.DeviceId)
+                .HasConstraintName("FK_ThietBi_PhanMems_ThietBis_ThietBiId");
+
+            entity.HasOne(d => d.Software).WithMany(p => p.DeviceSoftwares)
+                .HasForeignKey(d => d.SoftwareId)
+                .HasConstraintName("FK_ThietBi_PhanMems_PhanMems_PhanMemId");
         });
 
-        modelBuilder.Entity<DiaChiIp>(entity =>
+        modelBuilder.Entity<DeviceType>(entity =>
         {
-            entity.ToTable("DiaChiIPs");
+            entity.HasKey(e => e.Id).HasName("PK_LoaiThietBis");
 
-            entity.HasIndex(e => e.DiaChi, "IX_DiaChiIPs_DiaChi").IsUnique();
+            entity.HasIndex(e => e.TypeCode, "IX_LoaiThietBis_MaLoai").IsUnique();
 
-            entity.HasIndex(e => e.ThietBiId, "IX_DiaChiIPs_ThietBiId");
+            entity.Property(e => e.TypeCode).HasMaxLength(50);
+            entity.Property(e => e.TypeName).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<IpAddress>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_DiaChiIPs");
+
+            entity.HasIndex(e => e.IpAddress1, "IX_DiaChiIPs_DiaChi").IsUnique();
+
+            entity.HasIndex(e => e.DeviceId, "IX_DiaChiIPs_ThietBiId");
 
             entity.Property(e => e.AlternateDns)
                 .HasMaxLength(15)
                 .HasColumnName("AlternateDNS");
-            entity.Property(e => e.DiaChi).HasMaxLength(25);
             entity.Property(e => e.Gateway).HasMaxLength(15);
-            entity.Property(e => e.GhiChu).HasMaxLength(255);
+            entity.Property(e => e.IpAddress1)
+                .HasMaxLength(25)
+                .HasColumnName("IpAddress");
+            entity.Property(e => e.Note).HasMaxLength(255);
             entity.Property(e => e.PreferredDns)
                 .HasMaxLength(15)
                 .HasColumnName("PreferredDNS");
@@ -111,87 +180,52 @@ public partial class AssetDbContext : DbContext
                 .HasColumnName("ServerIP");
             entity.Property(e => e.SubnetMask).HasMaxLength(15);
 
-            entity.HasOne(d => d.ThietBi).WithMany(p => p.DiaChiIps).HasForeignKey(d => d.ThietBiId);
+            entity.HasOne(d => d.Device).WithMany(p => p.IpAddresses)
+                .HasForeignKey(d => d.DeviceId)
+                .HasConstraintName("FK_DiaChiIPs_ThietBis_ThietBiId");
         });
 
-        modelBuilder.Entity<LichSuChuyenDoi>(entity =>
+        modelBuilder.Entity<Software>(entity =>
         {
-            entity.HasIndex(e => e.IdMayCu, "IX_LichSuChuyenDois_IdMayCu");
+            entity.HasKey(e => e.Id).HasName("PK_PhanMems");
 
-            entity.HasIndex(e => e.IdMayMoi, "IX_LichSuChuyenDois_IdMayMoi");
+            entity.HasIndex(e => e.SoftwareCode, "IX_PhanMems_MaPhanMem").IsUnique();
 
-            entity.Property(e => e.GhiChu).HasMaxLength(500);
-
-            entity.HasOne(d => d.IdMayCuNavigation).WithMany(p => p.LichSuChuyenDoiIdMayCuNavigations)
-                .HasForeignKey(d => d.IdMayCu)
-                .OnDelete(DeleteBehavior.ClientSetNull);
-
-            entity.HasOne(d => d.IdMayMoiNavigation).WithMany(p => p.LichSuChuyenDoiIdMayMoiNavigations)
-                .HasForeignKey(d => d.IdMayMoi)
-                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.Property(e => e.Publisher).HasMaxLength(255);
+            entity.Property(e => e.SoftwareCode).HasMaxLength(50);
+            entity.Property(e => e.SoftwareName).HasMaxLength(255);
+            entity.Property(e => e.SoftwareType).HasMaxLength(150);
         });
 
-        modelBuilder.Entity<LoaiThietBi>(entity =>
+        modelBuilder.Entity<Supplier>(entity =>
         {
-            entity.HasIndex(e => e.MaLoai, "IX_LoaiThietBis_MaLoai").IsUnique();
+            entity.HasKey(e => e.Id).HasName("PK_NhaCungCaps");
 
-            entity.Property(e => e.MaLoai).HasMaxLength(50);
-            entity.Property(e => e.TenLoai).HasMaxLength(255);
+            entity.HasIndex(e => e.SupplierCode, "IX_NhaCungCaps_MaNhaCungCap").IsUnique();
+
+            entity.Property(e => e.SupplierCode).HasMaxLength(50);
+            entity.Property(e => e.SupplierName).HasMaxLength(255);
         });
 
-        modelBuilder.Entity<NhaCungCap>(entity =>
+        modelBuilder.Entity<TransferHistory>(entity =>
         {
-            entity.HasIndex(e => e.MaNhaCungCap, "IX_NhaCungCaps_MaNhaCungCap").IsUnique();
+            entity.HasKey(e => e.Id).HasName("PK_LichSuChuyenDois");
 
-            entity.Property(e => e.MaNhaCungCap).HasMaxLength(50);
-            entity.Property(e => e.TenNhaCungCap).HasMaxLength(255);
-        });
+            entity.HasIndex(e => e.OldDeviceId, "IX_LichSuChuyenDois_IdMayCu");
 
-        modelBuilder.Entity<PhanMem>(entity =>
-        {
-            entity.HasIndex(e => e.MaPhanMem, "IX_PhanMems_MaPhanMem").IsUnique();
+            entity.HasIndex(e => e.NewDeviceId, "IX_LichSuChuyenDois_IdMayMoi");
 
-            entity.Property(e => e.MaPhanMem).HasMaxLength(50);
-            entity.Property(e => e.NhaPhatHanh).HasMaxLength(150);
-            entity.Property(e => e.TenPhanMem).HasMaxLength(255);
-        });
+            entity.Property(e => e.Note).HasMaxLength(500);
 
-        modelBuilder.Entity<ThietBi>(entity =>
-        {
-            entity.HasIndex(e => e.ChiNhanhId, "IX_ThietBis_ChiNhanhId");
+            entity.HasOne(d => d.NewDevice).WithMany(p => p.TransferHistoryNewDevices)
+                .HasForeignKey(d => d.NewDeviceId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_LichSuChuyenDois_ThietBis_IdMayMoi");
 
-            entity.HasIndex(e => e.LoaiThietBiId, "IX_ThietBis_LoaiThietBiId");
-
-            entity.HasIndex(e => e.MaMay, "IX_ThietBis_MaMay").IsUnique();
-
-            entity.HasIndex(e => e.NhaCungCapId, "IX_ThietBis_NhaCungCapId");
-
-            entity.Property(e => e.Email).HasMaxLength(255);
-            entity.Property(e => e.GhiChu).HasMaxLength(500);
-            entity.Property(e => e.MaMay).HasMaxLength(50);
-            entity.Property(e => e.NguoiQuanLy).HasMaxLength(150);
-            entity.Property(e => e.TenMay).HasMaxLength(255);
-
-            entity.HasOne(d => d.ChiNhanh).WithMany(p => p.ThietBis).HasForeignKey(d => d.ChiNhanhId);
-
-            entity.HasOne(d => d.LoaiThietBi).WithMany(p => p.ThietBis).HasForeignKey(d => d.LoaiThietBiId);
-
-            entity.HasOne(d => d.NhaCungCap).WithMany(p => p.ThietBis).HasForeignKey(d => d.NhaCungCapId);
-        });
-
-        modelBuilder.Entity<ThietBiPhanMem>(entity =>
-        {
-            entity.HasKey(e => new { e.ThietBiId, e.PhanMemId });
-
-            entity.ToTable("ThietBi_PhanMems");
-
-            entity.HasIndex(e => e.PhanMemId, "IX_ThietBi_PhanMems_PhanMemId");
-
-            entity.Property(e => e.LicenseKey).HasMaxLength(255);
-
-            entity.HasOne(d => d.PhanMem).WithMany(p => p.ThietBiPhanMems).HasForeignKey(d => d.PhanMemId);
-
-            entity.HasOne(d => d.ThietBi).WithMany(p => p.ThietBiPhanMems).HasForeignKey(d => d.ThietBiId);
+            entity.HasOne(d => d.OldDevice).WithMany(p => p.TransferHistoryOldDevices)
+                .HasForeignKey(d => d.OldDeviceId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_LichSuChuyenDois_ThietBis_IdMayCu");
         });
 
         OnModelCreatingPartial(modelBuilder);

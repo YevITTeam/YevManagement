@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Asset.Domain;
+namespace Asset.Domain.Entities;
 
-public partial class CauHinhThietBi
+public partial class DeviceConfiguration
 {
     public int Id { get; set; }
 
-    public int ThietBiId { get; set; }
+    public int DeviceId { get; set; }
 
     public string? Mainboard { get; set; }
 
@@ -15,7 +15,7 @@ public partial class CauHinhThietBi
 
     public string? Ram { get; set; }
 
-    public string? Ocung { get; set; }
+    public string? HardDrive { get; set; }
 
     public string? Monitor { get; set; }
 
@@ -35,7 +35,7 @@ public partial class CauHinhThietBi
 
     public string? Vga { get; set; }
 
-    public string? GhiChu { get; set; }
+    public string? Note { get; set; }
 
-    public virtual ThietBi ThietBi { get; set; } = null!;
+    public virtual Device Device { get; set; } = null!;
 }

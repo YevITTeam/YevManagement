@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Asset.Domain;
+namespace Asset.Domain.Entities;
 
-public partial class DiaChiIp
+public partial class IpAddress
 {
     public int Id { get; set; }
 
-    public string DiaChi { get; set; } = null!;
+    public string IpAddress1 { get; set; } = null!;
 
     public string? SubnetMask { get; set; }
 
@@ -19,13 +19,13 @@ public partial class DiaChiIp
 
     public string? ServerIp { get; set; }
 
-    public int? ThietBiId { get; set; }
+    public int? DeviceId { get; set; }
 
-    public int TrangThai { get; set; }
+    public int Status { get; set; }
 
-    public string? GhiChu { get; set; }
+    public string? Note { get; set; }
 
     public bool IsDeleted { get; set; }
 
-    public virtual ThietBi? ThietBi { get; set; }
+    public virtual Device? Device { get; set; }
 }
