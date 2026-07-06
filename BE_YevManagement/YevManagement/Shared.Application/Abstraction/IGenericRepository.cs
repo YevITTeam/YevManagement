@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Shared.Application.Wrapper;
+using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
@@ -34,5 +35,11 @@ namespace Shared.Application.Abstractions
         IQueryable<T> GetQueryable(bool isTracking = false, params Expression<Func<T, object>>[] includes);
 
         Task<IReadOnlyList<T>> GetPagedAsync(IQueryable<T> query, int pageIndex, int pageSize);
+
+        Task<PagedResponse<TResult>> ToPagedResponseAsync<TResult>(
+            IQueryable<T> query,
+            int pageIndex,
+            int pageSize,
+            Expression<Func<T, TResult>> selector);
     }
 }

@@ -1,10 +1,11 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using Shared.Application.Abstractions;
+using Shared.Application.Wrapper;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
-using Shared.Application.Abstractions;
 
 namespace Shared.Infrastructure.Repositories
 {
@@ -93,6 +94,23 @@ namespace Shared.Infrastructure.Repositories
             return await query.Skip((pageIndex - 1) * pageSize)
                               .Take(pageSize)
                               .ToListAsync();
+        }
+
+        public async Task<PagedResponse<TResult>> ToPagedResponseAsync<TResult>(
+            IQueryable<T> query,
+            int pageIndex,
+            int pageSize,
+            Expression<Func<T, TResult>> selector)
+        {
+            var totalCount = await query.CountAsync();
+
+            var items = await query
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(selector)
+                .ToListAsync();
+
+            return new PagedResponse<TResult>(items, totalCount, pageIndex, pageSize);
         }
     }
 }

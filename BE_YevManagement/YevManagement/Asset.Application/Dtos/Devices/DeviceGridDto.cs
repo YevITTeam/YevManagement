@@ -11,7 +11,7 @@
         public string? IpAddress { get; set; }
         public DateTime PurchaseDate { get; set; }
         public string Manager { get; set; } = null!;
-        public int? ExpirationDays { get; set; }
+        public DateTime? ExpirationDate { get; set; }
         public string? Note { get; set; }
         public string? Email { get; set; }
         public int Status { get; set; }
