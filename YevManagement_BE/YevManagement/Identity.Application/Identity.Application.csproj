@@ -12,10 +12,4 @@
     <ProjectReference Include="..\Shared.Core\Shared.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Dtos\" />
-    <Folder Include="Interfaces\Repository\" />
-    <Folder Include="Services\" />
-  </ItemGroup>
-
 </Project>

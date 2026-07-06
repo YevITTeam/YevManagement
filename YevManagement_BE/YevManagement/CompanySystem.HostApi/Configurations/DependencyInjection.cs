@@ -1,6 +1,9 @@
 ﻿using Asset.Infrastructure.Context;
+using Identity.Infrastructure.Authentication;
+
 //using CompanySystem.HostApi.Middlewares;
 using Identity.Infrastructure.Context;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 
 namespace CompanySystem.HostApi.Configurations
@@ -26,16 +29,17 @@ namespace CompanySystem.HostApi.Configurations
                 assembly.FullName.StartsWith("Shared"))
 
             .AddClasses(classes => classes.Where(type =>
-                type.Name.EndsWith("Repo") ||
+                type.Name.EndsWith("Repository") ||
+                type.Name.EndsWith("UnitOfWork") ||
                 type.Name.EndsWith("Service")))
             .AsImplementedInterfaces()
             .WithScopedLifetime()
             );
 
-            //services.AddScoped<IClaimsTransformation, MyClaimsTransformation>();
 
             // Register IHttpContextAccessor
             services.AddHttpContextAccessor();
+            services.AddScoped<IClaimsTransformation, MyClaimsTransformation>();
 
             return services;
         }
