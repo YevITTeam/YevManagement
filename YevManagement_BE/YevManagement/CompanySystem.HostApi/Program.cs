@@ -28,14 +28,13 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowNextJs", policy =>
     {
-        // Thêm IP mạng LAN của bạn vào đây (cách nhau bằng dấu phẩy)
         policy.WithOrigins(
                   "http://localhost:3000",
-                  "http://10.45.1.181:3000" // Sửa lại đúng với IP máy bạn nếu IP khác nhé
+                  "http://10.45.1.181:3000"
               )
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials(); // Bắt buộc để truyền Windows Auth
+              .AllowCredentials();
     });
 });
 // Configure dependency injection for Identity and Asset modules
@@ -51,7 +50,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseCors("AllowNextJs"); // Bắt buộc nằm trước Auth
+app.UseCors("AllowNextJs");
 // Apply forwarded headers before authentication so client IP and scheme are correct
 app.UseForwardedHeaders();
 app.UseAuthentication();
