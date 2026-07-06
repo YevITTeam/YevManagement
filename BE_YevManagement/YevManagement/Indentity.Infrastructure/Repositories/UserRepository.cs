@@ -18,23 +18,11 @@ namespace Identity.Infrastructure.Repositories
             
         }
 
-        public async Task<User> GeUserWithRolesAsync(string userName)
+        public async Task<User?> GetUserWithRolesAsync(string userName)
         {
-            var user = await _dbContext.Users
-                .Select(u => new User
-                {
-                    UserName = u.UserName,
-                    FullName = u.FullName,
-                    Roles = u.Roles
-                })
-                .Include(ur => ur.Roles)
+            return await _dbContext.Users
+                .Include(u => u.Roles)
                 .FirstOrDefaultAsync(u => u.UserName == userName);
-
-            if (user == null) 
-                return null;
-
-
-            return user;
         }
 
     }

@@ -77,5 +77,22 @@ namespace Shared.Infrastructure.Repositories
                                .Select(selector)
                                .ToListAsync();
         }
+
+        public IQueryable<T> GetQueryable(bool isTracking = false, params Expression<Func<T, object>>[] includes)
+        {
+            var query = isTracking ? _dbSet.AsTracking() : _dbSet.AsNoTracking();
+            foreach (var include in includes)
+            {
+                query = query.Include(include);
+            }
+            return query;
+        }
+
+        public async Task<IReadOnlyList<T>> GetPagedAsync(IQueryable<T> query, int pageIndex, int pageSize)
+        {
+            return await query.Skip((pageIndex - 1) * pageSize)
+                              .Take(pageSize)
+                              .ToListAsync();
+        }
     }
 }

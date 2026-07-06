@@ -1,4 +1,5 @@
 using CompanySystem.HostApi.Configurations;
+using CompanySystem.HostApi.Middlewares;
 using Microsoft.AspNetCore.HttpOverrides;
 using Scalar.AspNetCore;
 
@@ -40,6 +41,9 @@ builder.Services.AddCors(options =>
 builder.Services.AddDIConfig(builder.Configuration);
 
 var app = builder.Build();
+
+// Add the exception handling middleware to the pipeline
+app.UseMiddleware<HandleExceptionMiddleware>();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

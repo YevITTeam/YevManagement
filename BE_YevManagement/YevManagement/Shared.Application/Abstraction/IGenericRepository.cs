@@ -30,5 +30,9 @@ namespace Shared.Application.Abstractions
         Task<IReadOnlyList<TResult>> SelectAsync<TResult>(
             Expression<Func<T, bool>> predicate,
             Expression<Func<T, TResult>> selector);
+
+        IQueryable<T> GetQueryable(bool isTracking = false, params Expression<Func<T, object>>[] includes);
+
+        Task<IReadOnlyList<T>> GetPagedAsync(IQueryable<T> query, int pageIndex, int pageSize);
     }
 }
