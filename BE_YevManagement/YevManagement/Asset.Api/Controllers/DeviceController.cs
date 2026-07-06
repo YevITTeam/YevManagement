@@ -20,10 +20,10 @@ namespace Asset.Api.Controllers
 
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<DeviceGridDto>>>> GetDevicesGrid(
-            [FromQuery] int pageIndex = 1,
-            [FromQuery] int pageSize = 50)
+            [FromQuery] DeviceFilterRequest request)
         {
-            var result = await _deviceService.GetDevicesForGridAsync(pageIndex, pageSize);
+            var result = await _deviceService.GetDevicesForGridAsync(request);
+
             return Success(result, "Lấy danh sách thiết bị thành công.");
         }
     }

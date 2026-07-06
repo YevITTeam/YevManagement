@@ -11,7 +11,7 @@ namespace Asset.Application.Services
         {
         }
 
-        public async Task<PagedResponse<DeviceGridDto>> GetDevicesForGridAsync(int pageIndex, int pageSize)
+        public async Task<PagedResponse<DeviceGridDto>> GetDevicesForGridAsync(DeviceFilterRequest request)
         {
             var query = _unitOfWork.Devices.GetQueryable(
                 false,
@@ -19,10 +19,37 @@ namespace Asset.Application.Services
                 d => d.Supplier,
                 d => d.DeviceType);
 
+            query = query.Where(d => !d.IsDeleted);
+
+            if (!string.IsNullOrWhiteSpace(request.DeviceCode))
+            {
+                query = query.Where(d => d.DeviceCode.StartsWith(request.DeviceCode));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Manager))
+            {
+                query = query.Where(d => d.Manager.StartsWith(request.Manager));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.SupplierName))
+            {
+                query = query.Where(d => d.Supplier.SupplierName.StartsWith(request.SupplierName));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.PurchaseDate))
+            {
+                query = query.Where(d => d.PurchaseDate.ToString().Contains(request.PurchaseDate));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Note))
+            {
+                query = query.Where(d => d.Note != null && d.Note.Contains(request.Note));
+            }
+
             return await _unitOfWork.Devices.ToPagedResponseAsync(
-                query.Where(d => !d.IsDeleted).OrderByDescending(d => d.PurchaseDate),
-                pageIndex,
-                pageSize,
+                query.OrderByDescending(d => d.PurchaseDate),
+                request.PageIndex,
+                request.PageSize,
                 d => new DeviceGridDto
                 {
                     Id = d.Id,
@@ -33,7 +60,6 @@ namespace Asset.Application.Services
                     DeviceTypeName = d.DeviceType.TypeName,
                     IpAddress = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).FirstOrDefault(),
                     PurchaseDate = d.PurchaseDate,
-                    ExpirationDate = d.ExpirationDate,
                     Manager = d.Manager,
                     Note = d.Note,
                     Email = d.Email,

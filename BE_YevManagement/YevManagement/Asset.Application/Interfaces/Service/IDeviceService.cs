@@ -5,6 +5,6 @@ namespace Asset.Application.Interfaces.Service
 {
     public interface IDeviceService
     {
-        Task<PagedResponse<DeviceGridDto>> GetDevicesForGridAsync(int pageIndex, int pageSize);
+        Task<PagedResponse<DeviceGridDto>> GetDevicesForGridAsync(DeviceFilterRequest request);
     }
 }
