@@ -1,6 +1,8 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
+import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
 
 const statusLabels: Record<number, string> = {
   1: "Chờ vận hành",
@@ -24,6 +26,7 @@ const mockDevices = [
     loaiThietBi: "Máy bàn",
     nhaCungCap: "FPT Hardware",
     chiNhanh: "Hà Nội HQ",
+    boPhan: "IT",
     nguoiQuanLy: "Nguyễn Văn A",
     email: "a.nguyen@yevmgr.local",
     ngayMua: "2024-01-15",
@@ -37,6 +40,7 @@ const mockDevices = [
     loaiThietBi: "Laptop",
     nhaCungCap: "Dell Việt Nam",
     chiNhanh: "Đà Nẵng Branch",
+    boPhan: "SẢN XUẤT",
     nguoiQuanLy: "Trần Thị B",
     email: "b.tran@yevmgr.local",
     ngayMua: "2023-09-10",
@@ -50,6 +54,7 @@ const mockDevices = [
     loaiThietBi: "Máy bàn",
     nhaCungCap: "ASUS",
     chiNhanh: "HCM Office",
+    boPhan: "HR",
     nguoiQuanLy: "Lê Văn C",
     email: "c.le@yevmgr.local",
     ngayMua: "2022-12-05",
@@ -63,6 +68,7 @@ const mockDevices = [
     loaiThietBi: "Máy chủ",
     nhaCungCap: "ASUS",
     chiNhanh: "Hà Nội HQ",
+    boPhan: "KẾ TOÁN",
     nguoiQuanLy: "Phạm Thị D",
     email: "d.pham@yevmgr.local",
     ngayMua: "2021-05-20",
@@ -79,26 +85,55 @@ function formatDate(value: string | null) {
 }
 
 export default function PcDashboardPage() {
-  const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState<DeviceFilters>({
+    search: "",
+    branch: "",
+    deviceType: "",
+    status: "",
+    supplier: "",
+    purchaseFrom: "",
+    purchaseTo: "",
+    expiryDate: "",
+  });
 
   const filteredDevices = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = filters.search.trim().toLowerCase();
 
-    if (!normalized) {
-      return mockDevices;
-    }
+    return mockDevices.filter((device) => {
+      const matchesSearch =
+        !normalized ||
+        [device.maMay, device.tenMay, device.loaiThietBi, device.nhaCungCap, device.chiNhanh, device.boPhan, device.nguoiQuanLy]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalized);
 
-    return mockDevices.filter((device) =>
-      [device.maMay, device.tenMay, device.loaiThietBi, device.nhaCungCap, device.chiNhanh, device.nguoiQuanLy]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalized),
-    );
-  }, [query]);
+      const matchesBranch = !filters.branch || device.chiNhanh.toLowerCase().includes(filters.branch.toLowerCase());
+      const matchesDeviceType = !filters.deviceType || device.loaiThietBi === filters.deviceType;
+      const matchesStatus =
+        !filters.status ||
+        (filters.status === "Đang sử dụng" && device.trangThai === 2) ||
+        (filters.status === "Chờ thanh lý" && device.trangThai === 1) ||
+        (filters.status === "Đang thuê ngoài" && device.trangThai === 4);
+      const matchesSupplier = !filters.supplier || device.nhaCungCap.toLowerCase().includes(filters.supplier.toLowerCase());
+      const matchesPurchaseFrom = !filters.purchaseFrom || device.ngayMua >= filters.purchaseFrom;
+      const matchesPurchaseTo = !filters.purchaseTo || device.ngayMua <= filters.purchaseTo;
+      const matchesExpiry = !filters.expiryDate || (device.hanSuDung ? device.hanSuDung <= filters.expiryDate : false);
+
+      return (
+        matchesSearch &&
+        matchesBranch &&
+        matchesDeviceType &&
+        matchesStatus &&
+        matchesSupplier &&
+        matchesPurchaseFrom &&
+        matchesPurchaseTo &&
+        matchesExpiry
+      );
+    });
+  }, [filters]);
 
   const activeDevices = mockDevices.filter((item) => item.trangThai === 2).length;
   const pendingDevices = mockDevices.filter((item) => item.trangThai === 1).length;
-  const otherDevices = mockDevices.filter((item) => item.trangThai !== 2 && item.trangThai !== 1).length;
 
   return (
     <div className="space-y-8">
@@ -109,6 +144,12 @@ export default function PcDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/pc/reports"
+            className="border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+          >
+            📊 Xem báo cáo
+          </Link>
           <button className="border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]">
             ↻ Đồng bộ Tanium
           </button>
@@ -121,71 +162,50 @@ export default function PcDashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="border border-[#e0e3e5] bg-white p-5">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">Tổng tài sản</div>
-          <div className="mt-3 text-[32px] font-semibold text-[#191c1e]">{mockDevices.length}</div>
-        </div>
-        <div className="border border-[#e0e3e5] bg-white p-5">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">Đang kết nối</div>
-          <div className="mt-3 text-[32px] font-semibold text-[#191c1e]">{activeDevices}</div>
-        </div>
-        <div className="border border-[#e0e3e5] bg-white p-5">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">Cần cập nhật</div>
-          <div className="mt-3 text-[32px] font-semibold text-[#e3000f]">{pendingDevices}</div>
-        </div>
-        <div className="border border-[#e0e3e5] bg-white p-5">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">Trạng thái hệ thống</div>
-          <div className="mt-3 flex items-center gap-2 text-[20px] font-semibold text-[#191c1e]">
-            <span className="h-2 w-2 bg-emerald-500" /> Tối ưu
-          </div>
-        </div>
-      </div>
-
       <section className="overflow-hidden border border-[#e0e3e5] bg-white">
-        <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex gap-2">
-            <select className="border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e]">
-              <option>Tất cả chi nhánh</option>
-              <option>Hà Nội</option>
-              <option>Đà Nẵng</option>
-              <option>Hồ Chí Minh</option>
-            </select>
-            <select className="border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e]">
-              <option>Tất cả loại</option>
-              <option>Máy bàn</option>
-              <option>Laptop</option>
-              <option>Máy chủ</option>
-            </select>
-          </div>
-          <div className="text-sm text-[#5e3f3a]">Hiển thị {filteredDevices.length} bản ghi</div>
+        <div className="border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
+          <DeviceFilterBar onFilter={setFilters} />
+        </div>
+
+        <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-white p-4 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm font-medium text-[#5e3f3a]">Hiển thị {filteredDevices.length} bản ghi</div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                <th className="px-6 py-3">Mã máy</th>
-                <th className="px-6 py-3">Tên máy</th>
-                <th className="px-6 py-3">Loại thiết bị</th>
-                <th className="px-6 py-3">Chi nhánh</th>
-                <th className="px-6 py-3">Trạng thái</th>
-                <th className="px-6 py-3 text-right">Thao tác</th>
+                <th className="px-4 py-3">Mã máy</th>
+                <th className="px-4 py-3">Tên máy</th>
+                <th className="px-4 py-3">Loại thiết bị</th>
+                <th className="px-4 py-3">Nhà cung cấp</th>
+                <th className="px-4 py-3">Chi nhánh</th>
+                <th className="px-4 py-3">Người quản lý</th>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Ngày mua</th>
+                <th className="px-4 py-3">Hạn sử dụng</th>
+                <th className="px-4 py-3">Trạng thái</th>
+                <th className="px-4 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {filteredDevices.map((device) => (
-                <tr key={device.id} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
-                  <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{device.maMay}</td>
-                  <td className="px-6 py-4 text-sm text-[#191c1e]">{device.tenMay}</td>
-                  <td className="px-6 py-4 text-sm text-[#5e3f3a]">{device.loaiThietBi}</td>
-                  <td className="px-6 py-4 text-sm text-[#5e3f3a]">{device.chiNhanh}</td>
-                  <td className="px-6 py-4">
+                <tr key={device.id} className="border-b border-[#f1f5f9] align-top hover:bg-[#f8fafc]">
+                  <td className="px-4 py-4 text-sm font-semibold text-[#191c1e]">{device.maMay}</td>
+                  <td className="px-4 py-4 text-sm text-[#191c1e]">{device.tenMay}</td>
+                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{device.loaiThietBi}</td>
+                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{device.nhaCungCap}</td>
+                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{device.chiNhanh}</td>
+                  <td className="px-4 py-4 text-sm text-[#191c1e]">{device.nguoiQuanLy}</td>
+                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{device.email}</td>
+                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{formatDate(device.ngayMua)}</td>
+                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{formatDate(device.hanSuDung)}</td>
+                  <td className="px-4 py-4">
                     <span className={`inline-flex px-3 py-1 text-xs font-semibold ${statusClasses[device.trangThai]}`}>
                       {statusLabels[device.trangThai]}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right text-sm text-[#5e3f3a]">⋯</td>
+                  <td className="px-4 py-4 text-right text-sm text-[#5e3f3a]">⋯</td>
                 </tr>
               ))}
             </tbody>

@@ -10,10 +10,12 @@ import {
   Package,
   ShieldCheck,
   Users,
+  Flag,
 } from "lucide-react";
 
 const navItems = [
-  { label: "Quản lý Tài sản", href: "/pc", icon: Computer }, // Đã bỏ dấu '/' ở cuối
+  { label: "Quản lý Thiết bị", href: "/pc", icon: Computer },
+  { label: "Báo cáo thống kê", href: "/pc/reports", icon: Flag },
   { label: "Quản lý IP", href: "/pc/ips", icon: Monitor },
   { label: "Quản lý loại thiết bị", href: "/pc/device-types", icon: HardDrive },
   { label: "Quản lý chi nhánh", href: "/pc/branches", icon: Building2 },
@@ -25,7 +27,8 @@ export default function PcManagerSidebar() {
   const pathname = usePathname() || "";
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6">
+    // Trích xuất phần khai báo aside trong PcManagerSidebar.tsx
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-[13.75rem] flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6">
       <div className="px-5">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center bg-[#e3000f] text-lg font-bold text-white">
