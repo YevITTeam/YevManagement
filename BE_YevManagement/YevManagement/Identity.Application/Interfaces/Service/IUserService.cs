@@ -8,7 +8,6 @@ namespace Identity.Application.Interfaces.Service
     public interface IUserService
     {
         Task<UserDto> SyncWindowsUserAsync(string username, string fullName);
-        Task<List<RoleDto>> GetAllRolesAsync();
         Task<List<UserDto>> GetAllUsersAsync();
         Task UpdateUserRolesAsync(UpdateUserRolesDto request);
     }

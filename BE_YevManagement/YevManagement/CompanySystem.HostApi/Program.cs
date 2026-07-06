@@ -1,6 +1,7 @@
 using CompanySystem.HostApi.Configurations;
 using CompanySystem.HostApi.Middlewares;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,7 +12,34 @@ builder.Services.AddControllers()
     .AddApplicationPart(typeof(Asset.Api.AssemblyReference).Assembly);
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            Description = "Nhập Access Token của bạn vào đây"
+        };
+
+        document.Security ??= new List<OpenApiSecurityRequirement>();
+
+        document.Security.Add(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecuritySchemeReference("Bearer"),
+                new List<string>() // <--- Đã sửa thành List<string> để hết báo lỗi đỏ
+            }
+        });
+
+        return Task.CompletedTask;
+    });
+});
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {

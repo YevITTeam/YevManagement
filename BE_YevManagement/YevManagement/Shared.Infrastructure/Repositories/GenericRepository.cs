@@ -66,6 +66,11 @@ namespace Shared.Infrastructure.Repositories
                 query = query.Include(include);
             }
 
+            if(predicate == null)
+            {
+                return await query.ToListAsync();
+            }
+
             return await query.Where(predicate).ToListAsync();
         }
 

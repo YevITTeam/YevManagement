@@ -11,21 +11,9 @@ namespace Identity.Application.Services
         {
         }
 
-        public async Task<List<RoleDto>> GetAllRolesAsync()
-        {
-            var roles = await _unitOfWork.Roles.GetAllAsync();
-
-            return roles.Select(role => new RoleDto
-            {
-                Id = role.Id,
-                RoleName = role.RoleName,
-                Description = role.Description
-            }).ToList();
-        }
-
         public async Task<List<UserDto>> GetAllUsersAsync()
         {
-            var users = await _unitOfWork.Users.GetAllAsync();
+            var users = await _unitOfWork.Users.FindWithIncludesAsync(null,x =>x.Roles);
 
             return users.Select(user => new UserDto
             {
@@ -82,7 +70,7 @@ namespace Identity.Application.Services
         {
             if (request == null || request.RoleIds == null)
             {
-                throw new ArgumentException("Dữ liệu cấp quyền không hợp lệ.");
+                throw new Exception("Dữ liệu cấp quyền không hợp lệ.");
             }
 
             var user = await _unitOfWork.Users.FirstOrDefaultAsync(
