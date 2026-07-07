@@ -8,6 +8,7 @@ interface TableProps {
 interface TableCellProps {
     className?: string;
     children: ReactNode;
+    colSpan?: number;
 }
 
 export function Table({ className = "", children }: TableProps) {
@@ -34,6 +35,10 @@ export function TableRow({ className = "", children }: TableProps) {
     return <tr className={`border-b border-slate-100 hover:bg-slate-50 ${className}`}>{children}</tr>;
 }
 
-export function TableCell({ className = "", children }: TableCellProps) {
-    return <td className={`px-4 py-4 text-sm text-slate-700 ${className}`}>{children}</td>;
+export function TableCell({ className = "", children, colSpan }: TableCellProps) {
+    return (
+        <td colSpan={colSpan} className={`px-4 py-4 text-sm text-slate-700 ${className}`}>
+            {children}
+        </td>
+    );
 }

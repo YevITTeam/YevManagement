@@ -1,7 +1,9 @@
 "use client";
 
 import { Building2, Calendar, ChevronDown, ChevronUp, Filter, MapPin, Search, Tag, Truck, User, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { BranchApi } from "@/modules/pc-management/api/branch.api";
+import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 
 export interface DeviceFilters {
     deviceCode: string;
@@ -56,6 +58,21 @@ const fieldLabelClassName = "mb-1.5 flex items-center gap-1.5 text-xs font-semib
 export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
+    const [branches, setBranches] = useState<BranchDto[]>([]);
+
+    useEffect(() => {
+        let isCancelled = false;
+
+        BranchApi.getAllBranches()
+            .then((data) => {
+                if (!isCancelled) setBranches(data);
+            })
+            .catch((err) => console.error(err));
+
+        return () => {
+            isCancelled = true;
+        };
+    }, []);
 
     const activeEntries = useMemo(
         () => (Object.entries(filters) as [keyof DeviceFilters, string][]).filter(([, value]) => value !== ""),
@@ -119,10 +136,11 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                     className={fieldWithIconClassName}
                                 >
                                     <option value="">Tất cả chi nhánh</option>
-                                    <option value="Hà Nội">Hà Nội</option>
-                                    <option value="Đà Nẵng">Đà Nẵng</option>
-                                    <option value="Hồ Chí Minh">Hồ Chí Minh</option>
-                                    <option value="Trà Vinh">Trà Vinh</option>
+                                    {branches.map((branch) => (
+                                        <option key={branch.id} value={branch.branchName}>
+                                            {branch.branchName}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                         </label>
