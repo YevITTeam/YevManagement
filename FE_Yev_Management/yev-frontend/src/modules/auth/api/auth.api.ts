@@ -26,7 +26,7 @@ export const AuthApi = {
     return response.data;
   },
   updateUserRoles: async ({ userId, roleIds }: { userId: number; roleIds: number[] }) => {
-    const response = await api.put<ApiResponse<any>>(ENDPOINTS.AUTH.updateUserRoles, { userId, roleIds });
+    const response = await api.post<ApiResponse<any>>(ENDPOINTS.AUTH.updateUserRoles, { userId, roleIds });
     return response.data;
   },
 

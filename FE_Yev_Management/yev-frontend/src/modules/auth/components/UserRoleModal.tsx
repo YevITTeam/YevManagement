@@ -96,7 +96,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
             {/* Header Section */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-[32px] font-semibold text-[#191c1e]">Phân quyền người dùng</h1>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền người dùng</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
                         Cập nhật vai trò cho từng tài khoản hệ thống.
                     </p>
@@ -134,7 +134,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                 value={searchTerm}
                                 onChange={(event) => setSearchTerm(event.target.value)}
                                 placeholder="Tìm tài khoản hoặc tên..."
-                                className="h-10 w-full rounded-md border border-[#e0e3e5] bg-white pl-9 pr-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white pl-9 pr-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                             />
                         </div>
                         <div className="text-sm font-medium text-[#5e3f3a]">
@@ -184,7 +184,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                             <button
                                                 onClick={() => setOpenRoleModalUserId(user.id)}
                                                 disabled={isSelf}
-                                                className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${isSelf
+                                                className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${isSelf
                                                     ? "cursor-not-allowed border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a] opacity-60"
                                                     : "border-[#e0e3e5] bg-white text-[#191c1e] hover:border-[#e3000f] hover:bg-[#fff4f2]"
                                                     }`}
@@ -214,7 +214,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                             <button
                                                 onClick={() => handleSave(user.id)}
                                                 disabled={isSelf}
-                                                className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition ${isSelf
+                                                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${isSelf
                                                     ? "cursor-not-allowed bg-[#eceef0] text-[#5e3f3a]"
                                                     : "bg-[#e3000f] text-white hover:bg-[#b40009]"
                                                     }`}

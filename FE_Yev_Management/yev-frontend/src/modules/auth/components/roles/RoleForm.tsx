@@ -35,38 +35,42 @@ export default function RoleForm({ initial, onCancel, onSubmit }: Props) {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-                <label className="block text-sm font-medium text-gray-700">Tên quyền</label>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Tên quyền</label>
                 <input
                     value={roleName}
                     onChange={(e) => setRoleName(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     placeholder="ví dụ: Admin, Manager"
                     required
                 />
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-gray-700">Mô tả (tuỳ chọn)</label>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Mô tả (tuỳ chọn)</label>
                 <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="block w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     rows={3}
                 />
             </div>
 
-            <div className="flex gap-2 justify-end">
+            <div className="flex justify-end gap-3">
                 {onCancel && (
-                    <button type="button" onClick={onCancel} className="cursor-pointer px-3 py-1 rounded-md border">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                    >
                         Huỷ
                     </button>
                 )}
                 <button
                     type="submit"
                     disabled={submitting}
-                    className=" cursor-pointer px-3 py-1 rounded-md bg-blue-600 text-white disabled:opacity-60"
+                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     {initial ? (submitting ? "Lưu..." : "Lưu thay đổi") : submitting ? "Tạo..." : "Tạo quyền"}
                 </button>

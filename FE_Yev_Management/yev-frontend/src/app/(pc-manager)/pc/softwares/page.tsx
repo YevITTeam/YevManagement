@@ -9,7 +9,7 @@ export default function SoftwaresPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-[32px] font-semibold text-[#191c1e]">Quản lý phần mềm</h1>
+          <h1 className="text-2xl font-semibold text-[#191c1e]">Quản lý phần mềm</h1>
           <p className="mt-1 text-[15px] text-[#5e3f3a]">Theo dõi các phần mềm được cấp phép và sử dụng trong doanh nghiệp.</p>
         </div>
 

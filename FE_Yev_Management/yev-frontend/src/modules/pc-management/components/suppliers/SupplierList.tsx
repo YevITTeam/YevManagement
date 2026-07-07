@@ -123,7 +123,7 @@ export default function SupplierList() {
         <div className="space-y-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-[32px] font-semibold text-[#191c1e]">Nhà cung cấp</h1>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">Nhà cung cấp</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">Quản lý các nhóm nhà cung cấp và mô tả.</p>
                 </div>
 

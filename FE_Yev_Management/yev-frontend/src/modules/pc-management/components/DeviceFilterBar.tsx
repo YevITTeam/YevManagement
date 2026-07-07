@@ -49,7 +49,7 @@ const filterLabels: Record<keyof DeviceFilters, string> = {
 const advancedFields: (keyof DeviceFilters)[] = ["supplierName", "manager", "ipAddress", "purchaseDate", "expiryDate"];
 
 const fieldClassName =
-    "h-10 w-full rounded-md border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
 const fieldWithIconClassName = `${fieldClassName} pl-9`;
 
@@ -118,7 +118,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                     value={filters.deviceCode}
                                     onChange={(event) => handleChange("deviceCode", event.target.value)}
                                     placeholder="Nhập mã thiết bị..."
-                                    className="h-10 w-full rounded-md border border-[#e0e3e5] bg-[#f8fafc] pl-9 pr-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:bg-white focus:ring-2 focus:ring-[#ffe0e3]"
+                                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-[#f8fafc] pl-9 pr-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:bg-white focus:ring-2 focus:ring-[#ffe0e3]"
                                 />
                             </div>
                         </label>
@@ -187,7 +187,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         <button
                             type="button"
                             onClick={() => setIsAdvancedOpen((current) => !current)}
-                            className="flex h-10 items-center gap-2 rounded-md border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f8fafc]"
+                            className="flex h-10 items-center gap-2 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f8fafc]"
                         >
                             <Filter className="h-4 w-4" />
                             Bộ lọc nâng cao
@@ -202,7 +202,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         <button
                             type="button"
                             onClick={handleReset}
-                            className="cursor-pointer flex h-10 items-center gap-2 rounded-md border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc]"
+                            className="cursor-pointer flex h-10 items-center gap-2 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc]"
                         >
                             <X className="h-4 w-4" />
                             Xóa bộ lọc
@@ -211,7 +211,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         <button
                             type="button"
                             onClick={handleSubmit}
-                            className="cursor-pointer h-10 rounded-md bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                            className="cursor-pointer h-10 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                         >
                             Lọc dữ liệu
                         </button>

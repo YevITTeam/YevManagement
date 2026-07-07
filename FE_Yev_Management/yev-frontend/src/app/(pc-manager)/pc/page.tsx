@@ -123,7 +123,7 @@ export default function PcDashboardPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-[32px] font-semibold text-[#191c1e]">Quản lý Thiết bị</h1>
+          <h1 className="text-2xl font-semibold text-[#191c1e]">Quản lý Thiết bị</h1>
           <p className="mt-1 text-[15px] text-[#5e3f3a]">Quản lý và theo dõi thiết bị phần cứng qua các văn phòng.</p>
         </div>
 

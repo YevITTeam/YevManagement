@@ -23,16 +23,11 @@ const config: Config = {
                 "surface-container-low": "#f2f4f6",
                 "surface-container-lowest": "#ffffff",
                 "outline-variant": "#e0e3e5",
+                muted: "#8a8f94",
             },
             fontFamily: {
-                sans: ["Hanken Grotesk", "Arial", "sans-serif"],
+                sans: ["Inter", "Arial", "sans-serif"],
                 mono: ["JetBrains Mono", "monospace"],
-            },
-            borderRadius: {
-                DEFAULT: "0px",
-                lg: "0px",
-                xl: "0px",
-                full: "0px",
             },
         },
     },

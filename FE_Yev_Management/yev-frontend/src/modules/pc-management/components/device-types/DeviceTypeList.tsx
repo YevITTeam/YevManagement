@@ -124,7 +124,7 @@ export default function DeviceTypeList() {
         <div className="space-y-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-[32px] font-semibold text-[#191c1e]">Loại thiết bị</h1>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">Loại thiết bị</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">Quản lý các nhóm thiết bị và mô tả sử dụng.</p>
                 </div>
 
@@ -132,20 +132,20 @@ export default function DeviceTypeList() {
                     <button
                         onClick={() => fetchDeviceTypes()}
                         disabled={isLoading}
-                        className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
                         ↻ Làm mới
                     </button>
                     <button
                         onClick={openCreateForm}
-                        className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                        className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
                     >
                         + Thêm mới
                     </button>
                 </div>
             </div>
 
-            <section className="overflow-hidden border border-[#e0e3e5] bg-white">
+            <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex gap-2">
                         <input
@@ -153,12 +153,12 @@ export default function DeviceTypeList() {
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder="Tìm theo mã hoặc tên loại thiết bị..."
-                            className="h-10 w-64 border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
                             Tìm kiếm
                         </button>
@@ -191,7 +191,7 @@ export default function DeviceTypeList() {
                                 </tr>
                             )}
                             {deviceTypes.map((deviceType) => (
-                                <tr key={deviceType.id} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
+                                <tr key={deviceType.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{deviceType.id}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{deviceType.typeCode}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{deviceType.typeName}</td>

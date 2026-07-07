@@ -63,7 +63,7 @@ export default function Header() {
               {isAdmin && (
                 <Link
                   href="/admin"
-                  className="hidden items-center gap-2 rounded-none border border-[#e3000f]/15 bg-[#fff5f5] px-3 py-2 text-sm font-semibold text-[#e3000f] transition hover:border-[#e3000f]/30 hover:bg-[#ffe8e8] sm:flex"
+                  className="hidden items-center gap-2 rounded-lg border border-[#e3000f]/15 bg-[#fff5f5] px-3 py-2 text-sm font-semibold text-[#e3000f] transition hover:border-[#e3000f]/30 hover:bg-[#ffe8e8] sm:flex"
                 >
                   <span className="text-base">⚙</span>
                   <span>Admin</span>

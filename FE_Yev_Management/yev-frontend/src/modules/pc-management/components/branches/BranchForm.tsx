@@ -21,7 +21,7 @@ const emptyValues: BranchFormValues = { branchCode: "", branchName: "" };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
-    "h-10 w-full border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 export default function BranchForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: BranchFormProps) {
     const [values, setValues] = useState<BranchFormValues>(emptyValues);
@@ -56,7 +56,7 @@ export default function BranchForm({ isOpen, mode, initial, loading = false, onC
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="branch-form-title"
-                className="z-60 mx-4 w-full max-w-md border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="branch-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -103,14 +103,14 @@ export default function BranchForm({ isOpen, mode, initial, loading = false, onC
                             type="button"
                             onClick={onClose}
                             disabled={loading}
-                            className="cursor-pointer border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             Huỷ
                         </button>
                         <button
                             type="submit"
                             disabled={loading}
-                            className="cursor-pointer bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {loading ? "Đang lưu..." : mode === "create" ? "Tạo mới" : "Lưu thay đổi"}
                         </button>
