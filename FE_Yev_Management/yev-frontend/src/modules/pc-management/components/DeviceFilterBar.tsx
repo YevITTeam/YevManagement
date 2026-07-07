@@ -1,16 +1,17 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Filter, Search, X } from "lucide-react";
+import { Building2, Calendar, ChevronDown, ChevronUp, Filter, MapPin, Search, Tag, Truck, User, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 export interface DeviceFilters {
-    search: string;
+    deviceCode: string;
+    manager: string;
+    ipAddress: string;
+    supplierName: string;
+    purchaseDate: string;
     branch: string;
     deviceType: string;
     status: string;
-    supplier: string;
-    purchaseFrom: string;
-    purchaseTo: string;
     expiryDate: string;
 }
 
@@ -19,26 +20,51 @@ export interface DeviceFilterBarProps {
 }
 
 const defaultFilters: DeviceFilters = {
-    search: "",
+    deviceCode: "",
+    manager: "",
+    ipAddress: "",
+    supplierName: "",
+    purchaseDate: "",
     branch: "",
     deviceType: "",
     status: "",
-    supplier: "",
-    purchaseFrom: "",
-    purchaseTo: "",
     expiryDate: "",
 };
 
-const selectClassName =
+const filterLabels: Record<keyof DeviceFilters, string> = {
+    deviceCode: "Mã thiết bị",
+    manager: "Người quản lý",
+    ipAddress: "IP",
+    supplierName: "Nhà cung cấp",
+    purchaseDate: "Ngày mua",
+    branch: "Chi nhánh",
+    deviceType: "Loại thiết bị",
+    status: "Trạng thái",
+    expiryDate: "Hạn sử dụng",
+};
+
+// These fields are sent straight to the Device/grid-list API as query params.
+const advancedFields: (keyof DeviceFilters)[] = ["supplierName", "manager", "ipAddress", "purchaseDate", "expiryDate"];
+
+const fieldClassName =
     "h-10 w-full rounded-md border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+
+const fieldWithIconClassName = `${fieldClassName} pl-9`;
+
+const fieldLabelClassName = "mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 
 export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
 
-    const hasActiveFilters = useMemo(() => {
-        return Object.values(filters).some((value) => value !== "");
-    }, [filters]);
+    const activeEntries = useMemo(
+        () => (Object.entries(filters) as [keyof DeviceFilters, string][]).filter(([, value]) => value !== ""),
+        [filters]
+    );
+    const advancedActiveCount = useMemo(
+        () => activeEntries.filter(([field]) => advancedFields.includes(field)).length,
+        [activeEntries]
+    );
 
     const handleChange = (field: keyof DeviceFilters, value: string) => {
         setFilters((current) => ({ ...current, [field]: value }));
@@ -53,61 +79,88 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
         onFilter(defaultFilters);
     };
 
+    const handleRemoveChip = (field: keyof DeviceFilters) => {
+        const next = { ...filters, [field]: "" };
+        setFilters(next);
+        onFilter(next);
+    };
+
     return (
         <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div className="flex flex-1 flex-col gap-3 md:flex-row md:flex-wrap">
-                        <label className="min-w-[240px] flex-1">
-                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                Tìm kiếm chung
+                        <label className="min-w-[220px] flex-1">
+                            <span className={fieldLabelClassName}>
+                                <Search className="h-3.5 w-3.5" />
+                                Mã thiết bị
                             </span>
                             <div className="relative">
                                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
                                 <input
-                                    value={filters.search}
-                                    onChange={(event) => handleChange("search", event.target.value)}
-                                    placeholder="Nhập Mã thiết bị, IP, Người QL..."
+                                    value={filters.deviceCode}
+                                    onChange={(event) => handleChange("deviceCode", event.target.value)}
+                                    placeholder="Nhập mã thiết bị..."
                                     className="h-10 w-full rounded-md border border-[#e0e3e5] bg-[#f8fafc] pl-9 pr-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:bg-white focus:ring-2 focus:ring-[#ffe0e3]"
                                 />
                             </div>
                         </label>
 
-                        <label className="min-w-[160px] flex-1">
-                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                        <label className="min-w-[170px] flex-1">
+                            <span className={fieldLabelClassName}>
+                                <Building2 className="h-3.5 w-3.5" />
                                 Chi nhánh
                             </span>
-                            <select value={filters.branch} onChange={(event) => handleChange("branch", event.target.value)} className={selectClassName}>
-                                <option value="">Tất cả chi nhánh</option>
-                                <option value="Hà Nội">Hà Nội</option>
-                                <option value="Đà Nẵng">Đà Nẵng</option>
-                                <option value="Hồ Chí Minh">Hồ Chí Minh</option>
-                                <option value="Trà Vinh">Trà Vinh</option>
-                            </select>
+                            <div className="relative">
+                                <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <select
+                                    value={filters.branch}
+                                    onChange={(event) => handleChange("branch", event.target.value)}
+                                    className={fieldWithIconClassName}
+                                >
+                                    <option value="">Tất cả chi nhánh</option>
+                                    <option value="Hà Nội">Hà Nội</option>
+                                    <option value="Đà Nẵng">Đà Nẵng</option>
+                                    <option value="Hồ Chí Minh">Hồ Chí Minh</option>
+                                    <option value="Trà Vinh">Trà Vinh</option>
+                                </select>
+                            </div>
                         </label>
 
                         <label className="min-w-[170px] flex-1">
-                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                            <span className={fieldLabelClassName}>
+                                <Tag className="h-3.5 w-3.5" />
                                 Loại thiết bị
                             </span>
-                            <select value={filters.deviceType} onChange={(event) => handleChange("deviceType", event.target.value)} className={selectClassName}>
-                                <option value="">Tất cả loại</option>
-                                <option value="Máy bàn">Máy bàn</option>
-                                <option value="Laptop">Laptop</option>
-                                <option value="Máy chủ">Máy chủ</option>
-                                <option value="Scan HT">Scan HT</option>
-                            </select>
+                            <div className="relative">
+                                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <select
+                                    value={filters.deviceType}
+                                    onChange={(event) => handleChange("deviceType", event.target.value)}
+                                    className={fieldWithIconClassName}
+                                >
+                                    <option value="">Tất cả loại</option>
+                                    <option value="Máy bàn">Máy bàn</option>
+                                    <option value="Laptop">Laptop</option>
+                                    <option value="Máy chủ">Máy chủ</option>
+                                    <option value="Scan HT">Scan HT</option>
+                                </select>
+                            </div>
                         </label>
 
                         <label className="min-w-[180px] flex-1">
-                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                Trạng thái
-                            </span>
-                            <select value={filters.status} onChange={(event) => handleChange("status", event.target.value)} className={selectClassName}>
+                            <span className={fieldLabelClassName}>Trạng thái</span>
+                            <select
+                                value={filters.status}
+                                onChange={(event) => handleChange("status", event.target.value)}
+                                className={fieldClassName}
+                            >
                                 <option value="">Tất cả trạng thái</option>
+                                <option value="Chưa sử dụng">Chưa sử dụng</option>
                                 <option value="Đang sử dụng">Đang sử dụng</option>
                                 <option value="Chờ thanh lý">Chờ thanh lý</option>
-                                <option value="Đang thuê ngoài">Đang thuê ngoài</option>
+                                <option value="Đã thanh lý">Đã thanh lý</option>
+                                <option value="Thuê ngoài">Thuê ngoài</option>
                             </select>
                         </label>
                     </div>
@@ -120,13 +173,18 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         >
                             <Filter className="h-4 w-4" />
                             Bộ lọc nâng cao
+                            {advancedActiveCount > 0 && (
+                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#e3000f] px-1 text-[11px] font-semibold text-white">
+                                    {advancedActiveCount}
+                                </span>
+                            )}
                             {isAdvancedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </button>
 
                         <button
                             type="button"
                             onClick={handleReset}
-                            className="flex h-10 items-center gap-2 rounded-md border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc]"
+                            className="cursor-pointer flex h-10 items-center gap-2 rounded-md border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc]"
                         >
                             <X className="h-4 w-4" />
                             Xóa bộ lọc
@@ -135,7 +193,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         <button
                             type="button"
                             onClick={handleSubmit}
-                            className="h-10 rounded-md bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                            className="cursor-pointer h-10 rounded-md bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                         >
                             Lọc dữ liệu
                         </button>
@@ -145,58 +203,101 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                 {isAdvancedOpen && (
                     <div className="grid gap-3 border-t border-[#e0e3e5] pt-4 md:grid-cols-2 xl:grid-cols-3">
                         <label>
-                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                            <span className={fieldLabelClassName}>
+                                <Truck className="h-3.5 w-3.5" />
                                 Nhà cung cấp
                             </span>
-                            <select value={filters.supplier} onChange={(event) => handleChange("supplier", event.target.value)} className={selectClassName}>
-                                <option value="">Tất cả nhà CC</option>
-                                <option value="FPT">FPT</option>
-                                <option value="Dell">Dell</option>
-                                <option value="Đinh T">Đinh T</option>
-                            </select>
+                            <div className="relative">
+                                <Truck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <input
+                                    value={filters.supplierName}
+                                    onChange={(event) => handleChange("supplierName", event.target.value)}
+                                    placeholder="Nhập tên nhà cung cấp..."
+                                    className={fieldWithIconClassName}
+                                />
+                            </div>
                         </label>
 
                         <label>
-                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                Từ ngày
+                            <span className={fieldLabelClassName}>
+                                <User className="h-3.5 w-3.5" />
+                                Người quản lý
+                            </span>
+                            <div className="relative">
+                                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <input
+                                    value={filters.manager}
+                                    onChange={(event) => handleChange("manager", event.target.value)}
+                                    placeholder="Nhập tên người quản lý..."
+                                    className={fieldWithIconClassName}
+                                />
+                            </div>
+                        </label>
+
+                        <label>
+                            <span className={fieldLabelClassName}>
+                                <MapPin className="h-3.5 w-3.5" />
+                                Địa chỉ IP
+                            </span>
+                            <div className="relative">
+                                <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <input
+                                    value={filters.ipAddress}
+                                    onChange={(event) => handleChange("ipAddress", event.target.value)}
+                                    placeholder="Nhập địa chỉ IP..."
+                                    className={fieldWithIconClassName}
+                                />
+                            </div>
+                        </label>
+
+                        <label>
+                            <span className={fieldLabelClassName}>
+                                <Calendar className="h-3.5 w-3.5" />
+                                Ngày mua
                             </span>
                             <input
                                 type="date"
-                                value={filters.purchaseFrom}
-                                onChange={(event) => handleChange("purchaseFrom", event.target.value)}
-                                className={selectClassName}
+                                value={filters.purchaseDate}
+                                onChange={(event) => handleChange("purchaseDate", event.target.value)}
+                                className={fieldClassName}
                             />
                         </label>
 
                         <label>
-                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                Đến ngày
-                            </span>
-                            <input
-                                type="date"
-                                value={filters.purchaseTo}
-                                onChange={(event) => handleChange("purchaseTo", event.target.value)}
-                                className={selectClassName}
-                            />
-                        </label>
-
-                        <label>
-                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                Hạn sử dụng
+                            <span className={fieldLabelClassName}>
+                                <Calendar className="h-3.5 w-3.5" />
+                                Hết hạn trước
                             </span>
                             <input
                                 type="date"
                                 value={filters.expiryDate}
                                 onChange={(event) => handleChange("expiryDate", event.target.value)}
-                                className={selectClassName}
+                                className={fieldClassName}
                             />
                         </label>
                     </div>
                 )}
 
-                {hasActiveFilters && (
-                    <div className="rounded-md bg-[#f8fafc] px-3 py-2 text-sm text-[#5e3f3a]">
-                        Đang áp dụng bộ lọc cho dữ liệu thiết bị.
+                {activeEntries.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-3">
+                        <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Đang lọc:</span>
+                        {activeEntries.map(([field, value]) => (
+                            <span
+                                key={field}
+                                className="flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs text-[#5e3f3a]"
+                            >
+                                <span className="font-semibold text-[#191c1e]">{filterLabels[field]}:</span>
+                                {value}
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveChip(field)}
+                                    className="text-[#5e3f3a] transition hover:text-[#e3000f]"
+                                    aria-label={`Xóa bộ lọc ${filterLabels[field]}`}
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </span>
+                        ))}
                     </div>
                 )}
             </div>

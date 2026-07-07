@@ -11,10 +11,7 @@ const ENDPOINTS = {
     createRole: "/Auth/create-role",
     updateRole: (roleId: number) => `/Auth/update-role/${roleId}`,
     deleteRole: (roleId: number) => `/Auth/delete-role/${roleId}`,
-  },
-  ADMIN: {
-
-  },
+  }
 } as const;
 
 export const AuthApi = {

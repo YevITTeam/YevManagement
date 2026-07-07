@@ -4,4 +4,21 @@ export interface ApiResponse<T> {
     data: T;
     errors: any | null;
     timestamp: string;
-}   
+}
+
+
+export interface ApiResponseWithPageNation<T> {
+    isSuccess: boolean;
+    message: string;
+    data: {
+        data: T[];
+        pageIndex: number;
+        pageSize: number;
+        totalCount: number;
+        totalPages: number;
+        hasNextPage: boolean;
+        hasPreviousPage: boolean
+    };
+    errors: [String];
+    timestamp: string;
+}

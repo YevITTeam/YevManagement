@@ -1,81 +1,38 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
-
+import { DeviceApi } from "../../../modules/pc-management/api/device.api";
+import type { DeviceDto } from "../../../modules/pc-management/types/device.dto";
+import { useRouter } from 'next/navigation';
 const statusLabels: Record<number, string> = {
-  1: "Chờ vận hành",
-  2: "Đang dùng",
-  3: "Thanh lý",
+  0: "Chưa sử dụng",
+  1: "Đang sử dụng",
+  2: "Chờ thanh lý",
+  3: "Đã thanh lý",
   4: "Thuê ngoài",
 };
 
 const statusClasses: Record<number, string> = {
+  0: "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]",
   1: "border border-[#e9bcb6] bg-[#fff4f2] text-[#930006]",
   2: "border border-[#d8e2ff] bg-[#f4f5ff] text-[#004494]",
   3: "border border-[#ffdad6] bg-[#fff8f7] text-[#93000a]",
   4: "border border-[#dae2fd] bg-[#f5f7ff] text-[#5c647a]",
 };
 
-const mockDevices = [
-  {
-    id: 1,
-    maMay: "PC-HN-00124",
-    tenMay: "Dell Optiplex 7090",
-    loaiThietBi: "Máy bàn",
-    nhaCungCap: "FPT Hardware",
-    chiNhanh: "Hà Nội HQ",
-    boPhan: "IT",
-    nguoiQuanLy: "Nguyễn Văn A",
-    email: "a.nguyen@yevmgr.local",
-    ngayMua: "2024-01-15",
-    hanSuDung: "2028-01-14",
-    trangThai: 2,
-  },
-  {
-    id: 2,
-    maMay: "LT-DN-0089",
-    tenMay: "Lenovo ThinkPad T14",
-    loaiThietBi: "Laptop",
-    nhaCungCap: "Dell Việt Nam",
-    chiNhanh: "Đà Nẵng Branch",
-    boPhan: "SẢN XUẤT",
-    nguoiQuanLy: "Trần Thị B",
-    email: "b.tran@yevmgr.local",
-    ngayMua: "2023-09-10",
-    hanSuDung: "2027-09-09",
-    trangThai: 1,
-  },
-  {
-    id: 3,
-    maMay: "PC-HCM-0342",
-    tenMay: "HP ProDesk 600",
-    loaiThietBi: "Máy bàn",
-    nhaCungCap: "ASUS",
-    chiNhanh: "HCM Office",
-    boPhan: "HR",
-    nguoiQuanLy: "Lê Văn C",
-    email: "c.le@yevmgr.local",
-    ngayMua: "2022-12-05",
-    hanSuDung: "2026-12-04",
-    trangThai: 2,
-  },
-  {
-    id: 4,
-    maMay: "SV-HN-0471",
-    tenMay: "Server Dell PowerEdge",
-    loaiThietBi: "Máy chủ",
-    nhaCungCap: "ASUS",
-    chiNhanh: "Hà Nội HQ",
-    boPhan: "KẾ TOÁN",
-    nguoiQuanLy: "Phạm Thị D",
-    email: "d.pham@yevmgr.local",
-    ngayMua: "2021-05-20",
-    hanSuDung: null,
-    trangThai: 4,
-  },
-];
+const defaultFilters: DeviceFilters = {
+  deviceCode: "",
+  manager: "",
+  ipAddress: "",
+  supplierName: "",
+  purchaseDate: "",
+  branch: "",
+  deviceType: "",
+  status: "",
+  expiryDate: "",
+};
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -85,55 +42,82 @@ function formatDate(value: string | null) {
 }
 
 export default function PcDashboardPage() {
-  const [filters, setFilters] = useState<DeviceFilters>({
-    search: "",
-    branch: "",
-    deviceType: "",
-    status: "",
-    supplier: "",
-    purchaseFrom: "",
-    purchaseTo: "",
-    expiryDate: "",
-  });
+  const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
+  const [devices, setDevices] = useState<DeviceDto[]>([]);
+  const [pageIndex, setPageIndex] = useState(1);
+  const [pageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [hasPreviousPage, setHasPreviousPage] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
+  // Reset back to page 1 whenever a server-backed filter changes, so pagination reflects the new result set.
+  useEffect(() => {
+    setPageIndex(1);
+  }, [filters.deviceCode, filters.manager, filters.ipAddress, filters.supplierName, filters.purchaseDate]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchDevices = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const result = await DeviceApi.getDevicePageNation({
+          pageIndex,
+          pageSize,
+          deviceCode: filters.deviceCode || undefined,
+          manager: filters.manager || undefined,
+          ipAddress: filters.ipAddress || undefined,
+          supplierName: filters.supplierName || undefined,
+          purchaseDate: filters.purchaseDate || undefined,
+        });
+        if (isCancelled) return;
+
+        setDevices(result.data);
+        setTotalCount(result.totalCount);
+        setTotalPages(result.totalPages);
+        setHasNextPage(result.hasNextPage);
+        setHasPreviousPage(result.hasPreviousPage);
+      } catch (err) {
+        if (!isCancelled) {
+          setError(err instanceof Error ? err.message : "Không thể tải danh sách thiết bị.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchDevices();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [pageIndex, pageSize, filters.deviceCode, filters.manager, filters.ipAddress, filters.supplierName, filters.purchaseDate]);
+
+  // Branch/device type/status/expiry aren't supported by the API yet, so they can only narrow down the devices already loaded on the current page.
   const filteredDevices = useMemo(() => {
-    const normalized = filters.search.trim().toLowerCase();
-
-    return mockDevices.filter((device) => {
-      const matchesSearch =
-        !normalized ||
-        [device.maMay, device.tenMay, device.loaiThietBi, device.nhaCungCap, device.chiNhanh, device.boPhan, device.nguoiQuanLy]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalized);
-
-      const matchesBranch = !filters.branch || device.chiNhanh.toLowerCase().includes(filters.branch.toLowerCase());
-      const matchesDeviceType = !filters.deviceType || device.loaiThietBi === filters.deviceType;
+    return devices.filter((device) => {
+      const matchesBranch = !filters.branch || device.branchName.toLowerCase().includes(filters.branch.toLowerCase());
+      const matchesDeviceType = !filters.deviceType || device.deviceTypeName === filters.deviceType;
       const matchesStatus =
         !filters.status ||
-        (filters.status === "Đang sử dụng" && device.trangThai === 2) ||
-        (filters.status === "Chờ thanh lý" && device.trangThai === 1) ||
-        (filters.status === "Đang thuê ngoài" && device.trangThai === 4);
-      const matchesSupplier = !filters.supplier || device.nhaCungCap.toLowerCase().includes(filters.supplier.toLowerCase());
-      const matchesPurchaseFrom = !filters.purchaseFrom || device.ngayMua >= filters.purchaseFrom;
-      const matchesPurchaseTo = !filters.purchaseTo || device.ngayMua <= filters.purchaseTo;
-      const matchesExpiry = !filters.expiryDate || (device.hanSuDung ? device.hanSuDung <= filters.expiryDate : false);
+        (filters.status === "Chưa sử dụng" && device.status === 0) ||
+        (filters.status === "Đang sử dụng" && device.status === 1) ||
+        (filters.status === "Chờ thanh lý" && device.status === 2) ||
+        (filters.status === "Đã thanh lý" && device.status === 3) ||
+        (filters.status === "Thuê ngoài" && device.status === 4);
+      const matchesExpiry = !filters.expiryDate || (device.expirationDate ? device.expirationDate <= filters.expiryDate : false);
 
-      return (
-        matchesSearch &&
-        matchesBranch &&
-        matchesDeviceType &&
-        matchesStatus &&
-        matchesSupplier &&
-        matchesPurchaseFrom &&
-        matchesPurchaseTo &&
-        matchesExpiry
-      );
+      return matchesBranch && matchesDeviceType && matchesStatus && matchesExpiry;
     });
-  }, [filters]);
-
-  const activeDevices = mockDevices.filter((item) => item.trangThai === 2).length;
-  const pendingDevices = mockDevices.filter((item) => item.trangThai === 1).length;
+  }, [devices, filters.branch, filters.deviceType, filters.status, filters.expiryDate]);
 
   return (
     <div className="space-y-8">
@@ -143,20 +127,20 @@ export default function PcDashboardPage() {
           <p className="mt-1 text-[15px] text-[#5e3f3a]">Quản lý và theo dõi thiết bị phần cứng qua các văn phòng.</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/pc/reports"
-            className="border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => router.push("/pc/reports")}
+            className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
           >
             📊 Xem báo cáo
-          </Link>
-          <button className="border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]">
+          </button>
+          <button className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]">
             ↻ Đồng bộ Tanium
           </button>
-          <button className="border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]">
+          <button className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]">
             ⤴ Nhập từ Excel
           </button>
-          <button className="bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]">
+          <button className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]">
             + Thêm mới
           </button>
         </div>
@@ -168,44 +152,84 @@ export default function PcDashboardPage() {
         </div>
 
         <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-white p-4 md:flex-row md:items-center md:justify-between">
-          <div className="text-sm font-medium text-[#5e3f3a]">Hiển thị {filteredDevices.length} bản ghi</div>
+          <div className="text-sm font-medium text-[#5e3f3a]">
+            {isLoading
+              ? "Đang tải dữ liệu..."
+              : `Hiển thị ${filteredDevices.length} / ${devices.length} bản ghi (trang ${pageIndex}/${totalPages}, tổng ${totalCount})`}
+          </div>
         </div>
+
+        {error && (
+          <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-left">
             <thead>
-              <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                <th className="px-4 py-3">Mã máy</th>
-                <th className="px-4 py-3">Tên máy</th>
-                <th className="px-4 py-3">Loại thiết bị</th>
-                <th className="px-4 py-3">Nhà cung cấp</th>
-                <th className="px-4 py-3">Chi nhánh</th>
-                <th className="px-4 py-3">Người quản lý</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Ngày mua</th>
-                <th className="px-4 py-3">Hạn sử dụng</th>
-                <th className="px-4 py-3">Trạng thái</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
+              <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                <th className="whitespace-nowrap px-4 py-3">Thiết bị</th>
+                <th className="whitespace-nowrap px-4 py-3">Loại / NCC</th>
+                <th className="whitespace-nowrap px-4 py-3">Chi nhánh</th>
+                <th className="whitespace-nowrap px-4 py-3">IP</th>
+                <th className="whitespace-nowrap px-4 py-3">Người quản lý</th>
+                <th className="whitespace-nowrap px-4 py-3">Mua / Hết hạn</th>
+                <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody>
+              {!isLoading && filteredDevices.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
+                    Không có dữ liệu thiết bị.
+                  </td>
+                </tr>
+              )}
               {filteredDevices.map((device) => (
-                <tr key={device.id} className="border-b border-[#f1f5f9] align-top hover:bg-[#f8fafc]">
-                  <td className="px-4 py-4 text-sm font-semibold text-[#191c1e]">{device.maMay}</td>
-                  <td className="px-4 py-4 text-sm text-[#191c1e]">{device.tenMay}</td>
-                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{device.loaiThietBi}</td>
-                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{device.nhaCungCap}</td>
-                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{device.chiNhanh}</td>
-                  <td className="px-4 py-4 text-sm text-[#191c1e]">{device.nguoiQuanLy}</td>
-                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{device.email}</td>
-                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{formatDate(device.ngayMua)}</td>
-                  <td className="px-4 py-4 text-sm text-[#5e3f3a]">{formatDate(device.hanSuDung)}</td>
-                  <td className="px-4 py-4">
-                    <span className={`inline-flex px-3 py-1 text-xs font-semibold ${statusClasses[device.trangThai]}`}>
-                      {statusLabels[device.trangThai]}
+                <tr key={device.id} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
+                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                    <div className="text-sm font-semibold text-[#191c1e]">{device.deviceCode}</div>
+                    <div className="max-w-[200px] truncate text-xs text-[#5e3f3a]" title={device.deviceName}>
+                      {device.deviceName}
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                    <div className="text-sm text-[#191c1e]">{device.deviceTypeName}</div>
+                    <div className="max-w-[160px] truncate text-xs text-[#5e3f3a]" title={device.supplierName}>
+                      {device.supplierName}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <div className="max-w-[160px] truncate text-sm text-[#5e3f3a]" title={device.branchName}>
+                      {device.branchName}
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-sm text-[#5e3f3a]">{device.ipAddress ?? "-"}</td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                    <div className="text-sm text-[#191c1e]">{device.manager}</div>
+                    <div className="max-w-[180px] truncate text-xs text-[#5e3f3a]" title={device.email ?? undefined}>
+                      {device.email ?? "-"}
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-xs text-[#5e3f3a]">
+                    <div>Mua: {formatDate(device.purchaseDate)}</div>
+                    <div>HSD: {formatDate(device.expirationDate)}</div>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                    <span
+                      className={`inline-flex whitespace-nowrap px-3 py-1 text-xs font-semibold ${statusClasses[device.status] ?? statusClasses[0]}`}
+                    >
+                      {statusLabels[device.status] ?? "Không xác định"}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-right text-sm text-[#5e3f3a]">⋯</td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-right text-sm text-[#5e3f3a]">
+                    <button
+                      className="px-1 text-[#5e3f3a] hover:text-[#191c1e]"
+                      title={device.note ? device.note : undefined}
+                    >
+                      ⋯
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -213,15 +237,23 @@ export default function PcDashboardPage() {
         </div>
 
         <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-          <button className="text-sm text-[#5e3f3a] disabled:opacity-50" disabled>
+          <button
+            className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+            disabled={!hasPreviousPage || isLoading}
+            onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
+          >
             Trang trước
           </button>
-          <div className="flex gap-1">
-            <button className="flex h-8 w-8 items-center justify-center bg-[#e3000f] text-sm font-semibold text-white">1</button>
-            <button className="flex h-8 w-8 items-center justify-center border border-[#e0e3e5] text-sm text-[#5e3f3a]">2</button>
-            <button className="flex h-8 w-8 items-center justify-center border border-[#e0e3e5] text-sm text-[#5e3f3a]">3</button>
+          <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
+            Trang {pageIndex} / {totalPages}
           </div>
-          <button className="text-sm text-[#5e3f3a]">Trang sau</button>
+          <button
+            className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+            disabled={!hasNextPage || isLoading}
+            onClick={() => setPageIndex((current) => current + 1)}
+          >
+            Trang sau
+          </button>
         </div>
       </section>
     </div>
