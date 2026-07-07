@@ -33,7 +33,7 @@ builder.Services.AddOpenApi(options =>
         {
             {
                 new OpenApiSecuritySchemeReference("Bearer"),
-                new List<string>() // <--- Đã sửa thành List<string> để hết báo lỗi đỏ
+                new List<string>()
             }
         });
 

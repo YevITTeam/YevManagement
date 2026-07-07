@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using Asset.Domain.Entities;
+﻿using Asset.Domain.Entities;
 using Asset.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,28 +16,16 @@ public partial class AssetDbContext : DbContext
     }
 
     public virtual DbSet<AuditTrail> AuditTrails { get; set; }
-
     public virtual DbSet<Branch> Branches { get; set; }
-
     public virtual DbSet<Device> Devices { get; set; }
-
     public virtual DbSet<DeviceConfiguration> DeviceConfigurations { get; set; }
-
     public virtual DbSet<DeviceSoftware> DeviceSoftwares { get; set; }
-
     public virtual DbSet<DeviceType> DeviceTypes { get; set; }
-
     public virtual DbSet<IpAddress> IpAddresses { get; set; }
-
     public virtual DbSet<Software> Softwares { get; set; }
-
     public virtual DbSet<Supplier> Suppliers { get; set; }
-
     public virtual DbSet<TransferHistory> TransferHistories { get; set; }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=DASVRFAST;Database=YevPCManagement;User Id=yev.app;Password=Yazaki@2026;TrustServerCertificate=True;");
+    public virtual DbSet<SoftwareGroup> SoftwareGroups { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,9 +39,7 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<Branch>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_ChiNhanhs");
-
             entity.HasIndex(e => e.BranchCode, "IX_ChiNhanhs_MaChiNhanh").IsUnique();
-
             entity.Property(e => e.BranchCode).HasMaxLength(50);
             entity.Property(e => e.BranchName).HasMaxLength(255);
         });
@@ -63,13 +47,9 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<Device>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_ThietBis");
-
             entity.HasIndex(e => e.BranchId, "IX_ThietBis_ChiNhanhId");
-
             entity.HasIndex(e => e.DeviceTypeId, "IX_ThietBis_LoaiThietBiId");
-
             entity.HasIndex(e => e.DeviceCode, "IX_ThietBis_MaMay").IsUnique();
-
             entity.HasIndex(e => e.SupplierId, "IX_ThietBis_NhaCungCapId");
 
             entity.Property(e => e.DeviceCode).HasMaxLength(50);
@@ -94,12 +74,9 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<DeviceConfiguration>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_CauHinhThietBis");
-
             entity.HasIndex(e => e.DeviceId, "IX_CauHinhThietBis_ThietBiId").IsUnique();
 
-            entity.Property(e => e.Cpu)
-                .HasMaxLength(150)
-                .HasColumnName("CPU");
+            entity.Property(e => e.Cpu).HasMaxLength(150).HasColumnName("CPU");
             entity.Property(e => e.HardDrive).HasMaxLength(150);
             entity.Property(e => e.Headphone).HasMaxLength(150);
             entity.Property(e => e.Keyboard).HasMaxLength(150);
@@ -107,22 +84,12 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.Monitor).HasMaxLength(150);
             entity.Property(e => e.Mouse).HasMaxLength(150);
             entity.Property(e => e.Note).HasMaxLength(150);
-            entity.Property(e => e.Os)
-                .HasMaxLength(150)
-                .HasColumnName("OS");
-            entity.Property(e => e.Psu)
-                .HasMaxLength(150)
-                .HasColumnName("PSU");
-            entity.Property(e => e.Ram)
-                .HasMaxLength(150)
-                .HasColumnName("RAM");
+            entity.Property(e => e.Os).HasMaxLength(150).HasColumnName("OS");
+            entity.Property(e => e.Psu).HasMaxLength(150).HasColumnName("PSU");
+            entity.Property(e => e.Ram).HasMaxLength(150).HasColumnName("RAM");
             entity.Property(e => e.Speaker).HasMaxLength(150);
-            entity.Property(e => e.Ups)
-                .HasMaxLength(150)
-                .HasColumnName("UPS");
-            entity.Property(e => e.Vga)
-                .HasMaxLength(150)
-                .HasColumnName("VGA");
+            entity.Property(e => e.Ups).HasMaxLength(150).HasColumnName("UPS");
+            entity.Property(e => e.Vga).HasMaxLength(150).HasColumnName("VGA");
 
             entity.HasOne(d => d.Device).WithOne(p => p.DeviceConfiguration)
                 .HasForeignKey<DeviceConfiguration>(d => d.DeviceId)
@@ -132,9 +99,7 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<DeviceSoftware>(entity =>
         {
             entity.HasKey(e => new { e.DeviceId, e.SoftwareId }).HasName("PK_ThietBi_PhanMems");
-
             entity.HasIndex(e => e.SoftwareId, "IX_ThietBi_PhanMems_PhanMemId");
-
             entity.Property(e => e.LicenseKey).HasMaxLength(255);
 
             entity.HasOne(d => d.Device).WithMany(p => p.DeviceSoftwares)
@@ -149,9 +114,7 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<DeviceType>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_LoaiThietBis");
-
             entity.HasIndex(e => e.TypeCode, "IX_LoaiThietBis_MaLoai").IsUnique();
-
             entity.Property(e => e.TypeCode).HasMaxLength(50);
             entity.Property(e => e.TypeName).HasMaxLength(255);
         });
@@ -159,25 +122,15 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<IpAddress>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_DiaChiIPs");
-
             entity.HasIndex(e => e.IpAddress1, "IX_DiaChiIPs_DiaChi").IsUnique();
-
             entity.HasIndex(e => e.DeviceId, "IX_DiaChiIPs_ThietBiId");
 
-            entity.Property(e => e.AlternateDns)
-                .HasMaxLength(15)
-                .HasColumnName("AlternateDNS");
+            entity.Property(e => e.AlternateDns).HasMaxLength(15).HasColumnName("AlternateDNS");
             entity.Property(e => e.Gateway).HasMaxLength(15);
-            entity.Property(e => e.IpAddress1)
-                .HasMaxLength(25)
-                .HasColumnName("IpAddress");
+            entity.Property(e => e.IpAddress1).HasMaxLength(25).HasColumnName("IpAddress");
             entity.Property(e => e.Note).HasMaxLength(255);
-            entity.Property(e => e.PreferredDns)
-                .HasMaxLength(15)
-                .HasColumnName("PreferredDNS");
-            entity.Property(e => e.ServerIp)
-                .HasMaxLength(15)
-                .HasColumnName("ServerIP");
+            entity.Property(e => e.PreferredDns).HasMaxLength(15).HasColumnName("PreferredDNS");
+            entity.Property(e => e.ServerIp).HasMaxLength(15).HasColumnName("ServerIP");
             entity.Property(e => e.SubnetMask).HasMaxLength(15);
 
             entity.HasOne(d => d.Device).WithMany(p => p.IpAddresses)
@@ -185,24 +138,10 @@ public partial class AssetDbContext : DbContext
                 .HasConstraintName("FK_DiaChiIPs_ThietBis_ThietBiId");
         });
 
-        modelBuilder.Entity<Software>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("PK_PhanMems");
-
-            entity.HasIndex(e => e.SoftwareCode, "IX_PhanMems_MaPhanMem").IsUnique();
-
-            entity.Property(e => e.Publisher).HasMaxLength(255);
-            entity.Property(e => e.SoftwareCode).HasMaxLength(50);
-            entity.Property(e => e.SoftwareName).HasMaxLength(255);
-            entity.Property(e => e.SoftwareType).HasMaxLength(150);
-        });
-
         modelBuilder.Entity<Supplier>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_NhaCungCaps");
-
             entity.HasIndex(e => e.SupplierCode, "IX_NhaCungCaps_MaNhaCungCap").IsUnique();
-
             entity.Property(e => e.SupplierCode).HasMaxLength(50);
             entity.Property(e => e.SupplierName).HasMaxLength(255);
         });
@@ -210,11 +149,8 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<TransferHistory>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_LichSuChuyenDois");
-
             entity.HasIndex(e => e.OldDeviceId, "IX_LichSuChuyenDois_IdMayCu");
-
             entity.HasIndex(e => e.NewDeviceId, "IX_LichSuChuyenDois_IdMayMoi");
-
             entity.Property(e => e.Note).HasMaxLength(500);
 
             entity.HasOne(d => d.NewDevice).WithMany(p => p.TransferHistoryNewDevices)
@@ -226,6 +162,34 @@ public partial class AssetDbContext : DbContext
                 .HasForeignKey(d => d.OldDeviceId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_LichSuChuyenDois_ThietBis_IdMayCu");
+        });
+
+        modelBuilder.Entity<SoftwareGroup>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_NhomPhanMems");
+            entity.HasIndex(e => e.GroupCode, "IX_NhomPhanMems_MaNhom").IsUnique();
+
+            entity.Property(e => e.GroupCode).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.GroupName).HasMaxLength(255).IsRequired();
+        });
+
+        modelBuilder.Entity<Software>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_PhanMems");
+            entity.HasIndex(e => e.SoftwareCode, "IX_PhanMems_MaPhanMem").IsUnique();
+
+            entity.HasIndex(e => e.SoftwareGroupId, "IX_PhanMems_NhomPhanMemId");
+
+            entity.Property(e => e.Publisher).HasMaxLength(255);
+            entity.Property(e => e.SoftwareCode).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.SoftwareName).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.SoftwareType).HasMaxLength(150);
+
+            entity.HasOne(d => d.SoftwareGroup)
+                  .WithMany(p => p.Softwares)
+                  .HasForeignKey(d => d.SoftwareGroupId)
+                  .OnDelete(DeleteBehavior.Restrict)
+                  .HasConstraintName("FK_PhanMems_NhomPhanMems_NhomPhanMemId");
         });
 
         OnModelCreatingPartial(modelBuilder);
