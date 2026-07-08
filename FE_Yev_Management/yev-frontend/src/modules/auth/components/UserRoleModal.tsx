@@ -6,6 +6,7 @@ import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto, RoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleSelectModal from "./RoleSelectModal";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 interface Props {
     isOpen: boolean;
@@ -84,8 +85,9 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
             await AuthApi.updateUserRoles({ userId, roleIds });
             toast.success("Cập nhật quyền thành công!");
             await fetchData();
-        } catch {
-            toast.error("Cập nhật thất bại!");
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, "Cập nhật thất bại!"));
         }
     };
 

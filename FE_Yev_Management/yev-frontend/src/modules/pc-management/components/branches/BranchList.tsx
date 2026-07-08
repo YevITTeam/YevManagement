@@ -7,6 +7,7 @@ import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import BranchForm, { type BranchFormValues } from "./BranchForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 const PAGE_SIZE = 10;
 
@@ -48,8 +49,9 @@ export default function BranchList() {
             setHasPreviousPage(result.hasPreviousPage);
         } catch (err) {
             console.error(err);
-            setError("Không thể tải danh sách chi nhánh.");
-            toast.error("Không thể tải danh sách chi nhánh.");
+            const message = getApiErrorMessage(err, "Không thể tải danh sách chi nhánh.");
+            setError(message);
+            toast.error(message);
         } finally {
             setIsLoading(false);
         }
@@ -98,7 +100,7 @@ export default function BranchList() {
             await fetchBranches();
         } catch (err) {
             console.error(err);
-            toast.error(formMode === "create" ? "Tạo chi nhánh thất bại" : "Cập nhật chi nhánh thất bại");
+            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo chi nhánh thất bại" : "Cập nhật chi nhánh thất bại"));
         } finally {
             setIsSaving(false);
         }
@@ -114,7 +116,7 @@ export default function BranchList() {
             await fetchBranches();
         } catch (err) {
             console.error(err);
-            toast.error("Xoá chi nhánh thất bại");
+            toast.error(getApiErrorMessage(err, "Xoá chi nhánh thất bại"));
         } finally {
             setIsDeleting(false);
         }

@@ -6,6 +6,7 @@ import {
   Building2,
   Computer,
   HardDrive,
+  Layers,
   Monitor,
   Package,
   ShieldCheck,
@@ -20,6 +21,7 @@ const navItems = [
   { label: "Quản lý loại thiết bị", href: "/pc/device-types", icon: HardDrive },
   { label: "Quản lý chi nhánh", href: "/pc/branches", icon: Building2 },
   { label: "Quản lý phần mềm", href: "/pc/softwares", icon: ShieldCheck },
+  { label: "Quản lý nhóm phần mềm", href: "/pc/software-groups", icon: Layers },
   { label: "Quản lý nhà cung cấp", href: "/pc/suppliers", icon: Package },
 ];
 

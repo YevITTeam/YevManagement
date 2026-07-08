@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import RoleForm from "./RoleForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { AuthApi } from "../../api/auth.api";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 export default function RoleList() {
     const [roles, setRoles] = useState<RoleDto[]>([]);
@@ -24,7 +25,7 @@ export default function RoleList() {
             setRoles(data);
         } catch (err) {
             console.error(err);
-            toast.error("Không thể tải danh sách quyền");
+            toast.error(getApiErrorMessage(err, "Không thể tải danh sách quyền"));
         } finally {
             setLoading(false);
         }
@@ -42,7 +43,7 @@ export default function RoleList() {
             await fetchRoles();
         } catch (err) {
             console.error(err);
-            toast.error("Tên quyền đã tồn tại hoặc không hợp lệ.");
+            toast.error(getApiErrorMessage(err, "Tên quyền đã tồn tại hoặc không hợp lệ."));
         }
     };
 
@@ -55,7 +56,7 @@ export default function RoleList() {
             await fetchRoles();
         } catch (err) {
             console.error(err);
-            toast.error("Cập nhật thất bại");
+            toast.error(getApiErrorMessage(err, "Cập nhật thất bại"));
         }
     };
 
@@ -66,7 +67,7 @@ export default function RoleList() {
             await fetchRoles();
         } catch (err) {
             console.error(err);
-            toast.error("Xoá thất bại");
+            toast.error(getApiErrorMessage(err, "Xoá thất bại"));
         } finally {
             // Xong xuôi thì đóng dialog và reset id
             setOpenDialog(false);

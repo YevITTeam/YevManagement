@@ -6,6 +6,7 @@ import { SupplierApi } from "@/modules/pc-management/api/supplier.api";
 import type { SupplierDto } from "@/modules/pc-management/types/supplier.dto";
 import SupplierForm, { type SupplierFormValues } from "./SupplierForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 const PAGE_SIZE = 10;
 
@@ -47,8 +48,9 @@ export default function SupplierList() {
             setHasPreviousPage(result.hasPreviousPage);
         } catch (err) {
             console.error(err);
-            setError("Không thể tải danh sách nhà cung cấp.");
-            toast.error("Không thể tải danh sách nhà cung cấp.");
+            const message = getApiErrorMessage(err, "Không thể tải danh sách nhà cung cấp.");
+            setError(message);
+            toast.error(message);
         } finally {
             setIsLoading(false);
         }
@@ -97,7 +99,7 @@ export default function SupplierList() {
             await fetchSuppliers();
         } catch (err) {
             console.error(err);
-            toast.error(formMode === "create" ? "Tạo nhà cung cấp thất bại" : "Cập nhật nhà cung cấp thất bại");
+            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo nhà cung cấp thất bại" : "Cập nhật nhà cung cấp thất bại"));
         } finally {
             setIsSaving(false);
         }
@@ -113,7 +115,7 @@ export default function SupplierList() {
             await fetchSuppliers();
         } catch (err) {
             console.error(err);
-            toast.error("Xoá nhà cung cấp thất bại");
+            toast.error(getApiErrorMessage(err, "Xoá nhà cung cấp thất bại"));
         } finally {
             setIsDeleting(false);
         }

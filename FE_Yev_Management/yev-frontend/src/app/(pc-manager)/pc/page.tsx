@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
 import { DeviceApi } from "../../../modules/pc-management/api/device.api";
 import type { DeviceDto } from "../../../modules/pc-management/types/device.dto";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { useRouter } from 'next/navigation';
 const statusLabels: Record<number, string> = {
   0: "Chưa sử dụng",
@@ -85,7 +86,7 @@ export default function PcDashboardPage() {
         setHasPreviousPage(result.hasPreviousPage);
       } catch (err) {
         if (!isCancelled) {
-          setError(err instanceof Error ? err.message : "Không thể tải danh sách thiết bị.");
+          setError(getApiErrorMessage(err, "Không thể tải danh sách thiết bị."));
         }
       } finally {
         if (!isCancelled) {

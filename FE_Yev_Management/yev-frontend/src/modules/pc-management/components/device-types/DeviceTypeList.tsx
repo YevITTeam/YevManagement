@@ -7,6 +7,7 @@ import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
 import DeviceTypeForm, { type DeviceTypeFormValues } from "./DeviceTypeForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 const PAGE_SIZE = 10;
 
@@ -48,8 +49,9 @@ export default function DeviceTypeList() {
             setHasPreviousPage(result.hasPreviousPage);
         } catch (err) {
             console.error(err);
-            setError("Không thể tải danh sách loại thiết bị.");
-            toast.error("Không thể tải danh sách loại thiết bị.");
+            const message = getApiErrorMessage(err, "Không thể tải danh sách loại thiết bị.");
+            setError(message);
+            toast.error(message);
         } finally {
             setIsLoading(false);
         }
@@ -98,7 +100,7 @@ export default function DeviceTypeList() {
             await fetchDeviceTypes();
         } catch (err) {
             console.error(err);
-            toast.error(formMode === "create" ? "Tạo loại thiết bị thất bại" : "Cập nhật loại thiết bị thất bại");
+            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo loại thiết bị thất bại" : "Cập nhật loại thiết bị thất bại"));
         } finally {
             setIsSaving(false);
         }
@@ -114,7 +116,7 @@ export default function DeviceTypeList() {
             await fetchDeviceTypes();
         } catch (err) {
             console.error(err);
-            toast.error("Xoá loại thiết bị thất bại");
+            toast.error(getApiErrorMessage(err, "Xoá loại thiết bị thất bại"));
         } finally {
             setIsDeleting(false);
         }
