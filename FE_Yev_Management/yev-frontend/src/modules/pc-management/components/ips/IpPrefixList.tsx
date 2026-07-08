@@ -1,0 +1,284 @@
+"use client";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { toast } from "react-toastify";
+
+import { IpApi } from "@/modules/pc-management/api/ip-api";
+import type { IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
+import { getApiErrorMessage } from "@/lib/apiError";
+import IpPrefixForm, { type IpPrefixFormValues } from "./IpPrefixForm";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
+import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+
+const PAGE_SIZE = 10;
+
+const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixList({ onLoadingChange }, ref) {
+    const [prefixes, setPrefixes] = useState<IpPrefixDto[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const [keyword, setKeyword] = useState("");
+    const [appliedKeyword, setAppliedKeyword] = useState("");
+
+    const [pageIndex, setPageIndex] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const [hasPreviousPage, setHasPreviousPage] = useState(false);
+
+    const [formOpen, setFormOpen] = useState(false);
+    const [formMode, setFormMode] = useState<"create" | "edit">("create");
+    const [editingPrefix, setEditingPrefix] = useState<IpPrefixDto | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const [deletingPrefix, setDeletingPrefix] = useState<IpPrefixDto | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const fetchPrefixes = async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const result = await IpApi.getIpPrefixPageNation({
+                pageIndex,
+                pageSize: PAGE_SIZE,
+                keyword: appliedKeyword || undefined,
+            });
+            setPrefixes(result.data);
+            setTotalCount(result.totalCount);
+            setTotalPages(result.totalPages);
+            setHasNextPage(result.hasNextPage);
+            setHasPreviousPage(result.hasPreviousPage);
+        } catch (err) {
+            console.error(err);
+            const message = getApiErrorMessage(err, "Không thể tải danh sách dải mạng.");
+            setError(message);
+            toast.error(message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchPrefixes();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pageIndex, appliedKeyword]);
+
+    useEffect(() => {
+        onLoadingChange?.(isLoading);
+    }, [isLoading, onLoadingChange]);
+
+    useImperativeHandle(ref, () => ({
+        refresh: fetchPrefixes,
+        openCreate: openCreateForm,
+    }));
+
+    const handleSearch = () => {
+        setPageIndex(1);
+        setAppliedKeyword(keyword.trim());
+    };
+
+    const openCreateForm = () => {
+        setFormMode("create");
+        setEditingPrefix(null);
+        setFormOpen(true);
+    };
+
+    const openEditForm = (prefix: IpPrefixDto) => {
+        setFormMode("edit");
+        setEditingPrefix(prefix);
+        setFormOpen(true);
+    };
+
+    const closeForm = () => {
+        if (isSaving) return;
+        setFormOpen(false);
+        setEditingPrefix(null);
+    };
+
+    const handleSubmitForm = async (values: IpPrefixFormValues) => {
+        setIsSaving(true);
+        try {
+            const payload = {
+                prefix: values.prefix.trim(),
+                subnetMask: values.subnetMask.trim() || null,
+                gateway: values.gateway.trim() || null,
+                preferredDns: values.preferredDns.trim() || null,
+                alternateDns: values.alternateDns.trim() || null,
+                description: values.description.trim() || null,
+            };
+
+            if (formMode === "create") {
+                await IpApi.createIpPrefix(payload);
+                toast.success("Tạo dải mạng thành công");
+            } else if (editingPrefix) {
+                await IpApi.updateIpPrefix(editingPrefix.id, payload);
+                toast.success("Cập nhật dải mạng thành công");
+            }
+            setFormOpen(false);
+            setEditingPrefix(null);
+            await fetchPrefixes();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo dải mạng thất bại" : "Cập nhật dải mạng thất bại"));
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!deletingPrefix) return;
+        setIsDeleting(true);
+        try {
+            await IpApi.deleteIpPrefix(deletingPrefix.id);
+            toast.success("Xoá dải mạng thành công");
+            setDeletingPrefix(null);
+            await fetchPrefixes();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, "Xoá dải mạng thất bại"));
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex gap-2">
+                        <input
+                            value={keyword}
+                            onChange={(event) => setKeyword(event.target.value)}
+                            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
+                            placeholder="Tìm theo dải mạng, mô tả..."
+                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
+                        <button
+                            onClick={handleSearch}
+                            disabled={isLoading}
+                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        >
+                            Tìm kiếm
+                        </button>
+                    </div>
+                    <div className="text-sm text-[#5e3f3a]">
+                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${prefixes.length} / ${totalCount} bản ghi`}
+                    </div>
+                </div>
+
+                {error && (
+                    <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
+                )}
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse text-left">
+                        <thead>
+                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                <th className="whitespace-nowrap px-6 py-3">Dải mạng</th>
+                                <th className="whitespace-nowrap px-6 py-3">Subnet mask</th>
+                                <th className="whitespace-nowrap px-6 py-3">Gateway</th>
+                                <th className="whitespace-nowrap px-6 py-3">DNS</th>
+                                <th className="whitespace-nowrap px-6 py-3">Mô tả</th>
+                                <th className="whitespace-nowrap px-6 py-3 text-right">Số IP</th>
+                                <th className="whitespace-nowrap px-6 py-3 text-right">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {!isLoading && prefixes.length === 0 && (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                        Không có dữ liệu dải mạng.
+                                    </td>
+                                </tr>
+                            )}
+                            {prefixes.map((prefix) => (
+                                <tr key={prefix.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                    <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-[#191c1e]">{prefix.prefix}</td>
+                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.subnetMask ?? "—"}</td>
+                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.gateway ?? "—"}</td>
+                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">
+                                        {prefix.preferredDns || prefix.alternateDns
+                                            ? [prefix.preferredDns, prefix.alternateDns].filter(Boolean).join(" / ")
+                                            : "—"}
+                                    </td>
+                                    <td className="max-w-[220px] truncate px-6 py-4 text-sm text-[#5e3f3a]" title={prefix.description ?? undefined}>
+                                        {prefix.description ?? "—"}
+                                    </td>
+                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-semibold text-[#191c1e]">
+                                        {prefix.ipAddressCount}
+                                    </td>
+                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
+                                        <div className="inline-flex items-center gap-3">
+                                            <button
+                                                onClick={() => openEditForm(prefix)}
+                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                title="Sửa"
+                                            >
+                                                Sửa
+                                            </button>
+                                            <button
+                                                onClick={() => setDeletingPrefix(prefix)}
+                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                title="Xoá"
+                                            >
+                                                Xoá
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+                    <button
+                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+                        disabled={!hasPreviousPage || isLoading}
+                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
+                    >
+                        Trang trước
+                    </button>
+                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
+                        Trang {pageIndex} / {totalPages}
+                    </div>
+                    <button
+                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+                        disabled={!hasNextPage || isLoading}
+                        onClick={() => setPageIndex((current) => current + 1)}
+                    >
+                        Trang sau
+                    </button>
+                </div>
+            </section>
+
+            <IpPrefixForm
+                isOpen={formOpen}
+                mode={formMode}
+                initial={editingPrefix}
+                loading={isSaving}
+                onClose={closeForm}
+                onSubmit={handleSubmitForm}
+            />
+
+            <ConfirmDialog
+                isOpen={deletingPrefix !== null}
+                title="Xoá dải mạng"
+                message={
+                    <>
+                        Bạn có chắc muốn xoá dải mạng <strong>{deletingPrefix?.prefix}</strong> không? Hành động này không thể
+                        hoàn tác.
+                    </>
+                }
+                approveLabel="Xoá"
+                deniedLabel="Huỷ"
+                loading={isDeleting}
+                onApprove={handleDelete}
+                onDenied={() => {
+                    if (!isDeleting) setDeletingPrefix(null);
+                }}
+            />
+        </div>
+    );
+});
+
+export default IpPrefixList;

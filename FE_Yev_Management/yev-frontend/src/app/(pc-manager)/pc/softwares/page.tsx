@@ -1,5 +1,5 @@
-import SoftwareList from "@/modules/pc-management/components/softwares/SoftwareList";
+import SoftwareManagement from "@/modules/pc-management/components/softwares/SoftwareManagement";
 
 export default function SoftwaresPage() {
-  return <SoftwareList />;
+  return <SoftwareManagement />;
 }

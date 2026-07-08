@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
+import PrintDeviceCodeDialog from "../../../modules/pc-management/components/PrintDeviceCodeDialog";
 import { DeviceApi } from "../../../modules/pc-management/api/device.api";
 import type { DeviceDto } from "../../../modules/pc-management/types/device.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -53,6 +54,7 @@ export default function PcDashboardPage() {
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPrintOpen, setIsPrintOpen] = useState(false);
   const router = useRouter();
 
   // Reset back to page 1 whenever a server-backed filter changes, so pagination reflects the new result set.
@@ -140,6 +142,12 @@ export default function PcDashboardPage() {
           </button>
           <button className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]">
             ⤴ Nhập từ Excel
+          </button>
+          <button
+            onClick={() => setIsPrintOpen(true)}
+            className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+          >
+            🖨 In mã thiết bị
           </button>
           <button className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]">
             + Thêm mới
@@ -257,6 +265,12 @@ export default function PcDashboardPage() {
           </button>
         </div>
       </section>
+
+      <PrintDeviceCodeDialog
+        isOpen={isPrintOpen}
+        devices={filteredDevices}
+        onClose={() => setIsPrintOpen(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 
 import { SoftwareGroupApi } from "@/modules/pc-management/api/software-group.api";
@@ -7,10 +7,11 @@ import type { SoftwareGroupDto } from "@/modules/pc-management/types/software-gr
 import { getApiErrorMessage } from "@/lib/apiError";
 import SoftwareGroupForm, { type SoftwareGroupFormValues } from "./SoftwareGroupForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 
 const PAGE_SIZE = 10;
 
-export default function SoftwareGroupList() {
+const SoftwareGroupList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareGroupList({ onLoadingChange }, ref) {
     const [groups, setGroups] = useState<SoftwareGroupDto[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -60,6 +61,15 @@ export default function SoftwareGroupList() {
         fetchGroups();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pageIndex, appliedKeyword]);
+
+    useEffect(() => {
+        onLoadingChange?.(isLoading);
+    }, [isLoading, onLoadingChange]);
+
+    useImperativeHandle(ref, () => ({
+        refresh: fetchGroups,
+        openCreate: openCreateForm,
+    }));
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -122,30 +132,7 @@ export default function SoftwareGroupList() {
     };
 
     return (
-        <div className="space-y-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Nhóm phần mềm</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">Quản lý các nhóm phân loại phần mềm.</p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        onClick={() => fetchGroups()}
-                        disabled={isLoading}
-                        className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                    >
-                        ↻ Làm mới
-                    </button>
-                    <button
-                        onClick={openCreateForm}
-                        className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
-                    >
-                        + Thêm mới
-                    </button>
-                </div>
-            </div>
-
+        <div className="space-y-4">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex gap-2">
@@ -269,4 +256,6 @@ export default function SoftwareGroupList() {
             />
         </div>
     );
-}
+});
+
+export default SoftwareGroupList;

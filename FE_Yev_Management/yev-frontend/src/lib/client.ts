@@ -53,7 +53,7 @@ const fetchClient = async <T>(
   options: RequestInit = {}
 ): Promise<T> => {
   const url = `${BASE_URL}${endpoint}`;
-  const token = getStoredToken();
+  let token = getStoredToken();
   const headers = new Headers(options.headers);
 
   if (token) {
@@ -66,39 +66,78 @@ const fetchClient = async <T>(
 
   const defaultOptions: RequestInit = {
     ...options,
-    credentials: "include",
+    credentials: "include", // Cờ này giúp gửi Windows Credentials
     headers,
   };
 
-  const response = await fetch(url, defaultOptions);
-
+  let response = await fetch(url, defaultOptions);
   let payload: unknown = null;
   const contentType = response.headers.get("content-type") ?? "";
 
+  // -----------------------------------------------------------
+  // XỬ LÝ AUTO RE-LOGIN KHI GẶP LỖI 401 (TOKEN HẾT HẠN)
+  // -----------------------------------------------------------
+  if (response.status === 401 && !endpoint.includes("windows-login")) {
+    try {
+     
+      const loginRes = await fetch(`${BASE_URL}/windows-login`, {
+        method: "POST",
+        credentials: "include" 
+      });
+
+      if (loginRes.ok) {
+        let loginPayload = null;
+        const loginContentType = loginRes.headers.get("content-type") ?? "";
+        if (loginContentType.includes("application/json")) {
+          loginPayload = await loginRes.json();
+        }
+
+        const newToken = extractTokenFromPayload(loginPayload);
+        
+        if (newToken) {
+          // Lưu token mới
+          persistToken(newToken);
+          
+          // Set lại Authorization header với token mới
+          headers.set("Authorization", `Bearer ${newToken}`);
+          defaultOptions.headers = headers;
+
+          // THỰC HIỆN GỌI LẠI (RETRY) REQUEST BAN ĐẦU
+          response = await fetch(url, defaultOptions);
+        }
+      }
+    } catch (error) {
+      console.error("Auto re-login failed:", error);
+    }
+  }
+  // -----------------------------------------------------------
+
+  // Đọc dữ liệu từ response (bao gồm cả response gốc hoặc response sau khi retry)
+  const finalContentType = response.headers.get("content-type") ?? "";
   if (response.status !== 204) {
-    if (contentType.includes("application/json")) {
+    if (finalContentType.includes("application/json")) {
       payload = await response.json();
     } else {
       payload = await response.text();
     }
   }
 
+  // Bắt các lỗi còn lại (403 hoặc 401 mà re-login vẫn thất bại)
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
       persistToken(null);
     }
-
     const errorBody = typeof payload === "string" ? payload : JSON.stringify(payload ?? {});
     throw new Error(errorBody || `API Error: ${response.status}`);
   }
 
+  // Trích xuất Token (nếu api trả về có token)
   const authToken = extractTokenFromPayload(payload);
   if (authToken) {
     persistToken(authToken);
   }
 
   if (response.status === 204) return {} as T;
-
   return (payload ?? {}) as T;
 };
 
