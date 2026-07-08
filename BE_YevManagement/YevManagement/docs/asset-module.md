@@ -1,8 +1,9 @@
 # asset-module.md — Module Asset (Quản lý Thiết bị / PC)
 
-> **Trạng thái:** ĐANG PHÁT TRIỂN. Đã có nền CRUD cho nhiều thực thể; một số phần
-> mới scaffold (Software/DeviceSoftware) còn thiếu API hoặc chưa đăng ký. Đọc
-> [architecture-core.md](architecture-core.md) trước.
+> **Trạng thái:** ĐANG PHÁT TRIỂN. Đã có nền CRUD cho nhiều thực thể (Branch,
+> DeviceType, Supplier, Software, SoftwareGroup, DeviceSoftware); Device mới có
+> grid, còn IpAddress/DeviceConfiguration/TransferHistory/AuditTrail chưa có
+> Application/Api. Đọc [architecture-core.md](architecture-core.md) trước.
 
 - **DB:** `YevPCManagement` (connection string `PCManagementConnection`).
 - **DbContext:** `AssetDbContext` (`Asset.Infrastructure/Context/`).
@@ -43,17 +44,20 @@
     `DeviceCode/Manager/PurchaseDate/IpAddress/SupplierName/Note`.
   - `DeviceGridDto` (1 dòng grid): gộp tên Branch/Supplier/DeviceType + IP đầu tiên.
 - **DeviceSoftwares/**: `DeviceSoftwareDto`, `CreateDeviceSoftwareDto` (+`[Required]` Device/Software), `UpdateDeviceSoftwareDto`.
+- **Softwares/**: `SoftwareDto` (Id/Code/Name/Type?/Publisher?/Quantity?/Priority?/GroupId/GroupName —
+  gộp tên `SoftwareGroup`), `CreateSoftwareDto` (+`[Required]` Code/Name/GroupId), `UpdateSoftwareDto`.
+- **SoftwareGroups/**: `SoftwareGroupDto` (Id/Code/Name), `CreateSoftwareGroupDto` (+`[Required]`), `UpdateSoftwareGroupDto`.
 
 ---
 
 ## 3. Repositories & UnitOfWork
 
-- `IAssetUnitOfWork : IUnitOfWork` gom **10 repository**: `Devices`, `Branches`,
-  `Softwares`, `Suppliers`, `DeviceConfigurations`, `DeviceSoftwares`,
+- `IAssetUnitOfWork : IUnitOfWork` gom **11 repository**: `Devices`, `Branches`,
+  `Softwares`, `SoftwareGroups`, `Suppliers`, `DeviceConfigurations`, `DeviceSoftwares`,
   `DeviceTypes`, `IpAddresses`, `TransferHistories`, `AuditTrails`.
 - Tất cả repo hiện **generic thuần** (class con rỗng, chỉ kế thừa
   `GenericRepository<T, AssetDbContext>`) — chưa có method đặc thù nào.
-- `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>` inject đủ 10 repo qua constructor.
+- `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>` inject đủ 11 repo qua constructor.
 
 ---
 
@@ -66,8 +70,8 @@
 | DeviceType | `DeviceTypeService` | `DeviceTypeController` `/api/DeviceType` | CRUD | `[AllowAnonymous]` |
 | Supplier | `SupplierService` | `SupplierController` `/api/Supplier` | CRUD | `[AllowAnonymous]` |
 | DeviceSoftware | `DeviceSoftwareService` | `DeviceSoftwareController` `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE | `[AllowAnonymous]` |
-| Software | ❌ chưa có | ❌ | — | — |
-| SoftwareGroup | ❌ chưa có | ❌ | — | — |
+| Software | `SoftwareService` (đầy đủ) | `SoftwareController` `/api/Software` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
+| SoftwareGroup | `SoftwareGroupService` (đầy đủ) | `SoftwareGroupController` `/api/SoftwareGroup` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
 | IpAddress | ❌ chưa có | ❌ | — | — |
 | DeviceConfiguration | ❌ chưa có | ❌ | — | — |
 | TransferHistory | ❌ chưa có | ❌ | — | — |
@@ -84,6 +88,11 @@
 - **Khoá kép** → xem `DeviceSoftwareService`: mọi thao tác tìm bằng
   `FirstOrDefaultAsync(x => x.DeviceId == .. && x.SoftwareId == ..)`, xoá **cứng**
   (`Delete`, không soft-delete vì entity không có `IsDeleted`).
+- **CRUD có FK bắt buộc** → xem `SoftwareService` (Software → SoftwareGroup):
+  `GetPagedAsync`/`GetAllActiveAsync`/`GetByIdAsync` dùng `GetQueryable`/`FirstOrDefaultAsync`
+  kèm `.Include(x => x.SoftwareGroup)` để gộp `SoftwareGroupName` vào DTO; `CreateAsync`/
+  `UpdateAsync` validate `SoftwareGroupId` tồn tại bằng `_unitOfWork.SoftwareGroups.GetByIdAsync`
+  + `OrThrowNotFound` trước khi ghi.
 
 **API endpoints chi tiết** (route pattern nhất quán):
 - `GET /api/{Entity}/grid-list?pageIndex=&pageSize=&keyword=` → `PagedResponse`.
@@ -94,20 +103,20 @@
 
 ## 5. Hiện trạng: ĐÃ XONG / CẦN LÀM TIẾP
 
-**Đã xong:** CRUD Branch/DeviceType/Supplier; grid Device (filter + phân trang);
-CRUD DeviceSoftware; toàn bộ Domain + DbContext + Migrations (đã map 11 entity).
+**Đã xong:** CRUD Branch/DeviceType/Supplier/Software/SoftwareGroup; grid Device
+(filter + phân trang); CRUD DeviceSoftware; toàn bộ Domain + DbContext +
+Migrations (đã map 11 entity).
 
 **Cần làm tiếp (theo độ ưu tiên gợi ý):**
 1. **Device**: mới có grid, **thiếu** GetById/Create/Update/Delete và quản lý
    cấu hình (`DeviceConfiguration`), IP (`IpAddress`), phần mềm cài đặt.
-2. **Software + SoftwareGroup**: có Domain + trong UoW nhưng **chưa có Service/
-   Controller/DTO** → cần CRUD (đây là phần đang code dở, nhánh untracked).
-3. **IpAddress / DeviceConfiguration / TransferHistory / AuditTrail**: chưa có
+2. **IpAddress / DeviceConfiguration / TransferHistory / AuditTrail**: chưa có
    tầng Application/Api.
-4. **Auth**: tất cả controller Asset đang `[AllowAnonymous]` — cần siết quyền
+3. **Auth**: tất cả controller Asset đang `[AllowAnonymous]` — cần siết quyền
    thật trước khi lên production.
-5. **Warning**: nhiều `CS8602` (deref possibly null) trong các Service —
-   `GetByIdAsync` trả nullable, nên dùng `OrThrowNotFound` như `BranchService`.
+4. **Warning**: nhiều `CS8602` (deref possibly null) trong các Service —
+   `GetByIdAsync` trả nullable, nên dùng `OrThrowNotFound` như `BranchService`
+   (Software/SoftwareGroup mới thêm cũng theo pattern này, cùng warning y hệt).
 
 ---
 
