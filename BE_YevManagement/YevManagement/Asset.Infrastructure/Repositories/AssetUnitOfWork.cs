@@ -18,6 +18,7 @@ namespace Asset.Infrastructure.Repositories
             IDeviceSoftwareRepository deviceSoftwares,
             IDeviceTypeRepository deviceTypes,
             IIpAddressRepository ipAddresses,
+            IIpPrefixRepository ipPrefixes,
             ITransferHistoryRepository transferHistories,
             IAuditTrailRepository auditTrails) : base(dbContext)
         {
@@ -30,6 +31,7 @@ namespace Asset.Infrastructure.Repositories
             DeviceSoftwares = deviceSoftwares;
             DeviceTypes = deviceTypes;
             IpAddresses = ipAddresses;
+            IpPrefixes = ipPrefixes;
             TransferHistories = transferHistories;
             AuditTrails = auditTrails;
         }
@@ -43,6 +45,7 @@ namespace Asset.Infrastructure.Repositories
         public IDeviceSoftwareRepository DeviceSoftwares { get; }
         public IDeviceTypeRepository DeviceTypes { get; }
         public IIpAddressRepository IpAddresses { get; }
+        public IIpPrefixRepository IpPrefixes { get; }
         public ITransferHistoryRepository TransferHistories { get; }
         public IAuditTrailRepository AuditTrails { get; }
     }

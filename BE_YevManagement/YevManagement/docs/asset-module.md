@@ -1,8 +1,8 @@
 # asset-module.md — Module Asset (Quản lý Thiết bị / PC)
 
 > **Trạng thái:** ĐANG PHÁT TRIỂN. Đã có nền CRUD cho nhiều thực thể (Branch,
-> DeviceType, Supplier, Software, SoftwareGroup, DeviceSoftware); Device mới có
-> grid, còn IpAddress/DeviceConfiguration/TransferHistory/AuditTrail chưa có
+> DeviceType, Supplier, Software, SoftwareGroup, DeviceSoftware, IpAddress); Device
+> mới có grid, còn DeviceConfiguration/TransferHistory/AuditTrail chưa có
 > Application/Api. Đọc [architecture-core.md](architecture-core.md) trước.
 
 - **DB:** `YevPCManagement` (connection string `PCManagementConnection`).
@@ -21,7 +21,8 @@
 | `Branch` | `BranchCode`(unique), `BranchName` | 1-N Devices | **Có** |
 | `Supplier` | `SupplierCode`(unique), `SupplierName` | 1-N Devices | **Có** |
 | `DeviceType` | `TypeCode`(unique), `TypeName` | 1-N Devices | **Có** |
-| `IpAddress` | `IpAddress1`(unique, cột `IpAddress`), `SubnetMask?`, `Gateway?`, DNS..., `DeviceId?`, `Status`, `Note?` | N-1 Device | **Có** |
+| `IpAddress` | `IpAddress1`(unique **toàn cục**, cột `IpAddress`), `ServerIp?`, `DeviceId?`, `IpPrefixId`(bắt buộc), `Status`, `Note?` | N-1 Device (nullable), N-1 IpPrefix (**bắt buộc**) | **Có** |
+| `IpPrefix` | `Prefix`(unique **toàn cục**, vd `10.45.1`), `SubnetMask?`, `Gateway?`, `PreferredDns?`, `AlternateDns?`, `Description?` | 1-N IpAddress | **Có** |
 | `DeviceConfiguration` | Cấu hình phần cứng: `Cpu/Ram/HardDrive/Os/Vga...` (cột viết hoa CPU/RAM/OS...) | 1-1 Device (`DeviceId` unique) | Không |
 | `DeviceSoftware` | **Khoá kép** `(DeviceId, SoftwareId)`, `InstallDate`, `LicenseKey?` | N-1 Device, N-1 Software | Không |
 | `Software` | `SoftwareCode`(unique), `SoftwareName`, `SoftwareType?`, `Publisher?`, `SoftwareQuantity?`, `SoftwarePriority?`, `SoftwareGroupId` | N-1 SoftwareGroup, 1-N DeviceSoftwares | **Có** |
@@ -31,6 +32,36 @@
 
 > `DeviceSoftware` dùng **khoá chính kép** — không có `Id` đơn. Repo/service phải
 > tìm bằng cả `DeviceId + SoftwareId` (dùng `FirstOrDefaultAsync`, không dùng `GetByIdAsync`).
+
+> **`IpAddress.Status` (int)** có ý nghĩa cố định qua enum `IpAddressStatus`
+> (`Asset.Domain/Enums/IpAddressStatus.cs`, enum Domain đầu tiên của project):
+> `0=Available` (chưa gán), `1=Assigned` (đã gán `DeviceId`), `2=Reserved` (giữ chỗ),
+> `3=Disabled` (ngưng dùng). `IpAddressService` tự derive Status theo `DeviceId`
+> (có `DeviceId` → luôn `Assigned`; gỡ `DeviceId` → luôn `Available`) — không cho
+> client tự đặt `Assigned` khi chưa có `DeviceId`. Lưu ý: dữ liệu cũ backfill từ
+> trước khi có rule này có thể còn vài dòng `Status` không khớp `DeviceId` (chưa
+> retroactive fix, chỉ áp dụng cho Create/Update mới).
+>
+> **Unique index `IX_DiaChiIPs_DiaChi` trên `IpAddress1` và `IX_TienToIPs_TienTo`
+> trên `IpPrefix.Prefix` đều là unique toàn cục, không lọc `IsDeleted`.** Mọi kiểm
+> tra trùng lặp (Create/Update) phải so khớp trên **toàn bộ bản ghi** kể cả đã
+> soft-delete, không chỉ lọc `!IsDeleted` (khác với phần lớn entity khác trong module).
+>
+> **Chuẩn hoá IpAddress → IpPrefix (2026-07-08):** trước đây `SubnetMask/Gateway/
+> PreferredDNS/AlternateDNS` nằm trực tiếp, lặp lại trên từng dòng `IpAddress`. Đã
+> tách sang bảng `IpPrefixes` riêng (mỗi dòng = 1 subnet 3-octet, vd `10.45.1`),
+> `IpAddress` tham chiếu qua `IpPrefixId` bắt buộc — sửa `SubnetMask/Gateway/DNS`
+> ở 1 `IpPrefix` tự "cascade" hiển thị cho toàn bộ IP con qua JOIN, không cần
+> bulk-update từng dòng. Migration `AddIpPrefix`
+> (`Asset.Infrastructure/Migrations/20260708031004_AddIpPrefix.cs`) đã **backfill
+> và apply lên DB thật**: 27 `IpPrefix` (group theo 3 octet đầu của 6885 `IpAddress`
+> hiện có) + DROP 4 cột cũ trên `IpAddresses`. Trạng thái schema hiện tại: đã chạy
+> xong, không cần backfill lại.
+>
+> **Tạo `IpPrefix` mới tự động sinh luôn 255 `IpAddress` con** (`n=1..255`,
+> `Status=Available`) trong cùng 1 lần gọi `IpPrefixService.CreateAsync` — không
+> còn action `generate-range` riêng trên `IpAddressController` (đã gộp vào đây).
+> Xoá `IpPrefix` bị chặn (`DomainException`) nếu còn `IpAddress` con `!IsDeleted`.
 
 ---
 
@@ -47,17 +78,25 @@
 - **Softwares/**: `SoftwareDto` (Id/Code/Name/Type?/Publisher?/Quantity?/Priority?/GroupId/GroupName —
   gộp tên `SoftwareGroup`), `CreateSoftwareDto` (+`[Required]` Code/Name/GroupId), `UpdateSoftwareDto`.
 - **SoftwareGroups/**: `SoftwareGroupDto` (Id/Code/Name), `CreateSoftwareGroupDto` (+`[Required]`), `UpdateSoftwareGroupDto`.
+- **IpAddresses/**: `IpAddressDto` (gộp `DeviceCode` + `StatusText` + `Prefix*` từ
+  `IpPrefix`), `CreateIpAddressDto`/`UpdateIpAddressDto` (+`[RegularExpression]`
+  IPv4, `IpPrefixId` `[Required]`), `IpAddressFilterRequest` (`Keyword/Status/DeviceId`,
+  **không có** `all` vì bảng pool lớn), `AssignIpAddressDto` (`DeviceId` `[Required]`).
+- **IpPrefixes/**: `IpPrefixDto` (gồm `IpAddressCount` đếm IP con), `CreateIpPrefixDto`
+  (`Prefix` `[Required]` + `[RegularExpression]` 3 octet, + SubnetMask/Gateway/DNS/
+  Description dùng chung cho cả subnet), `UpdateIpPrefixDto` (**không** có `Prefix`
+  — đổi prefix phải xoá + tạo lại, không hỗ trợ rename).
 
 ---
 
 ## 3. Repositories & UnitOfWork
 
-- `IAssetUnitOfWork : IUnitOfWork` gom **11 repository**: `Devices`, `Branches`,
+- `IAssetUnitOfWork : IUnitOfWork` gom **12 repository**: `Devices`, `Branches`,
   `Softwares`, `SoftwareGroups`, `Suppliers`, `DeviceConfigurations`, `DeviceSoftwares`,
-  `DeviceTypes`, `IpAddresses`, `TransferHistories`, `AuditTrails`.
+  `DeviceTypes`, `IpAddresses`, `IpPrefixes`, `TransferHistories`, `AuditTrails`.
 - Tất cả repo hiện **generic thuần** (class con rỗng, chỉ kế thừa
   `GenericRepository<T, AssetDbContext>`) — chưa có method đặc thù nào.
-- `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>` inject đủ 11 repo qua constructor.
+- `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>` inject đủ 12 repo qua constructor.
 
 ---
 
@@ -72,7 +111,8 @@
 | DeviceSoftware | `DeviceSoftwareService` | `DeviceSoftwareController` `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE | `[AllowAnonymous]` |
 | Software | `SoftwareService` (đầy đủ) | `SoftwareController` `/api/Software` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
 | SoftwareGroup | `SoftwareGroupService` (đầy đủ) | `SoftwareGroupController` `/api/SoftwareGroup` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
-| IpAddress | ❌ chưa có | ❌ | — | — |
+| IpAddress | `IpAddressService` (đầy đủ) | `IpAddressController` `/api/IpAddress` | grid-list, {id}, POST, PUT, DELETE, `{id}/assign`, `{id}/unassign` (**không có** `all`/`generate-range`) | `[AllowAnonymous]` |
+| IpPrefix | `IpPrefixService` (đầy đủ, POST tự sinh 255 IP con) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
 | DeviceConfiguration | ❌ chưa có | ❌ | — | — |
 | TransferHistory | ❌ chưa có | ❌ | — | — |
 | AuditTrail | ❌ chưa có | ❌ | — | — |
@@ -93,6 +133,20 @@
   kèm `.Include(x => x.SoftwareGroup)` để gộp `SoftwareGroupName` vào DTO; `CreateAsync`/
   `UpdateAsync` validate `SoftwareGroupId` tồn tại bằng `_unitOfWork.SoftwareGroups.GetByIdAsync`
   + `OrThrowNotFound` trước khi ghi.
+- **CRUD với FK optional + action gán/gỡ** → xem `IpAddressService`
+  (IpAddress → Device, nullable; IpAddress → IpPrefix, bắt buộc): `Status` tự derive
+  theo `DeviceId` (xem ghi chú `IpAddressStatus` ở §1), có 2 action riêng
+  `AssignToDeviceAsync`/`UnassignAsync` ngoài CRUD chuẩn để đổi `DeviceId`+`Status`
+  cùng lúc mà không cần gọi `UpdateAsync` đầy đủ. Lưu ý: `StatusText` trong
+  `Expression<Func<>>` của `ToPagedResponseAsync` phải viết bằng ternary lồng nhau
+  thay vì gọi method C#, vì EF Core dịch expression đó sang SQL và không hỗ trợ gọi
+  method tuỳ ý.
+- **Master record tự sinh hàng loạt record con** → xem `IpPrefixService.CreateAsync`
+  (IpPrefix 1-N IpAddress): tạo 1 `IpPrefix` xong (`AddAsync` + `SaveChangesAsync` để
+  có `Id`), build luôn danh sách 255 `IpAddress` con (`n=1..255`) bằng LINQ
+  `Enumerable.Range`, rồi `AddRangeAsync` + `SaveChangesAsync` **1 lần** cho cả batch
+  (không loop insert từng bản ghi). Không cần check trùng vì Prefix vừa tạo chắc
+  chắn chưa có IP con nào.
 
 **API endpoints chi tiết** (route pattern nhất quán):
 - `GET /api/{Entity}/grid-list?pageIndex=&pageSize=&keyword=` → `PagedResponse`.
@@ -103,20 +157,21 @@
 
 ## 5. Hiện trạng: ĐÃ XONG / CẦN LÀM TIẾP
 
-**Đã xong:** CRUD Branch/DeviceType/Supplier/Software/SoftwareGroup; grid Device
-(filter + phân trang); CRUD DeviceSoftware; toàn bộ Domain + DbContext +
-Migrations (đã map 11 entity).
+**Đã xong:** CRUD Branch/DeviceType/Supplier/Software/SoftwareGroup/IpAddress/IpPrefix;
+grid Device (filter + phân trang); CRUD DeviceSoftware; toàn bộ Domain + DbContext +
+Migrations (đã map 12 entity, kể cả migration `AddIpPrefix` đã backfill 27 prefix từ
+6885 `IpAddress` cũ và apply lên DB thật ngày 2026-07-08).
 
 **Cần làm tiếp (theo độ ưu tiên gợi ý):**
 1. **Device**: mới có grid, **thiếu** GetById/Create/Update/Delete và quản lý
-   cấu hình (`DeviceConfiguration`), IP (`IpAddress`), phần mềm cài đặt.
-2. **IpAddress / DeviceConfiguration / TransferHistory / AuditTrail**: chưa có
-   tầng Application/Api.
+   cấu hình (`DeviceConfiguration`), phần mềm cài đặt (IP đã xong ở `IpAddressService`).
+2. **DeviceConfiguration / TransferHistory / AuditTrail**: chưa có tầng Application/Api.
 3. **Auth**: tất cả controller Asset đang `[AllowAnonymous]` — cần siết quyền
    thật trước khi lên production.
-4. **Warning**: nhiều `CS8602` (deref possibly null) trong các Service —
-   `GetByIdAsync` trả nullable, nên dùng `OrThrowNotFound` như `BranchService`
-   (Software/SoftwareGroup mới thêm cũng theo pattern này, cùng warning y hệt).
+4. **Warning**: nhiều `CS8602`/`CS8603`/`CS8604` (deref/return possibly null) trong
+   các Service — `GetByIdAsync` trả nullable, nên dùng `OrThrowNotFound` như
+   `BranchService` (Software/SoftwareGroup/IpAddress mới thêm cũng theo pattern này,
+   cùng warning y hệt, chấp nhận được).
 
 ---
 

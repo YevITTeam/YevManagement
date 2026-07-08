@@ -263,17 +263,8 @@ namespace Asset.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AlternateDns")
-                        .HasMaxLength(15)
-                        .HasColumnType("nvarchar(15)")
-                        .HasColumnName("AlternateDNS");
-
                     b.Property<int?>("DeviceId")
                         .HasColumnType("int");
-
-                    b.Property<string>("Gateway")
-                        .HasMaxLength(15)
-                        .HasColumnType("nvarchar(15)");
 
                     b.Property<string>("IpAddress1")
                         .IsRequired()
@@ -281,17 +272,15 @@ namespace Asset.Infrastructure.Migrations
                         .HasColumnType("nvarchar(25)")
                         .HasColumnName("IpAddress");
 
+                    b.Property<int>("IpPrefixId")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
                     b.Property<string>("Note")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("PreferredDns")
-                        .HasMaxLength(15)
-                        .HasColumnType("nvarchar(15)")
-                        .HasColumnName("PreferredDNS");
 
                     b.Property<string>("ServerIp")
                         .HasMaxLength(15)
@@ -301,10 +290,6 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
-                    b.Property<string>("SubnetMask")
-                        .HasMaxLength(15)
-                        .HasColumnType("nvarchar(15)");
-
                     b.HasKey("Id")
                         .HasName("PK_DiaChiIPs");
 
@@ -313,7 +298,56 @@ namespace Asset.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "DeviceId" }, "IX_DiaChiIPs_ThietBiId");
 
+                    b.HasIndex(new[] { "IpPrefixId" }, "IX_DiaChiIPs_TienToId");
+
                     b.ToTable("IpAddresses");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.IpPrefix", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AlternateDns")
+                        .HasMaxLength(15)
+                        .HasColumnType("nvarchar(15)")
+                        .HasColumnName("AlternateDNS");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("Gateway")
+                        .HasMaxLength(15)
+                        .HasColumnType("nvarchar(15)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("PreferredDns")
+                        .HasMaxLength(15)
+                        .HasColumnType("nvarchar(15)")
+                        .HasColumnName("PreferredDNS");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("nvarchar(15)");
+
+                    b.Property<string>("SubnetMask")
+                        .HasMaxLength(15)
+                        .HasColumnType("nvarchar(15)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_TienToIPs");
+
+                    b.HasIndex(new[] { "Prefix" }, "IX_TienToIPs_TienTo")
+                        .IsUnique();
+
+                    b.ToTable("IpPrefixes");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.Software", b =>
@@ -566,7 +600,16 @@ namespace Asset.Infrastructure.Migrations
                         .HasForeignKey("DeviceId")
                         .HasConstraintName("FK_DiaChiIPs_ThietBis_ThietBiId");
 
+                    b.HasOne("Asset.Domain.Entities.IpPrefix", "IpPrefix")
+                        .WithMany("IpAddresses")
+                        .HasForeignKey("IpPrefixId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_DiaChiIPs_TienToIPs_TienToId");
+
                     b.Navigation("Device");
+
+                    b.Navigation("IpPrefix");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.Software", b =>
@@ -621,6 +664,11 @@ namespace Asset.Infrastructure.Migrations
             modelBuilder.Entity("Asset.Domain.Entities.DeviceType", b =>
                 {
                     b.Navigation("Devices");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.IpPrefix", b =>
+                {
+                    b.Navigation("IpAddresses");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.Software", b =>

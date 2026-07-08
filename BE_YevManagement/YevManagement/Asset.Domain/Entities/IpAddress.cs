@@ -9,17 +9,11 @@ public partial class IpAddress
 
     public string IpAddress1 { get; set; } = null!;
 
-    public string? SubnetMask { get; set; }
-
-    public string? Gateway { get; set; }
-
-    public string? PreferredDns { get; set; }
-
-    public string? AlternateDns { get; set; }
-
     public string? ServerIp { get; set; }
 
     public int? DeviceId { get; set; }
+
+    public int IpPrefixId { get; set; }
 
     public int Status { get; set; }
 
@@ -28,4 +22,6 @@ public partial class IpAddress
     public bool IsDeleted { get; set; }
 
     public virtual Device? Device { get; set; }
+
+    public virtual IpPrefix IpPrefix { get; set; } = null!;
 }

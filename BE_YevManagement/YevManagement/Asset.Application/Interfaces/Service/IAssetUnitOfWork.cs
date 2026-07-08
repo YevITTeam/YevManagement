@@ -14,6 +14,7 @@ namespace Asset.Application.Interfaces.Service
         IDeviceSoftwareRepository DeviceSoftwares { get; }
         IDeviceTypeRepository DeviceTypes { get; }
         IIpAddressRepository IpAddresses { get; }
+        IIpPrefixRepository IpPrefixes { get; }
         ITransferHistoryRepository TransferHistories { get; }
         IAuditTrailRepository AuditTrails { get; }
     }

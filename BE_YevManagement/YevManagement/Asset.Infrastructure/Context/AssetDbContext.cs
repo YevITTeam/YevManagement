@@ -22,6 +22,7 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<DeviceSoftware> DeviceSoftwares { get; set; }
     public virtual DbSet<DeviceType> DeviceTypes { get; set; }
     public virtual DbSet<IpAddress> IpAddresses { get; set; }
+    public virtual DbSet<IpPrefix> IpPrefixes { get; set; }
     public virtual DbSet<Software> Softwares { get; set; }
     public virtual DbSet<Supplier> Suppliers { get; set; }
     public virtual DbSet<TransferHistory> TransferHistories { get; set; }
@@ -124,18 +125,33 @@ public partial class AssetDbContext : DbContext
             entity.HasKey(e => e.Id).HasName("PK_DiaChiIPs");
             entity.HasIndex(e => e.IpAddress1, "IX_DiaChiIPs_DiaChi").IsUnique();
             entity.HasIndex(e => e.DeviceId, "IX_DiaChiIPs_ThietBiId");
+            entity.HasIndex(e => e.IpPrefixId, "IX_DiaChiIPs_TienToId");
 
-            entity.Property(e => e.AlternateDns).HasMaxLength(15).HasColumnName("AlternateDNS");
-            entity.Property(e => e.Gateway).HasMaxLength(15);
             entity.Property(e => e.IpAddress1).HasMaxLength(25).HasColumnName("IpAddress");
             entity.Property(e => e.Note).HasMaxLength(255);
-            entity.Property(e => e.PreferredDns).HasMaxLength(15).HasColumnName("PreferredDNS");
             entity.Property(e => e.ServerIp).HasMaxLength(15).HasColumnName("ServerIP");
-            entity.Property(e => e.SubnetMask).HasMaxLength(15);
 
             entity.HasOne(d => d.Device).WithMany(p => p.IpAddresses)
                 .HasForeignKey(d => d.DeviceId)
                 .HasConstraintName("FK_DiaChiIPs_ThietBis_ThietBiId");
+
+            entity.HasOne(d => d.IpPrefix).WithMany(p => p.IpAddresses)
+                .HasForeignKey(d => d.IpPrefixId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_DiaChiIPs_TienToIPs_TienToId");
+        });
+
+        modelBuilder.Entity<IpPrefix>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_TienToIPs");
+            entity.HasIndex(e => e.Prefix, "IX_TienToIPs_TienTo").IsUnique();
+
+            entity.Property(e => e.Prefix).HasMaxLength(15);
+            entity.Property(e => e.SubnetMask).HasMaxLength(15);
+            entity.Property(e => e.Gateway).HasMaxLength(15);
+            entity.Property(e => e.PreferredDns).HasMaxLength(15).HasColumnName("PreferredDNS");
+            entity.Property(e => e.AlternateDns).HasMaxLength(15).HasColumnName("AlternateDNS");
+            entity.Property(e => e.Description).HasMaxLength(255);
         });
 
         modelBuilder.Entity<Supplier>(entity =>

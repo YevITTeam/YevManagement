@@ -139,3 +139,6 @@ dotnet ef database update --project Asset.Infrastructure --startup-project Compa
 > Connection string & JWT secret nằm ở `CompanySystem.HostApi/appsettings.json`.
 > DB là **SQL Server dùng chung, dữ liệu thật** — mọi thao tác kiểm thử phải
 > read-only, không tạo/sửa/xoá bản ghi rác.
+
+## 6. Một số lưu ý
+Mọi comments ghi chú lại phải bằng tiếng anh.
