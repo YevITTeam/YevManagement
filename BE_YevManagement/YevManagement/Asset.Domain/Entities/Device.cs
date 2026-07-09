@@ -33,6 +33,10 @@ public partial class Device
 
     public string? Note { get; set; }
 
+    public string? SerialNumber { get; set; }
+
+    public bool IsUseUsb { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual Branch Branch { get; set; } = null!;

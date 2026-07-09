@@ -17,5 +17,7 @@
         public int Status { get; set; }
         public string StatusText { get; set; } = null!;
         public bool IsOutsourced { get; set; }
+        public string? SerialNumber { get; set; }
+        public bool IsUseUsb { get; set; }
     }
 }

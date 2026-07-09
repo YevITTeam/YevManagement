@@ -63,6 +63,16 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.IsOutsourced == request.IsOutsourced.Value);
             }
 
+            if (!string.IsNullOrWhiteSpace(request.SerialNumber))
+            {
+                query = query.Where(d => d.SerialNumber != null && d.SerialNumber.Contains(request.SerialNumber));
+            }
+
+            if (request.IsUseUsb.HasValue)
+            {
+                query = query.Where(d => d.IsUseUsb == request.IsUseUsb.Value);
+            }
+
             return await _unitOfWork.Devices.ToPagedResponseAsync(
                 query.OrderByDescending(d => d.PurchaseDate),
                 request.PageIndex,
@@ -82,6 +92,8 @@ namespace Asset.Application.Services
                     Note = d.Note,
                     Email = d.Email,
                     IsOutsourced = d.IsOutsourced,
+                    SerialNumber = d.SerialNumber,
+                    IsUseUsb = d.IsUseUsb,
                     Status = d.Status,
                     // Lặp lại logic của GetStatusText tại đây (không gọi method) vì đây là
                     // Expression<Func<>> được EF dịch sang SQL, không hỗ trợ gọi method C# tuỳ ý.
@@ -123,6 +135,12 @@ namespace Asset.Application.Services
             var codeExists = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == request.DeviceCode);
             if (codeExists != null) throw new DomainException($"Mã thiết bị '{request.DeviceCode}' đã tồn tại.");
 
+            if (!string.IsNullOrWhiteSpace(request.SerialNumber))
+            {
+                var serialExists = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.SerialNumber == request.SerialNumber);
+                if (serialExists != null) throw new DomainException($"Số Serial '{request.SerialNumber}' đã tồn tại.");
+            }
+
             var deviceType = await _unitOfWork.DeviceTypes.GetByIdAsync(request.DeviceTypeId);
             deviceType.OrThrowNotFound("Loại thiết bị", request.DeviceTypeId);
 
@@ -156,6 +174,8 @@ namespace Asset.Application.Services
                 IsOutsourced = request.IsOutsourced,
                 Status = request.Status,
                 Note = request.Note,
+                SerialNumber = request.SerialNumber,
+                IsUseUsb = request.IsUseUsb,
                 IsDeleted = false
             };
 
@@ -185,6 +205,12 @@ namespace Asset.Application.Services
             {
                 var codeExists = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == request.DeviceCode);
                 if (codeExists != null) throw new DomainException($"Mã thiết bị '{request.DeviceCode}' đã tồn tại.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.SerialNumber) && device.SerialNumber != request.SerialNumber)
+            {
+                var serialExists = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.SerialNumber == request.SerialNumber);
+                if (serialExists != null) throw new DomainException($"Số Serial '{request.SerialNumber}' đã tồn tại.");
             }
 
             var deviceType = await _unitOfWork.DeviceTypes.GetByIdAsync(request.DeviceTypeId);
@@ -233,6 +259,8 @@ namespace Asset.Application.Services
             device.IsOutsourced = request.IsOutsourced;
             device.Status = request.Status;
             device.Note = request.Note;
+            device.SerialNumber = request.SerialNumber;
+            device.IsUseUsb = request.IsUseUsb;
 
             _unitOfWork.Devices.Update(device);
             await _unitOfWork.SaveChangesAsync();
@@ -277,6 +305,8 @@ namespace Asset.Application.Services
             Status = device.Status,
             StatusText = GetStatusText(device.Status),
             Note = device.Note,
+            SerialNumber = device.SerialNumber,
+            IsUseUsb = device.IsUseUsb,
             IpAddressId = ipAddress?.Id,
             IpAddress = ipAddress?.IpAddress1
         };

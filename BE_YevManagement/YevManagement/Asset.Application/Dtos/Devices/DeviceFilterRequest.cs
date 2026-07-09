@@ -16,5 +16,7 @@ namespace Asset.Application.Dtos.Devices
         public string? SupplierName { get; set; }
         public string? Note { get; set; }
         public bool? IsOutsourced { get; set; }
+        public string? SerialNumber { get; set; }
+        public bool? IsUseUsb { get; set; }
     }
 }

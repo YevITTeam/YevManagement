@@ -66,6 +66,35 @@ namespace Asset.Application.Services
             );
         }
 
+        public async Task<List<IpAddressDto>> GetAvailableAsync(string? keyword)
+        {
+            var normalizedKeyword = string.IsNullOrWhiteSpace(keyword) ? "" : keyword.Trim();
+
+            var ipAddresses = await _unitOfWork.IpAddresses.SelectAsync(
+                predicate: x => !x.IsDeleted
+                    && x.Status == (int)IpAddressStatus.Available
+                    && x.IpAddress1.Contains(normalizedKeyword),
+                selector: x => new IpAddressDto
+                {
+                    Id = x.Id,
+                    IpAddress = x.IpAddress1,
+                    ServerIp = x.ServerIp,
+                    DeviceId = x.DeviceId,
+                    DeviceCode = null,
+                    IpPrefixId = x.IpPrefixId,
+                    Prefix = x.IpPrefix.Prefix,
+                    PrefixSubnetMask = x.IpPrefix.SubnetMask,
+                    PrefixGateway = x.IpPrefix.Gateway,
+                    PrefixPreferredDns = x.IpPrefix.PreferredDns,
+                    PrefixAlternateDns = x.IpPrefix.AlternateDns,
+                    Status = x.Status,
+                    StatusText = "Chưa gán",
+                    Note = x.Note
+                });
+
+            return ipAddresses.OrderBy(x => x.IpAddress).ToList();
+        }
+
         public async Task<IpAddressDto> GetByIdAsync(int id)
         {
             var ipAddress = await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.Id == id, x => x.Device, x => x.IpPrefix);

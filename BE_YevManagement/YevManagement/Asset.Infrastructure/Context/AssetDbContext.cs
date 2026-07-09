@@ -54,12 +54,15 @@ public partial class AssetDbContext : DbContext
             entity.HasIndex(e => e.DeviceTypeId, "IX_ThietBis_LoaiThietBiId");
             entity.HasIndex(e => e.DeviceCode, "IX_ThietBis_MaMay").IsUnique();
             entity.HasIndex(e => e.SupplierId, "IX_ThietBis_NhaCungCapId");
+            entity.HasIndex(e => e.SerialNumber, "IX_ThietBis_SoSeri").IsUnique().HasFilter("[SerialNumber] IS NOT NULL");
 
             entity.Property(e => e.DeviceCode).HasMaxLength(50);
             entity.Property(e => e.DeviceName).HasMaxLength(255);
             entity.Property(e => e.Email).HasMaxLength(255);
             entity.Property(e => e.Manager).HasMaxLength(150);
             entity.Property(e => e.Note).HasMaxLength(500);
+            entity.Property(e => e.SerialNumber).HasMaxLength(100);
+            entity.Property(e => e.IsUseUsb).HasDefaultValue(false);
 
             entity.HasOne(d => d.Branch).WithMany(p => p.Devices)
                 .HasForeignKey(d => d.BranchId)

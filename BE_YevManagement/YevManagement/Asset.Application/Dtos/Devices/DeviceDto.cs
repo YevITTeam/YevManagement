@@ -24,6 +24,8 @@ namespace Asset.Application.Dtos.Devices
         public int Status { get; set; }
         public string StatusText { get; set; } = null!;
         public string? Note { get; set; }
+        public string? SerialNumber { get; set; }
+        public bool IsUseUsb { get; set; }
         public int? IpAddressId { get; set; }
         public string? IpAddress { get; set; }
     }

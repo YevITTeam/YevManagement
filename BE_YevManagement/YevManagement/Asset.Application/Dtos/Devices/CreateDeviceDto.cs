@@ -43,6 +43,11 @@ namespace Asset.Application.Dtos.Devices
 
         public string? Note { get; set; }
 
+        [StringLength(100, ErrorMessage = "Số Serial không được vượt quá 100 ký tự")]
+        public string? SerialNumber { get; set; }
+
+        public bool IsUseUsb { get; set; }
+
         public int? IpAddressId { get; set; }
     }
 }

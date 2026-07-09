@@ -93,6 +93,11 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<bool>("IsOutsourced")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsUseUsb")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Manager")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -104,6 +109,10 @@ namespace Asset.Infrastructure.Migrations
 
                     b.Property<DateTime>("PurchaseDate")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("SerialNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -122,6 +131,10 @@ namespace Asset.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex(new[] { "SupplierId" }, "IX_ThietBis_NhaCungCapId");
+
+                    b.HasIndex(new[] { "SerialNumber" }, "IX_ThietBis_SoSeri")
+                        .IsUnique()
+                        .HasFilter("[SerialNumber] IS NOT NULL");
 
                     b.ToTable("Devices");
                 });

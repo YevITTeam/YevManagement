@@ -23,6 +23,13 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [HttpGet("available")]
+        public async Task<ActionResult<ApiResponse<List<IpAddressDto>>>> GetAvailable([FromQuery] string? keyword)
+        {
+            var result = await _ipAddressService.GetAvailableAsync(keyword);
+            return Success(result);
+        }
+
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<IpAddressDto>>> GetById(int id)
         {
