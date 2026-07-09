@@ -218,10 +218,13 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 **Query params `grid-list`** (không có tham số `all` — bảng IP quá lớn để load hết):
 `pageIndex`, `pageSize`, `keyword`, `status` (lọc theo enum trên), `deviceId`.
 
-**Danh sách "IP còn trống" để FE làm picker chọn IP khi tạo/sửa Device**:
+**Danh sách "IP còn trống" để FE làm picker chọn IP khi tạo/sửa Device** — 2 cách (2026-07-09, thêm cách 2):
 ```
-GET /api/IpAddress/grid-list?status=0&keyword=&pageIndex=1&pageSize=50
+GET /api/IpAddress/grid-list?status=0&keyword=&pageIndex=1&pageSize=50   // có phân trang
+GET /api/IpAddress/available?keyword=                                    // không phân trang, trả thẳng mảng
 ```
+
+`GET /api/IpAddress/available` trả thẳng `data: IpAddressDto[]` (không bọc `PagedResponse`), luôn lọc `status=0 Available`, sort theo `ipAddress` A-Z, `keyword` match `Contains` trên `ipAddress`. Dùng cho dropdown/autocomplete gọn — nếu cần phân trang/lọc thêm theo `deviceId` thì vẫn dùng `grid-list`.
 
 **Gán/gỡ IP thủ công** (ngoài luồng tạo/sửa Device):
 ```
@@ -250,7 +253,7 @@ Route `/api/Device`. **Không có** `GET /all` (danh sách quá lớn, luôn dù
 
 ### 5.2. `GET /api/Device/grid-list` — danh sách (bảng chính)
 
-Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string, match theo `Contains`), `ipAddress`, `supplierName`, `note`, **`isOutsourced`** (bool, mới thêm 2026-07-09).
+Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string, match theo `Contains`), `ipAddress`, `supplierName`, `note`, `isOutsourced` (bool, thêm 2026-07-09), **`serialNumber`** (string, `Contains`) và **`isUseUsb`** (bool, exact match) — 2 field cuối mới thêm cùng đợt 2026-07-09.
 
 ```jsonc
 // data.data[]
@@ -269,7 +272,9 @@ Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string,
   "email": "no-email@domain.com",
   "status": 0,
   "statusText": "Chờ sử dụng",
-  "isOutsourced": false
+  "isOutsourced": false,
+  "serialNumber": null,             // nullable, unique khi có giá trị
+  "isUseUsb": false
 }
 ```
 
@@ -291,6 +296,8 @@ Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string,
   "isOutsourced": false,
   "status": 1, "statusText": "Đang sử dụng",
   "note": "...",
+  "serialNumber": "SN-DEMO-001",   // nullable, unique khi có giá trị (2026-07-09)
+  "isUseUsb": false,                // 2026-07-09
   "ipAddressId": 6989,     // IP chính đang gắn, null nếu chưa gán
   "ipAddress": "1.1.1.104"
 }
@@ -326,12 +333,15 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
   "isOutsourced": false,
   "status": 0,                        // [Range(0,3)], mặc định 0 nếu không gửi
   "note": "Ghi chú tuỳ chọn",         // nullable
+  "serialNumber": "SN-TEST-001",      // nullable, [StringLength(100)], phải unique nếu có giá trị (2026-07-09)
+  "isUseUsb": false,                  // 2026-07-09, mặc định false nếu không gửi
   "ipAddressId": 6989                 // nullable — Id 1 IpAddress đang Status=0 Available; server tự gán + set Assigned
 }
 ```
 
 > **KHÔNG gửi `expirationDate`** — server luôn tự tính `purchaseDate + depreciationMonths` tháng, gửi lên sẽ bị bỏ qua (DTO không có field này).
 > Nếu `ipAddressId` trỏ tới IP không phải `Available` → 400 `DomainException` ("Địa chỉ IP đã được sử dụng...").
+> Nếu `serialNumber` khớp với Device khác đã có (kể cả đã soft-delete) → 400 `DomainException` ("Số Serial '...' đã tồn tại."). Để trống/`null` thì không bị check trùng (nhiều Device có thể cùng `serialNumber=null`).
 
 ### 5.6. Sửa Device — `PUT /api/Device/{id}`
 
@@ -484,7 +494,7 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 | GET | `/api/SoftwareGroup/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Nhóm phần mềm |
 | GET | `/api/Software/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Phần mềm (danh mục) |
 | GET | `/api/IpPrefix/grid-list`, `/all`, `/{id}` — POST (tự sinh 255 IP), PUT `/{id}`, DELETE `/{id}` | Dải mạng |
-| GET | `/api/IpAddress/grid-list?...` (không có `/all`), `/{id}` — POST, PUT `/{id}`, DELETE `/{id}`, PUT `/{id}/assign`, PUT `/{id}/unassign` | Địa chỉ IP |
+| GET | `/api/IpAddress/grid-list?...`, `/available?keyword=` (không phân trang, mới 2026-07-09), `/{id}` (không có `/all`) — POST, PUT `/{id}`, DELETE `/{id}`, PUT `/{id}/assign`, PUT `/{id}/unassign` | Địa chỉ IP |
 | GET | `/api/Device/grid-list?...` (không có `/all`), `/{id}`, `/{id}/detail` — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
 | GET | `/api/DeviceConfiguration/by-device/{deviceId}` — POST, PUT `/{id}`, DELETE `/{id}`, GET `/{configId}/initial`, DELETE `/initial/{id}`, GET `/{configId}/history` | Cấu hình phần cứng |
 | GET | `/api/DeviceSoftware/device/{deviceId}` — POST, PUT, DELETE `/device/{deviceId}/software/{softwareId}`, GET `/picker/{deviceId}`, PUT `/sync` | Phần mềm cài trên thiết bị |
@@ -496,6 +506,6 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 1. `GET /api/Device/{id}/detail` — 1 lần gọi lấy đủ Device + Configuration (có thể null) + Software list.
 2. Nếu `configuration == null` → hiện form trống, nút "Lưu" gọi `POST /api/DeviceConfiguration`. Ngược lại hiện form đã điền, nút "Lưu" gọi `PUT /api/DeviceConfiguration/{id}`.
 3. Dropdown chọn `deviceTypeId`/`supplierId`/`branchId` khi tạo/sửa Device → gọi `GET /api/{Entity}/all` (không phân trang).
-4. Dropdown/picker chọn IP khi tạo/sửa Device → `GET /api/IpAddress/grid-list?status=0&keyword=`.
+4. Dropdown/picker chọn IP khi tạo/sửa Device → `GET /api/IpAddress/available?keyword=` (gọn, không phân trang) hoặc `GET /api/IpAddress/grid-list?status=0&keyword=` (có phân trang).
 5. Dialog quản lý phần mềm → `GET /api/DeviceSoftware/picker/{deviceId}` để mở, `PUT /api/DeviceSoftware/sync` để lưu (xem mục 7.4).
 6. Xem lịch sử sửa chữa cấu hình → `GET /api/DeviceConfiguration/{configId}/history` (cần có `configId` từ bước 1).

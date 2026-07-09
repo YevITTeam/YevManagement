@@ -148,6 +148,14 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                         <div className="mt-1 text-sm text-[#191c1e]">{device.isOutsourced ? "Có" : "Không"}</div>
                     </div>
                     <div>
+                        <div className={infoLabelClassName}>Số Serial</div>
+                        <div className="mt-1 text-sm text-[#191c1e]">{device.serialNumber || "-"}</div>
+                    </div>
+                    <div>
+                        <div className={infoLabelClassName}>Sử dụng USB</div>
+                        <div className="mt-1 text-sm text-[#191c1e]">{device.isUseUsb ? "Có" : "Không"}</div>
+                    </div>
+                    <div>
                         <div className={infoLabelClassName}>Ngày mua</div>
                         <div className="mt-1 text-sm text-[#191c1e]">{formatDate(device.purchaseDate)}</div>
                     </div>

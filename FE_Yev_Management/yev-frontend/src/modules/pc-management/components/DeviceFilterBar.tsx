@@ -1,9 +1,11 @@
 "use client";
 
 import { Building2, Calendar, ChevronDown, ChevronUp, Filter, MapPin, Search, Tag, Truck, User, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
+import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
+import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
 
 export interface DeviceFilters {
     deviceCode: string;
@@ -59,6 +61,9 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
     const [branches, setBranches] = useState<BranchDto[]>([]);
+    const [deviceTypes, setDeviceTypes] = useState<DeviceTypeDto[]>([]);
+    const isFirstRender = useRef(true);
+    const lastSubmitted = useRef<string>(JSON.stringify(defaultFilters));
 
     useEffect(() => {
         let isCancelled = false;
@@ -69,10 +74,33 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
             })
             .catch((err) => console.error(err));
 
+        DeviceTypeApi.getAllDeviceTypes()
+            .then((data) => {
+                if (!isCancelled) setDeviceTypes(data);
+            })
+            .catch((err) => console.error(err));
+
         return () => {
             isCancelled = true;
         };
     }, []);
+
+    // Tự động tìm kiếm sau khi người dùng ngừng gõ/thay đổi bộ lọc (debounce), không cần nút "Lọc dữ liệu".
+    useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
+
+        const timeoutId = setTimeout(() => {
+            const serialized = JSON.stringify(filters);
+            if (serialized === lastSubmitted.current) return;
+            lastSubmitted.current = serialized;
+            onFilter(filters);
+        }, 400);
+
+        return () => clearTimeout(timeoutId);
+    }, [filters, onFilter]);
 
     const activeEntries = useMemo(
         () => (Object.entries(filters) as [keyof DeviceFilters, string][]).filter(([, value]) => value !== ""),
@@ -87,17 +115,15 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
         setFilters((current) => ({ ...current, [field]: value }));
     };
 
-    const handleSubmit = () => {
-        onFilter(filters);
-    };
-
     const handleReset = () => {
+        lastSubmitted.current = JSON.stringify(defaultFilters);
         setFilters(defaultFilters);
         onFilter(defaultFilters);
     };
 
     const handleRemoveChip = (field: keyof DeviceFilters) => {
         const next = { ...filters, [field]: "" };
+        lastSubmitted.current = JSON.stringify(next);
         setFilters(next);
         onFilter(next);
     };
@@ -158,10 +184,11 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                     className={fieldWithIconClassName}
                                 >
                                     <option value="">Tất cả loại</option>
-                                    <option value="Máy bàn">Máy bàn</option>
-                                    <option value="Laptop">Laptop</option>
-                                    <option value="Máy chủ">Máy chủ</option>
-                                    <option value="Scan HT">Scan HT</option>
+                                    {deviceTypes.map((deviceType) => (
+                                        <option key={deviceType.id} value={deviceType.typeName}>
+                                            {deviceType.typeName}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                         </label>
@@ -178,7 +205,6 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 <option value="Đang sử dụng">Đang sử dụng</option>
                                 <option value="Chờ thanh lý">Chờ thanh lý</option>
                                 <option value="Đã thanh lý">Đã thanh lý</option>
-                                <option value="Thuê ngoài">Thuê ngoài</option>
                             </select>
                         </label>
                     </div>
@@ -206,14 +232,6 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         >
                             <X className="h-4 w-4" />
                             Xóa bộ lọc
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={handleSubmit}
-                            className="cursor-pointer h-10 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
-                        >
-                            Lọc dữ liệu
                         </button>
                     </div>
                 </div>

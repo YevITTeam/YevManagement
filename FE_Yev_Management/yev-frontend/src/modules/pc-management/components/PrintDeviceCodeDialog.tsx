@@ -25,8 +25,7 @@ function buildPrintHtml(devices: DeviceDto[]) {
             (device) => `
       <div class="label">
         <div class="code">${escapeHtml(device.deviceCode)}</div>
-        <div class="name">${escapeHtml(device.deviceName)}</div>
-        <div class="branch">${escapeHtml(device.branchName)}</div>
+        <div class="serial">${escapeHtml(device.serialNumber ?? "Không có")}</div>
       </div>`
         )
         .join("");
@@ -49,7 +48,7 @@ function buildPrintHtml(devices: DeviceDto[]) {
     }
     .code { font-size: 20px; font-weight: 700; letter-spacing: 1px; word-break: break-all; }
     .name { font-size: 12px; margin-top: 4px; }
-    .branch { font-size: 11px; color: #555; margin-top: 2px; }
+    .serial { font-size: 15px; font-weight: 700; color: #555; margin-top: 2px; }
     @page { margin: 10mm; }
     @media print { .sheet { gap: 6px; } }
   </style>
@@ -219,7 +218,7 @@ export default function PrintDeviceCodeDialog({ isOpen, devices, onClose }: Prin
                                     <div className="min-w-0">
                                         <div className="text-sm font-semibold text-[#191c1e]">{device.deviceCode}</div>
                                         <div className="truncate text-xs text-[#5e3f3a]">
-                                            {device.deviceName} · {device.branchName}
+                                             SN: {device.serialNumber || "Không có"}
                                         </div>
                                     </div>
                                 </label>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
 import PrintDeviceCodeDialog from "../../../modules/pc-management/components/PrintDeviceCodeDialog";
@@ -46,6 +46,27 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleDateString("vi-VN");
 }
 
+// GET /Device/grid-list chỉ hỗ trợ lọc theo deviceCode/manager/ipAddress/supplierName/purchaseDate (xem docs/asset-api-fe.md §5.2).
+// branch/deviceType/status/expiryDate chưa có query param tương ứng trên BE, nên khi các field này được set,
+// FE phải tải toàn bộ tập kết quả (đã lọc theo các field BE hỗ trợ) rồi tự lọc + tự phân trang ở client
+// để giữ đúng điều kiện tìm kiếm khi chuyển trang, thay vì chỉ lọc trên dữ liệu của từng trang.
+const CLIENT_FILTER_FETCH_SIZE = 5000;
+
+function matchesClientOnlyFilters(device: DeviceDto, filters: DeviceFilters) {
+  const matchesBranch = !filters.branch || device.branchName.toLowerCase().includes(filters.branch.toLowerCase());
+  const matchesDeviceType = !filters.deviceType || device.deviceTypeName === filters.deviceType;
+  const matchesStatus =
+    !filters.status ||
+    (filters.status === "Chưa sử dụng" && device.status === 0) ||
+    (filters.status === "Đang sử dụng" && device.status === 1) ||
+    (filters.status === "Chờ thanh lý" && device.status === 2) ||
+    (filters.status === "Đã thanh lý" && device.status === 3) ||
+    (filters.status === "Thuê ngoài" && device.status === 4);
+  const matchesExpiry = !filters.expiryDate || (device.expirationDate ? device.expirationDate <= filters.expiryDate : false);
+
+  return matchesBranch && matchesDeviceType && matchesStatus && matchesExpiry;
+}
+
 export default function PcDashboardPage() {
   const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
   const [devices, setDevices] = useState<DeviceDto[]>([]);
@@ -69,77 +90,89 @@ export default function PcDashboardPage() {
   const [deletingDevice, setDeletingDevice] = useState<DeviceDto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Reset back to page 1 whenever a server-backed filter changes, so pagination reflects the new result set.
+  // Reset về trang 1 mỗi khi điều kiện lọc thay đổi, để phân trang khớp với tập kết quả mới.
   useEffect(() => {
     setPageIndex(1);
-  }, [filters.deviceCode, filters.manager, filters.ipAddress, filters.supplierName, filters.purchaseDate]);
+  }, [
+    filters.deviceCode,
+    filters.manager,
+    filters.ipAddress,
+    filters.supplierName,
+    filters.purchaseDate,
+    filters.branch,
+    filters.deviceType,
+    filters.status,
+    filters.expiryDate,
+  ]);
 
-  useEffect(() => {
-    let isCancelled = false;
+  const fetchDevices = async (targetPageIndex: number) => {
+    setIsLoading(true);
+    setError(null);
 
-    const fetchDevices = async () => {
-      setIsLoading(true);
-      setError(null);
+    const serverFilterParams = {
+      deviceCode: filters.deviceCode || undefined,
+      manager: filters.manager || undefined,
+      ipAddress: filters.ipAddress || undefined,
+      supplierName: filters.supplierName || undefined,
+      purchaseDate: filters.purchaseDate || undefined,
+    };
+    const hasClientOnlyFilters = Boolean(filters.branch || filters.deviceType || filters.status || filters.expiryDate);
 
-      try {
+    try {
+      if (hasClientOnlyFilters) {
         const result = await DeviceApi.getDevicePageNation({
-          pageIndex,
-          pageSize,
-          deviceCode: filters.deviceCode || undefined,
-          manager: filters.manager || undefined,
-          ipAddress: filters.ipAddress || undefined,
-          supplierName: filters.supplierName || undefined,
-          purchaseDate: filters.purchaseDate || undefined,
+          pageIndex: 1,
+          pageSize: CLIENT_FILTER_FETCH_SIZE,
+          ...serverFilterParams,
         });
-        if (isCancelled) return;
+        const matched = result.data.filter((device) => matchesClientOnlyFilters(device, filters));
+        const computedTotalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+        const safePageIndex = Math.min(targetPageIndex, computedTotalPages);
+        const start = (safePageIndex - 1) * pageSize;
 
+        setDevices(matched.slice(start, start + pageSize));
+        setTotalCount(matched.length);
+        setTotalPages(computedTotalPages);
+        setHasPreviousPage(safePageIndex > 1);
+        setHasNextPage(safePageIndex < computedTotalPages);
+        if (safePageIndex !== targetPageIndex) setPageIndex(safePageIndex);
+      } else {
+        const result = await DeviceApi.getDevicePageNation({
+          pageIndex: targetPageIndex,
+          pageSize,
+          ...serverFilterParams,
+        });
         setDevices(result.data);
         setTotalCount(result.totalCount);
         setTotalPages(result.totalPages);
         setHasNextPage(result.hasNextPage);
         setHasPreviousPage(result.hasPreviousPage);
-      } catch (err) {
-        if (!isCancelled) {
-          setError(getApiErrorMessage(err, "Không thể tải danh sách thiết bị."));
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
       }
-    };
-
-    fetchDevices();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [pageIndex, pageSize, filters.deviceCode, filters.manager, filters.ipAddress, filters.supplierName, filters.purchaseDate]);
-
-  const refetchDevices = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await DeviceApi.getDevicePageNation({
-        pageIndex,
-        pageSize,
-        deviceCode: filters.deviceCode || undefined,
-        manager: filters.manager || undefined,
-        ipAddress: filters.ipAddress || undefined,
-        supplierName: filters.supplierName || undefined,
-        purchaseDate: filters.purchaseDate || undefined,
-      });
-      setDevices(result.data);
-      setTotalCount(result.totalCount);
-      setTotalPages(result.totalPages);
-      setHasNextPage(result.hasNextPage);
-      setHasPreviousPage(result.hasPreviousPage);
     } catch (err) {
       setError(getApiErrorMessage(err, "Không thể tải danh sách thiết bị."));
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchDevices(pageIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    pageIndex,
+    pageSize,
+    filters.deviceCode,
+    filters.manager,
+    filters.ipAddress,
+    filters.supplierName,
+    filters.purchaseDate,
+    filters.branch,
+    filters.deviceType,
+    filters.status,
+    filters.expiryDate,
+  ]);
+
+  const refetchDevices = () => fetchDevices(pageIndex);
 
   const openCreateForm = () => {
     setFormMode("create");
@@ -202,24 +235,6 @@ export default function PcDashboardPage() {
     }
   };
 
-  // Branch/device type/status/expiry aren't supported by the API yet, so they can only narrow down the devices already loaded on the current page.
-  const filteredDevices = useMemo(() => {
-    return devices.filter((device) => {
-      const matchesBranch = !filters.branch || device.branchName.toLowerCase().includes(filters.branch.toLowerCase());
-      const matchesDeviceType = !filters.deviceType || device.deviceTypeName === filters.deviceType;
-      const matchesStatus =
-        !filters.status ||
-        (filters.status === "Chưa sử dụng" && device.status === 0) ||
-        (filters.status === "Đang sử dụng" && device.status === 1) ||
-        (filters.status === "Chờ thanh lý" && device.status === 2) ||
-        (filters.status === "Đã thanh lý" && device.status === 3) ||
-        (filters.status === "Thuê ngoài" && device.status === 4);
-      const matchesExpiry = !filters.expiryDate || (device.expirationDate ? device.expirationDate <= filters.expiryDate : false);
-
-      return matchesBranch && matchesDeviceType && matchesStatus && matchesExpiry;
-    });
-  }, [devices, filters.branch, filters.deviceType, filters.status, filters.expiryDate]);
-
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -265,7 +280,7 @@ export default function PcDashboardPage() {
           <div className="text-sm font-medium text-[#5e3f3a]">
             {isLoading
               ? "Đang tải dữ liệu..."
-              : `Hiển thị ${filteredDevices.length} / ${devices.length} bản ghi (trang ${pageIndex}/${totalPages}, tổng ${totalCount})`}
+              : `Hiển thị ${devices.length} bản ghi (trang ${pageIndex}/${totalPages}, tổng ${totalCount})`}
           </div>
         </div>
 
@@ -285,20 +300,20 @@ export default function PcDashboardPage() {
                 <th className="whitespace-nowrap px-4 py-3">Mua / Hết hạn</th>
                 <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
                 <th className="whitespace-nowrap px-4 py-3">Ghi chú</th>
-                <th className="sticky right-0 z-10 whitespace-nowrap bg-[#f8fafc] px-4 py-3 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
+                <th className="sticky right-0 z-10 whitespace-nowrap bg-[#f8fafc] px-2 py-3 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                   Hành động
                 </th>
               </tr>
             </thead>
             <tbody>
-              {!isLoading && filteredDevices.length === 0 && (
+              {!isLoading && devices.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
                     Không có dữ liệu thiết bị.
                   </td>
                 </tr>
               )}
-              {filteredDevices.map((device) => (
+              {devices.map((device) => (
                 <tr key={device.id} className="group border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
                   <td className="whitespace-nowrap px-4 py-3 align-top">
                     <div className="text-sm font-semibold text-[#191c1e]">{device.deviceCode}</div>
@@ -313,7 +328,7 @@ export default function PcDashboardPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    <div className="max-w-[160px] truncate text-sm text-[#5e3f3a]" title={device.branchName}>
+                    <div className="max-w-[100px] truncate text-sm text-[#5e3f3a]" title={device.branchName}>
                       {device.branchName}
                     </div>
                   </td>
@@ -337,11 +352,11 @@ export default function PcDashboardPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    <div className="max-w-[180px] truncate text-xs text-[#5e3f3a]" title={device.note ?? undefined}>
+                    <div className="line-clamp-2 max-w-[300px] text-xs text-[#5e3f3a]" title={device.note ?? undefined}>
                       {device.note || "-"}
                     </div>
                   </td>
-                  <td className="sticky right-0 whitespace-nowrap bg-white px-4 py-3 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)] group-hover:bg-[#f8fafc]">
+                  <td className="sticky right-0 whitespace-nowrap bg-white px-2 py-3 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)] group-hover:bg-[#f8fafc]">
                     <div className="inline-flex justify-end">
                       <RowActionsMenu
                         actions={[
@@ -381,7 +396,7 @@ export default function PcDashboardPage() {
 
       <PrintDeviceCodeDialog
         isOpen={isPrintOpen}
-        devices={filteredDevices}
+        devices={devices}
         onClose={() => setIsPrintOpen(false)}
       />
 

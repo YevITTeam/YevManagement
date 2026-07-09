@@ -5,6 +5,7 @@ import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 const ENDPOINTS = {
     IP_ADDRESS: {
         getIpAddressPageNation: "/IpAddress/grid-list",
+        getAvailableIpAddress: "/IpAddress/available",
         getIpAddressById: (id: number) => `/IpAddress/${id}`,
         createIpAddress: "/IpAddress",
         updateIpAddress: (id: number) => `/IpAddress/${id}`,
@@ -47,6 +48,14 @@ export const IpApi = {
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.IP_ADDRESS.getIpAddressPageNation}?${queryString}` : ENDPOINTS.IP_ADDRESS.getIpAddressPageNation;
         const response = await api.get<ApiResponseWithPageNation<IpAddressDto>>(url);
+        return response.data;
+    },
+    getAvailableIpAddress: async (keyword?: string) => {
+        const query = new URLSearchParams();
+        if (keyword) query.set("Keyword", keyword);
+        const queryString = query.toString();
+        const url = queryString ? `${ENDPOINTS.IP_ADDRESS.getAvailableIpAddress}?${queryString}` : ENDPOINTS.IP_ADDRESS.getAvailableIpAddress;
+        const response = await api.get<ApiResponse<IpAddressDto[]>>(url);
         return response.data;
     },
     getIpAddressById: async (id: number) => {

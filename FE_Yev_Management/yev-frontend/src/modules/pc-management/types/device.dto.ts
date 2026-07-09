@@ -17,6 +17,8 @@ export interface DeviceDto {
     status: number;
     statusText: string;
     isOutsourced: boolean;
+    serialNumber: string | null;
+    isUseUsb: boolean;
 }
 
 export interface CreateUpdateDeviceDto {
@@ -33,6 +35,8 @@ export interface CreateUpdateDeviceDto {
     isOutsourced: boolean;
     status: number;
     note: string | null;
+    serialNumber: string | null;
+    isUseUsb: boolean;
     ipAddressId: number | null;
 }
 
@@ -55,6 +59,8 @@ export interface DeviceGetDto {
     status: number;
     statusText: string;
     note: string | null;
+    serialNumber: string | null;
+    isUseUsb: boolean;
     ipAddressId: number | null;
     ipAddress: string | null;
 }

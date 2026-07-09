@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, Search } from "lucide-react";
 import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import { SupplierApi } from "@/modules/pc-management/api/supplier.api";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
@@ -24,6 +25,8 @@ export interface DeviceFormValues {
     isOutsourced: boolean;
     status: number;
     note: string | null;
+    serialNumber: string | null;
+    isUseUsb: boolean;
     ipAddressId: number | null;
 }
 
@@ -56,6 +59,8 @@ const emptyValues: DeviceFormValues = {
     isOutsourced: false,
     status: 0,
     note: "",
+    serialNumber: "",
+    isUseUsb: false,
     ipAddressId: null,
 };
 
@@ -74,18 +79,49 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
     const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
     const [branches, setBranches] = useState<BranchDto[]>([]);
     const [availableIps, setAvailableIps] = useState<IpAddressDto[]>([]);
+    const [ipSearch, setIpSearch] = useState("");
+    const [ipDropdownOpen, setIpDropdownOpen] = useState(false);
+    const [selectedIp, setSelectedIp] = useState<{ id: number; ipAddress: string } | null>(null);
+    const ipPickerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         DeviceTypeApi.getAllDeviceTypes().then((data) => setDeviceTypes(data)).catch((err) => console.error(err));
         SupplierApi.getAllSuppliers().then((data) => setSuppliers(data)).catch((err) => console.error(err));
         BranchApi.getAllBranches().then((data) => setBranches(data)).catch((err) => console.error(err));
-        IpApi.getIpAddressPageNation({ status: 0, pageSize: 200 })
-            .then((result) => setAvailableIps(result.data))
-            .catch((err) => console.error(err));
     }, []);
+
+    // Tải danh sách IP còn trống (không phân trang) theo từ khoá tìm kiếm, có debounce.
+    useEffect(() => {
+        if (!isOpen) return;
+        const handle = setTimeout(() => {
+            IpApi.getAvailableIpAddress(ipSearch.trim() || undefined)
+                .then((data) => setAvailableIps(data))
+                .catch((err) => console.error(err));
+        }, 300);
+        return () => clearTimeout(handle);
+    }, [isOpen, ipSearch]);
+
+    // Đóng dropdown IP khi click ra ngoài.
+    useEffect(() => {
+        if (!ipDropdownOpen) return;
+        const handleClickOutside = (event: MouseEvent) => {
+            if (ipPickerRef.current && !ipPickerRef.current.contains(event.target as Node)) {
+                setIpDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [ipDropdownOpen]);
 
     useEffect(() => {
         if (!isOpen) return;
+        setIpSearch("");
+        setIpDropdownOpen(false);
+        setSelectedIp(
+            initial?.ipAddressId != null
+                ? { id: initial.ipAddressId, ipAddress: initial.ipAddress ?? `#${initial.ipAddressId}` }
+                : null
+        );
         setValues(
             initial
                 ? {
@@ -101,6 +137,8 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                       isOutsourced: initial.isOutsourced,
                       status: initial.status,
                       note: initial.note ?? "",
+                      serialNumber: initial.serialNumber ?? "",
+                      isUseUsb: initial.isUseUsb,
                       ipAddressId: initial.ipAddressId,
                   }
                 : emptyValues
@@ -109,10 +147,12 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
 
     if (!isOpen) return null;
 
-    const ipOptions =
-        initial?.ipAddressId != null && !availableIps.some((ip) => ip.id === initial.ipAddressId)
-            ? [{ id: initial.ipAddressId, ipAddress: initial.ipAddress ?? `#${initial.ipAddressId}` }, ...availableIps]
-            : availableIps;
+    const handleSelectIp = (ip: { id: number; ipAddress: string } | null) => {
+        setSelectedIp(ip);
+        handleChange("ipAddressId", ip ? ip.id : null);
+        setIpDropdownOpen(false);
+        setIpSearch("");
+    };
 
     const handleChange = <K extends keyof DeviceFormValues>(field: K, value: DeviceFormValues[K]) => {
         setValues((current) => ({ ...current, [field]: value }));
@@ -132,7 +172,11 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
         ) {
             return;
         }
-        onSubmit({ ...values, note: values.note?.trim() ? values.note : null });
+        onSubmit({
+            ...values,
+            note: values.note?.trim() ? values.note : null,
+            serialNumber: values.serialNumber?.trim() ? values.serialNumber : null,
+        });
     };
 
     return (
@@ -246,24 +290,66 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                             </select>
                         </label>
 
-                        <label className="block">
+                        <div className="block" ref={ipPickerRef}>
                             <span className={fieldLabelClassName}>Địa chỉ IP</span>
-                            <select
-                                value={values.ipAddressId ?? ""}
-                                onChange={(event) =>
-                                    handleChange("ipAddressId", event.target.value ? Number(event.target.value) : null)
-                                }
-                                disabled={loading}
-                                className={fieldClassName}
-                            >
-                                <option value="">Không gán IP</option>
-                                {ipOptions.map((ip) => (
-                                    <option key={ip.id} value={ip.id}>
-                                        {ip.ipAddress}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => !loading && setIpDropdownOpen((open) => !open)}
+                                    disabled={loading}
+                                    className={`${fieldClassName} flex items-center justify-between text-left`}
+                                >
+                                    <span className={selectedIp ? "text-[#191c1e]" : "text-[#9aa0a6]"}>
+                                        {selectedIp ? selectedIp.ipAddress : "Không gán IP"}
+                                    </span>
+                                    <ChevronDown className="h-4 w-4 shrink-0 text-[#5e3f3a]" />
+                                </button>
+
+                                {ipDropdownOpen && (
+                                    <div className="absolute left-0 right-0 z-70 mt-1 rounded-lg border border-[#e0e3e5] bg-white shadow-xl">
+                                        <div className="border-b border-[#e0e3e5] p-2">
+                                            <div className="flex items-center gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-2.5">
+                                                <Search className="h-4 w-4 shrink-0 text-[#5e3f3a]" />
+                                                <input
+                                                    value={ipSearch}
+                                                    onChange={(event) => setIpSearch(event.target.value)}
+                                                    placeholder="Tìm địa chỉ IP..."
+                                                    autoFocus
+                                                    className="h-9 w-full bg-transparent text-sm text-[#191c1e] outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                        <ul className="max-h-52 overflow-y-auto py-1 text-sm text-[#191c1e]">
+                                            <li>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSelectIp(null)}
+                                                    className="w-full cursor-pointer px-3 py-2 text-left text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                                >
+                                                    Không gán IP
+                                                </button>
+                                            </li>
+                                            {availableIps.map((ip) => (
+                                                <li key={ip.id}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSelectIp({ id: ip.id, ipAddress: ip.ipAddress })}
+                                                        className={`w-full cursor-pointer px-3 py-2 text-left transition hover:bg-[#f2f4f6] ${
+                                                            values.ipAddressId === ip.id ? "bg-[#ffe0e3] font-semibold text-[#e3000f]" : ""
+                                                        }`}
+                                                    >
+                                                        {ip.ipAddress}
+                                                    </button>
+                                                </li>
+                                            ))}
+                                            {availableIps.length === 0 && (
+                                                <li className="px-3 py-2 text-[#9aa0a6]">Không tìm thấy IP trống</li>
+                                            )}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Người quản lý</span>
@@ -286,6 +372,18 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                 placeholder="Nhập email..."
                                 disabled={loading}
                                 required
+                                className={fieldClassName}
+                            />
+                        </label>
+
+                        <label className="block">
+                            <span className={fieldLabelClassName}>Số Serial</span>
+                            <input
+                                value={values.serialNumber ?? ""}
+                                onChange={(event) => handleChange("serialNumber", event.target.value)}
+                                placeholder="Nhập số serial (tuỳ chọn)..."
+                                disabled={loading}
+                                maxLength={100}
                                 className={fieldClassName}
                             />
                         </label>
@@ -341,6 +439,17 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                 className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                             />
                             <span className="text-sm text-[#191c1e]">Thiết bị thuê ngoài</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 pt-6">
+                            <input
+                                type="checkbox"
+                                checked={values.isUseUsb}
+                                onChange={(event) => handleChange("isUseUsb", event.target.checked)}
+                                disabled={loading}
+                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                            />
+                            <span className="text-sm text-[#191c1e]">Sử dụng USB</span>
                         </label>
                     </div>
 
