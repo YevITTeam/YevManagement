@@ -1,0 +1,30 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace Asset.Application.Dtos.Devices
+{
+    public class DeviceDto
+    {
+        public int Id { get; set; }
+        public string DeviceCode { get; set; } = null!;
+        public string DeviceName { get; set; } = null!;
+        public int DeviceTypeId { get; set; }
+        public string DeviceTypeName { get; set; } = null!;
+        public int SupplierId { get; set; }
+        public string SupplierName { get; set; } = null!;
+        public int BranchId { get; set; }
+        public string BranchName { get; set; } = null!;
+        public string Manager { get; set; } = null!;
+        public string Email { get; set; } = null!;
+        public DateTime PurchaseDate { get; set; }
+        public int DepreciationMonths { get; set; }
+        public DateTime? ExpirationDate { get; set; }
+        public bool IsOutsourced { get; set; }
+        public int Status { get; set; }
+        public string StatusText { get; set; } = null!;
+        public string? Note { get; set; }
+        public int? IpAddressId { get; set; }
+        public string? IpAddress { get; set; }
+    }
+}

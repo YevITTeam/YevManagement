@@ -1,8 +1,8 @@
 # asset-module.md — Module Asset (Quản lý Thiết bị / PC)
 
-> **Trạng thái:** ĐANG PHÁT TRIỂN. Đã có nền CRUD cho nhiều thực thể (Branch,
-> DeviceType, Supplier, Software, SoftwareGroup, DeviceSoftware, IpAddress); Device
-> mới có grid, còn DeviceConfiguration/TransferHistory/AuditTrail chưa có
+> **Trạng thái:** ĐANG PHÁT TRIỂN. Đã có nền CRUD cho hầu hết thực thể (Branch,
+> DeviceType, Supplier, Software, SoftwareGroup, DeviceSoftware, IpAddress,
+> IpPrefix, Device, DeviceConfiguration); còn TransferHistory/AuditTrail chưa có
 > Application/Api. Đọc [architecture-core.md](architecture-core.md) trước.
 
 - **DB:** `YevPCManagement` (connection string `PCManagementConnection`).
@@ -17,13 +17,15 @@
 
 | Entity | Thuộc tính chính | Quan hệ | Soft delete |
 |---|---|---|---|
-| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `Manager`, `Email`, `PurchaseDate`, `ExpirationDate?`, `Status`, `Note?` | N-1 Branch/DeviceType/Supplier; 1-1 DeviceConfiguration; 1-N IpAddresses, DeviceSoftwares, TransferHistory(old/new) | **Có** |
+| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `Manager`, `Email`, `PurchaseDate`, `DepreciationMonths`, `ExpirationDate?`(**tính toán**, không nhập tay — xem ghi chú bên dưới), `IsOutsourced`, `Status`, `Note?` | N-1 Branch/DeviceType/Supplier; 1-1 DeviceConfiguration; 1-N IpAddresses (0..1 IP "chính"/device qua `DeviceService`), DeviceSoftwares, TransferHistory(old/new) | **Có** |
 | `Branch` | `BranchCode`(unique), `BranchName` | 1-N Devices | **Có** |
 | `Supplier` | `SupplierCode`(unique), `SupplierName` | 1-N Devices | **Có** |
 | `DeviceType` | `TypeCode`(unique), `TypeName` | 1-N Devices | **Có** |
 | `IpAddress` | `IpAddress1`(unique **toàn cục**, cột `IpAddress`), `ServerIp?`, `DeviceId?`, `IpPrefixId`(bắt buộc), `Status`, `Note?` | N-1 Device (nullable), N-1 IpPrefix (**bắt buộc**) | **Có** |
 | `IpPrefix` | `Prefix`(unique **toàn cục**, vd `10.45.1`), `SubnetMask?`, `Gateway?`, `PreferredDns?`, `AlternateDns?`, `Description?` | 1-N IpAddress | **Có** |
-| `DeviceConfiguration` | Cấu hình phần cứng: `Cpu/Ram/HardDrive/Os/Vga...` (cột viết hoa CPU/RAM/OS...) | 1-1 Device (`DeviceId` unique) | Không |
+| `DeviceConfiguration` | Cấu hình phần cứng: `Cpu/Ram/HardDrive/Os/Vga/Mainboard/Monitor/Mouse/Keyboard/Headphone/Speaker/Ups/Psu` + `Maker/Model/PowerAdapter/WirelessCard/Nic/Other`(cột viết hoa CPU/RAM/OS/VGA/UPS/PSU/NIC...), `Note?` | 1-1 Device (`DeviceId` unique); 1-1 DeviceConfigurationInitial; 1-N DeviceConfigurationHistory | Không |
+| `DeviceConfigurationInitial` | Snapshot **bất biến** 20 field linh kiện y hệt `DeviceConfiguration` + `CreatedAt` | 1-1 DeviceConfiguration (`DeviceConfigurationId` unique) | Không (xoá cứng qua action riêng) |
+| `DeviceConfigurationHistory` | Snapshot 20 field linh kiện tại thời điểm sửa + `EditedAt`, `EditedBy` | N-1 DeviceConfiguration | Không (không có API xoá — audit log) |
 | `DeviceSoftware` | **Khoá kép** `(DeviceId, SoftwareId)`, `InstallDate`, `LicenseKey?` | N-1 Device, N-1 Software | Không |
 | `Software` | `SoftwareCode`(unique), `SoftwareName`, `SoftwareType?`, `Publisher?`, `SoftwareQuantity?`, `SoftwarePriority?`, `SoftwareGroupId` | N-1 SoftwareGroup, 1-N DeviceSoftwares | **Có** |
 | `SoftwareGroup` | `GroupCode`(unique), `GroupName` | 1-N Softwares | **Có** |
@@ -63,6 +65,70 @@
 > còn action `generate-range` riêng trên `IpAddressController` (đã gộp vào đây).
 > Xoá `IpPrefix` bị chặn (`DomainException`) nếu còn `IpAddress` con `!IsDeleted`.
 
+> **`Device.Status` (int)** có ý nghĩa cố định qua enum `DeviceStatus`
+> (`Asset.Domain/Enums/DeviceStatus.cs`): `0=PendingUse` (Chờ sử dụng, 694 thiết bị
+> tại thời điểm map), `1=InUse` (Đang sử dụng, 2414), `2=PendingLiquidation` (Chờ
+> thanh lý, 2094), `3=Liquidated` (Đã thanh lý, **mới thêm**, 0 thiết bị hiện tại —
+> dữ liệu cũ chỉ có 0/1/2, `3` an toàn để dùng cho nghiệp vụ mới).
+>
+> **`Device.ExpirationDate` là field TÍNH TOÁN (2026-07-08)**: server luôn set
+> `ExpirationDate = PurchaseDate.AddMonths(DepreciationMonths)` trong
+> `DeviceService.CreateAsync`/`UpdateAsync` — DTO Create/Update **không nhận**
+> `ExpirationDate` từ client, chỉ nhận `DepreciationMonths`. Migration
+> `AddDeviceFields` (`Asset.Infrastructure/Migrations/20260708042916_AddDeviceFields.cs`)
+> đã backfill `DepreciationMonths = DATEDIFF(MONTH, PurchaseDate, ExpirationDate)`
+> cho 5202 thiết bị thật (khớp chính xác 100%, chỉ 2 giá trị 60/48 tháng) và
+> `IsOutsourced = false` mặc định cho toàn bộ — đã apply lên DB thật.
+>
+> **Chọn/gán IP cho Device**: `Device` 1-N `IpAddress` nhưng UI chỉ thao tác **1 IP
+> chính/device** (thực tế 2131/2131 device có IP thì chỉ 27 có >1 IP). Create/Update
+> Device nhận `IpAddressId?` (Id của 1 `IpAddress` đang `Status=Available`) —
+> `DeviceService` tự gán/gỡ `IpAddress.DeviceId`+`Status` tương ứng (đổi IP → IP cũ
+> tự gỡ về `Available`; xoá Device → mọi IP đang gắn tự gỡ về `Available`). **Danh
+> sách "IP chưa dùng" để chọn** dùng lại `GET /api/IpAddress/grid-list?status=0&keyword=`
+> đã có sẵn — không có endpoint picker riêng.
+
+> **`DeviceConfiguration` — phạm vi đã làm (2026-07-08)**: chỉ CRUD cơ bản + 6 field
+> chung mới (`Maker/Model/PowerAdapter/WirelessCard/Nic/Other`) theo màn hình "CẬP
+> NHẬT CẤU HÌNH" của hệ thống cũ.
+>
+> **Quyết định KHÔNG làm field riêng theo loại thiết bị** (9 field "Máy in":
+> `standardFunction/type/MediaSize Max/Min/Copy-Print Resolution/Print Speed/
+> Connectivity/Scan Destination/Support`; 5 field "Thiết bị mạng": `Ports/Number of
+> Port/Network Media/Poe Ready/Management`) — người dùng xác nhận nhóm field này
+> trong hệ thống cũ hầu như không được nhập dù có ~351 máy in/scan + ~178 thiết bị
+> mạng trong fleet (~10% tổng số thiết bị), nên bỏ hẳn, không cần `DeviceType.Category`.
+> Máy in/thiết bị mạng vẫn quản lý bình thường qua field chung + `Note`/`Other`.
+>
+> Migration `AddDeviceConfigurationFields`
+> (`Asset.Infrastructure/Migrations/20260708090146_AddDeviceConfigurationFields.cs`)
+> chỉ thêm 6 cột nullable, không backfill — đã apply lên DB thật.
+>
+> **"Cấu hình ban đầu" + "Sửa chữa/Thay thế" (2026-07-08, đã làm)**: 2 bảng mới
+> `DeviceConfigurationInitials`/`DeviceConfigurationHistories`
+> (migration `AddDeviceConfigurationHistory`,
+> `Asset.Infrastructure/Migrations/20260708095858_AddDeviceConfigurationHistory.cs`
+> — chỉ `CREATE TABLE`, không đụng bảng cũ, đã apply lên DB thật). Cơ chế:
+> - **`DeviceConfigurationInitial`**: `DeviceConfigurationService.CreateAsync` tự
+>   động copy toàn bộ 20 field vừa tạo thành 1 snapshot bất biến — các lần `Update`
+>   sau không đụng tới. Xoá qua `DELETE /api/DeviceConfiguration/initial/{id}`
+>   (dùng khi nhập nhầm lúc tạo).
+> - **`DeviceConfigurationHistory`**: `UpdateAsync` so sánh 20 field cũ/mới; **chỉ**
+>   tạo 1 dòng lịch sử (giá trị **mới**, `EditedAt`, `EditedBy`) nếu có **ít nhất 1
+>   field thực sự đổi** — Save mà không đổi gì thì không log thêm (đã kiểm chứng
+>   bằng test thật: Update 2 lần cùng giá trị chỉ tạo đúng 1 dòng lịch sử).
+> - **`EditedBy`**: lấy `HttpContext.User.Identity.Name` (claim `ClaimTypes.Name`
+>   qua JWT nếu request có gắn token) qua `IHttpContextAccessor`; request hoàn
+>   toàn anonymous thì ghi `"Unknown"`. Cần thêm
+>   `<FrameworkReference Include="Microsoft.AspNetCore.App" />` vào
+>   `Asset.Application.csproj` (theo đúng convention đã có sẵn ở `Asset.Api.csproj`)
+>   để dùng được `IHttpContextAccessor` trong tầng Application.
+> - Cả 2 entity có FK `OnDelete(Cascade)` tới `DeviceConfiguration` — xoá
+>   `DeviceConfiguration` (`DeviceConfigurationService.DeleteAsync`) tự động xoá
+>   sạch Initial + toàn bộ History liên quan (đã verify bằng test thật, 0 dòng sót).
+> - Không có Create/Update DTO cho 2 entity này — hoàn toàn tự sinh (side effect),
+>   không có API cho client POST/PUT trực tiếp.
+
 ---
 
 ## 2. DTOs (`Asset.Application/Dtos/`)
@@ -73,7 +139,16 @@
 - **Devices/**:
   - `DeviceFilterRequest` (query grid): `PageIndex=1`, `PageSize=50`, filter
     `DeviceCode/Manager/PurchaseDate/IpAddress/SupplierName/Note`.
-  - `DeviceGridDto` (1 dòng grid): gộp tên Branch/Supplier/DeviceType + IP đầu tiên.
+  - `DeviceGridDto` (1 dòng grid): gộp tên Branch/Supplier/DeviceType + IP đầu tiên +
+    `StatusText`.
+  - `DeviceDto` (GetById, đầy đủ): gộp tên Branch/DeviceType/Supplier + `StatusText`
+    + `IpAddressId?`/`IpAddress?` (IP chính đang gắn) + `ExpirationDate` tính toán.
+  - `CreateDeviceDto`/`UpdateDeviceDto`: `DeviceCode/DeviceName/Manager/Email`
+    `[Required]` (Email +`[EmailAddress]`), `DeviceTypeId/SupplierId/BranchId`
+    `[Required]`, `PurchaseDate` `[Required]`, `DepreciationMonths`
+    `[Required][Range(1,600)]`, `IsOutsourced` (bool), `Status` `[Range(0,3)]`,
+    `Note?`, `IpAddressId?` (chọn IP `Available` để gán ngay). **Không có**
+    `ExpirationDate` (server tự tính, xem ghi chú §1).
 - **DeviceSoftwares/**: `DeviceSoftwareDto`, `CreateDeviceSoftwareDto` (+`[Required]` Device/Software), `UpdateDeviceSoftwareDto`.
 - **Softwares/**: `SoftwareDto` (Id/Code/Name/Type?/Publisher?/Quantity?/Priority?/GroupId/GroupName —
   gộp tên `SoftwareGroup`), `CreateSoftwareDto` (+`[Required]` Code/Name/GroupId), `UpdateSoftwareDto`.
@@ -86,17 +161,24 @@
   (`Prefix` `[Required]` + `[RegularExpression]` 3 octet, + SubnetMask/Gateway/DNS/
   Description dùng chung cho cả subnet), `UpdateIpPrefixDto` (**không** có `Prefix`
   — đổi prefix phải xoá + tạo lại, không hỗ trợ rename).
+- **DeviceConfigurations/**: `DeviceConfigurationDto` (gộp `DeviceCode`, đủ 20 field
+  linh kiện), `CreateDeviceConfigurationDto` (`DeviceId` `[Required]`, còn lại đều
+  optional), `UpdateDeviceConfigurationDto` (giống Create + `Id`, **không cho đổi
+  `DeviceId`** sau khi tạo), `DeviceConfigurationInitialDto` (20 field + `CreatedAt`),
+  `DeviceConfigurationHistoryDto` (20 field + `EditedAt`/`EditedBy`) — 2 DTO cuối
+  không có Create/Update tương ứng (tự sinh, xem ghi chú §1).
 
 ---
 
 ## 3. Repositories & UnitOfWork
 
-- `IAssetUnitOfWork : IUnitOfWork` gom **12 repository**: `Devices`, `Branches`,
-  `Softwares`, `SoftwareGroups`, `Suppliers`, `DeviceConfigurations`, `DeviceSoftwares`,
+- `IAssetUnitOfWork : IUnitOfWork` gom **14 repository**: `Devices`, `Branches`,
+  `Softwares`, `SoftwareGroups`, `Suppliers`, `DeviceConfigurations`,
+  `DeviceConfigurationInitials`, `DeviceConfigurationHistories`, `DeviceSoftwares`,
   `DeviceTypes`, `IpAddresses`, `IpPrefixes`, `TransferHistories`, `AuditTrails`.
 - Tất cả repo hiện **generic thuần** (class con rỗng, chỉ kế thừa
   `GenericRepository<T, AssetDbContext>`) — chưa có method đặc thù nào.
-- `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>` inject đủ 12 repo qua constructor.
+- `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>` inject đủ 14 repo qua constructor.
 
 ---
 
@@ -105,15 +187,15 @@
 | Thực thể | Service | Controller / Route | CRUD | Auth |
 |---|---|---|---|---|
 | Branch | `BranchService` (đầy đủ) | `BranchController` `/api/Branch` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
-| Device | `DeviceService` (chỉ grid) | `DeviceController` `/api/Device` | **chỉ** `grid-list` | `[AllowAnonymous]` |
+| Device | `DeviceService` (đầy đủ) | `DeviceController` `/api/Device` | grid-list, {id}, `{id}/detail` (gộp Device+Configuration+Softwares), POST, PUT, DELETE (**không có** `all`) | `[AllowAnonymous]` |
 | DeviceType | `DeviceTypeService` | `DeviceTypeController` `/api/DeviceType` | CRUD | `[AllowAnonymous]` |
 | Supplier | `SupplierService` | `SupplierController` `/api/Supplier` | CRUD | `[AllowAnonymous]` |
-| DeviceSoftware | `DeviceSoftwareService` | `DeviceSoftwareController` `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE | `[AllowAnonymous]` |
+| DeviceSoftware | `DeviceSoftwareService` | `DeviceSoftwareController` `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE, `picker/{deviceId}` (GET), `sync` (PUT, bulk tick) | `[AllowAnonymous]` |
 | Software | `SoftwareService` (đầy đủ) | `SoftwareController` `/api/Software` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
 | SoftwareGroup | `SoftwareGroupService` (đầy đủ) | `SoftwareGroupController` `/api/SoftwareGroup` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
 | IpAddress | `IpAddressService` (đầy đủ) | `IpAddressController` `/api/IpAddress` | grid-list, {id}, POST, PUT, DELETE, `{id}/assign`, `{id}/unassign` (**không có** `all`/`generate-range`) | `[AllowAnonymous]` |
 | IpPrefix | `IpPrefixService` (đầy đủ, POST tự sinh 255 IP con) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
-| DeviceConfiguration | ❌ chưa có | ❌ | — | — |
+| DeviceConfiguration | `DeviceConfigurationService` (CRUD + snapshot/history) | `DeviceConfigurationController` `/api/DeviceConfiguration` | `by-device/{deviceId}` (trả `null` nếu chưa có), POST, PUT, DELETE (xoá cứng, cascade Initial+History), `{configId}/initial` (GET), `initial/{id}` (DELETE), `{configId}/history` (GET list) — **không có** `grid-list`/`all` | `[AllowAnonymous]` |
 | TransferHistory | ❌ chưa có | ❌ | — | — |
 | AuditTrail | ❌ chưa có | ❌ | — | — |
 
@@ -147,6 +229,70 @@
   `Enumerable.Range`, rồi `AddRangeAsync` + `SaveChangesAsync` **1 lần** cho cả batch
   (không loop insert từng bản ghi). Không cần check trùng vì Prefix vừa tạo chắc
   chắn chưa có IP con nào.
+- **Field tính toán + điều khiển quan hệ 1-N ngược chiều (owning side là bảng
+  khác)** → xem `DeviceService` (Device 1-N IpAddress, nhưng Device không giữ FK —
+  `IpAddress.DeviceId` mới là FK): `CreateAsync`/`UpdateAsync` tự tính
+  `ExpirationDate = PurchaseDate.AddMonths(DepreciationMonths)` (không nhận từ
+  client); muốn gán/gỡ "IP chính" thì Service tự tìm `IpAddress` hiện gắn qua
+  `FirstOrDefaultAsync(x => x.DeviceId == device.Id && !x.IsDeleted)` rồi `Update`
+  trực tiếp field `DeviceId`/`Status` của nó (không gọi chéo sang `IpAddressService`
+  — cùng `IAssetUnitOfWork` nên truy cập thẳng repo `_unitOfWork.IpAddresses` là đủ).
+  `UpdateAsync` gom **mọi** thay đổi (Device + IP cũ gỡ + IP mới gán) vào **1 lần
+  `SaveChangesAsync`** duy nhất ở cuối; `CreateAsync` cần 2 lần Save vì phải có
+  `Device.Id` trước mới gán ngược được cho IP.
+- **1-1 optional, trả `null` thay vì `OrThrowNotFound`** → xem
+  `DeviceConfigurationService.GetByDeviceIdAsync`: phần lớn Device chưa có
+  `DeviceConfiguration` (3004/5202 tại thời điểm map) — đây là trạng thái bình
+  thường, không phải lỗi, nên trả thẳng `null` (`ApiResponse.IsSuccess=true`,
+  `Data=null`) thay vì ném `NotFoundException` như các lookup theo `Id` khác. FE
+  dựa vào `null` để quyết định gọi `POST` (tạo mới) hay `PUT` (cập nhật).
+- **Snapshot bất biến lúc tạo + audit log diff-based lúc sửa** → xem
+  `DeviceConfigurationService` (`CreateAsync` tạo kèm `DeviceConfigurationInitial`;
+  `UpdateAsync` so sánh field cũ/mới, chỉ `AddAsync` 1 dòng
+  `DeviceConfigurationHistory` nếu thực sự có thay đổi, gộp chung
+  `SaveChangesAsync` với `Update(config)`). Lấy "ai sửa" qua
+  `IHttpContextAccessor.HttpContext?.User?.Identity?.Name` (claim JWT optional,
+  fallback `"Unknown"` nếu request anonymous) — cần thêm
+  `<FrameworkReference Include="Microsoft.AspNetCore.App" />` vào project
+  Application mới dùng được kiểu này (xem ghi chú §1).
+
+> **Picker chọn nhiều phần mềm cho Device + đồng bộ 1 lần (2026-07-09, đã làm)**:
+> `GET /api/DeviceSoftware/picker/{deviceId}` trả `List<SoftwarePickerDto>`
+> (`SoftwareId/SoftwareCode/SoftwareName/IsSelected`) — toàn bộ Software
+> `!IsDeleted`, `IsSelected=true` nếu đã có trong `DeviceSoftware` của
+> `deviceId` đó. Dùng cho UI dạng checkbox-list (tick nhiều phần mềm 1 lúc,
+> giống màn "Update software to Equipment" của hệ thống cũ).
+> `PUT /api/DeviceSoftware/sync` (`SyncDeviceSoftwareDto`: `DeviceId`
+> `[Required]`, `Items: List<DeviceSoftwareSyncItemDto>` — mỗi item
+> `{SoftwareId [Required], InstallDate?, LicenseKey?}` **riêng theo từng phần
+> mềm**, không dùng chung 1 key cho cả batch nữa vì thực tế đa số phần mềm
+> (OS, Office...) có key bản quyền khác nhau) đồng bộ **toàn bộ** trạng thái
+> tick: phần mềm có trong `Items` nhưng chưa cài → `AddRangeAsync` (dùng
+> `item.InstallDate ?? DateTime.UtcNow` + `item.LicenseKey` **của riêng item
+> đó**); phần mềm đang cài nhưng **không còn trong `Items`** → `RemoveRange`
+> (gỡ hẳn, xoá cứng vì `DeviceSoftware` không có `IsDeleted`). Phần mềm **giữ
+> nguyên tick** (đã cài từ trước, vẫn có `SoftwareId` trong `Items`) →
+> **không đụng vào** bản ghi cũ dù `Items` có gửi `LicenseKey`/`InstallDate`
+> mới cho `SoftwareId` đó (không ghi đè); muốn sửa key/date của 1 phần mềm cụ
+> thể đã cài thì dùng `PUT /api/DeviceSoftware` (Update từng dòng) như cũ.
+> Validate `Items` không được trùng `SoftwareId` + toàn bộ `SoftwareId` phải
+> là Software tồn tại + chưa xoá trước khi ghi (`DomainException` nếu trùng
+> hoặc có Id lạ). 1 lần `SaveChangesAsync` cho cả add+remove, trả về danh
+> sách phần mềm sau đồng bộ (gọi lại `GetByDeviceIdAsync`). Đã test thật:
+> device mẫu 95 software trong picker, 9 đang cài → picker trả đúng 9 dòng
+> `IsSelected=true`; sync thêm 1 phần mềm mới với key riêng + giữ nguyên key
+> cũ của 2 phần mềm đã cài từ trước + gỡ 1 phần mềm bị bỏ tick — đúng cả 3
+> hành vi.
+
+> **API tổng hợp chi tiết Device (2026-07-09, đã làm)**: `GET
+> /api/Device/{id}/detail` trả `DeviceDetailDto { Device: DeviceDto,
+> Configuration: DeviceConfigurationDto?, Softwares: List<DeviceSoftwareDto> }`
+> — gộp `DeviceService.GetByIdAsync` + `DeviceConfigurationService
+> .GetByDeviceIdAsync` (có thể `null`, xem ghi chú §1) + `DeviceSoftwareService
+> .GetByDeviceIdAsync` trong 1 lần gọi (compose service, `DeviceService`
+> inject thêm `IDeviceConfigurationService`/`IDeviceSoftwareService` qua
+> constructor). FE mở màn hình chi tiết 1 thiết bị chỉ cần 1 request thay vì
+> gọi 3 API riêng.
 
 **API endpoints chi tiết** (route pattern nhất quán):
 - `GET /api/{Entity}/grid-list?pageIndex=&pageSize=&keyword=` → `PagedResponse`.
@@ -157,21 +303,36 @@
 
 ## 5. Hiện trạng: ĐÃ XONG / CẦN LÀM TIẾP
 
-**Đã xong:** CRUD Branch/DeviceType/Supplier/Software/SoftwareGroup/IpAddress/IpPrefix;
-grid Device (filter + phân trang); CRUD DeviceSoftware; toàn bộ Domain + DbContext +
-Migrations (đã map 12 entity, kể cả migration `AddIpPrefix` đã backfill 27 prefix từ
-6885 `IpAddress` cũ và apply lên DB thật ngày 2026-07-08).
+**Đã xong:** CRUD Branch/DeviceType/Supplier/Software/SoftwareGroup/IpAddress/
+IpPrefix/Device (đầy đủ, kể cả chọn/gán IP); CRUD DeviceSoftware + picker
+checkbox-list `GET picker/{deviceId}` + đồng bộ hàng loạt `PUT sync`; CRUD
+DeviceConfiguration (kể cả snapshot "Cấu hình ban đầu" + audit log "Sửa chữa Thay
+thế"); API tổng hợp `GET /api/Device/{id}/detail` (Device + Configuration +
+Softwares 1 lần gọi); toàn bộ Domain + DbContext + Migrations, gồm:
+- `AddIpPrefix` (2026-07-08): backfill 27 `IpPrefix` từ 6885 `IpAddress` cũ, apply
+  lên DB thật.
+- `AddDeviceFields` (2026-07-08): thêm `DepreciationMonths`/`IsOutsourced` cho
+  `Device`, backfill `DepreciationMonths` từ `DATEDIFF(MONTH, PurchaseDate,
+  ExpirationDate)` cho 5202 thiết bị thật, apply lên DB thật.
+- `AddDeviceConfigurationFields` (2026-07-08): thêm 6 cột nullable
+  (`Maker/Model/PowerAdapter/WirelessCard/Nic/Other`) cho `DeviceConfiguration`,
+  không backfill (khái niệm mới), apply lên DB thật.
+- `AddDeviceConfigurationHistory` (2026-07-08): tạo mới 2 bảng
+  `DeviceConfigurationInitials`/`DeviceConfigurationHistories`, không đụng bảng cũ,
+  apply lên DB thật — đã test end-to-end (create→snapshot, update có/không đổi
+  giá trị, cascade delete) trên dữ liệu test rồi dọn sạch.
 
 **Cần làm tiếp (theo độ ưu tiên gợi ý):**
-1. **Device**: mới có grid, **thiếu** GetById/Create/Update/Delete và quản lý
-   cấu hình (`DeviceConfiguration`), phần mềm cài đặt (IP đã xong ở `IpAddressService`).
-2. **DeviceConfiguration / TransferHistory / AuditTrail**: chưa có tầng Application/Api.
-3. **Auth**: tất cả controller Asset đang `[AllowAnonymous]` — cần siết quyền
+1. **TransferHistory / AuditTrail**: chưa có tầng Application/Api.
+2. **Auth**: tất cả controller Asset đang `[AllowAnonymous]` — cần siết quyền
    thật trước khi lên production.
-4. **Warning**: nhiều `CS8602`/`CS8603`/`CS8604` (deref/return possibly null) trong
+3. **Warning**: nhiều `CS8602`/`CS8603`/`CS8604` (deref/return possibly null) trong
    các Service — `GetByIdAsync` trả nullable, nên dùng `OrThrowNotFound` như
-   `BranchService` (Software/SoftwareGroup/IpAddress mới thêm cũng theo pattern này,
-   cùng warning y hệt, chấp nhận được).
+   `BranchService` (Software/SoftwareGroup/IpAddress/Device/DeviceConfiguration
+   mới thêm cũng theo pattern này, cùng warning y hệt, chấp nhận được).
+4. **Field ngoài phạm vi Device hiện tại** (theo ảnh form hệ thống cũ, chưa làm vì
+   chưa có yêu cầu rõ + cần thêm cột DB mới): Nhóm (Group), Email 2/Email 3, Sticky
+   Notes. Nếu cần, áp dụng đúng quy trình §4.2 CLAUDE.md (hỏi trước khi thêm cột).
 
 ---
 

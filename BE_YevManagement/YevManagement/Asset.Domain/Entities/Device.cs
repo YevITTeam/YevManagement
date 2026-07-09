@@ -25,6 +25,10 @@ public partial class Device
 
     public DateTime? ExpirationDate { get; set; }
 
+    public int DepreciationMonths { get; set; }
+
+    public bool IsOutsourced { get; set; }
+
     public int Status { get; set; }
 
     public string? Note { get; set; }

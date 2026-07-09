@@ -35,6 +35,18 @@ public partial class DeviceConfiguration
 
     public string? Vga { get; set; }
 
+    public string? Maker { get; set; }
+
+    public string? Model { get; set; }
+
+    public string? PowerAdapter { get; set; }
+
+    public string? WirelessCard { get; set; }
+
+    public string? Nic { get; set; }
+
+    public string? Other { get; set; }
+
     public string? Note { get; set; }
 
     public virtual Device Device { get; set; } = null!;

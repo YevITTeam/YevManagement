@@ -15,6 +15,8 @@ namespace Asset.Infrastructure.Repositories
             ISoftwareGroupRepository softwareGroups,
             ISupplierRepository suppliers,
             IDeviceConfigurationRepository deviceConfigurations,
+            IDeviceConfigurationInitialRepository deviceConfigurationInitials,
+            IDeviceConfigurationHistoryRepository deviceConfigurationHistories,
             IDeviceSoftwareRepository deviceSoftwares,
             IDeviceTypeRepository deviceTypes,
             IIpAddressRepository ipAddresses,
@@ -28,6 +30,8 @@ namespace Asset.Infrastructure.Repositories
             SoftwareGroups = softwareGroups;
             Suppliers = suppliers;
             DeviceConfigurations = deviceConfigurations;
+            DeviceConfigurationInitials = deviceConfigurationInitials;
+            DeviceConfigurationHistories = deviceConfigurationHistories;
             DeviceSoftwares = deviceSoftwares;
             DeviceTypes = deviceTypes;
             IpAddresses = ipAddresses;
@@ -42,6 +46,8 @@ namespace Asset.Infrastructure.Repositories
         public ISoftwareGroupRepository SoftwareGroups { get; }
         public ISupplierRepository Suppliers { get; }
         public IDeviceConfigurationRepository DeviceConfigurations { get; }
+        public IDeviceConfigurationInitialRepository DeviceConfigurationInitials { get; }
+        public IDeviceConfigurationHistoryRepository DeviceConfigurationHistories { get; }
         public IDeviceSoftwareRepository DeviceSoftwares { get; }
         public IDeviceTypeRepository DeviceTypes { get; }
         public IIpAddressRepository IpAddresses { get; }

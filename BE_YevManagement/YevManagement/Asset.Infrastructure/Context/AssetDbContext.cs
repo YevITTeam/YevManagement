@@ -19,6 +19,8 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<Branch> Branches { get; set; }
     public virtual DbSet<Device> Devices { get; set; }
     public virtual DbSet<DeviceConfiguration> DeviceConfigurations { get; set; }
+    public virtual DbSet<DeviceConfigurationInitial> DeviceConfigurationInitials { get; set; }
+    public virtual DbSet<DeviceConfigurationHistory> DeviceConfigurationHistories { get; set; }
     public virtual DbSet<DeviceSoftware> DeviceSoftwares { get; set; }
     public virtual DbSet<DeviceType> DeviceTypes { get; set; }
     public virtual DbSet<IpAddress> IpAddresses { get; set; }
@@ -91,10 +93,81 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.Speaker).HasMaxLength(150);
             entity.Property(e => e.Ups).HasMaxLength(150).HasColumnName("UPS");
             entity.Property(e => e.Vga).HasMaxLength(150).HasColumnName("VGA");
+            entity.Property(e => e.Maker).HasMaxLength(150);
+            entity.Property(e => e.Model).HasMaxLength(150);
+            entity.Property(e => e.PowerAdapter).HasMaxLength(150);
+            entity.Property(e => e.WirelessCard).HasMaxLength(150);
+            entity.Property(e => e.Nic).HasMaxLength(150).HasColumnName("NIC");
+            entity.Property(e => e.Other).HasMaxLength(150);
 
             entity.HasOne(d => d.Device).WithOne(p => p.DeviceConfiguration)
                 .HasForeignKey<DeviceConfiguration>(d => d.DeviceId)
                 .HasConstraintName("FK_CauHinhThietBis_ThietBis_ThietBiId");
+        });
+
+        modelBuilder.Entity<DeviceConfigurationInitial>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_CauHinhBanDaus");
+            entity.HasIndex(e => e.DeviceConfigurationId, "IX_CauHinhBanDaus_CauHinhThietBiId").IsUnique();
+
+            entity.Property(e => e.Cpu).HasMaxLength(150).HasColumnName("CPU");
+            entity.Property(e => e.HardDrive).HasMaxLength(150);
+            entity.Property(e => e.Headphone).HasMaxLength(150);
+            entity.Property(e => e.Keyboard).HasMaxLength(150);
+            entity.Property(e => e.Mainboard).HasMaxLength(150);
+            entity.Property(e => e.Monitor).HasMaxLength(150);
+            entity.Property(e => e.Mouse).HasMaxLength(150);
+            entity.Property(e => e.Note).HasMaxLength(150);
+            entity.Property(e => e.Os).HasMaxLength(150).HasColumnName("OS");
+            entity.Property(e => e.Psu).HasMaxLength(150).HasColumnName("PSU");
+            entity.Property(e => e.Ram).HasMaxLength(150).HasColumnName("RAM");
+            entity.Property(e => e.Speaker).HasMaxLength(150);
+            entity.Property(e => e.Ups).HasMaxLength(150).HasColumnName("UPS");
+            entity.Property(e => e.Vga).HasMaxLength(150).HasColumnName("VGA");
+            entity.Property(e => e.Maker).HasMaxLength(150);
+            entity.Property(e => e.Model).HasMaxLength(150);
+            entity.Property(e => e.PowerAdapter).HasMaxLength(150);
+            entity.Property(e => e.WirelessCard).HasMaxLength(150);
+            entity.Property(e => e.Nic).HasMaxLength(150).HasColumnName("NIC");
+            entity.Property(e => e.Other).HasMaxLength(150);
+
+            entity.HasOne(d => d.DeviceConfiguration).WithMany()
+                .HasForeignKey(d => d.DeviceConfigurationId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_CauHinhBanDaus_CauHinhThietBis_CauHinhThietBiId");
+        });
+
+        modelBuilder.Entity<DeviceConfigurationHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_SuaChuaThayThes");
+            entity.HasIndex(e => e.DeviceConfigurationId, "IX_SuaChuaThayThes_CauHinhThietBiId");
+
+            entity.Property(e => e.Cpu).HasMaxLength(150).HasColumnName("CPU");
+            entity.Property(e => e.HardDrive).HasMaxLength(150);
+            entity.Property(e => e.Headphone).HasMaxLength(150);
+            entity.Property(e => e.Keyboard).HasMaxLength(150);
+            entity.Property(e => e.Mainboard).HasMaxLength(150);
+            entity.Property(e => e.Monitor).HasMaxLength(150);
+            entity.Property(e => e.Mouse).HasMaxLength(150);
+            entity.Property(e => e.Note).HasMaxLength(150);
+            entity.Property(e => e.Os).HasMaxLength(150).HasColumnName("OS");
+            entity.Property(e => e.Psu).HasMaxLength(150).HasColumnName("PSU");
+            entity.Property(e => e.Ram).HasMaxLength(150).HasColumnName("RAM");
+            entity.Property(e => e.Speaker).HasMaxLength(150);
+            entity.Property(e => e.Ups).HasMaxLength(150).HasColumnName("UPS");
+            entity.Property(e => e.Vga).HasMaxLength(150).HasColumnName("VGA");
+            entity.Property(e => e.Maker).HasMaxLength(150);
+            entity.Property(e => e.Model).HasMaxLength(150);
+            entity.Property(e => e.PowerAdapter).HasMaxLength(150);
+            entity.Property(e => e.WirelessCard).HasMaxLength(150);
+            entity.Property(e => e.Nic).HasMaxLength(150).HasColumnName("NIC");
+            entity.Property(e => e.Other).HasMaxLength(150);
+            entity.Property(e => e.EditedBy).HasMaxLength(150);
+
+            entity.HasOne(d => d.DeviceConfiguration).WithMany()
+                .HasForeignKey(d => d.DeviceConfigurationId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_SuaChuaThayThes_CauHinhThietBis_CauHinhThietBiId");
         });
 
         modelBuilder.Entity<DeviceSoftware>(entity =>

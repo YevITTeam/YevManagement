@@ -15,5 +15,6 @@
         public string? Note { get; set; }
         public string? Email { get; set; }
         public int Status { get; set; }
+        public string StatusText { get; set; } = null!;
     }
 }

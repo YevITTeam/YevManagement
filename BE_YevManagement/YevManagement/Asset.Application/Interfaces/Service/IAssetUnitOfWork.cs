@@ -11,6 +11,8 @@ namespace Asset.Application.Interfaces.Service
         ISoftwareGroupRepository SoftwareGroups { get; }
         ISupplierRepository Suppliers { get; }
         IDeviceConfigurationRepository DeviceConfigurations { get; }
+        IDeviceConfigurationInitialRepository DeviceConfigurationInitials { get; }
+        IDeviceConfigurationHistoryRepository DeviceConfigurationHistories { get; }
         IDeviceSoftwareRepository DeviceSoftwares { get; }
         IDeviceTypeRepository DeviceTypes { get; }
         IIpAddressRepository IpAddresses { get; }

@@ -87,5 +87,75 @@ namespace Asset.Application.Services
             _unitOfWork.DeviceSoftwares.Delete(deviceSoftware);
             await _unitOfWork.SaveChangesAsync();
         }
+
+        public async Task<List<SoftwarePickerDto>> GetPickerListAsync(int deviceId)
+        {
+            var device = await _unitOfWork.Devices.GetByIdAsync(deviceId);
+            device.OrThrowNotFound("Thiết bị", deviceId);
+
+            var installedIds = (await _unitOfWork.DeviceSoftwares.FindAsync(x => x.DeviceId == deviceId))
+                .Select(x => x.SoftwareId)
+                .ToHashSet();
+
+            var result = await _unitOfWork.Softwares.SelectAsync(
+                predicate: s => !s.IsDeleted,
+                selector: s => new SoftwarePickerDto
+                {
+                    SoftwareId = s.Id,
+                    SoftwareCode = s.SoftwareCode,
+                    SoftwareName = s.SoftwareName,
+                    IsSelected = installedIds.Contains(s.Id)
+                });
+
+            return result
+                .OrderByDescending(x => x.IsSelected)
+                .ThenBy(x => x.SoftwareName)
+                .ToList();
+        }
+
+        public async Task<List<DeviceSoftwareDto>> SyncAsync(SyncDeviceSoftwareDto request)
+        {
+            var device = await _unitOfWork.Devices.GetByIdAsync(request.DeviceId);
+            device.OrThrowNotFound("Thiết bị", request.DeviceId);
+
+            if (request.Items.Select(x => x.SoftwareId).Distinct().Count() != request.Items.Count)
+                throw new DomainException("Danh sách phần mềm chọn bị trùng lặp.");
+
+            var selectedIds = request.Items.Select(x => x.SoftwareId).ToHashSet();
+
+            if (selectedIds.Count > 0)
+            {
+                var validIds = (await _unitOfWork.Softwares.FindAsync(s => !s.IsDeleted && selectedIds.Contains(s.Id)))
+                    .Select(s => s.Id)
+                    .ToHashSet();
+
+                if (validIds.Count != selectedIds.Count)
+                    throw new DomainException("Danh sách phần mềm chọn không hợp lệ.");
+            }
+
+            var current = await _unitOfWork.DeviceSoftwares.FindAsync(x => x.DeviceId == request.DeviceId);
+            var currentIds = current.Select(x => x.SoftwareId).ToHashSet();
+
+            var toRemove = current.Where(x => !selectedIds.Contains(x.SoftwareId)).ToList();
+            if (toRemove.Count > 0)
+                _unitOfWork.DeviceSoftwares.RemoveRange(toRemove);
+
+            var toAdd = request.Items.Where(x => !currentIds.Contains(x.SoftwareId)).ToList();
+            if (toAdd.Count > 0)
+            {
+                var newEntities = toAdd.Select(item => new DeviceSoftware
+                {
+                    DeviceId = request.DeviceId,
+                    SoftwareId = item.SoftwareId,
+                    InstallDate = item.InstallDate ?? DateTime.UtcNow,
+                    LicenseKey = item.LicenseKey
+                });
+                await _unitOfWork.DeviceSoftwares.AddRangeAsync(newEntities);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetByDeviceIdAsync(request.DeviceId);
+        }
     }
 }

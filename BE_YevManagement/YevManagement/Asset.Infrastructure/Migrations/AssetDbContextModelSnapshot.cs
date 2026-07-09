@@ -63,6 +63,9 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
 
+                    b.Property<int>("DepreciationMonths")
+                        .HasColumnType("int");
+
                     b.Property<string>("DeviceCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -85,6 +88,9 @@ namespace Asset.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsOutsourced")
                         .HasColumnType("bit");
 
                     b.Property<string>("Manager")
@@ -152,6 +158,14 @@ namespace Asset.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<string>("Maker")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
                     b.Property<string>("Monitor")
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
@@ -159,6 +173,11 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<string>("Mouse")
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Nic")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("NIC");
 
                     b.Property<string>("Note")
                         .HasMaxLength(150)
@@ -168,6 +187,14 @@ namespace Asset.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)")
                         .HasColumnName("OS");
+
+                    b.Property<string>("Other")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("PowerAdapter")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
 
                     b.Property<string>("Psu")
                         .HasMaxLength(150)
@@ -193,6 +220,10 @@ namespace Asset.Infrastructure.Migrations
                         .HasColumnType("nvarchar(150)")
                         .HasColumnName("VGA");
 
+                    b.Property<string>("WirelessCard")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
                     b.HasKey("Id")
                         .HasName("PK_CauHinhThietBis");
 
@@ -200,6 +231,230 @@ namespace Asset.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("DeviceConfigurations");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceConfigurationHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Cpu")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("CPU");
+
+                    b.Property<int>("DeviceConfigurationId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EditedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EditedBy")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("HardDrive")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Headphone")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Keyboard")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Mainboard")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Maker")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Monitor")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Mouse")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Nic")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("NIC");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Os")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("OS");
+
+                    b.Property<string>("Other")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("PowerAdapter")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Psu")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("PSU");
+
+                    b.Property<string>("Ram")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("RAM");
+
+                    b.Property<string>("Speaker")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Ups")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("UPS");
+
+                    b.Property<string>("Vga")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("VGA");
+
+                    b.Property<string>("WirelessCard")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_SuaChuaThayThes");
+
+                    b.HasIndex(new[] { "DeviceConfigurationId" }, "IX_SuaChuaThayThes_CauHinhThietBiId");
+
+                    b.ToTable("DeviceConfigurationHistories");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceConfigurationInitial", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Cpu")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("CPU");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DeviceConfigurationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("HardDrive")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Headphone")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Keyboard")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Mainboard")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Maker")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Monitor")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Mouse")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Nic")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("NIC");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Os")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("OS");
+
+                    b.Property<string>("Other")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("PowerAdapter")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Psu")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("PSU");
+
+                    b.Property<string>("Ram")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("RAM");
+
+                    b.Property<string>("Speaker")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Ups")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("UPS");
+
+                    b.Property<string>("Vga")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("VGA");
+
+                    b.Property<string>("WirelessCard")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_CauHinhBanDaus");
+
+                    b.HasIndex(new[] { "DeviceConfigurationId" }, "IX_CauHinhBanDaus_CauHinhThietBiId")
+                        .IsUnique();
+
+                    b.ToTable("DeviceConfigurationInitials");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.DeviceSoftware", b =>
@@ -570,6 +825,30 @@ namespace Asset.Infrastructure.Migrations
                         .HasConstraintName("FK_CauHinhThietBis_ThietBis_ThietBiId");
 
                     b.Navigation("Device");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceConfigurationHistory", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.DeviceConfiguration", "DeviceConfiguration")
+                        .WithMany()
+                        .HasForeignKey("DeviceConfigurationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SuaChuaThayThes_CauHinhThietBis_CauHinhThietBiId");
+
+                    b.Navigation("DeviceConfiguration");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceConfigurationInitial", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.DeviceConfiguration", "DeviceConfiguration")
+                        .WithMany()
+                        .HasForeignKey("DeviceConfigurationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_CauHinhBanDaus_CauHinhThietBis_CauHinhThietBiId");
+
+                    b.Navigation("DeviceConfiguration");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.DeviceSoftware", b =>

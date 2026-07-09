@@ -46,5 +46,19 @@ namespace Asset.Api.Controllers
             await _deviceSoftwareService.DeleteAsync(deviceId, softwareId);
             return Success(true, "Gỡ phần mềm khỏi thiết bị thành công.");
         }
+
+        [HttpGet("picker/{deviceId}")]
+        public async Task<ActionResult<ApiResponse<List<SoftwarePickerDto>>>> GetPicker(int deviceId)
+        {
+            var result = await _deviceSoftwareService.GetPickerListAsync(deviceId);
+            return Success(result);
+        }
+
+        [HttpPut("sync")]
+        public async Task<ActionResult<ApiResponse<List<DeviceSoftwareDto>>>> Sync([FromBody] SyncDeviceSoftwareDto request)
+        {
+            var result = await _deviceSoftwareService.SyncAsync(request);
+            return Success(result, "Cập nhật phần mềm cho thiết bị thành công.");
+        }
     }
 }
