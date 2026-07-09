@@ -1,11 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "react-toastify";
 import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
 import PrintDeviceCodeDialog from "../../../modules/pc-management/components/PrintDeviceCodeDialog";
+import DeviceForm, { type DeviceFormValues } from "../../../modules/pc-management/components/devices/DeviceForm";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { DeviceApi } from "../../../modules/pc-management/api/device.api";
-import type { DeviceDto } from "../../../modules/pc-management/types/device.dto";
+import type { DeviceDto, DeviceGetDto } from "../../../modules/pc-management/types/device.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useRouter } from 'next/navigation';
 const statusLabels: Record<number, string> = {
@@ -57,6 +59,15 @@ export default function PcDashboardPage() {
   const [isPrintOpen, setIsPrintOpen] = useState(false);
   const router = useRouter();
 
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [editingDevice, setEditingDevice] = useState<DeviceGetDto | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingEditTarget, setIsLoadingEditTarget] = useState(false);
+
+  const [deletingDevice, setDeletingDevice] = useState<DeviceDto | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Reset back to page 1 whenever a server-backed filter changes, so pagination reflects the new result set.
   useEffect(() => {
     setPageIndex(1);
@@ -104,6 +115,92 @@ export default function PcDashboardPage() {
     };
   }, [pageIndex, pageSize, filters.deviceCode, filters.manager, filters.ipAddress, filters.supplierName, filters.purchaseDate]);
 
+  const refetchDevices = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await DeviceApi.getDevicePageNation({
+        pageIndex,
+        pageSize,
+        deviceCode: filters.deviceCode || undefined,
+        manager: filters.manager || undefined,
+        ipAddress: filters.ipAddress || undefined,
+        supplierName: filters.supplierName || undefined,
+        purchaseDate: filters.purchaseDate || undefined,
+      });
+      setDevices(result.data);
+      setTotalCount(result.totalCount);
+      setTotalPages(result.totalPages);
+      setHasNextPage(result.hasNextPage);
+      setHasPreviousPage(result.hasPreviousPage);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Không thể tải danh sách thiết bị."));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openCreateForm = () => {
+    setFormMode("create");
+    setEditingDevice(null);
+    setFormOpen(true);
+  };
+
+  const openEditForm = async (device: DeviceDto) => {
+    setIsLoadingEditTarget(true);
+    try {
+      const detail = await DeviceApi.getDeviceById(device.id);
+      setFormMode("edit");
+      setEditingDevice(detail);
+      setFormOpen(true);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Không thể tải thông tin thiết bị."));
+    } finally {
+      setIsLoadingEditTarget(false);
+    }
+  };
+
+  const closeForm = () => {
+    if (isSaving) return;
+    setFormOpen(false);
+    setEditingDevice(null);
+  };
+
+  const handleSubmitForm = async (values: DeviceFormValues) => {
+    setIsSaving(true);
+    try {
+      if (formMode === "create") {
+        await DeviceApi.createDevice({ id: 0, ...values });
+        toast.success("Tạo thiết bị thành công");
+      } else if (editingDevice) {
+        await DeviceApi.updateDevice(editingDevice.id, { id: editingDevice.id, ...values });
+        toast.success("Cập nhật thiết bị thành công");
+      }
+      setFormOpen(false);
+      setEditingDevice(null);
+      await refetchDevices();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo thiết bị thất bại" : "Cập nhật thiết bị thất bại"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingDevice) return;
+    setIsDeleting(true);
+    try {
+      await DeviceApi.deleteDevice(deletingDevice.id);
+      toast.success("Xoá thiết bị thành công");
+      setDeletingDevice(null);
+      await refetchDevices();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Xoá thiết bị thất bại"));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Branch/device type/status/expiry aren't supported by the API yet, so they can only narrow down the devices already loaded on the current page.
   const filteredDevices = useMemo(() => {
     return devices.filter((device) => {
@@ -149,7 +246,10 @@ export default function PcDashboardPage() {
           >
             🖨 In mã thiết bị
           </button>
-          <button className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]">
+          <button
+            onClick={openCreateForm}
+            className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+          >
             + Thêm mới
           </button>
         </div>
@@ -231,13 +331,31 @@ export default function PcDashboardPage() {
                       {statusLabels[device.status] ?? "Không xác định"}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top text-right text-sm text-[#5e3f3a]">
-                    <button
-                      className="px-1 text-[#5e3f3a] hover:text-[#191c1e]"
-                      title={device.note ? device.note : undefined}
-                    >
-                      ⋯
-                    </button>
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-right text-sm">
+                    <div className="inline-flex items-center gap-3">
+                      <button
+                        onClick={() => router.push(`/pc/devices/${device.id}`)}
+                        className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                        title="Chi tiết"
+                      >
+                        Chi tiết
+                      </button>
+                      <button
+                        onClick={() => openEditForm(device)}
+                        disabled={isLoadingEditTarget}
+                        className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:opacity-50"
+                        title="Sửa"
+                      >
+                        Sửa
+                      </button>
+                      <button
+                        onClick={() => setDeletingDevice(device)}
+                        className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                        title="Xoá"
+                      >
+                        Xoá
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -270,6 +388,33 @@ export default function PcDashboardPage() {
         isOpen={isPrintOpen}
         devices={filteredDevices}
         onClose={() => setIsPrintOpen(false)}
+      />
+
+      <DeviceForm
+        isOpen={formOpen}
+        mode={formMode}
+        initial={editingDevice}
+        loading={isSaving}
+        onClose={closeForm}
+        onSubmit={handleSubmitForm}
+      />
+
+      <ConfirmDialog
+        isOpen={deletingDevice !== null}
+        title="Xoá thiết bị"
+        message={
+          <>
+            Bạn có chắc muốn xoá thiết bị <strong>{deletingDevice?.deviceCode}</strong> không? Hành động này không thể
+            hoàn tác.
+          </>
+        }
+        approveLabel="Xoá"
+        deniedLabel="Huỷ"
+        loading={isDeleting}
+        onApprove={handleDelete}
+        onDenied={() => {
+          if (!isDeleting) setDeletingDevice(null);
+        }}
       />
     </div>
   );

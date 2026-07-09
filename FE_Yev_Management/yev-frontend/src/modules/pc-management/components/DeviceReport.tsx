@@ -8,7 +8,7 @@ import { DeviceApi } from "@/modules/pc-management/api/device.api";
 import type { DeviceDto } from "@/modules/pc-management/types/device.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 
-const SAMPLE_SIZE = 1000;
+const PAGE_SIZE = 1000;
 const DAY_MS = 86_400_000;
 const EXPIRY_WINDOW_DAYS = 90;
 
@@ -102,9 +102,21 @@ export default function DeviceReport() {
         setIsLoading(true);
         setError(null);
         try {
-            const result = await DeviceApi.getDevicePageNation({ pageIndex: 1, pageSize: SAMPLE_SIZE });
-            setDevices(result.data);
-            setTotalCount(result.totalCount);
+            const firstPage = await DeviceApi.getDevicePageNation({ pageIndex: 1, pageSize: PAGE_SIZE });
+            let allDevices = firstPage.data;
+            const totalPages = firstPage.totalPages ?? 1;
+
+            if (totalPages > 1) {
+                const restPages = await Promise.all(
+                    Array.from({ length: totalPages - 1 }, (_, index) =>
+                        DeviceApi.getDevicePageNation({ pageIndex: index + 2, pageSize: PAGE_SIZE })
+                    )
+                );
+                allDevices = restPages.reduce((acc, page) => acc.concat(page.data), allDevices);
+            }
+
+            setDevices(allDevices);
+            setTotalCount(firstPage.totalCount);
             setNow(Date.now());
         } catch (err) {
             console.error(err);

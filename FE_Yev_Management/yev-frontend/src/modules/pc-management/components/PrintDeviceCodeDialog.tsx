@@ -54,9 +54,8 @@ function buildPrintHtml(devices: DeviceDto[]) {
     @media print { .sheet { gap: 6px; } }
   </style>
 </head>
-<body onload="window.focus(); window.print();">
+<body>
   <div class="sheet">${labels}</div>
-  <script>window.onafterprint = function () { window.close(); };</script>
 </body>
 </html>`;
 }
@@ -120,8 +119,32 @@ export default function PrintDeviceCodeDialog({ isOpen, devices, onClose }: Prin
             return;
         }
 
-        printWindow.document.write(buildPrintHtml(selected));
-        printWindow.document.close();
+        try {
+            printWindow.document.write(buildPrintHtml(selected));
+            printWindow.document.close();
+
+            let done = false;
+            const finish = (success: boolean) => {
+                if (done) return;
+                done = true;
+                if (success) {
+                    toast.success(`In thành công ${selected.length} nhãn thiết bị.`);
+                } else {
+                    toast.error("In không thành công. Vui lòng thử lại.");
+                }
+                printWindow.close();
+            };
+
+            printWindow.onafterprint = () => finish(true);
+
+            printWindow.focus();
+            printWindow.print();
+        } catch (error) {
+            console.error("Print failed:", error);
+            toast.error("In không thành công. Vui lòng thử lại.");
+            printWindow.close();
+        }
+
         onClose();
     };
 
