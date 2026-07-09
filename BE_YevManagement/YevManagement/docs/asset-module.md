@@ -138,9 +138,11 @@
 - **DeviceTypes/**: `DeviceTypeDto`, `CreateDeviceTypeDto`, `UpdateDeviceTypeDto`.
 - **Devices/**:
   - `DeviceFilterRequest` (query grid): `PageIndex=1`, `PageSize=50`, filter
-    `DeviceCode/Manager/PurchaseDate/IpAddress/SupplierName/Note`.
+    `DeviceCode/Manager/PurchaseDate/IpAddress/SupplierName/Note/IsOutsourced?`
+    (2026-07-09: thêm `IsOutsourced?` — lọc đúng true/false, bỏ qua nếu null).
   - `DeviceGridDto` (1 dòng grid): gộp tên Branch/Supplier/DeviceType + IP đầu tiên +
-    `StatusText`.
+    `StatusText` + `IsOutsourced` (2026-07-09: thêm cột này vào grid, trước đó chỉ
+    có ở `DeviceDto`/Create/Update, grid-list thiếu).
   - `DeviceDto` (GetById, đầy đủ): gộp tên Branch/DeviceType/Supplier + `StatusText`
     + `IpAddressId?`/`IpAddress?` (IP chính đang gắn) + `ExpirationDate` tính toán.
   - `CreateDeviceDto`/`UpdateDeviceDto`: `DeviceCode/DeviceName/Manager/Email`

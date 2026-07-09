@@ -58,6 +58,11 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.Note != null && d.Note.Contains(request.Note));
             }
 
+            if (request.IsOutsourced.HasValue)
+            {
+                query = query.Where(d => d.IsOutsourced == request.IsOutsourced.Value);
+            }
+
             return await _unitOfWork.Devices.ToPagedResponseAsync(
                 query.OrderByDescending(d => d.PurchaseDate),
                 request.PageIndex,
@@ -76,6 +81,7 @@ namespace Asset.Application.Services
                     Manager = d.Manager,
                     Note = d.Note,
                     Email = d.Email,
+                    IsOutsourced = d.IsOutsourced,
                     Status = d.Status,
                     // Lặp lại logic của GetStatusText tại đây (không gọi method) vì đây là
                     // Expression<Func<>> được EF dịch sang SQL, không hỗ trợ gọi method C# tuỳ ý.

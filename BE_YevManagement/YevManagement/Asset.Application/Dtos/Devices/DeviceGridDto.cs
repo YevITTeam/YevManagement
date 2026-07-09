@@ -16,5 +16,6 @@
         public string? Email { get; set; }
         public int Status { get; set; }
         public string StatusText { get; set; } = null!;
+        public bool IsOutsourced { get; set; }
     }
 }
