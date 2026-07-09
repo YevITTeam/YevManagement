@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 
 import { DeviceSoftwareApi } from "@/modules/pc-management/api/device-software.api";
+import { SoftwareApi } from "@/modules/pc-management/api/software.api";
 import type { DeviceSoftwareDeviceDto } from "@/modules/pc-management/types/device-software.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
@@ -14,6 +15,10 @@ interface DeviceSoftwarePanelProps {
     softwares: DeviceSoftwareDeviceDto[];
     onChanged: () => void;
 }
+
+const PRIORITY_FILTER_ALL = "all";
+const PRIORITY_FILTER_NONE = "none";
+type PrioritySort = "none" | "asc" | "desc";
 
 function formatDate(value: string | null) {
     if (!value) return "-";
@@ -39,6 +44,66 @@ export default function DeviceSoftwarePanel({ deviceId, softwares, onChanged }: 
 
     const [deletingItem, setDeletingItem] = useState<DeviceSoftwareDeviceDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // DeviceSoftware/device/{deviceId} không trả softwarePriority — join thêm từ danh mục phần mềm để lọc/sắp xếp theo ưu tiên.
+    const [priorityMap, setPriorityMap] = useState<Map<number, number | null>>(new Map());
+    const [priorityFilter, setPriorityFilter] = useState<string>(PRIORITY_FILTER_ALL);
+    const [prioritySort, setPrioritySort] = useState<PrioritySort>("none");
+
+    useEffect(() => {
+        let isCancelled = false;
+        SoftwareApi.getAllSoftware()
+            .then((result) => {
+                if (isCancelled) return;
+                setPriorityMap(new Map(result.map((software) => [software.id, software.softwarePriority])));
+            })
+            .catch((err) => {
+                if (!isCancelled) toast.error(getApiErrorMessage(err, "Không thể tải mức ưu tiên phần mềm."));
+            });
+        return () => {
+            isCancelled = true;
+        };
+    }, []);
+
+    const enrichedSoftwares = useMemo(
+        () =>
+            softwares.map((item) => ({
+                ...item,
+                softwarePriority: priorityMap.get(item.softwareId) ?? null,
+            })),
+        [softwares, priorityMap]
+    );
+
+    const priorityOptions = useMemo(() => {
+        const values = new Set<number>();
+        let hasNone = false;
+        enrichedSoftwares.forEach((item) => {
+            if (item.softwarePriority === null) hasNone = true;
+            else values.add(item.softwarePriority);
+        });
+        return { values: Array.from(values).sort((a, b) => a - b), hasNone };
+    }, [enrichedSoftwares]);
+
+    const visibleSoftwares = useMemo(() => {
+        let list = enrichedSoftwares.filter((item) => {
+            if (priorityFilter === PRIORITY_FILTER_ALL) return true;
+            if (priorityFilter === PRIORITY_FILTER_NONE) return item.softwarePriority === null;
+            return item.softwarePriority === Number(priorityFilter);
+        });
+
+        if (prioritySort !== "none") {
+            list = [...list].sort((a, b) => {
+                const aValue = a.softwarePriority ?? Number.POSITIVE_INFINITY;
+                const bValue = b.softwarePriority ?? Number.POSITIVE_INFINITY;
+                return prioritySort === "asc" ? aValue - bValue : bValue - aValue;
+            });
+        }
+        return list;
+    }, [enrichedSoftwares, priorityFilter, prioritySort]);
+
+    const togglePrioritySort = () => {
+        setPrioritySort((current) => (current === "none" ? "asc" : current === "asc" ? "desc" : "none"));
+    };
 
     useEffect(() => {
         if (!editingItem) return;
@@ -91,17 +156,34 @@ export default function DeviceSoftwarePanel({ deviceId, softwares, onChanged }: 
     return (
         <div className="space-y-6">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
+                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h3 className="text-base font-semibold text-[#191c1e]">Phần mềm đã cài</h3>
-                        <p className="mt-0.5 text-xs text-[#5e3f3a]">{softwares.length} phần mềm đang cài trên thiết bị.</p>
+                        <p className="mt-0.5 text-xs text-[#5e3f3a]">
+                            {visibleSoftwares.length} / {softwares.length} phần mềm đang cài trên thiết bị.
+                        </p>
                     </div>
-                    <button
-                        onClick={() => setPickerOpen(true)}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
-                    >
-                        Cập nhật phần mềm
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={priorityFilter}
+                            onChange={(event) => setPriorityFilter(event.target.value)}
+                            className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-xs text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        >
+                            <option value={PRIORITY_FILTER_ALL}>Tất cả mức ưu tiên</option>
+                            {priorityOptions.values.map((value) => (
+                                <option key={value} value={value}>
+                                    Ưu tiên {value}
+                                </option>
+                            ))}
+                            {priorityOptions.hasNone && <option value={PRIORITY_FILTER_NONE}>Chưa đặt ưu tiên</option>}
+                        </select>
+                        <button
+                            onClick={() => setPickerOpen(true)}
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                        >
+                            Cập nhật phần mềm
+                        </button>
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -111,22 +193,35 @@ export default function DeviceSoftwarePanel({ deviceId, softwares, onChanged }: 
                                 <th className="whitespace-nowrap px-4 py-3">Tên phần mềm</th>
                                 <th className="whitespace-nowrap px-4 py-3">Ngày cài</th>
                                 <th className="whitespace-nowrap px-4 py-3">License key</th>
+                                <th className="whitespace-nowrap px-4 py-3 text-right">
+                                    <button
+                                        type="button"
+                                        onClick={togglePrioritySort}
+                                        className="cursor-pointer inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                        title="Sắp xếp theo ưu tiên"
+                                    >
+                                        Ưu tiên
+                                        {prioritySort === "asc" && <span>↑</span>}
+                                        {prioritySort === "desc" && <span>↓</span>}
+                                    </button>
+                                </th>
                                 <th className="whitespace-nowrap px-4 py-3 text-right">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {softwares.length === 0 && (
+                            {visibleSoftwares.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Chưa cài phần mềm nào.
+                                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
+                                        {softwares.length === 0 ? "Chưa cài phần mềm nào." : "Không có phần mềm phù hợp."}
                                     </td>
                                 </tr>
                             )}
-                            {softwares.map((item) => (
+                            {visibleSoftwares.map((item) => (
                                 <tr key={item.softwareId} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
                                     <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-[#191c1e]">{item.softwareName}</td>
                                     <td className="whitespace-nowrap px-4 py-3 text-sm text-[#5e3f3a]">{formatDate(item.installDate)}</td>
                                     <td className="whitespace-nowrap px-4 py-3 text-sm text-[#5e3f3a]">{item.licenseKey || "-"}</td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-[#5e3f3a]">{item.softwarePriority ?? "—"}</td>
                                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button

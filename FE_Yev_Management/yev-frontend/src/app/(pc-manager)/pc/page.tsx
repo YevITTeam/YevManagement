@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
 import PrintDeviceCodeDialog from "../../../modules/pc-management/components/PrintDeviceCodeDialog";
+import RowActionsMenu from "../../../modules/pc-management/components/RowActionsMenu";
 import DeviceForm, { type DeviceFormValues } from "../../../modules/pc-management/components/devices/DeviceForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { DeviceApi } from "../../../modules/pc-management/api/device.api";
@@ -19,11 +20,11 @@ const statusLabels: Record<number, string> = {
 };
 
 const statusClasses: Record<number, string> = {
-  0: "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]",
-  1: "border border-[#e9bcb6] bg-[#fff4f2] text-[#930006]",
-  2: "border border-[#d8e2ff] bg-[#f4f5ff] text-[#004494]",
-  3: "border border-[#ffdad6] bg-[#fff8f7] text-[#93000a]",
-  4: "border border-[#dae2fd] bg-[#f5f7ff] text-[#5c647a]",
+  0: "border border-[#cbd5e1] bg-[#eef2f6] text-[#475569]",
+  1: "border border-[#16a34a] bg-[#16a34a] text-white",
+  2: "border border-[#f59e0b] bg-[#fef3c7] text-[#b45309]",
+  3: "border border-[#dc2626] bg-[#dc2626] text-white",
+  4: "border border-[#6366f1] bg-[#eef2ff] text-[#4338ca]",
 };
 
 const defaultFilters: DeviceFilters = {
@@ -232,7 +233,7 @@ export default function PcDashboardPage() {
             onClick={() => router.push("/pc/reports")}
             className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
           >
-            📊 Xem báo cáo
+             Xem báo cáo
           </button>
           <button className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]">
             ↻ Đồng bộ Tanium
@@ -283,19 +284,22 @@ export default function PcDashboardPage() {
                 <th className="whitespace-nowrap px-4 py-3">Người quản lý</th>
                 <th className="whitespace-nowrap px-4 py-3">Mua / Hết hạn</th>
                 <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Thao tác</th>
+                <th className="whitespace-nowrap px-4 py-3">Ghi chú</th>
+                <th className="sticky right-0 z-10 whitespace-nowrap bg-[#f8fafc] px-4 py-3 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
+                  Hành động
+                </th>
               </tr>
             </thead>
             <tbody>
               {!isLoading && filteredDevices.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
                     Không có dữ liệu thiết bị.
                   </td>
                 </tr>
               )}
               {filteredDevices.map((device) => (
-                <tr key={device.id} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
+                <tr key={device.id} className="group border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
                   <td className="whitespace-nowrap px-4 py-3 align-top">
                     <div className="text-sm font-semibold text-[#191c1e]">{device.deviceCode}</div>
                     <div className="max-w-[200px] truncate text-xs text-[#5e3f3a]" title={device.deviceName}>
@@ -326,35 +330,26 @@ export default function PcDashboardPage() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 align-top">
                     <span
-                      className={`inline-flex whitespace-nowrap px-3 py-1 text-xs font-semibold ${statusClasses[device.status] ?? statusClasses[0]}`}
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[device.status] ?? statusClasses[0]}`}
                     >
+                      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
                       {statusLabels[device.status] ?? "Không xác định"}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top text-right text-sm">
-                    <div className="inline-flex items-center gap-3">
-                      <button
-                        onClick={() => router.push(`/pc/devices/${device.id}`)}
-                        className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                        title="Chi tiết"
-                      >
-                        Chi tiết
-                      </button>
-                      <button
-                        onClick={() => openEditForm(device)}
-                        disabled={isLoadingEditTarget}
-                        className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:opacity-50"
-                        title="Sửa"
-                      >
-                        Sửa
-                      </button>
-                      <button
-                        onClick={() => setDeletingDevice(device)}
-                        className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                        title="Xoá"
-                      >
-                        Xoá
-                      </button>
+                  <td className="px-4 py-3 align-top">
+                    <div className="max-w-[180px] truncate text-xs text-[#5e3f3a]" title={device.note ?? undefined}>
+                      {device.note || "-"}
+                    </div>
+                  </td>
+                  <td className="sticky right-0 whitespace-nowrap bg-white px-4 py-3 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)] group-hover:bg-[#f8fafc]">
+                    <div className="inline-flex justify-end">
+                      <RowActionsMenu
+                        actions={[
+                          { label: "Chi tiết", onClick: () => router.push(`/pc/devices/${device.id}`) },
+                          { label: "Sửa", onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
+                          { label: "Xoá", onClick: () => setDeletingDevice(device), variant: "danger" },
+                        ]}
+                      />
                     </div>
                   </td>
                 </tr>

@@ -1,5 +1,5 @@
 "use client";
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 
 import { SoftwareApi } from "@/modules/pc-management/api/software.api";
@@ -12,21 +12,24 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 
 const PAGE_SIZE = 10;
+const PRIORITY_FILTER_ALL = "all";
+const PRIORITY_FILTER_NONE = "none";
+type PrioritySort = "none" | "asc" | "desc";
 
+// Danh mục phần mềm không phân trang phía BE (grid-list chỉ hỗ trợ keyword),
+// nên tải toàn bộ 1 lần rồi lọc/sắp xếp/phân trang phía FE để lọc theo Ưu tiên đúng trên toàn bộ dữ liệu.
 const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareList({ onLoadingChange }, ref) {
-    const [softwares, setSoftwares] = useState<SoftwareDto[]>([]);
+    const [allSoftwares, setAllSoftwares] = useState<SoftwareDto[]>([]);
     const [groups, setGroups] = useState<SoftwareGroupDto[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
+    const [priorityFilter, setPriorityFilter] = useState<string>(PRIORITY_FILTER_ALL);
+    const [prioritySort, setPrioritySort] = useState<PrioritySort>("none");
 
     const [pageIndex, setPageIndex] = useState(1);
-    const [totalCount, setTotalCount] = useState(0);
-    const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -40,16 +43,8 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
         setIsLoading(true);
         setError(null);
         try {
-            const result = await SoftwareApi.getSoftwarePageNation({
-                pageIndex,
-                pageSize: PAGE_SIZE,
-                keyword: appliedKeyword || undefined,
-            });
-            setSoftwares(result.data);
-            setTotalCount(result.totalCount);
-            setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
+            const result = await SoftwareApi.getAllSoftware();
+            setAllSoftwares(result);
         } catch (err) {
             console.error(err);
             const message = getApiErrorMessage(err, "Không thể tải danh sách phần mềm.");
@@ -62,8 +57,7 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
 
     useEffect(() => {
         fetchSoftwares();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+    }, []);
 
     useEffect(() => {
         onLoadingChange?.(isLoading);
@@ -90,9 +84,69 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
         };
     }, []);
 
+    const priorityOptions = useMemo(() => {
+        const values = new Set<number>();
+        let hasNone = false;
+        allSoftwares.forEach((software) => {
+            if (software.softwarePriority === null) hasNone = true;
+            else values.add(software.softwarePriority);
+        });
+        return { values: Array.from(values).sort((a, b) => a - b), hasNone };
+    }, [allSoftwares]);
+
+    const filteredSoftwares = useMemo(() => {
+        const keywordLower = appliedKeyword.trim().toLowerCase();
+        let list = allSoftwares.filter((software) => {
+            const matchesKeyword =
+                !keywordLower ||
+                software.softwareCode.toLowerCase().includes(keywordLower) ||
+                software.softwareName.toLowerCase().includes(keywordLower);
+            const matchesPriority =
+                priorityFilter === PRIORITY_FILTER_ALL
+                    ? true
+                    : priorityFilter === PRIORITY_FILTER_NONE
+                      ? software.softwarePriority === null
+                      : software.softwarePriority === Number(priorityFilter);
+            return matchesKeyword && matchesPriority;
+        });
+
+        if (prioritySort !== "none") {
+            list = [...list].sort((a, b) => {
+                const aValue = a.softwarePriority ?? Number.POSITIVE_INFINITY;
+                const bValue = b.softwarePriority ?? Number.POSITIVE_INFINITY;
+                return prioritySort === "asc" ? aValue - bValue : bValue - aValue;
+            });
+        }
+        return list;
+    }, [allSoftwares, appliedKeyword, priorityFilter, prioritySort]);
+
+    const totalCount = filteredSoftwares.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+    useEffect(() => {
+        if (pageIndex > totalPages) setPageIndex(totalPages);
+    }, [pageIndex, totalPages]);
+
+    const pagedSoftwares = useMemo(
+        () => filteredSoftwares.slice((pageIndex - 1) * PAGE_SIZE, pageIndex * PAGE_SIZE),
+        [filteredSoftwares, pageIndex]
+    );
+
+    const hasPreviousPage = pageIndex > 1;
+    const hasNextPage = pageIndex < totalPages;
+
     const handleSearch = () => {
         setPageIndex(1);
         setAppliedKeyword(keyword.trim());
+    };
+
+    const handlePriorityFilterChange = (value: string) => {
+        setPageIndex(1);
+        setPriorityFilter(value);
+    };
+
+    const togglePrioritySort = () => {
+        setPrioritySort((current) => (current === "none" ? "asc" : current === "asc" ? "desc" : "none"));
     };
 
     const openCreateForm = () => {
@@ -166,7 +220,7 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
         <div className="space-y-4">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
@@ -181,9 +235,22 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                         >
                             Tìm kiếm
                         </button>
+                        <select
+                            value={priorityFilter}
+                            onChange={(event) => handlePriorityFilterChange(event.target.value)}
+                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        >
+                            <option value={PRIORITY_FILTER_ALL}>Tất cả mức ưu tiên</option>
+                            {priorityOptions.values.map((value) => (
+                                <option key={value} value={value}>
+                                    Ưu tiên {value}
+                                </option>
+                            ))}
+                            {priorityOptions.hasNone && <option value={PRIORITY_FILTER_NONE}>Chưa đặt ưu tiên</option>}
+                        </select>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${softwares.length} / ${totalCount} bản ghi`}
+                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${pagedSoftwares.length} / ${totalCount} bản ghi`}
                     </div>
                 </div>
 
@@ -201,19 +268,30 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                                 <th className="px-6 py-3">Loại</th>
                                 <th className="px-6 py-3">Nhà phát hành</th>
                                 <th className="px-6 py-3 text-right">Số lượng</th>
-                                <th className="px-6 py-3 text-right">Ưu tiên</th>
+                                <th className="px-6 py-3 text-right">
+                                    <button
+                                        type="button"
+                                        onClick={togglePrioritySort}
+                                        className="cursor-pointer inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                        title="Sắp xếp theo ưu tiên"
+                                    >
+                                        Ưu tiên
+                                        {prioritySort === "asc" && <span>↑</span>}
+                                        {prioritySort === "desc" && <span>↓</span>}
+                                    </button>
+                                </th>
                                 <th className="px-6 py-3 text-right">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && softwares.length === 0 && (
+                            {!isLoading && pagedSoftwares.length === 0 && (
                                 <tr>
                                     <td colSpan={8} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có dữ liệu phần mềm.
                                     </td>
                                 </tr>
                             )}
-                            {softwares.map((software) => (
+                            {pagedSoftwares.map((software) => (
                                 <tr key={software.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{software.softwareCode}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{software.softwareName}</td>
