@@ -1,5 +1,7 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
-const AUTH_TOKEN_KEY = "yev_auth_token";
+export const AUTH_TOKEN_KEY = "yev_auth_token";
+// Cache thông tin user hiện tại đi kèm token, để tránh gọi lại windows-login (bật popup đăng nhập Windows) khi đã đăng nhập.
+export const CURRENT_USER_KEY = "yev_current_user";
 
 const getStoredToken = (): string | null => {
   if (typeof window === "undefined") {
@@ -20,6 +22,8 @@ const persistToken = (token: string | null) => {
   }
 
   window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  // Token bị xoá (hết hạn / re-login thất bại) → dọn luôn cache user để lần sau buộc đăng nhập lại.
+  window.localStorage.removeItem(CURRENT_USER_KEY);
 };
 
 const extractTokenFromPayload = (payload: unknown): string | null => {
@@ -79,10 +83,10 @@ const fetchClient = async <T>(
   // -----------------------------------------------------------
   if (response.status === 401 && !endpoint.includes("windows-login")) {
     try {
-     
-      const loginRes = await fetch(`${BASE_URL}/windows-login`, {
+
+      const loginRes = await fetch(`${BASE_URL}/Auth/windows-login`, {
         method: "POST",
-        credentials: "include" 
+        credentials: "include"
       });
 
       if (loginRes.ok) {

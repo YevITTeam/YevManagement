@@ -28,7 +28,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
             const [usersData, rolesData, meData] = await Promise.all([
                 AuthApi.getAllUsersWithRoles(),
                 AuthApi.getAllRoles(),
-                AuthApi.windowsLogin(),
+                AuthApi.getCurrentUser(),
             ]);
             setUsers(usersData);
             setRoles(rolesData);

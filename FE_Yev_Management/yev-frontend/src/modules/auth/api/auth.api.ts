@@ -1,4 +1,4 @@
-import { api } from "@/lib/client";
+import { api, AUTH_TOKEN_KEY, CURRENT_USER_KEY } from "@/lib/client";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { ApiResponse } from "@/types/api";
 
@@ -19,6 +19,32 @@ export const AuthApi = {
     // Ép kiểu cho toàn bộ cấu trúc trả về
     const response = await api.post<ApiResponse<any>>(ENDPOINTS.AUTH.windowsLogin);
     return response.data?.user as UserDto;
+  },
+
+  // Lấy user hiện tại: nếu ĐÃ có token + cache thì trả về cache luôn (KHÔNG gọi windows-login → không bật popup đăng nhập Windows).
+  // Chỉ gọi windows-login khi CHƯA có token (lần đầu vào, hoặc token đã bị xoá). Dùng forceRefresh để buộc lấy lại từ server.
+  getCurrentUser: async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}): Promise<UserDto | null> => {
+    if (typeof window === "undefined") return null;
+
+    const hasToken = Boolean(window.localStorage.getItem(AUTH_TOKEN_KEY));
+    const cachedRaw = window.localStorage.getItem(CURRENT_USER_KEY);
+
+    if (!forceRefresh && hasToken && cachedRaw) {
+      try {
+        return JSON.parse(cachedRaw) as UserDto;
+      } catch {
+        window.localStorage.removeItem(CURRENT_USER_KEY);
+      }
+    }
+
+    // Token được client.ts tự trích xuất & lưu từ response windows-login.
+    const user = await AuthApi.windowsLogin();
+    if (user) {
+      window.localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+    } else {
+      window.localStorage.removeItem(CURRENT_USER_KEY);
+    }
+    return user;
   },
 
   getAllUsersWithRoles: async () => {

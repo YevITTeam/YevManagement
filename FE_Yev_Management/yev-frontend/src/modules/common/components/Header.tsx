@@ -6,8 +6,6 @@ import Link from "next/link";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
 
-const AUTH_TOKEN_KEY = "yev_auth_token";
-
 export default function Header() {
   const pathname = usePathname() || "";
   const hasSidebar = pathname.startsWith("/pc");
@@ -22,7 +20,7 @@ export default function Header() {
       }
 
       try {
-        const response = await AuthApi.windowsLogin();
+        const response = await AuthApi.getCurrentUser();
         setUser(response);
       } catch (error) {
         console.error("Lỗi lấy thông tin:", error);
