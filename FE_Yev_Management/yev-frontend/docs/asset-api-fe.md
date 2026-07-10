@@ -459,6 +459,123 @@ GET /api/TransferHistory/device/{deviceId}
 ```
 Trả `data[]` sort theo `transferDate` mới nhất trước. **Không có** API sửa/xoá `TransferHistory` — đây là log lịch sử, mỗi lần chuyển máy tạo 1 dòng cố định.
 
+### 5.10. Import Device hàng loạt từ Excel — `/api/DeviceImport` (2026-07-10) ⭐
+
+Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang dùng để thêm thiết bị mới) và muốn thêm hàng loạt thay vì tạo tay từng cái. **Bắt buộc quy trình 2 bước — xem trước rồi mới xác nhận**, không có API ghi thẳng file vào DB.
+
+**Mẫu file Excel — 8 cột cố định theo đúng thứ tự, dòng 1 là header** (server luôn bỏ qua dòng 1, ghi gì cũng được):
+
+| Cột | Tên trong Excel | Map sang field | Bắt buộc? |
+|---|---|---|---|
+| A | MQL | Mã thiết bị mới (`deviceCode`) | ✅ Bắt buộc — phải **chưa tồn tại** trong hệ thống |
+| B | Xưởng | Tên Chi nhánh — khớp `branchName` có sẵn | ✅ Bắt buộc |
+| C | Loại Thiết Bị | Tên Loại thiết bị — khớp `typeName` có sẵn | ✅ Bắt buộc |
+| D | Nhà Cung Cấp | Tên Nhà cung cấp — khớp `supplierName` có sẵn | ✅ Bắt buộc |
+| E | Ngày Mua | Ngày mua (`purchaseDate`) | ✅ Bắt buộc — xem định dạng bên dưới |
+| F | Ghi Chú | Ghi chú (`note`) | Không bắt buộc |
+| G | Số SerialNumber | Số serial (`serialNumber`) | Không bắt buộc — phải unique nếu có nhập |
+| H | MQL Cũ | Mã thiết bị **bị thay thế** bởi thiết bị mới này | Không bắt buộc |
+
+> Cột B/C/D là **TÊN** (text), không phải Id — server tự tra theo tên (không phân biệt hoa/thường). **Không tự tạo mới** nếu chưa có sẵn — không khớp tên nào thì dòng đó báo lỗi ở bước preview, chặn import.
+
+**Định dạng cột "Ngày Mua"**:
+- Ô Excel là **Date thật** → đọc đúng luôn, không cần lo định dạng hiển thị.
+- Ô là **text** → chỉ nhận đúng 1 trong các định dạng cố định: `dd/MM/yyyy` (khuyến nghị, VD `01/07/2026`), `d/M/yyyy`, `dd-MM-yyyy`, `d-M-yyyy`, `yyyy-MM-dd`. Định dạng khác hoặc để trống → báo lỗi "Thiếu hoặc sai định dạng Ngày Mua".
+
+**Field Device `[Required]` mà Excel không có cột tương ứng** — server tự đặt mặc định:
+
+| Field | Giá trị mặc định |
+|---|---|
+| `deviceName` | = giống `deviceCode` (MQL) |
+| `manager` | Chuỗi rỗng |
+| `email` | Chuỗi rỗng |
+| `depreciationMonths` | **60 tháng** (cố định) |
+| `status` | `0` — Chờ sử dụng |
+
+→ FE nên nhắc người dùng: sau khi import, vào từng thiết bị sửa lại `Tên thiết bị`/`Người quản lý`/`Email`/`Số tháng khấu hao` nếu cần chính xác hơn mặc định.
+
+**Cột "MQL Cũ" — tự động thực hiện nghiệp vụ "chuyển máy"**: nếu dòng có giá trị này, server coi thiết bị mới **thay thế** thiết bị cũ đó — thực hiện y hệt `POST /api/TransferHistory` (mục 5.9): chuyển IP chính + phần mềm cài từ thiết bị cũ sang thiết bị mới vừa tạo, đổi trạng thái thiết bị cũ (Chờ sử dụng hoặc Chờ thanh lý tuỳ hạn sử dụng), tạo 1 dòng lịch sử chuyển máy. `MQL Cũ` phải khớp đúng 1 thiết bị **đang có sẵn, chưa xoá** — không khớp thì báo lỗi dòng đó.
+
+**Bước 1 — Preview (chỉ đọc, không ghi DB)**: `POST /api/DeviceImport/preview` — `multipart/form-data`, field file tên `file`.
+
+```jsonc
+// Response — data
+{
+  "rows": [
+    {
+      "rowNumber": 2,                    // số dòng trong Excel — dùng để tô đúng dòng lỗi trên UI
+      "deviceCode": "TEST-IMPORT-001",
+      "branchName": "CONFIRM",
+      "deviceTypeName": "Access Point",
+      "supplierName": "Đỉnh Thiên",
+      "purchaseDate": "2026-01-01T00:00:00",
+      "note": "Ghi chú...",
+      "serialNumber": null,
+      "oldDeviceCode": null,
+      "resolvedBranchId": 8,              // server đã tra sẵn Id — FE không cần tự tra
+      "resolvedDeviceTypeId": 11,
+      "resolvedSupplierId": 2,
+      "resolvedOldDeviceId": null,
+      "isValid": true,
+      "errors": []
+    },
+    {
+      "rowNumber": 3,
+      "deviceCode": "TEST-IMPORT-002",
+      "branchName": "Xưởng không tồn tại",
+      "deviceTypeName": "Access Point",
+      "supplierName": "Đỉnh Thiên",
+      "purchaseDate": "2026-01-01T00:00:00",
+      "note": null, "serialNumber": null, "oldDeviceCode": null,
+      "resolvedBranchId": null, "resolvedDeviceTypeId": 11, "resolvedSupplierId": 2, "resolvedOldDeviceId": null,
+      "isValid": false,
+      "errors": ["Không tìm thấy Xưởng 'Xưởng không tồn tại'."]
+    }
+  ],
+  "totalRows": 2,
+  "validRows": 1,
+  "invalidRows": 1
+}
+```
+
+FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm nội dung `errors`, để người dùng sửa lại file Excel gốc rồi upload/preview lại. Nút "Xác nhận import" nên **disable** khi `invalidRows > 0` (server cũng tự chặn ở bước confirm nếu cố tình gửi lúc còn lỗi).
+
+**Bước 2 — Confirm (ghi DB thật)**: `POST /api/DeviceImport/confirm` — `Content-Type: application/json`, body gửi lại **đúng mảng `rows`** vừa nhận từ bước preview (chỉ cần các field thô, không cần gửi `resolvedXxxId`/`isValid`/`errors` — server tự tra lại từ đầu theo dữ liệu DB hiện tại, không tin Id do FE gửi lên):
+
+```jsonc
+// Request body
+{
+  "rows": [
+    {
+      "rowNumber": 2,
+      "deviceCode": "TEST-IMPORT-001",
+      "branchName": "CONFIRM",
+      "deviceTypeName": "Access Point",
+      "supplierName": "Đỉnh Thiên",
+      "purchaseDate": "2026-01-01T00:00:00",
+      "note": "Ghi chú...",
+      "serialNumber": null,
+      "oldDeviceCode": null
+    }
+  ]
+}
+```
+
+```jsonc
+// Response — data (thành công)
+{
+  "createdCount": 1,
+  "replacedOldDeviceCount": 0,      // số dòng có "MQL Cũ" đã thực hiện chuyển máy thành công
+  "createdDeviceIds": [17996]
+}
+```
+
+> **Confirm luôn validate lại từ đầu** theo dữ liệu DB tại thời điểm bấm xác nhận (phòng trường hợp có gì đó đổi khác so với lúc xem preview — VD người khác vừa tạo trùng `MQL`). Nếu còn **bất kỳ** dòng nào lỗi, server **không ghi gì cả** (toàn bộ batch — atomic, không có chuyện tạo được nửa chừng) và trả 400 với `errors: string[]`, mỗi phần tử dạng `"Dòng {n}: {lý do}"` — FE xử lý y hệt lỗi 400 thông thường (mục 1.3), không cần logic riêng.
+
+**Quyền**: dùng chung permission `Asset.Device.Create` cho cả `preview` và `confirm` (không tách permission riêng cho import).
+
+**Giới hạn hiện tại**: chỉ hỗ trợ **tạo mới**, chưa hỗ trợ cập nhật Device đã tồn tại qua Excel — `MQL` trùng thiết bị đang có (kể cả đã xoá mềm) luôn báo lỗi, không ghi đè. Chưa có endpoint tải file Excel mẫu — dùng file mẫu công ty hiện có sẵn.
+
 ---
 
 ## 6. DeviceConfiguration (Cấu hình phần cứng)
@@ -604,6 +721,7 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 | GET | `/api/Device/grid-list?...` (không có `/all`), `/available?keyword=` (không phân trang, máy `Chờ sử dụng`, mới 2026-07-10), `/{id}`, `/{id}/detail` — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
 | GET | `/api/Report/device-list?deviceTypeId=&branchId=&keyword=` (không phân trang, mới 2026-07-09) | Báo cáo in ấn (controller riêng, sẽ gom thêm các báo cáo khác) |
 | POST | `/api/TransferHistory` (mới 2026-07-09) — GET `/api/TransferHistory/device/{deviceId}` | Chuyển máy (di chuyển IP + phần mềm, đổi trạng thái máy cũ) |
+| POST | `/api/DeviceImport/preview` (multipart file, không ghi DB), `/api/DeviceImport/confirm` (mới 2026-07-10) | Import Device hàng loạt từ Excel, có bước xem trước |
 | GET | `/api/DeviceConfiguration/by-device/{deviceId}` — POST, PUT `/{id}`, DELETE `/{id}`, GET `/{configId}/initial`, DELETE `/initial/{id}`, GET `/{configId}/history` | Cấu hình phần cứng |
 | GET | `/api/DeviceSoftware/device/{deviceId}` — POST, PUT, DELETE `/device/{deviceId}/software/{softwareId}`, GET `/picker/{deviceId}`, PUT `/sync` | Phần mềm cài trên thiết bị |
 
@@ -618,3 +736,4 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 5. Dialog quản lý phần mềm → `GET /api/DeviceSoftware/picker/{deviceId}` để mở, `PUT /api/DeviceSoftware/sync` để lưu (xem mục 7.4).
 6. Xem lịch sử sửa chữa cấu hình → `GET /api/DeviceConfiguration/{configId}/history` (cần có `configId` từ bước 1).
 7. Màn "Đổi thiết bị" → chọn máy mới qua `GET /api/Device/available?keyword=` (chỉ máy `Chờ sử dụng`), gọi `POST /api/TransferHistory` — server tự lo di chuyển IP/phần mềm + đổi trạng thái cả 2 máy (mục 5.9).
+8. Màn "Import Excel" → upload file vào `POST /api/DeviceImport/preview`, render bảng preview theo `rows`/`errors`, disable nút xác nhận nếu `invalidRows > 0`; bấm xác nhận → gửi lại nguyên `rows` vào `POST /api/DeviceImport/confirm` (mục 5.10).

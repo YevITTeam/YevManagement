@@ -200,6 +200,15 @@ export const api = {
       body: data ? JSON.stringify(data) : undefined,
     }),
 
+  // Dùng cho upload file (multipart/form-data) — KHÔNG JSON.stringify body, để browser tự set
+  // Content-Type kèm boundary. fetchClient đã né set Content-Type khi body instanceof FormData.
+  postForm: <T>(url: string, formData: FormData, options?: RequestInit) =>
+    fetchClient<T>(url, {
+      ...options,
+      method: "POST",
+      body: formData,
+    }),
+
   put: <T>(url: string, data?: unknown, options?: RequestInit) =>
     fetchClient<T>(url, {
       ...options,

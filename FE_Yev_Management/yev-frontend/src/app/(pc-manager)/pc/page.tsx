@@ -8,6 +8,7 @@ import PrintDeviceCodeDialog from "../../../modules/pc-management/components/Pri
 import RowActionsMenu from "../../../modules/pc-management/components/RowActionsMenu";
 import DeviceForm, { type DeviceFormValues } from "../../../modules/pc-management/components/devices/DeviceForm";
 import TransferDeviceDialog from "../../../modules/pc-management/components/devices/TransferDeviceDialog";
+import ImportDeviceDialog from "../../../modules/pc-management/components/devices/ImportDeviceDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { DeviceApi } from "../../../modules/pc-management/api/device.api";
 import type { DeviceDto, DeviceGetDto } from "../../../modules/pc-management/types/device.dto";
@@ -81,6 +82,7 @@ export default function PcDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const router = useRouter();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -266,7 +268,10 @@ export default function PcDashboardPage() {
           <button className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]">
             ↻ Đồng bộ Tanium
           </button>
-          <button className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]">
+          <button
+            onClick={() => setIsImportOpen(true)}
+            className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+          >
             ⤴ Nhập từ Excel
           </button>
           <button
@@ -428,6 +433,15 @@ export default function PcDashboardPage() {
         isOpen={isPrintOpen}
         devices={devices}
         onClose={() => setIsPrintOpen(false)}
+      />
+
+      <ImportDeviceDialog
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImported={() => {
+          setIsImportOpen(false);
+          refetchDevices();
+        }}
       />
 
       <TransferDeviceDialog

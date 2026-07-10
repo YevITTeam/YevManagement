@@ -34,8 +34,8 @@ export default function PcManagerSidebar() {
             Y
           </div>
           <div>
-            <div className="text-lg font-semibold text-[#191c1e]">YAZAKI IT</div>
-            <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">Management Suite</div>
+            <div className="text-lg font-semibold text-[#191c1e]">YEV IT</div>
+            <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">Quản lý PC</div>
           </div>
         </div>
       </div>
