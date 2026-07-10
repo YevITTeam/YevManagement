@@ -2,6 +2,7 @@
 using Identity.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
 using System.Security.Claims;
 
@@ -32,6 +33,7 @@ namespace Identity.Api.Controllers
             var fullName = User.Claims.FirstOrDefault(c => c.Type == "FullName")?.Value ?? User.Identity.Name;
             var username = User.Identity.Name;
             var roles = User.Claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value).ToList();
+            var permissions = User.Claims.Where(c => c.Type == "Permission").Select(c => c.Value).Distinct().ToList();
             var deviceName = User.Claims.FirstOrDefault(c => c.Type == "DeviceName")?.Value;
 
             int userId = 0;
@@ -47,6 +49,7 @@ namespace Identity.Api.Controllers
                 UserName = username,
                 FullName = fullName,
                 Roles = roles,
+                Permissions = permissions,
                 DeviceName = deviceName
             };
 
@@ -61,7 +64,7 @@ namespace Identity.Api.Controllers
             return Success(responseData, "Đăng nhập thành công!");
         }
 
-        [Authorize(Roles ="Admin")]
+        [RequirePermission("Identity.User.View")]
         [HttpGet("get-all-users-with-roles")]
         public async Task<ActionResult<ApiResponse<List<UserDto>>>> GetAllUsersWithRoles()
         {
@@ -69,7 +72,7 @@ namespace Identity.Api.Controllers
             return Success(users, "Lấy danh sách người dùng và quyền thành công!");
         }
 
-        [Authorize(Roles ="Admin")]
+        [RequirePermission("Identity.User.UpdateRoles")]
         [HttpPost("update-user-roles")]
         public async Task<ActionResult<ApiResponse<string>>> UpdateUserRoles([FromBody] UpdateUserRolesDto request)
         {
@@ -88,7 +91,7 @@ namespace Identity.Api.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin")]
+        [RequirePermission("Identity.Role.View")]
         [HttpGet("get-all-roles")]
         public async Task<ActionResult<ApiResponse<List<RoleDto>>>> GetAllRoles()
         {
@@ -96,7 +99,7 @@ namespace Identity.Api.Controllers
             return Success(roles, "Lấy danh sách quyền thành công!");
         }
 
-        [Authorize(Roles = "Admin")]
+        [RequirePermission("Identity.Role.Create")]
         [HttpPost("create-role")]
         public async Task<ActionResult<ApiResponse<RoleDto>>> CreateRole([FromBody] RoleDto roleDto)
         {
@@ -115,7 +118,7 @@ namespace Identity.Api.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin")]
+        [RequirePermission("Identity.Role.Update")]
         [HttpPut("update-role/{roleId}")]
         public async Task<ActionResult<ApiResponse<bool>>> UpdateRole(int roleId, [FromBody] UpdateRoleDto roleDto)
         {
@@ -141,7 +144,7 @@ namespace Identity.Api.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin")]
+        [RequirePermission("Identity.Role.Delete")]
         [HttpDelete("delete-role/{roleId}")]
         public async Task<ActionResult<ApiResponse<bool>>> DeleteRole(int roleId)
         {

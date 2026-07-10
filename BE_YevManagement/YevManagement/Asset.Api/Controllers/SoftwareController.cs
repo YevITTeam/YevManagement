@@ -1,12 +1,11 @@
 using Asset.Application.Dtos.Softwares;
 using Asset.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
 
 namespace Asset.Api.Controllers
 {
-    [AllowAnonymous]
     public class SoftwareController : BaseController
     {
         private readonly ISoftwareService _softwareService;
@@ -16,6 +15,7 @@ namespace Asset.Api.Controllers
             _softwareService = softwareService;
         }
 
+        [RequirePermission("Asset.Software.View")]
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<SoftwareDto>>>> GetPaged(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null)
@@ -24,6 +24,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.Software.View")]
         [HttpGet("all")]
         public async Task<ActionResult<ApiResponse<List<SoftwareDto>>>> GetAllActive()
         {
@@ -31,6 +32,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.Software.View")]
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<SoftwareDto>>> GetById(int id)
         {
@@ -38,6 +40,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.Software.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateSoftwareDto request)
         {
@@ -45,6 +48,7 @@ namespace Asset.Api.Controllers
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Thêm phần mềm thành công.");
         }
 
+        [RequirePermission("Asset.Software.Update")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateSoftwareDto request)
         {
@@ -54,6 +58,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Cập nhật phần mềm thành công.");
         }
 
+        [RequirePermission("Asset.Software.Delete")]
         [HttpDelete("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Delete(int id)
         {

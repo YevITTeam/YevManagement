@@ -1,13 +1,12 @@
 using Asset.Application.Dtos.Devices;
 using Asset.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
 using System.Collections.Generic;
 
 namespace Asset.Api.Controllers
 {
-    [AllowAnonymous]
     public class ReportController : BaseController
     {
         private readonly IDeviceService _deviceService;
@@ -16,6 +15,7 @@ namespace Asset.Api.Controllers
             _deviceService = deviceService;
         }
 
+        [RequirePermission("Asset.Report.View")]
         [HttpGet("device-list")]
         public async Task<ActionResult<ApiResponse<List<DeviceReportItemDto>>>> GetDeviceList(
             [FromQuery] DeviceReportFilterRequest request)

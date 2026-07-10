@@ -13,5 +13,7 @@ namespace Identity.Application.Interfaces.Service
         IRoleRepository Roles { get; }
 
         ILoginUserIPRepository LoginUserIPs { get; }
+
+        IPermissionRepository Permissions { get; }
     }
 }

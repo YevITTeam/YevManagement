@@ -15,15 +15,18 @@ namespace Identity.Infrastructure.Repositories
             IdentityDbContext dbContext,
             IUserReposiory users,
             IRoleRepository roles,
-            ILoginUserIPRepository loginUserIPs) : base(dbContext)
+            ILoginUserIPRepository loginUserIPs,
+            IPermissionRepository permissions) : base(dbContext)
         {
             Users = users;
             Roles = roles;
             LoginUserIPs = loginUserIPs;
+            Permissions = permissions;
         }
 
         public IUserReposiory Users { get; }
         public IRoleRepository Roles { get; }
         public ILoginUserIPRepository LoginUserIPs { get; }
+        public IPermissionRepository Permissions { get; }
     }
 }

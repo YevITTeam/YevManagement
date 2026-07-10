@@ -112,6 +112,49 @@ namespace Asset.Application.Services
             );
         }
 
+        public async Task<List<DeviceGridDto>> GetAvailableForTransferAsync(string? keyword)
+        {
+            var query = _unitOfWork.Devices.GetQueryable(
+                false,
+                d => d.Branch,
+                d => d.Supplier,
+                d => d.DeviceType);
+
+            query = query.Where(d => !d.IsDeleted && d.Status == (int)DeviceStatus.PendingUse);
+
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                query = query.Where(d => d.DeviceCode.Contains(keyword));
+            }
+
+            return await _unitOfWork.Devices.ToListAsync(
+                query.OrderBy(d => d.DeviceCode),
+                d => new DeviceGridDto
+                {
+                    Id = d.Id,
+                    DeviceCode = d.DeviceCode,
+                    DeviceName = d.DeviceName,
+                    BranchName = d.Branch.BranchName,
+                    SupplierName = d.Supplier.SupplierName,
+                    DeviceTypeName = d.DeviceType.TypeName,
+                    IpAddress = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).FirstOrDefault(),
+                    PurchaseDate = d.PurchaseDate,
+                    ExpirationDate = d.ExpirationDate,
+                    Manager = d.Manager,
+                    Note = d.Note,
+                    Email = d.Email,
+                    IsOutsourced = d.IsOutsourced,
+                    SerialNumber = d.SerialNumber,
+                    IsUseUsb = d.IsUseUsb,
+                    Status = d.Status,
+                    StatusText = d.Status == (int)DeviceStatus.PendingUse ? "Chờ sử dụng"
+                        : d.Status == (int)DeviceStatus.InUse ? "Đang sử dụng"
+                        : d.Status == (int)DeviceStatus.PendingLiquidation ? "Chờ thanh lý"
+                        : d.Status == (int)DeviceStatus.Liquidated ? "Đã thanh lý"
+                        : "Không xác định"
+                });
+        }
+
         public async Task<List<DeviceReportItemDto>> GetReportListAsync(DeviceReportFilterRequest request)
         {
             var query = _unitOfWork.Devices.GetQueryable(false, d => d.IpAddresses)

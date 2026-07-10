@@ -1,7 +1,7 @@
-﻿using Asset.Application.Dtos.DeviceSoftwares;
+using Asset.Application.Dtos.DeviceSoftwares;
 using Asset.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
 using System;
 using System.Collections.Generic;
@@ -9,7 +9,6 @@ using System.Text;
 
 namespace Asset.Api.Controllers
 {
-    [AllowAnonymous]
     public class DeviceSoftwareController : BaseController
     {
         private readonly IDeviceSoftwareService _deviceSoftwareService;
@@ -19,6 +18,7 @@ namespace Asset.Api.Controllers
             _deviceSoftwareService = deviceSoftwareService;
         }
 
+        [RequirePermission("Asset.DeviceSoftware.View")]
         [HttpGet("device/{deviceId}")]
         public async Task<ActionResult<ApiResponse<List<DeviceSoftwareDto>>>> GetByDeviceId(int deviceId)
         {
@@ -26,6 +26,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.DeviceSoftware.Create")]
         [HttpPost]
         public async Task<ActionResult<ApiResponse<DeviceSoftwareDto>>> Create([FromBody] CreateDeviceSoftwareDto request)
         {
@@ -33,6 +34,7 @@ namespace Asset.Api.Controllers
             return Success(result, "Thêm phần mềm cho thiết bị thành công.");
         }
 
+        [RequirePermission("Asset.DeviceSoftware.Update")]
         [HttpPut]
         public async Task<ActionResult<ApiResponse<bool>>> Update([FromBody] UpdateDeviceSoftwareDto request)
         {
@@ -40,6 +42,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Cập nhật thông tin cài đặt thành công.");
         }
 
+        [RequirePermission("Asset.DeviceSoftware.Delete")]
         [HttpDelete("device/{deviceId}/software/{softwareId}")]
         public async Task<ActionResult<ApiResponse<bool>>> Delete(int deviceId, int softwareId)
         {
@@ -47,6 +50,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Gỡ phần mềm khỏi thiết bị thành công.");
         }
 
+        [RequirePermission("Asset.DeviceSoftware.View")]
         [HttpGet("picker/{deviceId}")]
         public async Task<ActionResult<ApiResponse<List<SoftwarePickerDto>>>> GetPicker(int deviceId)
         {
@@ -54,6 +58,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.DeviceSoftware.Update")]
         [HttpPut("sync")]
         public async Task<ActionResult<ApiResponse<List<DeviceSoftwareDto>>>> Sync([FromBody] SyncDeviceSoftwareDto request)
         {

@@ -1,12 +1,11 @@
 using Asset.Application.Dtos.IpAddresses;
 using Asset.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
 
 namespace Asset.Api.Controllers
 {
-    [AllowAnonymous]
     public class IpAddressController : BaseController
     {
         private readonly IIpAddressService _ipAddressService;
@@ -16,6 +15,7 @@ namespace Asset.Api.Controllers
             _ipAddressService = ipAddressService;
         }
 
+        [RequirePermission("Asset.IpAddress.View")]
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<IpAddressDto>>>> GetPaged([FromQuery] IpAddressFilterRequest request)
         {
@@ -23,6 +23,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.IpAddress.View")]
         [HttpGet("available")]
         public async Task<ActionResult<ApiResponse<List<IpAddressDto>>>> GetAvailable([FromQuery] string? keyword)
         {
@@ -30,6 +31,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.IpAddress.View")]
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<IpAddressDto>>> GetById(int id)
         {
@@ -37,6 +39,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.IpAddress.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateIpAddressDto request)
         {
@@ -44,6 +47,7 @@ namespace Asset.Api.Controllers
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Thêm địa chỉ IP thành công.");
         }
 
+        [RequirePermission("Asset.IpAddress.Update")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateIpAddressDto request)
         {
@@ -53,6 +57,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Cập nhật địa chỉ IP thành công.");
         }
 
+        [RequirePermission("Asset.IpAddress.Delete")]
         [HttpDelete("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Delete(int id)
         {
@@ -60,6 +65,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Xóa địa chỉ IP thành công.");
         }
 
+        [RequirePermission("Asset.IpAddress.Assign")]
         [HttpPut("{id}/assign")]
         public async Task<ActionResult<ApiResponse<bool>>> Assign(int id, [FromBody] AssignIpAddressDto request)
         {
@@ -67,6 +73,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Gán địa chỉ IP cho thiết bị thành công.");
         }
 
+        [RequirePermission("Asset.IpAddress.Assign")]
         [HttpPut("{id}/unassign")]
         public async Task<ActionResult<ApiResponse<bool>>> Unassign(int id)
         {

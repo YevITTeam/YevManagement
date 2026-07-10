@@ -42,7 +42,7 @@ namespace Identity.Infrastructure.Authentication
 
                 // THÊM INCLUDE LoginUserIPs để tải dữ liệu lịch sử IP lên
                 var user = await dbContext.Users
-                    .Include(x => x.Roles)
+                    .Include(x => x.Roles).ThenInclude(r => r.Permissions)
                     .Include(x => x.LoginUserIPs)
                     .FirstOrDefaultAsync(a => a.UserName == windowsUsername);
 
@@ -124,6 +124,19 @@ namespace Identity.Infrastructure.Authentication
                 if (!string.IsNullOrEmpty(user.FullName))
                 {
                     dbIdentity.AddClaim(new Claim("FullName", user.FullName));
+                }
+
+                if (user.Roles != null)
+                {
+                    var permissionCodes = user.Roles
+                        .SelectMany(r => r.Permissions)
+                        .Select(p => p.Code)
+                        .Distinct();
+
+                    foreach (var code in permissionCodes)
+                    {
+                        dbIdentity.AddClaim(new Claim("Permission", code));
+                    }
                 }
             }
 

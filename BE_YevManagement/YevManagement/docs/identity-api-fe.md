@@ -17,13 +17,14 @@
 
 ## 1. Khác biệt quan trọng so với module Asset
 
-Toàn bộ endpoint **Asset** (Device/Software/IP...) hiện đang `[AllowAnonymous]`,
-nhưng **toàn bộ endpoint Identity đều yêu cầu xác thực**:
+**(2026-07-10, đã đổi)** Từ giờ **cả 2 module Identity và Asset đều bắt buộc
+JWT Bearer + đủ permission** — không còn phân biệt "Asset mở tự do, Identity siết
+role" như trước:
 
 | Endpoint | Cơ chế xác thực |
 |---|---|
 | `POST /api/Auth/windows-login` | **Windows Negotiate** (IWA) — không dùng Bearer token |
-| Tất cả endpoint còn lại (`get-all-users-with-roles`, `create-role`...) | **JWT Bearer**, yêu cầu role `Admin` trong claims |
+| Tất cả endpoint còn lại (Identity **và** Asset) | **JWT Bearer** + user (qua Role) phải có **permission** cụ thể cho hành động đó (không còn check "role Admin" cứng) — xem mục 3. |
 
 Envelope response (`ApiResponse<T>`) và cách đọc `data`/`errors` **giống hệt**
 module Asset — xem [asset-api-fe.md §1.1–1.3](asset-api-fe.md#1-quy-ước-chung--bắt-buộc-đọc-trước-khi-tích-hợp)
@@ -68,9 +69,12 @@ const body = await res.json();
     "userName": "YEV\\n.truong.da.pcd.it",
     "fullName": "Truong Nguyen",
     "deviceName": "DESKTOP-ABC123",   // nullable, reverse DNS từ IP
-    "roles": ["Admin"]                 // luôn có ít nhất "Basic" (auto-gán khi user mới)
+    "roles": ["Admin"],                // luôn có ít nhất "Basic" (auto-gán khi user mới)
+    "permissions": [                   // 2026-07-10, mới thêm — mã permission suy ra từ roles
+      "Asset.Device.View", "Asset.Device.Create", "Identity.Role.View", "..."
+    ]
   },
-  "token": "eyJhbGciOiJIUzI1NiIs..."   // JWT, dùng cho mọi request sau
+  "token": "eyJhbGciOiJIUzI1NiIs..."   // JWT, dùng cho mọi request sau (đã chứa claim Permission)
 }
 ```
 
@@ -84,6 +88,12 @@ const body = await res.json();
 - `token` hết hạn sau **120 phút** (`JwtSettings:ExpiryMinutes`). Hết hạn → mọi
   request dùng token cũ trả 401, FE phải gọi lại `windows-login` để lấy token
   mới (không có endpoint refresh-token riêng).
+- **Permission tự refresh mỗi request** (2026-07-10) — nếu Admin vừa đổi tập
+  permission của 1 Role, user thuộc role đó có hiệu lực ngay ở request tiếp
+  theo, **không cần** gọi lại `windows-login`. `user.permissions` trả về lúc
+  login chỉ là snapshot tại thời điểm đó — nếu cần permission mới nhất để hiển
+  thị UI (không phải để enforce, BE luôn tự check lại), FE có thể gọi lại
+  `windows-login` hoặc tự decode JWT mới nếu có.
 
 ### 2.3. Dùng token cho các request sau
 
@@ -98,24 +108,37 @@ ràng buộc.
 
 ---
 
-## 3. Phân quyền hiển thị UI
+## 3. Phân quyền hiển thị UI (2026-07-10, đổi sang permission chi tiết)
 
-`user.roles` là mảng string tên role (vd `["Basic"]`, `["Admin", "Basic"]`).
-FE tự quyết định ẩn/hiện menu quản trị dựa trên mảng này — BE **không** có
-endpoint kiểm tra quyền riêng, chỉ chặn ở tầng API (gọi endpoint `Admin` mà
-không có role → 401/403, không phải hiển thị UI đẹp).
+`user.roles` vẫn là mảng string tên role (vd `["Basic"]`, `["Admin", "Basic"]`)
+— dùng để hiển thị/quản lý, **không còn dùng để quyết định bật/tắt tính năng**.
+Việc đó giờ dựa vào **`user.permissions`** — mảng mã permission dạng
+`Module.Entity.Action` (vd `"Asset.Device.Delete"`, `"Identity.Role.Create"`).
+
+FE tự quyết định ẩn/hiện nút bấm/menu dựa trên `user.permissions.includes(code)`
+— BE **không** có endpoint "check quyền" riêng, luôn tự enforce lại ở tầng API
+(gọi 1 hành động mà thiếu permission tương ứng → 403, không phải chỉ ẩn UI).
+Danh sách đầy đủ mã permission theo module/entity xem
+[identity-module.md §9](identity-module.md#9-phân-quyền-chi-tiết-rbac--permission--2026-07-10);
+lấy toàn bộ danh sách này qua `GET /api/Permission/all` (mục 4.7) để dựng màn
+"quản lý phân quyền" (checkbox permission theo từng Role).
 
 Role hiện có trong DB (seed sẵn, có thể có thêm qua `create-role`): `Basic`,
-`Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiết bị`.
+`Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiết bị`. Sau migration nâng cấp permission,
+**chỉ `Admin` được seed sẵn full quyền** — 3 role còn lại chưa có permission nào,
+cần Admin tự gán qua `PUT /api/Permission/role/{roleId}` (mục 4.7).
 
 ---
 
-## 4. Quản trị User & Role (yêu cầu role `Admin`)
+## 4. Quản trị User & Role (yêu cầu permission tương ứng)
 
-Tất cả endpoint dưới đây cần header `Authorization: Bearer <token>` của 1 user
-có role `Admin` — thiếu hoặc sai role → 401.
+Tất cả endpoint dưới đây cần header `Authorization: Bearer <token>` **và**
+user phải có permission tương ứng (mặc định chỉ `Admin` có sẵn, xem mục 3) —
+thiếu token → 401, có token nhưng thiếu permission → 403.
 
 ### 4.1. Danh sách user + role — `GET /api/Auth/get-all-users-with-roles`
+
+Permission: `Identity.User.View`.
 
 ```jsonc
 // data[]
@@ -125,6 +148,8 @@ có role `Admin` — thiếu hoặc sai role → 401.
 ```
 
 ### 4.2. Gán role cho user — `POST /api/Auth/update-user-roles`
+
+Permission: `Identity.User.UpdateRoles`.
 
 ```jsonc
 // body
@@ -140,12 +165,16 @@ mảng nghĩa là gỡ role đó khỏi user.
 
 ### 4.3. Danh sách role — `GET /api/Auth/get-all-roles`
 
+Permission: `Identity.Role.View`.
+
 ```jsonc
 // data[]
 [ { "id": 1, "roleName": "Admin", "description": "Quản trị hệ thống" } ]
 ```
 
 ### 4.4. Tạo role — `POST /api/Auth/create-role`
+
+Permission: `Identity.Role.Create`.
 
 ```jsonc
 // body
@@ -155,6 +184,8 @@ mảng nghĩa là gỡ role đó khỏi user.
 
 ### 4.5. Sửa role — `PUT /api/Auth/update-role/{roleId}`
 
+Permission: `Identity.Role.Update`.
+
 ```jsonc
 // body (không cần gửi id, đã có trên URL)
 { "roleName": "Kế toán", "description": "Đã cập nhật mô tả" }
@@ -163,21 +194,48 @@ mảng nghĩa là gỡ role đó khỏi user.
 
 ### 4.6. Xoá role — `DELETE /api/Auth/delete-role/{roleId}`
 
-Xoá mềm (`IsDeleted=true`). → 400 "Không tìm thấy quyền để xóa." nếu roleId sai.
+Permission: `Identity.Role.Delete`. Xoá mềm (`IsDeleted=true`). → 400 "Không tìm thấy quyền để xóa." nếu roleId sai.
+
+### 4.7. Quản lý permission theo Role — `/api/Permission` (mới, 2026-07-10) ⭐
+
+Dùng để dựng màn "Phân quyền chi tiết": chọn 1 Role, tick các permission muốn
+cấp, lưu lại.
+
+```jsonc
+// GET /api/Permission/all → data[] — TOÀN BỘ permission hệ thống, permission: Identity.Permission.View
+[
+  { "id": 1, "code": "Asset.Device.View", "module": "Asset", "description": "Xem danh sách / chi tiết thiết bị" },
+  { "id": 2, "code": "Asset.Device.Create", "module": "Asset", "description": "Thêm thiết bị" }
+  // ... 51 dòng, group theo "module" để render section trên UI
+]
+
+// GET /api/Permission/role/{roleId} → data[] — permission ĐANG được gán cho role này, permission: Identity.Permission.View
+[ { "id": 1, "code": "Asset.Device.View", "module": "Asset", "description": "..." } ]
+
+// PUT /api/Permission/role/{roleId} — permission: Identity.Role.Update
+// body: TOÀN BỘ danh sách Id permission sau cùng (giống cơ chế update-user-roles — gửi thiếu 1 Id cũ = gỡ quyền đó)
+[1, 2, 5, 8]
+```
+
+**Không có** API tạo/sửa/xoá `Permission` — danh sách 51 mã là cố định (seed qua
+migration BE), FE chỉ đọc (`GET /all`) và gán/gỡ theo Role (`GET`/`PUT /role/{roleId}`).
 
 ---
 
 ## 5. Tổng hợp endpoint (tra cứu nhanh)
 
-| Method | Route | Auth | Mô tả |
+| Method | Route | Permission | Mô tả |
 |---|---|---|---|
-| POST | `/api/Auth/windows-login` | Negotiate (không phải Bearer) | Đăng nhập → JWT + profile |
-| GET | `/api/Auth/get-all-users-with-roles` | Bearer, role `Admin` | Danh sách user + role |
-| POST | `/api/Auth/update-user-roles` | Bearer, role `Admin` | Gán role cho 1 user (gửi đủ danh sách cuối) |
-| GET | `/api/Auth/get-all-roles` | Bearer, role `Admin` | Danh sách role |
-| POST | `/api/Auth/create-role` | Bearer, role `Admin` | Tạo role |
-| PUT | `/api/Auth/update-role/{roleId}` | Bearer, role `Admin` | Sửa role |
-| DELETE | `/api/Auth/delete-role/{roleId}` | Bearer, role `Admin` | Xoá mềm role |
+| POST | `/api/Auth/windows-login` | Negotiate (không phải Bearer) | Đăng nhập → JWT + profile (kèm `permissions`) |
+| GET | `/api/Auth/get-all-users-with-roles` | `Identity.User.View` | Danh sách user + role |
+| POST | `/api/Auth/update-user-roles` | `Identity.User.UpdateRoles` | Gán role cho 1 user (gửi đủ danh sách cuối) |
+| GET | `/api/Auth/get-all-roles` | `Identity.Role.View` | Danh sách role |
+| POST | `/api/Auth/create-role` | `Identity.Role.Create` | Tạo role |
+| PUT | `/api/Auth/update-role/{roleId}` | `Identity.Role.Update` | Sửa role |
+| DELETE | `/api/Auth/delete-role/{roleId}` | `Identity.Role.Delete` | Xoá mềm role |
+| GET | `/api/Permission/all` | `Identity.Permission.View` | Toàn bộ permission hệ thống |
+| GET | `/api/Permission/role/{roleId}` | `Identity.Permission.View` | Permission hiện tại của 1 role |
+| PUT | `/api/Permission/role/{roleId}` | `Identity.Role.Update` | Gán lại permission cho role |
 
 ---
 
@@ -186,6 +244,7 @@ Xoá mềm (`IsDeleted=true`). → 400 "Không tìm thấy quyền để xóa." 
 | Hiện tượng | Nguyên nhân | Cách xử lý |
 |---|---|---|
 | `windows-login` luôn trả 401 | Thiếu `credentials: "include"` trên fetch, hoặc máy/trình duyệt client không nằm trong domain AD | Thêm `credentials: "include"`; test bằng máy đã join domain |
-| Gọi `get-all-roles`... trả 401 dù đã đăng nhập | Token hết hạn (120 phút) hoặc thiếu header `Authorization` | Gọi lại `windows-login` lấy token mới |
-| Gọi `get-all-roles`... trả 401/403 dù token còn hạn | User đăng nhập không có role `Admin` (mặc định user mới chỉ có `Basic`) | Nhờ 1 Admin khác gọi `update-user-roles` gán thêm role `Admin` |
+| Gọi API nào đó trả 401 dù đã đăng nhập | Token hết hạn (120 phút) hoặc thiếu header `Authorization` | Gọi lại `windows-login` lấy token mới |
+| Gọi API nào đó trả 403 dù token còn hạn | User đăng nhập không có permission cho hành động đó (Role của user chưa được gán permission tương ứng) | Nhờ 1 Admin gọi `PUT /api/Permission/role/{roleId}` gán thêm permission cho Role của user, hoặc gán user sang Role phù hợp qua `update-user-roles` |
+| Gọi API Asset (Device/Software/IP...) trả 401/403 — trước đây không cần token | Từ 2026-07-10, module Asset đã siết permission, không còn `[AllowAnonymous]` | Gắn `Authorization: Bearer <token>` cho **mọi** request Asset, đảm bảo Role của user có permission tương ứng |
 | Gọi API từ origin khác `localhost:3000`/`10.45.1.181:3000` bị chặn CORS | Origin chưa nằm trong whitelist CORS ở BE | Báo BE thêm origin vào `Program.cs` (`AddCors`) |

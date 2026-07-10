@@ -1,12 +1,11 @@
-﻿using Asset.Application.Dtos.Suplliers;
+using Asset.Application.Dtos.Suplliers;
 using Asset.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
 
 namespace Asset.Api.Controllers
 {
-    [AllowAnonymous]
     public class SupplierController : BaseController
     {
         private readonly ISupplierService _supplierService;
@@ -16,6 +15,7 @@ namespace Asset.Api.Controllers
             _supplierService = supplierService;
         }
 
+        [RequirePermission("Asset.Supplier.View")]
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<SupplierDto>>>> GetPaged(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null)
@@ -24,6 +24,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.Supplier.View")]
         [HttpGet("all")]
         public async Task<ActionResult<ApiResponse<List<SupplierDto>>>> GetAllActive()
         {
@@ -31,6 +32,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.Supplier.View")]
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<SupplierDto>>> GetById(int id)
         {
@@ -38,6 +40,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.Supplier.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateSupplierDto request)
         {
@@ -45,6 +48,7 @@ namespace Asset.Api.Controllers
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Thêm nhà cung cấp thành công.");
         }
 
+        [RequirePermission("Asset.Supplier.Update")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateSupplierDto request)
         {
@@ -54,6 +58,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Cập nhật nhà cung cấp thành công.");
         }
 
+        [RequirePermission("Asset.Supplier.Delete")]
         [HttpDelete("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Delete(int id)
         {

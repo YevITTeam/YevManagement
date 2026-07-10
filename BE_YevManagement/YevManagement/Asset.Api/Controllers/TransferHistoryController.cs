@@ -1,12 +1,11 @@
 using Asset.Application.Dtos.TransferHistories;
 using Asset.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
 
 namespace Asset.Api.Controllers
 {
-    [AllowAnonymous]
     public class TransferHistoryController : BaseController
     {
         private readonly ITransferHistoryService _transferHistoryService;
@@ -15,6 +14,7 @@ namespace Asset.Api.Controllers
             _transferHistoryService = transferHistoryService;
         }
 
+        [RequirePermission("Asset.TransferHistory.Create")]
         [HttpPost]
         public async Task<IActionResult> Transfer([FromBody] CreateTransferHistoryDto request)
         {
@@ -22,6 +22,7 @@ namespace Asset.Api.Controllers
             return CreatedSuccess(nameof(GetByDevice), new { deviceId = result.NewDeviceId }, result, "Chuyển máy thành công.");
         }
 
+        [RequirePermission("Asset.TransferHistory.View")]
         [HttpGet("device/{deviceId}")]
         public async Task<ActionResult<ApiResponse<List<TransferHistoryDto>>>> GetByDevice(int deviceId)
         {

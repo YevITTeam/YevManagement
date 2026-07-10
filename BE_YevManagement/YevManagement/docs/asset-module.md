@@ -147,6 +147,10 @@
 >    dụng") — **trừ khi** `OldDevice.ExpirationDate` đã qua (dùng đúng công thức
 >    `IsExpired` ở báo cáo `device-list` bên trên) thì chuyển thẳng
 >    `PendingLiquidation` (2, "Chờ thanh lý") thay vì `PendingUse`.
+> 4b. **Đổi trạng thái `NewDevice` → `InUse`** (1, "Đang sử dụng", 2026-07-10, đã
+>    làm) — máy mới đã tiếp nhận IP + phần mềm của máy cũ nên tự động chuyển sang
+>    "Đang sử dụng" ngay khi transfer xong, không cần gọi `PUT /api/Device/{id}`
+>    riêng để đổi status thủ công.
 > 5. `DeviceConfiguration` **không đụng tới** — chủ ý không copy sang `NewDevice`
 >    (cấu hình phần cứng là đặc thù theo từng máy vật lý, máy mới có config
 >    riêng), cũng không xoá ở `OldDevice`.
@@ -154,6 +158,14 @@
 >    `OldDeviceId`/`NewDeviceId`/`Note`. **Không có API sửa/xoá `TransferHistory`**
 >    (audit-log, giống `DeviceConfigurationHistory` — chỉ tạo qua hành động
 >    nghiệp vụ, không cho client POST/PUT/DELETE trực tiếp).
+>
+> **Chọn máy mới để chuyển (2026-07-10, đã làm)**: `GET /api/Device/available?keyword=`
+> (`DeviceService.GetAvailableForTransferAsync`, cùng pattern
+> `IpAddressService.GetAvailableAsync` — không phân trang, trả `List<DeviceGridDto>`)
+> trả toàn bộ Device `Status=PendingUse` (0, "Chờ sử dụng") và `!IsDeleted`, lọc
+> theo `DeviceCode.Contains(keyword)` nếu có. Dùng để FE hiển thị danh sách máy
+> "chưa dùng" cho người dùng chọn làm `NewDeviceId` khi gọi
+> `POST /api/TransferHistory`.
 >
 > `GET /api/TransferHistory/device/{deviceId}` trả `List<TransferHistoryDto>` —
 > lịch sử chuyển máy liên quan tới 1 Device (dù là vai trò máy cũ hay máy mới),
@@ -291,19 +303,26 @@
 
 | Thực thể | Service | Controller / Route | CRUD | Auth |
 |---|---|---|---|---|
-| Branch | `BranchService` (đầy đủ) | `BranchController` `/api/Branch` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
-| Device | `DeviceService` (đầy đủ) | `DeviceController` `/api/Device` | grid-list, {id}, `{id}/detail` (gộp Device+Configuration+Softwares), POST, PUT, DELETE (**không có** `all`) | `[AllowAnonymous]` |
-| Report (device-list) | dùng lại `IDeviceService.GetReportListAsync` | `ReportController` `/api/Report` (2026-07-09, controller riêng cho mọi loại báo cáo) | `device-list` (báo cáo in ấn "DANH SÁCH DESKTOP TOÀN CÔNG TY") | `[AllowAnonymous]` |
-| DeviceType | `DeviceTypeService` | `DeviceTypeController` `/api/DeviceType` | CRUD | `[AllowAnonymous]` |
-| Supplier | `SupplierService` | `SupplierController` `/api/Supplier` | CRUD | `[AllowAnonymous]` |
-| DeviceSoftware | `DeviceSoftwareService` | `DeviceSoftwareController` `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE, `picker/{deviceId}` (GET), `sync` (PUT, bulk tick) | `[AllowAnonymous]` |
-| Software | `SoftwareService` (đầy đủ) | `SoftwareController` `/api/Software` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
-| SoftwareGroup | `SoftwareGroupService` (đầy đủ) | `SoftwareGroupController` `/api/SoftwareGroup` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
-| IpAddress | `IpAddressService` (đầy đủ) | `IpAddressController` `/api/IpAddress` | grid-list, `available` (2026-07-09, không phân trang), {id}, POST, PUT, DELETE, `{id}/assign`, `{id}/unassign` (**không có** `all`/`generate-range`) | `[AllowAnonymous]` |
-| IpPrefix | `IpPrefixService` (đầy đủ, POST tự sinh 255 IP con) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
-| DeviceConfiguration | `DeviceConfigurationService` (CRUD + snapshot/history) | `DeviceConfigurationController` `/api/DeviceConfiguration` | `by-device/{deviceId}` (trả `null` nếu chưa có), POST, PUT, DELETE (xoá cứng, cascade Initial+History), `{configId}/initial` (GET), `initial/{id}` (DELETE), `{configId}/history` (GET list) — **không có** `grid-list`/`all` | `[AllowAnonymous]` |
-| TransferHistory | `TransferHistoryService` (2026-07-09, đã làm — "chuyển máy") | `TransferHistoryController` `/api/TransferHistory` | POST (thực hiện chuyển máy), `device/{deviceId}` (GET, lịch sử chuyển máy của 1 thiết bị) — **không có** grid-list/all/PUT/DELETE (audit-log, không sửa/xoá sau khi tạo) | `[AllowAnonymous]` |
+| Branch | `BranchService` (đầy đủ) | `BranchController` `/api/Branch` | grid-list, all, {id}, POST, PUT, DELETE | `[RequirePermission("Asset.Branch.*")]` |
+| Device | `DeviceService` (đầy đủ) | `DeviceController` `/api/Device` | grid-list, `available` (2026-07-10, không phân trang — máy `Status=PendingUse` phục vụ chọn máy mới khi "đổi thiết bị"), {id}, `{id}/detail` (gộp Device+Configuration+Softwares), POST, PUT, DELETE (**không có** `all`) | `[RequirePermission("Asset.Device.*")]` |
+| Report (device-list) | dùng lại `IDeviceService.GetReportListAsync` | `ReportController` `/api/Report` (2026-07-09, controller riêng cho mọi loại báo cáo) | `device-list` (báo cáo in ấn "DANH SÁCH DESKTOP TOÀN CÔNG TY") | `[RequirePermission("Asset.Report.View")]` |
+| DeviceType | `DeviceTypeService` | `DeviceTypeController` `/api/DeviceType` | CRUD | `[RequirePermission("Asset.DeviceType.*")]` |
+| Supplier | `SupplierService` | `SupplierController` `/api/Supplier` | CRUD | `[RequirePermission("Asset.Supplier.*")]` |
+| DeviceSoftware | `DeviceSoftwareService` | `DeviceSoftwareController` `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE, `picker/{deviceId}` (GET), `sync` (PUT, bulk tick) | `[RequirePermission("Asset.DeviceSoftware.*")]` (Picker→`.View`, Sync→`.Update`) |
+| Software | `SoftwareService` (đầy đủ) | `SoftwareController` `/api/Software` | grid-list, all, {id}, POST, PUT, DELETE | `[RequirePermission("Asset.Software.*")]` |
+| SoftwareGroup | `SoftwareGroupService` (đầy đủ) | `SoftwareGroupController` `/api/SoftwareGroup` | grid-list, all, {id}, POST, PUT, DELETE | `[RequirePermission("Asset.SoftwareGroup.*")]` |
+| IpAddress | `IpAddressService` (đầy đủ) | `IpAddressController` `/api/IpAddress` | grid-list, `available` (2026-07-09, không phân trang), {id}, POST, PUT, DELETE, `{id}/assign`, `{id}/unassign` (**không có** `all`/`generate-range`) | `[RequirePermission("Asset.IpAddress.*")]` (assign/unassign dùng chung `Asset.IpAddress.Assign`) |
+| IpPrefix | `IpPrefixService` (đầy đủ, POST tự sinh 255 IP con) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, PUT, DELETE | `[RequirePermission("Asset.IpPrefix.*")]` |
+| DeviceConfiguration | `DeviceConfigurationService` (CRUD + snapshot/history) | `DeviceConfigurationController` `/api/DeviceConfiguration` | `by-device/{deviceId}` (trả `null` nếu chưa có), POST, PUT, DELETE (xoá cứng, cascade Initial+History), `{configId}/initial` (GET), `initial/{id}` (DELETE), `{configId}/history` (GET list) — **không có** `grid-list`/`all` | `[RequirePermission("Asset.DeviceConfiguration.*")]` (initial/history GET→`.View`, DeleteInitial→`.Delete`) |
+| TransferHistory | `TransferHistoryService` (2026-07-09, đã làm — "chuyển máy") | `TransferHistoryController` `/api/TransferHistory` | POST (thực hiện chuyển máy), `device/{deviceId}` (GET, lịch sử chuyển máy của 1 thiết bị) — **không có** grid-list/all/PUT/DELETE (audit-log, không sửa/xoá sau khi tạo) | `[RequirePermission("Asset.TransferHistory.Create/.View")]` |
 | AuditTrail | ❌ chưa có | ❌ | — | — |
+
+> **Auth (2026-07-10, đã siết)**: toàn bộ 12 controller trên đã bỏ `[AllowAnonymous]`,
+> chuyển sang `[RequirePermission("Module.Entity.Action")]` (attribute dùng chung ở
+> `Shared.Application/Authorization/`, xem cơ chế đầy đủ + danh sách mã permission ở
+> [identity-module.md](identity-module.md) §9). Muốn gọi các endpoint này giờ bắt buộc
+> có JWT hợp lệ **và** Role của user phải được gán đúng permission tương ứng qua
+> `PUT /api/Permission/role/{roleId}`.
 
 **Hai pattern service mẫu để nhân bản:**
 
@@ -475,8 +494,11 @@ tại" (tự đụng chính mình). Chưa fix vì ngoài phạm vi task lúc ph�
 
 **Cần làm tiếp (theo độ ưu tiên gợi ý):**
 1. **AuditTrail**: chưa có tầng Application/Api.
-2. **Auth**: tất cả controller Asset đang `[AllowAnonymous]` — cần siết quyền
-   thật trước khi lên production.
+2. ~~**Auth**: tất cả controller Asset đang `[AllowAnonymous]`~~ — **đã xong
+   (2026-07-10)**: chuyển sang `[RequirePermission]` chi tiết theo permission, xem
+   [identity-module.md](identity-module.md) §9. Còn lại: Admin cần tự gán permission
+   phù hợp cho các role `Basic`/`Quản lý Hợp Đồng`/`Quản lý Thiết bị` qua
+   `PUT /api/Permission/role/{roleId}` (mặc định chỉ `Admin` được seed sẵn full quyền).
 3. **Warning**: nhiều `CS8602`/`CS8603`/`CS8604` (deref/return possibly null) trong
    các Service — `GetByIdAsync` trả nullable, nên dùng `OrThrowNotFound` như
    `BranchService` (Software/SoftwareGroup/IpAddress/Device/DeviceConfiguration
@@ -507,6 +529,10 @@ tại" (tự đụng chính mình). Chưa fix vì ngoài phạm vi task lúc ph�
    — nhân theo `BranchService`. Scrutor tự DI (không sửa `AddDIConfig`).
 7. **Controller**: `<Entity>Controller : BaseController`, route theo pattern §4,
    bọc `Success/Fail/CreatedSuccess`. Controller nằm trong `Asset.Api` nên đã
-   được host nạp sẵn qua `AddApplicationPart` — không cần chỉnh Program.cs.
+   được host nạp sẵn qua `AddApplicationPart` — không cần chỉnh Program.cs. Gắn
+   `[RequirePermission("Asset.<Entity>.View/Create/Update/Delete")]` (namespace
+   `Shared.Application.Authorization`) trên từng action — **không** dùng lại
+   `[AllowAnonymous]`. Nhớ thêm mã permission mới vào migration seed (xem
+   [identity-module.md](identity-module.md) §9) và gán cho role `Admin`.
 8. **Migration**: `dotnet ef migrations add <Name> --project Asset.Infrastructure --startup-project CompanySystem.HostApi`.
 9. Cập nhật lại bảng ở §4 và mục §5 của file doc này.

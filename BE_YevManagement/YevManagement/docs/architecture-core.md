@@ -194,9 +194,14 @@ Service rồi bọc `Success(...)`. Route action đặt qua `[HttpGet("grid-list
 `[HttpPost]`, `[HttpPut("{id}")]`, `[HttpDelete("{id}")]`... Tên controller quyết
 định URL (`BranchController` → `/api/Branch`).
 
-> **Auth hiện trạng:** Host bật `FallbackPolicy = DefaultPolicy` → mặc định MỌI
-> endpoint yêu cầu đăng nhập. Các controller Asset hiện gắn `[AllowAnonymous]` ở
-> cấp class để mở tạm. Controller Identity `Auth` thì siết bằng `[Authorize(Roles="Admin")]`.
+> **Auth hiện trạng (2026-07-10, đã siết permission chi tiết):** Host bật
+> `FallbackPolicy = DefaultPolicy` → mặc định MỌI endpoint yêu cầu đăng nhập.
+> Toàn bộ controller Asset **và** Identity đều gắn
+> `[RequirePermission("Module.Entity.Action")]` (attribute ở
+> `Shared.Application/Authorization/`, policy-based, check claim `Permission`
+> trong JWT) trên từng action — không còn `[AllowAnonymous]`/`[Authorize(Roles=...)]`
+> nào. Chi tiết cơ chế + danh sách mã permission xem
+> [identity-module.md](identity-module.md) §9.
 
 ---
 

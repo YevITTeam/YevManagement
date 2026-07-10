@@ -1,8 +1,10 @@
 using CompanySystem.HostApi.Configurations;
 using CompanySystem.HostApi.Middlewares;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
+using Shared.Application.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +52,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.AddAuthConfig(builder.Configuration);
 
 builder.Services.AddAuthorization(options => { options.FallbackPolicy = options.DefaultPolicy; });
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 
 builder.Services.AddCors(options =>
 {

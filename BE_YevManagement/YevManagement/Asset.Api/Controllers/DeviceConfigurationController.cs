@@ -1,12 +1,11 @@
 using Asset.Application.Dtos.DeviceConfigurations;
 using Asset.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
 
 namespace Asset.Api.Controllers
 {
-    [AllowAnonymous]
     public class DeviceConfigurationController : BaseController
     {
         private readonly IDeviceConfigurationService _deviceConfigurationService;
@@ -16,6 +15,7 @@ namespace Asset.Api.Controllers
             _deviceConfigurationService = deviceConfigurationService;
         }
 
+        [RequirePermission("Asset.DeviceConfiguration.View")]
         [HttpGet("by-device/{deviceId}")]
         public async Task<ActionResult<ApiResponse<DeviceConfigurationDto?>>> GetByDeviceId(int deviceId)
         {
@@ -23,6 +23,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.DeviceConfiguration.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateDeviceConfigurationDto request)
         {
@@ -30,6 +31,7 @@ namespace Asset.Api.Controllers
             return CreatedSuccess(nameof(GetByDeviceId), new { deviceId = result.DeviceId }, result, "Thêm cấu hình thiết bị thành công.");
         }
 
+        [RequirePermission("Asset.DeviceConfiguration.Update")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateDeviceConfigurationDto request)
         {
@@ -39,6 +41,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Cập nhật cấu hình thiết bị thành công.");
         }
 
+        [RequirePermission("Asset.DeviceConfiguration.Delete")]
         [HttpDelete("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Delete(int id)
         {
@@ -46,6 +49,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Xóa cấu hình thiết bị thành công.");
         }
 
+        [RequirePermission("Asset.DeviceConfiguration.View")]
         [HttpGet("{configId}/initial")]
         public async Task<ActionResult<ApiResponse<DeviceConfigurationInitialDto?>>> GetInitial(int configId)
         {
@@ -53,6 +57,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.DeviceConfiguration.Delete")]
         [HttpDelete("initial/{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> DeleteInitial(int id)
         {
@@ -60,6 +65,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Xóa cấu hình ban đầu thành công.");
         }
 
+        [RequirePermission("Asset.DeviceConfiguration.View")]
         [HttpGet("{configId}/history")]
         public async Task<ActionResult<ApiResponse<List<DeviceConfigurationHistoryDto>>>> GetHistory(int configId)
         {

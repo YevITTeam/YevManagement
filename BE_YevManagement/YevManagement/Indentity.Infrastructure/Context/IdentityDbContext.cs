@@ -22,11 +22,32 @@ public partial class IdentityDbContext : DbContext
 
     public virtual DbSet<LoginUserIP> LoginUserIPs { get; set; }
 
+    public virtual DbSet<Permission> Permissions { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Role>(entity =>
         {
             entity.Property(e => e.RoleName).HasMaxLength(50);
+
+            entity.HasMany(d => d.Permissions).WithMany(p => p.Roles)
+                .UsingEntity<Dictionary<string, object>>(
+                    "RolePermission",
+                    r => r.HasOne<Permission>().WithMany().HasForeignKey("PermissionId"),
+                    l => l.HasOne<Role>().WithMany().HasForeignKey("RoleId"),
+                    j =>
+                    {
+                        j.HasKey("RoleId", "PermissionId");
+                        j.ToTable("RolePermissions");
+                    });
+        });
+
+        modelBuilder.Entity<Permission>(entity =>
+        {
+            entity.Property(e => e.Code).HasMaxLength(150);
+            entity.Property(e => e.Module).HasMaxLength(50);
+            entity.Property(e => e.Description).HasMaxLength(255);
+            entity.HasIndex(e => e.Code).IsUnique();
         });
 
         modelBuilder.Entity<User>(entity =>

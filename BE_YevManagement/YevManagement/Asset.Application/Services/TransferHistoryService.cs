@@ -69,6 +69,10 @@ namespace Asset.Application.Services
             oldDevice.Status = isExpired ? (int)DeviceStatus.PendingLiquidation : (int)DeviceStatus.PendingUse;
             _unitOfWork.Devices.Update(oldDevice);
 
+            // Máy mới: chuyển thẳng "Đang sử dụng" vì đã tiếp nhận IP + phần mềm của máy cũ.
+            newDevice!.Status = (int)DeviceStatus.InUse;
+            _unitOfWork.Devices.Update(newDevice);
+
             var transferHistory = new TransferHistory
             {
                 OldDeviceId = oldDevice.Id,

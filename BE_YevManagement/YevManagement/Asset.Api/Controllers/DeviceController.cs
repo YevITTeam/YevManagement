@@ -1,7 +1,7 @@
-﻿using Asset.Application.Dtos.Devices;
+using Asset.Application.Dtos.Devices;
 using Asset.Application.Interfaces.Service;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
 using System;
 using System.Collections.Generic;
@@ -9,7 +9,6 @@ using System.Text;
 
 namespace Asset.Api.Controllers
 {
-    [AllowAnonymous]
     public class DeviceController : BaseController
     {
         private readonly IDeviceService _deviceService;
@@ -18,6 +17,7 @@ namespace Asset.Api.Controllers
             _deviceService = deviceService;
         }
 
+        [RequirePermission("Asset.Device.View")]
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<DeviceGridDto>>>> GetDevicesGrid(
             [FromQuery] DeviceFilterRequest request)
@@ -27,6 +27,15 @@ namespace Asset.Api.Controllers
             return Success(result, "Lấy danh sách thiết bị thành công.");
         }
 
+        [RequirePermission("Asset.Device.View")]
+        [HttpGet("available")]
+        public async Task<ActionResult<ApiResponse<List<DeviceGridDto>>>> GetAvailableForTransfer([FromQuery] string? keyword)
+        {
+            var result = await _deviceService.GetAvailableForTransferAsync(keyword);
+            return Success(result, "Lấy danh sách thiết bị chờ sử dụng thành công.");
+        }
+
+        [RequirePermission("Asset.Device.View")]
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<DeviceDto>>> GetById(int id)
         {
@@ -34,6 +43,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.Device.View")]
         [HttpGet("{id}/detail")]
         public async Task<ActionResult<ApiResponse<DeviceDetailDto>>> GetDetail(int id)
         {
@@ -41,6 +51,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.Device.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateDeviceDto request)
         {
@@ -48,6 +59,7 @@ namespace Asset.Api.Controllers
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Thêm thiết bị thành công.");
         }
 
+        [RequirePermission("Asset.Device.Update")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateDeviceDto request)
         {
@@ -57,6 +69,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Cập nhật thiết bị thành công.");
         }
 
+        [RequirePermission("Asset.Device.Delete")]
         [HttpDelete("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Delete(int id)
         {
