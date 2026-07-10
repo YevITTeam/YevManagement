@@ -183,12 +183,13 @@
 >
 > **Định dạng cột "Ngày Mua"**: nếu ô Excel là **kiểu Date thật** (không phải
 > text) thì đọc trực tiếp, không phụ thuộc cách hiển thị. Nếu ô là text,
-> `ParseExcel`/`TryParsePurchaseDate` chỉ nhận cố định vài định dạng
-> (`dd/MM/yyyy`, `d/M/yyyy`, `dd-MM-yyyy`, `d-M-yyyy`, `yyyy-MM-dd`) qua
+> `ParseExcel`/`TryParsePurchaseDate` chỉ nhận **đúng 1 định dạng cố định**
+> `dd/MM/yyyy` (hằng số `PurchaseDateFormat`, VD `01/07/2026`) qua
 > `DateTime.TryParseExact` + `CultureInfo.InvariantCulture` — **cố ý không dùng**
 > `DateTime.TryParse` theo culture mặc định của server (dễ hiểu nhầm ngày/tháng
-> tuỳ môi trường chạy). Định dạng khác hoặc ô trống → dòng đó báo lỗi "Thiếu
-> hoặc sai định dạng Ngày Mua", không có giá trị mặc định.
+> tuỳ môi trường chạy). Định dạng khác (kể cả `d/M/yyyy` thiếu số 0, hay
+> `yyyy-MM-dd`) hoặc ô trống → dòng đó báo lỗi "Thiếu hoặc sai định dạng Ngày
+> Mua", không có giá trị mặc định.
 > 1. `POST /api/DeviceImport/preview` (`multipart/form-data`, field `file`) —
 >    `DeviceImportService.PreviewAsync` đọc file bằng `ClosedXML`
 >    (`Asset.Application` thêm package `ClosedXML` 0.105.0), parse từng dòng,
@@ -238,6 +239,117 @@
 > (`template`) — FE dùng lại file mẫu người dùng đang có sẵn. Import chỉ hỗ trợ
 > **tạo mới**, không hỗ trợ cập nhật Device đã tồn tại qua Excel (trùng `MQL` với
 > Device đang có luôn bị báo lỗi, không ghi đè).
+
+> **Import Cấu hình thiết bị hàng loạt từ file kiểm kê Tanium (2026-07-10, đã
+> làm)**: khác hẳn import ở trên (import Device MỚI) — feature này chỉ **cập
+> nhật** `DeviceConfiguration` cho Device **đã tồn tại sẵn**, không tự tạo
+> Device mới (quyết định người dùng: file Tanium không có Xưởng/Loại thiết
+> bị/Nhà cung cấp/Ngày mua nên không đủ dữ liệu tạo Device hợp lệ). Controller/
+> Service riêng: `DeviceConfigurationImportController`
+> `/api/DeviceConfigurationImport` (`preview`/`confirm`, cùng pattern 2 bước
+> như `DeviceImport`) + `DeviceConfigurationImportService`.
+>
+> **Mẫu file Tanium — 8 cột cố định**: `Computer Name`, `Tanium Client IP
+> Address`, `Last Logged In User` (**bỏ qua**, không lưu — theo quyết định
+> người dùng), `Manufacturer` → `Maker`, `Model` → `Model`, `CPU` → `Cpu`,
+> `RAM` → `Ram`, `Size` → `HardDrive`. Dòng 1 header.
+>
+> **Chỉ import đúng 5 "họ" mã** (2026-07-10, chốt lại sau khi rà toàn bộ ~900
+> dòng dữ liệu Tanium thật của người dùng): `YDC`, `YLC`, `YDF`, `AC`, `TYC`.
+> Computer Name không khớp 1 trong 5 họ này (VD `Mayhethong`,
+> `VNDASOLARWINDS`, `BTTB-ATO-xx`, `QAKENSA-MAE-xx`, `DESKTOP-xxxxxxx`,
+> `NUC0xx`, `ACLF/ACELF/ALF-xx`, `YCM-xx`, `yazaki-xx`, `DASVRFAST`, và **toàn
+> bộ họ `DA` — cả `DA-<serial>` lẫn `DA-ENG-<serial>`**...) → **loại thầm
+> lặng** khỏi kết quả trả về (không phải lỗi, không đưa vào `Rows`), đếm số
+> dòng bị loại vào `OutOfScopeSkippedCount` của response preview để người
+> dùng biết. **Lịch sử quyết định họ `DA`**: ban đầu chỉ định loại dạng 3 đoạn
+> `DA-ENG-<serial>` (giữ lại `DA-<serial>` 2 đoạn), sau đó người dùng chốt lại
+> (2026-07-10) là loại bỏ **toàn bộ** họ `DA` khỏi phạm vi import lần này.
+>
+> **Tách "Computer Name" → Mã/Tên** (`DeviceConfigurationImportService.ParseComputerName`,
+> đã verify khớp 100% với toàn bộ dữ liệu thật bằng script độc lập trước khi
+> tích hợp, gồm cả các case bẫy nêu dưới):
+> 1. Bỏ hậu tố domain (phần sau dấu `.` đầu tiên, VD `.yev.vn`).
+> 2. Tách theo dấu `-`.
+> 3. Đoạn đầu khớp đúng 1 trong 4 tiền tố **họ chuẩn** `YDC`/`YLC`/`YDF`/`TYC`
+>    theo sau bởi số (số có thể **rỗng** — case hiếm `YDC-TVSOC`/`YDF-011`
+>    không có số) → Mã = chèn dấu `-` giữa chữ và số (`YDC1877` → `YDC-1877`),
+>    Tên = phần còn lại nối bằng `-` (VD `TVCBSX`).
+> 4. Đoạn đầu khớp regex `^AC\d+[A-Za-z]?$` (`AC` + số + tối đa 1 chữ cuối,
+>    VD `AC81`, `AC90`, `AC90A/B/D/E`, `AC95`) → **họ AC**: mã gốc đã có dấu
+>    `-` sẵn bên trong: Mã = nối 2 đoạn đầu (`AC90B-2446`), Tên = giống hệt
+>    Mã, đoạn còn lại (VD `J19`) bị **bỏ**. **Áp dụng thống nhất theo tiền tố
+>    "AC"** (không theo cấu trúc chữ/số từng đoạn) — bản đầu có bug: `AC81`/
+>    `AC90`/`AC95` vô tình khớp "họ chuẩn" (chữ-rồi-số thuần) trong khi
+>    `AC90A/B/D/E` thì không (có chữ xen sau số), khiến cùng 1 họ AC bị tách
+>    2 kiểu khác nhau — đã sửa bằng cách nhận diện theo tiền tố `AC` trước,
+>    không dựa cấu trúc regex chung. **Không khớp** `ACLF`/`ACELF`/`ALF` (chữ
+>    ngay sau `AC`, không phải số — khác họ, bị loại ở bước lọc allowlist).
+> 5. Còn lại (không khớp bước 3–4, bao gồm **toàn bộ họ `DA`** — cả
+>    `DA-<serial>` 2 đoạn lẫn `DA-ENG-<serial>` 3 đoạn) → ngoài phạm vi 5 họ,
+>    loại thầm lặng (mục trên).
+>
+> **Không tìm thấy Device theo mã tách được** → báo lỗi dòng đó ở Preview,
+> **không tự tạo Device mới** (quyết định người dùng). Có check trùng mã tách
+> được trong cùng 1 file import (báo lỗi nếu 2 dòng parse ra cùng 1 mã) — cố
+> ý **không** tự động lấy dòng cuối/mới nhất khi trùng: dữ liệu thật cho thấy
+> có Computer Name họ AC (VD `AC90B-2446-J19`, `AC90D-2698-A04`) xuất hiện 2
+> lần với **CPU/Model khác hẳn nhau** (đổi máy vật lý nhưng giữ nguyên tên
+> theo vị trí/cổng mạng) — tự tin dùng dòng cuối có thể ghi nhầm cấu hình
+> sang thiết bị khác, nên chặn để người dùng tự kiểm tra là lựa chọn an toàn
+> hơn.
+>
+> **Dòng lỗi Tanium** (`"TSE-Error: Failed to send..."` xuất hiện ở bất kỳ cột
+> IP/Manufacturer/Model/Cpu/Ram/Size nào) → tự động phát hiện qua prefix
+> `"TSE-Error"`, báo lỗi dòng đó ở Preview, không update gì.
+>
+> **Gán IP chính cho Device** (`Tanium Client IP Address`, chỉ khi cột này có
+> giá trị — để trống thì bỏ qua, không lỗi/không cảnh báo): tra
+> `IpAddress.IpAddress1` khớp đúng giá trị, `!IsDeleted`. Quy tắc **đã đổi**
+> (2026-07-10, chốt lại lần 2 — thay thế hoàn toàn quy tắc chặn-theo-status cũ):
+> - Khớp được `IpAddress` trong DB (bất kể đang `Available`, `Assigned` cho
+>   thiết bị khác, `Reserved` hay `Disabled`) → **luôn** gán làm IP chính cho
+>   Device này, kể cả khi phải "cướp" lại từ 1 Device khác đang giữ nó — không
+>   còn phân biệt theo `Status` như bản đầu.
+> - **Không** khớp `IpAddress` nào trong DB (chưa cấp phát qua `IpPrefix`) →
+>   **không chặn dòng**, chỉ bỏ qua việc cập nhật IP và thêm 1 dòng vào
+>   `Warnings` của row đó để báo cho người dùng biết (Cpu/Ram/Model/tạo-cập
+>   nhật `DeviceConfiguration` vẫn chạy bình thường).
+> - Việc gán/cướp IP xử lý trong
+>   `DeviceConfigurationImportService.ReassignDeviceIpAsync` (không gọi chéo
+>   `IpAddressService`, cùng `IAssetUnitOfWork` nên truy cập thẳng repo, giống
+>   pattern `DeviceService`/`TransferHistoryService`): gỡ IP cũ của Device này
+>   (nếu khác) về `Available`, gán IP mới `DeviceId`+`Status=Assigned` — do
+>   `IpAddress.DeviceId` là FK 1 chiều nên việc set field này tự động "cướp"
+>   khỏi Device cũ đang giữ IP đó mà không cần đụng gì thêm ở phía Device cũ.
+>
+> **Update `DeviceConfiguration` không đè mất field khác**: nếu Device đã có
+> `DeviceConfiguration`, chỉ ghi đè đúng 5 field Tanium báo cáo được
+> (`Cpu/Ram/HardDrive/Maker/Model`, và **chỉ đè nếu giá trị mới không rỗng** —
+> giữ nguyên giá trị cũ nếu cột đó trống ở dòng import), toàn bộ field còn lại
+> (`Mainboard/Monitor/Mouse/Keyboard/Headphone/Speaker/Ups/Psu/Os/Vga/
+> PowerAdapter/WirelessCard/Nic/Other/Note`) copy nguyên từ config hiện có
+> (vì `UpdateDeviceConfigurationDto` yêu cầu gửi đủ field, không hỗ trợ patch
+> từng phần). Nếu Device **chưa có** `DeviceConfiguration` → tạo mới qua
+> `IDeviceConfigurationService.CreateAsync` (tự kèm snapshot "Cấu hình ban
+> đầu" như bình thường, xem §1 mục `DeviceConfigurationInitial`).
+>
+> **Confirm chạy trong 1 transaction** (`BeginTransactionAsync`/
+> `CommitTransactionAsync`, rollback nếu lỗi giữa chừng) — validate lại toàn
+> bộ từ đầu theo dữ liệu DB hiện tại trước khi ghi (giống `DeviceImportService`),
+> nếu còn dòng lỗi thì **không ghi gì cả**, ném `DomainException` kèm `Errors`
+> dạng `"Dòng {n}: {lý do}"`.
+>
+> **Permission**: dùng chung `Asset.DeviceConfiguration.Update` cho cả
+> `preview` và `confirm` (không tách permission riêng cho import).
+>
+> Đã test thật trên DB (tạo 1 Device TEST + gán IP Available thật, import cấu
+> hình lần đầu → tạo `DeviceConfiguration` mới + gán đúng IP; sửa tay thêm
+> `Mainboard` qua API thường rồi import lại với `Ram` khác → xác nhận chỉ
+> `Ram` đổi, `Mainboard` giữ nguyên, `ipReassignedCount=0` vì IP không đổi;
+> test âm: mã không tồn tại bị chặn, dòng `TSE-Error` bị chặn, gửi cả batch
+> có dòng lỗi bị chặn toàn bộ không ghi gì; dọn sạch: xoá `DeviceConfiguration`
+> + soft-delete Device TEST, xác nhận IP tự gỡ về `Available`).
 
 > **`Device.SerialNumber` + `Device.IsUseUsb` (2026-07-09, đã làm)**: 2 field mới —
 > `SerialNumber?` (string, max 100, **unique khi có giá trị** — index
@@ -380,6 +492,7 @@
 | DeviceConfiguration | `DeviceConfigurationService` (CRUD + snapshot/history) | `DeviceConfigurationController` `/api/DeviceConfiguration` | `by-device/{deviceId}` (trả `null` nếu chưa có), POST, PUT, DELETE (xoá cứng, cascade Initial+History), `{configId}/initial` (GET), `initial/{id}` (DELETE), `{configId}/history` (GET list) — **không có** `grid-list`/`all` | `[RequirePermission("Asset.DeviceConfiguration.*")]` (initial/history GET→`.View`, DeleteInitial→`.Delete`) |
 | TransferHistory | `TransferHistoryService` (2026-07-09, đã làm — "chuyển máy") | `TransferHistoryController` `/api/TransferHistory` | POST (thực hiện chuyển máy), `device/{deviceId}` (GET, lịch sử chuyển máy của 1 thiết bị) — **không có** grid-list/all/PUT/DELETE (audit-log, không sửa/xoá sau khi tạo) | `[RequirePermission("Asset.TransferHistory.Create/.View")]` |
 | DeviceImport | `DeviceImportService` (2026-07-10, mới làm — import Device hàng loạt từ Excel) | `DeviceImportController` `/api/DeviceImport` | `preview` (POST multipart file, chỉ đọc + validate, **không ghi DB**), `confirm` (POST, validate lại rồi ghi DB trong 1 transaction) | `[RequirePermission("Asset.Device.Create")]` (dùng chung, không tách permission riêng) |
+| DeviceConfigurationImport | `DeviceConfigurationImportService` (2026-07-10, mới làm — import cấu hình hàng loạt từ file Tanium, chỉ update Device đã có sẵn) | `DeviceConfigurationImportController` `/api/DeviceConfigurationImport` | `preview` (POST multipart file, không ghi DB), `confirm` (POST, validate lại rồi ghi DB trong 1 transaction) | `[RequirePermission("Asset.DeviceConfiguration.Update")]` (dùng chung, không tách permission riêng) |
 | AuditTrail | ❌ chưa có | ❌ | — | — |
 
 > **Auth (2026-07-10, đã siết)**: toàn bộ 12 controller trên đã bỏ `[AllowAnonymous]`,
@@ -547,6 +660,16 @@ dùng nguyên nghiệp vụ "chuyển máy" của `TransferHistoryService`. Thê
 `ClosedXML` 0.105.0 vào `Asset.Application` để đọc `.xlsx`; thêm constructor
 `DomainException(string message, List<string> errors)` ở `Shared.Core` để trả
 lỗi theo từng dòng qua `ApiResponse.Failure.Errors`.
+
+`POST /api/DeviceConfigurationImport/preview` + `.../confirm` (2026-07-10, đã
+làm, xem ghi chú §1) — import cấu hình phần cứng hàng loạt từ file kiểm kê
+Tanium (`Computer Name/Tanium Client IP Address/Manufacturer/Model/CPU/RAM/
+Size`), tách `Computer Name` thành Mã/Tên theo thuật toán đã verify khớp dữ
+liệu thật, chỉ update Device đã có sẵn (không tự tạo Device mới), tự gán IP
+chính theo `Tanium Client IP Address` nếu khớp IP đang `Available` trong hệ
+thống. Đã test thật trên DB (tạo Device TEST, import lần đầu tạo Configuration
+mới + gán IP, import lại xác nhận chỉ update field Tanium báo cáo được và giữ
+nguyên field khác, dọn sạch dữ liệu test sau khi xong).
 
 Dữ liệu thật `Software`/`SoftwareGroup` cũng đã được sửa lại (2026-07-09, thao
 tác dữ liệu qua API CRUD sẵn có, không phải code): trước đó 1 lần migrate dữ

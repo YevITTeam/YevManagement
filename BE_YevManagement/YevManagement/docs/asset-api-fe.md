@@ -480,7 +480,7 @@ Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang 
 
 **Định dạng cột "Ngày Mua"**:
 - Ô Excel là **Date thật** → đọc đúng luôn, không cần lo định dạng hiển thị.
-- Ô là **text** → chỉ nhận đúng 1 trong các định dạng cố định: `dd/MM/yyyy` (khuyến nghị, VD `01/07/2026`), `d/M/yyyy`, `dd-MM-yyyy`, `d-M-yyyy`, `yyyy-MM-dd`. Định dạng khác hoặc để trống → báo lỗi "Thiếu hoặc sai định dạng Ngày Mua".
+- Ô là **text** → chỉ nhận **đúng 1 định dạng** `dd/MM/yyyy` (VD `01/07/2026`, luôn có số 0 ở đầu ngày/tháng nếu <10). Định dạng khác (kể cả `1/7/2026` thiếu số 0, hay ISO `2026-07-01`) hoặc để trống → báo lỗi "Thiếu hoặc sai định dạng Ngày Mua".
 
 **Field Device `[Required]` mà Excel không có cột tương ứng** — server tự đặt mặc định:
 
@@ -622,6 +622,113 @@ GET /api/DeviceConfiguration/{configId}/history   → DeviceConfigurationHistory
 
 Mỗi phần tử = 18 field linh kiện tại thời điểm sửa + `editedAt` + `editedBy`. **Chỉ sinh dòng mới nếu thực sự có field thay đổi** — `PUT` mà không đổi gì thì không tạo thêm dòng lịch sử (FE gọi PUT thoải mái không sợ spam log). Không có API tạo/sửa trực tiếp entity này (tự động 100%).
 
+### 6.3. Import cấu hình hàng loạt từ file kiểm kê Tanium — `/api/DeviceConfigurationImport` (2026-07-10) ⭐
+
+Dùng khi phòng IT có sẵn file xuất từ Tanium (agent quét toàn bộ máy tính công ty) và muốn cập nhật hàng loạt cấu hình phần cứng thay vì sửa tay từng máy. **Khác hẳn mục 5.10** — feature này **CHỈ cập nhật** thiết bị **đã có sẵn** trong hệ thống, **không tự tạo Device mới** (file Tanium không có Xưởng/Loại thiết bị/Nhà cung cấp/Ngày mua nên không đủ dữ liệu để tạo Device hợp lệ). Cùng quy trình 2 bước bắt buộc như mục 5.10 — xem trước rồi mới xác nhận.
+
+**Mẫu file Tanium — 8 cột, dòng 1 là header:**
+
+| Cột | Tên trong Excel | Map sang field | Ghi chú |
+|---|---|---|---|
+| A | Computer Name | Tách thành Mã + Tên thiết bị | Xem thuật toán tách bên dưới |
+| B | Tanium Client IP Address | Gán làm IP chính của Device | Optional — để trống thì bỏ qua, không lỗi |
+| C | Last Logged In User | **Bỏ qua hoàn toàn** | Không lưu vào đâu |
+| D | Manufacturer | `maker` | |
+| E | Model | `model` | |
+| F | CPU | `cpu` | |
+| G | RAM | `ram` | |
+| H | Size | `hardDrive` | |
+
+> **Chỉ import đúng 5 "họ" mã**: `YDC`, `YLC`, `YDF`, `AC`, `TYC`. Computer Name không khớp 1 trong 5 họ này (VD `Mayhethong`, `BTTB-ATO-xx`, `QAKENSA-MAE-xx`, `DESKTOP-xxxxxxx`, `NUC0xx`, `ACLF/ACELF/ALF-xx`, `YCM-xx`, `yazaki-xx`, các server/VM, và **toàn bộ họ `DA`** — cả `DA-<serial>` lẫn `DA-ENG-<serial>`...) → **loại thầm lặng, không đưa vào `rows`** trả về (không phải lỗi) — xem `outOfScopeSkippedCount` trong response Preview. (Lưu ý: họ `DA` từng được nhận dạng ở bản trước — nay đã bỏ hẳn theo quyết định người dùng 2026-07-10.)
+
+**Thuật toán tách "Computer Name" → Mã/Tên thiết bị** (server tự làm, FE không cần tự tách):
+1. Bỏ hậu tố domain (`.yev.vn`) nếu có, tách theo dấu `-`.
+2. Đoạn đầu khớp 1 trong 4 tiền tố `YDC`/`YLC`/`YDF`/`TYC` theo sau bởi số (số có thể rỗng) → Mã = chèn dấu `-` (`YDC1877` → `YDC-1877`), Tên = phần còn lại (VD `TVCBSX`).
+3. Đoạn đầu khớp `AC` + số + tối đa 1 chữ cuối (VD `AC81`, `AC90`, `AC90A/B/D/E`, `AC95`) → mã gốc coi như đã có dấu `-` sẵn: Mã = nối 2 đoạn đầu (`AC90B-2446`), Tên = giống Mã, phần còn lại (VD `-J19`) bị bỏ. **Không khớp** `ACLF`/`ACELF`/`ALF` (chữ ngay sau "AC", khác họ — bị loại theo mục allowlist trên).
+4. Còn lại (không khớp bước 2–3, bao gồm cả `DA-<serial>` và `DA-ENG-<serial>`) → ngoài phạm vi, loại thầm lặng.
+
+> Ví dụ: `YDC1877-TVCBSX.yev.vn` → Mã `YDC-1877`, Tên `TVCBSX`. `AC90B-2446-J19` → Mã `AC90B-2446`, Tên `AC90B-2446`. `DA-4CE0203DK7.yev.vn` → ngoài phạm vi, bị loại. `DA-ENG-2ZR9MV3.yev.vn` → ngoài phạm vi, bị loại.
+
+**Mã không khớp Device nào đang có** → dòng đó báo lỗi ở Preview, **không tự tạo Device mới**. **Trùng mã trong cùng file** → báo lỗi cả 2 dòng, **không tự động lấy dòng cuối** — dữ liệu thật cho thấy có Computer Name họ AC bị dùng lại cho các máy vật lý khác nhau theo thời gian, nên chặn để người dùng tự kiểm tra là an toàn hơn tự đoán. **Dòng lỗi Tanium** (bất kỳ cột nào có giá trị bắt đầu bằng `"TSE-Error"` — agent quét lỗi, không thu thập được dữ liệu) → tự động phát hiện, báo lỗi dòng đó, không update gì.
+
+**Bước 1 — Preview**: `POST /api/DeviceConfigurationImport/preview` (`multipart/form-data`, field `file`)
+
+```jsonc
+// Response — data
+{
+  "rows": [
+    {
+      "rowNumber": 2,
+      "computerName": "YDC9999-TESTCFG.yev.vn",
+      "taniumIpAddress": "1.1.1.168",
+      "manufacturer": "Dell Inc.",
+      "model": "OptiPlex 7090",
+      "cpu": "Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz",
+      "ram": "16384 MB",
+      "size": "512 GB",
+      "parsedDeviceCode": "YDC-9999",       // Mã tách được — chỉ để hiển thị, FE không cần dùng lại
+      "parsedDeviceName": "TESTCFG",
+      "resolvedDeviceId": 18001,             // server đã tra ra Device — FE không cần tự tra
+      "resolvedIpAddressId": 7053,
+      "isValid": true,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "rowNumber": 3,
+      "computerName": "ZZZ9999-NOTFOUND.yev.vn",
+      "taniumIpAddress": null,
+      "manufacturer": "HP", "model": "...", "cpu": "...", "ram": "...", "size": "...",
+      "parsedDeviceCode": "ZZZ-9999", "parsedDeviceName": "NOTFOUND",
+      "resolvedDeviceId": null, "resolvedIpAddressId": null,
+      "isValid": false,
+      "errors": ["Không tìm thấy thiết bị có mã 'ZZZ-9999'."],
+      "warnings": []
+    },
+    {
+      "rowNumber": 4,
+      "computerName": "TYC011-MPTVDT.yev.vn",
+      "taniumIpAddress": "10.45.3.183",
+      "manufacturer": "Microsoft Corporation", "model": "Surface Go 4", "cpu": "Intel(R) N200", "ram": "8017 MB", "size": "119 GB",
+      "parsedDeviceCode": "TYC-011", "parsedDeviceName": "MPTVDT",
+      "resolvedDeviceId": 18055, "resolvedIpAddressId": null,
+      "isValid": true,
+      "errors": [],
+      "warnings": ["Không tìm thấy địa chỉ IP '10.45.3.183' trong hệ thống — sẽ không cập nhật IP cho thiết bị này."]
+    }
+  ],
+  "totalRows": 3,
+  "validRows": 2,
+  "invalidRows": 1,
+  "outOfScopeSkippedCount": 137   // số dòng Computer Name không thuộc 5 họ mã, đã bị loại trước khi vào "rows"
+}
+```
+
+FE render bảng preview theo `rows` (nên hiện cả `parsedDeviceCode`/`parsedDeviceName` để người dùng biết server đã hiểu đúng Computer Name hay chưa), tô đỏ dòng `isValid=false` kèm `errors`. `warnings` **không** chặn dòng (dòng vẫn `isValid=true`, vẫn confirm được) — nên tô vàng/hiện icon cảnh báo riêng, phổ biến nhất là case IP Tanium không khớp IP nào trong hệ thống (dòng 4 ở ví dụ trên: cấu hình máy vẫn được cập nhật, chỉ riêng IP là bị bỏ qua). Nút xác nhận chỉ cần disable khi `invalidRows > 0`. Có thể hiện thêm dòng ghi chú kiểu "Đã bỏ qua {outOfScopeSkippedCount} máy ngoài phạm vi (không thuộc mã YDC/YLC/YDF/AC/TYC)" để người dùng không thắc mắc vì sao tổng số dòng preview ít hơn số dòng trong file gốc.
+
+**Bước 2 — Confirm**: `POST /api/DeviceConfigurationImport/confirm` — body gửi lại nguyên `rows` (chỉ cần field thô: `computerName/taniumIpAddress/manufacturer/model/cpu/ram/size`, không cần gửi `parsedXxx`/`resolvedXxx` — server tự resolve lại từ đầu):
+
+```jsonc
+// Response — data (thành công)
+{
+  "createdConfigCount": 1,    // số Device chưa có Configuration, được tạo mới
+  "updatedConfigCount": 0,    // số Device đã có Configuration, được cập nhật
+  "ipReassignedCount": 1,     // số dòng có gán/đổi IP chính thực sự
+  "updatedDeviceIds": [18001]
+}
+```
+
+**Luật gán IP chính (`taniumIpAddress`) — quan trọng vì ảnh hưởng dữ liệu IP thật, đã đổi 2026-07-10 (thay thế hoàn toàn luật chặn-theo-status trước đó):**
+- Để trống → bỏ qua, chỉ update cấu hình phần cứng, không đụng IP, không cảnh báo.
+- Khớp được `IpAddress` nào đó trong hệ thống (bất kể IP đó đang chưa gán, đang gán cho **thiết bị khác**, giữ chỗ hay ngưng dùng) → **luôn** gán IP đó làm IP chính cho thiết bị đang import, kể cả phải "cướp" lại từ thiết bị khác đang giữ nó. IP cũ của thiết bị đang import (nếu khác) tự gỡ về `Available`.
+- **Không khớp** `IpAddress` nào trong hệ thống → **không chặn dòng** — Cpu/Ram/Model/cấu hình vẫn được tạo/cập nhật bình thường, chỉ riêng IP bị bỏ qua và thêm 1 thông báo vào `warnings` của dòng đó.
+
+**Update cấu hình không đè mất dữ liệu khác**: nếu thiết bị đã có `DeviceConfiguration` từ trước, import chỉ ghi đè đúng 5 field lấy được từ Tanium (`cpu/ram/hardDrive/maker/model`, và **chỉ đè nếu ô Excel không rỗng** — cột trống thì giữ nguyên giá trị cũ), toàn bộ field khác (`mainboard/monitor/mouse/os/vga/...`) **giữ nguyên**, không bị xoá. Nếu thiết bị **chưa có** cấu hình → tạo mới bình thường (kèm sinh "Cấu hình ban đầu" như mục 6.1).
+
+> **Confirm cũng validate lại từ đầu** và **atomic** giống mục 5.10 — còn dòng lỗi thì không ghi gì cả, trả 400 với `errors: string[]` dạng `"Dòng {n}: {lý do}"`.
+
+**Quyền**: dùng chung permission `Asset.DeviceConfiguration.Update` cho cả `preview` và `confirm`.
+
 ---
 
 ## 7. DeviceSoftware (Phần mềm cài trên thiết bị) — bao gồm màn hình picker checkbox
@@ -723,6 +830,7 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 | POST | `/api/TransferHistory` (mới 2026-07-09) — GET `/api/TransferHistory/device/{deviceId}` | Chuyển máy (di chuyển IP + phần mềm, đổi trạng thái máy cũ) |
 | POST | `/api/DeviceImport/preview` (multipart file, không ghi DB), `/api/DeviceImport/confirm` (mới 2026-07-10) | Import Device hàng loạt từ Excel, có bước xem trước |
 | GET | `/api/DeviceConfiguration/by-device/{deviceId}` — POST, PUT `/{id}`, DELETE `/{id}`, GET `/{configId}/initial`, DELETE `/initial/{id}`, GET `/{configId}/history` | Cấu hình phần cứng |
+| POST | `/api/DeviceConfigurationImport/preview` (multipart file, không ghi DB), `/api/DeviceConfigurationImport/confirm` (mới 2026-07-10) | Import cấu hình hàng loạt từ file Tanium, chỉ update Device có sẵn |
 | GET | `/api/DeviceSoftware/device/{deviceId}` — POST, PUT, DELETE `/device/{deviceId}/software/{softwareId}`, GET `/picker/{deviceId}`, PUT `/sync` | Phần mềm cài trên thiết bị |
 
 ---
@@ -736,4 +844,5 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 5. Dialog quản lý phần mềm → `GET /api/DeviceSoftware/picker/{deviceId}` để mở, `PUT /api/DeviceSoftware/sync` để lưu (xem mục 7.4).
 6. Xem lịch sử sửa chữa cấu hình → `GET /api/DeviceConfiguration/{configId}/history` (cần có `configId` từ bước 1).
 7. Màn "Đổi thiết bị" → chọn máy mới qua `GET /api/Device/available?keyword=` (chỉ máy `Chờ sử dụng`), gọi `POST /api/TransferHistory` — server tự lo di chuyển IP/phần mềm + đổi trạng thái cả 2 máy (mục 5.9).
-8. Màn "Import Excel" → upload file vào `POST /api/DeviceImport/preview`, render bảng preview theo `rows`/`errors`, disable nút xác nhận nếu `invalidRows > 0`; bấm xác nhận → gửi lại nguyên `rows` vào `POST /api/DeviceImport/confirm` (mục 5.10).
+8. Màn "Import Excel" (thêm Device mới) → upload file vào `POST /api/DeviceImport/preview`, render bảng preview theo `rows`/`errors`, disable nút xác nhận nếu `invalidRows > 0`; bấm xác nhận → gửi lại nguyên `rows` vào `POST /api/DeviceImport/confirm` (mục 5.10).
+9. Màn "Import cấu hình từ Tanium" (chỉ update Device có sẵn) → cùng pattern preview/confirm như mục 8, dùng `POST /api/DeviceConfigurationImport/preview` + `.../confirm` (mục 6.3) — nên hiện thêm `parsedDeviceCode`/`parsedDeviceName` trong bảng preview để người dùng kiểm tra server tách đúng mã từ Computer Name hay chưa.

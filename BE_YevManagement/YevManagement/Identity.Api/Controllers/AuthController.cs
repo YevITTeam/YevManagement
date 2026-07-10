@@ -72,6 +72,21 @@ namespace Identity.Api.Controllers
             return Success(users, "Lấy danh sách người dùng và quyền thành công!");
         }
 
+        [RequirePermission("Identity.User.Create")]
+        [HttpPost("create-user")]
+        public async Task<ActionResult<ApiResponse<UserDto>>> CreateUser([FromBody] CreateUserDto request)
+        {
+            try
+            {
+                var createdUser = await _service.CreateUserAsync(request);
+                return Success(createdUser, "Tạo người dùng thành công!");
+            }
+            catch (Exception ex)
+            {
+                return Fail<UserDto>($"Tạo người dùng thất bại: {ex.Message}");
+            }
+        }
+
         [RequirePermission("Identity.User.UpdateRoles")]
         [HttpPost("update-user-roles")]
         public async Task<ActionResult<ApiResponse<string>>> UpdateUserRoles([FromBody] UpdateUserRolesDto request)

@@ -309,19 +309,15 @@ namespace Asset.Application.Services
             return rows;
         }
 
-        // Chỉ nhận vài định dạng ngày cố định (không dùng CurrentCulture của server —
-        // dễ hiểu nhầm ngày/tháng tuỳ môi trường chạy). Ưu tiên dd/MM/yyyy (định dạng
-        // Việt Nam phổ biến khi ô Excel bị nhập dạng text thay vì Date thật).
-        private static readonly string[] AcceptedPurchaseDateFormats =
-        {
-            "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "d-M-yyyy", "yyyy-MM-dd"
-        };
+        // Định dạng ngày mặc định duy nhất khi ô Excel là text: dd/MM/yyyy (không dùng
+        // CurrentCulture của server — dễ hiểu nhầm ngày/tháng tuỳ môi trường chạy).
+        private const string PurchaseDateFormat = "dd/MM/yyyy";
 
         private static bool TryParsePurchaseDate(string value, out DateTime result)
         {
             return DateTime.TryParseExact(
                 value.Trim(),
-                AcceptedPurchaseDateFormats,
+                PurchaseDateFormat,
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None,
                 out result);

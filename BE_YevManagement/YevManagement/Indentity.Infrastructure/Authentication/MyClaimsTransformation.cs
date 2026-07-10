@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Shared.Application.Helper;
 using System.DirectoryServices.AccountManagement;
 using System.Net;
 using System.Net.Sockets;
@@ -34,18 +35,28 @@ namespace Identity.Infrastructure.Authentication
             var dbIdentity = new ClaimsIdentity("DbRoles", ClaimTypes.Name, ClaimTypes.Role);
 
             string? ipAddress = GetClientIp();
-            string? deviceName = null;
+            // Phải resolve deviceName TRƯỚC khi tra User — vì từ 2026-07-10, định danh
+            // đăng nhập là cặp (UserName, DeviceName) chứ không chỉ UserName suông (xem
+            // ghi chú dưới).
+            string? deviceName = GetClientDeviceName(ipAddress);
 
             using (var scope = _serviceProvider.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
 
-                // THÊM INCLUDE LoginUserIPs để tải dữ liệu lịch sử IP lên
+                // Quyết định người dùng (2026-07-10): so khớp theo ĐÚNG cặp (UserName,
+                // DeviceName), không chỉ UserName — cho phép Admin "pre-provision" trước 1
+                // User ứng với 1 máy cụ thể + gán sẵn Role (xem UserService.CreateUserAsync).
+                // Nếu cùng UserName Windows nhưng đăng nhập từ 1 máy KHÁC (DeviceName khác,
+                // hoặc chưa từng đăng nhập từ máy này) → coi là chưa tồn tại, tự tạo 1 User
+                // MỚI với Role mặc định "Basic", KHÔNG đụng tới các User khác cùng UserName
+                // (1 tài khoản Windows có thể ứng với nhiều dòng User, mỗi dòng 1 máy + Role
+                // riêng theo máy đó).
                 var user = await dbContext.Users
                     .Include(x => x.Roles).ThenInclude(r => r.Permissions)
                     .Include(x => x.LoginUserIPs)
                     .Include(x => x.UserPermissions).ThenInclude(up => up.Permission)
-                    .FirstOrDefaultAsync(a => a.UserName == windowsUsername);
+                    .FirstOrDefaultAsync(a => a.UserName == windowsUsername && a.DeviceName == deviceName);
 
                 if (user == null)
                 {
@@ -55,7 +66,8 @@ namespace Identity.Infrastructure.Authentication
                     {
                         UserName = windowsUsername,
                         FullName = actualFullName,
-                        CreatedAt = DateTime.UtcNow,
+                        DeviceName = deviceName,
+                        CreatedAt = TimeHelper.GetCurrentUtcTime(),
                         Roles = new List<Role>(),
                         LoginUserIPs = new List<LoginUserIP>() // Khởi tạo list IP cho user mới
                     };
@@ -69,15 +81,7 @@ namespace Identity.Infrastructure.Authentication
                     dbContext.Users.Add(user);
                 }
 
-                // Cập nhật thông tin Network & Device
-                deviceName = GetClientDeviceName(ipAddress);
                 bool isUpdated = false;
-
-                if (!string.IsNullOrEmpty(deviceName) && user.DeviceName != deviceName)
-                {
-                    user.DeviceName = deviceName;
-                    isUpdated = true;
-                }
 
                 if (!string.IsNullOrEmpty(ipAddress))
                 {
@@ -87,7 +91,7 @@ namespace Identity.Infrastructure.Authentication
 
                     if (existingIpRecord != null)
                     {
-                        existingIpRecord.LastLoginAt = DateTime.UtcNow;
+                        existingIpRecord.LastLoginAt = TimeHelper.GetCurrentUtcTime();
                         isUpdated = true;
                     }
                     else
@@ -95,8 +99,8 @@ namespace Identity.Infrastructure.Authentication
                         user.LoginUserIPs.Add(new LoginUserIP
                         {
                             IPAddress = ipAddress,
-                            FirstLoginAt = DateTime.UtcNow,
-                            LastLoginAt = DateTime.UtcNow
+                            FirstLoginAt = TimeHelper.GetCurrentUtcTime(),
+                            LastLoginAt = TimeHelper.GetCurrentUtcTime()
                         });
                         isUpdated = true;
                     }

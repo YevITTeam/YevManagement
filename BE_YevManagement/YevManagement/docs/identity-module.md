@@ -72,7 +72,7 @@
 
 | Service | Method | Ghi chú |
 |---|---|---|
-| `IUserService` / `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync`, `UpdateUserRolesAsync` | Sync user AD, gán role, cập nhật role. |
+| `IUserService` / `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync`, `UpdateUserRolesAsync`, `CreateUserAsync` (2026-07-10) | Sync user AD, gán role, cập nhật role. `CreateUserAsync` — Admin **pre-provision** thủ công 1 User (`UserName`+`DeviceName`+chọn `RoleIds`) trước khi người đó từng đăng nhập Windows — xem §5.1. |
 | `IRoleService` / `RoleService` | `GetAllRolesAsync`, `GetRoleByIdAsync`, `CreateRoleAsync`, `UpdateRoleByIdAsync`, `DeleteRoleByIdAsync` | CRUD role, xoá = soft delete. `CreateRole` ném `DomainException` nếu trùng tên. |
 | `ITokenService` / `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` | Sinh JWT HS256 từ claims (loại bỏ claim `RolesLoaded`), hạn theo `JwtSettings:ExpiryMinutes`. |
 | `IPermissionService` / `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync(roleId)`, `UpdateRolePermissionsAsync(dto)`, `GetUserPermissionOverridesAsync(userId)`, `GetEffectivePermissionsForUserAsync(userId)`, `UpdateUserPermissionOverridesAsync(dto)` | Danh sách permission cố định (chỉ đọc); gán/đổi tập permission của 1 Role (clear rồi add lại theo danh sách Id, giống `UserService.UpdateUserRolesAsync`); 3 method cuối (2026-07-10) quản lý override permission riêng theo User — xem §9.1. |
@@ -88,11 +88,24 @@ Luồng: **Windows Negotiate → ClaimsTransformation (đồng bộ DB) → JWT*
    `.AddJwtBearer(...)` (validate Issuer/Audience/Lifetime/SigningKey từ `JwtSettings`).
 2. **`MyClaimsTransformation : IClaimsTransformation`** (`Indentity.Infrastructure/Authentication/`)
    chạy mỗi request đã xác thực Windows (**và mỗi request JWT** — xem lưu ý bên dưới):
+   - Resolve `deviceName` (reverse DNS qua IP client) **trước** khi tra `Users` (đổi
+     2026-07-10 — xem điểm tiếp theo).
    - Nếu chưa có claim `RolesLoaded`: tra `Users` (kèm `.Include(Roles).ThenInclude(Permissions)`
-     + `.Include(UserPermissions).ThenInclude(Permission)`, 2026-07-10) theo `UserName` (Windows name).
-   - User chưa tồn tại → tạo mới, gán role `"Basic"`, resolve `FullName` từ AD
-     (`UserPrincipal.FindByIdentity`, chỉ chạy trên Windows).
-   - Ghi/cập nhật `LoginUserIP` (IP client, `LastLoginAt`), `DeviceName` (reverse DNS).
+     + `.Include(UserPermissions).ThenInclude(Permission)`, 2026-07-10) theo **ĐÚNG
+     cặp `(UserName, DeviceName)`** (đổi 2026-07-10 — trước đây chỉ khớp theo
+     `UserName`). Lý do đổi: cho phép Admin pre-provision trước 1 User ứng với 1
+     máy cụ thể + Role riêng (xem §5.1) mà không lo bị 1 user "windows account"
+     dùng chung dữ liệu Role qua nhiều máy khác nhau.
+   - **Không khớp được cặp `(UserName, DeviceName)`** (kể cả trường hợp `UserName`
+     đã tồn tại nhưng ứng với `DeviceName` khác, hoặc lần đầu đăng nhập từ máy này)
+     → tạo User **MỚI**, gán role `"Basic"`, resolve `FullName` từ AD
+     (`UserPrincipal.FindByIdentity`, chỉ chạy trên Windows) — **không đụng** tới
+     các User khác đã có cùng `UserName` (1 tài khoản Windows có thể ứng với nhiều
+     dòng `User`, mỗi dòng 1 máy + Role riêng theo máy đó — quyết định người dùng
+     2026-07-10, xem thêm ở §5.1).
+   - Ghi/cập nhật `LoginUserIP` (IP client, `LastLoginAt`). `DeviceName` giờ được
+     set 1 lần tại thời điểm khớp/tạo User (không còn logic "cập nhật lại nếu khác"
+     như bản cũ, vì `DeviceName` giờ là 1 phần của khoá khớp, đã đúng ngay từ query).
    - Bơm claims: `ClaimTypes.Role` (mỗi role), `Permission` (mỗi mã permission **hiệu
      lực** — base từ `user.Roles.SelectMany(r => r.Permissions)`, cộng
      `UserPermission.IsGranted=true`, trừ `UserPermission.IsGranted=false`; xem công
@@ -101,6 +114,32 @@ Luồng: **Windows Negotiate → ClaimsTransformation (đồng bộ DB) → JWT*
    đọc claims, gọi `TokenService.GenerateJwtToken(User)` trả `LoginResponseDto`
    (`UserDto.Permissions` lấy từ claim `Permission`). Từ đó client dùng
    `Authorization: Bearer <token>` cho các request sau.
+
+### 5.1. Tạo User thủ công (pre-provision) — 2026-07-10
+
+**Mục đích**: cho Admin tạo trước 1 `User` (`UserName` + `DeviceName` + chọn
+`RoleIds`) cho người **CHƯA từng đăng nhập Windows lần nào** — ví dụ nhân viên
+mới sắp nhận máy. Khi người đó đăng nhập Windows lần đầu **đúng từ máy đã khai
+báo** (`DeviceName` khớp — xem §5), `MyClaimsTransformation` tra ra đúng dòng
+`User` này và dùng luôn `Role` đã gán, **không** rơi vào mặc định `"Basic"`.
+
+- `POST /api/Auth/create-user` (`[RequirePermission("Identity.User.Create")]`,
+  permission mới seed qua migration `AddIdentityUserCreatePermission`, đã gán
+  full quyền cho `Admin`) — body `CreateUserDto`: `UserName` `[Required]`,
+  `DeviceName` `[Required]` (**bắt buộc** — đây là "chìa khoá" để login sau này
+  khớp đúng, phải nhập đúng hostname reverse-DNS thật của máy), `FullName?`
+  (optional), `RoleIds: List<int>` (optional, có thể để trống — nếu để trống,
+  User này khi đăng nhập vẫn nhận claim Role mặc định `"Basic"` giống case
+  không có Role nào, nhưng là claim-only, KHÔNG tự thêm Role "Basic" vào DB).
+- `UserService.CreateUserAsync`: chặn trùng nếu đã có `User` với đúng cặp
+  `(UserName, DeviceName)` (`DomainException`); validate mọi `RoleIds` phải tồn
+  tại và chưa xoá mềm (`DomainException` nếu có Id không hợp lệ).
+- **Quyết định người dùng (2026-07-10) khi đăng nhập gặp máy lạ**: nếu
+  `UserName` đã tồn tại (dù được tạo thủ công qua tính năng này hay tự sinh qua
+  Windows login trước đó) nhưng đăng nhập từ 1 `DeviceName` KHÁC chưa từng có
+  trong DB → hệ thống tự tạo 1 `User` **MỚI** (Role mặc định `"Basic"`), giữ
+  nguyên dòng `User` cũ không đổi gì — nghĩa là 1 tài khoản Windows có thể có
+  nhiều dòng `User`, mỗi dòng ứng 1 máy vật lý, Role độc lập theo từng máy.
 
 > ⚠️ **`RolesLoaded` bị loại khỏi JWT** (`TokenService` filter claim này khi sinh
 > token) → mỗi request dùng Bearer token, `MyClaimsTransformation` chạy lại từ đầu
@@ -124,6 +163,7 @@ Controller kế thừa `BaseController` (Identity), trả `ApiResponse<T>`.
 | Method | Route | Auth | Mô tả |
 |---|---|---|---|
 | POST | `/api/Auth/windows-login` | Negotiate | Đăng nhập Windows → JWT + profile (kèm `Permissions`). |
+| POST | `/api/Auth/create-user` (2026-07-10) | `RequirePermission("Identity.User.Create")` | Pre-provision thủ công 1 User (`UserName`+`DeviceName`+`RoleIds`) — xem §5.1. |
 | GET | `/api/Auth/get-all-users-with-roles` | `RequirePermission("Identity.User.View")` | Danh sách user + role. |
 | POST | `/api/Auth/update-user-roles` | `RequirePermission("Identity.User.UpdateRoles")` | Cập nhật role cho user (`UpdateUserRolesDto`). |
 | GET | `/api/Auth/get-all-roles` | `RequirePermission("Identity.Role.View")` | Danh sách role (chưa xoá). |
@@ -166,7 +206,9 @@ Seed role trong DB: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Th
   xử lý (khác chuẩn ở [architecture-core.md](architecture-core.md) §6). Cân nhắc refactor về ném exception.
 - `RoleService.GetRoleByIdAsync` **không kiểm null** trước khi map → NRE nếu id sai
   (nên dùng `.OrThrowNotFound("Role", roleId)`).
-- Chưa có endpoint quản lý User độc lập (chỉ thao tác qua Auth). Chưa có xoá/sửa User.
+- Có endpoint tạo User thủ công (`create-user`, §5.1) nhưng vẫn qua `AuthController`
+  (chưa tách `UserController` riêng). Chưa có xoá/sửa User (kể cả sửa `DeviceName`
+  sau khi tạo — muốn đổi phải xoá thẳng trong DB, chưa có API).
 - `UserDto` thiếu `[Required]`; `RoleDto` nên tách input/output.
 - Endpoint Identity **không** `[AllowAnonymous]` — siết bằng `[RequirePermission]`.
 - Role `Basic`/`Quản lý Hợp Đồng`/`Quản lý Thiết bị` **chưa được gán permission
@@ -219,9 +261,10 @@ vẫn chỉ có Role như trước (không gán permission thẳng cho User).
   mỗi request** nhờ JWT không mang claim `RolesLoaded`, nên Admin đổi quyền của 1
   Role có hiệu lực ngay ở request tiếp theo, không cần user đăng nhập lại.
 
-**Danh sách permission đã seed (52 mã — 51 mã gốc trong migration
-`AddPermissionAndRolePermission` + 1 mã `Identity.User.UpdatePermissions` thêm ở
-migration `AddUserPermissionOverride`, xem §9.1):**
+**Danh sách permission đã seed (53 mã — 51 mã gốc trong migration
+`AddPermissionAndRolePermission` + `Identity.User.UpdatePermissions` thêm ở
+migration `AddUserPermissionOverride` (§9.1) + `Identity.User.Create` thêm ở
+migration `AddIdentityUserCreatePermission` (§5.1)):**
 
 | Module.Entity | Action seed |
 |---|---|
@@ -237,7 +280,7 @@ migration `AddUserPermissionOverride`, xem §9.1):**
 | `Asset.DeviceSoftware` | View, Create, Update, Delete (`picker`→View, `sync`→Update) |
 | `Asset.Report` | View |
 | `Asset.TransferHistory` | View, Create |
-| `Identity.User` | View, UpdateRoles, **UpdatePermissions** (thêm ở migration `AddUserPermissionOverride`, xem §9.1) |
+| `Identity.User` | View, UpdateRoles, UpdatePermissions, **Create** (thêm ở migration `AddIdentityUserCreatePermission`, xem §5.1) |
 | `Identity.Role` | View, Create, Update, Delete |
 | `Identity.Permission` | View |
 

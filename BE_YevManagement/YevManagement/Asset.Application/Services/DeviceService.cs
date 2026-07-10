@@ -3,6 +3,7 @@ using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
 using Asset.Domain.Enums;
 using Shared.Application.Abstractions;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
@@ -169,7 +170,7 @@ namespace Asset.Application.Services
             if (!string.IsNullOrWhiteSpace(request.Keyword))
                 query = query.Where(d => d.DeviceCode.Contains(request.Keyword) || d.DeviceName.Contains(request.Keyword));
 
-            var today = DateTime.UtcNow.Date;
+            var today = TimeHelper.GetCurrentUtcTime().Date;
 
             var items = await _unitOfWork.Devices.ToListAsync(
                 query.OrderBy(d => d.DeviceCode),

@@ -78,10 +78,17 @@ const body = await res.json();
 }
 ```
 
-- **Lần đầu 1 user Windows đăng nhập** → server **tự động tạo** user mới trong
-  `YevIdentityManagement`, gán sẵn role `"Basic"` — không cần bước "đăng ký"
-  riêng. Muốn nâng quyền (vd lên `Admin`) phải nhờ 1 Admin khác gọi
-  `update-user-roles` (xem mục 4).
+- **Định danh đăng nhập là cặp `(UserName, DeviceName)`, không chỉ `UserName`**
+  (đổi 2026-07-10). Server tự nhận diện `DeviceName` qua reverse-DNS từ IP
+  client, rồi tra User theo đúng cặp này. **Lần đầu 1 user Windows đăng nhập
+  từ 1 máy chưa từng ghi nhận** (dù `UserName` đó đã tồn tại nhưng gắn với
+  `DeviceName` khác, hoặc hoàn toàn mới) → server **tự động tạo user mới**
+  trong `YevIdentityManagement`, gán sẵn role `"Basic"` — không cần bước "đăng
+  ký" riêng, và **không đụng** tới các user khác cùng `UserName` (1 tài khoản
+  Windows có thể có nhiều dòng user, mỗi dòng ứng 1 máy + Role riêng). Muốn
+  nâng quyền (vd lên `Admin`) phải nhờ 1 Admin khác gọi `update-user-roles`
+  (xem mục 4.2), hoặc **Admin tạo trước** user cho máy đó kèm Role mong muốn
+  qua `create-user` (mục 4.9) trước khi người dùng đăng nhập lần đầu.
 - Mỗi lần gọi `windows-login` server cũng **ghi/cập nhật** IP + `DeviceName`
   của lần đăng nhập gần nhất — **không phải API read-only**, gọi nhiều lần vẫn
   an toàn (idempotent) nhưng có side-effect ghi DB.
@@ -209,7 +216,7 @@ cấp, lưu lại.
 [
   { "id": 1, "code": "Asset.Device.View", "module": "Asset", "description": "Xem danh sách / chi tiết thiết bị" },
   { "id": 2, "code": "Asset.Device.Create", "module": "Asset", "description": "Thêm thiết bị" }
-  // ... 52 dòng, group theo "module" để render section trên UI
+  // ... 53 dòng, group theo "module" để render section trên UI
 ]
 
 // GET /api/Permission/role/{roleId} → data[] — permission ĐANG được gán cho role này, permission: Identity.Permission.View
@@ -220,7 +227,7 @@ cấp, lưu lại.
 [1, 2, 5, 8]
 ```
 
-**Không có** API tạo/sửa/xoá `Permission` — danh sách 52 mã là cố định (seed qua
+**Không có** API tạo/sửa/xoá `Permission` — danh sách 53 mã là cố định (seed qua
 migration BE), FE chỉ đọc (`GET /all`) và gán/gỡ theo Role (`GET`/`PUT /role/{roleId}`).
 
 ### 4.8. Override permission riêng theo User — `/api/Permission/user/{userId}` (mới, 2026-07-10) ⭐
@@ -256,6 +263,34 @@ sẵn quyền xem Thiết bị) nhưng muốn **thu hồi riêng** quyền xem T
 **Không cần user đăng nhập lại** — permission hiệu lực tự refresh ngay request
 tiếp theo (cùng cơ chế với đổi permission theo Role, xem mục 2.2).
 
+### 4.9. Tạo user thủ công (pre-provision) — `POST /api/Auth/create-user` (mới, 2026-07-10) ⭐
+
+Permission: `Identity.User.Create`. Dùng khi Admin muốn **chuẩn bị trước** 1
+user cho 1 nhân viên/máy cụ thể — ví dụ nhân viên mới sắp nhận máy — **trước
+khi** người đó từng đăng nhập Windows lần nào. Khi họ đăng nhập lần đầu **đúng
+từ máy đã khai báo**, hệ thống nhận diện khớp và dùng ngay Role đã gán ở đây,
+không rơi vào mặc định `"Basic"` (xem cơ chế khớp `(UserName, DeviceName)` ở
+mục 2.2).
+
+```jsonc
+// body
+{
+  "userName": "YEV\\nv.a",          // Windows username đầy đủ (kèm domain nếu có)
+  "deviceName": "YDC-1877",         // BẮT BUỘC — phải đúng hostname reverse-DNS thật của máy, xem cảnh báo dưới
+  "fullName": "Nguyễn Văn A",       // optional
+  "roleIds": [3]                    // optional, Id thật lấy từ GET /api/Auth/get-all-roles — để trống thì user này coi như Basic khi đăng nhập
+}
+
+// → 400 nếu thiếu userName/deviceName, nếu (userName, deviceName) đã tồn tại,
+//   hoặc roleIds chứa Id không tồn tại/đã bị xoá mềm
+```
+
+> ⚠️ **`deviceName` phải khớp CHÍNH XÁC** với giá trị hệ thống tự nhận diện lúc
+> đăng nhập thật (reverse-DNS hostname của máy, ví dụ IT có thể tra qua công cụ
+> quản lý tài sản/Tanium). Nhập sai/khác 1 ký tự → lúc người dùng đăng nhập
+> thật, hệ thống KHÔNG khớp được dòng đã tạo này, sẽ tự tạo 1 dòng user MỚI
+> khác với Role mặc định `"Basic"` thay vì dùng Role đã chuẩn bị.
+
 ---
 
 ## 5. Tổng hợp endpoint (tra cứu nhanh)
@@ -263,6 +298,7 @@ tiếp theo (cùng cơ chế với đổi permission theo Role, xem mục 2.2).
 | Method | Route | Permission | Mô tả |
 |---|---|---|---|
 | POST | `/api/Auth/windows-login` | Negotiate (không phải Bearer) | Đăng nhập → JWT + profile (kèm `permissions`) |
+| POST | `/api/Auth/create-user` | `Identity.User.Create` | Tạo user thủ công (pre-provision UserName+DeviceName+Role) |
 | GET | `/api/Auth/get-all-users-with-roles` | `Identity.User.View` | Danh sách user + role |
 | POST | `/api/Auth/update-user-roles` | `Identity.User.UpdateRoles` | Gán role cho 1 user (gửi đủ danh sách cuối) |
 | GET | `/api/Auth/get-all-roles` | `Identity.Role.View` | Danh sách role |

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
+using Shared.Application.Helper;
 
 namespace Asset.Application.Dtos.DeviceSoftwares
 {
@@ -13,7 +14,7 @@ namespace Asset.Application.Dtos.DeviceSoftwares
         [Required(ErrorMessage = "Phần mềm không được để trống")]
         public int SoftwareId { get; set; }
 
-        public DateTime InstallDate { get; set; } = DateTime.UtcNow;
+        public DateTime InstallDate { get; set; } = TimeHelper.GetCurrentUtcTime();
         public string? LicenseKey { get; set; }
     }
 }

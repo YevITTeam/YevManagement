@@ -10,5 +10,6 @@ namespace Identity.Application.Interfaces.Service
         Task<UserDto> SyncWindowsUserAsync(string username, string fullName);
         Task<List<UserDto>> GetAllUsersAsync();
         Task UpdateUserRolesAsync(UpdateUserRolesDto request);
+        Task<UserDto> CreateUserAsync(CreateUserDto request);
     }
 }

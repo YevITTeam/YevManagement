@@ -4,6 +4,7 @@ using Asset.Domain.Entities;
 using Asset.Domain.Enums;
 using Shared.Application.Services;
 using Shared.Application.Abstractions;
+using Shared.Application.Helper;
 using Shared.Core.Exceptions;
 
 namespace Asset.Application.Services
@@ -70,7 +71,7 @@ namespace Asset.Application.Services
 
             // Máy cũ: chuyển trạng thái "Chờ sử dụng", trừ khi đã hết hạn sử dụng thì
             // chuyển thẳng "Chờ thanh lý" (cùng công thức IsExpired ở báo cáo device-list).
-            var today = DateTime.UtcNow.Date;
+            var today = TimeHelper.GetCurrentUtcTime().Date;
             var isExpired = oldDevice!.ExpirationDate.HasValue && oldDevice.ExpirationDate.Value.Date < today;
             oldDevice.Status = isExpired ? (int)DeviceStatus.PendingLiquidation : (int)DeviceStatus.PendingUse;
             _unitOfWork.Devices.Update(oldDevice);
@@ -83,7 +84,7 @@ namespace Asset.Application.Services
             {
                 OldDeviceId = oldDevice.Id,
                 NewDeviceId = newDevice!.Id,
-                TransferDate = DateTime.UtcNow,
+                TransferDate = TimeHelper.GetCurrentUtcTime(),
                 Note = request.Note
             };
 

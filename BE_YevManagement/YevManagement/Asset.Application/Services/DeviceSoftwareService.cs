@@ -2,6 +2,7 @@
 using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
 using Shared.Application.Abstractions;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 using System;
@@ -147,7 +148,7 @@ namespace Asset.Application.Services
                 {
                     DeviceId = request.DeviceId,
                     SoftwareId = item.SoftwareId,
-                    InstallDate = item.InstallDate ?? DateTime.UtcNow,
+                    InstallDate = item.InstallDate ?? TimeHelper.GetCurrentUtcTime(),
                     LicenseKey = item.LicenseKey
                 });
                 await _unitOfWork.DeviceSoftwares.AddRangeAsync(newEntities);

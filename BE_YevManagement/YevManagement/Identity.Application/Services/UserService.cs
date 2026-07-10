@@ -1,7 +1,9 @@
 ﻿using Identity.Application.Dtos.UserDto;
 using Identity.Application.Interfaces.Service;
 using Identity.Domain.Entities;
+using Shared.Application.Helper;
 using Shared.Application.Services;
+using Shared.Core.Exceptions;
 
 namespace Identity.Application.Services
 {
@@ -46,7 +48,7 @@ namespace Identity.Application.Services
             {
                 UserName = username,
                 FullName = fullName,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = TimeHelper.GetCurrentUtcTime(),
 
                 Roles = new List<Role>
                 {
@@ -97,6 +99,48 @@ namespace Identity.Application.Services
 
             _unitOfWork.Users.Update(user);
             await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task<UserDto> CreateUserAsync(CreateUserDto request)
+        {
+            var userName = request.UserName.Trim();
+            var deviceName = request.DeviceName.Trim();
+
+            // Định danh đăng nhập là cặp (UserName, DeviceName) — xem MyClaimsTransformation.
+            // Không cho tạo trùng để tránh 2 dòng User cùng khớp 1 lần đăng nhập thật.
+            var existingUser = await _unitOfWork.Users.FirstOrDefaultAsync(
+                x => x.UserName == userName && x.DeviceName == deviceName);
+            if (existingUser != null)
+                throw new DomainException($"Người dùng '{userName}' trên thiết bị '{deviceName}' đã tồn tại.");
+
+            var roles = new List<Role>();
+            if (request.RoleIds.Any())
+            {
+                roles = (await _unitOfWork.Roles.FindAsync(r => request.RoleIds.Contains(r.Id) && !r.IsDeleted)).ToList();
+                if (roles.Count != request.RoleIds.Distinct().Count())
+                    throw new DomainException("Một số quyền (Role) được chọn không tồn tại.");
+            }
+
+            var newUser = new User
+            {
+                UserName = userName,
+                DeviceName = deviceName,
+                FullName = request.FullName,
+                CreatedAt = TimeHelper.GetCurrentUtcTime(),
+                Roles = roles
+            };
+
+            await _unitOfWork.Users.AddAsync(newUser);
+            await _unitOfWork.SaveChangesAsync();
+
+            return new UserDto
+            {
+                Id = newUser.Id,
+                UserName = newUser.UserName,
+                FullName = newUser.FullName,
+                DeviceName = newUser.DeviceName,
+                Roles = roles.Select(r => r.RoleName).ToList()
+            };
         }
     }
 }

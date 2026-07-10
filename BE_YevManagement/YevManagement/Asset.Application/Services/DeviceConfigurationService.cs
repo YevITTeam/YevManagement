@@ -3,6 +3,7 @@ using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Shared.Application.Abstractions;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 using System;
@@ -85,7 +86,7 @@ namespace Asset.Application.Services
                 Nic = newConfig.Nic,
                 Other = newConfig.Other,
                 Note = newConfig.Note,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = TimeHelper.GetCurrentUtcTime()
             };
 
             await _unitOfWork.DeviceConfigurationInitials.AddAsync(initial);
@@ -129,7 +130,7 @@ namespace Asset.Application.Services
                     Nic = request.Nic,
                     Other = request.Other,
                     Note = request.Note,
-                    EditedAt = DateTime.UtcNow,
+                    EditedAt = TimeHelper.GetCurrentUtcTime(),
                     EditedBy = GetCurrentUser()
                 };
 
