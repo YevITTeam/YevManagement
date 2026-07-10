@@ -1,0 +1,330 @@
+using Asset.Application.Dtos.DeviceImports;
+using Asset.Application.Dtos.Devices;
+using Asset.Application.Dtos.TransferHistories;
+using Asset.Application.Interfaces.Service;
+using Asset.Domain.Enums;
+using ClosedXML.Excel;
+using Shared.Application.Abstractions;
+using Shared.Application.Services;
+using Shared.Core.Exceptions;
+
+namespace Asset.Application.Services
+{
+    public class DeviceImportService : BaseService<IAssetUnitOfWork>, IDeviceImportService
+    {
+        // File Excel mẫu (xem docs/asset-module.md) không có DeviceName/Manager/Email/
+        // DepreciationMonths dù các trường này [Required] ở CreateDeviceDto — theo quyết
+        // định của người dùng (2026-07-10): DeviceName lấy theo MQL, Manager/Email để
+        // trống, DepreciationMonths mặc định 60 tháng, sửa lại sau qua màn hình Device
+        // nếu cần.
+        private const int DefaultDepreciationMonths = 60;
+
+        private readonly IDeviceService _deviceService;
+        private readonly ITransferHistoryService _transferHistoryService;
+
+        public DeviceImportService(
+            IAssetUnitOfWork unitOfWork,
+            IDeviceService deviceService,
+            ITransferHistoryService transferHistoryService) : base(unitOfWork)
+        {
+            _deviceService = deviceService;
+            _transferHistoryService = transferHistoryService;
+        }
+
+        public async Task<DeviceImportPreviewResultDto> PreviewAsync(Stream excelFileStream)
+        {
+            var rawRows = ParseExcel(excelFileStream);
+            var validatedRows = await ValidateAndResolveRowsAsync(rawRows);
+            return BuildPreviewResult(validatedRows);
+        }
+
+        public async Task<DeviceImportConfirmResultDto> ConfirmAsync(ConfirmDeviceImportDto request)
+        {
+            // Validate lại theo dữ liệu DB hiện tại (không tin Id do client gửi lên) —
+            // phòng trường hợp dữ liệu đã đổi kể từ lúc người dùng xem bản Preview.
+            var validatedRows = await ValidateAndResolveRowsAsync(request.Rows);
+            var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
+            if (invalidRows.Count > 0)
+            {
+                var errors = invalidRows
+                    .SelectMany(r => r.Errors.Select(e => $"Dòng {r.RowNumber}: {e}"))
+                    .ToList();
+                throw new DomainException("Dữ liệu import không hợp lệ, vui lòng xem lại bản xem trước.", errors);
+            }
+
+            var result = new DeviceImportConfirmResultDto();
+
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                foreach (var row in validatedRows)
+                {
+                    var createDto = new CreateDeviceDto
+                    {
+                        DeviceCode = row.DeviceCode!,
+                        DeviceName = row.DeviceCode!,
+                        DeviceTypeId = row.ResolvedDeviceTypeId!.Value,
+                        SupplierId = row.ResolvedSupplierId!.Value,
+                        BranchId = row.ResolvedBranchId!.Value,
+                        Manager = string.Empty,
+                        Email = string.Empty,
+                        PurchaseDate = row.PurchaseDate!.Value,
+                        DepreciationMonths = DefaultDepreciationMonths,
+                        IsOutsourced = false,
+                        Status = (int)DeviceStatus.PendingUse,
+                        Note = row.Note,
+                        SerialNumber = row.SerialNumber
+                    };
+
+                    var created = await _deviceService.CreateAsync(createDto);
+                    result.CreatedDeviceIds.Add(created.Id);
+                    result.CreatedCount++;
+
+                    if (row.ResolvedOldDeviceId.HasValue)
+                    {
+                        await _transferHistoryService.TransferAsync(new CreateTransferHistoryDto
+                        {
+                            OldDeviceId = row.ResolvedOldDeviceId.Value,
+                            NewDeviceId = created.Id,
+                            Note = $"Nhập từ Excel: thiết bị {row.DeviceCode} thay thế {row.OldDeviceCode}"
+                        });
+                        result.ReplacedOldDeviceCount++;
+                    }
+                }
+
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
+
+            return result;
+        }
+
+        private async Task<List<DeviceImportRowDto>> ValidateAndResolveRowsAsync(List<DeviceImportRowDto> rawRows)
+        {
+            var branches = await _unitOfWork.Branches.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.BranchName });
+            var deviceTypes = await _unitOfWork.DeviceTypes.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.TypeName });
+            var suppliers = await _unitOfWork.Suppliers.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.SupplierName });
+
+            var duplicatedCodesInFile = FindDuplicates(rawRows, r => r.DeviceCode);
+            var duplicatedOldCodesInFile = FindDuplicates(rawRows, r => r.OldDeviceCode);
+            var duplicatedSerialsInFile = FindDuplicates(rawRows, r => r.SerialNumber);
+
+            var result = new List<DeviceImportRowDto>();
+
+            foreach (var row in rawRows)
+            {
+                var errors = new List<string>();
+                var deviceCode = row.DeviceCode?.Trim();
+
+                if (string.IsNullOrWhiteSpace(deviceCode))
+                {
+                    errors.Add("Thiếu MQL (mã thiết bị).");
+                }
+                else
+                {
+                    if (duplicatedCodesInFile.Contains(deviceCode))
+                        errors.Add($"MQL '{deviceCode}' bị lặp lại nhiều dòng trong file.");
+
+                    var existingDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == deviceCode);
+                    if (existingDevice != null)
+                        errors.Add($"Mã thiết bị '{deviceCode}' đã tồn tại trong hệ thống.");
+                }
+
+                int? branchId = null;
+                var branchName = row.BranchName?.Trim();
+                if (string.IsNullOrWhiteSpace(branchName))
+                {
+                    errors.Add("Thiếu Xưởng.");
+                }
+                else
+                {
+                    var branch = branches.FirstOrDefault(b => string.Equals(b.BranchName, branchName, StringComparison.OrdinalIgnoreCase));
+                    if (branch == null) errors.Add($"Không tìm thấy Xưởng '{branchName}'.");
+                    else branchId = branch.Id;
+                }
+
+                int? deviceTypeId = null;
+                var deviceTypeName = row.DeviceTypeName?.Trim();
+                if (string.IsNullOrWhiteSpace(deviceTypeName))
+                {
+                    errors.Add("Thiếu Loại Thiết Bị.");
+                }
+                else
+                {
+                    var deviceType = deviceTypes.FirstOrDefault(d => string.Equals(d.TypeName, deviceTypeName, StringComparison.OrdinalIgnoreCase));
+                    if (deviceType == null) errors.Add($"Không tìm thấy Loại Thiết Bị '{deviceTypeName}'.");
+                    else deviceTypeId = deviceType.Id;
+                }
+
+                int? supplierId = null;
+                var supplierName = row.SupplierName?.Trim();
+                if (string.IsNullOrWhiteSpace(supplierName))
+                {
+                    errors.Add("Thiếu Nhà Cung Cấp.");
+                }
+                else
+                {
+                    var supplier = suppliers.FirstOrDefault(s => string.Equals(s.SupplierName, supplierName, StringComparison.OrdinalIgnoreCase));
+                    if (supplier == null) errors.Add($"Không tìm thấy Nhà Cung Cấp '{supplierName}'.");
+                    else supplierId = supplier.Id;
+                }
+
+                if (!row.PurchaseDate.HasValue)
+                    errors.Add("Thiếu hoặc sai định dạng Ngày Mua.");
+
+                var serialNumber = string.IsNullOrWhiteSpace(row.SerialNumber) ? null : row.SerialNumber.Trim();
+                if (serialNumber != null)
+                {
+                    if (duplicatedSerialsInFile.Contains(serialNumber))
+                        errors.Add($"Số Serial '{serialNumber}' bị lặp lại nhiều dòng trong file.");
+
+                    var existingSerial = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.SerialNumber == serialNumber);
+                    if (existingSerial != null)
+                        errors.Add($"Số Serial '{serialNumber}' đã tồn tại trong hệ thống.");
+                }
+
+                int? oldDeviceId = null;
+                var oldDeviceCode = row.OldDeviceCode?.Trim();
+                if (!string.IsNullOrWhiteSpace(oldDeviceCode))
+                {
+                    if (!string.IsNullOrWhiteSpace(deviceCode) && string.Equals(oldDeviceCode, deviceCode, StringComparison.OrdinalIgnoreCase))
+                    {
+                        errors.Add("MQL Cũ không được trùng với MQL mới.");
+                    }
+                    else if (duplicatedOldCodesInFile.Contains(oldDeviceCode))
+                    {
+                        errors.Add($"MQL Cũ '{oldDeviceCode}' được dùng để thay thế ở nhiều dòng trong file.");
+                    }
+                    else
+                    {
+                        var oldDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == oldDeviceCode && !x.IsDeleted);
+                        if (oldDevice == null) errors.Add($"Không tìm thấy thiết bị cũ có mã '{oldDeviceCode}'.");
+                        else oldDeviceId = oldDevice.Id;
+                    }
+                }
+
+                result.Add(new DeviceImportRowDto
+                {
+                    RowNumber = row.RowNumber,
+                    DeviceCode = deviceCode,
+                    BranchName = branchName,
+                    DeviceTypeName = deviceTypeName,
+                    SupplierName = supplierName,
+                    PurchaseDate = row.PurchaseDate,
+                    Note = row.Note,
+                    SerialNumber = serialNumber,
+                    OldDeviceCode = oldDeviceCode,
+                    ResolvedBranchId = branchId,
+                    ResolvedDeviceTypeId = deviceTypeId,
+                    ResolvedSupplierId = supplierId,
+                    ResolvedOldDeviceId = oldDeviceId,
+                    IsValid = errors.Count == 0,
+                    Errors = errors
+                });
+            }
+
+            return result;
+        }
+
+        private static HashSet<string> FindDuplicates(List<DeviceImportRowDto> rows, Func<DeviceImportRowDto, string?> selector)
+        {
+            return rows
+                .Select(selector)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v!.Trim())
+                .GroupBy(v => v, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static DeviceImportPreviewResultDto BuildPreviewResult(List<DeviceImportRowDto> rows) => new()
+        {
+            Rows = rows,
+            TotalRows = rows.Count,
+            ValidRows = rows.Count(r => r.IsValid),
+            InvalidRows = rows.Count(r => !r.IsValid)
+        };
+
+        // Cột cố định theo đúng thứ tự template Excel hiện có (xem ảnh mẫu): A=MQL,
+        // B=Xưởng, C=Loại Thiết Bị, D=Nhà Cung Cấp, E=Ngày Mua, F=Ghi Chú,
+        // G=Số SerialNumber, H=MQL Cũ. Dòng 1 là header.
+        private static List<DeviceImportRowDto> ParseExcel(Stream stream)
+        {
+            using var workbook = new XLWorkbook(stream);
+            var worksheet = workbook.Worksheets.First();
+            var usedRange = worksheet.RangeUsed();
+
+            var rows = new List<DeviceImportRowDto>();
+            if (usedRange == null) return rows;
+
+            foreach (var xlRow in usedRange.RowsUsed().Skip(1))
+            {
+                var deviceCode = xlRow.Cell(1).GetString().Trim();
+                var branchName = xlRow.Cell(2).GetString().Trim();
+                var deviceTypeName = xlRow.Cell(3).GetString().Trim();
+                var supplierName = xlRow.Cell(4).GetString().Trim();
+                var dateCell = xlRow.Cell(5);
+                var note = xlRow.Cell(6).GetString().Trim();
+                var serialNumber = xlRow.Cell(7).GetString().Trim();
+                var oldDeviceCode = xlRow.Cell(8).GetString().Trim();
+
+                var isRowEmpty = string.IsNullOrWhiteSpace(deviceCode) && string.IsNullOrWhiteSpace(branchName) &&
+                    string.IsNullOrWhiteSpace(deviceTypeName) && string.IsNullOrWhiteSpace(supplierName) &&
+                    string.IsNullOrWhiteSpace(note) && string.IsNullOrWhiteSpace(serialNumber) &&
+                    string.IsNullOrWhiteSpace(oldDeviceCode) && dateCell.IsEmpty();
+                if (isRowEmpty) continue;
+
+                DateTime? purchaseDate = null;
+                if (!dateCell.IsEmpty())
+                {
+                    if (dateCell.DataType == XLDataType.DateTime)
+                    {
+                        purchaseDate = dateCell.GetDateTime();
+                    }
+                    else if (TryParsePurchaseDate(dateCell.GetString(), out var parsedDate))
+                    {
+                        purchaseDate = parsedDate;
+                    }
+                }
+
+                rows.Add(new DeviceImportRowDto
+                {
+                    RowNumber = xlRow.RowNumber(),
+                    DeviceCode = string.IsNullOrWhiteSpace(deviceCode) ? null : deviceCode,
+                    BranchName = string.IsNullOrWhiteSpace(branchName) ? null : branchName,
+                    DeviceTypeName = string.IsNullOrWhiteSpace(deviceTypeName) ? null : deviceTypeName,
+                    SupplierName = string.IsNullOrWhiteSpace(supplierName) ? null : supplierName,
+                    PurchaseDate = purchaseDate,
+                    Note = string.IsNullOrWhiteSpace(note) ? null : note,
+                    SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
+                    OldDeviceCode = string.IsNullOrWhiteSpace(oldDeviceCode) ? null : oldDeviceCode
+                });
+            }
+
+            return rows;
+        }
+
+        // Chỉ nhận vài định dạng ngày cố định (không dùng CurrentCulture của server —
+        // dễ hiểu nhầm ngày/tháng tuỳ môi trường chạy). Ưu tiên dd/MM/yyyy (định dạng
+        // Việt Nam phổ biến khi ô Excel bị nhập dạng text thay vì Date thật).
+        private static readonly string[] AcceptedPurchaseDateFormats =
+        {
+            "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "d-M-yyyy", "yyyy-MM-dd"
+        };
+
+        private static bool TryParsePurchaseDate(string value, out DateTime result)
+        {
+            return DateTime.TryParseExact(
+                value.Trim(),
+                AcceptedPurchaseDateFormats,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out result);
+        }
+    }
+}

@@ -175,6 +175,70 @@
 > — riêng dòng `TransferHistory` test không xoá được vì thiết kế không có API
 > xoá, chấp nhận còn lại vài dòng tham chiếu thiết bị đã soft-delete).
 
+> **Import Device hàng loạt từ Excel (2026-07-10, đã làm)**: theo đúng file mẫu
+> Excel hiện có của người dùng (8 cột theo đúng thứ tự: `MQL`, `Xưởng`, `Loại
+> Thiết Bị`, `Nhà Cung Cấp`, `Ngày Mua`, `Ghi Chú`, `Số SerialNumber`, `MQL Cũ`;
+> dòng 1 là header). Quy trình 2 bước — **bắt buộc xem trước khi ghi DB** theo
+> yêu cầu người dùng:
+>
+> **Định dạng cột "Ngày Mua"**: nếu ô Excel là **kiểu Date thật** (không phải
+> text) thì đọc trực tiếp, không phụ thuộc cách hiển thị. Nếu ô là text,
+> `ParseExcel`/`TryParsePurchaseDate` chỉ nhận cố định vài định dạng
+> (`dd/MM/yyyy`, `d/M/yyyy`, `dd-MM-yyyy`, `d-M-yyyy`, `yyyy-MM-dd`) qua
+> `DateTime.TryParseExact` + `CultureInfo.InvariantCulture` — **cố ý không dùng**
+> `DateTime.TryParse` theo culture mặc định của server (dễ hiểu nhầm ngày/tháng
+> tuỳ môi trường chạy). Định dạng khác hoặc ô trống → dòng đó báo lỗi "Thiếu
+> hoặc sai định dạng Ngày Mua", không có giá trị mặc định.
+> 1. `POST /api/DeviceImport/preview` (`multipart/form-data`, field `file`) —
+>    `DeviceImportService.PreviewAsync` đọc file bằng `ClosedXML`
+>    (`Asset.Application` thêm package `ClosedXML` 0.105.0), parse từng dòng,
+>    validate + resolve tên → Id (không đụng DB, chỉ đọc), trả
+>    `DeviceImportPreviewResultDto { Rows: List<DeviceImportRowDto>, TotalRows,
+>    ValidRows, InvalidRows }`. Mỗi `DeviceImportRowDto` có `IsValid`/`Errors`
+>    (tiếng Việt, theo từng dòng) để FE hiển thị bảng preview trước khi người
+>    dùng bấm xác nhận import.
+> 2. `POST /api/DeviceImport/confirm` (`ConfirmDeviceImportDto { Rows }` — FE gửi
+>    lại đúng field thô của các dòng đã xem ở bước 1, **không gửi Id đã resolve**
+>    vì server luôn tự tra lại theo tên, không tin Id từ client) —
+>    `DeviceImportService.ConfirmAsync` **validate lại từ đầu** theo dữ liệu DB
+>    tại thời điểm confirm (phòng race condition giữa lúc xem preview và lúc bấm
+>    xác nhận) — nếu còn dòng lỗi thì **không ghi gì cả**, ném `DomainException`
+>    kèm `Errors` là danh sách `"Dòng {n}: {lý do}"` (dùng constructor mới
+>    `DomainException(message, List<string> errors)` thêm ở `Shared.Core`, map
+>    thẳng vào `ApiResponse.Failure.Errors` qua middleware chung). Nếu toàn bộ
+>    hợp lệ, chạy trong 1 `_unitOfWork.BeginTransactionAsync()`/
+>    `CommitTransactionAsync()` (rollback nếu có lỗi giữa chừng — atomic cả
+>    batch), với từng dòng:
+>    - Gọi thẳng `IDeviceService.CreateAsync` (tái dùng nguyên logic tạo Device
+>      đã có, không viết lại) với `DeviceCode`/`SerialNumber`/`Note`/`PurchaseDate`
+>      lấy từ Excel, còn các field **`[Required]` mà Excel không có** thì theo
+>      đúng quyết định người dùng (2026-07-10): `DeviceName` = lấy theo `MQL`,
+>      `Manager`/`Email` để trống, `DepreciationMonths` mặc định **60 tháng**
+>      (hằng số `DefaultDepreciationMonths` trong `DeviceImportService`) —
+>      `Status` mặc định `PendingUse`. Cần sửa lại tay qua màn hình Device sau
+>      nếu thiếu thông tin.
+>    - Nếu dòng có `MQL Cũ` (thiết bị bị thay thế): gọi thẳng
+>      `ITransferHistoryService.TransferAsync` (tái dùng 100% nghiệp vụ "chuyển
+>      máy" đã có ở §1 — chuyển IP chính + phần mềm từ máy cũ sang máy vừa tạo,
+>      đổi trạng thái máy cũ theo hạn sử dụng, tạo dòng `TransferHistory`) theo
+>      đúng quyết định người dùng, **không** viết logic thay thế riêng.
+>
+> **Validate/resolve từng dòng** (`DeviceImportService.ValidateAndResolveRowsAsync`,
+> dùng chung cho cả `preview` và `confirm`): `Xưởng`/`Loại Thiết Bị`/`Nhà Cung
+> Cấp` là **tên** (không phải mã) → so khớp case-insensitive với
+> `Branch.BranchName`/`DeviceType.TypeName`/`Supplier.SupplierName` đang
+> `!IsDeleted`; theo đúng quyết định người dùng, **không tự tạo mới** — không
+> khớp thì báo lỗi dòng đó, chặn import. Tương tự `MQL Cũ` phải khớp đúng 1
+> `Device.DeviceCode` (`!IsDeleted`) đang có sẵn. Các lỗi khác được kiểm: thiếu
+> `MQL`/`Ngày Mua`, `MQL`/Serial trùng trong chính file đang import, `MQL`/Serial
+> đã tồn tại trong DB, `MQL Cũ` trùng `MQL` mới, `MQL Cũ` bị dùng thay thế ở
+> nhiều dòng trong cùng file.
+>
+> **Chưa làm / giới hạn đã biết**: chưa có endpoint tải file Excel mẫu
+> (`template`) — FE dùng lại file mẫu người dùng đang có sẵn. Import chỉ hỗ trợ
+> **tạo mới**, không hỗ trợ cập nhật Device đã tồn tại qua Excel (trùng `MQL` với
+> Device đang có luôn bị báo lỗi, không ghi đè).
+
 > **`Device.SerialNumber` + `Device.IsUseUsb` (2026-07-09, đã làm)**: 2 field mới —
 > `SerialNumber?` (string, max 100, **unique khi có giá trị** — index
 > `IX_ThietBis_SoSeri` filtered `WHERE SerialNumber IS NOT NULL`, cho phép nhiều
@@ -315,6 +379,7 @@
 | IpPrefix | `IpPrefixService` (đầy đủ, POST tự sinh 255 IP con) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, PUT, DELETE | `[RequirePermission("Asset.IpPrefix.*")]` |
 | DeviceConfiguration | `DeviceConfigurationService` (CRUD + snapshot/history) | `DeviceConfigurationController` `/api/DeviceConfiguration` | `by-device/{deviceId}` (trả `null` nếu chưa có), POST, PUT, DELETE (xoá cứng, cascade Initial+History), `{configId}/initial` (GET), `initial/{id}` (DELETE), `{configId}/history` (GET list) — **không có** `grid-list`/`all` | `[RequirePermission("Asset.DeviceConfiguration.*")]` (initial/history GET→`.View`, DeleteInitial→`.Delete`) |
 | TransferHistory | `TransferHistoryService` (2026-07-09, đã làm — "chuyển máy") | `TransferHistoryController` `/api/TransferHistory` | POST (thực hiện chuyển máy), `device/{deviceId}` (GET, lịch sử chuyển máy của 1 thiết bị) — **không có** grid-list/all/PUT/DELETE (audit-log, không sửa/xoá sau khi tạo) | `[RequirePermission("Asset.TransferHistory.Create/.View")]` |
+| DeviceImport | `DeviceImportService` (2026-07-10, mới làm — import Device hàng loạt từ Excel) | `DeviceImportController` `/api/DeviceImport` | `preview` (POST multipart file, chỉ đọc + validate, **không ghi DB**), `confirm` (POST, validate lại rồi ghi DB trong 1 transaction) | `[RequirePermission("Asset.Device.Create")]` (dùng chung, không tách permission riêng) |
 | AuditTrail | ❌ chưa có | ❌ | — | — |
 
 > **Auth (2026-07-10, đã siết)**: toàn bộ 12 controller trên đã bỏ `[AllowAnonymous]`,
@@ -473,6 +538,15 @@ tạo 1 dòng `TransferHistory` audit-log. Đã test thật trên DB (tạo thi�
 verify đủ 2 kịch bản trạng thái + swap IP + dedup phần mềm + reject trùng Id,
 rồi soft-delete thiết bị TEST — dòng `TransferHistory` test không xoá được do
 thiết kế không có API xoá).
+
+`POST /api/DeviceImport/preview` + `POST /api/DeviceImport/confirm` (2026-07-10,
+đã làm, xem ghi chú §1) — import Device hàng loạt từ file Excel mẫu có sẵn của
+người dùng (8 cột `MQL/Xưởng/Loại Thiết Bị/Nhà Cung Cấp/Ngày Mua/Ghi Chú/Số
+SerialNumber/MQL Cũ`), có bước preview validate trước khi ghi DB, `MQL Cũ` tái
+dùng nguyên nghiệp vụ "chuyển máy" của `TransferHistoryService`. Thêm package
+`ClosedXML` 0.105.0 vào `Asset.Application` để đọc `.xlsx`; thêm constructor
+`DomainException(string message, List<string> errors)` ở `Shared.Core` để trả
+lỗi theo từng dòng qua `ApiResponse.Failure.Errors`.
 
 Dữ liệu thật `Software`/`SoftwareGroup` cũng đã được sửa lại (2026-07-09, thao
 tác dữ liệu qua API CRUD sẵn có, không phải code): trước đó 1 lần migrate dữ

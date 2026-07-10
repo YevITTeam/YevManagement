@@ -8,5 +8,8 @@ namespace Shared.Core.Exceptions
     {
         public DomainException(string message)
             : base(message, 400) { }
+
+        public DomainException(string message, List<string> errors)
+            : base(message, 400, errors) { }
     }
 }
