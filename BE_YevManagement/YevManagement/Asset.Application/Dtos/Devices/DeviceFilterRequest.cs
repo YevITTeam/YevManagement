@@ -18,5 +18,9 @@ namespace Asset.Application.Dtos.Devices
         public bool? IsOutsourced { get; set; }
         public string? SerialNumber { get; set; }
         public bool? IsUseUsb { get; set; }
+
+        // 2026-07-10: sort theo DeviceCode, null = giữ mặc định OrderByDescending(PurchaseDate).
+        // true = tăng dần, false = giảm dần.
+        public bool? SortDeviceCodeAscending { get; set; }
     }
 }

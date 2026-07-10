@@ -52,6 +52,7 @@ public class GenericRepository<T, TDbContext> : IGenericRepository<T>
 | `GetQueryable(isTracking, ...includes)` | Trả `IQueryable<T>` để Service tự build filter động. |
 | `GetPagedAsync(query, pageIndex, pageSize)` | Cắt trang thô. |
 | `ToPagedResponseAsync(query, pageIndex, pageSize, selector)` | **Cách phân trang chuẩn** → trả thẳng `PagedResponse<TResult>`. |
+| `ToListAsync(query, selector)` | (2026-07-09, mới thêm) Materialize `IQueryable<T>` đã filter/`OrderBy` thành `List<TResult>` projection — dùng khi Service cần build `IQueryable` động (`.Where` theo filter optional) rồi trả **toàn bộ** kết quả, không phân trang (ví dụ báo cáo). Khác `SelectAsync` ở chỗ nhận `IQueryable` đã compose sẵn thay vì 1 `predicate` đơn, nên hỗ trợ `OrderBy`/nhiều `.Where` nối tiếp trước khi gọi. |
 
 **Quy ước quan trọng:**
 - Repository con **chỉ thêm** method đặc thù không generic hoá được (ví dụ

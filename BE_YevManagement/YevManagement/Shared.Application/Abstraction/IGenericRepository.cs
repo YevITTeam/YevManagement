@@ -41,5 +41,9 @@ namespace Shared.Application.Abstractions
             int pageIndex,
             int pageSize,
             Expression<Func<T, TResult>> selector);
+
+        Task<List<TResult>> ToListAsync<TResult>(
+            IQueryable<T> query,
+            Expression<Func<T, TResult>> selector);
     }
 }

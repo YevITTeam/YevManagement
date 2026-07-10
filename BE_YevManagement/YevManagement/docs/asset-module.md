@@ -2,8 +2,10 @@
 
 > **Trạng thái:** ĐANG PHÁT TRIỂN. Đã có nền CRUD cho hầu hết thực thể (Branch,
 > DeviceType, Supplier, Software, SoftwareGroup, DeviceSoftware, IpAddress,
-> IpPrefix, Device, DeviceConfiguration); còn TransferHistory/AuditTrail chưa có
-> Application/Api. Đọc [architecture-core.md](architecture-core.md) trước.
+> IpPrefix, Device, DeviceConfiguration, TransferHistory); còn AuditTrail chưa có
+> Application/Api. Đọc [architecture-core.md](architecture-core.md) trước. Tài
+> liệu cho đội FE (request/response mẫu, luật nghiệp vụ ảnh hưởng UI):
+> [asset-api-fe.md](asset-api-fe.md).
 
 - **DB:** `YevPCManagement` (connection string `PCManagementConnection`).
 - **DbContext:** `AssetDbContext` (`Asset.Infrastructure/Context/`).
@@ -17,7 +19,7 @@
 
 | Entity | Thuộc tính chính | Quan hệ | Soft delete |
 |---|---|---|---|
-| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `Manager`, `Email`, `PurchaseDate`, `DepreciationMonths`, `ExpirationDate?`(**tính toán**, không nhập tay — xem ghi chú bên dưới), `IsOutsourced`, `Status`, `Note?` | N-1 Branch/DeviceType/Supplier; 1-1 DeviceConfiguration; 1-N IpAddresses (0..1 IP "chính"/device qua `DeviceService`), DeviceSoftwares, TransferHistory(old/new) | **Có** |
+| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `Manager`, `Email`, `PurchaseDate`, `DepreciationMonths`, `ExpirationDate?`(**tính toán**, không nhập tay — xem ghi chú bên dưới), `IsOutsourced`, `Status`, `Note?`, `SerialNumber?`(unique khi có giá trị), `IsUseUsb` | N-1 Branch/DeviceType/Supplier; 1-1 DeviceConfiguration; 1-N IpAddresses (0..1 IP "chính"/device qua `DeviceService`), DeviceSoftwares, TransferHistory(old/new) | **Có** |
 | `Branch` | `BranchCode`(unique), `BranchName` | 1-N Devices | **Có** |
 | `Supplier` | `SupplierCode`(unique), `SupplierName` | 1-N Devices | **Có** |
 | `DeviceType` | `TypeCode`(unique), `TypeName` | 1-N Devices | **Có** |
@@ -85,8 +87,94 @@
 > Device nhận `IpAddressId?` (Id của 1 `IpAddress` đang `Status=Available`) —
 > `DeviceService` tự gán/gỡ `IpAddress.DeviceId`+`Status` tương ứng (đổi IP → IP cũ
 > tự gỡ về `Available`; xoá Device → mọi IP đang gắn tự gỡ về `Available`). **Danh
-> sách "IP chưa dùng" để chọn** dùng lại `GET /api/IpAddress/grid-list?status=0&keyword=`
-> đã có sẵn — không có endpoint picker riêng.
+> sách "IP chưa dùng" để chọn** có 2 cách: `GET /api/IpAddress/grid-list?status=0&keyword=`
+> (có phân trang, dùng cho bảng/picker lớn) hoặc `GET /api/IpAddress/available?keyword=`
+> (2026-07-09, mới thêm — trả thẳng `List<IpAddressDto>` không phân trang, sort theo
+> `IpAddress` A-Z, dùng cho dropdown/picker gọn không cần trang).
+
+> **Báo cáo "DANH SÁCH DESKTOP TOÀN CÔNG TY" (2026-07-09, đã làm)**:
+> `GET /api/Report/device-list?deviceTypeId=&branchId=&keyword=` (controller
+> riêng `ReportController`, **không** nằm trong `DeviceController` — để sau này
+> gom chung các loại báo cáo khác như "Thống kê phần mềm"/"Thống kê tổng số thiết
+> bị toàn công ty" cùng dưới `/api/Report/*`) trả thẳng
+> `List<DeviceReportItemDto>` (**không phân trang** — dùng cho in ấn/export, khác
+> `grid-list`), gồm `Stt` (đánh số lại theo kết quả trả về, `OrderBy(DeviceCode)`),
+> `DeviceCode`, `DeviceName`, `IpAddress` (IP chính), `PurchaseDate`,
+> `ExpirationDate`, `IsExpired` (bool, `ExpirationDate < hôm nay UTC` — tương ứng
+> cột "O/X" trong báo cáo giấy, FE tự chọn ký hiệu hiển thị), `FinancialPeriod`
+> (int?, xem công thức bên dưới), `Note`. Filter đều optional: không truyền gì
+> = toàn bộ Device active.
+>
+> **Công thức "Kỳ tài chính" (`FinancialPeriod`)**: tính từ `ExpirationDate`
+> (Hạn sử dụng/Hạn S/D), **không phải** `PurchaseDate`. Năm tài chính Yazaki chạy
+> **1/7 → 30/6 năm sau** (không theo năm dương lịch), đánh số liên tục từ năm
+> thành lập Yazaki Corporation (1941, kỳ 1 = FY1941–1942):
+> ```
+> fiscalYearStartYear = ExpirationDate.Month >= 7 ? ExpirationDate.Year : ExpirationDate.Year - 1
+> FinancialPeriod = fiscalYearStartYear - 1940
+> ```
+> Đã verify khớp 100% với báo cáo giấy gốc (vd `Hạn S/D=01-Oct-2026` → kỳ 86,
+> `09-Nov-2020` → kỳ 80, `31-Aug-2028` → kỳ 88). Field này **không lưu DB**, chỉ
+> tính on-the-fly trong `DeviceService.GetReportListAsync` — công thức được viết
+> lặp lại trực tiếp trong `Expression<Func<>>` (giống `StatusText`) vì EF dịch
+> sang SQL, không gọi được method C# tuỳ ý.
+>
+> Endpoint này dùng repository method mới `IGenericRepository<T>.ToListAsync(query,
+> selector)` (thêm ở `Shared.Application`/`Shared.Infrastructure`, xem
+> [architecture-core.md](architecture-core.md) §1) — materialize `IQueryable` đã
+> filter/`OrderBy` động thành `List<TResult>` **không phân trang**, khác
+> `ToPagedResponseAsync`.
+
+> **"Chuyển máy" — `TransferHistory` (2026-07-09, đã làm)**:
+> `POST /api/TransferHistory` (`CreateTransferHistoryDto`: `OldDeviceId`/
+> `NewDeviceId` `[Required]`, `Note?`) thực hiện **1 hành động nghiệp vụ tổng hợp**
+> qua `TransferHistoryService.TransferAsync`, không phải CRUD tạo bản ghi đơn
+> thuần:
+> 1. Validate `OldDeviceId != NewDeviceId` (`DomainException` nếu trùng), cả 2
+>    Device phải tồn tại (`OrThrowNotFound`).
+> 2. **Chuyển IP chính**: IP đang gắn `OldDevice` (nếu có) → gán sang `NewDevice`.
+>    Nếu `NewDevice` đang có sẵn 1 IP khác → IP đó tự gỡ về `Available` trước (đúng
+>    ràng buộc "1 IP không được gắn nhiều thiết bị" — logic giống hệt cách
+>    `DeviceService.UpdateAsync` đổi `ipAddressId`, viết lại trực tiếp trong
+>    `TransferHistoryService` vì cả 2 dùng chung `IAssetUnitOfWork`, không gọi
+>    chéo sang `IpAddressService`).
+> 3. **Chuyển phần mềm cài (`DeviceSoftware`)**: đổi `DeviceId` của từng dòng từ
+>    `OldDevice` sang `NewDevice` (move, không phải copy — giữ nguyên
+>    `InstallDate`/`LicenseKey` cũ). Nếu `NewDevice` **đã cài sẵn** đúng phần mềm
+>    đó rồi (trùng khoá kép `DeviceId+SoftwareId`) → giữ bản ghi bên `NewDevice`,
+>    xoá cứng bản ghi cũ bên `OldDevice` (tránh vi phạm khoá kép).
+> 4. **Đổi trạng thái `OldDevice`**: mặc định chuyển `PendingUse` (0, "Chờ sử
+>    dụng") — **trừ khi** `OldDevice.ExpirationDate` đã qua (dùng đúng công thức
+>    `IsExpired` ở báo cáo `device-list` bên trên) thì chuyển thẳng
+>    `PendingLiquidation` (2, "Chờ thanh lý") thay vì `PendingUse`.
+> 5. `DeviceConfiguration` **không đụng tới** — chủ ý không copy sang `NewDevice`
+>    (cấu hình phần cứng là đặc thù theo từng máy vật lý, máy mới có config
+>    riêng), cũng không xoá ở `OldDevice`.
+> 6. Tạo 1 dòng `TransferHistory` (`TransferDate = DateTime.UtcNow`) ghi nhận
+>    `OldDeviceId`/`NewDeviceId`/`Note`. **Không có API sửa/xoá `TransferHistory`**
+>    (audit-log, giống `DeviceConfigurationHistory` — chỉ tạo qua hành động
+>    nghiệp vụ, không cho client POST/PUT/DELETE trực tiếp).
+>
+> `GET /api/TransferHistory/device/{deviceId}` trả `List<TransferHistoryDto>` —
+> lịch sử chuyển máy liên quan tới 1 Device (dù là vai trò máy cũ hay máy mới),
+> sort `TransferDate` mới nhất trước. Đã test thật trên DB (tạo thiết bị TEST,
+> gán IP/phần mềm, chuyển máy, verify IP/phần mềm/status đúng cả 2 kịch bản hết
+> hạn/chưa hết hạn + case trùng Id bị từ chối 400, rồi soft-delete thiết bị TEST
+> — riêng dòng `TransferHistory` test không xoá được vì thiết kế không có API
+> xoá, chấp nhận còn lại vài dòng tham chiếu thiết bị đã soft-delete).
+
+> **`Device.SerialNumber` + `Device.IsUseUsb` (2026-07-09, đã làm)**: 2 field mới —
+> `SerialNumber?` (string, max 100, **unique khi có giá trị** — index
+> `IX_ThietBis_SoSeri` filtered `WHERE SerialNumber IS NOT NULL`, cho phép nhiều
+> Device cùng `SerialNumber=null`) và `IsUseUsb` (bool, mặc định `false`, không có
+> ràng buộc unique). `DeviceService.CreateAsync`/`UpdateAsync` tự check trùng
+> `SerialNumber` bằng `DomainException` giống `DeviceCode` (chỉ khi
+> `SerialNumber` không rỗng/null và có thay đổi so với giá trị cũ khi Update).
+> Có trong `DeviceFilterRequest` (lọc `Contains` theo `SerialNumber`, exact-match
+> theo `IsUseUsb`), `DeviceGridDto`, `DeviceDto`, `Create/UpdateDeviceDto`.
+> Migration `AddDeviceUsbSerialFields`
+> (`Asset.Infrastructure/Migrations/20260709062733_AddDeviceUsbSerialFields.cs`)
+> đã apply lên DB thật.
 
 > **`DeviceConfiguration` — phạm vi đã làm (2026-07-08)**: chỉ CRUD cơ bản + 6 field
 > chung mới (`Maker/Model/PowerAdapter/WirelessCard/Nic/Other`) theo màn hình "CẬP
@@ -139,17 +227,24 @@
 - **Devices/**:
   - `DeviceFilterRequest` (query grid): `PageIndex=1`, `PageSize=50`, filter
     `DeviceCode/Manager/PurchaseDate/IpAddress/SupplierName/Note/IsOutsourced?`
-    (2026-07-09: thêm `IsOutsourced?` — lọc đúng true/false, bỏ qua nếu null).
+    (2026-07-09: thêm `IsOutsourced?` — lọc đúng true/false, bỏ qua nếu null),
+    `SerialNumber?`(`Contains`), `IsUseUsb?` (2026-07-09, thêm sau — exact match),
+    `SortDeviceCodeAscending?` (2026-07-10, thêm sau — `null` giữ mặc định
+    `OrderByDescending(PurchaseDate)`, `true`/`false` = sort theo `DeviceCode`
+    tăng/giảm dần, ghi đè sort mặc định).
   - `DeviceGridDto` (1 dòng grid): gộp tên Branch/Supplier/DeviceType + IP đầu tiên +
     `StatusText` + `IsOutsourced` (2026-07-09: thêm cột này vào grid, trước đó chỉ
-    có ở `DeviceDto`/Create/Update, grid-list thiếu).
+    có ở `DeviceDto`/Create/Update, grid-list thiếu) + `SerialNumber?`/`IsUseUsb`
+    (2026-07-09, thêm sau).
   - `DeviceDto` (GetById, đầy đủ): gộp tên Branch/DeviceType/Supplier + `StatusText`
-    + `IpAddressId?`/`IpAddress?` (IP chính đang gắn) + `ExpirationDate` tính toán.
+    + `IpAddressId?`/`IpAddress?` (IP chính đang gắn) + `ExpirationDate` tính toán +
+    `SerialNumber?`/`IsUseUsb` (2026-07-09).
   - `CreateDeviceDto`/`UpdateDeviceDto`: `DeviceCode/DeviceName/Manager/Email`
     `[Required]` (Email +`[EmailAddress]`), `DeviceTypeId/SupplierId/BranchId`
     `[Required]`, `PurchaseDate` `[Required]`, `DepreciationMonths`
     `[Required][Range(1,600)]`, `IsOutsourced` (bool), `Status` `[Range(0,3)]`,
-    `Note?`, `IpAddressId?` (chọn IP `Available` để gán ngay). **Không có**
+    `Note?`, `IpAddressId?` (chọn IP `Available` để gán ngay), `SerialNumber?`
+    (`[StringLength(100)]`, 2026-07-09), `IsUseUsb` (bool, 2026-07-09). **Không có**
     `ExpirationDate` (server tự tính, xem ghi chú §1).
 - **DeviceSoftwares/**: `DeviceSoftwareDto`, `CreateDeviceSoftwareDto` (+`[Required]` Device/Software), `UpdateDeviceSoftwareDto`.
 - **Softwares/**: `SoftwareDto` (Id/Code/Name/Type?/Publisher?/Quantity?/Priority?/GroupId/GroupName —
@@ -169,6 +264,14 @@
   `DeviceId`** sau khi tạo), `DeviceConfigurationInitialDto` (20 field + `CreatedAt`),
   `DeviceConfigurationHistoryDto` (20 field + `EditedAt`/`EditedBy`) — 2 DTO cuối
   không có Create/Update tương ứng (tự sinh, xem ghi chú §1).
+- **Devices/** (báo cáo): `DeviceReportFilterRequest` (`DeviceTypeId?/BranchId?/Keyword?`,
+  tất cả optional), `DeviceReportItemDto` (`Stt/DeviceCode/DeviceName/IpAddress/
+  PurchaseDate/ExpirationDate/IsExpired/FinancialPeriod/Note` — xem công thức
+  `FinancialPeriod` ở ghi chú §1).
+- **TransferHistories/**: `TransferHistoryDto` (gộp `OldDeviceCode/OldDeviceName/
+  NewDeviceCode/NewDeviceName`), `CreateTransferHistoryDto` (`OldDeviceId`/
+  `NewDeviceId` `[Required]`, `Note?`) — **không có** Update/Delete DTO (audit-log,
+  xem ghi chú §1).
 
 ---
 
@@ -190,15 +293,16 @@
 |---|---|---|---|---|
 | Branch | `BranchService` (đầy đủ) | `BranchController` `/api/Branch` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
 | Device | `DeviceService` (đầy đủ) | `DeviceController` `/api/Device` | grid-list, {id}, `{id}/detail` (gộp Device+Configuration+Softwares), POST, PUT, DELETE (**không có** `all`) | `[AllowAnonymous]` |
+| Report (device-list) | dùng lại `IDeviceService.GetReportListAsync` | `ReportController` `/api/Report` (2026-07-09, controller riêng cho mọi loại báo cáo) | `device-list` (báo cáo in ấn "DANH SÁCH DESKTOP TOÀN CÔNG TY") | `[AllowAnonymous]` |
 | DeviceType | `DeviceTypeService` | `DeviceTypeController` `/api/DeviceType` | CRUD | `[AllowAnonymous]` |
 | Supplier | `SupplierService` | `SupplierController` `/api/Supplier` | CRUD | `[AllowAnonymous]` |
 | DeviceSoftware | `DeviceSoftwareService` | `DeviceSoftwareController` `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE, `picker/{deviceId}` (GET), `sync` (PUT, bulk tick) | `[AllowAnonymous]` |
 | Software | `SoftwareService` (đầy đủ) | `SoftwareController` `/api/Software` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
 | SoftwareGroup | `SoftwareGroupService` (đầy đủ) | `SoftwareGroupController` `/api/SoftwareGroup` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
-| IpAddress | `IpAddressService` (đầy đủ) | `IpAddressController` `/api/IpAddress` | grid-list, {id}, POST, PUT, DELETE, `{id}/assign`, `{id}/unassign` (**không có** `all`/`generate-range`) | `[AllowAnonymous]` |
+| IpAddress | `IpAddressService` (đầy đủ) | `IpAddressController` `/api/IpAddress` | grid-list, `available` (2026-07-09, không phân trang), {id}, POST, PUT, DELETE, `{id}/assign`, `{id}/unassign` (**không có** `all`/`generate-range`) | `[AllowAnonymous]` |
 | IpPrefix | `IpPrefixService` (đầy đủ, POST tự sinh 255 IP con) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, PUT, DELETE | `[AllowAnonymous]` |
 | DeviceConfiguration | `DeviceConfigurationService` (CRUD + snapshot/history) | `DeviceConfigurationController` `/api/DeviceConfiguration` | `by-device/{deviceId}` (trả `null` nếu chưa có), POST, PUT, DELETE (xoá cứng, cascade Initial+History), `{configId}/initial` (GET), `initial/{id}` (DELETE), `{configId}/history` (GET list) — **không có** `grid-list`/`all` | `[AllowAnonymous]` |
-| TransferHistory | ❌ chưa có | ❌ | — | — |
+| TransferHistory | `TransferHistoryService` (2026-07-09, đã làm — "chuyển máy") | `TransferHistoryController` `/api/TransferHistory` | POST (thực hiện chuyển máy), `device/{deviceId}` (GET, lịch sử chuyển máy của 1 thiết bị) — **không có** grid-list/all/PUT/DELETE (audit-log, không sửa/xoá sau khi tạo) | `[AllowAnonymous]` |
 | AuditTrail | ❌ chưa có | ❌ | — | — |
 
 **Hai pattern service mẫu để nhân bản:**
@@ -208,7 +312,9 @@
   `GetAllActiveAsync` dùng `SelectAsync`).
 - **Grid filter động** → xem `DeviceService.GetDevicesForGridAsync`: lấy
   `GetQueryable(false, ...includes)`, `.Where(!IsDeleted)`, nối filter theo field,
-  `OrderByDescending`, rồi `ToPagedResponseAsync` projection sang `DeviceGridDto`.
+  `OrderByDescending` (mặc định theo `PurchaseDate`, hoặc theo `DeviceCode` nếu
+  `SortDeviceCodeAscending` có giá trị), rồi `ToPagedResponseAsync` projection
+  sang `DeviceGridDto`.
 - **Khoá kép** → xem `DeviceSoftwareService`: mọi thao tác tìm bằng
   `FirstOrDefaultAsync(x => x.DeviceId == .. && x.SoftwareId == ..)`, xoá **cứng**
   (`Delete`, không soft-delete vì entity không có `IsDeleted`).
@@ -323,9 +429,52 @@ Softwares 1 lần gọi); toàn bộ Domain + DbContext + Migrations, gồm:
   `DeviceConfigurationInitials`/`DeviceConfigurationHistories`, không đụng bảng cũ,
   apply lên DB thật — đã test end-to-end (create→snapshot, update có/không đổi
   giá trị, cascade delete) trên dữ liệu test rồi dọn sạch.
+- `AddDeviceUsbSerialFields` (2026-07-09): thêm `SerialNumber`(nvarchar 100,
+  nullable) + `IsUseUsb`(bit, default false) cho `Device`, kèm unique index
+  filtered `IX_ThietBis_SoSeri` (`WHERE SerialNumber IS NOT NULL`), không backfill,
+  apply lên DB thật. Đi kèm `GET /api/IpAddress/available?keyword=` (endpoint mới,
+  trả list rút gọn IP `Available` không phân trang — xem `IpAddressService
+  .GetAvailableAsync`, ghi chú §1).
+
+`GET /api/Report/device-list` (2026-07-09, đã làm, xem ghi chú §1) — báo cáo in ấn
+"DANH SÁCH DESKTOP TOÀN CÔNG TY", filter `deviceTypeId`/`branchId`/`keyword`,
+trả `FinancialPeriod` ("Kỳ T/C") tính đúng công thức fiscal year Yazaki
+(1/7–30/6, đánh số từ 1941) — đã verify khớp báo cáo giấy gốc. Không lưu DB,
+tính on-the-fly. Nằm ở controller riêng `ReportController`, không phải
+`DeviceController`. Kèm theo đó, thêm method dùng chung mới
+`IGenericRepository<T>.ToListAsync(query, selector)` ở tầng `Shared.*` (materialize
+`IQueryable` filter động thành `List<TResult>` không phân trang) — xem
+[architecture-core.md](architecture-core.md) §1.
+
+`POST /api/TransferHistory` + `GET /api/TransferHistory/device/{deviceId}`
+(2026-07-09, đã làm, xem ghi chú §1) — nghiệp vụ "chuyển máy": chuyển IP chính +
+`DeviceSoftware` từ máy cũ sang máy mới (không chuyển `DeviceConfiguration`),
+máy cũ tự chuyển `PendingUse`/`PendingLiquidation` (tuỳ đã hết hạn hay chưa),
+tạo 1 dòng `TransferHistory` audit-log. Đã test thật trên DB (tạo thiết bị TEST,
+verify đủ 2 kịch bản trạng thái + swap IP + dedup phần mềm + reject trùng Id,
+rồi soft-delete thiết bị TEST — dòng `TransferHistory` test không xoá được do
+thiết kế không có API xoá).
+
+Dữ liệu thật `Software`/`SoftwareGroup` cũng đã được sửa lại (2026-07-09, thao
+tác dữ liệu qua API CRUD sẵn có, không phải code): trước đó 1 lần migrate dữ
+liệu cũ bị sai — nhét mã nhóm cũ vào `SoftwareType`, bỏ trống
+`SoftwareQuantity`/`SoftwarePriority`, dồn gần hết vào 1 group `DEFAULT`. Đã
+đối chiếu lại với dữ liệu gốc (`HTLoaiPhanMem`/`HTPhanMem`) và sửa đúng 32
+`SoftwareGroup` + 95 `Software` (field `SoftwareType`=kind, `SoftwareQuantity`
+=licence, `SoftwarePriority`=TTUuTien, `SoftwareGroupId` khớp đúng nhóm — có xử
+lý 15 dòng mà dữ liệu gốc lưu **tên nhóm** thay vì **mã nhóm** trong cột tham
+chiếu, match case-insensitive theo cả 2 field). Không có migration nào cho
+việc này vì chỉ là data fix, không đổi schema.
+
+**Bug đã biết (chưa fix)**: `SoftwareGroupService.UpdateAsync` so sánh
+`GroupCode` cũ/mới **trong bộ nhớ** (case-sensitive) để quyết định có chạy check
+trùng hay không, nhưng chính check trùng đó chạy dưới SQL Server với collation
+mặc định **case-insensitive** — nên đổi `GroupCode` sang 1 chuỗi chỉ khác hoa/
+thường so với chính nó (vd `"MS Office"` → `"MS OFFICE"`) luôn bị 400 "đã tồn
+tại" (tự đụng chính mình). Chưa fix vì ngoài phạm vi task lúc phát hiện.
 
 **Cần làm tiếp (theo độ ưu tiên gợi ý):**
-1. **TransferHistory / AuditTrail**: chưa có tầng Application/Api.
+1. **AuditTrail**: chưa có tầng Application/Api.
 2. **Auth**: tất cả controller Asset đang `[AllowAnonymous]` — cần siết quyền
    thật trước khi lên production.
 3. **Warning**: nhiều `CS8602`/`CS8603`/`CS8604` (deref/return possibly null) trong
@@ -335,6 +484,9 @@ Softwares 1 lần gọi); toàn bộ Domain + DbContext + Migrations, gồm:
 4. **Field ngoài phạm vi Device hiện tại** (theo ảnh form hệ thống cũ, chưa làm vì
    chưa có yêu cầu rõ + cần thêm cột DB mới): Nhóm (Group), Email 2/Email 3, Sticky
    Notes. Nếu cần, áp dụng đúng quy trình §4.2 CLAUDE.md (hỏi trước khi thêm cột).
+5. **`SoftwareGroupService.UpdateAsync` case-collation bug** nêu trên — cần sửa
+   logic so sánh sang case-insensitive (hoặc so `Id` của bản ghi trùng khác `request.Id`)
+   trước khi cho phép rename đổi hoa/thường `GroupCode`.
 
 ---
 

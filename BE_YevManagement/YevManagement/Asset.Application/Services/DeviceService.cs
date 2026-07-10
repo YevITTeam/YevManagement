@@ -73,8 +73,14 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.IsUseUsb == request.IsUseUsb.Value);
             }
 
+            var orderedQuery = request.SortDeviceCodeAscending.HasValue
+                ? (request.SortDeviceCodeAscending.Value
+                    ? query.OrderBy(d => d.DeviceCode)
+                    : query.OrderByDescending(d => d.DeviceCode))
+                : query.OrderByDescending(d => d.PurchaseDate);
+
             return await _unitOfWork.Devices.ToPagedResponseAsync(
-                query.OrderByDescending(d => d.PurchaseDate),
+                orderedQuery,
                 request.PageIndex,
                 request.PageSize,
                 d => new DeviceGridDto
@@ -104,6 +110,50 @@ namespace Asset.Application.Services
                         : "Không xác định"
                 }
             );
+        }
+
+        public async Task<List<DeviceReportItemDto>> GetReportListAsync(DeviceReportFilterRequest request)
+        {
+            var query = _unitOfWork.Devices.GetQueryable(false, d => d.IpAddresses)
+                .Where(d => !d.IsDeleted);
+
+            if (request.DeviceTypeId.HasValue)
+                query = query.Where(d => d.DeviceTypeId == request.DeviceTypeId.Value);
+
+            if (request.BranchId.HasValue)
+                query = query.Where(d => d.BranchId == request.BranchId.Value);
+
+            if (!string.IsNullOrWhiteSpace(request.Keyword))
+                query = query.Where(d => d.DeviceCode.Contains(request.Keyword) || d.DeviceName.Contains(request.Keyword));
+
+            var today = DateTime.UtcNow.Date;
+
+            var items = await _unitOfWork.Devices.ToListAsync(
+                query.OrderBy(d => d.DeviceCode),
+                d => new DeviceReportItemDto
+                {
+                    DeviceCode = d.DeviceCode,
+                    DeviceName = d.DeviceName,
+                    IpAddress = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).FirstOrDefault(),
+                    PurchaseDate = d.PurchaseDate,
+                    ExpirationDate = d.ExpirationDate,
+                    Note = d.Note,
+                    IsExpired = d.ExpirationDate.HasValue && d.ExpirationDate.Value < today,
+                    // Kỳ tài chính Yazaki: năm tài chính chạy 1/7 - 30/6, đánh số liên tục từ
+                    // năm thành lập Yazaki Corporation (1941) -> kỳ = năm bắt đầu FY - 1940.
+                    // Lặp lại logic tại đây (không gọi method) vì đây là Expression<Func<>> được
+                    // EF dịch sang SQL, không hỗ trợ gọi method C# tuỳ ý (giống StatusText ở trên).
+                    FinancialPeriod = d.ExpirationDate.HasValue
+                        ? (d.ExpirationDate.Value.Month >= 7 ? d.ExpirationDate.Value.Year : d.ExpirationDate.Value.Year - 1) - 1940
+                        : (int?)null
+                });
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                items[i].Stt = i + 1;
+            }
+
+            return items;
         }
 
         public async Task<DeviceDto> GetByIdAsync(int id)

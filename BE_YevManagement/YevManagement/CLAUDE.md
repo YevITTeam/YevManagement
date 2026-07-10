@@ -46,8 +46,8 @@ CompanySystem.HostApi → Composition root: Program.cs, DI, Auth, Middleware
 
 | Module | Trạng thái | Doc |
 |---|---|---|
-| Identity | Đã có code (User/Role/Auth, Windows login) | [docs/identity-module.md](docs/identity-module.md) |
-| Asset | Đã có code, đang phát triển (Device/Branch/Supplier/DeviceType/Software...) | [docs/asset-module.md](docs/asset-module.md) |
+| Identity | Đã có code (User/Role/Auth, Windows login) | [docs/identity-module.md](docs/identity-module.md) (dev) · [docs/identity-api-fe.md](docs/identity-api-fe.md) (FE) |
+| Asset | Đã có code, đang phát triển (Device/Branch/Supplier/DeviceType/Software...) | [docs/asset-module.md](docs/asset-module.md) (dev) · [docs/asset-api-fe.md](docs/asset-api-fe.md) (FE) |
 | Attendance | **CHƯA DEFINE** (chỉ có 4 project rỗng) | [docs/attendance-module.md](docs/attendance-module.md) |
 
 > ⚠️ **Bẫy tên thư mục:** project Infrastructure của Identity nằm ở thư mục
@@ -142,3 +142,4 @@ dotnet ef database update --project Asset.Infrastructure --startup-project Compa
 
 ## 6. Một số lưu ý
 Mọi comments ghi chú lại phải bằng tiếng anh.
+Trả lời mình bằng tiếng việt nhé.

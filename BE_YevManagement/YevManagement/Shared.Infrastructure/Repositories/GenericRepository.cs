@@ -117,5 +117,12 @@ namespace Shared.Infrastructure.Repositories
 
             return new PagedResponse<TResult>(items, totalCount, pageIndex, pageSize);
         }
+
+        public async Task<List<TResult>> ToListAsync<TResult>(
+            IQueryable<T> query,
+            Expression<Func<T, TResult>> selector)
+        {
+            return await query.Select(selector).ToListAsync();
+        }
     }
 }

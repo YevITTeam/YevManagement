@@ -2,7 +2,8 @@
 
 > **Trạng thái:** ĐÃ CÓ CODE, đang chạy production. Quản lý User/Role và xác thực
 > qua **Windows Negotiate (AD)** → sinh **JWT**. Đọc [architecture-core.md](architecture-core.md)
-> trước để nắm pattern lõi.
+> trước để nắm pattern lõi. Tài liệu cho đội FE (request/response, luồng login
+> từ browser): [identity-api-fe.md](identity-api-fe.md).
 
 - **DB:** `YevIdentityManagement` (connection string `IdentityManagementConnection`).
 - **DbContext:** `IdentityDbContext` (`Indentity.Infrastructure/Context/`).
