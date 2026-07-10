@@ -7,6 +7,7 @@ const ENDPOINTS = {
         getDevicePageNation: "/Device/grid-list",
         getDeviceById: (id: number) => `/Device/${id}`,
         getDeviceDetailById: (id: number) => `/Device/${id}/detail`,
+        getAvailableDevices: "/Device/available",
         createDevice: "/Device",
         updateDevice: (id: number) => `/Device/${id}`,
         deleteDevice: (id: number) => `/Device/${id}`,
@@ -23,6 +24,7 @@ export interface GetDevicePageNationParams {
     supplierName?: string;
     note?: string;
     isOutsourced?: boolean;
+    sortDeviceCodeAscending?: boolean;
 }
 
 export const DeviceApi = {
@@ -37,6 +39,7 @@ export const DeviceApi = {
         if (params?.supplierName) query.set("SupplierName", params.supplierName);
         if (params?.note) query.set("Note", params.note);
         if (params?.isOutsourced !== undefined) query.set("IsOutsourced", String(params.isOutsourced));
+        if (params?.sortDeviceCodeAscending !== undefined) query.set("SortDeviceCodeAscending", String(params.sortDeviceCodeAscending));
 
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.DEVICE.getDevicePageNation}?${queryString}` : ENDPOINTS.DEVICE.getDevicePageNation;
@@ -50,6 +53,16 @@ export const DeviceApi = {
     },
     getDeviceDetailById: async (id: number) => {
         const response = await api.get<ApiResponse<DeviceDetailDto>>(ENDPOINTS.DEVICE.getDeviceDetailById(id));
+        return response.data;
+    },
+    // Chỉ trả máy đang "Chờ sử dụng" (status=0), không phân trang — dùng cho picker chọn máy mới khi "đổi thiết bị".
+    getAvailableDevices: async (keyword?: string) => {
+        const query = new URLSearchParams();
+        if (keyword) query.set("keyword", keyword);
+        const queryString = query.toString();
+        const url = queryString ? `${ENDPOINTS.DEVICE.getAvailableDevices}?${queryString}` : ENDPOINTS.DEVICE.getAvailableDevices;
+
+        const response = await api.get<ApiResponse<DeviceDto[]>>(url);
         return response.data;
     },
     createDevice: async (deviceData: CreateUpdateDeviceDto) => {

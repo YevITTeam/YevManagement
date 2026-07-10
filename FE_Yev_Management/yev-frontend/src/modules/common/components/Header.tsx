@@ -1,39 +1,43 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { AuthApi } from "@/modules/auth/api/auth.api";
-import type { UserDto } from "@/modules/auth/types/auth.dto";
+import { RefreshCw } from "lucide-react";
+import { toast } from "react-toastify";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasAnyPermission } from "@/modules/auth/lib/permissions";
+
+// Menu "Admin" hiện ra nếu user có ít nhất 1 permission quản trị Identity (docs/identity-api-fe.md §3 —
+// FE ẩn/hiện UI dựa trên user.permissions, không còn dựa vào role "Admin" cứng).
+const IDENTITY_ADMIN_PERMISSIONS = [
+  "Identity.User.View",
+  "Identity.User.UpdateRoles",
+  "Identity.Role.View",
+  "Identity.Permission.View",
+];
 
 export default function Header() {
   const pathname = usePathname() || "";
   const hasSidebar = pathname.startsWith("/pc");
-  const [user, setUser] = useState<UserDto | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, isLoading, refreshUser } = useAuth();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (typeof window === "undefined") {
-        setIsLoading(false);
-        return;
-      }
+  const canSeeAdmin = hasAnyPermission(user, IDENTITY_ADMIN_PERMISSIONS);
 
-      try {
-        const response = await AuthApi.getCurrentUser();
-        setUser(response);
-      } catch (error) {
-        console.error("Lỗi lấy thông tin:", error);
-        setUser(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchUser();
-  }, []);
-
-  const isAdmin = user?.roles?.includes("Admin");
+  // Xoá token cũ + đăng nhập lại — dùng khi Admin vừa cấp quyền mới cho Role của mình và cần thấy hiệu
+  // lực ngay trên UI (nút bấm/menu ẩn hiện theo permissions), thay vì phải tự đóng tab/mở lại.
+  const handleRefreshPermissions = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshUser();
+      toast.success("Đã làm mới quyền — vui lòng thử lại thao tác vừa rồi.");
+    } catch {
+      toast.error("Không thể làm mới quyền. Vui lòng thử lại.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <header
@@ -58,7 +62,18 @@ export default function Header() {
             <div className="h-9 w-40 animate-pulse rounded-md bg-[#eceef0]" />
           ) : user ? (
             <>
-              {isAdmin && (
+              <button
+                type="button"
+                onClick={handleRefreshPermissions}
+                disabled={isRefreshing}
+                title="Đăng nhập lại để cập nhật quyền mới được cấp"
+                className="cursor-pointer flex items-center gap-2 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#5e3f3a] transition hover:border-[#e3000f]/30 hover:text-[#e3000f] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Làm mới quyền</span>
+              </button>
+
+              {canSeeAdmin && (
                 <Link
                   href="/admin"
                   className="hidden items-center gap-2 rounded-lg border border-[#e3000f]/15 bg-[#fff5f5] px-3 py-2 text-sm font-semibold text-[#e3000f] transition hover:border-[#e3000f]/30 hover:bg-[#ffe8e8] sm:flex"

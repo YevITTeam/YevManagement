@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
+import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from "lucide-react";
 import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
 import PrintDeviceCodeDialog from "../../../modules/pc-management/components/PrintDeviceCodeDialog";
 import RowActionsMenu from "../../../modules/pc-management/components/RowActionsMenu";
 import DeviceForm, { type DeviceFormValues } from "../../../modules/pc-management/components/devices/DeviceForm";
+import TransferDeviceDialog from "../../../modules/pc-management/components/devices/TransferDeviceDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { DeviceApi } from "../../../modules/pc-management/api/device.api";
 import type { DeviceDto, DeviceGetDto } from "../../../modules/pc-management/types/device.dto";
@@ -90,6 +92,14 @@ export default function PcDashboardPage() {
   const [deletingDevice, setDeletingDevice] = useState<DeviceDto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // undefined = mặc định sort theo purchaseDate giảm dần (BE mặc định); true/false = theo deviceCode tăng/giảm dần.
+  const [sortDeviceCodeAscending, setSortDeviceCodeAscending] = useState<boolean | undefined>(undefined);
+  const [transferringDevice, setTransferringDevice] = useState<DeviceDto | null>(null);
+
+  const toggleSortDeviceCode = () => {
+    setSortDeviceCodeAscending((current) => (current === undefined ? true : current === true ? false : undefined));
+  };
+
   // Reset về trang 1 mỗi khi điều kiện lọc thay đổi, để phân trang khớp với tập kết quả mới.
   useEffect(() => {
     setPageIndex(1);
@@ -103,6 +113,7 @@ export default function PcDashboardPage() {
     filters.deviceType,
     filters.status,
     filters.expiryDate,
+    sortDeviceCodeAscending,
   ]);
 
   const fetchDevices = async (targetPageIndex: number) => {
@@ -115,6 +126,7 @@ export default function PcDashboardPage() {
       ipAddress: filters.ipAddress || undefined,
       supplierName: filters.supplierName || undefined,
       purchaseDate: filters.purchaseDate || undefined,
+      sortDeviceCodeAscending,
     };
     const hasClientOnlyFilters = Boolean(filters.branch || filters.deviceType || filters.status || filters.expiryDate);
 
@@ -170,6 +182,7 @@ export default function PcDashboardPage() {
     filters.deviceType,
     filters.status,
     filters.expiryDate,
+    sortDeviceCodeAscending,
   ]);
 
   const refetchDevices = () => fetchDevices(pageIndex);
@@ -292,7 +305,19 @@ export default function PcDashboardPage() {
           <table className="min-w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                <th className="whitespace-nowrap px-4 py-3">Thiết bị</th>
+                <th className="whitespace-nowrap px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={toggleSortDeviceCode}
+                    className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a] transition hover:text-[#191c1e]"
+                    title="Sắp xếp theo mã thiết bị"
+                  >
+                    Thiết bị
+                    {sortDeviceCodeAscending === undefined && <ArrowUpDown className="h-3.5 w-3.5" />}
+                    {sortDeviceCodeAscending === true && <ArrowDownAZ className="h-3.5 w-3.5" />}
+                    {sortDeviceCodeAscending === false && <ArrowUpAZ className="h-3.5 w-3.5" />}
+                  </button>
+                </th>
                 <th className="whitespace-nowrap px-4 py-3">Loại / NCC</th>
                 <th className="whitespace-nowrap px-4 py-3">Chi nhánh</th>
                 <th className="whitespace-nowrap px-4 py-3">IP</th>
@@ -362,6 +387,11 @@ export default function PcDashboardPage() {
                         actions={[
                           { label: "Chi tiết", onClick: () => router.push(`/pc/devices/${device.id}`) },
                           { label: "Sửa", onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
+                          {
+                            label: "Chuyển máy",
+                            onClick: () => setTransferringDevice(device),
+                            disabled: device.status === 3,
+                          },
                           { label: "Xoá", onClick: () => setDeletingDevice(device), variant: "danger" },
                         ]}
                       />
@@ -398,6 +428,16 @@ export default function PcDashboardPage() {
         isOpen={isPrintOpen}
         devices={devices}
         onClose={() => setIsPrintOpen(false)}
+      />
+
+      <TransferDeviceDialog
+        isOpen={transferringDevice !== null}
+        oldDevice={transferringDevice}
+        onClose={() => setTransferringDevice(null)}
+        onTransferred={() => {
+          setTransferringDevice(null);
+          refetchDevices();
+        }}
       />
 
       <DeviceForm

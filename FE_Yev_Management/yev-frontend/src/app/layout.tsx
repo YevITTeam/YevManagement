@@ -6,6 +6,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 import Header from "@/modules/common/components/Header";
+import { AuthProvider } from "@/modules/auth/context/AuthContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,11 +24,13 @@ export default function RootLayout({
     <html lang="vi">
       <body className={`${inter.className} bg-gray-50 min-h-screen flex flex-col`}>
 
-        <Header />
+        <AuthProvider>
+          <Header />
 
-        <main className="flex-grow">
-          {children}
-        </main>
+          <main className="flex-grow">
+            {children}
+          </main>
+        </AuthProvider>
 
         <ToastContainer
           position="top-right"

@@ -3,23 +3,32 @@
 import { useState } from "react";
 import UserRoleModal from "@/modules/auth/components/UserRoleModal";
 import RoleList from "@/modules/auth/components/roles/RoleList";
+import RolePermissionManager from "@/modules/auth/components/permissions/RolePermissionManager";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
+import {Users, Key, Shield} from "lucide-react"
+
+type MenuKey = "user-roles" | "roles" | "permissions";
 
 export default function AdminDashboard() {
-  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
-  const [showRoleManager, setShowRoleManager] = useState(false);
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const { user: currentUser, isLoading: isLoadingUser } = useAuth();
+  const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
 
-  const openPermissions = () => {
-    setShowRoleManager(false);
-    setIsRoleModalOpen(true);
-    setActiveMenu("permissions");
-  };
+  // Mỗi mục sidebar chỉ hiện khi user có permission tương ứng (docs/identity-api-fe.md §4) —
+  // BE vẫn tự enforce lại 403 nếu FE có sai sót, đây chỉ là ẩn/hiện UI.
+  const canViewUserRoles = hasPermission(currentUser, "Identity.User.View");
+  const canViewRoles = hasPermission(currentUser, "Identity.Role.View");
+  const canViewPermissions = hasPermission(currentUser, "Identity.Permission.View");
 
-  const openRoles = () => {
-    setIsRoleModalOpen(false);
-    setShowRoleManager(true);
-    setActiveMenu("roles");
-  };
+  const isUserRoles = activeMenu === "user-roles";
+  const isRoles = activeMenu === "roles";
+  const isPermissions = activeMenu === "permissions";
+
+  const menuItemClass = (active: boolean) =>
+    `flex w-full cursor-pointer items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium transition-colors ${active
+      ? "bg-[#fff4f2] text-[#e3000f]"
+      : "bg-white text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+    }`;
 
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-[#f8fafc]">
@@ -28,25 +37,39 @@ export default function AdminDashboard() {
           Quản trị hệ thống
         </h3>
 
-        <button
-          onClick={openPermissions}
-          className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium transition-colors ${activeMenu === "permissions"
-            ? "bg-[#fff4f2] text-[#e3000f]"
-            : "bg-white text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-            }`}
-        >
-          <span>🛡️</span> Phân quyền
-        </button>
+        {isLoadingUser ? (
+          <div className="space-y-2">
+            <div className="h-11 animate-pulse rounded-lg bg-[#eceef0]" />
+            <div className="h-11 animate-pulse rounded-lg bg-[#eceef0]" />
+            <div className="h-11 animate-pulse rounded-lg bg-[#eceef0]" />
+          </div>
+        ) : (
+          <>
+            {canViewUserRoles && (
+              <button onClick={() => setActiveMenu("user-roles")} className={menuItemClass(isUserRoles)}>
+                <span><Users className="h-4 w-4" /></span> Gán vai trò người dùng
+              </button>
+            )}
 
-        <button
-          onClick={openRoles}
-          className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium transition-colors ${activeMenu === "roles"
-            ? "bg-[#fff4f2] text-[#e3000f]"
-            : "bg-white text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-            }`}
-        >
-          <span>🔑</span> Quản lý Roles
-        </button>
+            {canViewRoles && (
+              <button onClick={() => setActiveMenu("roles")} className={menuItemClass(isRoles)}>
+                <span><Key className="h-4 w-4" /></span> Quản lý Roles
+              </button>
+            )}
+
+            {canViewPermissions && (
+              <button onClick={() => setActiveMenu("permissions")} className={menuItemClass(isPermissions)}>
+                <span><Shield className="h-4 w-4" /></span> Phân quyền theo Role
+              </button>
+            )}
+
+            {!canViewUserRoles && !canViewRoles && !canViewPermissions && (
+              <p className="px-2 text-sm text-[#5e3f3a]">
+                Tài khoản của bạn chưa được cấp quyền quản trị nào.
+              </p>
+            )}
+          </>
+        )}
 
         <button className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-[#5e3f3a] opacity-50">
           <span>📊</span> Báo cáo số liệu
@@ -57,16 +80,12 @@ export default function AdminDashboard() {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-8">
-        {activeMenu === "permissions" ? (
-          <UserRoleModal
-            isOpen={isRoleModalOpen}
-            onClose={() => {
-              setIsRoleModalOpen(false);
-              setActiveMenu(null);
-            }}
-          />
-        ) : showRoleManager ? (
+        {isUserRoles && canViewUserRoles ? (
+          <UserRoleModal isOpen onClose={() => setActiveMenu(null)} />
+        ) : isRoles && canViewRoles ? (
           <RoleList />
+        ) : isPermissions && canViewPermissions ? (
+          <RolePermissionManager />
         ) : (
           <div className="flex h-full flex-col items-center justify-center rounded-xl border border-[#e0e3e5] bg-white p-8 text-center shadow-sm">
             <div className="mb-4 text-6xl">👋</div>

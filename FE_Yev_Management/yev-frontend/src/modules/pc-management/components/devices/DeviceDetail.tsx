@@ -10,12 +10,14 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import DeviceForm, { type DeviceFormValues } from "./DeviceForm";
 import DeviceConfigurationPanel from "./DeviceConfigurationPanel";
 import DeviceSoftwarePanel from "./DeviceSoftwarePanel";
+import DeviceTransferHistoryPanel from "./DeviceTransferHistoryPanel";
+import TransferDeviceDialog from "./TransferDeviceDialog";
 
 interface DeviceDetailProps {
     deviceId: number;
 }
 
-type DetailTab = "configuration" | "software";
+type DetailTab = "configuration" | "software" | "transfer-history";
 
 function formatDate(value: string | null) {
     if (!value) return "-";
@@ -32,6 +34,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
 
     const [formOpen, setFormOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [transferOpen, setTransferOpen] = useState(false);
 
     const fetchDetail = async () => {
         setIsLoading(true);
@@ -103,6 +106,13 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
                         ↻ Làm mới
+                    </button>
+                    <button
+                        onClick={() => setTransferOpen(true)}
+                        disabled={device.status === 3}
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        Chuyển máy
                     </button>
                     <button
                         onClick={() => setFormOpen(true)}
@@ -178,6 +188,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                 {[
                     { key: "configuration" as const, label: "Cấu hình phần cứng" },
                     { key: "software" as const, label: "Phần mềm" },
+                    { key: "transfer-history" as const, label: "Lịch sử chuyển máy" },
                 ].map((tab) => (
                     <button
                         key={tab.key}
@@ -193,16 +204,18 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                 ))}
             </div>
 
-            {activeTab === "configuration" ? (
+            {activeTab === "configuration" && (
                 <DeviceConfigurationPanel
                     deviceId={device.id}
                     deviceCode={device.deviceCode}
                     configuration={detail.configuration}
                     onChanged={fetchDetail}
                 />
-            ) : (
+            )}
+            {activeTab === "software" && (
                 <DeviceSoftwarePanel deviceId={device.id} softwares={detail.softwares} onChanged={fetchDetail} />
             )}
+            {activeTab === "transfer-history" && <DeviceTransferHistoryPanel deviceId={device.id} />}
 
             <DeviceForm
                 isOpen={formOpen}
@@ -211,6 +224,16 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                 loading={isSaving}
                 onClose={() => !isSaving && setFormOpen(false)}
                 onSubmit={handleSubmitForm}
+            />
+
+            <TransferDeviceDialog
+                isOpen={transferOpen}
+                oldDevice={device}
+                onClose={() => setTransferOpen(false)}
+                onTransferred={() => {
+                    setTransferOpen(false);
+                    fetchDetail();
+                }}
             />
         </div>
     );

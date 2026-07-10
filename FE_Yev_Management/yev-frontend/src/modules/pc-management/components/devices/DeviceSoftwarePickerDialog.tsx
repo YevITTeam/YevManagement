@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 
 import { DeviceSoftwareApi } from "@/modules/pc-management/api/device-software.api";
+import { SoftwareApi } from "@/modules/pc-management/api/software.api";
 import type { DeviceSoftwarePickerDto, DeviceSoftwareSyncItemDto } from "@/modules/pc-management/types/device-software.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 
@@ -19,10 +20,19 @@ interface NewItemDetails {
     installDate: string;
 }
 
+// Picker (GET /DeviceSoftware/picker/{deviceId}) không trả về softwarePriority — phải lấy riêng từ
+// GET /Software/all rồi merge theo softwareId để có dữ liệu sắp xếp theo mức độ ưu tiên.
+interface PickerItemWithPriority extends DeviceSoftwarePickerDto {
+    softwarePriority: number | null;
+}
+
+type PrioritySort = "none" | "asc" | "desc";
+
 export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, onSynced }: DeviceSoftwarePickerDialogProps) {
-    const [items, setItems] = useState<DeviceSoftwarePickerDto[]>([]);
+    const [items, setItems] = useState<PickerItemWithPriority[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [search, setSearch] = useState("");
+    const [prioritySort, setPrioritySort] = useState<PrioritySort>("none");
 
     const [originalSelectedIds, setOriginalSelectedIds] = useState<Set<number>>(new Set());
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -32,9 +42,15 @@ export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, 
     useEffect(() => {
         if (!isOpen) return;
         setSearch("");
+        setPrioritySort("none");
         setIsLoading(true);
-        DeviceSoftwareApi.getDeviceSoftwarePicker(deviceId)
-            .then((result) => {
+        Promise.all([DeviceSoftwareApi.getDeviceSoftwarePicker(deviceId), SoftwareApi.getAllSoftware()])
+            .then(([pickerResult, allSoftware]) => {
+                const priorityBySoftwareId = new Map(allSoftware.map((software) => [software.id, software.softwarePriority]));
+                const result: PickerItemWithPriority[] = pickerResult.map((item) => ({
+                    ...item,
+                    softwarePriority: priorityBySoftwareId.get(item.softwareId) ?? null,
+                }));
                 setItems(result);
                 const selected = new Set(result.filter((item) => item.isSelected).map((item) => item.softwareId));
                 setOriginalSelectedIds(selected);
@@ -45,13 +61,26 @@ export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, 
             .finally(() => setIsLoading(false));
     }, [isOpen, deviceId]);
 
+    const togglePrioritySort = () => {
+        setPrioritySort((current) => (current === "none" ? "asc" : current === "asc" ? "desc" : "none"));
+    };
+
     const filteredItems = useMemo(() => {
         const keyword = search.trim().toLowerCase();
-        if (!keyword) return items;
-        return items.filter(
-            (item) => item.softwareName.toLowerCase().includes(keyword) || item.softwareCode.toLowerCase().includes(keyword)
-        );
-    }, [items, search]);
+        const result = keyword
+            ? items.filter(
+                  (item) => item.softwareName.toLowerCase().includes(keyword) || item.softwareCode.toLowerCase().includes(keyword)
+              )
+            : items;
+
+        if (prioritySort === "none") return result;
+
+        return [...result].sort((a, b) => {
+            const aValue = a.softwarePriority ?? Number.POSITIVE_INFINITY;
+            const bValue = b.softwarePriority ?? Number.POSITIVE_INFINITY;
+            return prioritySort === "asc" ? aValue - bValue : bValue - aValue;
+        });
+    }, [items, search, prioritySort]);
 
     if (!isOpen) return null;
 
@@ -133,7 +162,19 @@ export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, 
                         placeholder="Tìm theo mã hoặc tên phần mềm..."
                         className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
-                    <div className="mt-3 text-xs text-[#5e3f3a]">Đã chọn {selectedIds.size} phần mềm</div>
+                    <div className="mt-3 flex items-center justify-between">
+                        <span className="text-xs text-[#5e3f3a]">Đã chọn {selectedIds.size} phần mềm</span>
+                        <button
+                            type="button"
+                            onClick={togglePrioritySort}
+                            className="cursor-pointer inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a] transition hover:text-[#191c1e]"
+                            title="Sắp xếp theo mức độ ưu tiên"
+                        >
+                            Ưu tiên
+                            {prioritySort === "asc" && <span>↑</span>}
+                            {prioritySort === "desc" && <span>↓</span>}
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2">
@@ -154,10 +195,13 @@ export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, 
                                             onChange={() => toggleItem(item)}
                                             className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                         />
-                                        <div className="min-w-0">
+                                        <div className="min-w-0 flex-1">
                                             <div className="text-sm font-semibold text-[#191c1e]">{item.softwareName}</div>
                                             <div className="truncate text-xs text-[#5e3f3a]">{item.softwareCode}</div>
                                         </div>
+                                        <span className="shrink-0 text-xs text-[#5e3f3a]">
+                                            Ưu tiên: {item.softwarePriority ?? "—"}
+                                        </span>
                                     </label>
                                     {isNewlyTicked && (
                                         <div className="mt-2 grid grid-cols-2 gap-2 pl-7">

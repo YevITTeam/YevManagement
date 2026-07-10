@@ -7,6 +7,7 @@ import { Computer, Monitor, HardDrive, Clock } from "lucide-react";
 import { DeviceApi } from "@/modules/pc-management/api/device.api";
 import type { DeviceDto } from "@/modules/pc-management/types/device.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import DeviceListReportPrintDialog from "./DeviceListReportPrintDialog";
 
 const PAGE_SIZE = 1000;
 const DAY_MS = 86_400_000;
@@ -97,6 +98,7 @@ export default function DeviceReport() {
     const [now, setNow] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isPrintOpen, setIsPrintOpen] = useState(false);
 
     const fetchDevices = async () => {
         setIsLoading(true);
@@ -197,6 +199,12 @@ export default function DeviceReport() {
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
                         ↻ Làm mới
+                    </button>
+                    <button
+                        onClick={() => setIsPrintOpen(true)}
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                    >
+                        ⬇ Xuất PDF
                     </button>
                     <Link
                         href="/pc"
@@ -325,6 +333,8 @@ export default function DeviceReport() {
                     </table>
                 </div>
             </section>
+
+            <DeviceListReportPrintDialog isOpen={isPrintOpen} onClose={() => setIsPrintOpen(false)} />
         </div>
     );
 }

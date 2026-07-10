@@ -7,6 +7,8 @@ import type { UserDto, RoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleSelectModal from "./RoleSelectModal";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { hasPermission } from "@/modules/auth/lib/permissions";
+import { useAuth } from "@/modules/auth/context/AuthContext";
 
 interface Props {
     isOpen: boolean;
@@ -14,9 +16,9 @@ interface Props {
 }
 
 export default function UserRoleModal({ isOpen, onClose }: Props) {
+    const { user: currentUser } = useAuth();
     const [users, setUsers] = useState<UserDto[]>([]);
     const [roles, setRoles] = useState<RoleDto[]>([]);
-    const [currentUser, setCurrentUser] = useState<UserDto | null>(null);
     const [selectedRolesMap, setSelectedRolesMap] = useState<Record<number, number[]>>({});
     const [isLoading, setIsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
@@ -25,14 +27,12 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [usersData, rolesData, meData] = await Promise.all([
+            const [usersData, rolesData] = await Promise.all([
                 AuthApi.getAllUsersWithRoles(),
                 AuthApi.getAllRoles(),
-                AuthApi.getCurrentUser(),
             ]);
             setUsers(usersData);
             setRoles(rolesData);
-            setCurrentUser(meData);
 
             const initialRoleMap: Record<number, number[]> = {};
             usersData.forEach((user: UserDto) => {
@@ -57,6 +57,9 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
         }, 0);
         return () => window.clearTimeout(timer);
     }, [fetchData, isOpen]);
+
+    // POST /api/Auth/update-user-roles yêu cầu permission Identity.User.UpdateRoles (docs/identity-api-fe.md §4.2).
+    const canUpdateUserRoles = hasPermission(currentUser, "Identity.User.UpdateRoles");
 
     const filteredUsers = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
@@ -160,6 +163,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                         ) : (
                             filteredUsers.map((user) => {
                                 const isSelf = currentUser?.userName === user.userName;
+                                const isDisabled = isSelf || !canUpdateUserRoles;
                                 const currentSelectedIds = selectedRolesMap[user.id] || [];
 
                                 return (
@@ -185,8 +189,8 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                         <div className="flex flex-col gap-3 justify-center">
                                             <button
                                                 onClick={() => setOpenRoleModalUserId(user.id)}
-                                                disabled={isSelf}
-                                                className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${isSelf
+                                                disabled={isDisabled}
+                                                className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${isDisabled
                                                     ? "cursor-not-allowed border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a] opacity-60"
                                                     : "border-[#e0e3e5] bg-white text-[#191c1e] hover:border-[#e3000f] hover:bg-[#fff4f2]"
                                                     }`}
@@ -215,8 +219,8 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                         <div className="flex items-center justify-end">
                                             <button
                                                 onClick={() => handleSave(user.id)}
-                                                disabled={isSelf}
-                                                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${isSelf
+                                                disabled={isDisabled}
+                                                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${isDisabled
                                                     ? "cursor-not-allowed bg-[#eceef0] text-[#5e3f3a]"
                                                     : "bg-[#e3000f] text-white hover:bg-[#b40009]"
                                                     }`}

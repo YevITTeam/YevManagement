@@ -1,5 +1,5 @@
-import { api, AUTH_TOKEN_KEY, CURRENT_USER_KEY } from "@/lib/client";
-import type { UserDto } from "@/modules/auth/types/auth.dto";
+import { api, windowsLogin as requestWindowsLogin } from "@/lib/client";
+import type { UserDto, RoleDto, WindowsLoginResponseDto } from "@/modules/auth/types/auth.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
@@ -15,36 +15,24 @@ const ENDPOINTS = {
 } as const;
 
 export const AuthApi = {
-  windowsLogin: async () => {
-    // Ép kiểu cho toàn bộ cấu trúc trả về
-    const response = await api.post<ApiResponse<any>>(ENDPOINTS.AUTH.windowsLogin);
-    return response.data?.user as UserDto;
+  // Đi qua requestWindowsLogin() (single-flight ở client.ts) thay vì api.post thẳng — nếu lúc này có
+  // request khác cũng đang tự retry sau 401, cả hai gộp về đúng 1 lần gọi Negotiate thật sự, tránh
+  // trình duyệt phải xử lý nhiều handshake NTLM chồng chéo (nguyên nhân gây lặp popup đăng nhập domain).
+  windowsLogin: async (): Promise<UserDto> => {
+    const payload = (await requestWindowsLogin()) as ApiResponse<WindowsLoginResponseDto> | null;
+    if (!payload?.data?.user) {
+      throw new Error("Đăng nhập thất bại: phản hồi từ server không hợp lệ.");
+    }
+    return payload.data.user;
   },
 
-  // Lấy user hiện tại: nếu ĐÃ có token + cache thì trả về cache luôn (KHÔNG gọi windows-login → không bật popup đăng nhập Windows).
-  // Chỉ gọi windows-login khi CHƯA có token (lần đầu vào, hoặc token đã bị xoá). Dùng forceRefresh để buộc lấy lại từ server.
-  getCurrentUser: async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}): Promise<UserDto | null> => {
+  // Luôn gọi thẳng windows-login (Negotiate/Kerberos — âm thầm dùng phiên đăng nhập Windows hiện tại,
+  // KHÔNG phải popup nhập mật khẩu, gọi nhiều lần vẫn an toàn/idempotent, xem docs/identity-api-fe.md §2.2).
+  // KHÔNG cache profile user ở localStorage (permissions/roles là dữ liệu nhạy cảm) — nơi cache hợp lý là
+  // AuthContext (React state, chỉ tồn tại trong bộ nhớ JS của tab hiện tại), không phải ở đây.
+  getCurrentUser: async (): Promise<UserDto | null> => {
     if (typeof window === "undefined") return null;
-
-    const hasToken = Boolean(window.localStorage.getItem(AUTH_TOKEN_KEY));
-    const cachedRaw = window.localStorage.getItem(CURRENT_USER_KEY);
-
-    if (!forceRefresh && hasToken && cachedRaw) {
-      try {
-        return JSON.parse(cachedRaw) as UserDto;
-      } catch {
-        window.localStorage.removeItem(CURRENT_USER_KEY);
-      }
-    }
-
-    // Token được client.ts tự trích xuất & lưu từ response windows-login.
-    const user = await AuthApi.windowsLogin();
-    if (user) {
-      window.localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-    } else {
-      window.localStorage.removeItem(CURRENT_USER_KEY);
-    }
-    return user;
+    return AuthApi.windowsLogin();
   },
 
   getAllUsersWithRoles: async () => {
@@ -52,27 +40,27 @@ export const AuthApi = {
     return response.data;
   },
   updateUserRoles: async ({ userId, roleIds }: { userId: number; roleIds: number[] }) => {
-    const response = await api.post<ApiResponse<any>>(ENDPOINTS.AUTH.updateUserRoles, { userId, roleIds });
+    const response = await api.post<ApiResponse<null>>(ENDPOINTS.AUTH.updateUserRoles, { userId, roleIds });
     return response.data;
   },
 
   getAllRoles: async () => {
-    const response = await api.get<ApiResponse<any[]>>(ENDPOINTS.AUTH.getAllRoles);
+    const response = await api.get<ApiResponse<RoleDto[]>>(ENDPOINTS.AUTH.getAllRoles);
     return response.data;
   },
 
   createRole: async (roleName: string, description?: string) => {
-    const response = await api.post<ApiResponse<any>>(ENDPOINTS.AUTH.createRole, { roleName, description });
+    const response = await api.post<ApiResponse<RoleDto>>(ENDPOINTS.AUTH.createRole, { roleName, description });
     return response.data;
   },
 
   updateRole: async (roleId: number, roleName: string, description?: string) => {
-    const response = await api.put<ApiResponse<any>>(ENDPOINTS.AUTH.updateRole(roleId), { roleName, description });
+    const response = await api.put<ApiResponse<RoleDto>>(ENDPOINTS.AUTH.updateRole(roleId), { roleName, description });
     return response.data;
   },
 
   deleteRole: async (roleId: number) => {
-    const response = await api.delete<ApiResponse<any>>(ENDPOINTS.AUTH.deleteRole(roleId));
+    const response = await api.delete<ApiResponse<null>>(ENDPOINTS.AUTH.deleteRole(roleId));
     return response.data;
   },
 };

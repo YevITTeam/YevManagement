@@ -7,7 +7,13 @@
 
 - **Base URL (Development)**: `http://localhost:5000`
 - **Swagger/Scalar UI**: `http://localhost:5000/scalar/v1` (chỉ chạy ở Development, xem trực tiếp toàn bộ schema tại đây)
-- **Auth**: toàn bộ endpoint Asset hiện đang `[AllowAnonymous]` — **không cần** gửi `Authorization: Bearer <token>`. Sẽ siết quyền trong tương lai, FE nên chừa chỗ gắn token sẵn.
+- **Auth (2026-07-10, đã siết)**: toàn bộ endpoint Asset giờ **bắt buộc** gửi
+  `Authorization: Bearer <token>` (JWT lấy từ `POST /api/Auth/windows-login`, xem
+  [identity-api-fe.md](identity-api-fe.md)), **và** user phải có permission tương
+  ứng (vd `Asset.Device.View` để gọi `GET /api/Device/grid-list`) — thiếu token →
+  401, có token nhưng thiếu permission → 403. Danh sách mã permission theo từng
+  entity xem [identity-module.md](identity-module.md) §9. FE nên dựa vào
+  `user.permissions` (trả về từ `windows-login`) để ẩn/hiện nút bấm tương ứng.
 - **Content-Type**: `application/json` cho mọi request có body (POST/PUT).
 
 ---
@@ -60,7 +66,8 @@ Các endpoint `grid-list` trả `data` là **1 object lồng thêm 1 tầng** (k
 | 201 | Create thành công (`POST`) — kèm header `Location` | "Thêm ... thành công." |
 | 400 | Validate DataAnnotations sai, hoặc `DomainException` (lỗi nghiệp vụ: trùng mã, IP đã dùng...) | thông báo tiếng Việt cụ thể |
 | 404 | `NotFoundException` — Id không tồn tại | `"{Entity} with ID (x) not exist."` |
-| 401/403 | Chưa áp dụng cho module Asset (đang AllowAnonymous) | — |
+| 401 | Thiếu/token JWT sai hoặc hết hạn (120 phút) | — |
+| 403 | Có token hợp lệ nhưng user (qua Role) không có permission cho hành động này | — |
 | 500 | Lỗi hệ thống không lường trước | "An unexpected error occurred on the server." |
 
 FE nên check `response.isSuccess` trước, nếu `false` thì hiển thị `message` (+ `errors` nếu có) cho người dùng, bất kể status code.
@@ -253,7 +260,14 @@ Route `/api/Device`. **Không có** `GET /all` (danh sách quá lớn, luôn dù
 
 ### 5.2. `GET /api/Device/grid-list` — danh sách (bảng chính)
 
-Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string, match theo `Contains`), `ipAddress`, `supplierName`, `note`, `isOutsourced` (bool, thêm 2026-07-09), **`serialNumber`** (string, `Contains`) và **`isUseUsb`** (bool, exact match) — 2 field cuối mới thêm cùng đợt 2026-07-09.
+Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string, match theo `Contains`), `ipAddress`, `supplierName`, `note`, `isOutsourced` (bool, thêm 2026-07-09), `serialNumber` (string, `Contains`) và `isUseUsb` (bool, exact match) — 2 field này thêm cùng đợt 2026-07-09.
+
+**`sortDeviceCodeAscending`** (bool, optional, thêm 2026-07-10): không truyền (hoặc bỏ trống) → giữ mặc định sort theo `purchaseDate` giảm dần (mới mua nhất lên đầu); truyền `true` → sort theo `deviceCode` tăng dần; truyền `false` → sort theo `deviceCode` giảm dần. Khi tham số này có giá trị, nó **ghi đè hoàn toàn** sort mặc định theo `purchaseDate`.
+
+```
+GET /api/Device/grid-list?pageIndex=1&pageSize=50&sortDeviceCodeAscending=true   // mã thiết bị tăng dần
+GET /api/Device/grid-list?pageIndex=1&pageSize=50&sortDeviceCodeAscending=false  // mã thiết bị giảm dần
+```
 
 ```jsonc
 // data.data[]
@@ -276,6 +290,18 @@ Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string,
   "serialNumber": null,             // nullable, unique khi có giá trị
   "isUseUsb": false
 }
+```
+
+### 5.2b. Chọn máy mới khi "đổi thiết bị" — `GET /api/Device/available?keyword=` (2026-07-10) ⭐
+
+Không phân trang, trả thẳng `data: DeviceGridDto[]` (cùng shape với item trong
+`grid-list` ở mục 5.2) — luôn lọc `status=0` ("Chờ sử dụng") và chưa xoá,
+`keyword` (optional) match `Contains` trên `deviceCode`. Dùng để FE dựng
+dropdown/picker chọn máy mới khi thực hiện nghiệp vụ "chuyển máy" (mục 5.9) —
+chỉ những máy đang "Chờ sử dụng" mới hợp lý để nhận bàn giao.
+
+```
+GET /api/Device/available?keyword=YDF
 ```
 
 ### 5.3. `GET /api/Device/{id}` — chi tiết 1 device (không kèm cấu hình/phần mềm)
@@ -352,6 +378,86 @@ Body giống hệt Create + thêm `id` (phải khớp `{id}` trên URL, sai → 
 ### 5.7. Xoá Device — `DELETE /api/Device/{id}`
 
 Soft-delete (`IsDeleted=true`). Mọi IP đang gắn tự động gỡ về `Available`. **Không** tự xoá `DeviceConfiguration`/`DeviceSoftware` liên quan — nếu cần dọn sạch, gọi thêm API xoá riêng.
+
+### 5.8. Báo cáo in ấn — `GET /api/Report/device-list` (2026-07-09)
+
+**Lưu ý: nằm ở controller riêng `/api/Report`, không phải `/api/Device`** — vì đây là báo cáo, không phải CRUD thiết bị; các loại báo cáo khác sau này (thống kê phần mềm, tổng số thiết bị toàn công ty...) sẽ gom chung dưới `/api/Report/*`.
+
+Dùng cho màn hình/nút "In danh sách thiết bị" kiểu báo cáo giấy (vd "DANH SÁCH DESKTOP TOÀN CÔNG TY"). **Khác `grid-list`**: không phân trang, trả thẳng toàn bộ kết quả khớp filter trong `data` (mảng, không có `pageIndex`/`totalCount`).
+
+```
+GET /api/Report/device-list?deviceTypeId=1&branchId=&keyword=
+```
+
+- `deviceTypeId` (optional) — lọc theo loại thiết bị, vd `1` = Desktop (lấy Id thật từ `GET /api/DeviceType/all`).
+- `branchId` (optional) — lọc theo chi nhánh, để trống = toàn công ty.
+- `keyword` (optional) — match `Contains` trên `deviceCode` hoặc `deviceName`.
+
+```jsonc
+// data[] — sort theo deviceCode A-Z, stt đánh số lại theo đúng thứ tự trả về
+[
+  {
+    "stt": 1,
+    "deviceCode": "10SXC92",
+    "deviceName": "MP-ENG",
+    "ipAddress": null,
+    "purchaseDate": "2021-10-01T00:00:00",
+    "expirationDate": "2026-10-01T00:00:00",
+    "isExpired": false,           // true nếu expirationDate đã qua (so với hôm nay UTC) — FE tự map thành ký hiệu O/X
+    "financialPeriod": 86,        // "Kỳ T/C" — xem công thức bên dưới
+    "note": "Không xác định ngày mua"
+  }
+]
+```
+
+**Cột "Kỳ T/C" (`financialPeriod`)**: tính từ `expirationDate` (Hạn sử dụng), theo năm tài chính Yazaki chạy **1/7 → 30/6 năm sau**, đánh số liên tục từ 1941 (năm thành lập Yazaki Corporation). Ví dụ `expirationDate=2026-10-01` → tháng 10 ≥ 7 → năm tài chính bắt đầu 2026 → kỳ `2026 − 1940 = 86`. `financialPeriod` là `null` nếu `expirationDate` là `null`.
+
+### 5.9. Chuyển máy — `POST /api/TransferHistory` (2026-07-09)
+
+Dùng khi người dùng chuyển từ 1 thiết bị đang dùng (máy cũ) sang 1 thiết bị mới **đã có sẵn trong hệ thống** (tạo trước qua `POST /api/Device` bình thường). Đây là **1 API duy nhất thực hiện toàn bộ nghiệp vụ** — FE không cần tự gọi nhiều API để di chuyển IP/phần mềm/đổi trạng thái.
+
+```jsonc
+// POST /api/TransferHistory — body
+{
+  "oldDeviceId": 17984,       // [Required]
+  "newDeviceId": 17985,       // [Required], phải khác oldDeviceId (400 nếu trùng)
+  "note": "Máy cũ hỏng ổ cứng, thay máy mới"   // nullable
+}
+```
+
+**Server tự động xử lý** (FE không cần làm gì thêm sau khi gọi API này):
+- **IP chính**: IP đang gắn máy cũ → chuyển sang máy mới. Nếu máy mới đang có sẵn 1 IP khác → IP đó tự gỡ về `Available` (đúng luật "1 IP không được gắn nhiều thiết bị").
+- **Phần mềm cài (`DeviceSoftware`)**: toàn bộ phần mềm đang cài ở máy cũ **chuyển hẳn** sang máy mới (giữ nguyên `installDate`/`licenseKey`). Nếu máy mới đã cài sẵn đúng phần mềm đó rồi → giữ bản ghi của máy mới, bỏ bản ghi cũ (không tạo trùng).
+- **Cấu hình phần cứng (`DeviceConfiguration`)**: **không** chuyển — máy mới có cấu hình phần cứng riêng của nó (nhập/sửa qua API `DeviceConfiguration` như bình thường).
+- **Trạng thái máy cũ**: tự đổi thành `status=0` ("Chờ sử dụng"), **trừ khi** máy cũ đã hết hạn sử dụng (`expirationDate` đã qua) thì tự đổi thành `status=2` ("Chờ thanh lý") luôn.
+- **Trạng thái máy mới**: tự đổi thành `status=1` ("Đang sử dụng", 2026-07-10) —
+  FE **không cần** gọi thêm `PUT /api/Device/{id}` để đổi status máy mới sau khi
+  chuyển xong.
+
+```jsonc
+// Response — data
+{
+  "id": 3,
+  "oldDeviceId": 17984,
+  "oldDeviceCode": "TEST-TRANSFER-OLD-EXP",
+  "oldDeviceName": "...",
+  "newDeviceId": 17985,
+  "newDeviceCode": "TEST-TRANSFER-NEW-1",
+  "newDeviceName": "...",
+  "transferDate": "2026-07-09T09:43:57.115857Z",
+  "note": "..."
+}
+```
+
+**Gợi ý luồng UI "đổi thiết bị"**: chọn máy cũ (thiết bị đang thao tác) →
+`GET /api/Device/available?keyword=` (mục 5.2b) để user chọn máy mới trong số
+các máy "Chờ sử dụng" → `POST /api/TransferHistory` với `oldDeviceId`/`newDeviceId`.
+
+**Xem lịch sử chuyển máy của 1 thiết bị** (dù thiết bị đó từng đóng vai trò máy cũ hay máy mới):
+```
+GET /api/TransferHistory/device/{deviceId}
+```
+Trả `data[]` sort theo `transferDate` mới nhất trước. **Không có** API sửa/xoá `TransferHistory` — đây là log lịch sử, mỗi lần chuyển máy tạo 1 dòng cố định.
 
 ---
 
@@ -495,7 +601,9 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 | GET | `/api/Software/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Phần mềm (danh mục) |
 | GET | `/api/IpPrefix/grid-list`, `/all`, `/{id}` — POST (tự sinh 255 IP), PUT `/{id}`, DELETE `/{id}` | Dải mạng |
 | GET | `/api/IpAddress/grid-list?...`, `/available?keyword=` (không phân trang, mới 2026-07-09), `/{id}` (không có `/all`) — POST, PUT `/{id}`, DELETE `/{id}`, PUT `/{id}/assign`, PUT `/{id}/unassign` | Địa chỉ IP |
-| GET | `/api/Device/grid-list?...` (không có `/all`), `/{id}`, `/{id}/detail` — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
+| GET | `/api/Device/grid-list?...` (không có `/all`), `/available?keyword=` (không phân trang, máy `Chờ sử dụng`, mới 2026-07-10), `/{id}`, `/{id}/detail` — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
+| GET | `/api/Report/device-list?deviceTypeId=&branchId=&keyword=` (không phân trang, mới 2026-07-09) | Báo cáo in ấn (controller riêng, sẽ gom thêm các báo cáo khác) |
+| POST | `/api/TransferHistory` (mới 2026-07-09) — GET `/api/TransferHistory/device/{deviceId}` | Chuyển máy (di chuyển IP + phần mềm, đổi trạng thái máy cũ) |
 | GET | `/api/DeviceConfiguration/by-device/{deviceId}` — POST, PUT `/{id}`, DELETE `/{id}`, GET `/{configId}/initial`, DELETE `/initial/{id}`, GET `/{configId}/history` | Cấu hình phần cứng |
 | GET | `/api/DeviceSoftware/device/{deviceId}` — POST, PUT, DELETE `/device/{deviceId}/software/{softwareId}`, GET `/picker/{deviceId}`, PUT `/sync` | Phần mềm cài trên thiết bị |
 
@@ -509,3 +617,4 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 4. Dropdown/picker chọn IP khi tạo/sửa Device → `GET /api/IpAddress/available?keyword=` (gọn, không phân trang) hoặc `GET /api/IpAddress/grid-list?status=0&keyword=` (có phân trang).
 5. Dialog quản lý phần mềm → `GET /api/DeviceSoftware/picker/{deviceId}` để mở, `PUT /api/DeviceSoftware/sync` để lưu (xem mục 7.4).
 6. Xem lịch sử sửa chữa cấu hình → `GET /api/DeviceConfiguration/{configId}/history` (cần có `configId` từ bước 1).
+7. Màn "Đổi thiết bị" → chọn máy mới qua `GET /api/Device/available?keyword=` (chỉ máy `Chờ sử dụng`), gọi `POST /api/TransferHistory` — server tự lo di chuyển IP/phần mềm + đổi trạng thái cả 2 máy (mục 5.9).
