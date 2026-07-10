@@ -44,6 +44,7 @@ namespace Identity.Infrastructure.Authentication
                 var user = await dbContext.Users
                     .Include(x => x.Roles).ThenInclude(r => r.Permissions)
                     .Include(x => x.LoginUserIPs)
+                    .Include(x => x.UserPermissions).ThenInclude(up => up.Permission)
                     .FirstOrDefaultAsync(a => a.UserName == windowsUsername);
 
                 if (user == null)
@@ -128,12 +129,18 @@ namespace Identity.Infrastructure.Authentication
 
                 if (user.Roles != null)
                 {
-                    var permissionCodes = user.Roles
-                        .SelectMany(r => r.Permissions)
-                        .Select(p => p.Code)
-                        .Distinct();
+                    // Permission hiệu lực = permission theo Role, cộng permission được cấp
+                    // riêng (UserPermission.IsGranted=true), trừ permission bị thu hồi riêng
+                    // (IsGranted=false) — deny override luôn thắng grant từ Role.
+                    var basePermissionCodes = user.Roles.SelectMany(r => r.Permissions).Select(p => p.Code);
 
-                    foreach (var code in permissionCodes)
+                    var userPermissions = user.UserPermissions ?? new List<UserPermission>();
+                    var grantedCodes = userPermissions.Where(up => up.IsGranted).Select(up => up.Permission.Code);
+                    var deniedCodes = userPermissions.Where(up => !up.IsGranted).Select(up => up.Permission.Code).ToHashSet();
+
+                    var effectiveCodes = basePermissionCodes.Union(grantedCodes).Except(deniedCodes).Distinct();
+
+                    foreach (var code in effectiveCodes)
                     {
                         dbIdentity.AddClaim(new Claim("Permission", code));
                     }

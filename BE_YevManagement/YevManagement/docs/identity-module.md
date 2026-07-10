@@ -15,10 +15,11 @@
 
 | Entity | Thuộc tính chính | Quan hệ | Soft delete |
 |---|---|---|---|
-| `User` | `Id`, `UserName`(≤100), `FullName?`, `CreatedAt`, `DeviceName?`(≤100) | N-N `Roles`, 1-N `LoginUserIPs` | Không |
+| `User` | `Id`, `UserName`(≤100), `FullName?`, `CreatedAt`, `DeviceName?`(≤100) | N-N `Roles`, 1-N `LoginUserIPs`, 1-N `UserPermissions` | Không |
 | `Role` | `Id`, `RoleName`(≤50), `Description?`, `IsDeleted` | N-N `Users`, N-N `Permissions` | **Có** (`IsDeleted`) |
 | `LoginUserIP` | `Id`, `UserId`, `IPAddress`, `FirstLoginAt`, `LastLoginAt` | N-1 `User` | Không |
-| `Permission` | `Id`, `Code`(≤150, unique, dạng `Module.Entity.Action`), `Module`(≤50), `Description?`(≤255) | N-N `Roles` | Không (danh sách cố định, seed qua migration — xem §9) |
+| `Permission` | `Id`, `Code`(≤150, unique, dạng `Module.Entity.Action`), `Module`(≤50), `Description?`(≤255) | N-N `Roles`, 1-N `UserPermissions` | Không (danh sách cố định, seed qua migration — xem §9) |
+| `UserPermission` | `UserId`, `PermissionId` (khoá kép), `IsGranted` (bool) | N-1 `User`, N-1 `Permission` | Không (2026-07-10, xem §9.1 — override permission riêng theo từng User) |
 
 **Cấu hình quan hệ (Fluent, `IdentityDbContext.OnModelCreating`):**
 - `User` ↔ `Role`: **many-to-many** qua bảng nối `UserRoles` (khoá kép
@@ -26,7 +27,13 @@
 - `Role` ↔ `Permission`: **many-to-many** qua bảng nối `RolePermissions` (khoá kép
   `RoleId, PermissionId`) — cùng pattern `UsingEntity<Dictionary<string,object>>`
   như `UserRoles`, không có repository riêng cho bảng nối.
-- `User`/`Role`/`Permission` là `partial class`; `IdentityDbContext` là `partial`.
+- `User` ↔ `Permission` (qua `UserPermission`): **KHÔNG** dùng shorthand
+  `UsingEntity<Dictionary<...>>` như 2 quan hệ trên, vì cần thêm cột dữ liệu
+  `IsGranted` trên chính bảng nối — khai báo `UserPermission` là **entity tường
+  minh** (`modelBuilder.Entity<UserPermission>()`, khoá kép qua `HasKey(e => new
+  { e.UserId, e.PermissionId })`, 2 `HasOne().WithMany()` riêng). Có repository
+  `IUserPermissionRepository` riêng (khác 2 bảng nối kia).
+- `User`/`Role`/`Permission`/`UserPermission` là `partial class`; `IdentityDbContext` là `partial`.
 - `LoginUserIP` chưa có Fluent config riêng (map theo convention).
 
 ---
@@ -42,6 +49,9 @@
 | `UpdateUserRolesDto` | `UserId`, `RoleIds: List<int>`. |
 | `PermissionDto` | `Id`, `Code`, `Module`, `Description?` — output-only, không có Create/Update DTO (permission là danh sách cố định). |
 | `UpdateRolePermissionsDto` | `RoleId`, `PermissionIds: List<int>` — gán lại toàn bộ tập permission cho 1 role. |
+| `UserPermissionDto` | `PermissionId`, `Code`, `Module`, `Description?`, `IsGranted` — 1 dòng override hiện có của 1 User (2026-07-10). |
+| `UpdateUserPermissionsDto` | `UserId`, `GrantPermissionIds: List<int>`, `DenyPermissionIds: List<int>` — dùng nội bộ Service (2026-07-10). |
+| `UpdateUserPermissionOverridesDto` | `GrantPermissionIds: List<int>`, `DenyPermissionIds: List<int>` — body request `PUT /api/Permission/user/{userId}` (không lặp lại `UserId` vì đã có trên route, 2026-07-10). |
 
 > Ghi chú: `UserDto.UserName`/`FullName` non-nullable nhưng chưa gắn `[Required]`
 > (đang có warning CS8618). `RoleDto` hiện đóng 2 vai (input+output).
@@ -51,9 +61,9 @@
 ## 3. Repositories & UnitOfWork
 
 - `IUserReposiory` *(giữ nguyên typo)* : `GenericRepository<User>` + `GetUserWithRolesAsync(userName)`.
-- `IRoleRepository`, `ILoginUserIPRepository`, `IPermissionRepository` : generic (repo con rỗng, chỉ kế thừa).
-- `IIdentityUnitOfWork : IUnitOfWork` → phơi bày `Users`, `Roles`, `LoginUserIPs`, `Permissions`.
-- Cài đặt: `UserRepository`/`RoleRepository`/`LoginUserIPRepository`/`PermissionRepository` +
+- `IRoleRepository`, `ILoginUserIPRepository`, `IPermissionRepository`, `IUserPermissionRepository` : generic (repo con rỗng, chỉ kế thừa).
+- `IIdentityUnitOfWork : IUnitOfWork` → phơi bày `Users`, `Roles`, `LoginUserIPs`, `Permissions`, `UserPermissions`.
+- Cài đặt: `UserRepository`/`RoleRepository`/`LoginUserIPRepository`/`PermissionRepository`/`UserPermissionRepository` +
   `IdentityUnitOfWork : BaseUnitOfWork<IdentityDbContext>`.
 
 ---
@@ -65,7 +75,7 @@
 | `IUserService` / `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync`, `UpdateUserRolesAsync` | Sync user AD, gán role, cập nhật role. |
 | `IRoleService` / `RoleService` | `GetAllRolesAsync`, `GetRoleByIdAsync`, `CreateRoleAsync`, `UpdateRoleByIdAsync`, `DeleteRoleByIdAsync` | CRUD role, xoá = soft delete. `CreateRole` ném `DomainException` nếu trùng tên. |
 | `ITokenService` / `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` | Sinh JWT HS256 từ claims (loại bỏ claim `RolesLoaded`), hạn theo `JwtSettings:ExpiryMinutes`. |
-| `IPermissionService` / `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync(roleId)`, `UpdateRolePermissionsAsync(dto)` | Danh sách permission cố định (chỉ đọc); gán/đổi tập permission của 1 Role — pattern giống hệt `UserService.UpdateUserRolesAsync` (clear rồi add lại theo danh sách Id). |
+| `IPermissionService` / `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync(roleId)`, `UpdateRolePermissionsAsync(dto)`, `GetUserPermissionOverridesAsync(userId)`, `GetEffectivePermissionsForUserAsync(userId)`, `UpdateUserPermissionOverridesAsync(dto)` | Danh sách permission cố định (chỉ đọc); gán/đổi tập permission của 1 Role (clear rồi add lại theo danh sách Id, giống `UserService.UpdateUserRolesAsync`); 3 method cuối (2026-07-10) quản lý override permission riêng theo User — xem §9.1. |
 
 ---
 
@@ -78,14 +88,15 @@ Luồng: **Windows Negotiate → ClaimsTransformation (đồng bộ DB) → JWT*
    `.AddJwtBearer(...)` (validate Issuer/Audience/Lifetime/SigningKey từ `JwtSettings`).
 2. **`MyClaimsTransformation : IClaimsTransformation`** (`Indentity.Infrastructure/Authentication/`)
    chạy mỗi request đã xác thực Windows (**và mỗi request JWT** — xem lưu ý bên dưới):
-   - Nếu chưa có claim `RolesLoaded`: tra `Users` (kèm `.Include(Roles).ThenInclude(Permissions)`)
-     theo `UserName` (Windows name).
+   - Nếu chưa có claim `RolesLoaded`: tra `Users` (kèm `.Include(Roles).ThenInclude(Permissions)`
+     + `.Include(UserPermissions).ThenInclude(Permission)`, 2026-07-10) theo `UserName` (Windows name).
    - User chưa tồn tại → tạo mới, gán role `"Basic"`, resolve `FullName` từ AD
      (`UserPrincipal.FindByIdentity`, chỉ chạy trên Windows).
    - Ghi/cập nhật `LoginUserIP` (IP client, `LastLoginAt`), `DeviceName` (reverse DNS).
-   - Bơm claims: `ClaimTypes.Role` (mỗi role), `Permission` (mỗi mã permission suy ra
-     từ `user.Roles.SelectMany(r => r.Permissions)`, xem §9), `FullName`, `IpAddress`,
-     `DeviceName`, `RolesLoaded=true`.
+   - Bơm claims: `ClaimTypes.Role` (mỗi role), `Permission` (mỗi mã permission **hiệu
+     lực** — base từ `user.Roles.SelectMany(r => r.Permissions)`, cộng
+     `UserPermission.IsGranted=true`, trừ `UserPermission.IsGranted=false`; xem công
+     thức đầy đủ ở §9.1), `FullName`, `IpAddress`, `DeviceName`, `RolesLoaded=true`.
 3. **`AuthController.WindowsLogin`** (`[Authorize(AuthenticationSchemes="Negotiate")]`)
    đọc claims, gọi `TokenService.GenerateJwtToken(User)` trả `LoginResponseDto`
    (`UserDto.Permissions` lấy từ claim `Permission`). Từ đó client dùng
@@ -129,9 +140,12 @@ Seed role trong DB: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Th
 | GET | `/api/Permission/all` | `RequirePermission("Identity.Permission.View")` | Toàn bộ permission hệ thống (order theo Module, Code) — FE dùng để dựng UI gán quyền. |
 | GET | `/api/Permission/role/{roleId}` | `RequirePermission("Identity.Permission.View")` | Permission hiện tại của 1 role. |
 | PUT | `/api/Permission/role/{roleId}` | `RequirePermission("Identity.Role.Update")` | Gán lại toàn bộ tập permission cho role (body: `List<int>` permission id). |
+| GET | `/api/Permission/user/{userId}` | `RequirePermission("Identity.Permission.View")` | Danh sách override (grant/deny) hiện có của 1 User (2026-07-10). |
+| GET | `/api/Permission/user/{userId}/effective` | `RequirePermission("Identity.Permission.View")` | Permission **hiệu lực** cuối cùng của 1 User (base theo Role, đã áp override) — dùng để preview "user này thực sự làm được gì" (2026-07-10). |
+| PUT | `/api/Permission/user/{userId}` | `RequirePermission("Identity.User.UpdatePermissions")` | Gán lại override cho User (body `UpdateUserPermissionOverridesDto`: `GrantPermissionIds`, `DenyPermissionIds`) (2026-07-10). |
 
 **Không có** API tạo/sửa/xoá `Permission` — danh sách cố định, chỉ seed qua migration
-(xem §9). Chỉ có CRUD `RolePermission` qua 2 endpoint GET/PUT ở trên.
+(xem §9). Chỉ có CRUD `RolePermission` và `UserPermission` (override) qua các endpoint ở trên.
 
 ---
 
@@ -143,6 +157,9 @@ Seed role trong DB: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Th
 - **Phân quyền chi tiết theo permission (RBAC + Permission, 2026-07-10)** — xem §9:
   entity `Permission` + N-N `RolePermission`, enforce qua `[RequirePermission]` trên
   toàn bộ action Identity **và** 12 controller Asset (trước đó `[AllowAnonymous]`).
+- **Override permission riêng theo User (2026-07-10)** — xem §9.1: entity
+  `UserPermission` (grant/deny), cho phép cấp thêm hoặc thu hồi riêng 1 permission
+  cho 1 User cụ thể mà không cần tạo Role mới cho từng trường hợp ngoại lệ.
 
 **Cần làm tiếp / điểm nợ kỹ thuật:**
 - `AuthController` dùng `try/catch` + `Fail<>()` thủ công thay vì để middleware
@@ -202,8 +219,9 @@ vẫn chỉ có Role như trước (không gán permission thẳng cho User).
   mỗi request** nhờ JWT không mang claim `RolesLoaded`, nên Admin đổi quyền của 1
   Role có hiệu lực ngay ở request tiếp theo, không cần user đăng nhập lại.
 
-**Danh sách permission đã seed (51 mã, migration `AddPermissionAndRolePermission`,
-`Indentity.Infrastructure/Migrations/20260710025421_AddPermissionAndRolePermission.cs`):**
+**Danh sách permission đã seed (52 mã — 51 mã gốc trong migration
+`AddPermissionAndRolePermission` + 1 mã `Identity.User.UpdatePermissions` thêm ở
+migration `AddUserPermissionOverride`, xem §9.1):**
 
 | Module.Entity | Action seed |
 |---|---|
@@ -219,7 +237,7 @@ vẫn chỉ có Role như trước (không gán permission thẳng cho User).
 | `Asset.DeviceSoftware` | View, Create, Update, Delete (`picker`→View, `sync`→Update) |
 | `Asset.Report` | View |
 | `Asset.TransferHistory` | View, Create |
-| `Identity.User` | View, UpdateRoles |
+| `Identity.User` | View, UpdateRoles, **UpdatePermissions** (thêm ở migration `AddUserPermissionOverride`, xem §9.1) |
 | `Identity.Role` | View, Create, Update, Delete |
 | `Identity.Permission` | View |
 
@@ -234,3 +252,51 @@ bị`) **không** được gán mặc định, cần Admin tự cấu hình qua
 **Áp dụng vào controller:** toàn bộ 12 controller `Asset.Api` đã bỏ
 `[AllowAnonymous]` cấp class, chuyển sang `[RequirePermission]` từng action — xem
 [asset-module.md](asset-module.md) §4 để biết mã cụ thể theo từng entity.
+
+### 9.1. Override permission riêng theo User (2026-07-10)
+
+**Lý do:** RBAC thuần (chỉ Role) dễ sinh "role rác" khi mỗi nhân viên có nhu cầu
+quyền hơi khác nhau — mỗi tổ hợp khác lại phải tạo 1 Role mới. Giải pháp: giữ
+Role làm nền (đa số user dùng chung Role theo phòng ban/vị trí), thêm khả năng
+**override riêng lẻ theo User** cho phần thiểu số cần ngoại lệ, tránh phải tạo
+Role mới cho từng trường hợp cá biệt.
+
+**Entity `UserPermission`** (`UserId`, `PermissionId`, `IsGranted: bool`):
+- `IsGranted = true` → **cấp thêm** permission này riêng cho User, dù không Role
+  nào của User đó cấp.
+- `IsGranted = false` → **thu hồi (deny)** permission này riêng khỏi User, dù có
+  Role đang cấp permission đó.
+
+**Công thức tính permission hiệu lực** (dùng trong `MyClaimsTransformation` khi
+build claim `Permission`, và trong `PermissionService.GetEffectivePermissionsForUserAsync`
+khi trả về cho FE preview):
+
+```
+basePermissions = ∪ (Permissions của mọi Role mà User đang có)
+grants          = { p.PermissionId | UserPermission có IsGranted = true }
+denies          = { p.PermissionId | UserPermission có IsGranted = false }
+
+effectivePermissions = (basePermissions ∪ grants) \ denies
+```
+
+**Deny luôn thắng** — nếu 1 permission vừa nằm trong `basePermissions`/`grants`
+vừa nằm trong `denies`, kết quả cuối cùng là **không có** permission đó. Ràng
+buộc: `UpdateUserPermissionOverridesAsync` từ chối (ném `DomainException`) nếu
+cùng 1 `PermissionId` xuất hiện ở cả `GrantPermissionIds` **và**
+`DenyPermissionIds` trong 1 request (vô nghĩa, không rõ ý định).
+
+**Cập nhật override** (`PermissionService.UpdateUserPermissionOverridesAsync`):
+xoá sạch toàn bộ dòng `UserPermission` cũ của User đó, rồi insert lại theo đúng
+`GrantPermissionIds`/`DenyPermissionIds` mới — **thay thế toàn bộ**, không phải
+patch từng phần (giống pattern `UpdateRolePermissionsAsync`/`UpdateUserRolesAsync`).
+
+**Ví dụ áp dụng** (đúng yêu cầu ban đầu — "Full quyền Chi nhánh nhưng không
+được xem Thiết bị"): User đang thuộc Role "Quản lý PC" (có `Asset.Device.View`)
+→ Admin gọi `PUT /api/Permission/user/{userId}` với `DenyPermissionIds:
+[<id Asset.Device.View>]` → User đó mất quyền xem Device dù Role vẫn còn
+nguyên, không ảnh hưởng user khác cùng Role.
+
+**Chưa làm:** chưa có UI Admin (FE) cho màn "gán override theo User" — mới có
+API. `Identity.User.UpdatePermissions` (permission guard cho `PUT
+.../user/{userId}`) đã seed sẵn full quyền cho `Admin` qua migration
+`AddUserPermissionOverride` (`Indentity.Infrastructure/Migrations/20260710045905_AddUserPermissionOverride.cs`).

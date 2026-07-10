@@ -24,6 +24,8 @@ public partial class IdentityDbContext : DbContext
 
     public virtual DbSet<Permission> Permissions { get; set; }
 
+    public virtual DbSet<UserPermission> UserPermissions { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Role>(entity =>
@@ -65,6 +67,19 @@ public partial class IdentityDbContext : DbContext
                         j.HasKey("UserId", "RoleId");
                         j.ToTable("UserRoles");
                     });
+        });
+
+        modelBuilder.Entity<UserPermission>(entity =>
+        {
+            entity.HasKey(e => new { e.UserId, e.PermissionId });
+
+            entity.HasOne(e => e.User).WithMany(u => u.UserPermissions)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Permission).WithMany()
+                .HasForeignKey(e => e.PermissionId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         OnModelCreatingPartial(modelBuilder);

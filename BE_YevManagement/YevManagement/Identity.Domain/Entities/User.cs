@@ -18,4 +18,6 @@ public class User
     public virtual ICollection<Role> Roles { get; set; } = new List<Role>();
 
     public virtual ICollection<LoginUserIP> LoginUserIPs { get; set; } = new List<LoginUserIP>();
+
+    public virtual ICollection<UserPermission> UserPermissions { get; set; } = new List<UserPermission>();
 }

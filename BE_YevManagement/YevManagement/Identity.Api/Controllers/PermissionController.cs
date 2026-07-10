@@ -43,5 +43,35 @@ namespace Identity.Api.Controllers
 
             return Success(true, "Cập nhật chức năng cho quyền thành công!");
         }
+
+        [RequirePermission("Identity.Permission.View")]
+        [HttpGet("user/{userId}")]
+        public async Task<ActionResult<ApiResponse<List<UserPermissionDto>>>> GetUserPermissionOverrides(int userId)
+        {
+            var overrides = await _service.GetUserPermissionOverridesAsync(userId);
+            return Success(overrides, "Lấy danh sách chức năng riêng của người dùng thành công!");
+        }
+
+        [RequirePermission("Identity.Permission.View")]
+        [HttpGet("user/{userId}/effective")]
+        public async Task<ActionResult<ApiResponse<List<PermissionDto>>>> GetEffectivePermissionsForUser(int userId)
+        {
+            var permissions = await _service.GetEffectivePermissionsForUserAsync(userId);
+            return Success(permissions, "Lấy danh sách chức năng hiệu lực của người dùng thành công!");
+        }
+
+        [RequirePermission("Identity.User.UpdatePermissions")]
+        [HttpPut("user/{userId}")]
+        public async Task<ActionResult<ApiResponse<bool>>> UpdateUserPermissionOverrides(int userId, [FromBody] UpdateUserPermissionOverridesDto request)
+        {
+            await _service.UpdateUserPermissionOverridesAsync(new UpdateUserPermissionsDto
+            {
+                UserId = userId,
+                GrantPermissionIds = request?.GrantPermissionIds ?? new List<int>(),
+                DenyPermissionIds = request?.DenyPermissionIds ?? new List<int>()
+            });
+
+            return Success(true, "Cập nhật chức năng riêng của người dùng thành công!");
+        }
     }
 }

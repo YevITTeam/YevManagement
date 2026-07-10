@@ -118,10 +118,13 @@ Việc đó giờ dựa vào **`user.permissions`** — mảng mã permission d�
 FE tự quyết định ẩn/hiện nút bấm/menu dựa trên `user.permissions.includes(code)`
 — BE **không** có endpoint "check quyền" riêng, luôn tự enforce lại ở tầng API
 (gọi 1 hành động mà thiếu permission tương ứng → 403, không phải chỉ ẩn UI).
+`user.permissions` đã là danh sách **hiệu lực cuối cùng** (base theo Role, đã
+cộng/trừ override riêng theo User nếu có — xem mục 4.8), FE không cần tự tính lại.
 Danh sách đầy đủ mã permission theo module/entity xem
 [identity-module.md §9](identity-module.md#9-phân-quyền-chi-tiết-rbac--permission--2026-07-10);
 lấy toàn bộ danh sách này qua `GET /api/Permission/all` (mục 4.7) để dựng màn
-"quản lý phân quyền" (checkbox permission theo từng Role).
+"quản lý phân quyền" (checkbox permission theo từng Role, hoặc override riêng
+theo User ở mục 4.8).
 
 Role hiện có trong DB (seed sẵn, có thể có thêm qua `create-role`): `Basic`,
 `Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiết bị`. Sau migration nâng cấp permission,
@@ -206,7 +209,7 @@ cấp, lưu lại.
 [
   { "id": 1, "code": "Asset.Device.View", "module": "Asset", "description": "Xem danh sách / chi tiết thiết bị" },
   { "id": 2, "code": "Asset.Device.Create", "module": "Asset", "description": "Thêm thiết bị" }
-  // ... 51 dòng, group theo "module" để render section trên UI
+  // ... 52 dòng, group theo "module" để render section trên UI
 ]
 
 // GET /api/Permission/role/{roleId} → data[] — permission ĐANG được gán cho role này, permission: Identity.Permission.View
@@ -217,8 +220,41 @@ cấp, lưu lại.
 [1, 2, 5, 8]
 ```
 
-**Không có** API tạo/sửa/xoá `Permission` — danh sách 51 mã là cố định (seed qua
+**Không có** API tạo/sửa/xoá `Permission` — danh sách 52 mã là cố định (seed qua
 migration BE), FE chỉ đọc (`GET /all`) và gán/gỡ theo Role (`GET`/`PUT /role/{roleId}`).
+
+### 4.8. Override permission riêng theo User — `/api/Permission/user/{userId}` (mới, 2026-07-10) ⭐
+
+Dùng khi 1 nhân viên cụ thể cần quyền **khác** so với Role đang gán (tránh phải
+tạo hẳn 1 Role mới chỉ cho 1 người) — ví dụ: user thuộc Role "Quản lý PC" (có
+sẵn quyền xem Thiết bị) nhưng muốn **thu hồi riêng** quyền xem Thiết bị của
+đúng người này, hoặc **cấp thêm riêng** 1 quyền mà Role của họ không có.
+
+```jsonc
+// GET /api/Permission/user/{userId} → data[] — override ĐANG áp dụng cho user này (permission: Identity.Permission.View)
+[
+  { "permissionId": 5, "code": "Asset.Device.View", "module": "Asset", "description": "...", "isGranted": false }
+  // isGranted=false → đang bị THU HỒI riêng dù Role có cấp
+  // isGranted=true  → đang được CẤP THÊM riêng dù Role không cấp
+]
+
+// GET /api/Permission/user/{userId}/effective → data[] — permission HIỆU LỰC cuối cùng (đã cộng/trừ override), cùng shape GET /all (permission: Identity.Permission.View)
+[
+  { "id": 1, "code": "Asset.Branch.View", "module": "Asset", "description": "..." }
+  // danh sách này mới là "user thực sự làm được gì" — dùng để preview trước khi lưu, hoặc audit
+]
+
+// PUT /api/Permission/user/{userId} — permission: Identity.User.UpdatePermissions
+// body: TOÀN BỘ override sau cùng (thay thế hết override cũ, giống cơ chế PUT /role/{roleId})
+{
+  "grantPermissionIds": [12],      // cấp thêm riêng permission id=12
+  "denyPermissionIds": [5, 8]      // thu hồi riêng permission id=5, id=8 (dù Role đang cấp)
+}
+// → 400 nếu 1 permission id xuất hiện ở CẢ 2 mảng cùng lúc (vô nghĩa)
+```
+
+**Không cần user đăng nhập lại** — permission hiệu lực tự refresh ngay request
+tiếp theo (cùng cơ chế với đổi permission theo Role, xem mục 2.2).
 
 ---
 
@@ -236,6 +272,9 @@ migration BE), FE chỉ đọc (`GET /all`) và gán/gỡ theo Role (`GET`/`PUT 
 | GET | `/api/Permission/all` | `Identity.Permission.View` | Toàn bộ permission hệ thống |
 | GET | `/api/Permission/role/{roleId}` | `Identity.Permission.View` | Permission hiện tại của 1 role |
 | PUT | `/api/Permission/role/{roleId}` | `Identity.Role.Update` | Gán lại permission cho role |
+| GET | `/api/Permission/user/{userId}` | `Identity.Permission.View` | Override (grant/deny) hiện có của 1 user |
+| GET | `/api/Permission/user/{userId}/effective` | `Identity.Permission.View` | Permission hiệu lực cuối cùng của 1 user |
+| PUT | `/api/Permission/user/{userId}` | `Identity.User.UpdatePermissions` | Gán lại override riêng cho user |
 
 ---
 
@@ -246,5 +285,6 @@ migration BE), FE chỉ đọc (`GET /all`) và gán/gỡ theo Role (`GET`/`PUT 
 | `windows-login` luôn trả 401 | Thiếu `credentials: "include"` trên fetch, hoặc máy/trình duyệt client không nằm trong domain AD | Thêm `credentials: "include"`; test bằng máy đã join domain |
 | Gọi API nào đó trả 401 dù đã đăng nhập | Token hết hạn (120 phút) hoặc thiếu header `Authorization` | Gọi lại `windows-login` lấy token mới |
 | Gọi API nào đó trả 403 dù token còn hạn | User đăng nhập không có permission cho hành động đó (Role của user chưa được gán permission tương ứng) | Nhờ 1 Admin gọi `PUT /api/Permission/role/{roleId}` gán thêm permission cho Role của user, hoặc gán user sang Role phù hợp qua `update-user-roles` |
+| User rõ ràng đã được gán Role có permission X nhưng vẫn 403 khi gọi hành động cần permission X | User có thể đang bị **deny override riêng** (`UserPermission.IsGranted=false`) đè lên permission mà Role cấp | Gọi `GET /api/Permission/user/{userId}` xem override đang áp dụng; nếu cần khôi phục, `PUT /api/Permission/user/{userId}` với `denyPermissionIds` không còn permission đó |
 | Gọi API Asset (Device/Software/IP...) trả 401/403 — trước đây không cần token | Từ 2026-07-10, module Asset đã siết permission, không còn `[AllowAnonymous]` | Gắn `Authorization: Bearer <token>` cho **mọi** request Asset, đảm bảo Role của user có permission tương ứng |
 | Gọi API từ origin khác `localhost:3000`/`10.45.1.181:3000` bị chặn CORS | Origin chưa nằm trong whitelist CORS ở BE | Báo BE thêm origin vào `Program.cs` (`AddCors`) |

@@ -51,14 +51,20 @@ namespace Asset.Application.Services
 
             foreach (var deviceSoftware in oldSoftwares)
             {
-                if (newSoftwareIds.Contains(deviceSoftware.SoftwareId))
+                // DeviceId là 1 phần của khoá chính kép (DeviceId, SoftwareId) nên EF Core
+                // không cho phép sửa trực tiếp rồi Update — phải xoá dòng cũ, thêm dòng mới
+                // (giữ nguyên InstallDate/LicenseKey) để "chuyển" bản ghi sang máy mới.
+                _unitOfWork.DeviceSoftwares.Delete(deviceSoftware);
+
+                if (!newSoftwareIds.Contains(deviceSoftware.SoftwareId))
                 {
-                    _unitOfWork.DeviceSoftwares.Delete(deviceSoftware);
-                }
-                else
-                {
-                    deviceSoftware.DeviceId = newDevice!.Id;
-                    _unitOfWork.DeviceSoftwares.Update(deviceSoftware);
+                    await _unitOfWork.DeviceSoftwares.AddAsync(new DeviceSoftware
+                    {
+                        DeviceId = newDevice!.Id,
+                        SoftwareId = deviceSoftware.SoftwareId,
+                        InstallDate = deviceSoftware.InstallDate,
+                        LicenseKey = deviceSoftware.LicenseKey
+                    });
                 }
             }
 

@@ -10,5 +10,8 @@ namespace Identity.Application.Interfaces.Service
         Task<List<PermissionDto>> GetAllPermissionsAsync();
         Task<List<PermissionDto>> GetRolePermissionsAsync(int roleId);
         Task UpdateRolePermissionsAsync(UpdateRolePermissionsDto dto);
+        Task<List<UserPermissionDto>> GetUserPermissionOverridesAsync(int userId);
+        Task<List<PermissionDto>> GetEffectivePermissionsForUserAsync(int userId);
+        Task UpdateUserPermissionOverridesAsync(UpdateUserPermissionsDto dto);
     }
 }
