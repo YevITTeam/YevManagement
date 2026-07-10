@@ -4,11 +4,12 @@ import { useState } from "react";
 import UserRoleModal from "@/modules/auth/components/UserRoleModal";
 import RoleList from "@/modules/auth/components/roles/RoleList";
 import RolePermissionManager from "@/modules/auth/components/permissions/RolePermissionManager";
+import UserPermissionOverrideManager from "@/modules/auth/components/permissions/UserPermissionOverrideManager";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
-import {Users, Key, Shield} from "lucide-react"
+import {Users, Key, Shield, ShieldCheck} from "lucide-react"
 
-type MenuKey = "user-roles" | "roles" | "permissions";
+type MenuKey = "user-roles" | "roles" | "permissions" | "user-permissions";
 
 export default function AdminDashboard() {
   const { user: currentUser, isLoading: isLoadingUser } = useAuth();
@@ -23,6 +24,7 @@ export default function AdminDashboard() {
   const isUserRoles = activeMenu === "user-roles";
   const isRoles = activeMenu === "roles";
   const isPermissions = activeMenu === "permissions";
+  const isUserPermissions = activeMenu === "user-permissions";
 
   const menuItemClass = (active: boolean) =>
     `flex w-full cursor-pointer items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium transition-colors ${active
@@ -63,6 +65,12 @@ export default function AdminDashboard() {
               </button>
             )}
 
+            {canViewPermissions && (
+              <button onClick={() => setActiveMenu("user-permissions")} className={menuItemClass(isUserPermissions)}>
+                <span><ShieldCheck className="h-4 w-4" /></span> Phân quyền riêng theo User
+              </button>
+            )}
+
             {!canViewUserRoles && !canViewRoles && !canViewPermissions && (
               <p className="px-2 text-sm text-[#5e3f3a]">
                 Tài khoản của bạn chưa được cấp quyền quản trị nào.
@@ -86,6 +94,8 @@ export default function AdminDashboard() {
           <RoleList />
         ) : isPermissions && canViewPermissions ? (
           <RolePermissionManager />
+        ) : isUserPermissions && canViewPermissions ? (
+          <UserPermissionOverrideManager />
         ) : (
           <div className="flex h-full flex-col items-center justify-center rounded-xl border border-[#e0e3e5] bg-white p-8 text-center shadow-sm">
             <div className="mb-4 text-6xl">👋</div>
