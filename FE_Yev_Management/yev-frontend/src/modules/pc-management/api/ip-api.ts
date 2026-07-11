@@ -77,12 +77,13 @@ export const IpApi = {
         const response = await api.delete<ApiResponse<void>>(ENDPOINTS.IP_ADDRESS.deleteIpAddress(id));
         return response.data;
     },
+    // docs/asset-api-fe.md §4.2 — 2 route này là PUT, không phải POST.
     assignIpAddress: async (id: number, deviceId: number) => {
-        const response = await api.post<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.assignIpAddress(id), { deviceId });
+        const response = await api.put<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.assignIpAddress(id), { deviceId });
         return response.data;
     },
     unassignIpAddress: async (id: number) => {
-        const response = await api.post<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.unassignIpAddress(id));
+        const response = await api.put<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.unassignIpAddress(id));
         return response.data;
     },
     getIpPrefixPageNation: async (params?: GetIpPrefixPageNationParams) => {

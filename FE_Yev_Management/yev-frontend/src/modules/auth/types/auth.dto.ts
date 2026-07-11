@@ -29,6 +29,15 @@ export interface CreateRoleDto {
   description?: string;
 }
 
+// Body cho POST /api/Auth/create-user — Admin chuẩn bị trước 1 user cho (UserName, DeviceName) cụ thể,
+// trước khi người đó đăng nhập Windows lần đầu (xem docs/identity-api-fe.md §4.9).
+export interface CreateUserDto {
+  userName: string;
+  deviceName: string;
+  fullName?: string;
+  roleIds?: number[];
+}
+
 // Response gốc của POST /api/Auth/windows-login (docs/identity-api-fe.md §2.2)
 export interface WindowsLoginResponseDto {
   user: UserDto;

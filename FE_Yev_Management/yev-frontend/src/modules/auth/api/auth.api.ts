@@ -1,10 +1,11 @@
 import { api, windowsLogin as requestWindowsLogin } from "@/lib/client";
-import type { UserDto, RoleDto, WindowsLoginResponseDto } from "@/modules/auth/types/auth.dto";
+import type { UserDto, RoleDto, WindowsLoginResponseDto, CreateUserDto } from "@/modules/auth/types/auth.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
   AUTH: {
     windowsLogin: "/Auth/windows-login",
+    createUser: "/Auth/create-user",
     getAllUsersWithRoles: "/Auth/get-all-users-with-roles",
     updateUserRoles: "/Auth/update-user-roles",
     getAllRoles: "/Auth/get-all-roles",
@@ -33,6 +34,14 @@ export const AuthApi = {
   getCurrentUser: async (): Promise<UserDto | null> => {
     if (typeof window === "undefined") return null;
     return AuthApi.windowsLogin();
+  },
+
+  // Chuẩn bị trước 1 user cho (UserName, DeviceName) cụ thể — dùng khi nhân viên mới chưa từng đăng
+  // nhập Windows lần nào (docs/identity-api-fe.md §4.9). deviceName phải khớp CHÍNH XÁC reverse-DNS
+  // hostname thật của máy, sai lệch sẽ khiến lần đăng nhập thật không khớp được dòng đã tạo này.
+  createUser: async (data: CreateUserDto) => {
+    const response = await api.post<ApiResponse<UserDto>>(ENDPOINTS.AUTH.createUser, data);
+    return response.data;
   },
 
   getAllUsersWithRoles: async () => {

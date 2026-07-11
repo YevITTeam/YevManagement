@@ -6,6 +6,7 @@ import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto, RoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleSelectModal from "./RoleSelectModal";
+import CreateUserDialog from "./CreateUserDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -23,6 +24,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [isLoading, setIsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [openRoleModalUserId, setOpenRoleModalUserId] = useState<number | null>(null);
+    const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -60,6 +62,8 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
 
     // POST /api/Auth/update-user-roles yêu cầu permission Identity.User.UpdateRoles (docs/identity-api-fe.md §4.2).
     const canUpdateUserRoles = hasPermission(currentUser, "Identity.User.UpdateRoles");
+    // POST /api/Auth/create-user yêu cầu permission Identity.User.Create (docs/identity-api-fe.md §4.9).
+    const canCreateUser = hasPermission(currentUser, "Identity.User.Create");
 
     const filteredUsers = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
@@ -113,6 +117,14 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     <div className="border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e]">
                         Tổng roles: {roles.length}
                     </div>
+                    {canCreateUser && (
+                        <button
+                            onClick={() => setIsCreateUserOpen(true)}
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                        >
+                            + Tạo user thủ công
+                        </button>
+                    )}
                     {onClose && (
                         <button
                             onClick={onClose}
@@ -247,6 +259,16 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     onClose={() => setOpenRoleModalUserId(null)}
                 />
             )}
+
+            <CreateUserDialog
+                isOpen={isCreateUserOpen}
+                roles={roles}
+                onClose={() => setIsCreateUserOpen(false)}
+                onCreated={() => {
+                    setIsCreateUserOpen(false);
+                    void fetchData();
+                }}
+            />
         </div>
     );
 }

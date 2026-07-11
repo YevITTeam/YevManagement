@@ -119,7 +119,7 @@ export default function UserPermissionOverrideManager() {
     };
 
     const handleSave = async () => {
-        if (selectedUserId === null) return;
+        if (selectedUserId === null || isEditingSelf) return;
         const grantPermissionIds: number[] = [];
         const denyPermissionIds: number[] = [];
         choices.forEach((choice, permissionId) => {
@@ -140,6 +140,16 @@ export default function UserPermissionOverrideManager() {
     };
 
     const selectedUser = users.find((user) => user.id === selectedUserId) ?? null;
+    // Chặn tự sửa quyền của chính tài khoản đang đăng nhập — tránh tự khoá/tự cấp quyền cho mình.
+    // So cả `id` lẫn `userName` (không phân biệt hoa/thường) — phòng trường hợp id trả về từ 2 API
+    // (`getAllUsersWithRoles` vs `windows-login`) không đồng nhất kiểu dữ liệu, `userName` (định danh AD)
+    // là nguồn đáng tin cậy hơn để nhận diện "đây chính là tài khoản đang đăng nhập".
+    const isEditingSelf =
+        currentUser !== null &&
+        selectedUser !== null &&
+        (String(selectedUser.id) === String(currentUser.id) ||
+            selectedUser.userName.trim().toLowerCase() === currentUser.userName.trim().toLowerCase());
+    const canEditSelectedUser = canUpdateUserPermissions && !isEditingSelf;
 
     return (
         <div className="space-y-8">
@@ -206,7 +216,8 @@ export default function UserPermissionOverrideManager() {
                                 <button
                                     type="button"
                                     onClick={handleSave}
-                                    disabled={isSaving || isLoadingUserPermissions || selectedUserId === null}
+                                    disabled={isSaving || isLoadingUserPermissions || selectedUserId === null || isEditingSelf}
+                                    title={isEditingSelf ? "Không thể tự chỉnh sửa quyền của chính tài khoản đang đăng nhập." : undefined}
                                     className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     <Save className="h-4 w-4" />
@@ -214,6 +225,12 @@ export default function UserPermissionOverrideManager() {
                                 </button>
                             )}
                         </div>
+
+                        {isEditingSelf && (
+                            <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">
+                                Bạn đang xem tài khoản của chính mình — không thể tự chỉnh sửa quyền riêng cho tài khoản đang đăng nhập.
+                            </div>
+                        )}
 
                         {isLoadingUserPermissions ? (
                             <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">Đang tải quyền...</div>
@@ -259,7 +276,7 @@ export default function UserPermissionOverrideManager() {
                                                                 <button
                                                                     key={value}
                                                                     type="button"
-                                                                    disabled={!canUpdateUserPermissions}
+                                                                    disabled={!canEditSelectedUser}
                                                                     onClick={() => setChoice(permission.id, value)}
                                                                     className={`cursor-pointer rounded px-2 py-1 font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                                                                         choice === value
