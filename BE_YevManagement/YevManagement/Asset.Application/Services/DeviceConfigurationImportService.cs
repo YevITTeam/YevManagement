@@ -5,6 +5,7 @@ using Asset.Application.Interfaces.Service;
 using Asset.Domain.Enums;
 using ClosedXML.Excel;
 using Shared.Application.Abstractions;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 
@@ -35,9 +36,9 @@ namespace Asset.Application.Services
             _deviceConfigurationService = deviceConfigurationService;
         }
 
-        public async Task<DeviceConfigurationImportPreviewResultDto> PreviewAsync(Stream excelFileStream)
+        public async Task<DeviceConfigurationImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string? fileName = null)
         {
-            var rawRows = ParseExcel(excelFileStream);
+            var rawRows = CsvFileHelper.HasCsvExtension(fileName) ? ParseCsv(excelFileStream) : ParseXlsx(excelFileStream);
             var (validatedRows, outOfScopeSkippedCount) = await ValidateAndResolveRowsAsync(rawRows);
             return BuildPreviewResult(validatedRows, outOfScopeSkippedCount);
         }
@@ -304,9 +305,25 @@ namespace Asset.Application.Services
         // Cột cố định theo đúng thứ tự file kiểm kê Tanium: A=Computer Name, B=Tanium
         // Client IP Address, C=Last Logged In User (bỏ qua), D=Manufacturer, E=Model,
         // F=CPU, G=RAM, H=Size. Dòng 1 là header.
-        private static List<DeviceConfigurationImportRowDto> ParseExcel(Stream stream)
+        private static List<DeviceConfigurationImportRowDto> ParseXlsx(Stream stream)
         {
-            using var workbook = new XLWorkbook(stream);
+            XLWorkbook workbook;
+            try
+            {
+                workbook = new XLWorkbook(stream);
+            }
+            catch (Exception ex) when (ex is not DomainException)
+            {
+                // ClosedXML ném nhiều loại exception khác nhau (FileFormatException,
+                // InvalidOperationException...) khi file không phải .xlsx hợp lệ hoặc bị
+                // hỏng — quy về 1 DomainException (400, thông báo rõ ràng) thay vì để lọt
+                // ra ngoài thành lỗi 500 chung chung qua HandleExceptionMiddleware. Đây
+                // chính là nguyên nhân bug thật gặp phải: file Tanium xuất ra thực chất là
+                // .csv nhưng bị đổi đuôi/hiểu nhầm là .xlsx.
+                throw new DomainException("File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx hoặc .csv).");
+            }
+
+            using var _ = workbook;
             var worksheet = workbook.Worksheets.First();
             var usedRange = worksheet.RangeUsed();
 
@@ -343,5 +360,47 @@ namespace Asset.Application.Services
 
             return rows;
         }
+
+        // Cùng 8 cột/thứ tự như ParseXlsx nhưng đọc từ file .csv (2026-07-11, thêm sau —
+        // dùng CsvFileHelper chung, tự nhận diện dấu phẩy/chấm phẩy). File kiểm kê Tanium
+        // thực tế thường xuất mặc định ở dạng CSV — đây là lý do chính thêm nhánh này.
+        private static List<DeviceConfigurationImportRowDto> ParseCsv(Stream stream)
+        {
+            var csvRows = CsvFileHelper.ReadRows(stream);
+            var rows = new List<DeviceConfigurationImportRowDto>();
+
+            for (int i = 1; i < csvRows.Count; i++)
+            {
+                var cells = csvRows[i];
+                var computerName = GetCsvCell(cells, 0);
+                var taniumIp = GetCsvCell(cells, 1);
+                var manufacturer = GetCsvCell(cells, 3);
+                var model = GetCsvCell(cells, 4);
+                var cpu = GetCsvCell(cells, 5);
+                var ram = GetCsvCell(cells, 6);
+                var size = GetCsvCell(cells, 7);
+
+                var isRowEmpty = string.IsNullOrWhiteSpace(computerName) && string.IsNullOrWhiteSpace(taniumIp) &&
+                    string.IsNullOrWhiteSpace(manufacturer) && string.IsNullOrWhiteSpace(model) &&
+                    string.IsNullOrWhiteSpace(cpu) && string.IsNullOrWhiteSpace(ram) && string.IsNullOrWhiteSpace(size);
+                if (isRowEmpty) continue;
+
+                rows.Add(new DeviceConfigurationImportRowDto
+                {
+                    RowNumber = i + 1,
+                    ComputerName = string.IsNullOrWhiteSpace(computerName) ? null : computerName,
+                    TaniumIpAddress = string.IsNullOrWhiteSpace(taniumIp) ? null : taniumIp,
+                    Manufacturer = string.IsNullOrWhiteSpace(manufacturer) ? null : manufacturer,
+                    Model = string.IsNullOrWhiteSpace(model) ? null : model,
+                    Cpu = string.IsNullOrWhiteSpace(cpu) ? null : cpu,
+                    Ram = string.IsNullOrWhiteSpace(ram) ? null : ram,
+                    Size = string.IsNullOrWhiteSpace(size) ? null : size
+                });
+            }
+
+            return rows;
+        }
+
+        private static string GetCsvCell(string[] cells, int index) => index < cells.Length ? cells[index] : string.Empty;
     }
 }

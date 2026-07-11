@@ -35,28 +35,27 @@ namespace Identity.Infrastructure.Authentication
             var dbIdentity = new ClaimsIdentity("DbRoles", ClaimTypes.Name, ClaimTypes.Role);
 
             string? ipAddress = GetClientIp();
-            // Phải resolve deviceName TRƯỚC khi tra User — vì từ 2026-07-10, định danh
-            // đăng nhập là cặp (UserName, DeviceName) chứ không chỉ UserName suông (xem
-            // ghi chú dưới).
+            // DeviceName chỉ còn mang tính tham khảo/hiển thị (2026-07-11, đổi lại —
+            // xem ghi chú dưới), không dùng để khớp User nữa nên resolve sau cũng được,
+            // nhưng vẫn resolve ở đây để set/refresh cho User tìm được bên dưới.
             string? deviceName = GetClientDeviceName(ipAddress);
 
             using (var scope = _serviceProvider.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
 
-                // Quyết định người dùng (2026-07-10): so khớp theo ĐÚNG cặp (UserName,
-                // DeviceName), không chỉ UserName — cho phép Admin "pre-provision" trước 1
-                // User ứng với 1 máy cụ thể + gán sẵn Role (xem UserService.CreateUserAsync).
-                // Nếu cùng UserName Windows nhưng đăng nhập từ 1 máy KHÁC (DeviceName khác,
-                // hoặc chưa từng đăng nhập từ máy này) → coi là chưa tồn tại, tự tạo 1 User
-                // MỚI với Role mặc định "Basic", KHÔNG đụng tới các User khác cùng UserName
-                // (1 tài khoản Windows có thể ứng với nhiều dòng User, mỗi dòng 1 máy + Role
-                // riêng theo máy đó).
+                // Khớp User theo UserName suông (2026-07-11, đổi lại từ cặp (UserName,
+                // DeviceName) áp dụng 2026-07-10). Lý do đổi: DeviceName resolve qua
+                // reverse-DNS trên IP client không ổn định (NAT, nhiều PTR record...) —
+                // cùng 1 người có thể bị resolve ra 2 hostname khác nhau chỉ trong vài giây,
+                // khiến hệ thống hiểu nhầm là "máy lạ" và tự tạo thêm 1 User trùng mỗi lần
+                // đăng nhập. Đánh đổi: mất tính năng "Role riêng theo từng máy" của
+                // UserService.CreateUserAsync — giờ 1 UserName chỉ còn đúng 1 dòng User.
                 var user = await dbContext.Users
                     .Include(x => x.Roles).ThenInclude(r => r.Permissions)
                     .Include(x => x.LoginUserIPs)
                     .Include(x => x.UserPermissions).ThenInclude(up => up.Permission)
-                    .FirstOrDefaultAsync(a => a.UserName == windowsUsername && a.DeviceName == deviceName);
+                    .FirstOrDefaultAsync(a => a.UserName == windowsUsername);
 
                 if (user == null)
                 {
@@ -82,6 +81,14 @@ namespace Identity.Infrastructure.Authentication
                 }
 
                 bool isUpdated = false;
+
+                // Refresh DeviceName hiển thị theo lần đăng nhập gần nhất (không đụng tới
+                // nếu resolve thất bại/null — tránh xoá mất giá trị Admin đã pre-provision).
+                if (!string.IsNullOrEmpty(deviceName) && user.DeviceName != deviceName)
+                {
+                    user.DeviceName = deviceName;
+                    isUpdated = true;
+                }
 
                 if (!string.IsNullOrEmpty(ipAddress))
                 {

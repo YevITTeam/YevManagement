@@ -8,12 +8,12 @@ namespace Identity.Application.Dtos.UserDto
         [MaxLength(100, ErrorMessage = "Tên đăng nhập không được vượt quá 100 ký tự")]
         public string UserName { get; set; } = null!;
 
-        // Bắt buộc — đây chính là "chìa khoá" để login sau này khớp đúng bản ghi
-        // User này (xem MyClaimsTransformation: định danh đăng nhập là cặp
-        // UserName+DeviceName). Phải nhập đúng hostname (reverse DNS) của máy thật.
-        [Required(ErrorMessage = "Tên thiết bị không được để trống")]
+        // Không bắt buộc (2026-07-11, đổi lại — bỏ vai trò "chìa khoá" đăng nhập).
+        // Chỉ để tham khảo/hiển thị; MyClaimsTransformation giờ khớp User lúc login
+        // theo UserName suông, không còn phụ thuộc DeviceName resolve qua reverse-DNS
+        // (không ổn định, từng gây tạo trùng User — xem ghi chú ở docs/identity-module.md).
         [MaxLength(100, ErrorMessage = "Tên thiết bị không được vượt quá 100 ký tự")]
-        public string DeviceName { get; set; } = null!;
+        public string? DeviceName { get; set; }
 
         public string? FullName { get; set; }
 

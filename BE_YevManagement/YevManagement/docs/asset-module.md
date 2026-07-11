@@ -235,6 +235,23 @@
 >    ValidRows, InvalidRows }`. Mỗi `DeviceImportRowDto` có `IsValid`/`Errors`
 >    (tiếng Việt, theo từng dòng) để FE hiển thị bảng preview trước khi người
 >    dùng bấm xác nhận import.
+>
+>    **Hỗ trợ cả `.xlsx` lẫn `.csv` (2026-07-11, thêm sau)**: `PreviewAsync` nhận
+>    thêm `fileName?` (controller truyền `IFormFile.FileName`), quyết định
+>    `ParseXlsx` (ClosedXML, giữ nguyên logic cũ, đổi tên từ `ParseExcel`) hay
+>    `ParseCsv` dựa theo đuôi file (`CsvFileHelper.HasCsvExtension`, đuôi `.csv`
+>    không phân biệt hoa/thường). `ParseCsv` dùng `CsvFileHelper`
+>    (`Shared.Application/Helper/CsvFileHelper.cs`, helper dùng chung, tự viết
+>    tay không phụ thuộc thư viện ngoài) — tự nhận diện dấu phân cách `,`/`;` dựa
+>    trên dòng header (đếm số lần xuất hiện, dấu nào nhiều hơn thì dùng cho toàn
+>    file), hỗ trợ field có dấu ngoặc kép bao quanh (chứa dấu phân cách/escape
+>    `""`→`"` bên trong), UTF-8 tự nhận BOM. Vì CSV không có kiểu Date thật như
+>    Excel, cột "Ngày Mua" ở nhánh CSV luôn parse qua `TryParsePurchaseDate`
+>    (`dd/MM/yyyy`) — giống hệt nhánh "cell text" của `ParseXlsx`, không có
+>    nhánh đọc Date-typed cell riêng. File không mở được ở cả 2 nhánh (hỏng/sai
+>    định dạng) → `DomainException` (400) thay vì để lọt exception gốc của
+>    ClosedXML ra ngoài thành lỗi 500 (xem ghi chú riêng ở mục Import Tanium bên
+>    dưới — cùng 1 fix áp dụng cho cả 2 service import Excel).
 > 2. `POST /api/DeviceImport/confirm` (`ConfirmDeviceImportDto { Rows }` — FE gửi
 >    lại đúng field thô của các dòng đã xem ở bước 1, **không gửi Id đã resolve**
 >    vì server luôn tự tra lại theo tên, không tin Id từ client) —
@@ -256,11 +273,17 @@
 >      định **60 tháng** (hằng số `DefaultDepreciationMonths` trong
 >      `DeviceImportService`) — `Status` mặc định `PendingUse`. Cần sửa lại tay
 >      qua màn hình Device sau nếu thiếu thông tin.
->    - Nếu dòng có `MQL Cũ` (thiết bị bị thay thế): gọi thẳng
->      `ITransferHistoryService.TransferAsync` (tái dùng 100% nghiệp vụ "chuyển
->      máy" đã có ở §1 — chuyển toàn bộ IP + phần mềm từ máy cũ sang máy vừa tạo,
->      đổi trạng thái máy cũ theo hạn sử dụng, tạo dòng `TransferHistory`) theo
->      đúng quyết định người dùng, **không** viết logic thay thế riêng.
+>    - Nếu dòng có `MQL Cũ` (thiết bị dự tính bị thay thế): **KHÔNG** tự chuyển
+>      máy nữa (2026-07-11, đổi quyết định trước đó). `ConfirmAsync` chỉ thêm 1
+>      gợi ý vào `DeviceImportConfirmResultDto.PendingTransfers`
+>      (`DeviceImportPendingTransferDto { NewDeviceId, NewDeviceCode, OldDeviceId,
+>      OldDeviceCode }`) — lúc import chỉ là dự tính máy cũ nào sẽ được thay,
+>      thực tế lắp đặt có thể đổi ý. FE dùng gợi ý này để **điền sẵn nhưng cho
+>      sửa** trên màn hình "Chuyển máy" (chọn `NewDeviceId` khác nếu cần qua
+>      `GET /api/Device/available`), người dùng phải tự bấm nút "Chuyển" thì mới
+>      thật sự gọi `POST /api/TransferHistory` (nghiệp vụ chuyển máy đầy đủ vẫn
+>      y nguyên như mô tả ở §1, chỉ đổi **thời điểm** gọi — không còn tự động
+>      trong lúc import).
 >
 > **Validate/resolve từng dòng** (`DeviceImportService.ValidateAndResolveRowsAsync`,
 > dùng chung cho cả `preview` và `confirm`): `Xưởng`/`Loại Thiết Bị`/`Nhà Cung
@@ -386,6 +409,26 @@
 > **Permission**: dùng chung `Asset.DeviceConfiguration.Update` cho cả
 > `preview` và `confirm` (không tách permission riêng cho import).
 >
+> **File Excel không hợp lệ/hỏng bị crash 500 (2026-07-11, đã fix)**: `ParseXlsx`
+> (cả ở đây lẫn `DeviceImportService`, đổi tên từ `ParseExcel`) gọi
+> `new XLWorkbook(stream)` — nếu file upload không phải `.xlsx` hợp lệ (VD đổi
+> đuôi từ `.xls`, hoặc file bị hỏng khi tải lên) thì `ClosedXML` ném thẳng
+> `FileFormatException`/exception khác ra ngoài, rơi vào nhánh `default` của
+> `HandleExceptionMiddleware` → trả 500 "An unexpected error occurred" chung
+> chung. Đã bọc `try/catch` quanh `new XLWorkbook(stream)`, quy về
+> `DomainException` (400) với thông báo tiếng Việt rõ ràng ("File Excel không
+> hợp lệ hoặc bị hỏng...") — áp dụng cho cả 2 service import Excel trong module.
+> **Nguyên nhân thật của lỗi này khi phát sinh**: file kiểm kê Tanium xuất ra
+> thực chất là `.csv` nhưng bị hiểu nhầm/đổi đuôi thành `.xlsx` → dẫn tới thêm
+> tính năng hỗ trợ `.csv` native ngay bên dưới, thay vì chỉ dừng ở việc trả lỗi
+> rõ ràng hơn.
+>
+> **Hỗ trợ upload `.csv`** (2026-07-11, thêm sau, xem chi tiết cơ chế
+> `CsvFileHelper` ở mục Import Device hàng loạt phía trên — dùng chung 100%):
+> `PreviewAsync` nhận thêm `fileName?`, chọn `ParseXlsx` hay `ParseCsv` theo đuôi
+> file. Cột Tanium không có kiểu Date nên không có khác biệt đặc biệt nào giữa
+> 2 nhánh ngoài nguồn đọc.
+>
 > Đã test thật trên DB (tạo 1 Device TEST + gán IP Available thật, import cấu
 > hình lần đầu → tạo `DeviceConfiguration` mới + gán đúng IP; sửa tay thêm
 > `Mainboard` qua API thường rồi import lại với `Ram` khác → xác nhận chỉ
@@ -465,6 +508,11 @@
     `IsUseUsb?` (2026-07-09, thêm sau — exact match), `SortDeviceCodeAscending?`
     (2026-07-10, thêm sau — `null` giữ mặc định `OrderByDescending(PurchaseDate)`,
     `true`/`false` = sort theo `DeviceCode` tăng/giảm dần, ghi đè sort mặc định).
+    **`DeviceCode`/`Manager`/`SupplierName` đổi từ `StartsWith` sang `Contains`**
+    (2026-07-11, theo yêu cầu người dùng — kiểu filter "chỉ cần chứa từ khoá" ở
+    bất kỳ vị trí nào là ra kết quả, đồng nhất với `Note`/`SerialNumber`/
+    `IpAddress`/`Email` vốn đã `Contains` sẵn). `PurchaseDate` vẫn giữ nguyên
+    `Contains` trên `ToString()` như cũ (không đổi).
   - `DeviceGridDto` (1 dòng grid): gộp tên Branch/Supplier/DeviceType +
     `IpAddresses: List<string>`/`Emails: List<string>` (2026-07-11: đổi từ
     field đơn `IpAddress?`/`Email?` sang list — xem ghi chú multi-IP/multi-Email

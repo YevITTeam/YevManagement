@@ -104,14 +104,14 @@ namespace Identity.Application.Services
         public async Task<UserDto> CreateUserAsync(CreateUserDto request)
         {
             var userName = request.UserName.Trim();
-            var deviceName = request.DeviceName.Trim();
+            var deviceName = string.IsNullOrWhiteSpace(request.DeviceName) ? null : request.DeviceName.Trim();
 
-            // Định danh đăng nhập là cặp (UserName, DeviceName) — xem MyClaimsTransformation.
-            // Không cho tạo trùng để tránh 2 dòng User cùng khớp 1 lần đăng nhập thật.
-            var existingUser = await _unitOfWork.Users.FirstOrDefaultAsync(
-                x => x.UserName == userName && x.DeviceName == deviceName);
+            // Định danh đăng nhập là UserName suông (2026-07-11, đổi lại — xem
+            // MyClaimsTransformation). Không cho tạo trùng UserName để tránh 2 dòng User
+            // cùng khớp 1 lần đăng nhập thật.
+            var existingUser = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == userName);
             if (existingUser != null)
-                throw new DomainException($"Người dùng '{userName}' trên thiết bị '{deviceName}' đã tồn tại.");
+                throw new DomainException($"Người dùng '{userName}' đã tồn tại.");
 
             var roles = new List<Role>();
             if (request.RoleIds.Any())

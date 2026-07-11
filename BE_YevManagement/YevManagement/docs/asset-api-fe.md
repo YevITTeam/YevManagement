@@ -260,9 +260,14 @@ Route `/api/Device`. **Không có** `GET /all` (danh sách quá lớn, luôn dù
 
 ### 5.2. `GET /api/Device/grid-list` — danh sách (bảng chính)
 
-Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string, match theo `Contains`), `ipAddress`, `email` (2026-07-11, mới), `supplierName`, `note`, `isOutsourced` (bool, thêm 2026-07-09), `serialNumber` (string, `Contains`) và `isUseUsb` (bool, exact match) — 2 field này thêm cùng đợt 2026-07-09.
+Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `supplierName` (3 field này match theo `Contains`, đổi từ `StartsWith` 2026-07-11 — xem ghi chú dưới), `purchaseDate` (string, match theo `Contains`), `ipAddress`, `email` (2026-07-11, mới), `note`, `isOutsourced` (bool, thêm 2026-07-09), `serialNumber` (string, `Contains`) và `isUseUsb` (bool, exact match) — 2 field này thêm cùng đợt 2026-07-09.
 
 > **`ipAddress`/`email`** (2026-07-11): match `Contains` trên **bất kỳ** IP/email nào của Device (Device giờ có thể có nhiều IP + nhiều email — xem mục 5.3/5.5). `ipAddress` đã có sẵn field trước đó nhưng chưa thật sự lọc được gì; từ nay hoạt động đúng.
+
+> **`deviceCode`/`manager`/`supplierName` đổi từ `StartsWith` sang `Contains`**
+> (2026-07-11, theo yêu cầu người dùng): trước đây phải gõ đúng từ đầu chuỗi mới
+> ra kết quả, giờ chỉ cần từ khoá xuất hiện ở bất kỳ vị trí nào trong giá trị là
+> khớp — đồng nhất cách filter với `note`/`serialNumber`/`ipAddress`/`email`.
 
 **`sortDeviceCodeAscending`** (bool, optional, thêm 2026-07-10): không truyền (hoặc bỏ trống) → giữ mặc định sort theo `purchaseDate` giảm dần (mới mua nhất lên đầu); truyền `true` → sort theo `deviceCode` tăng dần; truyền `false` → sort theo `deviceCode` giảm dần. Khi tham số này có giá trị, nó **ghi đè hoàn toàn** sort mặc định theo `purchaseDate`.
 
@@ -502,9 +507,18 @@ Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang 
 
 → FE nên nhắc người dùng: sau khi import, vào từng thiết bị sửa lại `Tên thiết bị`/`Người quản lý`/`Email`/`Số tháng khấu hao` nếu cần chính xác hơn mặc định.
 
-**Cột "MQL Cũ" — tự động thực hiện nghiệp vụ "chuyển máy"**: nếu dòng có giá trị này, server coi thiết bị mới **thay thế** thiết bị cũ đó — thực hiện y hệt `POST /api/TransferHistory` (mục 5.9): chuyển toàn bộ IP + phần mềm cài từ thiết bị cũ sang thiết bị mới vừa tạo, đổi trạng thái thiết bị cũ (Chờ sử dụng hoặc Chờ thanh lý tuỳ hạn sử dụng), tạo 1 dòng lịch sử chuyển máy. `MQL Cũ` phải khớp đúng 1 thiết bị **đang có sẵn, chưa xoá** — không khớp thì báo lỗi dòng đó.
+**Cột "MQL Cũ" — chỉ là GỢI Ý chuyển máy, KHÔNG tự thực hiện** (2026-07-11, đổi
+hành vi trước đó): nếu dòng có giá trị này, `MQL Cũ` vẫn phải khớp đúng 1 thiết
+bị **đang có sẵn, chưa xoá** (không khớp thì báo lỗi dòng đó ở cả preview lẫn
+confirm), nhưng bước Confirm **không** tự gọi nghiệp vụ "chuyển máy" nữa — chỉ
+tạo thiết bị mới, rồi trả về gợi ý trong `pendingTransfers` (xem response bên
+dưới). Lý do: lúc import chỉ là dự tính máy cũ nào sẽ được thay, thực tế lắp
+đặt có thể đổi ý, nên FE dùng gợi ý này để **điền sẵn (nhưng cho sửa)** ô "Thiết
+bị cũ" trên màn hình "Chuyển máy" — người dùng phải tự bấm nút "Chuyển" thì mới
+thật sự gọi `POST /api/TransferHistory` (mục 5.9, nghiệp vụ không đổi, chỉ đổi
+thời điểm gọi).
 
-**Bước 1 — Preview (chỉ đọc, không ghi DB)**: `POST /api/DeviceImport/preview` — `multipart/form-data`, field file tên `file`.
+**Bước 1 — Preview (chỉ đọc, không ghi DB)**: `POST /api/DeviceImport/preview` — `multipart/form-data`, field file tên `file`. Nhận cả file `.xlsx` lẫn `.csv` (2026-07-11, thêm sau — server tự nhận diện theo đuôi file, CSV tự nhận diện dấu phân cách `,`/`;`).
 
 ```jsonc
 // Response — data
@@ -573,11 +587,20 @@ FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm 
 // Response — data (thành công)
 {
   "createdCount": 1,
-  "replacedOldDeviceCount": 0,      // số dòng có "MQL Cũ" đã thực hiện chuyển máy thành công
-  "createdDeviceIds": [17996]
+  "createdDeviceIds": [17996],
+  "pendingTransfers": [               // gợi ý "chuyển máy" từ cột MQL Cũ — CHƯA chuyển thật
+    {
+      "newDeviceId": 17996,
+      "newDeviceCode": "TEST-IMPORT-001",
+      "oldDeviceId": 17500,
+      "oldDeviceCode": "TEST-OLD-001"
+    }
+  ]
 }
 ```
 
+> FE nên điều hướng người dùng sang màn hình "Chuyển máy" ngay sau khi confirm, dùng `pendingTransfers` để **điền sẵn** danh sách (mỗi dòng = 1 cặp máy cũ/máy mới, cho phép sửa `newDeviceId` nếu người dùng muốn đổi ý), người dùng bấm "Chuyển" từng dòng (hoặc hàng loạt) mới thật sự gọi `POST /api/TransferHistory`. Nếu đóng màn hình mà chưa bấm "Chuyển", gợi ý này **mất luôn** (server không lưu lại) — chỉ tồn tại trong response của lần confirm đó.
+>
 > **Confirm luôn validate lại từ đầu** theo dữ liệu DB tại thời điểm bấm xác nhận (phòng trường hợp có gì đó đổi khác so với lúc xem preview — VD người khác vừa tạo trùng `MQL`). Nếu còn **bất kỳ** dòng nào lỗi, server **không ghi gì cả** (toàn bộ batch — atomic, không có chuyện tạo được nửa chừng) và trả 400 với `errors: string[]`, mỗi phần tử dạng `"Dòng {n}: {lý do}"` — FE xử lý y hệt lỗi 400 thông thường (mục 1.3), không cần logic riêng.
 
 **Quyền**: dùng chung permission `Asset.Device.Create` cho cả `preview` và `confirm` (không tách permission riêng cho import).
@@ -659,7 +682,7 @@ Dùng khi phòng IT có sẵn file xuất từ Tanium (agent quét toàn bộ m�
 
 **Mã không khớp Device nào đang có** → dòng đó báo lỗi ở Preview, **không tự tạo Device mới**. **Trùng mã trong cùng file** → báo lỗi cả 2 dòng, **không tự động lấy dòng cuối** — dữ liệu thật cho thấy có Computer Name họ AC bị dùng lại cho các máy vật lý khác nhau theo thời gian, nên chặn để người dùng tự kiểm tra là an toàn hơn tự đoán. **Dòng lỗi Tanium** (bất kỳ cột nào có giá trị bắt đầu bằng `"TSE-Error"` — agent quét lỗi, không thu thập được dữ liệu) → tự động phát hiện, báo lỗi dòng đó, không update gì.
 
-**Bước 1 — Preview**: `POST /api/DeviceConfigurationImport/preview` (`multipart/form-data`, field `file`)
+**Bước 1 — Preview**: `POST /api/DeviceConfigurationImport/preview` (`multipart/form-data`, field `file`). Nhận cả `.xlsx` lẫn `.csv` (2026-07-11 — file kiểm kê Tanium thường xuất mặc định dạng CSV, không cần tự convert sang Excel trước khi upload nữa).
 
 ```jsonc
 // Response — data
@@ -852,5 +875,5 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 5. Dialog quản lý phần mềm → `GET /api/DeviceSoftware/picker/{deviceId}` để mở, `PUT /api/DeviceSoftware/sync` để lưu (xem mục 7.4).
 6. Xem lịch sử sửa chữa cấu hình → `GET /api/DeviceConfiguration/{configId}/history` (cần có `configId` từ bước 1).
 7. Màn "Đổi thiết bị" → chọn máy mới qua `GET /api/Device/available?keyword=` (chỉ máy `Chờ sử dụng`), gọi `POST /api/TransferHistory` — server tự lo di chuyển IP/phần mềm + đổi trạng thái cả 2 máy (mục 5.9).
-8. Màn "Import Excel" (thêm Device mới) → upload file vào `POST /api/DeviceImport/preview`, render bảng preview theo `rows`/`errors`, disable nút xác nhận nếu `invalidRows > 0`; bấm xác nhận → gửi lại nguyên `rows` vào `POST /api/DeviceImport/confirm` (mục 5.10).
+8. Màn "Import Excel" (thêm Device mới) → upload file vào `POST /api/DeviceImport/preview`, render bảng preview theo `rows`/`errors`, disable nút xác nhận nếu `invalidRows > 0`; bấm xác nhận → gửi lại nguyên `rows` vào `POST /api/DeviceImport/confirm` (mục 5.10). Nếu response có `pendingTransfers`, điều hướng/điền sẵn danh sách đó sang màn "Đổi thiết bị" (mục 7) — **không** tự gọi `POST /api/TransferHistory`, để người dùng tự bấm "Chuyển" từng dòng (cho sửa `newDeviceId` nếu cần).
 9. Màn "Import cấu hình từ Tanium" (chỉ update Device có sẵn) → cùng pattern preview/confirm như mục 8, dùng `POST /api/DeviceConfigurationImport/preview` + `.../confirm` (mục 6.3) — nên hiện thêm `parsedDeviceCode`/`parsedDeviceName` trong bảng preview để người dùng kiểm tra server tách đúng mã từ Computer Name hay chưa.

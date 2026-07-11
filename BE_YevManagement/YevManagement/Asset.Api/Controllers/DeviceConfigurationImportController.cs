@@ -23,10 +23,10 @@ namespace Asset.Api.Controllers
         public async Task<ActionResult<ApiResponse<DeviceConfigurationImportPreviewResultDto>>> Preview(IFormFile file)
         {
             if (file == null || file.Length == 0)
-                return Fail<DeviceConfigurationImportPreviewResultDto>("Vui lòng chọn file Excel để import.");
+                return Fail<DeviceConfigurationImportPreviewResultDto>("Vui lòng chọn file Excel/CSV để import.");
 
             await using var stream = file.OpenReadStream();
-            var result = await _deviceConfigurationImportService.PreviewAsync(stream);
+            var result = await _deviceConfigurationImportService.PreviewAsync(stream, file.FileName);
             return Success(result, "Đọc file thành công, vui lòng xem lại bản xem trước bên dưới.");
         }
 

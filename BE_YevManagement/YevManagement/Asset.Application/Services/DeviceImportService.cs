@@ -1,10 +1,10 @@
 using Asset.Application.Dtos.DeviceImports;
 using Asset.Application.Dtos.Devices;
-using Asset.Application.Dtos.TransferHistories;
 using Asset.Application.Interfaces.Service;
 using Asset.Domain.Enums;
 using ClosedXML.Excel;
 using Shared.Application.Abstractions;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 
@@ -20,20 +20,17 @@ namespace Asset.Application.Services
         private const int DefaultDepreciationMonths = 60;
 
         private readonly IDeviceService _deviceService;
-        private readonly ITransferHistoryService _transferHistoryService;
 
         public DeviceImportService(
             IAssetUnitOfWork unitOfWork,
-            IDeviceService deviceService,
-            ITransferHistoryService transferHistoryService) : base(unitOfWork)
+            IDeviceService deviceService) : base(unitOfWork)
         {
             _deviceService = deviceService;
-            _transferHistoryService = transferHistoryService;
         }
 
-        public async Task<DeviceImportPreviewResultDto> PreviewAsync(Stream excelFileStream)
+        public async Task<DeviceImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string? fileName = null)
         {
-            var rawRows = ParseExcel(excelFileStream);
+            var rawRows = CsvFileHelper.HasCsvExtension(fileName) ? ParseCsv(excelFileStream) : ParseXlsx(excelFileStream);
             var validatedRows = await ValidateAndResolveRowsAsync(rawRows);
             return BuildPreviewResult(validatedRows);
         }
@@ -80,15 +77,19 @@ namespace Asset.Application.Services
                     result.CreatedDeviceIds.Add(created.Id);
                     result.CreatedCount++;
 
+                    // Không tự chuyển máy ở đây nữa (2026-07-11) — chỉ gợi ý, người dùng
+                    // tự bấm "Chuyển" trên màn hình riêng (gọi POST /api/TransferHistory)
+                    // vì lúc import chỉ là dự tính, có thể đổi ý máy cũ nào sẽ được thay khi
+                    // thật sự lắp đặt.
                     if (row.ResolvedOldDeviceId.HasValue)
                     {
-                        await _transferHistoryService.TransferAsync(new CreateTransferHistoryDto
+                        result.PendingTransfers.Add(new DeviceImportPendingTransferDto
                         {
-                            OldDeviceId = row.ResolvedOldDeviceId.Value,
                             NewDeviceId = created.Id,
-                            Note = $"Nhập từ Excel: thiết bị {row.DeviceCode} thay thế {row.OldDeviceCode}"
+                            NewDeviceCode = row.DeviceCode!,
+                            OldDeviceId = row.ResolvedOldDeviceId.Value,
+                            OldDeviceCode = row.OldDeviceCode!
                         });
-                        result.ReplacedOldDeviceCount++;
                     }
                 }
 
@@ -253,9 +254,23 @@ namespace Asset.Application.Services
         // Cột cố định theo đúng thứ tự template Excel hiện có (xem ảnh mẫu): A=MQL,
         // B=Xưởng, C=Loại Thiết Bị, D=Nhà Cung Cấp, E=Ngày Mua, F=Ghi Chú,
         // G=Số SerialNumber, H=MQL Cũ. Dòng 1 là header.
-        private static List<DeviceImportRowDto> ParseExcel(Stream stream)
+        private static List<DeviceImportRowDto> ParseXlsx(Stream stream)
         {
-            using var workbook = new XLWorkbook(stream);
+            XLWorkbook workbook;
+            try
+            {
+                workbook = new XLWorkbook(stream);
+            }
+            catch (Exception ex) when (ex is not DomainException)
+            {
+                // ClosedXML ném nhiều loại exception khác nhau (FileFormatException,
+                // InvalidOperationException...) khi file không phải .xlsx hợp lệ hoặc bị
+                // hỏng — quy về 1 DomainException (400, thông báo rõ ràng) thay vì để lọt
+                // ra ngoài thành lỗi 500 chung chung qua HandleExceptionMiddleware.
+                throw new DomainException("File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx hoặc .csv).");
+            }
+
+            using var _ = workbook;
             var worksheet = workbook.Worksheets.First();
             var usedRange = worksheet.RangeUsed();
 
@@ -308,6 +323,56 @@ namespace Asset.Application.Services
 
             return rows;
         }
+
+        // Cùng 8 cột/thứ tự như ParseXlsx nhưng đọc từ file .csv (2026-07-11, thêm sau —
+        // dùng CsvFileHelper chung, tự nhận diện dấu phẩy/chấm phẩy). CSV không có kiểu
+        // Date thật như Excel nên Ngày Mua luôn parse qua TryParsePurchaseDate (dd/MM/yyyy),
+        // giống hệt nhánh "cell text" của ParseXlsx.
+        private static List<DeviceImportRowDto> ParseCsv(Stream stream)
+        {
+            var csvRows = CsvFileHelper.ReadRows(stream);
+            var rows = new List<DeviceImportRowDto>();
+
+            for (int i = 1; i < csvRows.Count; i++)
+            {
+                var cells = csvRows[i];
+                var deviceCode = GetCsvCell(cells, 0);
+                var branchName = GetCsvCell(cells, 1);
+                var deviceTypeName = GetCsvCell(cells, 2);
+                var supplierName = GetCsvCell(cells, 3);
+                var dateText = GetCsvCell(cells, 4);
+                var note = GetCsvCell(cells, 5);
+                var serialNumber = GetCsvCell(cells, 6);
+                var oldDeviceCode = GetCsvCell(cells, 7);
+
+                var isRowEmpty = string.IsNullOrWhiteSpace(deviceCode) && string.IsNullOrWhiteSpace(branchName) &&
+                    string.IsNullOrWhiteSpace(deviceTypeName) && string.IsNullOrWhiteSpace(supplierName) &&
+                    string.IsNullOrWhiteSpace(note) && string.IsNullOrWhiteSpace(serialNumber) &&
+                    string.IsNullOrWhiteSpace(oldDeviceCode) && string.IsNullOrWhiteSpace(dateText);
+                if (isRowEmpty) continue;
+
+                DateTime? purchaseDate = null;
+                if (!string.IsNullOrWhiteSpace(dateText) && TryParsePurchaseDate(dateText, out var parsedDate))
+                    purchaseDate = parsedDate;
+
+                rows.Add(new DeviceImportRowDto
+                {
+                    RowNumber = i + 1,
+                    DeviceCode = string.IsNullOrWhiteSpace(deviceCode) ? null : deviceCode,
+                    BranchName = string.IsNullOrWhiteSpace(branchName) ? null : branchName,
+                    DeviceTypeName = string.IsNullOrWhiteSpace(deviceTypeName) ? null : deviceTypeName,
+                    SupplierName = string.IsNullOrWhiteSpace(supplierName) ? null : supplierName,
+                    PurchaseDate = purchaseDate,
+                    Note = string.IsNullOrWhiteSpace(note) ? null : note,
+                    SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
+                    OldDeviceCode = string.IsNullOrWhiteSpace(oldDeviceCode) ? null : oldDeviceCode
+                });
+            }
+
+            return rows;
+        }
+
+        private static string GetCsvCell(string[] cells, int index) => index < cells.Length ? cells[index] : string.Empty;
 
         // Định dạng ngày mặc định duy nhất khi ô Excel là text: dd/MM/yyyy (không dùng
         // CurrentCulture của server — dễ hiểu nhầm ngày/tháng tuỳ môi trường chạy).

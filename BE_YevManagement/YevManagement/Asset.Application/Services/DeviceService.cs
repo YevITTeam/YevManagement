@@ -36,17 +36,20 @@ namespace Asset.Application.Services
 
             if (!string.IsNullOrWhiteSpace(request.DeviceCode))
             {
-                query = query.Where(d => d.DeviceCode.StartsWith(request.DeviceCode));
+                // 2026-07-11: đổi từ StartsWith sang Contains — chỉ cần chứa từ khoá ở bất
+                // kỳ vị trí nào trong mã thiết bị là ra kết quả, không bắt buộc gõ đúng từ
+                // đầu (đồng nhất với Note/SerialNumber/IpAddress/Email đã Contains sẵn).
+                query = query.Where(d => d.DeviceCode.Contains(request.DeviceCode));
             }
 
             if (!string.IsNullOrWhiteSpace(request.Manager))
             {
-                query = query.Where(d => d.Manager.StartsWith(request.Manager));
+                query = query.Where(d => d.Manager.Contains(request.Manager));
             }
 
             if (!string.IsNullOrWhiteSpace(request.SupplierName))
             {
-                query = query.Where(d => d.Supplier.SupplierName.StartsWith(request.SupplierName));
+                query = query.Where(d => d.Supplier.SupplierName.Contains(request.SupplierName));
             }
 
             if (!string.IsNullOrWhiteSpace(request.PurchaseDate))

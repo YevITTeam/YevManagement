@@ -72,7 +72,7 @@
 
 | Service | Method | Ghi chú |
 |---|---|---|
-| `IUserService` / `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync`, `UpdateUserRolesAsync`, `CreateUserAsync` (2026-07-10) | Sync user AD, gán role, cập nhật role. `CreateUserAsync` — Admin **pre-provision** thủ công 1 User (`UserName`+`DeviceName`+chọn `RoleIds`) trước khi người đó từng đăng nhập Windows — xem §5.1. |
+| `IUserService` / `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync`, `UpdateUserRolesAsync`, `CreateUserAsync` (2026-07-10) | Sync user AD, gán role, cập nhật role. `CreateUserAsync` — Admin **pre-provision** thủ công 1 User (`UserName`+chọn `RoleIds`, `DeviceName?` chỉ để tham khảo) trước khi người đó từng đăng nhập Windows — xem §5.1. |
 | `IRoleService` / `RoleService` | `GetAllRolesAsync`, `GetRoleByIdAsync`, `CreateRoleAsync`, `UpdateRoleByIdAsync`, `DeleteRoleByIdAsync` | CRUD role, xoá = soft delete. `CreateRole` ném `DomainException` nếu trùng tên. |
 | `ITokenService` / `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` | Sinh JWT HS256 từ claims (loại bỏ claim `RolesLoaded`), hạn theo `JwtSettings:ExpiryMinutes`. |
 | `IPermissionService` / `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync(roleId)`, `UpdateRolePermissionsAsync(dto)`, `GetUserPermissionOverridesAsync(userId)`, `GetEffectivePermissionsForUserAsync(userId)`, `UpdateUserPermissionOverridesAsync(dto)` | Danh sách permission cố định (chỉ đọc); gán/đổi tập permission của 1 Role (clear rồi add lại theo danh sách Id, giống `UserService.UpdateUserRolesAsync`); 3 method cuối (2026-07-10) quản lý override permission riêng theo User — xem §9.1. |
@@ -88,58 +88,66 @@ Luồng: **Windows Negotiate → ClaimsTransformation (đồng bộ DB) → JWT*
    `.AddJwtBearer(...)` (validate Issuer/Audience/Lifetime/SigningKey từ `JwtSettings`).
 2. **`MyClaimsTransformation : IClaimsTransformation`** (`Indentity.Infrastructure/Authentication/`)
    chạy mỗi request đã xác thực Windows (**và mỗi request JWT** — xem lưu ý bên dưới):
-   - Resolve `deviceName` (reverse DNS qua IP client) **trước** khi tra `Users` (đổi
-     2026-07-10 — xem điểm tiếp theo).
+   - Resolve `deviceName` (reverse DNS qua IP client) — chỉ dùng để **hiển thị/log**
+     (2026-07-11, đổi lại — xem điểm tiếp theo), không còn dùng để khớp `User`.
    - Nếu chưa có claim `RolesLoaded`: tra `Users` (kèm `.Include(Roles).ThenInclude(Permissions)`
-     + `.Include(UserPermissions).ThenInclude(Permission)`, 2026-07-10) theo **ĐÚNG
-     cặp `(UserName, DeviceName)`** (đổi 2026-07-10 — trước đây chỉ khớp theo
-     `UserName`). Lý do đổi: cho phép Admin pre-provision trước 1 User ứng với 1
-     máy cụ thể + Role riêng (xem §5.1) mà không lo bị 1 user "windows account"
-     dùng chung dữ liệu Role qua nhiều máy khác nhau.
-   - **Không khớp được cặp `(UserName, DeviceName)`** (kể cả trường hợp `UserName`
-     đã tồn tại nhưng ứng với `DeviceName` khác, hoặc lần đầu đăng nhập từ máy này)
-     → tạo User **MỚI**, gán role `"Basic"`, resolve `FullName` từ AD
-     (`UserPrincipal.FindByIdentity`, chỉ chạy trên Windows) — **không đụng** tới
-     các User khác đã có cùng `UserName` (1 tài khoản Windows có thể ứng với nhiều
-     dòng `User`, mỗi dòng 1 máy + Role riêng theo máy đó — quyết định người dùng
-     2026-07-10, xem thêm ở §5.1).
-   - Ghi/cập nhật `LoginUserIP` (IP client, `LastLoginAt`). `DeviceName` giờ được
-     set 1 lần tại thời điểm khớp/tạo User (không còn logic "cập nhật lại nếu khác"
-     như bản cũ, vì `DeviceName` giờ là 1 phần của khoá khớp, đã đúng ngay từ query).
+     + `.Include(UserPermissions).ThenInclude(Permission)`) theo **`UserName` suông**
+     (2026-07-11, đổi lại từ cặp `(UserName, DeviceName)` áp dụng 2026-07-10 —
+     xem lý do đổi bên dưới).
+   - **`UserName` chưa tồn tại** → tạo User **MỚI**, gán role `"Basic"`, resolve
+     `FullName` từ AD (`UserPrincipal.FindByIdentity`, chỉ chạy trên Windows).
+   - **`UserName` đã tồn tại** → dùng lại đúng dòng đó (không tạo thêm), chỉ
+     refresh `DeviceName` hiển thị nếu resolve ra giá trị khác giá trị cũ (bỏ qua
+     nếu resolve thất bại/`null`, tránh xoá mất `DeviceName` Admin đã nhập tay).
+   - Ghi/cập nhật `LoginUserIP` (IP client, `LastLoginAt`).
    - Bơm claims: `ClaimTypes.Role` (mỗi role), `Permission` (mỗi mã permission **hiệu
      lực** — base từ `user.Roles.SelectMany(r => r.Permissions)`, cộng
      `UserPermission.IsGranted=true`, trừ `UserPermission.IsGranted=false`; xem công
      thức đầy đủ ở §9.1), `FullName`, `IpAddress`, `DeviceName`, `RolesLoaded=true`.
+
+   > ⚠️ **Lịch sử quyết định — khớp theo `(UserName, DeviceName)` (2026-07-10) rồi
+   > bỏ lại (2026-07-11)**: bản 2026-07-10 từng đổi sang khớp theo cặp
+   > `(UserName, DeviceName)` để cho phép Admin pre-provision Role riêng theo từng
+   > máy (xem §5.1). Nhưng `deviceName` resolve qua **reverse-DNS PTR lookup trên
+   > IP client** (`Dns.GetHostEntry`, không cache, resolve lại mỗi request) **không
+   > ổn định** trong môi trường thật (NAT, nhiều PTR record...) — quan sát được
+   > cùng 1 người dùng bị resolve ra 2 hostname khác nhau chỉ trong vài giây, khiến
+   > hệ thống hiểu nhầm "đăng nhập từ máy lạ" và tự tạo thêm 1 dòng `User` trùng
+   > mỗi lần vào web (dữ liệu rác, sai lệch Role). Quyết định người dùng
+   > (2026-07-11): bỏ hẳn việc dùng `DeviceName` làm khoá khớp, quay lại khớp theo
+   > `UserName` suông — đánh đổi mất tính năng "Role riêng theo từng máy" (1
+   > `UserName` giờ chỉ còn đúng 1 dòng `User`), nhưng đổi lại ổn định tuyệt đối,
+   > không phụ thuộc DNS. **Dữ liệu cũ**: các dòng `User` trùng `UserName` đã bị
+   > tạo rác bởi bug này (trước 2026-07-11) chưa được dọn tự động — cần rà tay
+   > qua `GET /api/User` để gộp/xoá nếu cần.
 3. **`AuthController.WindowsLogin`** (`[Authorize(AuthenticationSchemes="Negotiate")]`)
    đọc claims, gọi `TokenService.GenerateJwtToken(User)` trả `LoginResponseDto`
    (`UserDto.Permissions` lấy từ claim `Permission`). Từ đó client dùng
    `Authorization: Bearer <token>` cho các request sau.
 
-### 5.1. Tạo User thủ công (pre-provision) — 2026-07-10
+### 5.1. Tạo User thủ công (pre-provision) — 2026-07-10 (đổi lại 2026-07-11)
 
-**Mục đích**: cho Admin tạo trước 1 `User` (`UserName` + `DeviceName` + chọn
-`RoleIds`) cho người **CHƯA từng đăng nhập Windows lần nào** — ví dụ nhân viên
-mới sắp nhận máy. Khi người đó đăng nhập Windows lần đầu **đúng từ máy đã khai
-báo** (`DeviceName` khớp — xem §5), `MyClaimsTransformation` tra ra đúng dòng
-`User` này và dùng luôn `Role` đã gán, **không** rơi vào mặc định `"Basic"`.
+**Mục đích**: cho Admin tạo trước 1 `User` (`UserName` + chọn `RoleIds`) cho
+người **CHƯA từng đăng nhập Windows lần nào** — ví dụ nhân viên mới sắp nhận
+máy. Khi người đó đăng nhập Windows lần đầu, `MyClaimsTransformation` tra ra
+đúng dòng `User` này theo `UserName` và dùng luôn `Role` đã gán, **không** rơi
+vào mặc định `"Basic"`.
 
 - `POST /api/Auth/create-user` (`[RequirePermission("Identity.User.Create")]`,
-  permission mới seed qua migration `AddIdentityUserCreatePermission`, đã gán
-  full quyền cho `Admin`) — body `CreateUserDto`: `UserName` `[Required]`,
-  `DeviceName` `[Required]` (**bắt buộc** — đây là "chìa khoá" để login sau này
-  khớp đúng, phải nhập đúng hostname reverse-DNS thật của máy), `FullName?`
+  permission seed qua migration `AddIdentityUserCreatePermission`, đã gán full
+  quyền cho `Admin`) — body `CreateUserDto`: `UserName` `[Required]`,
+  `DeviceName?` (2026-07-11: **không còn bắt buộc** — chỉ để tham khảo/hiển
+  thị, không dùng để khớp login nữa, xem lý do đổi ở §5), `FullName?`
   (optional), `RoleIds: List<int>` (optional, có thể để trống — nếu để trống,
   User này khi đăng nhập vẫn nhận claim Role mặc định `"Basic"` giống case
   không có Role nào, nhưng là claim-only, KHÔNG tự thêm Role "Basic" vào DB).
-- `UserService.CreateUserAsync`: chặn trùng nếu đã có `User` với đúng cặp
-  `(UserName, DeviceName)` (`DomainException`); validate mọi `RoleIds` phải tồn
-  tại và chưa xoá mềm (`DomainException` nếu có Id không hợp lệ).
-- **Quyết định người dùng (2026-07-10) khi đăng nhập gặp máy lạ**: nếu
-  `UserName` đã tồn tại (dù được tạo thủ công qua tính năng này hay tự sinh qua
-  Windows login trước đó) nhưng đăng nhập từ 1 `DeviceName` KHÁC chưa từng có
-  trong DB → hệ thống tự tạo 1 `User` **MỚI** (Role mặc định `"Basic"`), giữ
-  nguyên dòng `User` cũ không đổi gì — nghĩa là 1 tài khoản Windows có thể có
-  nhiều dòng `User`, mỗi dòng ứng 1 máy vật lý, Role độc lập theo từng máy.
+- `UserService.CreateUserAsync`: chặn trùng nếu đã có `User` với đúng `UserName`
+  (2026-07-11, đổi lại từ chặn trùng theo cặp `(UserName, DeviceName)`;
+  `DomainException`); validate mọi `RoleIds` phải tồn tại và chưa xoá mềm
+  (`DomainException` nếu có Id không hợp lệ).
+- **1 `UserName` chỉ còn đúng 1 dòng `User`** (2026-07-11, bỏ tính năng "nhiều
+  dòng User theo từng máy" của bản 2026-07-10 — xem lý do đổi ở §5): đăng nhập
+  từ máy nào cũng khớp về đúng dòng `User` này, dùng chung 1 bộ Role.
 
 > ⚠️ **`RolesLoaded` bị loại khỏi JWT** (`TokenService` filter claim này khi sinh
 > token) → mỗi request dùng Bearer token, `MyClaimsTransformation` chạy lại từ đầu
@@ -163,7 +171,7 @@ Controller kế thừa `BaseController` (Identity), trả `ApiResponse<T>`.
 | Method | Route | Auth | Mô tả |
 |---|---|---|---|
 | POST | `/api/Auth/windows-login` | Negotiate | Đăng nhập Windows → JWT + profile (kèm `Permissions`). |
-| POST | `/api/Auth/create-user` (2026-07-10) | `RequirePermission("Identity.User.Create")` | Pre-provision thủ công 1 User (`UserName`+`DeviceName`+`RoleIds`) — xem §5.1. |
+| POST | `/api/Auth/create-user` (2026-07-10) | `RequirePermission("Identity.User.Create")` | Pre-provision thủ công 1 User (`UserName`+`RoleIds`, `DeviceName?` tham khảo) — xem §5.1. |
 | GET | `/api/Auth/get-all-users-with-roles` | `RequirePermission("Identity.User.View")` | Danh sách user + role. |
 | POST | `/api/Auth/update-user-roles` | `RequirePermission("Identity.User.UpdateRoles")` | Cập nhật role cho user (`UpdateUserRolesDto`). |
 | GET | `/api/Auth/get-all-roles` | `RequirePermission("Identity.Role.View")` | Danh sách role (chưa xoá). |
