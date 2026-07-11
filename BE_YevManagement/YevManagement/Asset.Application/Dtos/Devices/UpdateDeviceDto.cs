@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace Asset.Application.Dtos.Devices
@@ -26,8 +27,8 @@ namespace Asset.Application.Dtos.Devices
         public string Manager { get; set; } = null!;
 
         [Required(ErrorMessage = "Email không được để trống")]
-        [EmailAddress(ErrorMessage = "Email không đúng định dạng")]
-        public string Email { get; set; } = null!;
+        [MinLength(1, ErrorMessage = "Cần ít nhất 1 email")]
+        public List<DeviceEmailInputDto> Emails { get; set; } = new();
 
         [Required(ErrorMessage = "Ngày mua không được để trống")]
         public DateTime PurchaseDate { get; set; }
@@ -48,6 +49,6 @@ namespace Asset.Application.Dtos.Devices
 
         public bool IsUseUsb { get; set; }
 
-        public int? IpAddressId { get; set; }
+        public List<int> IpAddressIds { get; set; } = new();
     }
 }

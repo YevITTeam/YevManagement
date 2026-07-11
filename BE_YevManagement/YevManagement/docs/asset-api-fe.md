@@ -260,7 +260,9 @@ Route `/api/Device`. **Không có** `GET /all` (danh sách quá lớn, luôn dù
 
 ### 5.2. `GET /api/Device/grid-list` — danh sách (bảng chính)
 
-Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string, match theo `Contains`), `ipAddress`, `supplierName`, `note`, `isOutsourced` (bool, thêm 2026-07-09), `serialNumber` (string, `Contains`) và `isUseUsb` (bool, exact match) — 2 field này thêm cùng đợt 2026-07-09.
+Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `purchaseDate` (string, match theo `Contains`), `ipAddress`, `email` (2026-07-11, mới), `supplierName`, `note`, `isOutsourced` (bool, thêm 2026-07-09), `serialNumber` (string, `Contains`) và `isUseUsb` (bool, exact match) — 2 field này thêm cùng đợt 2026-07-09.
+
+> **`ipAddress`/`email`** (2026-07-11): match `Contains` trên **bất kỳ** IP/email nào của Device (Device giờ có thể có nhiều IP + nhiều email — xem mục 5.3/5.5). `ipAddress` đã có sẵn field trước đó nhưng chưa thật sự lọc được gì; từ nay hoạt động đúng.
 
 **`sortDeviceCodeAscending`** (bool, optional, thêm 2026-07-10): không truyền (hoặc bỏ trống) → giữ mặc định sort theo `purchaseDate` giảm dần (mới mua nhất lên đầu); truyền `true` → sort theo `deviceCode` tăng dần; truyền `false` → sort theo `deviceCode` giảm dần. Khi tham số này có giá trị, nó **ghi đè hoàn toàn** sort mặc định theo `purchaseDate`.
 
@@ -278,12 +280,12 @@ GET /api/Device/grid-list?pageIndex=1&pageSize=50&sortDeviceCodeAscending=false 
   "branchName": "Chi nhánh Tạm thời (Migrate)",
   "supplierName": "Mai Trung",
   "deviceTypeName": "Desktop",
-  "ipAddress": null,               // IP chính đang gắn (chuỗi hoặc null)
+  "ipAddresses": [],               // 2026-07-11: mảng IP đang gắn (có thể rỗng, có thể nhiều hơn 1)
   "purchaseDate": "2026-06-01T00:00:00",
   "manager": "Chưa xác định",
   "expirationDate": "2031-06-01T00:00:00",
   "note": "...",
-  "email": "no-email@domain.com",
+  "emails": ["no-email@domain.com"], // 2026-07-11: mảng email (thay field email đơn cũ)
   "status": 0,
   "statusText": "Chờ sử dụng",
   "isOutsourced": false,
@@ -315,7 +317,6 @@ GET /api/Device/available?keyword=YDF
   "supplierId": 2, "supplierName": "Đỉnh Thiên",
   "branchId": 9, "branchName": "Chi nhánh Tạm thời (Migrate)",
   "manager": "Nguyen Van Demo",
-  "email": "demo.device@company.com",
   "purchaseDate": "2026-01-15T00:00:00",
   "depreciationMonths": 36,
   "expirationDate": "2029-01-15T00:00:00",   // server tự tính = purchaseDate + depreciationMonths
@@ -324,8 +325,12 @@ GET /api/Device/available?keyword=YDF
   "note": "...",
   "serialNumber": "SN-DEMO-001",   // nullable, unique khi có giá trị (2026-07-09)
   "isUseUsb": false,                // 2026-07-09
-  "ipAddressId": 6989,     // IP chính đang gắn, null nếu chưa gán
-  "ipAddress": "1.1.1.104"
+  "ipAddresses": [                  // 2026-07-11: thay ipAddressId?/ipAddress? đơn — có thể nhiều IP
+    { "id": 6989, "ipAddress": "1.1.1.104" }
+  ],
+  "emails": [                       // 2026-07-11: thay field email đơn — có thể nhiều email
+    { "id": 501, "email": "demo.device@company.com", "note": null }
+  ]
 }
 ```
 
@@ -353,7 +358,9 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
   "supplierId": 2,                    // [Required] Id thật từ /api/Supplier/all
   "branchId": 9,                      // [Required] Id thật từ /api/Branch/all
   "manager": "Nguyễn Văn Test",       // [Required]
-  "email": "test.qa@company.com",     // [Required][EmailAddress]
+  "emails": [                         // [Required][MinLength(1)] — 2026-07-11, thay field email đơn
+    { "email": "test.qa@company.com", "note": null }   // mỗi item [Required][EmailAddress]
+  ],
   "purchaseDate": "2026-01-15T00:00:00",  // [Required]
   "depreciationMonths": 36,           // [Required][Range(1,600)]
   "isOutsourced": false,
@@ -361,19 +368,20 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
   "note": "Ghi chú tuỳ chọn",         // nullable
   "serialNumber": "SN-TEST-001",      // nullable, [StringLength(100)], phải unique nếu có giá trị (2026-07-09)
   "isUseUsb": false,                  // 2026-07-09, mặc định false nếu không gửi
-  "ipAddressId": 6989                 // nullable — Id 1 IpAddress đang Status=0 Available; server tự gán + set Assigned
+  "ipAddressIds": [6989]              // 2026-07-11, thay ipAddressId? đơn — mảng Id IpAddress đang Status=0 Available (có thể rỗng []); server tự gán + set Assigned cho từng IP
 }
 ```
 
 > **KHÔNG gửi `expirationDate`** — server luôn tự tính `purchaseDate + depreciationMonths` tháng, gửi lên sẽ bị bỏ qua (DTO không có field này).
-> Nếu `ipAddressId` trỏ tới IP không phải `Available` → 400 `DomainException` ("Địa chỉ IP đã được sử dụng...").
+> Nếu 1 Id trong `ipAddressIds` trỏ tới IP không phải `Available`, hoặc `ipAddressIds` có Id trùng lặp → 400 `DomainException`.
 > Nếu `serialNumber` khớp với Device khác đã có (kể cả đã soft-delete) → 400 `DomainException` ("Số Serial '...' đã tồn tại."). Để trống/`null` thì không bị check trùng (nhiều Device có thể cùng `serialNumber=null`).
+> `emails` **không** yêu cầu unique — nhiều Device có thể dùng chung 1 email.
 
 ### 5.6. Sửa Device — `PUT /api/Device/{id}`
 
-Body giống hệt Create + thêm `id` (phải khớp `{id}` trên URL, sai → 400 "Id không khớp."). Đổi `ipAddressId`:
-- Gửi Id IP khác đang gắn → IP cũ tự gỡ về `Available`, IP mới tự chuyển `Assigned`.
-- Gửi `null` → gỡ IP hiện tại, không gán IP nào.
+Body giống hệt Create + thêm `id` (phải khớp `{id}` trên URL, sai → 400 "Id không khớp."). Server **đối chiếu diff** thay vì thay hết:
+- `ipAddressIds`: IP nào đang gắn mà không còn trong mảng mới → tự gỡ về `Available`. IP mới trong mảng mà trước đó Device chưa có → phải đang `Available`, tự chuyển `Assigned`. IP đã gắn sẵn và vẫn còn trong mảng → giữ nguyên, không đụng tới. Gửi `[]` → gỡ hết IP hiện tại.
+- `emails`: entry khớp theo `email` (so khớp không phân biệt hoa/thường, đã trim) với entry đang có → giữ nguyên `id`, chỉ cập nhật `note` nếu đổi. Entry mới → thêm. Entry cũ không còn trong danh sách gửi lên → xoá (soft-delete).
 
 ### 5.7. Xoá Device — `DELETE /api/Device/{id}`
 
@@ -400,7 +408,7 @@ GET /api/Report/device-list?deviceTypeId=1&branchId=&keyword=
     "stt": 1,
     "deviceCode": "10SXC92",
     "deviceName": "MP-ENG",
-    "ipAddress": null,
+    "ipAddress": null,            // 2026-07-11: nếu Device có nhiều IP, các IP được nối bằng ", " trong 1 string
     "purchaseDate": "2021-10-01T00:00:00",
     "expirationDate": "2026-10-01T00:00:00",
     "isExpired": false,           // true nếu expirationDate đã qua (so với hôm nay UTC) — FE tự map thành ký hiệu O/X
@@ -488,13 +496,13 @@ Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang 
 |---|---|
 | `deviceName` | = giống `deviceCode` (MQL) |
 | `manager` | Chuỗi rỗng |
-| `email` | Chuỗi rỗng |
+| `emails` | Mảng rỗng `[]` (2026-07-11, file mẫu không có cột email) |
 | `depreciationMonths` | **60 tháng** (cố định) |
 | `status` | `0` — Chờ sử dụng |
 
 → FE nên nhắc người dùng: sau khi import, vào từng thiết bị sửa lại `Tên thiết bị`/`Người quản lý`/`Email`/`Số tháng khấu hao` nếu cần chính xác hơn mặc định.
 
-**Cột "MQL Cũ" — tự động thực hiện nghiệp vụ "chuyển máy"**: nếu dòng có giá trị này, server coi thiết bị mới **thay thế** thiết bị cũ đó — thực hiện y hệt `POST /api/TransferHistory` (mục 5.9): chuyển IP chính + phần mềm cài từ thiết bị cũ sang thiết bị mới vừa tạo, đổi trạng thái thiết bị cũ (Chờ sử dụng hoặc Chờ thanh lý tuỳ hạn sử dụng), tạo 1 dòng lịch sử chuyển máy. `MQL Cũ` phải khớp đúng 1 thiết bị **đang có sẵn, chưa xoá** — không khớp thì báo lỗi dòng đó.
+**Cột "MQL Cũ" — tự động thực hiện nghiệp vụ "chuyển máy"**: nếu dòng có giá trị này, server coi thiết bị mới **thay thế** thiết bị cũ đó — thực hiện y hệt `POST /api/TransferHistory` (mục 5.9): chuyển toàn bộ IP + phần mềm cài từ thiết bị cũ sang thiết bị mới vừa tạo, đổi trạng thái thiết bị cũ (Chờ sử dụng hoặc Chờ thanh lý tuỳ hạn sử dụng), tạo 1 dòng lịch sử chuyển máy. `MQL Cũ` phải khớp đúng 1 thiết bị **đang có sẵn, chưa xoá** — không khớp thì báo lỗi dòng đó.
 
 **Bước 1 — Preview (chỉ đọc, không ghi DB)**: `POST /api/DeviceImport/preview` — `multipart/form-data`, field file tên `file`.
 
@@ -713,14 +721,14 @@ FE render bảng preview theo `rows` (nên hiện cả `parsedDeviceCode`/`parse
 {
   "createdConfigCount": 1,    // số Device chưa có Configuration, được tạo mới
   "updatedConfigCount": 0,    // số Device đã có Configuration, được cập nhật
-  "ipReassignedCount": 1,     // số dòng có gán/đổi IP chính thực sự
+  "ipReassignedCount": 1,     // số dòng có gán/đổi IP thực sự
   "updatedDeviceIds": [18001]
 }
 ```
 
-**Luật gán IP chính (`taniumIpAddress`) — quan trọng vì ảnh hưởng dữ liệu IP thật, đã đổi 2026-07-10 (thay thế hoàn toàn luật chặn-theo-status trước đó):**
+**Luật gán IP theo `taniumIpAddress`** — quan trọng vì ảnh hưởng dữ liệu IP thật, đã đổi 2026-07-10 (thay thế hoàn toàn luật chặn-theo-status trước đó) rồi **đổi tiếp 2026-07-11** (bỏ khái niệm "IP chính", Device giờ hỗ trợ nhiều IP):
 - Để trống → bỏ qua, chỉ update cấu hình phần cứng, không đụng IP, không cảnh báo.
-- Khớp được `IpAddress` nào đó trong hệ thống (bất kể IP đó đang chưa gán, đang gán cho **thiết bị khác**, giữ chỗ hay ngưng dùng) → **luôn** gán IP đó làm IP chính cho thiết bị đang import, kể cả phải "cướp" lại từ thiết bị khác đang giữ nó. IP cũ của thiết bị đang import (nếu khác) tự gỡ về `Available`.
+- Khớp được `IpAddress` nào đó trong hệ thống (bất kể IP đó đang chưa gán, đang gán cho **thiết bị khác**, giữ chỗ hay ngưng dùng) → **luôn** gán IP đó cho thiết bị đang import, kể cả phải "cướp" lại từ thiết bị khác đang giữ nó. **Từ 2026-07-11: các IP khác đã gán sẵn cho chính thiết bị đang import KHÔNG bị gỡ** (IP Tanium chỉ được thêm vào, không thay thế).
 - **Không khớp** `IpAddress` nào trong hệ thống → **không chặn dòng** — Cpu/Ram/Model/cấu hình vẫn được tạo/cập nhật bình thường, chỉ riêng IP bị bỏ qua và thêm 1 thông báo vào `warnings` của dòng đó.
 
 **Update cấu hình không đè mất dữ liệu khác**: nếu thiết bị đã có `DeviceConfiguration` từ trước, import chỉ ghi đè đúng 5 field lấy được từ Tanium (`cpu/ram/hardDrive/maker/model`, và **chỉ đè nếu ô Excel không rỗng** — cột trống thì giữ nguyên giá trị cũ), toàn bộ field khác (`mainboard/monitor/mouse/os/vga/...`) **giữ nguyên**, không bị xoá. Nếu thiết bị **chưa có** cấu hình → tạo mới bình thường (kèm sinh "Cấu hình ban đầu" như mục 6.1).

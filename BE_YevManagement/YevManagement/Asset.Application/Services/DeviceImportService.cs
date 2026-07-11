@@ -67,7 +67,7 @@ namespace Asset.Application.Services
                         SupplierId = row.ResolvedSupplierId!.Value,
                         BranchId = row.ResolvedBranchId!.Value,
                         Manager = string.Empty,
-                        Email = string.Empty,
+                        Emails = new(),
                         PurchaseDate = row.PurchaseDate!.Value,
                         DepreciationMonths = DefaultDepreciationMonths,
                         IsOutsourced = false,

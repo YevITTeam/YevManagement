@@ -19,7 +19,8 @@
 
 | Entity | Thuộc tính chính | Quan hệ | Soft delete |
 |---|---|---|---|
-| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `Manager`, `Email`, `PurchaseDate`, `DepreciationMonths`, `ExpirationDate?`(**tính toán**, không nhập tay — xem ghi chú bên dưới), `IsOutsourced`, `Status`, `Note?`, `SerialNumber?`(unique khi có giá trị), `IsUseUsb` | N-1 Branch/DeviceType/Supplier; 1-1 DeviceConfiguration; 1-N IpAddresses (0..1 IP "chính"/device qua `DeviceService`), DeviceSoftwares, TransferHistory(old/new) | **Có** |
+| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `Manager`, `PurchaseDate`, `DepreciationMonths`, `ExpirationDate?`(**tính toán**, không nhập tay — xem ghi chú bên dưới), `IsOutsourced`, `Status`, `Note?`, `SerialNumber?`(unique khi có giá trị), `IsUseUsb` | N-1 Branch/DeviceType/Supplier; 1-1 DeviceConfiguration; 1-N IpAddresses (**nhiều IP/device**, xem ghi chú bên dưới), 1-N DeviceEmails, DeviceSoftwares, TransferHistory(old/new) | **Có** |
+| `DeviceEmail` | `DeviceId`, `Email`, `Note?` | N-1 Device | **Có** |
 | `Branch` | `BranchCode`(unique), `BranchName` | 1-N Devices | **Có** |
 | `Supplier` | `SupplierCode`(unique), `SupplierName` | 1-N Devices | **Có** |
 | `DeviceType` | `TypeCode`(unique), `TypeName` | 1-N Devices | **Có** |
@@ -82,15 +83,49 @@
 > cho 5202 thiết bị thật (khớp chính xác 100%, chỉ 2 giá trị 60/48 tháng) và
 > `IsOutsourced = false` mặc định cho toàn bộ — đã apply lên DB thật.
 >
-> **Chọn/gán IP cho Device**: `Device` 1-N `IpAddress` nhưng UI chỉ thao tác **1 IP
-> chính/device** (thực tế 2131/2131 device có IP thì chỉ 27 có >1 IP). Create/Update
-> Device nhận `IpAddressId?` (Id của 1 `IpAddress` đang `Status=Available`) —
-> `DeviceService` tự gán/gỡ `IpAddress.DeviceId`+`Status` tương ứng (đổi IP → IP cũ
-> tự gỡ về `Available`; xoá Device → mọi IP đang gắn tự gỡ về `Available`). **Danh
-> sách "IP chưa dùng" để chọn** có 2 cách: `GET /api/IpAddress/grid-list?status=0&keyword=`
-> (có phân trang, dùng cho bảng/picker lớn) hoặc `GET /api/IpAddress/available?keyword=`
-> (2026-07-09, mới thêm — trả thẳng `List<IpAddressDto>` không phân trang, sort theo
-> `IpAddress` A-Z, dùng cho dropdown/picker gọn không cần trang).
+> **Chọn/gán nhiều IP cho Device (2026-07-11, đã đổi — bỏ khái niệm "IP chính")**:
+> `Device` 1-N `IpAddress`, Create/Update Device nhận `IpAddressIds: List<int>`
+> (mỗi Id phải là 1 `IpAddress` đang `Status=Available`, không được trùng lặp
+> trong cùng request) — `DeviceService.CreateAsync` validate + gán toàn bộ list;
+> `UpdateAsync` gọi `SyncIpAddressesAsync` để **đối chiếu diff** với các IP đang
+> gắn: IP nào không còn trong list mới → gỡ về `Available`; IP mới trong list mà
+> trước đó chưa gắn → validate `Available` rồi gán; IP đã gắn sẵn và vẫn còn
+> trong list → **không đụng tới** (tránh xoá/gán lại không cần thiết). Xoá
+> Device → mọi IP đang gắn tự gỡ về `Available` (như cũ). `DeviceDto.IpAddresses`
+> trả `List<DeviceIpAddressDto>` (`Id` + `IpAddress`); `DeviceGridDto.IpAddresses`
+> trả `List<string>` rút gọn. **Danh sách "IP chưa dùng" để chọn** có 2 cách:
+> `GET /api/IpAddress/grid-list?status=0&keyword=` (có phân trang, dùng cho
+> bảng/picker lớn) hoặc `GET /api/IpAddress/available?keyword=` (trả thẳng
+> `List<IpAddressDto>` không phân trang, sort theo `IpAddress` A-Z, dùng cho
+> dropdown/picker gọn không cần trang).
+>
+> **Nhiều Email/Device (2026-07-11, đã làm)**: thay cột `Device.Email` (string
+> đơn) bằng bảng `DeviceEmails` (`Id/DeviceId/Email/Note?/IsDeleted`), **không**
+> ràng buộc unique (1 email có thể dùng chung cho nhiều Device, theo quyết định
+> người dùng). Create/Update Device nhận `Emails: List<DeviceEmailInputDto>`
+> (`Email [Required][EmailAddress]`, `Note?`) — `UpdateAsync` gọi
+> `SyncEmailsAsync`: entry không còn trong request (so khớp theo `Email` đã
+> trim, case-insensitive) → soft-delete; entry khớp sẵn → chỉ cập nhật `Note`
+> nếu đổi, giữ nguyên `Id`; entry mới → `AddAsync`. Xoá Device → toàn bộ
+> `DeviceEmail` liên quan cũng soft-delete theo. `DeviceDto.Emails` trả
+> `List<DeviceEmailDto>` (`Id/Email/Note`); `DeviceGridDto.Emails` trả
+> `List<string>` rút gọn. Migration `AddDeviceEmailsMultiIp`
+> (`Asset.Infrastructure/Migrations/20260711013130_AddDeviceEmailsMultiIp.cs`)
+> đã **backfill 5218/5225 Device.Email cũ** sang `DeviceEmails` (verify khớp
+> 100% số dòng) trước khi drop cột cũ, đã apply lên DB thật.
+>
+> **Bộ lọc Device theo IP/Email (2026-07-11, đã làm)**: `DeviceFilterRequest`
+> thêm `IpAddress?`/`Email?` (Contains, khớp **bất kỳ** IP/email nào của Device
+> qua `d.IpAddresses.Any(...)`/`d.DeviceEmails.Any(...)`, cả 2 đều tự lọc
+> `!IsDeleted` trên bảng con).
+>
+> **Hệ luỵ sang nghiệp vụ khác (2026-07-11)**: `TransferHistoryService.TransferAsync`
+> đổi từ "chuyển 1 IP chính" sang **chuyển toàn bộ IP đang gắn** của máy cũ sang
+> máy mới (IP nào máy mới đang giữ sẵn mà không thuộc tập IP máy cũ thì gỡ về
+> `Available` trước). `DeviceConfigurationImportService.ReassignDeviceIpAsync`
+> (import Tanium) không còn gỡ các IP khác của Device khi gán IP Tanium báo cáo
+> được — chỉ "cướp" IP đó từ Device khác đang giữ (nếu có), không đụng tới các
+> IP khác của chính Device đang import.
 
 > **Báo cáo "DANH SÁCH DESKTOP TOÀN CÔNG TY" (2026-07-09, đã làm)**:
 > `GET /api/Report/device-list?deviceTypeId=&branchId=&keyword=` (controller
@@ -99,7 +134,8 @@
 > bị toàn công ty" cùng dưới `/api/Report/*`) trả thẳng
 > `List<DeviceReportItemDto>` (**không phân trang** — dùng cho in ấn/export, khác
 > `grid-list`), gồm `Stt` (đánh số lại theo kết quả trả về, `OrderBy(DeviceCode)`),
-> `DeviceCode`, `DeviceName`, `IpAddress` (IP chính), `PurchaseDate`,
+> `DeviceCode`, `DeviceName`, `IpAddress` (2026-07-11: toàn bộ IP đang gắn, nối
+> `", "`, không còn chỉ 1 IP chính — xem ghi chú §1), `PurchaseDate`,
 > `ExpirationDate`, `IsExpired` (bool, `ExpirationDate < hôm nay UTC` — tương ứng
 > cột "O/X" trong báo cáo giấy, FE tự chọn ký hiệu hiển thị), `FinancialPeriod`
 > (int?, xem công thức bên dưới), `Note`. Filter đều optional: không truyền gì
@@ -132,12 +168,13 @@
 > thuần:
 > 1. Validate `OldDeviceId != NewDeviceId` (`DomainException` nếu trùng), cả 2
 >    Device phải tồn tại (`OrThrowNotFound`).
-> 2. **Chuyển IP chính**: IP đang gắn `OldDevice` (nếu có) → gán sang `NewDevice`.
->    Nếu `NewDevice` đang có sẵn 1 IP khác → IP đó tự gỡ về `Available` trước (đúng
->    ràng buộc "1 IP không được gắn nhiều thiết bị" — logic giống hệt cách
->    `DeviceService.UpdateAsync` đổi `ipAddressId`, viết lại trực tiếp trong
->    `TransferHistoryService` vì cả 2 dùng chung `IAssetUnitOfWork`, không gọi
->    chéo sang `IpAddressService`).
+> 2. **Chuyển toàn bộ IP** (2026-07-11: đổi từ "chuyển 1 IP chính" — Device giờ
+>    hỗ trợ nhiều IP cùng lúc): mọi IP đang gắn `OldDevice` → gán sang
+>    `NewDevice`. IP nào `NewDevice` đang giữ sẵn mà không thuộc tập IP của
+>    `OldDevice` → tự gỡ về `Available` trước (đúng ràng buộc "1 IP không được
+>    gắn nhiều thiết bị" — logic giống hệt cách `DeviceService.UpdateAsync` đối
+>    chiếu diff IP, viết lại trực tiếp trong `TransferHistoryService` vì cả 2
+>    dùng chung `IAssetUnitOfWork`, không gọi chéo sang `IpAddressService`).
 > 3. **Chuyển phần mềm cài (`DeviceSoftware`)**: đổi `DeviceId` của từng dòng từ
 >    `OldDevice` sang `NewDevice` (move, không phải copy — giữ nguyên
 >    `InstallDate`/`LicenseKey` cũ). Nếu `NewDevice` **đã cài sẵn** đúng phần mềm
@@ -214,13 +251,14 @@
 >      đã có, không viết lại) với `DeviceCode`/`SerialNumber`/`Note`/`PurchaseDate`
 >      lấy từ Excel, còn các field **`[Required]` mà Excel không có** thì theo
 >      đúng quyết định người dùng (2026-07-10): `DeviceName` = lấy theo `MQL`,
->      `Manager`/`Email` để trống, `DepreciationMonths` mặc định **60 tháng**
->      (hằng số `DefaultDepreciationMonths` trong `DeviceImportService`) —
->      `Status` mặc định `PendingUse`. Cần sửa lại tay qua màn hình Device sau
->      nếu thiếu thông tin.
+>      `Manager` để trống, `Emails` để rỗng (2026-07-11: `List<DeviceEmailInputDto>`
+>      rỗng, thay cho `Email = string.Empty` trước đó), `DepreciationMonths` mặc
+>      định **60 tháng** (hằng số `DefaultDepreciationMonths` trong
+>      `DeviceImportService`) — `Status` mặc định `PendingUse`. Cần sửa lại tay
+>      qua màn hình Device sau nếu thiếu thông tin.
 >    - Nếu dòng có `MQL Cũ` (thiết bị bị thay thế): gọi thẳng
 >      `ITransferHistoryService.TransferAsync` (tái dùng 100% nghiệp vụ "chuyển
->      máy" đã có ở §1 — chuyển IP chính + phần mềm từ máy cũ sang máy vừa tạo,
+>      máy" đã có ở §1 — chuyển toàn bộ IP + phần mềm từ máy cũ sang máy vừa tạo,
 >      đổi trạng thái máy cũ theo hạn sử dụng, tạo dòng `TransferHistory`) theo
 >      đúng quyết định người dùng, **không** viết logic thay thế riêng.
 >
@@ -303,14 +341,16 @@
 > IP/Manufacturer/Model/Cpu/Ram/Size nào) → tự động phát hiện qua prefix
 > `"TSE-Error"`, báo lỗi dòng đó ở Preview, không update gì.
 >
-> **Gán IP chính cho Device** (`Tanium Client IP Address`, chỉ khi cột này có
-> giá trị — để trống thì bỏ qua, không lỗi/không cảnh báo): tra
+> **Gán IP Tanium báo cáo được cho Device** (`Tanium Client IP Address`, chỉ khi
+> cột này có giá trị — để trống thì bỏ qua, không lỗi/không cảnh báo): tra
 > `IpAddress.IpAddress1` khớp đúng giá trị, `!IsDeleted`. Quy tắc **đã đổi**
-> (2026-07-10, chốt lại lần 2 — thay thế hoàn toàn quy tắc chặn-theo-status cũ):
+> (2026-07-10, chốt lại lần 2 — thay thế hoàn toàn quy tắc chặn-theo-status cũ;
+> **2026-07-11: đổi tiếp** — không còn khái niệm "IP chính" nên hành vi gỡ IP
+> khác của Device cũng bỏ, xem bên dưới):
 > - Khớp được `IpAddress` trong DB (bất kể đang `Available`, `Assigned` cho
->   thiết bị khác, `Reserved` hay `Disabled`) → **luôn** gán làm IP chính cho
->   Device này, kể cả khi phải "cướp" lại từ 1 Device khác đang giữ nó — không
->   còn phân biệt theo `Status` như bản đầu.
+>   thiết bị khác, `Reserved` hay `Disabled`) → **luôn** gán IP đó cho Device
+>   này, kể cả khi phải "cướp" lại từ 1 Device khác đang giữ nó — không còn
+>   phân biệt theo `Status` như bản đầu.
 > - **Không** khớp `IpAddress` nào trong DB (chưa cấp phát qua `IpPrefix`) →
 >   **không chặn dòng**, chỉ bỏ qua việc cập nhật IP và thêm 1 dòng vào
 >   `Warnings` của row đó để báo cho người dùng biết (Cpu/Ram/Model/tạo-cập
@@ -318,10 +358,13 @@
 > - Việc gán/cướp IP xử lý trong
 >   `DeviceConfigurationImportService.ReassignDeviceIpAsync` (không gọi chéo
 >   `IpAddressService`, cùng `IAssetUnitOfWork` nên truy cập thẳng repo, giống
->   pattern `DeviceService`/`TransferHistoryService`): gỡ IP cũ của Device này
->   (nếu khác) về `Available`, gán IP mới `DeviceId`+`Status=Assigned` — do
->   `IpAddress.DeviceId` là FK 1 chiều nên việc set field này tự động "cướp"
->   khỏi Device cũ đang giữ IP đó mà không cần đụng gì thêm ở phía Device cũ.
+>   pattern `DeviceService`/`TransferHistoryService`): gán IP mới
+>   `DeviceId`+`Status=Assigned` — do `IpAddress.DeviceId` là FK 1 chiều nên
+>   việc set field này tự động "cướp" khỏi Device cũ đang giữ IP đó mà không
+>   cần đụng gì thêm ở phía Device cũ. **Từ 2026-07-11, KHÔNG còn gỡ các IP
+>   khác của chính Device đang import** (khác hành vi cũ khi chỉ có 1 "IP
+>   chính") — Device giờ hỗ trợ nhiều IP cùng lúc nên IP Tanium báo cáo chỉ
+>   được **thêm vào**, không thay thế IP đã gán thủ công trước đó.
 >
 > **Update `DeviceConfiguration` không đè mất field khác**: nếu Device đã có
 > `DeviceConfiguration`, chỉ ghi đè đúng 5 field Tanium báo cáo được
@@ -414,26 +457,38 @@
 - **DeviceTypes/**: `DeviceTypeDto`, `CreateDeviceTypeDto`, `UpdateDeviceTypeDto`.
 - **Devices/**:
   - `DeviceFilterRequest` (query grid): `PageIndex=1`, `PageSize=50`, filter
-    `DeviceCode/Manager/PurchaseDate/IpAddress/SupplierName/Note/IsOutsourced?`
-    (2026-07-09: thêm `IsOutsourced?` — lọc đúng true/false, bỏ qua nếu null),
-    `SerialNumber?`(`Contains`), `IsUseUsb?` (2026-07-09, thêm sau — exact match),
-    `SortDeviceCodeAscending?` (2026-07-10, thêm sau — `null` giữ mặc định
-    `OrderByDescending(PurchaseDate)`, `true`/`false` = sort theo `DeviceCode`
-    tăng/giảm dần, ghi đè sort mặc định).
-  - `DeviceGridDto` (1 dòng grid): gộp tên Branch/Supplier/DeviceType + IP đầu tiên +
-    `StatusText` + `IsOutsourced` (2026-07-09: thêm cột này vào grid, trước đó chỉ
-    có ở `DeviceDto`/Create/Update, grid-list thiếu) + `SerialNumber?`/`IsUseUsb`
-    (2026-07-09, thêm sau).
+    `DeviceCode/Manager/PurchaseDate/IpAddress/Email/SupplierName/Note/IsOutsourced?`
+    (2026-07-09: thêm `IsOutsourced?` — lọc đúng true/false, bỏ qua nếu null;
+    2026-07-11: thêm `Email?`, kích hoạt thật `IpAddress?` — trước đó field này
+    có trong DTO nhưng chưa được dùng trong `GetDevicesForGridAsync`), cả 2 đều
+    Contains khớp bất kỳ IP/email nào của Device, `SerialNumber?`(`Contains`),
+    `IsUseUsb?` (2026-07-09, thêm sau — exact match), `SortDeviceCodeAscending?`
+    (2026-07-10, thêm sau — `null` giữ mặc định `OrderByDescending(PurchaseDate)`,
+    `true`/`false` = sort theo `DeviceCode` tăng/giảm dần, ghi đè sort mặc định).
+  - `DeviceGridDto` (1 dòng grid): gộp tên Branch/Supplier/DeviceType +
+    `IpAddresses: List<string>`/`Emails: List<string>` (2026-07-11: đổi từ
+    field đơn `IpAddress?`/`Email?` sang list — xem ghi chú multi-IP/multi-Email
+    §1) + `StatusText` + `IsOutsourced` (2026-07-09: thêm cột này vào grid,
+    trước đó chỉ có ở `DeviceDto`/Create/Update, grid-list thiếu) +
+    `SerialNumber?`/`IsUseUsb` (2026-07-09, thêm sau).
   - `DeviceDto` (GetById, đầy đủ): gộp tên Branch/DeviceType/Supplier + `StatusText`
-    + `IpAddressId?`/`IpAddress?` (IP chính đang gắn) + `ExpirationDate` tính toán +
-    `SerialNumber?`/`IsUseUsb` (2026-07-09).
-  - `CreateDeviceDto`/`UpdateDeviceDto`: `DeviceCode/DeviceName/Manager/Email`
-    `[Required]` (Email +`[EmailAddress]`), `DeviceTypeId/SupplierId/BranchId`
-    `[Required]`, `PurchaseDate` `[Required]`, `DepreciationMonths`
-    `[Required][Range(1,600)]`, `IsOutsourced` (bool), `Status` `[Range(0,3)]`,
-    `Note?`, `IpAddressId?` (chọn IP `Available` để gán ngay), `SerialNumber?`
+    + `IpAddresses: List<DeviceIpAddressDto>` (`Id`/`IpAddress`) +
+    `Emails: List<DeviceEmailDto>` (`Id`/`Email`/`Note`) (2026-07-11: thay
+    `IpAddressId?`/`IpAddress?`/`Email` đơn — xem ghi chú §1) + `ExpirationDate`
+    tính toán + `SerialNumber?`/`IsUseUsb` (2026-07-09).
+  - `CreateDeviceDto`/`UpdateDeviceDto`: `DeviceCode/DeviceName/Manager`
+    `[Required]`, `Emails: List<DeviceEmailInputDto>` `[Required][MinLength(1)]`
+    (mỗi item `Email [Required][EmailAddress]` + `Note?`, 2026-07-11 — thay
+    field `Email` đơn), `DeviceTypeId/SupplierId/BranchId` `[Required]`,
+    `PurchaseDate` `[Required]`, `DepreciationMonths` `[Required][Range(1,600)]`,
+    `IsOutsourced` (bool), `Status` `[Range(0,3)]`, `Note?`,
+    `IpAddressIds: List<int>` (2026-07-11, thay `IpAddressId?` đơn — mỗi Id phải
+    là IP `Available`, không giới hạn số lượng), `SerialNumber?`
     (`[StringLength(100)]`, 2026-07-09), `IsUseUsb` (bool, 2026-07-09). **Không có**
     `ExpirationDate` (server tự tính, xem ghi chú §1).
+  - `DeviceIpAddressDto` (`Id`/`IpAddress`), `DeviceEmailDto` (`Id`/`Email`/`Note`),
+    `DeviceEmailInputDto` (`Email`/`Note`, dùng cho Create/Update) — 3 DTO nhỏ mới
+    2026-07-11, đi kèm entity `DeviceEmail`.
 - **DeviceSoftwares/**: `DeviceSoftwareDto`, `CreateDeviceSoftwareDto` (+`[Required]` Device/Software), `UpdateDeviceSoftwareDto`.
 - **Softwares/**: `SoftwareDto` (Id/Code/Name/Type?/Publisher?/Quantity?/Priority?/GroupId/GroupName —
   gộp tên `SoftwareGroup`), `CreateSoftwareDto` (+`[Required]` Code/Name/GroupId), `UpdateSoftwareDto`.
@@ -454,7 +509,10 @@
   không có Create/Update tương ứng (tự sinh, xem ghi chú §1).
 - **Devices/** (báo cáo): `DeviceReportFilterRequest` (`DeviceTypeId?/BranchId?/Keyword?`,
   tất cả optional), `DeviceReportItemDto` (`Stt/DeviceCode/DeviceName/IpAddress/
-  PurchaseDate/ExpirationDate/IsExpired/FinancialPeriod/Note` — xem công thức
+  PurchaseDate/ExpirationDate/IsExpired/FinancialPeriod/Note` — `IpAddress` vẫn
+  là 1 `string?` để giữ nguyên contract cho báo cáo in ấn, nhưng từ 2026-07-11
+  chứa **toàn bộ IP đang gắn nối bằng `", "`** (`string.Join`) thay vì chỉ IP
+  đầu tiên — xem công thức
   `FinancialPeriod` ở ghi chú §1).
 - **TransferHistories/**: `TransferHistoryDto` (gộp `OldDeviceCode/OldDeviceName/
   NewDeviceCode/NewDeviceName`), `CreateTransferHistoryDto` (`OldDeviceId`/
@@ -465,13 +523,14 @@
 
 ## 3. Repositories & UnitOfWork
 
-- `IAssetUnitOfWork : IUnitOfWork` gom **14 repository**: `Devices`, `Branches`,
+- `IAssetUnitOfWork : IUnitOfWork` gom **15 repository**: `Devices`, `Branches`,
   `Softwares`, `SoftwareGroups`, `Suppliers`, `DeviceConfigurations`,
-  `DeviceConfigurationInitials`, `DeviceConfigurationHistories`, `DeviceSoftwares`,
-  `DeviceTypes`, `IpAddresses`, `IpPrefixes`, `TransferHistories`, `AuditTrails`.
+  `DeviceConfigurationInitials`, `DeviceConfigurationHistories`, `DeviceEmails`
+  (2026-07-11), `DeviceSoftwares`, `DeviceTypes`, `IpAddresses`, `IpPrefixes`,
+  `TransferHistories`, `AuditTrails`.
 - Tất cả repo hiện **generic thuần** (class con rỗng, chỉ kế thừa
   `GenericRepository<T, AssetDbContext>`) — chưa có method đặc thù nào.
-- `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>` inject đủ 14 repo qua constructor.
+- `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>` inject đủ 15 repo qua constructor.
 
 ---
 
@@ -538,13 +597,16 @@
   khác)** → xem `DeviceService` (Device 1-N IpAddress, nhưng Device không giữ FK —
   `IpAddress.DeviceId` mới là FK): `CreateAsync`/`UpdateAsync` tự tính
   `ExpirationDate = PurchaseDate.AddMonths(DepreciationMonths)` (không nhận từ
-  client); muốn gán/gỡ "IP chính" thì Service tự tìm `IpAddress` hiện gắn qua
-  `FirstOrDefaultAsync(x => x.DeviceId == device.Id && !x.IsDeleted)` rồi `Update`
-  trực tiếp field `DeviceId`/`Status` của nó (không gọi chéo sang `IpAddressService`
-  — cùng `IAssetUnitOfWork` nên truy cập thẳng repo `_unitOfWork.IpAddresses` là đủ).
-  `UpdateAsync` gom **mọi** thay đổi (Device + IP cũ gỡ + IP mới gán) vào **1 lần
+  client); gán/gỡ **nhiều** IP (2026-07-11, không còn khái niệm "IP chính")
+  qua `SyncIpAddressesAsync` — đối chiếu diff giữa `IpAddressIds` mới với
+  `FindAsync(x => x.DeviceId == device.Id && !x.IsDeleted)` hiện có, chỉ
+  `Update` field `DeviceId`/`Status` của những IP thực sự thêm/bớt (không gọi
+  chéo sang `IpAddressService` — cùng `IAssetUnitOfWork` nên truy cập thẳng
+  repo `_unitOfWork.IpAddresses` là đủ). Tương tự `SyncEmailsAsync` đối chiếu
+  `Emails` mới với `DeviceEmails` hiện có (so khớp theo text, xem ghi chú §1).
+  `UpdateAsync` gom **mọi** thay đổi (Device + IP/Email thêm/bớt) vào **1 lần
   `SaveChangesAsync`** duy nhất ở cuối; `CreateAsync` cần 2 lần Save vì phải có
-  `Device.Id` trước mới gán ngược được cho IP.
+  `Device.Id` trước mới gán ngược được cho IP/Email.
 - **1-1 optional, trả `null` thay vì `OrThrowNotFound`** → xem
   `DeviceConfigurationService.GetByDeviceIdAsync`: phần lớn Device chưa có
   `DeviceConfiguration` (3004/5202 tại thời điểm map) — đây là trạng thái bình
@@ -644,8 +706,10 @@ tính on-the-fly. Nằm ở controller riêng `ReportController`, không phải
 [architecture-core.md](architecture-core.md) §1.
 
 `POST /api/TransferHistory` + `GET /api/TransferHistory/device/{deviceId}`
-(2026-07-09, đã làm, xem ghi chú §1) — nghiệp vụ "chuyển máy": chuyển IP chính +
-`DeviceSoftware` từ máy cũ sang máy mới (không chuyển `DeviceConfiguration`),
+(2026-07-09, đã làm, xem ghi chú §1; hành vi IP cập nhật lại 2026-07-11 — chuyển
+**toàn bộ IP** thay vì chỉ 1 IP chính, xem ghi chú multi-IP §1) — nghiệp vụ
+"chuyển máy": chuyển toàn bộ IP đang gắn + `DeviceSoftware` từ máy cũ sang máy
+mới (không chuyển `DeviceConfiguration`),
 máy cũ tự chuyển `PendingUse`/`PendingLiquidation` (tuỳ đã hết hạn hay chưa),
 tạo 1 dòng `TransferHistory` audit-log. Đã test thật trên DB (tạo thiết bị TEST,
 verify đủ 2 kịch bản trạng thái + swap IP + dedup phần mềm + reject trùng Id,
@@ -681,6 +745,22 @@ liệu cũ bị sai — nhét mã nhóm cũ vào `SoftwareType`, bỏ trống
 lý 15 dòng mà dữ liệu gốc lưu **tên nhóm** thay vì **mã nhóm** trong cột tham
 chiếu, match case-insensitive theo cả 2 field). Không có migration nào cho
 việc này vì chỉ là data fix, không đổi schema.
+
+**Device hỗ trợ nhiều IP + nhiều Email (2026-07-11, đã làm)** — xem ghi chú chi
+tiết ở §1: bỏ khái niệm "IP chính" (`IpAddressId?` đơn) trên Device, thay bằng
+`IpAddressIds: List<int>`; thay cột `Device.Email` đơn bằng bảng `DeviceEmails`
+(1-N, không unique). Kéo theo: `DeviceFilterRequest` thêm filter `Email?`, kích
+hoạt thật filter `IpAddress?` (trước đó có field nhưng chưa dùng);
+`TransferHistoryService` chuyển toàn bộ IP thay vì 1 IP chính;
+`DeviceConfigurationImportService.ReassignDeviceIpAsync` (import Tanium) không
+còn gỡ IP khác của Device khi gán IP mới. Migration `AddDeviceEmailsMultiIp`
+(`Asset.Infrastructure/Migrations/20260711013130_AddDeviceEmailsMultiIp.cs`) đã
+backfill 5218/5225 `Device.Email` cũ sang `DeviceEmails` trước khi drop cột,
+verify khớp 100% số dòng, đã apply lên DB thật. Đã verify EF Core dịch đúng
+toàn bộ query mới (projection `List<string>` từ collection navigation, filter
+`Any()`, `string.Join` in-memory cho báo cáo) trên DB thật bằng script đọc
+read-only riêng (không qua HTTP do user hiện tại không có quyền
+`Asset.Device.View` để test qua API).
 
 **Bug đã biết (chưa fix)**: `SoftwareGroupService.UpdateAsync` so sánh
 `GroupCode` cũ/mới **trong bộ nhớ** (case-sensitive) để quyết định có chạy check

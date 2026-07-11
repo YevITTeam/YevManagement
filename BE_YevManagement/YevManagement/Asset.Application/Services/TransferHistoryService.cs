@@ -24,22 +24,25 @@ namespace Asset.Application.Services
             var newDevice = await _unitOfWork.Devices.GetByIdAsync(request.NewDeviceId);
             newDevice.OrThrowNotFound("Thiết bị mới", request.NewDeviceId);
 
-            // Chuyển IP chính: máy cũ -> máy mới. Nếu máy mới đang có sẵn 1 IP khác thì gỡ về
-            // Available trước, vì 1 IP không được gắn trên nhiều thiết bị cùng lúc.
-            var oldIp = await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.DeviceId == oldDevice!.Id && !x.IsDeleted);
-            if (oldIp != null)
-            {
-                var newDeviceCurrentIp = await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.DeviceId == newDevice!.Id && !x.IsDeleted);
-                if (newDeviceCurrentIp != null && newDeviceCurrentIp.Id != oldIp.Id)
-                {
-                    newDeviceCurrentIp.DeviceId = null;
-                    newDeviceCurrentIp.Status = (int)IpAddressStatus.Available;
-                    _unitOfWork.IpAddresses.Update(newDeviceCurrentIp);
-                }
+            // Chuyển toàn bộ IP đang gắn: máy cũ -> máy mới (Device giờ hỗ trợ nhiều IP cùng lúc,
+            // không còn khái niệm "IP chính"). IP nào máy mới đang giữ sẵn mà không nằm trong tập
+            // IP của máy cũ thì gỡ về Available trước, vì 1 IP không được gắn trên nhiều thiết bị.
+            var oldIps = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == oldDevice!.Id && !x.IsDeleted);
+            var oldIpIds = oldIps.Select(x => x.Id).ToHashSet();
 
-                oldIp.DeviceId = newDevice!.Id;
-                oldIp.Status = (int)IpAddressStatus.Assigned;
-                _unitOfWork.IpAddresses.Update(oldIp);
+            var newDeviceCurrentIps = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == newDevice!.Id && !x.IsDeleted);
+            foreach (var ip in newDeviceCurrentIps.Where(x => !oldIpIds.Contains(x.Id)))
+            {
+                ip.DeviceId = null;
+                ip.Status = (int)IpAddressStatus.Available;
+                _unitOfWork.IpAddresses.Update(ip);
+            }
+
+            foreach (var ip in oldIps)
+            {
+                ip.DeviceId = newDevice!.Id;
+                ip.Status = (int)IpAddressStatus.Assigned;
+                _unitOfWork.IpAddresses.Update(ip);
             }
 
             // Chuyển phần mềm cài: đổi DeviceId của từng dòng DeviceSoftware sang máy mới.

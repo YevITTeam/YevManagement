@@ -79,11 +79,6 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<int>("DeviceTypeId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
                     b.Property<DateTime?>("ExpirationDate")
                         .HasColumnType("datetime2");
 
@@ -468,6 +463,37 @@ namespace Asset.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("DeviceConfigurationInitials");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceEmail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ThietBi_Emails");
+
+                    b.HasIndex(new[] { "DeviceId" }, "IX_ThietBi_Emails_ThietBiId");
+
+                    b.ToTable("DeviceEmails");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.DeviceSoftware", b =>
@@ -864,6 +890,18 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("DeviceConfiguration");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceEmail", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Device", "Device")
+                        .WithMany("DeviceEmails")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ThietBi_Emails_ThietBis_ThietBiId");
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.DeviceSoftware", b =>
                 {
                     b.HasOne("Asset.Domain.Entities.Device", "Device")
@@ -943,6 +981,8 @@ namespace Asset.Infrastructure.Migrations
             modelBuilder.Entity("Asset.Domain.Entities.Device", b =>
                 {
                     b.Navigation("DeviceConfiguration");
+
+                    b.Navigation("DeviceEmails");
 
                     b.Navigation("DeviceSoftwares");
 

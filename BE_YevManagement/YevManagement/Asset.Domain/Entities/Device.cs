@@ -19,8 +19,6 @@ public partial class Device
 
     public string Manager { get; set; } = null!;
 
-    public string Email { get; set; } = null!;
-
     public DateTime PurchaseDate { get; set; }
 
     public DateTime? ExpirationDate { get; set; }
@@ -42,6 +40,8 @@ public partial class Device
     public virtual Branch Branch { get; set; } = null!;
 
     public virtual DeviceConfiguration? DeviceConfiguration { get; set; }
+
+    public virtual ICollection<DeviceEmail> DeviceEmails { get; set; } = new List<DeviceEmail>();
 
     public virtual ICollection<DeviceSoftware> DeviceSoftwares { get; set; } = new List<DeviceSoftware>();
 

@@ -131,25 +131,18 @@ namespace Asset.Application.Services
             return result;
         }
 
-        // Gán IP (đã xác định Available hoặc đã thuộc đúng device này) làm IP chính của
-        // device — gỡ IP cũ (nếu khác) về Available trước, giống pattern DeviceService.UpdateAsync.
-        // Trả về true nếu có thay đổi thực sự (để đếm IpReassignedCount).
+        // Gán IP Tanium báo cáo được cho device này — Device giờ hỗ trợ nhiều IP cùng lúc nên
+        // KHÔNG còn gỡ các IP khác đang gắn sẵn của device (khác hành vi cũ khi chỉ có 1 "IP
+        // chính"). Vẫn "cướp" IP này khỏi bất kỳ device khác đang giữ nó, theo đúng quyết định
+        // người dùng (2026-07-10). Trả về true nếu có thay đổi thực sự (để đếm IpReassignedCount).
         private async Task<bool> ReassignDeviceIpAsync(int deviceId, int newIpAddressId)
         {
-            var currentIp = await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.DeviceId == deviceId && !x.IsDeleted);
-            if (currentIp?.Id == newIpAddressId) return false;
+            var ip = await _unitOfWork.IpAddresses.GetByIdAsync(newIpAddressId);
+            if (ip == null || ip.DeviceId == deviceId) return false;
 
-            if (currentIp != null)
-            {
-                currentIp.DeviceId = null;
-                currentIp.Status = (int)IpAddressStatus.Available;
-                _unitOfWork.IpAddresses.Update(currentIp);
-            }
-
-            var newIp = await _unitOfWork.IpAddresses.GetByIdAsync(newIpAddressId);
-            newIp!.DeviceId = deviceId;
-            newIp.Status = (int)IpAddressStatus.Assigned;
-            _unitOfWork.IpAddresses.Update(newIp);
+            ip.DeviceId = deviceId;
+            ip.Status = (int)IpAddressStatus.Assigned;
+            _unitOfWork.IpAddresses.Update(ip);
 
             return true;
         }

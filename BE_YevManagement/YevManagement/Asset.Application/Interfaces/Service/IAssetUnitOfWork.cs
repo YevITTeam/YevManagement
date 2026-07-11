@@ -13,6 +13,7 @@ namespace Asset.Application.Interfaces.Service
         IDeviceConfigurationRepository DeviceConfigurations { get; }
         IDeviceConfigurationInitialRepository DeviceConfigurationInitials { get; }
         IDeviceConfigurationHistoryRepository DeviceConfigurationHistories { get; }
+        IDeviceEmailRepository DeviceEmails { get; }
         IDeviceSoftwareRepository DeviceSoftwares { get; }
         IDeviceTypeRepository DeviceTypes { get; }
         IIpAddressRepository IpAddresses { get; }

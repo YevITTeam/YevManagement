@@ -74,6 +74,16 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.IsUseUsb == request.IsUseUsb.Value);
             }
 
+            if (!string.IsNullOrWhiteSpace(request.IpAddress))
+            {
+                query = query.Where(d => d.IpAddresses.Any(ip => !ip.IsDeleted && ip.IpAddress1.Contains(request.IpAddress)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Email))
+            {
+                query = query.Where(d => d.DeviceEmails.Any(e => !e.IsDeleted && e.Email.Contains(request.Email)));
+            }
+
             var orderedQuery = request.SortDeviceCodeAscending.HasValue
                 ? (request.SortDeviceCodeAscending.Value
                     ? query.OrderBy(d => d.DeviceCode)
@@ -92,12 +102,12 @@ namespace Asset.Application.Services
                     BranchName = d.Branch.BranchName,
                     SupplierName = d.Supplier.SupplierName,
                     DeviceTypeName = d.DeviceType.TypeName,
-                    IpAddress = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).FirstOrDefault(),
+                    IpAddresses = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).ToList(),
                     PurchaseDate = d.PurchaseDate,
                     ExpirationDate = d.ExpirationDate,
                     Manager = d.Manager,
                     Note = d.Note,
-                    Email = d.Email,
+                    Emails = d.DeviceEmails.Where(e => !e.IsDeleted).Select(e => e.Email).ToList(),
                     IsOutsourced = d.IsOutsourced,
                     SerialNumber = d.SerialNumber,
                     IsUseUsb = d.IsUseUsb,
@@ -138,12 +148,12 @@ namespace Asset.Application.Services
                     BranchName = d.Branch.BranchName,
                     SupplierName = d.Supplier.SupplierName,
                     DeviceTypeName = d.DeviceType.TypeName,
-                    IpAddress = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).FirstOrDefault(),
+                    IpAddresses = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).ToList(),
                     PurchaseDate = d.PurchaseDate,
                     ExpirationDate = d.ExpirationDate,
                     Manager = d.Manager,
                     Note = d.Note,
-                    Email = d.Email,
+                    Emails = d.DeviceEmails.Where(e => !e.IsDeleted).Select(e => e.Email).ToList(),
                     IsOutsourced = d.IsOutsourced,
                     SerialNumber = d.SerialNumber,
                     IsUseUsb = d.IsUseUsb,
@@ -172,25 +182,36 @@ namespace Asset.Application.Services
 
             var today = TimeHelper.GetCurrentUtcTime().Date;
 
-            var items = await _unitOfWork.Devices.ToListAsync(
+            // Select the raw list of Ip strings first (translatable collection projection),
+            // then join into a display string in-memory below — string.Join over a subquery
+            // is not reliably translatable across providers.
+            var rawItems = await _unitOfWork.Devices.ToListAsync(
                 query.OrderBy(d => d.DeviceCode),
-                d => new DeviceReportItemDto
+                d => new
                 {
-                    DeviceCode = d.DeviceCode,
-                    DeviceName = d.DeviceName,
-                    IpAddress = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).FirstOrDefault(),
-                    PurchaseDate = d.PurchaseDate,
-                    ExpirationDate = d.ExpirationDate,
-                    Note = d.Note,
-                    IsExpired = d.ExpirationDate.HasValue && d.ExpirationDate.Value < today,
-                    // Kỳ tài chính Yazaki: năm tài chính chạy 1/7 - 30/6, đánh số liên tục từ
-                    // năm thành lập Yazaki Corporation (1941) -> kỳ = năm bắt đầu FY - 1940.
-                    // Lặp lại logic tại đây (không gọi method) vì đây là Expression<Func<>> được
-                    // EF dịch sang SQL, không hỗ trợ gọi method C# tuỳ ý (giống StatusText ở trên).
-                    FinancialPeriod = d.ExpirationDate.HasValue
-                        ? (d.ExpirationDate.Value.Month >= 7 ? d.ExpirationDate.Value.Year : d.ExpirationDate.Value.Year - 1) - 1940
-                        : (int?)null
+                    d.DeviceCode,
+                    d.DeviceName,
+                    IpAddresses = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).ToList(),
+                    d.PurchaseDate,
+                    d.ExpirationDate,
+                    d.Note
                 });
+
+            var items = rawItems.Select(d => new DeviceReportItemDto
+            {
+                DeviceCode = d.DeviceCode,
+                DeviceName = d.DeviceName,
+                IpAddress = d.IpAddresses.Count > 0 ? string.Join(", ", d.IpAddresses) : null,
+                PurchaseDate = d.PurchaseDate,
+                ExpirationDate = d.ExpirationDate,
+                Note = d.Note,
+                IsExpired = d.ExpirationDate.HasValue && d.ExpirationDate.Value < today,
+                // Kỳ tài chính Yazaki: năm tài chính chạy 1/7 - 30/6, đánh số liên tục từ
+                // năm thành lập Yazaki Corporation (1941) -> kỳ = năm bắt đầu FY - 1940.
+                FinancialPeriod = d.ExpirationDate.HasValue
+                    ? (d.ExpirationDate.Value.Month >= 7 ? d.ExpirationDate.Value.Year : d.ExpirationDate.Value.Year - 1) - 1940
+                    : (int?)null
+            }).ToList();
 
             for (int i = 0; i < items.Count; i++)
             {
@@ -205,9 +226,10 @@ namespace Asset.Application.Services
             var device = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == id, x => x.Branch, x => x.DeviceType, x => x.Supplier);
             device.OrThrowNotFound("Thiết bị", id);
 
-            var currentIp = await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.DeviceId == id && !x.IsDeleted);
+            var ipAddresses = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
+            var emails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
 
-            return MapToDto(device, currentIp);
+            return MapToDto(device, ipAddresses, emails);
         }
 
         public async Task<DeviceDetailDto> GetDetailAsync(int id)
@@ -244,14 +266,7 @@ namespace Asset.Application.Services
             var branch = await _unitOfWork.Branches.GetByIdAsync(request.BranchId);
             branch.OrThrowNotFound("Chi nhánh", request.BranchId);
 
-            IpAddress? ipAddress = null;
-            if (request.IpAddressId.HasValue)
-            {
-                ipAddress = await _unitOfWork.IpAddresses.GetByIdAsync(request.IpAddressId.Value);
-                ipAddress.OrThrowNotFound("Địa chỉ IP", request.IpAddressId.Value);
-                if (ipAddress.Status != (int)IpAddressStatus.Available)
-                    throw new DomainException("Địa chỉ IP đã được sử dụng, vui lòng chọn IP khác.");
-            }
+            var ipAddresses = await ResolveAndValidateIpAddressesAsync(request.IpAddressIds);
 
             var newDevice = new Device
             {
@@ -261,7 +276,6 @@ namespace Asset.Application.Services
                 SupplierId = request.SupplierId,
                 BranchId = request.BranchId,
                 Manager = request.Manager,
-                Email = request.Email,
                 PurchaseDate = request.PurchaseDate,
                 DepreciationMonths = request.DepreciationMonths,
                 ExpirationDate = request.PurchaseDate.AddMonths(request.DepreciationMonths),
@@ -276,18 +290,33 @@ namespace Asset.Application.Services
             await _unitOfWork.Devices.AddAsync(newDevice);
             await _unitOfWork.SaveChangesAsync();
 
-            if (ipAddress != null)
+            foreach (var ip in ipAddresses)
             {
-                ipAddress.DeviceId = newDevice.Id;
-                ipAddress.Status = (int)IpAddressStatus.Assigned;
-                _unitOfWork.IpAddresses.Update(ipAddress);
-                await _unitOfWork.SaveChangesAsync();
+                ip.DeviceId = newDevice.Id;
+                ip.Status = (int)IpAddressStatus.Assigned;
+                _unitOfWork.IpAddresses.Update(ip);
             }
+
+            var emails = new List<DeviceEmail>();
+            foreach (var emailInput in request.Emails)
+            {
+                var email = new DeviceEmail
+                {
+                    DeviceId = newDevice.Id,
+                    Email = emailInput.Email.Trim(),
+                    Note = emailInput.Note,
+                    IsDeleted = false
+                };
+                emails.Add(email);
+                await _unitOfWork.DeviceEmails.AddAsync(email);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
 
             newDevice.Branch = branch;
             newDevice.DeviceType = deviceType;
             newDevice.Supplier = supplier;
-            return MapToDto(newDevice, ipAddress);
+            return MapToDto(newDevice, ipAddresses, emails);
         }
 
         public async Task UpdateAsync(UpdateDeviceDto request)
@@ -316,29 +345,8 @@ namespace Asset.Application.Services
             var branch = await _unitOfWork.Branches.GetByIdAsync(request.BranchId);
             branch.OrThrowNotFound("Chi nhánh", request.BranchId);
 
-            var currentIp = await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.DeviceId == device.Id && !x.IsDeleted);
-
-            if (currentIp?.Id != request.IpAddressId)
-            {
-                if (currentIp != null)
-                {
-                    currentIp.DeviceId = null;
-                    currentIp.Status = (int)IpAddressStatus.Available;
-                    _unitOfWork.IpAddresses.Update(currentIp);
-                }
-
-                if (request.IpAddressId.HasValue)
-                {
-                    var newIp = await _unitOfWork.IpAddresses.GetByIdAsync(request.IpAddressId.Value);
-                    newIp.OrThrowNotFound("Địa chỉ IP", request.IpAddressId.Value);
-                    if (newIp.Status != (int)IpAddressStatus.Available)
-                        throw new DomainException("Địa chỉ IP đã được sử dụng, vui lòng chọn IP khác.");
-
-                    newIp.DeviceId = device.Id;
-                    newIp.Status = (int)IpAddressStatus.Assigned;
-                    _unitOfWork.IpAddresses.Update(newIp);
-                }
-            }
+            await SyncIpAddressesAsync(device.Id, request.IpAddressIds);
+            await SyncEmailsAsync(device.Id, request.Emails);
 
             device.DeviceCode = request.DeviceCode;
             device.DeviceName = request.DeviceName;
@@ -346,7 +354,6 @@ namespace Asset.Application.Services
             device.SupplierId = request.SupplierId;
             device.BranchId = request.BranchId;
             device.Manager = request.Manager;
-            device.Email = request.Email;
             device.PurchaseDate = request.PurchaseDate;
             device.DepreciationMonths = request.DepreciationMonths;
             device.ExpirationDate = request.PurchaseDate.AddMonths(request.DepreciationMonths);
@@ -376,10 +383,116 @@ namespace Asset.Application.Services
                 _unitOfWork.IpAddresses.Update(ip);
             }
 
+            var emails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
+            foreach (var email in emails)
+            {
+                email.IsDeleted = true;
+                _unitOfWork.DeviceEmails.Update(email);
+            }
+
             await _unitOfWork.SaveChangesAsync();
         }
 
-        private static DeviceDto MapToDto(Device device, IpAddress? ipAddress) => new DeviceDto
+        // Validates a set of IpAddressIds for a brand-new Device: every Id must exist and be
+        // currently Available. Duplicated Ids in the same request are rejected upfront.
+        private async Task<List<IpAddress>> ResolveAndValidateIpAddressesAsync(List<int> ipAddressIds)
+        {
+            var result = new List<IpAddress>();
+            if (ipAddressIds.Count == 0) return result;
+
+            if (ipAddressIds.Distinct().Count() != ipAddressIds.Count)
+                throw new DomainException("Danh sách địa chỉ IP có ID bị trùng lặp.");
+
+            foreach (var ipId in ipAddressIds)
+            {
+                var ip = await _unitOfWork.IpAddresses.GetByIdAsync(ipId);
+                ip.OrThrowNotFound("Địa chỉ IP", ipId);
+                if (ip!.Status != (int)IpAddressStatus.Available)
+                    throw new DomainException($"Địa chỉ IP '{ip.IpAddress1}' đã được sử dụng, vui lòng chọn IP khác.");
+                result.Add(ip);
+            }
+
+            return result;
+        }
+
+        // Reconciles a Device's assigned IpAddresses with the requested Id list: unassigns
+        // Ips no longer present, assigns newly-added ones (must be Available), leaves
+        // already-assigned Ips untouched.
+        private async Task SyncIpAddressesAsync(int deviceId, List<int> requestedIpAddressIds)
+        {
+            if (requestedIpAddressIds.Distinct().Count() != requestedIpAddressIds.Count)
+                throw new DomainException("Danh sách địa chỉ IP có ID bị trùng lặp.");
+
+            var currentIps = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted);
+            var currentIds = currentIps.Select(x => x.Id).ToHashSet();
+
+            foreach (var ip in currentIps.Where(x => !requestedIpAddressIds.Contains(x.Id)))
+            {
+                ip.DeviceId = null;
+                ip.Status = (int)IpAddressStatus.Available;
+                _unitOfWork.IpAddresses.Update(ip);
+            }
+
+            foreach (var ipId in requestedIpAddressIds.Where(id => !currentIds.Contains(id)))
+            {
+                var ip = await _unitOfWork.IpAddresses.GetByIdAsync(ipId);
+                ip.OrThrowNotFound("Địa chỉ IP", ipId);
+                if (ip!.Status != (int)IpAddressStatus.Available)
+                    throw new DomainException($"Địa chỉ IP '{ip.IpAddress1}' đã được sử dụng, vui lòng chọn IP khác.");
+
+                ip.DeviceId = deviceId;
+                ip.Status = (int)IpAddressStatus.Assigned;
+                _unitOfWork.IpAddresses.Update(ip);
+            }
+        }
+
+        // Reconciles a Device's emails with the requested list, matched by trimmed/case-insensitive
+        // Email text (input items have no Id): entries missing from the request are soft-deleted,
+        // matching entries keep their Id and only refresh Note if it changed, unmatched entries are added.
+        private async Task SyncEmailsAsync(int deviceId, List<DeviceEmailInputDto> requestedEmails)
+        {
+            var currentEmails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted);
+
+            var normalizedRequest = requestedEmails
+                .Select(e => new { Email = e.Email.Trim(), e.Note })
+                .ToList();
+            var requestedKeys = normalizedRequest.Select(e => e.Email.ToLowerInvariant()).ToHashSet();
+
+            foreach (var email in currentEmails.Where(e => !requestedKeys.Contains(e.Email.ToLowerInvariant())))
+            {
+                email.IsDeleted = true;
+                _unitOfWork.DeviceEmails.Update(email);
+            }
+
+            var currentByKey = currentEmails
+                .Where(e => requestedKeys.Contains(e.Email.ToLowerInvariant()))
+                .ToDictionary(e => e.Email.ToLowerInvariant(), e => e);
+
+            foreach (var item in normalizedRequest)
+            {
+                var key = item.Email.ToLowerInvariant();
+                if (currentByKey.TryGetValue(key, out var existing))
+                {
+                    if (existing.Note != item.Note)
+                    {
+                        existing.Note = item.Note;
+                        _unitOfWork.DeviceEmails.Update(existing);
+                    }
+                }
+                else
+                {
+                    await _unitOfWork.DeviceEmails.AddAsync(new DeviceEmail
+                    {
+                        DeviceId = deviceId,
+                        Email = item.Email,
+                        Note = item.Note,
+                        IsDeleted = false
+                    });
+                }
+            }
+        }
+
+        private static DeviceDto MapToDto(Device device, IReadOnlyList<IpAddress> ipAddresses, IReadOnlyList<DeviceEmail> emails) => new DeviceDto
         {
             Id = device.Id,
             DeviceCode = device.DeviceCode,
@@ -391,7 +504,6 @@ namespace Asset.Application.Services
             BranchId = device.BranchId,
             BranchName = device.Branch?.BranchName!,
             Manager = device.Manager,
-            Email = device.Email,
             PurchaseDate = device.PurchaseDate,
             DepreciationMonths = device.DepreciationMonths,
             ExpirationDate = device.ExpirationDate,
@@ -401,8 +513,8 @@ namespace Asset.Application.Services
             Note = device.Note,
             SerialNumber = device.SerialNumber,
             IsUseUsb = device.IsUseUsb,
-            IpAddressId = ipAddress?.Id,
-            IpAddress = ipAddress?.IpAddress1
+            IpAddresses = ipAddresses.Select(ip => new DeviceIpAddressDto { Id = ip.Id, IpAddress = ip.IpAddress1 }).ToList(),
+            Emails = emails.Select(e => new DeviceEmailDto { Id = e.Id, Email = e.Email, Note = e.Note }).ToList()
         };
 
         private static string GetStatusText(int status) => status switch

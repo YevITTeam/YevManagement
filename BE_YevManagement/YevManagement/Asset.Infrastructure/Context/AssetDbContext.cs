@@ -21,6 +21,7 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<DeviceConfiguration> DeviceConfigurations { get; set; }
     public virtual DbSet<DeviceConfigurationInitial> DeviceConfigurationInitials { get; set; }
     public virtual DbSet<DeviceConfigurationHistory> DeviceConfigurationHistories { get; set; }
+    public virtual DbSet<DeviceEmail> DeviceEmails { get; set; }
     public virtual DbSet<DeviceSoftware> DeviceSoftwares { get; set; }
     public virtual DbSet<DeviceType> DeviceTypes { get; set; }
     public virtual DbSet<IpAddress> IpAddresses { get; set; }
@@ -58,7 +59,6 @@ public partial class AssetDbContext : DbContext
 
             entity.Property(e => e.DeviceCode).HasMaxLength(50);
             entity.Property(e => e.DeviceName).HasMaxLength(255);
-            entity.Property(e => e.Email).HasMaxLength(255);
             entity.Property(e => e.Manager).HasMaxLength(150);
             entity.Property(e => e.Note).HasMaxLength(500);
             entity.Property(e => e.SerialNumber).HasMaxLength(100);
@@ -171,6 +171,19 @@ public partial class AssetDbContext : DbContext
                 .HasForeignKey(d => d.DeviceConfigurationId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_SuaChuaThayThes_CauHinhThietBis_CauHinhThietBiId");
+        });
+
+        modelBuilder.Entity<DeviceEmail>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ThietBi_Emails");
+            entity.HasIndex(e => e.DeviceId, "IX_ThietBi_Emails_ThietBiId");
+
+            entity.Property(e => e.Email).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Note).HasMaxLength(255);
+
+            entity.HasOne(d => d.Device).WithMany(p => p.DeviceEmails)
+                .HasForeignKey(d => d.DeviceId)
+                .HasConstraintName("FK_ThietBi_Emails_ThietBis_ThietBiId");
         });
 
         modelBuilder.Entity<DeviceSoftware>(entity =>

@@ -17,6 +17,7 @@ namespace Asset.Infrastructure.Repositories
             IDeviceConfigurationRepository deviceConfigurations,
             IDeviceConfigurationInitialRepository deviceConfigurationInitials,
             IDeviceConfigurationHistoryRepository deviceConfigurationHistories,
+            IDeviceEmailRepository deviceEmails,
             IDeviceSoftwareRepository deviceSoftwares,
             IDeviceTypeRepository deviceTypes,
             IIpAddressRepository ipAddresses,
@@ -32,6 +33,7 @@ namespace Asset.Infrastructure.Repositories
             DeviceConfigurations = deviceConfigurations;
             DeviceConfigurationInitials = deviceConfigurationInitials;
             DeviceConfigurationHistories = deviceConfigurationHistories;
+            DeviceEmails = deviceEmails;
             DeviceSoftwares = deviceSoftwares;
             DeviceTypes = deviceTypes;
             IpAddresses = ipAddresses;
@@ -48,6 +50,7 @@ namespace Asset.Infrastructure.Repositories
         public IDeviceConfigurationRepository DeviceConfigurations { get; }
         public IDeviceConfigurationInitialRepository DeviceConfigurationInitials { get; }
         public IDeviceConfigurationHistoryRepository DeviceConfigurationHistories { get; }
+        public IDeviceEmailRepository DeviceEmails { get; }
         public IDeviceSoftwareRepository DeviceSoftwares { get; }
         public IDeviceTypeRepository DeviceTypes { get; }
         public IIpAddressRepository IpAddresses { get; }

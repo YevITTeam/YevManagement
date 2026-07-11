@@ -16,7 +16,6 @@ namespace Asset.Application.Dtos.Devices
         public int BranchId { get; set; }
         public string BranchName { get; set; } = null!;
         public string Manager { get; set; } = null!;
-        public string Email { get; set; } = null!;
         public DateTime PurchaseDate { get; set; }
         public int DepreciationMonths { get; set; }
         public DateTime? ExpirationDate { get; set; }
@@ -26,7 +25,7 @@ namespace Asset.Application.Dtos.Devices
         public string? Note { get; set; }
         public string? SerialNumber { get; set; }
         public bool IsUseUsb { get; set; }
-        public int? IpAddressId { get; set; }
-        public string? IpAddress { get; set; }
+        public List<DeviceIpAddressDto> IpAddresses { get; set; } = new();
+        public List<DeviceEmailDto> Emails { get; set; } = new();
     }
 }
