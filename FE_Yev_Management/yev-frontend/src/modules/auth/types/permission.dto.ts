@@ -1,10 +1,22 @@
-// Danh sách 52 mã permission là cố định (seed qua migration BE) — FE chỉ đọc, không tạo/sửa/xoá Permission.
+// Danh sách 53 mã permission là cố định (seed qua migration BE) — FE chỉ đọc, không tạo/sửa/xoá Permission.
 // Xem docs/identity-api-fe.md §4.7.
 export interface PermissionDto {
     id: number;
     code: string;
     module: string;
     description: string;
+}
+
+// GET /api/Permission/all trả nhóm 2 cấp Module > Entity (2026-07-11, đổi từ mảng phẳng).
+// Các endpoint permission khác (getByRole, getUserOverrides, getUserEffective...) vẫn trả PermissionDto[] phẳng như cũ.
+export interface PermissionEntityGroupDto {
+    entity: string;
+    permissions: PermissionDto[];
+}
+
+export interface PermissionModuleGroupDto {
+    module: string;
+    entities: PermissionEntityGroupDto[];
 }
 
 // Override permission riêng theo User — đè lên permission suy ra từ Role của họ.

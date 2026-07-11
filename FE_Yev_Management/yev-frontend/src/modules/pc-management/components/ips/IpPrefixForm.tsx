@@ -31,14 +31,88 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
+// Đúng 4 octet, mỗi octet 0-255 (dùng cho subnetMask/gateway/preferredDns/alternateDns).
+const isValidIPv4 = (value: string): boolean => {
+    const parts = value.split(".");
+    if (parts.length !== 4) return false;
+    return parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+};
+
+// Đúng 3 octet, không có octet thứ 4 — docs/asset-api-fe.md §4.1.
+const isValidPrefix = (value: string): boolean => {
+    const parts = value.split(".");
+    if (parts.length !== 3) return false;
+    return parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+};
+
+const isSameSubnet = (baseIp: string, otherIp: string, subnetMask: string): boolean => {
+    const base = baseIp.split(".").map(Number);
+    const other = otherIp.split(".").map(Number);
+    const mask = subnetMask.split(".").map(Number);
+    return base.every((octet, index) => (octet & mask[index]) === (other[index] & mask[index]));
+};
+
+// Đối chiếu docs/asset-api-fe.md §4.1: field nào có nhập phải là IPv4 hợp lệ; gateway phải
+// cùng dải 3-octet với prefix, cùng subnet theo subnetMask, và không trùng .0/.255.
+function validateIpPrefixForm(values: IpPrefixFormValues): string | null {
+    const prefix = values.prefix.trim();
+    const subnetMask = values.subnetMask.trim();
+    const gateway = values.gateway.trim();
+    const preferredDns = values.preferredDns.trim();
+    const alternateDns = values.alternateDns.trim();
+
+    if (!prefix) return "Vui lòng nhập dải mạng (Prefix).";
+    if (!isValidPrefix(prefix)) {
+        return "Dải mạng (Prefix) không hợp lệ — phải gồm đúng 3 octet (0-255), ví dụ: 10.50.2.";
+    }
+
+    if (subnetMask && !isValidIPv4(subnetMask)) {
+        return "Subnet mask không hợp lệ.";
+    }
+
+    if (gateway) {
+        if (!isValidIPv4(gateway)) {
+            return "Gateway không hợp lệ.";
+        }
+
+        const gatewayParts = gateway.split(".");
+        const gatewayPrefix = gatewayParts.slice(0, 3).join(".");
+        const gatewayLastOctet = Number(gatewayParts[3]);
+
+        if (gatewayPrefix !== prefix) {
+            return `Gateway phải nằm trong dải mạng ${prefix}.x`;
+        }
+
+        if (gatewayLastOctet === 0 || gatewayLastOctet === 255) {
+            return "Gateway không được là địa chỉ mạng (.0) hoặc địa chỉ broadcast (.255).";
+        }
+
+        if (subnetMask && isValidIPv4(subnetMask) && !isSameSubnet(`${prefix}.0`, gateway, subnetMask)) {
+            return "Gateway không cùng subnet với dải mạng theo subnet mask đã nhập.";
+        }
+    }
+
+    if (preferredDns && !isValidIPv4(preferredDns)) {
+        return "DNS ưu tiên không hợp lệ.";
+    }
+
+    if (alternateDns && !isValidIPv4(alternateDns)) {
+        return "DNS thay thế không hợp lệ.";
+    }
+
+    return null;
+}
+
 // docs/asset-api-fe.md §4.1 (2026-07-11) — IpPrefix không còn PUT (Update):
 // toàn bộ field cố định ngay lúc tạo, form này chỉ dùng để "Tạo mới".
 export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmit }: IpPrefixFormProps) {
     const [values, setValues] = useState<IpPrefixFormValues>(emptyValues);
+    const [formError, setFormError] = useState<string | null>(null);
 
     useEffect(() => {
         if (isOpen) {
             setValues(emptyValues);
+            setFormError(null);
         }
     }, [isOpen]);
 
@@ -46,11 +120,17 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
 
     const handleChange = (field: keyof IpPrefixFormValues, value: string) => {
         setValues((current) => ({ ...current, [field]: value }));
+        setFormError(null);
     };
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!values.prefix.trim()) return;
+        const error = validateIpPrefixForm(values);
+        if (error) {
+            setFormError(error);
+            return;
+        }
+        setFormError(null);
         onSubmit(values);
     };
 
@@ -82,6 +162,12 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
                     Tạo dải mạng sẽ tự động sinh 255 địa chỉ IP con. Toàn bộ thông tin bên dưới cố định ngay lúc tạo — không thể sửa lại sau này, chỉ có thể xoá rồi tạo lại.
                 </p>
 
+                {formError && (
+                    <p className="mb-4 rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-sm text-[#930006]">
+                        {formError}
+                    </p>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
@@ -104,6 +190,7 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
                                 onChange={(event) => handleChange("subnetMask", event.target.value)}
                                 placeholder="Ví dụ: 255.255.255.0"
                                 disabled={loading}
+                                required
                                 className={fieldClassName}
                             />
                         </label>
@@ -116,6 +203,7 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
                             onChange={(event) => handleChange("gateway", event.target.value)}
                             placeholder="Ví dụ: 10.50.2.1"
                             disabled={loading}
+                            required
                             className={fieldClassName}
                         />
                     </label>
@@ -128,6 +216,7 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
                                 onChange={(event) => handleChange("preferredDns", event.target.value)}
                                 placeholder="Ví dụ: 8.8.8.8"
                                 disabled={loading}
+                                required
                                 className={fieldClassName}
                             />
                         </label>
@@ -139,6 +228,7 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
                                 onChange={(event) => handleChange("alternateDns", event.target.value)}
                                 placeholder="Ví dụ: 8.8.4.4"
                                 disabled={loading}
+                                required
                                 className={fieldClassName}
                             />
                         </label>

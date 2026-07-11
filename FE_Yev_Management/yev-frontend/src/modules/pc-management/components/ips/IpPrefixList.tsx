@@ -161,7 +161,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                                 <th className="whitespace-nowrap px-6 py-3">Gateway</th>
                                 <th className="whitespace-nowrap px-6 py-3">DNS</th>
                                 <th className="whitespace-nowrap px-6 py-3">Mô tả</th>
-                                <th className="whitespace-nowrap px-6 py-3 text-right">Số IP</th>
+                                <th className="whitespace-nowrap px-6 py-3 text-right">IP dùng/ có sẵn</th>
                                 <th className="whitespace-nowrap px-6 py-3 text-right">Thao tác</th>
                             </tr>
                         </thead>
@@ -186,8 +186,8 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                                     <td className="max-w-[220px] truncate px-6 py-4 text-sm text-[#5e3f3a]" title={prefix.description ?? undefined}>
                                         {prefix.description ?? "—"}
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-semibold text-[#191c1e]">
-                                        {prefix.ipAddressCount}
+                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-[#5e3f3a]">
+                                        {prefix.usedIpCount} / {prefix.availableIpCount}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
                                         <button
@@ -238,7 +238,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                 message={
                     <>
                         Bạn có chắc muốn xoá dải mạng <strong>{deletingPrefix?.prefix}</strong> không? Nếu còn IP đang gán cho
-                        thiết bị, thao tác sẽ bị chặn. Nếu không, xoá dải mạng sẽ <strong>xoá luôn toàn bộ {deletingPrefix?.ipAddressCount ?? 0} địa chỉ IP con</strong> chưa dùng — hành động này không thể hoàn tác.
+                        thiết bị, thao tác sẽ bị chặn. Nếu không, xoá dải mạng sẽ <strong>xoá luôn toàn bộ {deletingPrefix?.availableIpCount ?? 0} địa chỉ IP con</strong> chưa dùng — hành động này không thể hoàn tác.
                     </>
                 }
                 approveLabel="Xoá"

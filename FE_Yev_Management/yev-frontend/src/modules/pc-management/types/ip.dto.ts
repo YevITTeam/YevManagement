@@ -29,7 +29,8 @@ export interface IpPrefixDto {
     preferredDns: string | null,
     alternateDns: string | null,
     description: string | null,
-    ipAddressCount: number
+    usedIpCount: number,
+    availableIpCount: number
 }
 
 export interface IpPrefixCreateDto {

@@ -6,7 +6,7 @@ import { toast } from "react-toastify";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import { PermissionApi } from "@/modules/auth/api/permission.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
-import type { PermissionDto } from "@/modules/auth/types/permission.dto";
+import type { PermissionModuleGroupDto } from "@/modules/auth/types/permission.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -21,7 +21,8 @@ export default function UserPermissionOverrideManager() {
     const canUpdateUserPermissions = hasPermission(currentUser, "Identity.User.UpdatePermissions");
 
     const [users, setUsers] = useState<UserDto[]>([]);
-    const [allPermissions, setAllPermissions] = useState<PermissionDto[]>([]);
+    // Nhóm 2 cấp Module > Entity trả thẳng từ GET /api/Permission/all (docs/identity-api-fe.md §4.7, 2026-07-11).
+    const [moduleGroups, setModuleGroups] = useState<PermissionModuleGroupDto[]>([]);
     const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
     const [userSearchTerm, setUserSearchTerm] = useState("");
 
@@ -43,7 +44,7 @@ export default function UserPermissionOverrideManager() {
                     PermissionApi.getAll(),
                 ]);
                 setUsers(usersData);
-                setAllPermissions(permissionsData);
+                setModuleGroups(permissionsData);
                 if (usersData.length > 0) setSelectedUserId(usersData[0].id);
             } catch (err) {
                 toast.error(getApiErrorMessage(err, "Không thể tải danh sách người dùng / quyền."));
@@ -53,6 +54,12 @@ export default function UserPermissionOverrideManager() {
         };
         loadBase();
     }, []);
+
+    // Danh sách phẳng tất cả permission, suy ra từ cây Module > Entity — dùng để tính baseline theo Role.
+    const flatPermissions = useMemo(
+        () => moduleGroups.flatMap((moduleGroup) => moduleGroup.entities.flatMap((entityGroup) => entityGroup.permissions)),
+        [moduleGroups]
+    );
 
     const loadUserPermissions = useCallback(async (userId: number) => {
         setIsLoadingUserPermissions(true);
@@ -67,7 +74,7 @@ export default function UserPermissionOverrideManager() {
 
             // roleHasAccess = hasOverride ? !isGranted : effectiveHasAccess (không override thì effective = role).
             const baseline = new Set<number>();
-            for (const permission of allPermissions.length > 0 ? allPermissions : effective) {
+            for (const permission of flatPermissions.length > 0 ? flatPermissions : effective) {
                 const override = overrideByPermissionId.get(permission.id);
                 const roleHasAccess = override !== undefined ? !override : effectiveIds.has(permission.id);
                 if (roleHasAccess) baseline.add(permission.id);
@@ -84,22 +91,12 @@ export default function UserPermissionOverrideManager() {
         } finally {
             setIsLoadingUserPermissions(false);
         }
-    }, [allPermissions]);
+    }, [flatPermissions]);
 
     useEffect(() => {
-        if (selectedUserId === null || allPermissions.length === 0) return;
+        if (selectedUserId === null || flatPermissions.length === 0) return;
         loadUserPermissions(selectedUserId);
-    }, [selectedUserId, allPermissions, loadUserPermissions]);
-
-    const permissionsByModule = useMemo(() => {
-        const groups = new Map<string, PermissionDto[]>();
-        for (const permission of allPermissions) {
-            const list = groups.get(permission.module) ?? [];
-            list.push(permission);
-            groups.set(permission.module, list);
-        }
-        return Array.from(groups.entries());
-    }, [allPermissions]);
+    }, [selectedUserId, flatPermissions, loadUserPermissions]);
 
     const filteredUsers = useMemo(() => {
         const term = userSearchTerm.trim().toLowerCase();
@@ -236,65 +233,72 @@ export default function UserPermissionOverrideManager() {
                             <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">Đang tải quyền...</div>
                         ) : (
                             <div className="max-h-[60vh] divide-y divide-[#f1f5f9] overflow-y-auto">
-                                {permissionsByModule.map(([moduleName, modulePermissions]) => (
-                                    <div key={moduleName} className="px-4 py-3">
+                                {moduleGroups.map((moduleGroup) => (
+                                    <div key={moduleGroup.module} className="px-4 py-3">
                                         <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                            {moduleName}
+                                            {moduleGroup.module}
                                         </div>
-                                        <div className="space-y-1.5">
-                                            {modulePermissions.map((permission) => {
-                                                const choice = choices.get(permission.id) ?? "inherit";
-                                                const roleHasAccess = roleBaselineIds.has(permission.id);
-                                                const effectiveHasAccess =
-                                                    choice === "grant" ? true : choice === "deny" ? false : roleHasAccess;
+                                        <div className="space-y-3 pl-2">
+                                            {moduleGroup.entities.map((entityGroup) => (
+                                                <div key={entityGroup.entity}>
+                                                    <div className="mb-1 text-xs font-semibold text-[#191c1e]">{entityGroup.entity}</div>
+                                                    <div className="space-y-1.5">
+                                                        {entityGroup.permissions.map((permission) => {
+                                                            const choice = choices.get(permission.id) ?? "inherit";
+                                                            const roleHasAccess = roleBaselineIds.has(permission.id);
+                                                            const effectiveHasAccess =
+                                                                choice === "grant" ? true : choice === "deny" ? false : roleHasAccess;
 
-                                                return (
-                                                    <div
-                                                        key={permission.id}
-                                                        className="flex flex-col gap-1.5 border border-transparent py-1 sm:flex-row sm:items-center sm:justify-between"
-                                                        title={permission.description}
-                                                    >
-                                                        <div className="flex items-center gap-2 text-sm">
-                                                            <span
-                                                                className={`h-2 w-2 flex-shrink-0 rounded-full ${
-                                                                    effectiveHasAccess ? "bg-[#1a7f37]" : "bg-[#e0e3e5]"
-                                                                }`}
-                                                            />
-                                                            <span className="text-[#191c1e]">{permission.description}</span>
-                                                            <span className="text-xs text-[#5e3f3a]">
-                                                                ({roleHasAccess ? "có theo Role" : "không có theo Role"})
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex flex-shrink-0 gap-1 text-xs">
-                                                            {(
-                                                                [
-                                                                    ["inherit", "Theo Role"],
-                                                                    ["grant", "Cấp thêm"],
-                                                                    ["deny", "Thu hồi"],
-                                                                ] as [OverrideChoice, string][]
-                                                            ).map(([value, label]) => (
-                                                                <button
-                                                                    key={value}
-                                                                    type="button"
-                                                                    disabled={!canEditSelectedUser}
-                                                                    onClick={() => setChoice(permission.id, value)}
-                                                                    className={`cursor-pointer rounded px-2 py-1 font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                                                                        choice === value
-                                                                            ? value === "deny"
-                                                                                ? "bg-[#930006] text-white"
-                                                                                : value === "grant"
-                                                                                  ? "bg-[#1a7f37] text-white"
-                                                                                  : "bg-[#eceef0] text-[#191c1e]"
-                                                                            : "bg-white text-[#5e3f3a] hover:bg-[#f8fafc]"
-                                                                    }`}
+                                                            return (
+                                                                <div
+                                                                    key={permission.id}
+                                                                    className="flex flex-col gap-1.5 border border-transparent py-1 sm:flex-row sm:items-center sm:justify-between"
+                                                                    title={permission.description}
                                                                 >
-                                                                    {label}
-                                                                </button>
-                                                            ))}
-                                                        </div>
+                                                                    <div className="flex items-center gap-2 text-sm">
+                                                                        <span
+                                                                            className={`h-2 w-2 flex-shrink-0 rounded-full ${
+                                                                                effectiveHasAccess ? "bg-[#1a7f37]" : "bg-[#e0e3e5]"
+                                                                            }`}
+                                                                        />
+                                                                        <span className="text-[#191c1e]">{permission.description}</span>
+                                                                        <span className="text-xs text-[#5e3f3a]">
+                                                                            ({roleHasAccess ? "có theo Role" : "không có theo Role"})
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex flex-shrink-0 gap-1 text-xs">
+                                                                        {(
+                                                                            [
+                                                                                ["inherit", "Theo Role"],
+                                                                                ["grant", "Cấp thêm"],
+                                                                                ["deny", "Thu hồi"],
+                                                                            ] as [OverrideChoice, string][]
+                                                                        ).map(([value, label]) => (
+                                                                            <button
+                                                                                key={value}
+                                                                                type="button"
+                                                                                disabled={!canEditSelectedUser}
+                                                                                onClick={() => setChoice(permission.id, value)}
+                                                                                className={`cursor-pointer rounded px-2 py-1 font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                                                                    choice === value
+                                                                                        ? value === "deny"
+                                                                                            ? "bg-[#930006] text-white"
+                                                                                            : value === "grant"
+                                                                                              ? "bg-[#1a7f37] text-white"
+                                                                                              : "bg-[#eceef0] text-[#191c1e]"
+                                                                                        : "bg-white text-[#5e3f3a] hover:bg-[#f8fafc]"
+                                                                                }`}
+                                                                            >
+                                                                                {label}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
-                                                );
-                                            })}
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 ))}

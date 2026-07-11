@@ -6,7 +6,7 @@ import { IpApi } from "@/modules/pc-management/api/ip-api";
 import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import IpForm, { type IpFormValues } from "./IpForm";
-import { ipStatusClasses } from "./ip-status";
+import { ipStatusClasses, ipStatusLabels, ipStatusOptions } from "./ip-status";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 
 const PAGE_SIZE = 10;
@@ -21,6 +21,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
+    const [statusFilter, setStatusFilter] = useState<string>("");
 
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -40,6 +41,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                 pageIndex,
                 pageSize: PAGE_SIZE,
                 keyword: appliedKeyword || undefined,
+                status: statusFilter !== "" ? Number(statusFilter) : undefined,
             });
             setIpAddresses(result.data);
             setTotalCount(result.totalCount);
@@ -59,7 +61,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
     useEffect(() => {
         fetchIpAddresses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+    }, [pageIndex, appliedKeyword, statusFilter]);
 
     useEffect(() => {
         onLoadingChange?.(isLoading);
@@ -126,6 +128,21 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                         >
                             Tìm kiếm
                         </button>
+                        <select
+                            value={statusFilter}
+                            onChange={(event) => {
+                                setStatusFilter(event.target.value);
+                                setPageIndex(1);
+                            }}
+                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        >
+                            <option value="">Tất cả trạng thái</option>
+                            {ipStatusOptions.map((status) => (
+                                <option key={status} value={status}>
+                                    {ipStatusLabels[status]}
+                                </option>
+                            ))}
+                        </select>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
                         {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${ipAddresses.length} / ${totalCount} bản ghi`}

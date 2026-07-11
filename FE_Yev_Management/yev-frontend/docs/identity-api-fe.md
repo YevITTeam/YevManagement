@@ -215,14 +215,46 @@ Permission: `Identity.Role.Delete`. Xoá mềm (`IsDeleted=true`). → 400 "Khô
 Dùng để dựng màn "Phân quyền chi tiết": chọn 1 Role, tick các permission muốn
 cấp, lưu lại.
 
-```jsonc
-// GET /api/Permission/all → data[] — TOÀN BỘ permission hệ thống, permission: Identity.Permission.View
-[
-  { "id": 1, "code": "Asset.Device.View", "module": "Asset", "description": "Xem danh sách / chi tiết thiết bị" },
-  { "id": 2, "code": "Asset.Device.Create", "module": "Asset", "description": "Thêm thiết bị" }
-  // ... 53 dòng, group theo "module" để render section trên UI
-]
+**`GET /api/Permission/all` trả về nhóm 2 cấp Module > Entity (2026-07-11, đổi
+— trước đó là mảng phẳng)**, permission: `Identity.Permission.View`. `Entity`
+được server tự tách từ đoạn giữa của `code` (dạng `Module.Entity.Action`, vd
+`Asset.Device.View` → Entity `Device`). Dùng để dựng UI dạng cây/collapsible
+(cấp 1: Module, cấp 2: Entity, cấp 3: checkbox từng permission) thay vì phải
+tự group lại 1 mảng ~53 dòng phẳng như trước:
 
+```jsonc
+// GET /api/Permission/all → data — List<PermissionModuleGroupDto>
+[
+  {
+    "module": "Asset",
+    "entities": [
+      {
+        "entity": "Device",
+        "permissions": [
+          { "id": 1, "code": "Asset.Device.View", "module": "Asset", "description": "Xem danh sách / chi tiết thiết bị" },
+          { "id": 2, "code": "Asset.Device.Create", "module": "Asset", "description": "Thêm thiết bị" }
+        ]
+      },
+      { "entity": "Branch", "permissions": [ /* ... */ ] }
+      // ... các entity khác trong module Asset
+    ]
+  },
+  {
+    "module": "Identity",
+    "entities": [
+      { "entity": "Role", "permissions": [ /* ... */ ] },
+      { "entity": "Permission", "permissions": [ /* ... */ ] }
+    ]
+  }
+  // tổng cộng vẫn đúng 53 permission, chỉ đổi cách gói — flatten lại
+  // (entities.flatMap(e => e.permissions)) nếu FE cần danh sách phẳng cũ
+]
+```
+
+**Các endpoint permission khác vẫn trả mảng phẳng `List<PermissionDto>` như
+cũ** (không đổi theo `GET /all`):
+
+```jsonc
 // GET /api/Permission/role/{roleId} → data[] — permission ĐANG được gán cho role này, permission: Identity.Permission.View
 [ { "id": 1, "code": "Asset.Device.View", "module": "Asset", "description": "..." } ]
 
@@ -309,7 +341,7 @@ mặc định `"Basic"` (xem cơ chế khớp ở mục 2.2).
 | POST | `/api/Auth/create-role` | `Identity.Role.Create` | Tạo role |
 | PUT | `/api/Auth/update-role/{roleId}` | `Identity.Role.Update` | Sửa role |
 | DELETE | `/api/Auth/delete-role/{roleId}` | `Identity.Role.Delete` | Xoá mềm role |
-| GET | `/api/Permission/all` | `Identity.Permission.View` | Toàn bộ permission hệ thống |
+| GET | `/api/Permission/all` | `Identity.Permission.View` | Toàn bộ permission hệ thống, nhóm 2 cấp Module > Entity (`PermissionModuleGroupDto[]`, 2026-07-11 — các endpoint permission khác vẫn phẳng) |
 | GET | `/api/Permission/role/{roleId}` | `Identity.Permission.View` | Permission hiện tại của 1 role |
 | PUT | `/api/Permission/role/{roleId}` | `Identity.Role.Update` | Gán lại permission cho role |
 | GET | `/api/Permission/user/{userId}` | `Identity.Permission.View` | Override (grant/deny) hiện có của 1 user |

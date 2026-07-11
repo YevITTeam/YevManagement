@@ -1,17 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Save } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import { PermissionApi } from "@/modules/auth/api/permission.api";
 import type { RoleDto } from "@/modules/auth/types/auth.dto";
-import type { PermissionDto } from "@/modules/auth/types/permission.dto";
+import type { PermissionDto, PermissionModuleGroupDto } from "@/modules/auth/types/permission.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 export default function RolePermissionManager() {
     const [roles, setRoles] = useState<RoleDto[]>([]);
-    const [allPermissions, setAllPermissions] = useState<PermissionDto[]>([]);
+    // Nhóm 2 cấp Module > Entity trả thẳng từ GET /api/Permission/all (docs/identity-api-fe.md §4.7, 2026-07-11).
+    const [moduleGroups, setModuleGroups] = useState<PermissionModuleGroupDto[]>([]);
     const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
     const [selectedPermissionIds, setSelectedPermissionIds] = useState<Set<number>>(new Set());
 
@@ -28,7 +29,7 @@ export default function RolePermissionManager() {
                     PermissionApi.getAll(),
                 ]);
                 setRoles(rolesData);
-                setAllPermissions(permissionsData);
+                setModuleGroups(permissionsData);
                 if (rolesData.length > 0) setSelectedRoleId(rolesData[0].id);
             } catch (err) {
                 toast.error(getApiErrorMessage(err, "Không thể tải danh sách vai trò / quyền."));
@@ -56,16 +57,6 @@ export default function RolePermissionManager() {
         loadRolePermissions(selectedRoleId);
     }, [selectedRoleId, loadRolePermissions]);
 
-    const permissionsByModule = useMemo(() => {
-        const groups = new Map<string, PermissionDto[]>();
-        for (const permission of allPermissions) {
-            const list = groups.get(permission.module) ?? [];
-            list.push(permission);
-            groups.set(permission.module, list);
-        }
-        return Array.from(groups.entries());
-    }, [allPermissions]);
-
     const togglePermission = (permissionId: number, checked: boolean) => {
         setSelectedPermissionIds((prev) => {
             const next = new Set(prev);
@@ -75,10 +66,10 @@ export default function RolePermissionManager() {
         });
     };
 
-    const toggleModule = (modulePermissions: PermissionDto[], checked: boolean) => {
+    const togglePermissionGroup = (permissions: PermissionDto[], checked: boolean) => {
         setSelectedPermissionIds((prev) => {
             const next = new Set(prev);
-            for (const permission of modulePermissions) {
+            for (const permission of permissions) {
                 if (checked) next.add(permission.id);
                 else next.delete(permission.id);
             }
@@ -164,11 +155,12 @@ export default function RolePermissionManager() {
                             <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">Đang tải quyền...</div>
                         ) : (
                             <div className="max-h-[60vh] divide-y divide-[#f1f5f9] overflow-y-auto">
-                                {permissionsByModule.map(([moduleName, modulePermissions]) => {
+                                {moduleGroups.map((moduleGroup) => {
+                                    const modulePermissions = moduleGroup.entities.flatMap((e) => e.permissions);
                                     const allChecked = modulePermissions.every((p) => selectedPermissionIds.has(p.id));
                                     const someChecked = !allChecked && modulePermissions.some((p) => selectedPermissionIds.has(p.id));
                                     return (
-                                        <div key={moduleName} className="px-4 py-3">
+                                        <div key={moduleGroup.module} className="px-4 py-3">
                                             <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                                 <input
                                                     type="checkbox"
@@ -176,29 +168,52 @@ export default function RolePermissionManager() {
                                                     ref={(el) => {
                                                         if (el) el.indeterminate = someChecked;
                                                     }}
-                                                    onChange={(event) => toggleModule(modulePermissions, event.target.checked)}
+                                                    onChange={(event) => togglePermissionGroup(modulePermissions, event.target.checked)}
                                                     className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                                 />
-                                                {moduleName}
+                                                {moduleGroup.module}
                                             </label>
-                                            <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 pl-6 sm:grid-cols-2 lg:grid-cols-3">
-                                                {modulePermissions.map((permission) => (
-                                                    <label
-                                                        key={permission.id}
-                                                        className="flex cursor-pointer items-start gap-2 py-0.5 text-sm text-[#191c1e]"
-                                                        title={permission.description}
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={selectedPermissionIds.has(permission.id)}
-                                                            onChange={(event) => togglePermission(permission.id, event.target.checked)}
-                                                            className="mt-0.5 h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                        />
-                                                        <span>
-                                                            <span className="block text-[#5e3f3a]">{permission.description}</span>
-                                                        </span>
-                                                    </label>
-                                                ))}
+                                            <div className="space-y-2.5 pl-6">
+                                                {moduleGroup.entities.map((entityGroup) => {
+                                                    const entityAllChecked = entityGroup.permissions.every((p) => selectedPermissionIds.has(p.id));
+                                                    const entitySomeChecked =
+                                                        !entityAllChecked && entityGroup.permissions.some((p) => selectedPermissionIds.has(p.id));
+                                                    return (
+                                                        <div key={entityGroup.entity}>
+                                                            <label className="mb-1 flex cursor-pointer items-center gap-2 text-xs font-semibold text-[#191c1e]">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={entityAllChecked}
+                                                                    ref={(el) => {
+                                                                        if (el) el.indeterminate = entitySomeChecked;
+                                                                    }}
+                                                                    onChange={(event) => togglePermissionGroup(entityGroup.permissions, event.target.checked)}
+                                                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                                />
+                                                                {entityGroup.entity}
+                                                            </label>
+                                                            <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 pl-6 sm:grid-cols-2 lg:grid-cols-3">
+                                                                {entityGroup.permissions.map((permission) => (
+                                                                    <label
+                                                                        key={permission.id}
+                                                                        className="flex cursor-pointer items-start gap-2 py-0.5 text-sm text-[#191c1e]"
+                                                                        title={permission.description}
+                                                                    >
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={selectedPermissionIds.has(permission.id)}
+                                                                            onChange={(event) => togglePermission(permission.id, event.target.checked)}
+                                                                            className="mt-0.5 h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                                        />
+                                                                        <span>
+                                                                            <span className="block text-[#5e3f3a]">{permission.description}</span>
+                                                                        </span>
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     );

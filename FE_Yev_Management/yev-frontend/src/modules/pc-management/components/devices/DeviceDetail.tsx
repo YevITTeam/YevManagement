@@ -192,6 +192,12 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                         <div className={infoLabelClassName}>Ghi chú</div>
                         <div className="mt-1 text-sm text-[#191c1e]">{device.note || "-"}</div>
                     </div>
+                    {device.replacesOldDeviceCode && (
+                        <div>
+                            <div className={infoLabelClassName}>Dự tính thay thế cho</div>
+                            <div className="mt-1 text-sm text-[#191c1e]">{device.replacesOldDeviceCode}</div>
+                        </div>
+                    )}
                 </div>
             </section>
 

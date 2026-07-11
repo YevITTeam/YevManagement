@@ -5,7 +5,7 @@ import { toast } from "react-toastify";
 
 import { DeviceApi } from "@/modules/pc-management/api/device.api";
 import { TransferHistoryApi } from "@/modules/pc-management/api/transfer-history.api";
-import type { DeviceDto } from "@/modules/pc-management/types/device.dto";
+import type { DeviceDto, DeviceReplacementSuggestionDto } from "@/modules/pc-management/types/device.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 interface TransferableDevice {
@@ -31,13 +31,37 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
     const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
     const [note, setNote] = useState("");
     const [isSaving, setIsSaving] = useState(false);
+    // Gợi ý máy mới suy ra từ cột "MQL Cũ" lúc import Excel (docs/asset-api-fe.md §5.9) — chỉ tự tra khi
+    // dialog KHÔNG được mở sẵn với 1 gợi ý cụ thể từ màn "Import Excel" (initialNewDeviceId).
+    const [suggestion, setSuggestion] = useState<DeviceReplacementSuggestionDto | null>(null);
 
     useEffect(() => {
-        if (!isOpen) return;
+        if (!isOpen || !oldDevice) return;
         setSearch("");
-        setSelectedDeviceId(initialNewDeviceId ?? null);
         setNote("");
-    }, [isOpen, initialNewDeviceId]);
+        setSuggestion(null);
+
+        if (initialNewDeviceId != null) {
+            setSelectedDeviceId(initialNewDeviceId);
+            return;
+        }
+
+        setSelectedDeviceId(null);
+        let isCancelled = false;
+        DeviceApi.getReplacementSuggestion(oldDevice.id)
+            .then((result) => {
+                if (isCancelled || !result) return;
+                setSuggestion(result);
+                setSelectedDeviceId(result.id);
+            })
+            .catch(() => {
+                // Không có gợi ý hoặc lỗi tra cứu — bỏ qua, người dùng vẫn chọn máy mới thủ công như bình thường.
+            });
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [isOpen, oldDevice, initialNewDeviceId]);
 
     useEffect(() => {
         if (!isOpen || !oldDevice) return;
@@ -124,6 +148,12 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
                         <div className="text-xs text-[#5e3f3a]">{oldDevice.deviceName}</div>
                     </div>
                 </div>
+
+                {suggestion && selectedDeviceId === suggestion.id && (
+                    <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-2.5 text-xs text-[#930006]">
+                        Đã tự điền gợi ý từ lúc import Excel (cột &quot;MQL Cũ&quot;): <strong>{suggestion.deviceCode}</strong> — vẫn có thể đổi sang máy khác bên dưới.
+                    </div>
+                )}
 
                 <div className="border-b border-[#e0e3e5] p-4">
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">

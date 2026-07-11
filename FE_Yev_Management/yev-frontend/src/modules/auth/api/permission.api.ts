@@ -1,6 +1,7 @@
 import { api } from "@/lib/client";
 import type {
     PermissionDto,
+    PermissionModuleGroupDto,
     UpdateUserPermissionOverridesDto,
     UserPermissionOverrideDto,
 } from "@/modules/auth/types/permission.dto";
@@ -18,8 +19,9 @@ const ENDPOINTS = {
 } as const;
 
 export const PermissionApi = {
+    // Nhóm 2 cấp Module > Entity (docs/identity-api-fe.md §4.7, đổi 2026-07-11) — dùng để dựng UI dạng cây.
     getAll: async () => {
-        const response = await api.get<ApiResponse<PermissionDto[]>>(ENDPOINTS.PERMISSION.getAll);
+        const response = await api.get<ApiResponse<PermissionModuleGroupDto[]>>(ENDPOINTS.PERMISSION.getAll);
         return response.data;
     },
     getByRole: async (roleId: number) => {

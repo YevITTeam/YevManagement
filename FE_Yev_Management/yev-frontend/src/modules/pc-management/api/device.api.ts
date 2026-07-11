@@ -1,5 +1,5 @@
 import { api } from "@/lib/client";
-import type { DeviceDto,CreateUpdateDeviceDto,DeviceDetailDto,DeviceGetDto } from "@/modules/pc-management/types/device.dto";
+import type { DeviceDto,CreateUpdateDeviceDto,DeviceDetailDto,DeviceGetDto,DeviceReplacementSuggestionDto } from "@/modules/pc-management/types/device.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -8,6 +8,7 @@ const ENDPOINTS = {
         getDeviceById: (id: number) => `/Device/${id}`,
         getDeviceDetailById: (id: number) => `/Device/${id}/detail`,
         getAvailableDevices: "/Device/available",
+        getReplacementSuggestion: (oldDeviceId: number) => `/Device/${oldDeviceId}/replacement-suggestion`,
         createDevice: "/Device",
         updateDevice: (id: number) => `/Device/${id}`,
         deleteDevice: (id: number) => `/Device/${id}`,
@@ -69,6 +70,13 @@ export const DeviceApi = {
         const url = queryString ? `${ENDPOINTS.DEVICE.getAvailableDevices}?${queryString}` : ENDPOINTS.DEVICE.getAvailableDevices;
 
         const response = await api.get<ApiResponse<DeviceDto[]>>(url);
+        return response.data;
+    },
+    // Gợi ý máy mới điền sẵn cho màn "Chuyển máy", suy ra từ cột "MQL Cũ" lúc import Excel — có thể null (docs/asset-api-fe.md §5.9).
+    getReplacementSuggestion: async (oldDeviceId: number) => {
+        const response = await api.get<ApiResponse<DeviceReplacementSuggestionDto | null>>(
+            ENDPOINTS.DEVICE.getReplacementSuggestion(oldDeviceId)
+        );
         return response.data;
     },
     createDevice: async (deviceData: CreateUpdateDeviceDto) => {
