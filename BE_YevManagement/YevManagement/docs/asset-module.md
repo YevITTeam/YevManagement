@@ -110,6 +110,14 @@
 > chưa dùng** cùng lúc với soft-delete Prefix (đây là cách duy nhất dọn IP chưa
 > dùng vì không còn API xoá tay từng IP).
 
+> **Sắp xếp lưới IP theo giá trị số (2026-07-11)**: cả `IpPrefix` grid/all và
+> `IpAddress` grid-list/available đều sort theo **giá trị IP** (không phải chuỗi —
+> sort chuỗi sẽ đặt `10.45.10` trước `10.45.2`). Dùng `NetworkHelper.ToSortableKey`
+> (pack 4 octet thành 1 `long`). Vì cần sort theo số nên `GetPagedAsync` (cả 2
+> service) **materialize DTO đã project rồi sort + phân trang trong bộ nhớ** thay vì
+> `ToPagedResponseAsync` (paging trong SQL) — bảng IP là nội bộ, quy mô vừa phải nên
+> chấp nhận được.
+
 > **`Device.Status` (int)** có ý nghĩa cố định qua enum `DeviceStatus`
 > (`Asset.Domain/Enums/DeviceStatus.cs`): `0=PendingUse` (Chờ sử dụng, 694 thiết bị
 > tại thời điểm map), `1=InUse` (Đang sử dụng, 2414), `2=PendingLiquidation` (Chờ
@@ -217,23 +225,39 @@
 >    gắn nhiều thiết bị" — logic giống hệt cách `DeviceService.UpdateAsync` đối
 >    chiếu diff IP, viết lại trực tiếp trong `TransferHistoryService` vì cả 2
 >    dùng chung `IAssetUnitOfWork`, không gọi chéo sang `IpAddressService`).
-> 3. **Chuyển phần mềm cài (`DeviceSoftware`)**: đổi `DeviceId` của từng dòng từ
+> 3. **Chuyển Email (`DeviceEmail`, 2026-07-11, mới thêm)**: đổi `DeviceId` của
+>    từng dòng từ `OldDevice` sang `NewDevice` (move, giữ nguyên `Note`). Khác
+>    IP — `DeviceEmail` không có ràng buộc unique nên **không cần gỡ** email sẵn
+>    có của `NewDevice`, chỉ re-point `DeviceId` trực tiếp (PK riêng, không phải
+>    khoá kép như `DeviceSoftware`). Nếu trùng đúng nội dung `Email` với 1 dòng
+>    `NewDevice` đã có sẵn → soft-delete dòng cũ (tránh nhân đôi).
+> 4. **Chuyển phần mềm cài (`DeviceSoftware`)**: đổi `DeviceId` của từng dòng từ
 >    `OldDevice` sang `NewDevice` (move, không phải copy — giữ nguyên
 >    `InstallDate`/`LicenseKey` cũ). Nếu `NewDevice` **đã cài sẵn** đúng phần mềm
 >    đó rồi (trùng khoá kép `DeviceId+SoftwareId`) → giữ bản ghi bên `NewDevice`,
 >    xoá cứng bản ghi cũ bên `OldDevice` (tránh vi phạm khoá kép).
-> 4. **Đổi trạng thái `OldDevice`**: mặc định chuyển `PendingUse` (0, "Chờ sử
+> 5. **Chuyển dữ liệu vai trò/vị trí sử dụng của `Device` (2026-07-11, chốt lại
+>    lần 2 theo quyết định người dùng)**: copy trực tiếp từ `OldDevice` ghi đè lên
+>    `NewDevice` CHỈ 4 field `BranchId`/`Manager`/`IsOutsourced`/`IsUseUsb` — đây
+>    là dữ liệu gắn theo vị trí/người dùng đang thao tác trên máy, không phải
+>    thuộc tính vật lý riêng của thiết bị. **KHÔNG copy** (giữ nguyên của
+>    `NewDevice`, coi là thuộc tính vật lý/độc nhất của từng máy — mỗi máy có
+>    ngày mua/nhà cung cấp/loại/khấu hao riêng, không đại diện cho máy kia):
+>    `DeviceTypeId`, `SupplierId`, `PurchaseDate`, `ExpirationDate`,
+>    `DepreciationMonths`, `Id`, `DeviceCode`, `DeviceName`, `SerialNumber`,
+>    `Note`, `DeviceConfiguration` (xem mục 7), `Status` (tính riêng ở mục 6/6b).
+> 6. **Đổi trạng thái `OldDevice`**: mặc định chuyển `PendingUse` (0, "Chờ sử
 >    dụng") — **trừ khi** `OldDevice.ExpirationDate` đã qua (dùng đúng công thức
 >    `IsExpired` ở báo cáo `device-list` bên trên) thì chuyển thẳng
 >    `PendingLiquidation` (2, "Chờ thanh lý") thay vì `PendingUse`.
-> 4b. **Đổi trạng thái `NewDevice` → `InUse`** (1, "Đang sử dụng", 2026-07-10, đã
+> 6b. **Đổi trạng thái `NewDevice` → `InUse`** (1, "Đang sử dụng", 2026-07-10, đã
 >    làm) — máy mới đã tiếp nhận IP + phần mềm của máy cũ nên tự động chuyển sang
 >    "Đang sử dụng" ngay khi transfer xong, không cần gọi `PUT /api/Device/{id}`
 >    riêng để đổi status thủ công.
-> 5. `DeviceConfiguration` **không đụng tới** — chủ ý không copy sang `NewDevice`
+> 7. `DeviceConfiguration` **không đụng tới** — chủ ý không copy sang `NewDevice`
 >    (cấu hình phần cứng là đặc thù theo từng máy vật lý, máy mới có config
 >    riêng), cũng không xoá ở `OldDevice`.
-> 6. Tạo 1 dòng `TransferHistory` (`TransferDate = DateTime.UtcNow`) ghi nhận
+> 8. Tạo 1 dòng `TransferHistory` (`TransferDate = DateTime.UtcNow`) ghi nhận
 >    `OldDeviceId`/`NewDeviceId`/`Note`. **Không có API sửa/xoá `TransferHistory`**
 >    (audit-log, giống `DeviceConfigurationHistory` — chỉ tạo qua hành động
 >    nghiệp vụ, không cho client POST/PUT/DELETE trực tiếp).
@@ -603,10 +627,14 @@
 - **IpAddresses/**: `IpAddressDto` (gộp `DeviceCode` + `StatusText` + `Prefix*` từ
   `IpPrefix`; 2026-07-11: bỏ `ServerIp`, `DeviceCode`="Khác" khi Status=1), `Update
   IpAddressDto` (2026-07-11, tạo lại **thu hẹp** — chỉ `Id`/`Status`/`Note`),
-  `IpAddressFilterRequest` (`Keyword/Status/DeviceId`, **không có** `all` vì bảng
-  pool lớn), `AssignIpAddressDto` (`DeviceId` `[Required]`). **Không còn**
+  `IpAddressFilterRequest` (`Keyword/Status/IsInUse/DeviceId`, **không có** `all` vì
+  bảng pool lớn — 2026-07-11: thêm `IsInUse?` lọc gộp đang/chưa sử dụng: `true`→
+  `Status != Available`, `false`→`Status == Available`, AND với `Status` nếu gửi cả 2),
+  `AssignIpAddressDto` (`DeviceId` `[Required]`). **Không còn**
   `CreateIpAddressDto` (2026-07-11, xoá — không tạo tay từng IP).
-- **IpPrefixes/**: `IpPrefixDto` (gồm `IpAddressCount` đếm IP con), `CreateIpPrefixDto`
+- **IpPrefixes/**: `IpPrefixDto` (2026-07-11: **bỏ** `IpAddressCount` (luôn = 255) →
+  thay bằng `UsedIpCount` (IP đang dùng, `Status != Available`) + `AvailableIpCount`
+  (IP chưa dùng, `Status == Available`)), `CreateIpPrefixDto`
   (`Prefix` `[Required]` + `[RegularExpression]` 3 octet, + SubnetMask/Gateway/DNS/
   Description dùng chung cho cả subnet — 2026-07-11: `CreateAsync` validate thêm các
   field IP hợp lệ + Gateway cùng subnet qua `NetworkHelper`, xem ghi chú §1).
@@ -614,8 +642,12 @@
   đổi prefix/subnet phải xoá + tạo lại, xem ghi chú §1).
 - **DeviceConfigurations/**: `DeviceConfigurationDto` (gộp `DeviceCode`, đủ 20 field
   linh kiện), `CreateDeviceConfigurationDto` (`DeviceId` `[Required]`, còn lại đều
-  optional), `UpdateDeviceConfigurationDto` (giống Create + `Id`, **không cho đổi
-  `DeviceId`** sau khi tạo), `DeviceConfigurationInitialDto` (20 field + `CreatedAt`),
+  optional), `UpdateDeviceConfigurationDto` (giống Create + `Id`; field `DeviceId`
+  vẫn còn trong DTO nhưng **không còn được đối chiếu/dùng để làm gì trong
+  `UpdateAsync`** — 2026-07-11, đã bỏ check `config.DeviceId != request.DeviceId`
+  vì `DeviceId` chưa từng thực sự được ghi lại ở Update, check chỉ gây lỗi giả
+  `DomainException` khi client gửi sai/thiếu `deviceId` cho 1 lần sửa cấu hình
+  bình thường; `id` trên route đã định danh đúng bản ghi), `DeviceConfigurationInitialDto` (20 field + `CreatedAt`),
   `DeviceConfigurationHistoryDto` (20 field + `EditedAt`/`EditedBy`) — 2 DTO cuối
   không có Create/Update tương ứng (tự sinh, xem ghi chú §1).
 - **Devices/** (báo cáo): `DeviceReportFilterRequest` (`DeviceTypeId?/BranchId?/Keyword?`,

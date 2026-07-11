@@ -3,6 +3,7 @@ using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
 using Asset.Domain.Enums;
 using Shared.Application.Abstractions;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
@@ -31,15 +32,24 @@ namespace Asset.Application.Services
                 query = query.Where(x => x.Status == request.Status.Value);
             }
 
+            // Lọc theo mức độ sử dụng: đang sử dụng = đã gán (Status != Available), chưa sử dụng
+            // = còn trống (Status == Available). Kết hợp AND với filter Status nếu cả hai được gửi.
+            if (request.IsInUse.HasValue)
+            {
+                query = request.IsInUse.Value
+                    ? query.Where(x => x.Status != (int)IpAddressStatus.Available)
+                    : query.Where(x => x.Status == (int)IpAddressStatus.Available);
+            }
+
             if (request.DeviceId.HasValue)
             {
                 query = query.Where(x => x.DeviceId == request.DeviceId.Value);
             }
 
-            return await _unitOfWork.IpAddresses.ToPagedResponseAsync(
-                query.OrderBy(x => x.IpAddress1),
-                request.PageIndex,
-                request.PageSize,
+            // Materialize projected DTOs then sort by numeric IP value + page in memory: ordering
+            // by the IpAddress string in SQL is lexicographic ("10.45.1.10" before "10.45.1.2").
+            var all = await _unitOfWork.IpAddresses.ToListAsync(
+                query,
                 x => new IpAddressDto
                 {
                     Id = x.Id,
@@ -65,6 +75,15 @@ namespace Asset.Application.Services
                     Note = x.Note
                 }
             );
+
+            var ordered = all.OrderBy(x => NetworkHelper.ToSortableKey(x.IpAddress)).ToList();
+
+            var items = ordered
+                .Skip((request.PageIndex - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .ToList();
+
+            return new PagedResponse<IpAddressDto>(items, ordered.Count, request.PageIndex, request.PageSize);
         }
 
         public async Task<List<IpAddressDto>> GetAvailableAsync(string? keyword)
@@ -92,7 +111,7 @@ namespace Asset.Application.Services
                     Note = x.Note
                 });
 
-            return ipAddresses.OrderBy(x => x.IpAddress).ToList();
+            return ipAddresses.OrderBy(x => NetworkHelper.ToSortableKey(x.IpAddress)).ToList();
         }
 
         public async Task<IpAddressDto> GetByIdAsync(int id)

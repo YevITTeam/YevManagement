@@ -27,22 +27,30 @@ namespace Asset.Application.Services
                     || (x.Description != null && x.Description.Contains(keyword)));
             }
 
-            return await _unitOfWork.IpPrefixes.ToPagedResponseAsync(
-                query.OrderBy(x => x.Prefix),
-                pageIndex,
-                pageSize,
-                x => new IpPrefixDto
-                {
-                    Id = x.Id,
-                    Prefix = x.Prefix,
-                    SubnetMask = x.SubnetMask,
-                    Gateway = x.Gateway,
-                    PreferredDns = x.PreferredDns,
-                    AlternateDns = x.AlternateDns,
-                    Description = x.Description,
-                    IpAddressCount = x.IpAddresses.Count(a => !a.IsDeleted)
-                }
-            );
+            // Materialize the projection then sort by numeric IP value + page in memory: ordering
+            // by the Prefix string in SQL is lexicographic ("10.45.10" before "10.45.2"). The
+            // IpPrefix table is small (a few tens of rows) so in-memory paging here is cheap.
+            var all = await _unitOfWork.IpPrefixes.ToListAsync(query, x => new IpPrefixDto
+            {
+                Id = x.Id,
+                Prefix = x.Prefix,
+                SubnetMask = x.SubnetMask,
+                Gateway = x.Gateway,
+                PreferredDns = x.PreferredDns,
+                AlternateDns = x.AlternateDns,
+                Description = x.Description,
+                UsedIpCount = x.IpAddresses.Count(a => !a.IsDeleted && a.Status != (int)IpAddressStatus.Available),
+                AvailableIpCount = x.IpAddresses.Count(a => !a.IsDeleted && a.Status == (int)IpAddressStatus.Available)
+            });
+
+            var ordered = all.OrderBy(x => NetworkHelper.ToSortableKey(x.Prefix)).ToList();
+
+            var items = ordered
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PagedResponse<IpPrefixDto>(items, ordered.Count, pageIndex, pageSize);
         }
 
         public async Task<List<IpPrefixDto>> GetAllActiveAsync()
@@ -58,10 +66,11 @@ namespace Asset.Application.Services
                     PreferredDns = x.PreferredDns,
                     AlternateDns = x.AlternateDns,
                     Description = x.Description,
-                    IpAddressCount = x.IpAddresses.Count(a => !a.IsDeleted)
+                    UsedIpCount = x.IpAddresses.Count(a => !a.IsDeleted && a.Status != (int)IpAddressStatus.Available),
+                    AvailableIpCount = x.IpAddresses.Count(a => !a.IsDeleted && a.Status == (int)IpAddressStatus.Available)
                 }
             );
-            return prefixes.OrderBy(x => x.Prefix).ToList();
+            return prefixes.OrderBy(x => NetworkHelper.ToSortableKey(x.Prefix)).ToList();
         }
 
         public async Task<IpPrefixDto> GetByIdAsync(int id)
@@ -69,7 +78,9 @@ namespace Asset.Application.Services
             var prefix = await _unitOfWork.IpPrefixes.GetByIdAsync(id);
             prefix.OrThrowNotFound("Prefix", id);
 
-            var ipAddressCount = (await _unitOfWork.IpAddresses.FindAsync(x => x.IpPrefixId == id && !x.IsDeleted)).Count;
+            var childAddresses = await _unitOfWork.IpAddresses.FindAsync(x => x.IpPrefixId == id && !x.IsDeleted);
+            var usedCount = childAddresses.Count(x => x.Status != (int)IpAddressStatus.Available);
+            var availableCount = childAddresses.Count(x => x.Status == (int)IpAddressStatus.Available);
 
             return new IpPrefixDto
             {
@@ -80,7 +91,8 @@ namespace Asset.Application.Services
                 PreferredDns = prefix.PreferredDns,
                 AlternateDns = prefix.AlternateDns,
                 Description = prefix.Description,
-                IpAddressCount = ipAddressCount
+                UsedIpCount = usedCount,
+                AvailableIpCount = availableCount
             };
         }
 
@@ -130,7 +142,9 @@ namespace Asset.Application.Services
                 PreferredDns = newPrefix.PreferredDns,
                 AlternateDns = newPrefix.AlternateDns,
                 Description = newPrefix.Description,
-                IpAddressCount = childAddresses.Count
+                // Vừa sinh xong nên toàn bộ IP con đều Available (chưa sử dụng).
+                UsedIpCount = 0,
+                AvailableIpCount = childAddresses.Count
             };
         }
 

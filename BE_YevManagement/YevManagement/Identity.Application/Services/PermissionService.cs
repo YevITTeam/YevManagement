@@ -15,20 +15,40 @@ namespace Identity.Application.Services
         {
         }
 
-        public async Task<List<PermissionDto>> GetAllPermissionsAsync()
+        public async Task<List<PermissionModuleGroupDto>> GetAllPermissionsAsync()
         {
             var permissions = await _unitOfWork.Permissions.GetAllAsync();
 
+            // Code có dạng "Module.Entity.Action" -> tách đoạn giữa làm tên Entity
+            // để nhóm 2 cấp (Module > Entity) cho FE dễ hiển thị dạng cây/collapsible.
             return permissions
                 .OrderBy(p => p.Module)
                 .ThenBy(p => p.Code)
-                .Select(p => new PermissionDto
+                .GroupBy(p => p.Module)
+                .Select(moduleGroup => new PermissionModuleGroupDto
                 {
-                    Id = p.Id,
-                    Code = p.Code,
-                    Module = p.Module,
-                    Description = p.Description
+                    Module = moduleGroup.Key,
+                    Entities = moduleGroup
+                        .GroupBy(p => GetEntityFromCode(p.Code))
+                        .Select(entityGroup => new PermissionEntityGroupDto
+                        {
+                            Entity = entityGroup.Key,
+                            Permissions = entityGroup
+                                .Select(p => new PermissionDto
+                                {
+                                    Id = p.Id,
+                                    Code = p.Code,
+                                    Module = p.Module,
+                                    Description = p.Description
+                                }).ToList()
+                        }).ToList()
                 }).ToList();
+        }
+
+        private static string GetEntityFromCode(string code)
+        {
+            var parts = code.Split('.');
+            return parts.Length >= 3 ? parts[1] : code;
         }
 
         public async Task<List<PermissionDto>> GetRolePermissionsAsync(int roleId)

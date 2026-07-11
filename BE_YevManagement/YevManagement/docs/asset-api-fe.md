@@ -166,8 +166,11 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
   "preferredDns": "0.45.1.2",
   "alternateDns": "9.7.6.5",
   "description": null,
-  "ipAddressCount": 255              // số IpAddress con hiện có
+  // 2026-07-11: đã BỎ "ipAddressCount" (luôn = 255) → thay bằng 2 field dưới.
+  "usedIpCount": 12,                 // số IP đang sử dụng trong dải (status != 0)
+  "availableIpCount": 243            // số IP chưa sử dụng trong dải (status = 0)
 }
+// grid-list / all: kết quả sort theo GIÁ TRỊ IP (10.45.2 trước 10.45.10), không sort chuỗi.
 ```
 
 **Tạo mới prefix (POST) tự động sinh 255 IpAddress con** (`n=1..255`, `Status=0 Available`) — FE chỉ cần 1 lần gọi, không cần thêm action "generate range":
@@ -214,7 +217,8 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 > - Dùng để đánh dấu tay 1 IP là "đang dùng bởi thiết bị ngoài" (0→1) hoặc trả về trống (1→0). Gán cho thiết bị **trong** hệ thống thì đi qua `assign`/luồng Device (tự set `status=2`).
 
 ```jsonc
-// GET /api/IpAddress/grid-list?pageIndex=1&pageSize=50&keyword=&status=0&deviceId= → data.data[]
+// GET /api/IpAddress/grid-list?pageIndex=1&pageSize=50&keyword=&status=0&isInUse=&deviceId= → data.data[]
+// Kết quả sort theo GIÁ TRỊ IP (10.45.2 trước 10.45.10), không phải sort chuỗi.
 {
   "id": 6989,
   "ipAddress": "1.1.1.104",          // 2026-07-11: đã bỏ field "serverIp"
@@ -233,7 +237,10 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 ```
 
 **Query params `grid-list`** (không có tham số `all` — bảng IP quá lớn để load hết):
-`pageIndex`, `pageSize`, `keyword`, `status` (lọc theo enum trên), `deviceId`.
+`pageIndex`, `pageSize`, `keyword`, `status` (lọc theo enum trên), `isInUse`, `deviceId`.
+`isInUse` (bool, 2026-07-11) là bộ lọc gộp đang/chưa sử dụng: `true`→IP đang dùng
+(`status != 0`), `false`→IP chưa dùng (`status = 0`), bỏ trống→không lọc. Có thể kết
+hợp với `status` (AND). Danh sách luôn sort theo **giá trị IP** (không phải sort chuỗi).
 
 **Danh sách "IP còn trống" để FE làm picker chọn IP khi tạo/sửa Device** — 2 cách (2026-07-09, thêm cách 2):
 ```
@@ -449,8 +456,16 @@ Dùng khi người dùng chuyển từ 1 thiết bị đang dùng (máy cũ) san
 ```
 
 **Server tự động xử lý** (FE không cần làm gì thêm sau khi gọi API này):
-- **IP chính**: IP đang gắn máy cũ → chuyển sang máy mới. Nếu máy mới đang có sẵn 1 IP khác → IP đó tự gỡ về `Available` (đúng luật "1 IP không được gắn nhiều thiết bị").
+- **Toàn bộ IP đang gắn**: IP đang gắn máy cũ → chuyển sang máy mới. IP nào máy mới đang giữ sẵn mà không thuộc máy cũ → tự gỡ về `Available` (đúng luật "1 IP không được gắn nhiều thiết bị").
+- **Email (`DeviceEmail`, 2026-07-11, mới thêm)**: toàn bộ email của máy cũ → chuyển sang máy mới (giữ nguyên `note`). Không có ràng buộc unique như IP nên email sẵn có của máy mới **được giữ nguyên**, không bị gỡ. Nếu trùng đúng nội dung email đã có ở máy mới thì bỏ dòng cũ (không tạo trùng).
 - **Phần mềm cài (`DeviceSoftware`)**: toàn bộ phần mềm đang cài ở máy cũ **chuyển hẳn** sang máy mới (giữ nguyên `installDate`/`licenseKey`). Nếu máy mới đã cài sẵn đúng phần mềm đó rồi → giữ bản ghi của máy mới, bỏ bản ghi cũ (không tạo trùng).
+- **Dữ liệu vai trò/vị trí sử dụng của máy (2026-07-11, chốt lại lần 2)**: chỉ
+  `branchId`/`manager`/`isOutsourced`/`isUseUsb` của máy cũ **ghi đè** lên máy
+  mới (dữ liệu gắn theo vị trí/người dùng đang thao tác trên máy). **KHÔNG
+  chuyển** (máy mới giữ nguyên dữ liệu vật lý/riêng của chính nó): `deviceTypeId`,
+  `supplierId`, `purchaseDate`, `expirationDate`, `depreciationMonths` (mỗi máy
+  vật lý có ngày mua/nhà cung cấp/loại/khấu hao riêng), `deviceCode`,
+  `deviceName`, `serialNumber`, `note`, cấu hình phần cứng (`DeviceConfiguration`).
 - **Cấu hình phần cứng (`DeviceConfiguration`)**: **không** chuyển — máy mới có cấu hình phần cứng riêng của nó (nhập/sửa qua API `DeviceConfiguration` như bình thường).
 - **Trạng thái máy cũ**: tự đổi thành `status=0` ("Chờ sử dụng"), **trừ khi** máy cũ đã hết hạn sử dụng (`expirationDate` đã qua) thì tự đổi thành `status=2` ("Chờ thanh lý") luôn.
 - **Trạng thái máy mới**: tự đổi thành `status=1` ("Đang sử dụng", 2026-07-10) —
@@ -892,7 +907,7 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 | GET | `/api/IpAddress/grid-list?...`, `/available?keyword=` (không phân trang, mới 2026-07-09), `/{id}` (không có `/all`) — PUT `/{id}` (chỉ đổi status+note), PUT `/{id}/assign`, PUT `/{id}/unassign` (**không còn POST/DELETE thủ công**, 2026-07-11) | Địa chỉ IP |
 | GET | `/api/Device/grid-list?...` (không có `/all`), `/available?keyword=` (không phân trang, máy `Chờ sử dụng`, mới 2026-07-10), `/{id}`, `/{id}/detail` — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
 | GET | `/api/Report/device-list?deviceTypeId=&branchId=&keyword=` (không phân trang, mới 2026-07-09) | Báo cáo in ấn (controller riêng, sẽ gom thêm các báo cáo khác) |
-| POST | `/api/TransferHistory` (mới 2026-07-09) — GET `/api/TransferHistory/device/{deviceId}` | Chuyển máy (di chuyển IP + phần mềm, đổi trạng thái máy cũ) |
+| POST | `/api/TransferHistory` (mới 2026-07-09) — GET `/api/TransferHistory/device/{deviceId}` | Chuyển máy (di chuyển IP + email + phần mềm + toàn bộ dữ liệu vai trò/sử dụng, đổi trạng thái máy cũ, 2026-07-11: mở rộng đầy đủ dữ liệu) |
 | POST | `/api/DeviceImport/preview` (multipart file, không ghi DB), `/api/DeviceImport/confirm` (mới 2026-07-10) | Import Device hàng loạt từ Excel, có bước xem trước |
 | GET | `/api/DeviceConfiguration/by-device/{deviceId}` — POST, PUT `/{id}`, DELETE `/{id}`, GET `/{configId}/initial`, DELETE `/initial/{id}`, GET `/{configId}/history` | Cấu hình phần cứng |
 | POST | `/api/DeviceConfigurationImport/preview` (multipart file, không ghi DB), `/api/DeviceConfigurationImport/confirm` (mới 2026-07-10) | Import cấu hình hàng loạt từ file Tanium, chỉ update Device có sẵn |

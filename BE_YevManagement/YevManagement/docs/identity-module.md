@@ -48,6 +48,7 @@
 | `UpdateRoleDto` | `RoleName`, `Description?`. |
 | `UpdateUserRolesDto` | `UserId`, `RoleIds: List<int>`. |
 | `PermissionDto` | `Id`, `Code`, `Module`, `Description?` — output-only, không có Create/Update DTO (permission là danh sách cố định). |
+| `PermissionModuleGroupDto` / `PermissionEntityGroupDto` | `PermissionModuleGroupDto`: `Module`, `Entities: List<PermissionEntityGroupDto>`. `PermissionEntityGroupDto`: `Entity`, `Permissions: List<PermissionDto>` — nhóm 2 cấp Module > Entity (Entity tách từ đoạn giữa của `Code` dạng `Module.Entity.Action`), riêng cho response `GET /api/Permission/all` để FE dựng UI gán quyền dạng cây/collapsible thay vì 1 danh sách phẳng ~53 dòng (2026-07-11). |
 | `UpdateRolePermissionsDto` | `RoleId`, `PermissionIds: List<int>` — gán lại toàn bộ tập permission cho 1 role. |
 | `UserPermissionDto` | `PermissionId`, `Code`, `Module`, `Description?`, `IsGranted` — 1 dòng override hiện có của 1 User (2026-07-10). |
 | `UpdateUserPermissionsDto` | `UserId`, `GrantPermissionIds: List<int>`, `DenyPermissionIds: List<int>` — dùng nội bộ Service (2026-07-10). |
@@ -185,7 +186,7 @@ Seed role trong DB: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Th
 
 | Method | Route | Auth | Mô tả |
 |---|---|---|---|
-| GET | `/api/Permission/all` | `RequirePermission("Identity.Permission.View")` | Toàn bộ permission hệ thống (order theo Module, Code) — FE dùng để dựng UI gán quyền. |
+| GET | `/api/Permission/all` | `RequirePermission("Identity.Permission.View")` | Toàn bộ permission hệ thống, **nhóm 2 cấp Module > Entity** (`List<PermissionModuleGroupDto>`, 2026-07-11) — FE dùng để dựng UI gán quyền dạng cây. Các endpoint permission khác (`role/{roleId}`, `user/{userId}`, `user/{userId}/effective`) vẫn trả `List<PermissionDto>` phẳng như cũ. |
 | GET | `/api/Permission/role/{roleId}` | `RequirePermission("Identity.Permission.View")` | Permission hiện tại của 1 role. |
 | PUT | `/api/Permission/role/{roleId}` | `RequirePermission("Identity.Role.Update")` | Gán lại toàn bộ tập permission cho role (body: `List<int>` permission id). |
 | GET | `/api/Permission/user/{userId}` | `RequirePermission("Identity.Permission.View")` | Danh sách override (grant/deny) hiện có của 1 User (2026-07-10). |

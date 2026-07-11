@@ -45,6 +45,40 @@ namespace Asset.Application.Services
                 _unitOfWork.IpAddresses.Update(ip);
             }
 
+            // Chuyển email: đổi DeviceId của từng dòng DeviceEmail sang máy mới (2026-07-11).
+            // Email không phải tài nguyên dùng chung như IP (không có ràng buộc unique), nên chỉ
+            // cần re-point DeviceId, không cần gỡ email hiện có của máy mới. Nếu trùng đúng nội
+            // dung Email với 1 dòng máy mới đã có sẵn thì bỏ dòng cũ (tránh nhân đôi).
+            var oldEmails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == oldDevice.Id && !x.IsDeleted);
+            var newDeviceEmailTexts = (await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == newDevice!.Id && !x.IsDeleted))
+                .Select(x => x.Email)
+                .ToHashSet();
+
+            foreach (var email in oldEmails)
+            {
+                if (newDeviceEmailTexts.Contains(email.Email))
+                {
+                    email.IsDeleted = true;
+                }
+                else
+                {
+                    email.DeviceId = newDevice!.Id;
+                }
+                _unitOfWork.DeviceEmails.Update(email);
+            }
+
+            // Chuyển dữ liệu vai trò/vị trí sử dụng của máy cũ sang máy mới (2026-07-11, chốt lại
+            // lần 2 theo quyết định người dùng): CHỈ BranchId/Manager/IsOutsourced/IsUseUsb — đây là
+            // dữ liệu gắn theo vị trí/người dùng, không phải thuộc tính vật lý của thiết bị. KHÔNG
+            // copy DeviceTypeId/SupplierId/PurchaseDate/ExpirationDate/DepreciationMonths (mỗi máy
+            // vật lý có ngày mua/nhà cung cấp/loại/khấu hao riêng, không đại diện cho máy kia), cũng
+            // như Id/DeviceCode/DeviceName/SerialNumber/Note/DeviceConfiguration (giữ nguyên của máy
+            // mới). Status không copy trực tiếp vì đã có logic tính riêng bên dưới.
+            newDevice!.BranchId = oldDevice.BranchId;
+            newDevice.Manager = oldDevice.Manager;
+            newDevice.IsOutsourced = oldDevice.IsOutsourced;
+            newDevice.IsUseUsb = oldDevice.IsUseUsb;
+
             // Chuyển phần mềm cài: đổi DeviceId của từng dòng DeviceSoftware sang máy mới.
             // Nếu máy mới đã cài sẵn phần mềm đó rồi (trùng khoá kép DeviceId+SoftwareId) thì
             // giữ nguyên bản ghi bên máy mới, xoá bản ghi cũ để tránh trùng khoá.

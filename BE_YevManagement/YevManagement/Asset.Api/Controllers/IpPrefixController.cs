@@ -46,7 +46,7 @@ namespace Asset.Api.Controllers
         {
             var result = await _ipPrefixService.CreateAsync(request);
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result,
-                $"Thêm prefix thành công, đã sinh {result.IpAddressCount} địa chỉ IP.");
+                $"Thêm prefix thành công, đã sinh {result.AvailableIpCount} địa chỉ IP.");
         }
 
         // Không còn Update cho IpPrefix (2026-07-11, quyết định người dùng) — IpPrefix chỉ

@@ -102,8 +102,11 @@ namespace Asset.Application.Services
             var config = await _unitOfWork.DeviceConfigurations.GetByIdAsync(request.Id);
             config.OrThrowNotFound("Cấu hình thiết bị", request.Id);
 
-            if (config.DeviceId != request.DeviceId)
-                throw new DomainException("Không thể đổi thiết bị của một cấu hình đã tạo, vui lòng xoá và tạo mới.");
+            // 2026-07-11 (chốt lại): bỏ check đối chiếu request.DeviceId với config.DeviceId —
+            // DeviceId chưa từng thực sự được ghi lại ở dưới (chỉ đổi 20 field cấu hình), nên
+            // check này chỉ để validate mà không có tác dụng thực tế, lại gây lỗi giả khi FE gửi
+            // deviceId không khớp cho 1 request sửa cấu hình bình thường. `id` trên route đã định
+            // danh đúng bản ghi cần sửa, không cần deviceId để xác thực thêm.
 
             if (HasChanges(config, request))
             {

@@ -7,7 +7,7 @@ namespace Identity.Application.Interfaces.Service
 {
     public interface IPermissionService
     {
-        Task<List<PermissionDto>> GetAllPermissionsAsync();
+        Task<List<PermissionModuleGroupDto>> GetAllPermissionsAsync();
         Task<List<PermissionDto>> GetRolePermissionsAsync(int roleId);
         Task UpdateRolePermissionsAsync(UpdateRolePermissionsDto dto);
         Task<List<UserPermissionDto>> GetUserPermissionOverridesAsync(int userId);

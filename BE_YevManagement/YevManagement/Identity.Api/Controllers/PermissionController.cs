@@ -17,7 +17,7 @@ namespace Identity.Api.Controllers
 
         [RequirePermission("Identity.Permission.View")]
         [HttpGet("all")]
-        public async Task<ActionResult<ApiResponse<List<PermissionDto>>>> GetAllPermissions()
+        public async Task<ActionResult<ApiResponse<List<PermissionModuleGroupDto>>>> GetAllPermissions()
         {
             var permissions = await _service.GetAllPermissionsAsync();
             return Success(permissions, "Lấy danh sách chức năng thành công!");

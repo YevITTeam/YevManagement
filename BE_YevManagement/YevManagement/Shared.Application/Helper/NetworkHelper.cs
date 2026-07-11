@@ -35,6 +35,30 @@ namespace Shared.Application.Helper
             return $"{parts[0]}.{parts[1]}.{parts[2]}";
         }
 
+        // Pack an IPv4 address ("10.45.1.20") or a 3-octet prefix ("10.45.1") into a single
+        // sortable long so lists order by numeric IP value instead of lexicographically
+        // (string sort would put "10.45.1.10" before "10.45.1.2"). Missing octets (prefix) are
+        // treated as 0; null/blank or malformed input sorts last (long.MaxValue).
+        public static long ToSortableKey(string? ip)
+        {
+            if (string.IsNullOrWhiteSpace(ip)) return long.MaxValue;
+
+            var parts = ip.Trim().Split('.');
+            long key = 0;
+            for (var i = 0; i < 4; i++)
+            {
+                long octet = 0;
+                if (i < parts.Length)
+                {
+                    if (!int.TryParse(parts[i], out var number) || number < 0 || number > 255)
+                        return long.MaxValue;
+                    octet = number;
+                }
+                key = (key << 8) | octet;
+            }
+            return key;
+        }
+
         // ip và gateway có cùng subnet theo subnetMask hay không (bitwise AND từng octet).
         // Trả về false nếu bất kỳ tham số nào không phải IPv4 hợp lệ.
         public static bool IsSameSubnet(string? ip, string? gateway, string? subnetMask)
