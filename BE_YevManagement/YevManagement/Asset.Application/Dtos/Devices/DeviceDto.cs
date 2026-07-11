@@ -25,6 +25,8 @@ namespace Asset.Application.Dtos.Devices
         public string? Note { get; set; }
         public string? SerialNumber { get; set; }
         public bool IsUseUsb { get; set; }
+        public int? ReplacesOldDeviceId { get; set; }
+        public string? ReplacesOldDeviceCode { get; set; }
         public List<DeviceIpAddressDto> IpAddresses { get; set; } = new();
         public List<DeviceEmailDto> Emails { get; set; } = new();
     }

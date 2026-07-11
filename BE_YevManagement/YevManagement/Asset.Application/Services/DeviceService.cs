@@ -226,7 +226,7 @@ namespace Asset.Application.Services
 
         public async Task<DeviceDto> GetByIdAsync(int id)
         {
-            var device = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == id, x => x.Branch, x => x.DeviceType, x => x.Supplier);
+            var device = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == id, x => x.Branch, x => x.DeviceType, x => x.Supplier, x => x.ReplacesOldDevice!);
             device.OrThrowNotFound("Thiết bị", id);
 
             var ipAddresses = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
@@ -269,6 +269,8 @@ namespace Asset.Application.Services
             var branch = await _unitOfWork.Branches.GetByIdAsync(request.BranchId);
             branch.OrThrowNotFound("Chi nhánh", request.BranchId);
 
+            var replacesOldDevice = await ValidateReplacesOldDeviceIdAsync(request.ReplacesOldDeviceId, currentDeviceId: null);
+
             var ipAddresses = await ResolveAndValidateIpAddressesAsync(request.IpAddressIds);
 
             var newDevice = new Device
@@ -287,6 +289,7 @@ namespace Asset.Application.Services
                 Note = request.Note,
                 SerialNumber = request.SerialNumber,
                 IsUseUsb = request.IsUseUsb,
+                ReplacesOldDeviceId = request.ReplacesOldDeviceId,
                 IsDeleted = false
             };
 
@@ -319,6 +322,7 @@ namespace Asset.Application.Services
             newDevice.Branch = branch;
             newDevice.DeviceType = deviceType;
             newDevice.Supplier = supplier;
+            newDevice.ReplacesOldDevice = replacesOldDevice;
             return MapToDto(newDevice, ipAddresses, emails);
         }
 
@@ -348,6 +352,8 @@ namespace Asset.Application.Services
             var branch = await _unitOfWork.Branches.GetByIdAsync(request.BranchId);
             branch.OrThrowNotFound("Chi nhánh", request.BranchId);
 
+            await ValidateReplacesOldDeviceIdAsync(request.ReplacesOldDeviceId, currentDeviceId: device!.Id);
+
             await SyncIpAddressesAsync(device.Id, request.IpAddressIds);
             await SyncEmailsAsync(device.Id, request.Emails);
 
@@ -365,9 +371,49 @@ namespace Asset.Application.Services
             device.Note = request.Note;
             device.SerialNumber = request.SerialNumber;
             device.IsUseUsb = request.IsUseUsb;
+            device.ReplacesOldDeviceId = request.ReplacesOldDeviceId;
 
             _unitOfWork.Devices.Update(device);
             await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task<DeviceReplacementSuggestionDto?> GetReplacementSuggestionAsync(int oldDeviceId)
+        {
+            var oldDevice = await _unitOfWork.Devices.GetByIdAsync(oldDeviceId);
+            oldDevice.OrThrowNotFound("Thiết bị", oldDeviceId);
+
+            // Có thể có nhiều máy cùng khai "MQL Cũ" = máy này qua nhiều lần import khác
+            // nhau (theo quyết định người dùng) — chỉ lấy máy import gần nhất (Id lớn nhất)
+            // còn Status=PendingUse (chưa được dùng để chuyển máy khác) làm gợi ý duy nhất.
+            var candidates = await _unitOfWork.Devices.FindAsync(x =>
+                x.ReplacesOldDeviceId == oldDeviceId &&
+                x.Status == (int)DeviceStatus.PendingUse &&
+                !x.IsDeleted);
+
+            var suggestion = candidates.OrderByDescending(x => x.Id).FirstOrDefault();
+            if (suggestion == null) return null;
+
+            return new DeviceReplacementSuggestionDto
+            {
+                Id = suggestion.Id,
+                DeviceCode = suggestion.DeviceCode,
+                DeviceName = suggestion.DeviceName
+            };
+        }
+
+        // Dùng chung cho Create/Update: nếu có ReplacesOldDeviceId, máy cũ phải tồn tại
+        // (!IsDeleted) và không được trỏ vào chính nó (chỉ áp dụng khi Update, currentDeviceId != null).
+        // Trả về entity máy cũ (hoặc null nếu không set) để gọi nơi cần gắn navigation ngay.
+        private async Task<Device?> ValidateReplacesOldDeviceIdAsync(int? replacesOldDeviceId, int? currentDeviceId)
+        {
+            if (!replacesOldDeviceId.HasValue) return null;
+
+            if (currentDeviceId.HasValue && replacesOldDeviceId.Value == currentDeviceId.Value)
+                throw new DomainException("Thiết bị không thể tự thay thế cho chính nó.");
+
+            var oldDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == replacesOldDeviceId.Value && !x.IsDeleted);
+            oldDevice.OrThrowNotFound("Thiết bị cũ (thay thế)", replacesOldDeviceId.Value);
+            return oldDevice;
         }
 
         public async Task DeleteAsync(int id)
@@ -516,6 +562,8 @@ namespace Asset.Application.Services
             Note = device.Note,
             SerialNumber = device.SerialNumber,
             IsUseUsb = device.IsUseUsb,
+            ReplacesOldDeviceId = device.ReplacesOldDeviceId,
+            ReplacesOldDeviceCode = device.ReplacesOldDevice?.DeviceCode,
             IpAddresses = ipAddresses.Select(ip => new DeviceIpAddressDto { Id = ip.Id, IpAddress = ip.IpAddress1 }).ToList(),
             Emails = emails.Select(e => new DeviceEmailDto { Id = e.Id, Email = e.Email, Note = e.Note }).ToList()
         };

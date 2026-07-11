@@ -36,6 +36,14 @@ namespace Asset.Api.Controllers
         }
 
         [RequirePermission("Asset.Device.View")]
+        [HttpGet("{id}/replacement-suggestion")]
+        public async Task<ActionResult<ApiResponse<DeviceReplacementSuggestionDto?>>> GetReplacementSuggestion(int id)
+        {
+            var result = await _deviceService.GetReplacementSuggestionAsync(id);
+            return Success(result, result != null ? "Có gợi ý máy thay thế." : "Không có gợi ý máy thay thế.");
+        }
+
+        [RequirePermission("Asset.Device.View")]
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<DeviceDto>>> GetById(int id)
         {

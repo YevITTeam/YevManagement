@@ -49,5 +49,10 @@ namespace Asset.Application.Dtos.Devices
         public bool IsUseUsb { get; set; }
 
         public List<int> IpAddressIds { get; set; } = new();
+
+        // Gợi ý "máy cũ được thay thế bởi thiết bị này" (điền từ MQL Cũ khi import Excel,
+        // hoặc chọn tay khi tạo Device thường). Optional — chỉ dùng để FE điền sẵn
+        // NewDeviceId trên màn "Chuyển máy" sau này, không tự động chuyển máy.
+        public int? ReplacesOldDeviceId { get; set; }
     }
 }

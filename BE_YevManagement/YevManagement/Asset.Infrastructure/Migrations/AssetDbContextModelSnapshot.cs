@@ -105,6 +105,9 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<DateTime>("PurchaseDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("ReplacesOldDeviceId")
+                        .HasColumnType("int");
+
                     b.Property<string>("SerialNumber")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -130,6 +133,8 @@ namespace Asset.Infrastructure.Migrations
                     b.HasIndex(new[] { "SerialNumber" }, "IX_ThietBis_SoSeri")
                         .IsUnique()
                         .HasFilter("[SerialNumber] IS NOT NULL");
+
+                    b.HasIndex(new[] { "ReplacesOldDeviceId" }, "IX_ThietBis_ThayTheChoId");
 
                     b.ToTable("Devices");
                 });
@@ -835,6 +840,11 @@ namespace Asset.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_ThietBis_LoaiThietBis_LoaiThietBiId");
 
+                    b.HasOne("Asset.Domain.Entities.Device", "ReplacesOldDevice")
+                        .WithMany()
+                        .HasForeignKey("ReplacesOldDeviceId")
+                        .HasConstraintName("FK_ThietBis_ThietBis_ThayTheChoId");
+
                     b.HasOne("Asset.Domain.Entities.Supplier", "Supplier")
                         .WithMany("Devices")
                         .HasForeignKey("SupplierId")
@@ -845,6 +855,8 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("Branch");
 
                     b.Navigation("DeviceType");
+
+                    b.Navigation("ReplacesOldDevice");
 
                     b.Navigation("Supplier");
                 });

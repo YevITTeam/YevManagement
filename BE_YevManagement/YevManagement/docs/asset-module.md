@@ -19,7 +19,7 @@
 
 | Entity | Thuộc tính chính | Quan hệ | Soft delete |
 |---|---|---|---|
-| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `Manager`, `PurchaseDate`, `DepreciationMonths`, `ExpirationDate?`(**tính toán**, không nhập tay — xem ghi chú bên dưới), `IsOutsourced`, `Status`, `Note?`, `SerialNumber?`(unique khi có giá trị), `IsUseUsb` | N-1 Branch/DeviceType/Supplier; 1-1 DeviceConfiguration; 1-N IpAddresses (**nhiều IP/device**, xem ghi chú bên dưới), 1-N DeviceEmails, DeviceSoftwares, TransferHistory(old/new) | **Có** |
+| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `Manager`, `PurchaseDate`, `DepreciationMonths`, `ExpirationDate?`(**tính toán**, không nhập tay — xem ghi chú bên dưới), `IsOutsourced`, `Status`, `Note?`, `SerialNumber?`(unique khi có giá trị), `IsUseUsb`, `ReplacesOldDeviceId?`(tự tham chiếu, gợi ý máy thay thế — xem ghi chú "Lưu lại gợi ý máy thay thế xuống DB") | N-1 Branch/DeviceType/Supplier; N-1 ReplacesOldDevice (tự tham chiếu, optional); 1-1 DeviceConfiguration; 1-N IpAddresses (**nhiều IP/device**, xem ghi chú bên dưới), 1-N DeviceEmails, DeviceSoftwares, TransferHistory(old/new) | **Có** |
 | `DeviceEmail` | `DeviceId`, `Email`, `Note?` | N-1 Device | **Có** |
 | `Branch` | `BranchCode`(unique), `BranchName` | 1-N Devices | **Có** |
 | `Supplier` | `SupplierCode`(unique), `SupplierName` | 1-N Devices | **Có** |
@@ -270,6 +270,36 @@
 > "chưa dùng" cho người dùng chọn làm `NewDeviceId` khi gọi
 > `POST /api/TransferHistory`.
 >
+> **Lưu lại gợi ý "máy thay thế" xuống DB + endpoint tra cứu (2026-07-11, thêm
+> sau)**: trước đó `PendingTransfers` chỉ trả về **1 lần duy nhất** trong
+> response `POST /api/DeviceImport/confirm` — nếu người dùng không mở màn
+> "Chuyển máy" ngay lúc đó thì gợi ý bị mất. Giờ quan hệ này được **lưu xuống
+> DB**: `Device` thêm cột tự tham chiếu `ReplacesOldDeviceId` (int?, FK →
+> `Devices.Id`, index `IX_ThietBis_ThayTheChoId`, constraint
+> `FK_ThietBis_ThietBis_ThayTheChoId`, `OnDelete(ClientSetNull)`) — nghĩa là
+> "thiết bị này (máy mới) dự tính thay thế cho máy có Id này (máy cũ)".
+> `DeviceImportService.ConfirmAsync` set field này khi tạo Device có `MQL Cũ`
+> (qua `CreateDeviceDto.ReplacesOldDeviceId`, cũng có sẵn ở `UpdateDeviceDto`
+> để sửa tay nếu cần — `DeviceService.CreateAsync`/`UpdateAsync` validate máy
+> cũ phải tồn tại `!IsDeleted` và không được trỏ vào chính nó).
+>
+> `GET /api/Device/{oldDeviceId}/replacement-suggestion` (permission
+> `Asset.Device.View`, dùng chung `DeviceController`) trả
+> `DeviceReplacementSuggestionDto? { Id, DeviceCode, DeviceName }` — gọi khi FE
+> mở màn "Chuyển máy" trên 1 máy cũ để **tự điền sẵn** ô chọn `NewDeviceId`
+> (người dùng vẫn có thể đổi qua `GET /api/Device/available` như bình thường,
+> đây chỉ là gợi ý, không ép buộc). Logic chọn gợi ý
+> (`DeviceService.GetReplacementSuggestionAsync`): tìm mọi Device có
+> `ReplacesOldDeviceId == oldDeviceId`, `Status == PendingUse` (chưa được dùng
+> để chuyển máy khác), `!IsDeleted` — nếu nhiều máy cùng khai (nhiều lần
+> import khác thời điểm cùng trỏ về 1 máy cũ, theo quyết định người dùng
+> 2026-07-11), chỉ lấy máy có `Id` lớn nhất (import gần nhất) làm gợi ý duy
+> nhất, không trả danh sách. `null` nếu không có gợi ý nào. `DeviceDto` cũng
+> trả kèm `ReplacesOldDeviceId`/`ReplacesOldDeviceCode` khi xem chi tiết máy
+> mới (`GET /api/Device/{id}`). Migration `AddDeviceReplacesOldDevice`
+> (`Asset.Infrastructure/Migrations/20260711074154_AddDeviceReplacesOldDevice.cs`)
+> đã **apply lên DB thật** (2026-07-11).
+>
 > `GET /api/TransferHistory/device/{deviceId}` trả `List<TransferHistoryDto>` —
 > lịch sử chuyển máy liên quan tới 1 Device (dù là vai trò máy cũ hay máy mới),
 > sort `TransferDate` mới nhất trước. Đã test thật trên DB (tạo thiết bị TEST,
@@ -361,11 +391,17 @@
 >      gợi ý vào `DeviceImportConfirmResultDto.PendingTransfers`
 >      (`DeviceImportPendingTransferDto { NewDeviceId, NewDeviceCode, OldDeviceId,
 >      OldDeviceCode }`) — lúc import chỉ là dự tính máy cũ nào sẽ được thay,
->      thực tế lắp đặt có thể đổi ý. FE dùng gợi ý này để **điền sẵn nhưng cho
->      sửa** trên màn hình "Chuyển máy" (chọn `NewDeviceId` khác nếu cần qua
->      `GET /api/Device/available`), người dùng phải tự bấm nút "Chuyển" thì mới
->      thật sự gọi `POST /api/TransferHistory` (nghiệp vụ chuyển máy đầy đủ vẫn
->      y nguyên như mô tả ở §1, chỉ đổi **thời điểm** gọi — không còn tự động
+>      thực tế lắp đặt có thể đổi ý. **Cùng lúc đó (2026-07-11, thêm sau) cũng
+>      lưu quan hệ này xuống DB** qua `CreateDeviceDto.ReplacesOldDeviceId` — xem
+>      ghi chú riêng "Lưu lại gợi ý máy thay thế xuống DB" ngay phía trên mục
+>      "Chọn máy mới để chuyển", vì `PendingTransfers` chỉ trả 1 lần trong
+>      response Confirm còn `ReplacesOldDeviceId` tồn tại lâu dài để tra lại sau
+>      qua `GET /api/Device/{oldId}/replacement-suggestion`. FE dùng gợi ý này để
+>      **điền sẵn nhưng cho sửa** trên màn hình "Chuyển máy" (chọn `NewDeviceId`
+>      khác nếu cần qua `GET /api/Device/available`), người dùng phải tự bấm nút
+>      "Chuyển" thì mới thật sự gọi `POST /api/TransferHistory` (nghiệp vụ
+>      chuyển máy đầy đủ vẫn y nguyên như mô tả ở §1, chỉ đổi **thời điểm** gọi
+>      — không còn tự động
 >      trong lúc import).
 >
 > **Validate/resolve từng dòng** (`DeviceImportService.ValidateAndResolveRowsAsync`,

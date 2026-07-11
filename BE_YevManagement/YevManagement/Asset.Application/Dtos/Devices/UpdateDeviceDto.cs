@@ -50,5 +50,7 @@ namespace Asset.Application.Dtos.Devices
         public bool IsUseUsb { get; set; }
 
         public List<int> IpAddressIds { get; set; } = new();
+
+        public int? ReplacesOldDeviceId { get; set; }
     }
 }

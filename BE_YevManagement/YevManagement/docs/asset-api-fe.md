@@ -347,6 +347,8 @@ GET /api/Device/available?keyword=YDF
   "note": "...",
   "serialNumber": "SN-DEMO-001",   // nullable, unique khi có giá trị (2026-07-09)
   "isUseUsb": false,                // 2026-07-09
+  "replacesOldDeviceId": null,      // 2026-07-11, mới — máy này dự tính thay thế cho máy nào (gợi ý từ import Excel, xem mục 5.9/5.10), null nếu không có
+  "replacesOldDeviceCode": null,    // mã của replacesOldDeviceId, chỉ có giá trị khi replacesOldDeviceId khác null
   "ipAddresses": [                  // 2026-07-11: thay ipAddressId?/ipAddress? đơn — có thể nhiều IP
     { "id": 6989, "ipAddress": "1.1.1.104" }
   ],
@@ -390,7 +392,8 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
   "note": "Ghi chú tuỳ chọn",         // nullable
   "serialNumber": "SN-TEST-001",      // nullable, [StringLength(100)], phải unique nếu có giá trị (2026-07-09)
   "isUseUsb": false,                  // 2026-07-09, mặc định false nếu không gửi
-  "ipAddressIds": [6989]              // 2026-07-11, thay ipAddressId? đơn — mảng Id IpAddress đang Status=0 Available (có thể rỗng []); server tự gán + set Assigned cho từng IP
+  "ipAddressIds": [6989],             // 2026-07-11, thay ipAddressId? đơn — mảng Id IpAddress đang Status=0 Available (có thể rỗng []); server tự gán + set Assigned cho từng IP
+  "replacesOldDeviceId": null         // nullable, 2026-07-11 mới — Id máy cũ mà thiết bị này dự tính thay thế; server tự set field này khi import Excel (mục 5.10), FE thường không cần gửi tay trừ khi muốn sửa/tạo gợi ý thủ công
 }
 ```
 
@@ -398,6 +401,7 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
 > Nếu 1 Id trong `ipAddressIds` trỏ tới IP không phải `Available`, hoặc `ipAddressIds` có Id trùng lặp → 400 `DomainException`.
 > Nếu `serialNumber` khớp với Device khác đã có (kể cả đã soft-delete) → 400 `DomainException` ("Số Serial '...' đã tồn tại."). Để trống/`null` thì không bị check trùng (nhiều Device có thể cùng `serialNumber=null`).
 > `emails` **không** yêu cầu unique — nhiều Device có thể dùng chung 1 email.
+> Nếu `replacesOldDeviceId` được gửi: máy cũ phải tồn tại (`!IsDeleted`) → 404 nếu không tìm thấy; khi sửa (`PUT`) không được trỏ về chính `id` của bản thân → 400 `DomainException`.
 
 ### 5.6. Sửa Device — `PUT /api/Device/{id}`
 
@@ -491,6 +495,25 @@ Dùng khi người dùng chuyển từ 1 thiết bị đang dùng (máy cũ) san
 `GET /api/Device/available?keyword=` (mục 5.2b) để user chọn máy mới trong số
 các máy "Chờ sử dụng" → `POST /api/TransferHistory` với `oldDeviceId`/`newDeviceId`.
 
+**Tự điền sẵn máy mới gợi ý (2026-07-11, thêm sau)** — khi mở màn "Chuyển máy"
+trên 1 máy cũ, gọi thêm:
+```
+GET /api/Device/{oldDeviceId}/replacement-suggestion
+```
+trả về (`data`, có thể `null` nếu không có gợi ý):
+```jsonc
+{
+  "id": 17985,
+  "deviceCode": "YDF-011",
+  "deviceName": "YDF-011"
+}
+```
+Gợi ý này đến từ cột "MQL Cũ" lúc import Excel máy mới (mục 5.10) — dùng để
+**điền sẵn** `newDeviceId` trên form, người dùng vẫn xem/đổi được sang máy khác
+qua picker `GET /api/Device/available?keyword=` như bình thường trước khi bấm
+"Chuyển". Không gọi API này thì form vẫn hoạt động bình thường (chỉ là để đỡ
+phải gõ tay lại cái đã biết trước từ lúc import).
+
 **Xem lịch sử chuyển máy của 1 thiết bị** (dù thiết bị đó từng đóng vai trò máy cũ hay máy mới):
 ```
 GET /api/TransferHistory/device/{deviceId}
@@ -549,6 +572,14 @@ dưới). Lý do: lúc import chỉ là dự tính máy cũ nào sẽ được t
 bị cũ" trên màn hình "Chuyển máy" — người dùng phải tự bấm nút "Chuyển" thì mới
 thật sự gọi `POST /api/TransferHistory` (mục 5.9, nghiệp vụ không đổi, chỉ đổi
 thời điểm gọi).
+
+**Gợi ý này giờ được lưu lại, không chỉ trả 1 lần lúc import (2026-07-11, thêm
+sau)**: nếu FE bỏ qua `pendingTransfers` lúc đó (VD người dùng đóng màn import
+mà chưa mở "Chuyển máy" ngay), gợi ý **không bị mất** — mở lại màn "Chuyển máy"
+trên máy cũ đó bất kỳ lúc nào sau này vẫn tự lấy lại được qua
+`GET /api/Device/{oldDeviceId}/replacement-suggestion` (xem mục 5.9). Khuyến
+nghị: FE có thể bỏ qua `pendingTransfers` trong response Confirm và luôn gọi
+API tra cứu này khi mở màn "Chuyển máy" thay vì phải giữ state từ lúc import.
 
 **Bước 1 — Preview (chỉ đọc, không ghi DB)**: `POST /api/DeviceImport/preview` — `multipart/form-data`, field file tên `file`. Nhận cả file `.xlsx` lẫn `.csv` (2026-07-11, thêm sau — server tự nhận diện theo đuôi file, CSV tự nhận diện dấu phân cách `,`/`;`).
 
@@ -905,7 +936,7 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 | GET | `/api/Software/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Phần mềm (danh mục) |
 | GET | `/api/IpPrefix/grid-list`, `/all`, `/{id}` — POST (tự sinh 255 IP), DELETE `/{id}` (cascade IP con chưa dùng; **không còn PUT**, 2026-07-11) | Dải mạng |
 | GET | `/api/IpAddress/grid-list?...`, `/available?keyword=` (không phân trang, mới 2026-07-09), `/{id}` (không có `/all`) — PUT `/{id}` (chỉ đổi status+note), PUT `/{id}/assign`, PUT `/{id}/unassign` (**không còn POST/DELETE thủ công**, 2026-07-11) | Địa chỉ IP |
-| GET | `/api/Device/grid-list?...` (không có `/all`), `/available?keyword=` (không phân trang, máy `Chờ sử dụng`, mới 2026-07-10), `/{id}`, `/{id}/detail` — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
+| GET | `/api/Device/grid-list?...` (không có `/all`), `/available?keyword=` (không phân trang, máy `Chờ sử dụng`, mới 2026-07-10), `/{id}`, `/{id}/detail`, `/{id}/replacement-suggestion` (gợi ý máy thay thế cho màn "Chuyển máy", mới 2026-07-11) — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
 | GET | `/api/Report/device-list?deviceTypeId=&branchId=&keyword=` (không phân trang, mới 2026-07-09) | Báo cáo in ấn (controller riêng, sẽ gom thêm các báo cáo khác) |
 | POST | `/api/TransferHistory` (mới 2026-07-09) — GET `/api/TransferHistory/device/{deviceId}` | Chuyển máy (di chuyển IP + email + phần mềm + toàn bộ dữ liệu vai trò/sử dụng, đổi trạng thái máy cũ, 2026-07-11: mở rộng đầy đủ dữ liệu) |
 | POST | `/api/DeviceImport/preview` (multipart file, không ghi DB), `/api/DeviceImport/confirm` (mới 2026-07-10) | Import Device hàng loạt từ Excel, có bước xem trước |

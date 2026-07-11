@@ -35,9 +35,13 @@ public partial class Device
 
     public bool IsUseUsb { get; set; }
 
+    public int? ReplacesOldDeviceId { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual Branch Branch { get; set; } = null!;
+
+    public virtual Device? ReplacesOldDevice { get; set; }
 
     public virtual DeviceConfiguration? DeviceConfiguration { get; set; }
 

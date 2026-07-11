@@ -75,6 +75,16 @@ public partial class AssetDbContext : DbContext
             entity.HasOne(d => d.Supplier).WithMany(p => p.Devices)
                 .HasForeignKey(d => d.SupplierId)
                 .HasConstraintName("FK_ThietBis_NhaCungCaps_NhaCungCapId");
+
+            // Self-reference: gợi ý "thiết bị này sẽ thay thế cho máy cũ nào" (điền từ cột
+            // "MQL Cũ" khi import Excel, xem docs/asset-module.md). Chỉ mang tính gợi ý cho
+            // màn hình "Chuyển máy" — không tự động thực hiện TransferHistory.
+            entity.HasIndex(e => e.ReplacesOldDeviceId, "IX_ThietBis_ThayTheChoId");
+
+            entity.HasOne(d => d.ReplacesOldDevice).WithMany()
+                .HasForeignKey(d => d.ReplacesOldDeviceId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ThietBis_ThietBis_ThayTheChoId");
         });
 
         modelBuilder.Entity<DeviceConfiguration>(entity =>

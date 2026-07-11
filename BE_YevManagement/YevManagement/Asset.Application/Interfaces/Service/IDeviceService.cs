@@ -7,6 +7,7 @@ namespace Asset.Application.Interfaces.Service
     {
         Task<PagedResponse<DeviceGridDto>> GetDevicesForGridAsync(DeviceFilterRequest request);
         Task<List<DeviceGridDto>> GetAvailableForTransferAsync(string? keyword);
+        Task<DeviceReplacementSuggestionDto?> GetReplacementSuggestionAsync(int oldDeviceId);
         Task<List<DeviceReportItemDto>> GetReportListAsync(DeviceReportFilterRequest request);
         Task<DeviceDto> GetByIdAsync(int id);
         Task<DeviceDetailDto> GetDetailAsync(int id);

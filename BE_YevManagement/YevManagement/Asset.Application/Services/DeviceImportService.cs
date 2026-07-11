@@ -80,7 +80,12 @@ namespace Asset.Application.Services
                         IsOutsourced = false,
                         Status = (int)DeviceStatus.PendingUse,
                         Note = row.Note,
-                        SerialNumber = row.SerialNumber
+                        SerialNumber = row.SerialNumber,
+                        // Lưu lại gợi ý "MQL Cũ" xuống DB (2026-07-11, thêm sau — trước đó chỉ trả
+                        // về PendingTransfers 1 lần trong response Confirm, không lưu) để màn hình
+                        // "Chuyển máy" mở trên máy cũ sau này vẫn tự hiện được gợi ý máy này qua
+                        // GET /api/Device/{oldId}/replacement-suggestion, dù không xử lý ngay lúc import.
+                        ReplacesOldDeviceId = row.ResolvedOldDeviceId
                     };
 
                     var created = await _deviceService.CreateAsync(createDto);
