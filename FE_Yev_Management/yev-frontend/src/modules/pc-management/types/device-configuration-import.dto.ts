@@ -33,6 +33,10 @@ export interface DeviceConfigurationImportPreviewResultDto {
     outOfScopeSkippedCount: number;
 }
 
+// Response của BE KHÔNG có skippedRows/skippedCount (khác Device Import) — endpoint
+// này vẫn re-validate + atomic theo request gửi lên (xem docs/asset-api-fe.md §6.3).
+// Để cho phép Confirm dù còn dòng lỗi mà không rủi ro bị BE từ chối cả batch, FE tự
+// lọc bỏ các dòng isValid=false trước khi gửi (xem ImportDeviceConfigurationDialog).
 export interface DeviceConfigurationImportConfirmResultDto {
     createdConfigCount: number;
     updatedConfigCount: number;

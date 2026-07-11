@@ -1,5 +1,5 @@
 import { api } from "@/lib/client";
-import type { IpAddressCreateDto, IpAddressDto,IpPrefixCreateDto,IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
+import type { IpAddressUpdateDto, IpAddressDto, IpPrefixCreateDto, IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -7,9 +7,7 @@ const ENDPOINTS = {
         getIpAddressPageNation: "/IpAddress/grid-list",
         getAvailableIpAddress: "/IpAddress/available",
         getIpAddressById: (id: number) => `/IpAddress/${id}`,
-        createIpAddress: "/IpAddress",
         updateIpAddress: (id: number) => `/IpAddress/${id}`,
-        deleteIpAddress: (id: number) => `/IpAddress/${id}`,
         assignIpAddress: (id: number) => `/IpAddress/${id}/assign`,
         unassignIpAddress: (id: number) => `/IpAddress/${id}/unassign`,
     },
@@ -18,7 +16,6 @@ const ENDPOINTS = {
         getAllIpPrefix: "/IpPrefix/all",
         getIpPrefixById: (id: number) => `/IpPrefix/${id}`,
         createIpPrefix: "/IpPrefix",
-        updateIpPrefix: (id: number) => `/IpPrefix/${id}`,
         deleteIpPrefix: (id: number) => `/IpPrefix/${id}`,
     }
 } as const;
@@ -38,6 +35,8 @@ export interface GetIpPrefixPageNationParams {
 }
 
 export const IpApi = {
+    // docs/asset-api-fe.md §4.2 — IpAddress không còn POST/DELETE thủ công
+    // (2026-07-11): chỉ sinh hàng loạt qua POST /IpPrefix, dọn qua DELETE /IpPrefix/{id}.
     getIpAddressPageNation: async (params?: GetIpAddressPageNationParams) => {
         const query = new URLSearchParams();
         if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
@@ -62,22 +61,14 @@ export const IpApi = {
         const response = await api.get<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.getIpAddressById(id));
         return response.data;
     },
-    createIpAddress: async (ipAddressData: IpAddressCreateDto) => {
-        const response = await api.post<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.createIpAddress, ipAddressData);
-        return response.data;
-    },
-    updateIpAddress: async (id: number, ipAddressData: Partial<IpAddressCreateDto>) => {
+    // docs/asset-api-fe.md §4.2 — PUT chỉ đổi được status + note.
+    updateIpAddress: async (id: number, data: IpAddressUpdateDto) => {
         const response = await api.put<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.updateIpAddress(id), {
-            id: id,
-            ...ipAddressData
+            id,
+            ...data
         });
         return response.data;
     },
-    deleteIpAddress: async (id: number) => {
-        const response = await api.delete<ApiResponse<void>>(ENDPOINTS.IP_ADDRESS.deleteIpAddress(id));
-        return response.data;
-    },
-    // docs/asset-api-fe.md §4.2 — 2 route này là PUT, không phải POST.
     assignIpAddress: async (id: number, deviceId: number) => {
         const response = await api.put<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.assignIpAddress(id), { deviceId });
         return response.data;
@@ -104,17 +95,12 @@ export const IpApi = {
         const response = await api.get<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.getIpPrefixById(id));
         return response.data;
     },
+    // docs/asset-api-fe.md §4.1 — tạo prefix tự sinh 255 IpAddress con.
     createIpPrefix: async (ipPrefixData: IpPrefixCreateDto) => {
         const response = await api.post<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.createIpPrefix, ipPrefixData);
         return response.data;
     },
-    updateIpPrefix: async (id: number, ipPrefixData: Partial<IpPrefixCreateDto>) => {
-        const response = await api.put<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.updateIpPrefix(id), {
-            id: id,
-            ...ipPrefixData
-        });
-        return response.data;
-    },
+    // docs/asset-api-fe.md §4.1 — không còn PUT (2026-07-11), field cố định lúc tạo.
     deleteIpPrefix: async (id: number) => {
         const response = await api.delete<ApiResponse<void>>(ENDPOINTS.IP_PREFIX.deleteIpPrefix(id));
         return response.data;

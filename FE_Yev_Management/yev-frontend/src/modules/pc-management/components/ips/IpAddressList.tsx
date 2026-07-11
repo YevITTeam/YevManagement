@@ -3,18 +3,19 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 
 import { IpApi } from "@/modules/pc-management/api/ip-api";
-import type { IpAddressDto, IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
+import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import IpForm, { type IpFormValues } from "./IpForm";
 import { ipStatusClasses } from "./ip-status";
-import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 
 const PAGE_SIZE = 10;
 
+// docs/asset-api-fe.md §4.2 (2026-07-11) — IpAddress không còn tạo/xoá thủ công,
+// chỉ sinh hàng loạt qua IpPrefix (POST) và dọn qua IpPrefix (DELETE cascade).
+// Danh sách này chỉ hỗ trợ xem + sửa status/note của từng IP.
 const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddressList({ onLoadingChange }, ref) {
     const [ipAddresses, setIpAddresses] = useState<IpAddressDto[]>([]);
-    const [prefixes, setPrefixes] = useState<IpPrefixDto[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -28,12 +29,8 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
     const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
-    const [formMode, setFormMode] = useState<"create" | "edit">("create");
     const [editingIp, setEditingIp] = useState<IpAddressDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-
-    const [deletingIp, setDeletingIp] = useState<IpAddressDto | null>(null);
-    const [isDeleting, setIsDeleting] = useState(false);
 
     const fetchIpAddresses = async () => {
         setIsLoading(true);
@@ -70,38 +67,16 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
 
     useImperativeHandle(ref, () => ({
         refresh: fetchIpAddresses,
-        openCreate: openCreateForm,
+        // Không còn "tạo mới" thủ công cho IpAddress — no-op để khớp ListHandle.
+        openCreate: () => {},
     }));
-
-    useEffect(() => {
-        let isCancelled = false;
-        (async () => {
-            try {
-                const result = await IpApi.getAllIpPrefix();
-                if (!isCancelled) setPrefixes(result);
-            } catch (err) {
-                console.error(err);
-                if (!isCancelled) toast.error("Không thể tải danh sách dải mạng.");
-            }
-        })();
-        return () => {
-            isCancelled = true;
-        };
-    }, []);
 
     const handleSearch = () => {
         setPageIndex(1);
         setAppliedKeyword(keyword.trim());
     };
 
-    const openCreateForm = () => {
-        setFormMode("create");
-        setEditingIp(null);
-        setFormOpen(true);
-    };
-
     const openEditForm = (ip: IpAddressDto) => {
-        setFormMode("edit");
         setEditingIp(ip);
         setFormOpen(true);
     };
@@ -113,48 +88,22 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
     };
 
     const handleSubmitForm = async (values: IpFormValues) => {
+        if (!editingIp) return;
         setIsSaving(true);
         try {
-            const payload = {
-                ipAddress: values.ipAddress.trim(),
-                ipPrefixId: Number(values.ipPrefixId),
-                serverIp: values.serverIp.trim() || null,
-                deviceId: editingIp?.deviceId ?? null,
-                status: values.status === "" ? null : Number(values.status),
+            await IpApi.updateIpAddress(editingIp.id, {
+                status: Number(values.status),
                 note: values.note.trim() || null,
-            };
-
-            if (formMode === "create") {
-                await IpApi.createIpAddress(payload);
-                toast.success("Tạo địa chỉ IP thành công");
-            } else if (editingIp) {
-                await IpApi.updateIpAddress(editingIp.id, payload);
-                toast.success("Cập nhật địa chỉ IP thành công");
-            }
+            });
+            toast.success("Cập nhật địa chỉ IP thành công");
             setFormOpen(false);
             setEditingIp(null);
             await fetchIpAddresses();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo địa chỉ IP thất bại" : "Cập nhật địa chỉ IP thất bại"));
+            toast.error(getApiErrorMessage(err, "Cập nhật địa chỉ IP thất bại"));
         } finally {
             setIsSaving(false);
-        }
-    };
-
-    const handleDelete = async () => {
-        if (!deletingIp) return;
-        setIsDeleting(true);
-        try {
-            await IpApi.deleteIpAddress(deletingIp.id);
-            toast.success("Xoá địa chỉ IP thành công");
-            setDeletingIp(null);
-            await fetchIpAddresses();
-        } catch (err) {
-            console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá địa chỉ IP thất bại"));
-        } finally {
-            setIsDeleting(false);
         }
     };
 
@@ -193,7 +142,6 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                 <th className="whitespace-nowrap px-6 py-3">Địa chỉ IP</th>
                                 <th className="whitespace-nowrap px-6 py-3">Dải mạng</th>
-                                <th className="whitespace-nowrap px-6 py-3">Server IP</th>
                                 <th className="whitespace-nowrap px-6 py-3">Thiết bị</th>
                                 <th className="whitespace-nowrap px-6 py-3">Trạng thái</th>
                                 <th className="whitespace-nowrap px-6 py-3">Ghi chú</th>
@@ -203,7 +151,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                         <tbody>
                             {!isLoading && ipAddresses.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                    <td colSpan={6} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có dữ liệu địa chỉ IP.
                                     </td>
                                 </tr>
@@ -212,7 +160,6 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                 <tr key={ip.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-[#191c1e]">{ip.ipAddress}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{ip.prefix ?? "—"}</td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{ip.serverIp ?? "—"}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{ip.deviceCode ?? "—"}</td>
                                     <td className="whitespace-nowrap px-6 py-4">
                                         <span
@@ -227,22 +174,13 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                         {ip.note ?? "—"}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                                        <div className="inline-flex items-center gap-3">
-                                            <button
-                                                onClick={() => openEditForm(ip)}
-                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                title="Sửa"
-                                            >
-                                                Sửa
-                                            </button>
-                                            <button
-                                                onClick={() => setDeletingIp(ip)}
-                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                                title="Xoá"
-                                            >
-                                                Xoá
-                                            </button>
-                                        </div>
+                                        <button
+                                            onClick={() => openEditForm(ip)}
+                                            className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                            title="Sửa"
+                                        >
+                                            Sửa
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -273,30 +211,10 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
 
             <IpForm
                 isOpen={formOpen}
-                mode={formMode}
                 initial={editingIp}
-                prefixes={prefixes}
                 loading={isSaving}
                 onClose={closeForm}
                 onSubmit={handleSubmitForm}
-            />
-
-            <ConfirmDialog
-                isOpen={deletingIp !== null}
-                title="Xoá địa chỉ IP"
-                message={
-                    <>
-                        Bạn có chắc muốn xoá địa chỉ IP <strong>{deletingIp?.ipAddress}</strong> không? Hành động này không thể
-                        hoàn tác.
-                    </>
-                }
-                approveLabel="Xoá"
-                deniedLabel="Huỷ"
-                loading={isDeleting}
-                onApprove={handleDelete}
-                onDenied={() => {
-                    if (!isDeleting) setDeletingIp(null);
-                }}
             />
         </div>
     );

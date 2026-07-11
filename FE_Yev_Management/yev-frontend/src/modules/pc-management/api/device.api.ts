@@ -21,9 +21,12 @@ export interface GetDevicePageNationParams {
     manager?: string;
     purchaseDate?: string;
     ipAddress?: string;
+    email?: string;
     supplierName?: string;
     note?: string;
     isOutsourced?: boolean;
+    serialNumber?: string;
+    isUseUsb?: boolean;
     sortDeviceCodeAscending?: boolean;
 }
 
@@ -36,9 +39,12 @@ export const DeviceApi = {
         if (params?.manager) query.set("Manager", params.manager);
         if (params?.purchaseDate) query.set("PurchaseDate", params.purchaseDate);
         if (params?.ipAddress) query.set("IpAddress", params.ipAddress);
+        if (params?.email) query.set("Email", params.email);
         if (params?.supplierName) query.set("SupplierName", params.supplierName);
         if (params?.note) query.set("Note", params.note);
         if (params?.isOutsourced !== undefined) query.set("IsOutsourced", String(params.isOutsourced));
+        if (params?.serialNumber) query.set("SerialNumber", params.serialNumber);
+        if (params?.isUseUsb !== undefined) query.set("IsUseUsb", String(params.isUseUsb));
         if (params?.sortDeviceCodeAscending !== undefined) query.set("SortDeviceCodeAscending", String(params.sortDeviceCodeAscending));
 
         const queryString = query.toString();

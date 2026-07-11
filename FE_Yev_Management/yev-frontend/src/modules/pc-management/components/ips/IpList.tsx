@@ -19,7 +19,9 @@ export default function IpList() {
     const addressRef = useRef<ListHandle>(null);
     const prefixRef = useRef<ListHandle>(null);
     const activeRef = activeTab === "addresses" ? addressRef : prefixRef;
-    const addLabel = activeTab === "addresses" ? "+ Thêm địa chỉ IP" : "+ Thêm dải mạng";
+    // IpAddress không còn tạo thủ công (docs/asset-api-fe.md §4.2) — chỉ sinh
+    // hàng loạt khi tạo dải mạng, nên tab "Địa chỉ IP" không có nút "Thêm".
+    const addLabel = activeTab === "prefixes" ? "+ Thêm dải mạng" : null;
 
     return (
         <div className="space-y-6">
@@ -39,12 +41,14 @@ export default function IpList() {
                     >
                         ↻ Làm mới
                     </button>
-                    <button
-                        onClick={() => activeRef.current?.openCreate()}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
-                    >
-                        {addLabel}
-                    </button>
+                    {addLabel && (
+                        <button
+                            onClick={() => activeRef.current?.openCreate()}
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                        >
+                            {addLabel}
+                        </button>
+                    )}
                 </div>
             </div>
 

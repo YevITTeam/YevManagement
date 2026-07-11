@@ -147,11 +147,22 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                     </div>
                     <div>
                         <div className={infoLabelClassName}>Email</div>
-                        <div className="mt-1 text-sm text-[#191c1e]">{device.email || "-"}</div>
+                        <div className="mt-1 space-y-0.5 text-sm text-[#191c1e]">
+                            {device.emails.length > 0
+                                ? device.emails.map((item) => (
+                                      <div key={item.id}>
+                                          {item.email}
+                                          {item.note && <span className="text-xs text-[#5e3f3a]"> ({item.note})</span>}
+                                      </div>
+                                  ))
+                                : "-"}
+                        </div>
                     </div>
                     <div>
                         <div className={infoLabelClassName}>Địa chỉ IP</div>
-                        <div className="mt-1 text-sm text-[#191c1e]">{device.ipAddress ?? "-"}</div>
+                        <div className="mt-1 text-sm text-[#191c1e]">
+                            {device.ipAddresses.length > 0 ? device.ipAddresses.map((ip) => ip.ipAddress).join(", ") : "-"}
+                        </div>
                     </div>
                     <div>
                         <div className={infoLabelClassName}>Thuê ngoài</div>

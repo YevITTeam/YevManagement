@@ -1,59 +1,46 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { IpAddressDto, IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
-import { ipStatusLabels, ipStatusOptions } from "./ip-status";
+import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
+import { ipStatusLabels } from "./ip-status";
 
+// docs/asset-api-fe.md §4.2 (2026-07-11) — PUT /api/IpAddress/{id} chỉ đổi được
+// status + note. IP đang gắn thiết bị (deviceId != null) chỉ đổi được note;
+// IP chưa gắn chỉ được đặt status 0 (Chưa gán) hoặc 1 (Đã gán khác).
 export interface IpFormValues {
-    ipAddress: string;
-    ipPrefixId: string;
-    serverIp: string;
     status: string;
     note: string;
 }
 
 interface IpFormProps {
     isOpen: boolean;
-    mode: "create" | "edit";
-    initial?: IpAddressDto | null;
-    prefixes: IpPrefixDto[];
+    initial: IpAddressDto | null;
     loading?: boolean;
     onClose: () => void;
     onSubmit: (values: IpFormValues) => void | Promise<void>;
 }
 
-const emptyValues: IpFormValues = {
-    ipAddress: "",
-    ipPrefixId: "",
-    serverIp: "",
-    status: "0",
-    note: "",
-};
-
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+const readonlyValueClassName = "flex h-10 items-center rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 text-sm text-[#191c1e]";
 
-export default function IpForm({ isOpen, mode, initial, prefixes, loading = false, onClose, onSubmit }: IpFormProps) {
-    const [values, setValues] = useState<IpFormValues>(emptyValues);
+export default function IpForm({ isOpen, initial, loading = false, onClose, onSubmit }: IpFormProps) {
+    const [values, setValues] = useState<IpFormValues>({ status: "0", note: "" });
+
+    const isAssignedToDevice = initial?.deviceId != null;
+    const statusOptions = isAssignedToDevice ? [2] : [0, 1];
 
     useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? {
-                          ipAddress: initial.ipAddress,
-                          ipPrefixId: initial.ipPrefixId != null ? String(initial.ipPrefixId) : "",
-                          serverIp: initial.serverIp ?? "",
-                          status: String(initial.status ?? 0),
-                          note: initial.note ?? "",
-                      }
-                    : emptyValues
-            );
+        if (isOpen && initial) {
+            setValues({
+                status: String(initial.status ?? 0),
+                note: initial.note ?? "",
+            });
         }
     }, [isOpen, initial]);
 
-    if (!isOpen) return null;
+    if (!isOpen || !initial) return null;
 
     const handleChange = (field: keyof IpFormValues, value: string) => {
         setValues((current) => ({ ...current, [field]: value }));
@@ -61,7 +48,6 @@ export default function IpForm({ isOpen, mode, initial, prefixes, loading = fals
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!values.ipAddress.trim() || !values.ipPrefixId) return;
         onSubmit(values);
     };
 
@@ -77,7 +63,7 @@ export default function IpForm({ isOpen, mode, initial, prefixes, loading = fals
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="ip-form-title" className="text-lg font-semibold text-[#191c1e]">
-                        {mode === "create" ? "Thêm địa chỉ IP" : "Cập nhật địa chỉ IP"}
+                        Cập nhật địa chỉ IP
                     </h3>
                     <button
                         type="button"
@@ -91,52 +77,26 @@ export default function IpForm({ isOpen, mode, initial, prefixes, loading = fals
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <label className="block">
+                        <div>
                             <span className={fieldLabelClassName}>Địa chỉ IP</span>
-                            <input
-                                value={values.ipAddress}
-                                onChange={(event) => handleChange("ipAddress", event.target.value)}
-                                placeholder="Ví dụ: 192.168.1.10"
-                                disabled={loading}
-                                autoFocus
-                                required
-                                className={fieldClassName}
-                            />
-                        </label>
-
-                        <label className="block">
-                            <span className={fieldLabelClassName}>Dải mạng (Prefix)</span>
-                            <select
-                                value={values.ipPrefixId}
-                                onChange={(event) => handleChange("ipPrefixId", event.target.value)}
-                                disabled={loading}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    -- Chọn dải mạng --
-                                </option>
-                                {prefixes.map((prefix) => (
-                                    <option key={prefix.id} value={prefix.id}>
-                                        {prefix.prefix}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
+                            <div className={readonlyValueClassName}>{initial.ipAddress}</div>
+                        </div>
+                        <div>
+                            <span className={fieldLabelClassName}>Dải mạng</span>
+                            <div className={readonlyValueClassName}>{initial.prefix}</div>
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <label className="block">
-                            <span className={fieldLabelClassName}>Server IP</span>
-                            <input
-                                value={values.serverIp}
-                                onChange={(event) => handleChange("serverIp", event.target.value)}
-                                placeholder="Nhập server IP..."
-                                disabled={loading}
-                                className={fieldClassName}
-                            />
-                        </label>
+                    <div>
+                        <span className={fieldLabelClassName}>Thiết bị</span>
+                        <div className={readonlyValueClassName}>{initial.deviceCode ?? "—"}</div>
+                    </div>
 
+                    {isAssignedToDevice ? (
+                        <p className="rounded-lg border border-[#d8e2ff] bg-[#f4f5ff] px-3 py-2 text-sm text-[#004494]">
+                            IP này đang gắn thiết bị nên chỉ có thể sửa Ghi chú. Muốn gỡ gán, thực hiện qua màn hình Thiết bị.
+                        </p>
+                    ) : (
                         <label className="block">
                             <span className={fieldLabelClassName}>Trạng thái</span>
                             <select
@@ -145,14 +105,14 @@ export default function IpForm({ isOpen, mode, initial, prefixes, loading = fals
                                 disabled={loading}
                                 className={fieldClassName}
                             >
-                                {ipStatusOptions.map((status) => (
+                                {statusOptions.map((status) => (
                                     <option key={status} value={status}>
                                         {ipStatusLabels[status]}
                                     </option>
                                 ))}
                             </select>
                         </label>
-                    </div>
+                    )}
 
                     <label className="block">
                         <span className={fieldLabelClassName}>Ghi chú</span>
@@ -180,7 +140,7 @@ export default function IpForm({ isOpen, mode, initial, prefixes, loading = fals
                             disabled={loading}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? "Đang lưu..." : mode === "create" ? "Tạo mới" : "Lưu thay đổi"}
+                            {loading ? "Đang lưu..." : "Lưu thay đổi"}
                         </button>
                     </div>
                 </form>

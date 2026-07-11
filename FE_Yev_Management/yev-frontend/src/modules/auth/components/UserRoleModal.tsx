@@ -25,6 +25,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [searchTerm, setSearchTerm] = useState("");
     const [openRoleModalUserId, setOpenRoleModalUserId] = useState<number | null>(null);
     const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+    const [savingUserId, setSavingUserId] = useState<number | null>(null);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -87,14 +88,28 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     };
 
     const handleSave = async (userId: number) => {
+        setSavingUserId(userId);
         try {
             const roleIds = selectedRolesMap[userId] || [];
             await AuthApi.updateUserRoles({ userId, roleIds });
             toast.success("Cập nhật quyền thành công!");
             await fetchData();
+            return true;
         } catch (err) {
             console.error(err);
             toast.error(getApiErrorMessage(err, "Cập nhật thất bại!"));
+            return false;
+        } finally {
+            setSavingUserId(null);
+        }
+    };
+
+    const handleSaveFromModal = async () => {
+        if (openRoleModalUserId === null) return;
+
+        const success = await handleSave(openRoleModalUserId);
+        if (success) {
+            setOpenRoleModalUserId(null);
         }
     };
 
@@ -111,10 +126,10 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                    <div className="border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e]">
+                    <div className="rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e]">
                         Tổng user: {users.length}
                     </div>
-                    <div className="border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e]">
+                    <div className="rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e]">
                         Tổng roles: {roles.length}
                     </div>
                     {canCreateUser && (
@@ -122,13 +137,13 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                             onClick={() => setIsCreateUserOpen(true)}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                         >
-                            + Tạo user thủ công
+                            + Tạo user
                         </button>
                     )}
                     {onClose && (
                         <button
                             onClick={onClose}
-                            className="border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
                             Đóng
                         </button>
@@ -229,17 +244,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                         </div>
 
                                         <div className="flex items-center justify-end">
-                                            <button
-                                                onClick={() => handleSave(user.id)}
-                                                disabled={isDisabled}
-                                                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${isDisabled
-                                                    ? "cursor-not-allowed bg-[#eceef0] text-[#5e3f3a]"
-                                                    : "bg-[#e3000f] text-white hover:bg-[#b40009]"
-                                                    }`}
-                                            >
-                                                <Save className="h-4 w-4" />
-                                                <span>Lưu</span>
-                                            </button>
+                                            <span className="text-sm text-[#5e3f3a]">Chọn vai trò</span>
                                         </div>
                                     </div>
                                 );
@@ -257,6 +262,9 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     selectedRoleIds={selectedRolesMap[openRoleModalUserId] || []}
                     onRoleChange={(roleId, isChecked) => handleCheckboxChange(openRoleModalUserId, roleId, isChecked)}
                     onClose={() => setOpenRoleModalUserId(null)}
+                    onSave={handleSaveFromModal}
+                    isSaving={savingUserId !== null}
+                    disabled={currentUser?.userName === users.find((user) => user.id === openRoleModalUserId)?.userName || !canUpdateUserRoles}
                 />
             )}
 

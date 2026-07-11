@@ -1,6 +1,25 @@
 import type { DeviceSoftwareDeviceDto } from "@/modules/pc-management/types/device-software.dto";
 import type { DeviceConfigurationDto } from "@/modules/pc-management/types/device-configuration.dto";
 
+// 2026-07-11: Device hỗ trợ nhiều IP + nhiều email — xem docs/asset-api-fe.md §5.3/5.5.
+export interface DeviceIpAddressDto {
+    id: number;
+    ipAddress: string;
+}
+
+// Item email gắn với Device khi lấy chi tiết (GET /{id}, /{id}/detail) — có id + note riêng.
+export interface DeviceEmailDto {
+    id: number;
+    email: string;
+    note: string | null;
+}
+
+// Item email gửi lên khi Create/Update Device — không có id (server tự khớp theo giá trị email).
+export interface DeviceEmailInputDto {
+    email: string;
+    note: string | null;
+}
+
 export interface DeviceDto {
     id: number;
     deviceCode: string;
@@ -8,12 +27,13 @@ export interface DeviceDto {
     branchName: string;
     supplierName: string;
     deviceTypeName: string;
-    ipAddress: string | null;
+    // Grid-list trả thẳng mảng string (giống emails), khác với DeviceGetDto.ipAddresses ở mục 5.3 (mảng object {id, ipAddress}).
+    ipAddresses: string[];
     purchaseDate: string | null;
     manager: string;
     expirationDate: string | null;
     note: string | null;
-    email: string | null;
+    emails: string[];
     status: number;
     statusText: string;
     isOutsourced: boolean;
@@ -29,7 +49,7 @@ export interface CreateUpdateDeviceDto {
     supplierId: number;
     branchId: number;
     manager: string;
-    email: string;
+    emails: DeviceEmailInputDto[];
     purchaseDate: string;
     depreciationMonths: number;
     isOutsourced: boolean;
@@ -37,7 +57,7 @@ export interface CreateUpdateDeviceDto {
     note: string | null;
     serialNumber: string | null;
     isUseUsb: boolean;
-    ipAddressId: number | null;
+    ipAddressIds: number[];
 }
 
 export interface DeviceGetDto {
@@ -51,7 +71,7 @@ export interface DeviceGetDto {
     branchId: number;
     branchName: string;
     manager: string;
-    email: string;
+    emails: DeviceEmailDto[];
     purchaseDate: string;
     depreciationMonths: number;
     expirationDate: string | null;
@@ -61,8 +81,7 @@ export interface DeviceGetDto {
     note: string | null;
     serialNumber: string | null;
     isUseUsb: boolean;
-    ipAddressId: number | null;
-    ipAddress: string | null;
+    ipAddresses: DeviceIpAddressDto[];
 }
 
 // API tổng hợp GET /Device/{id}/detail — configuration null nếu chưa nhập cấu hình.

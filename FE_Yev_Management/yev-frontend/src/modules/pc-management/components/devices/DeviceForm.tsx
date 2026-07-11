@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Plus, Search, Trash2 } from "lucide-react";
 import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import { SupplierApi } from "@/modules/pc-management/api/supplier.api";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
@@ -10,7 +10,7 @@ import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dt
 import type { SupplierDto } from "@/modules/pc-management/types/supplier.dto";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
-import type { DeviceGetDto } from "@/modules/pc-management/types/device.dto";
+import type { DeviceEmailInputDto, DeviceGetDto, DeviceIpAddressDto } from "@/modules/pc-management/types/device.dto";
 
 export interface DeviceFormValues {
     deviceCode: string;
@@ -19,7 +19,7 @@ export interface DeviceFormValues {
     supplierId: number;
     branchId: number;
     manager: string;
-    email: string;
+    emails: DeviceEmailInputDto[];
     purchaseDate: string;
     depreciationMonths: number;
     isOutsourced: boolean;
@@ -27,7 +27,7 @@ export interface DeviceFormValues {
     note: string | null;
     serialNumber: string | null;
     isUseUsb: boolean;
-    ipAddressId: number | null;
+    ipAddressIds: number[];
 }
 
 interface DeviceFormProps {
@@ -53,7 +53,7 @@ const emptyValues: DeviceFormValues = {
     supplierId: 0,
     branchId: 0,
     manager: "",
-    email: "",
+    emails: [{ email: "", note: null }],
     purchaseDate: "",
     depreciationMonths: 36,
     isOutsourced: false,
@@ -61,7 +61,7 @@ const emptyValues: DeviceFormValues = {
     note: "",
     serialNumber: "",
     isUseUsb: false,
-    ipAddressId: null,
+    ipAddressIds: [],
 };
 
 function toDateInputValue(value: string | null | undefined) {
@@ -81,7 +81,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
     const [availableIps, setAvailableIps] = useState<IpAddressDto[]>([]);
     const [ipSearch, setIpSearch] = useState("");
     const [ipDropdownOpen, setIpDropdownOpen] = useState(false);
-    const [selectedIp, setSelectedIp] = useState<{ id: number; ipAddress: string } | null>(null);
+    const [selectedIps, setSelectedIps] = useState<DeviceIpAddressDto[]>([]);
     const ipPickerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -117,11 +117,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
         if (!isOpen) return;
         setIpSearch("");
         setIpDropdownOpen(false);
-        setSelectedIp(
-            initial?.ipAddressId != null
-                ? { id: initial.ipAddressId, ipAddress: initial.ipAddress ?? `#${initial.ipAddressId}` }
-                : null
-        );
+        setSelectedIps(initial?.ipAddresses ?? []);
         setValues(
             initial
                 ? {
@@ -131,7 +127,10 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                       supplierId: initial.supplierId,
                       branchId: initial.branchId,
                       manager: initial.manager,
-                      email: initial.email,
+                      emails:
+                          initial.emails.length > 0
+                              ? initial.emails.map((item) => ({ email: item.email, note: item.note }))
+                              : [{ email: "", note: null }],
                       purchaseDate: toDateInputValue(initial.purchaseDate),
                       depreciationMonths: initial.depreciationMonths,
                       isOutsourced: initial.isOutsourced,
@@ -139,7 +138,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                       note: initial.note ?? "",
                       serialNumber: initial.serialNumber ?? "",
                       isUseUsb: initial.isUseUsb,
-                      ipAddressId: initial.ipAddressId,
+                      ipAddressIds: initial.ipAddresses.map((ip) => ip.id),
                   }
                 : emptyValues
         );
@@ -147,19 +146,53 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
 
     if (!isOpen) return null;
 
-    const handleSelectIp = (ip: { id: number; ipAddress: string } | null) => {
-        setSelectedIp(ip);
-        handleChange("ipAddressId", ip ? ip.id : null);
+    const handleAddIp = (ip: DeviceIpAddressDto) => {
+        if (values.ipAddressIds.includes(ip.id)) {
+            setIpDropdownOpen(false);
+            setIpSearch("");
+            return;
+        }
+        setSelectedIps((current) => [...current, ip]);
+        handleChange("ipAddressIds", [...values.ipAddressIds, ip.id]);
         setIpDropdownOpen(false);
         setIpSearch("");
+    };
+
+    const handleRemoveIp = (ipId: number) => {
+        setSelectedIps((current) => current.filter((ip) => ip.id !== ipId));
+        handleChange(
+            "ipAddressIds",
+            values.ipAddressIds.filter((id) => id !== ipId)
+        );
     };
 
     const handleChange = <K extends keyof DeviceFormValues>(field: K, value: DeviceFormValues[K]) => {
         setValues((current) => ({ ...current, [field]: value }));
     };
 
+    const handleEmailChange = (index: number, field: "email" | "note", value: string) => {
+        setValues((current) => ({
+            ...current,
+            emails: current.emails.map((item, itemIndex) =>
+                itemIndex === index ? { ...item, [field]: field === "note" ? (value.trim() ? value : null) : value } : item
+            ),
+        }));
+    };
+
+    const handleAddEmail = () => {
+        setValues((current) => ({ ...current, emails: [...current.emails, { email: "", note: null }] }));
+    };
+
+    const handleRemoveEmail = (index: number) => {
+        setValues((current) => ({ ...current, emails: current.emails.filter((_, itemIndex) => itemIndex !== index) }));
+    };
+
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
+        const trimmedEmails = values.emails
+            .map((item) => ({ email: item.email.trim(), note: item.note?.trim() ? item.note.trim() : null }))
+            .filter((item) => item.email);
+
         if (
             !values.deviceCode.trim() ||
             !values.deviceName.trim() ||
@@ -167,13 +200,14 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
             !values.supplierId ||
             !values.branchId ||
             !values.manager.trim() ||
-            !values.email.trim() ||
-            !values.purchaseDate
+            !values.purchaseDate ||
+            trimmedEmails.length === 0
         ) {
             return;
         }
         onSubmit({
             ...values,
+            emails: trimmedEmails,
             note: values.note?.trim() ? values.note : null,
             serialNumber: values.serialNumber?.trim() ? values.serialNumber : null,
         });
@@ -187,7 +221,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="device-form-title"
-                className="z-60 mx-4 w-full max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 w-full max-w-4xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="device-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -204,7 +238,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         <label className="block">
                             <span className={fieldLabelClassName}>Mã thiết bị</span>
                             <input
@@ -290,86 +324,12 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                             </select>
                         </label>
 
-                        <div className="block" ref={ipPickerRef}>
-                            <span className={fieldLabelClassName}>Địa chỉ IP</span>
-                            <div className="relative">
-                                <button
-                                    type="button"
-                                    onClick={() => !loading && setIpDropdownOpen((open) => !open)}
-                                    disabled={loading}
-                                    className={`${fieldClassName} flex items-center justify-between text-left`}
-                                >
-                                    <span className={selectedIp ? "text-[#191c1e]" : "text-[#9aa0a6]"}>
-                                        {selectedIp ? selectedIp.ipAddress : "Không gán IP"}
-                                    </span>
-                                    <ChevronDown className="h-4 w-4 shrink-0 text-[#5e3f3a]" />
-                                </button>
-
-                                {ipDropdownOpen && (
-                                    <div className="absolute left-0 right-0 z-70 mt-1 rounded-lg border border-[#e0e3e5] bg-white shadow-xl">
-                                        <div className="border-b border-[#e0e3e5] p-2">
-                                            <div className="flex items-center gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-2.5">
-                                                <Search className="h-4 w-4 shrink-0 text-[#5e3f3a]" />
-                                                <input
-                                                    value={ipSearch}
-                                                    onChange={(event) => setIpSearch(event.target.value)}
-                                                    placeholder="Tìm địa chỉ IP..."
-                                                    autoFocus
-                                                    className="h-9 w-full bg-transparent text-sm text-[#191c1e] outline-none"
-                                                />
-                                            </div>
-                                        </div>
-                                        <ul className="max-h-52 overflow-y-auto py-1 text-sm text-[#191c1e]">
-                                            <li>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleSelectIp(null)}
-                                                    className="w-full cursor-pointer px-3 py-2 text-left text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
-                                                >
-                                                    Không gán IP
-                                                </button>
-                                            </li>
-                                            {availableIps.map((ip) => (
-                                                <li key={ip.id}>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleSelectIp({ id: ip.id, ipAddress: ip.ipAddress })}
-                                                        className={`w-full cursor-pointer px-3 py-2 text-left transition hover:bg-[#f2f4f6] ${
-                                                            values.ipAddressId === ip.id ? "bg-[#ffe0e3] font-semibold text-[#e3000f]" : ""
-                                                        }`}
-                                                    >
-                                                        {ip.ipAddress}
-                                                    </button>
-                                                </li>
-                                            ))}
-                                            {availableIps.length === 0 && (
-                                                <li className="px-3 py-2 text-[#9aa0a6]">Không tìm thấy IP trống</li>
-                                            )}
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
                         <label className="block">
                             <span className={fieldLabelClassName}>Người quản lý</span>
                             <input
                                 value={values.manager}
                                 onChange={(event) => handleChange("manager", event.target.value)}
                                 placeholder="Nhập tên người quản lý..."
-                                disabled={loading}
-                                required
-                                className={fieldClassName}
-                            />
-                        </label>
-
-                        <label className="block">
-                            <span className={fieldLabelClassName}>Email</span>
-                            <input
-                                type="email"
-                                value={values.email}
-                                onChange={(event) => handleChange("email", event.target.value)}
-                                placeholder="Nhập email..."
                                 disabled={loading}
                                 required
                                 className={fieldClassName}
@@ -451,6 +411,123 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                             />
                             <span className="text-sm text-[#191c1e]">Sử dụng USB</span>
                         </label>
+                    </div>
+
+                    <div className="block" ref={ipPickerRef}>
+                        <span className={fieldLabelClassName}>Địa chỉ IP</span>
+                        {selectedIps.length > 0 && (
+                            <div className="mb-2 flex flex-wrap gap-2">
+                                {selectedIps.map((ip) => (
+                                    <span
+                                        key={ip.id}
+                                        className="inline-flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#191c1e]"
+                                    >
+                                        {ip.ipAddress}
+                                        <button
+                                            type="button"
+                                            onClick={() => !loading && handleRemoveIp(ip.id)}
+                                            disabled={loading}
+                                            className="text-[#5e3f3a] transition hover:text-[#e3000f] disabled:cursor-not-allowed"
+                                            aria-label={`Gỡ IP ${ip.ipAddress}`}
+                                        >
+                                            ✕
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        <div className="relative">
+                            <button
+                                type="button"
+                                onClick={() => !loading && setIpDropdownOpen((open) => !open)}
+                                disabled={loading}
+                                className={`${fieldClassName} flex items-center justify-between text-left`}
+                            >
+                                <span className="text-[#9aa0a6]">+ Thêm địa chỉ IP...</span>
+                                <ChevronDown className="h-4 w-4 shrink-0 text-[#5e3f3a]" />
+                            </button>
+
+                            {ipDropdownOpen && (
+                                <div className="absolute left-0 right-0 z-70 mt-1 rounded-lg border border-[#e0e3e5] bg-white shadow-xl">
+                                    <div className="border-b border-[#e0e3e5] p-2">
+                                        <div className="flex items-center gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-2.5">
+                                            <Search className="h-4 w-4 shrink-0 text-[#5e3f3a]" />
+                                            <input
+                                                value={ipSearch}
+                                                onChange={(event) => setIpSearch(event.target.value)}
+                                                placeholder="Tìm địa chỉ IP..."
+                                                autoFocus
+                                                className="h-9 w-full bg-transparent text-sm text-[#191c1e] outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                    <ul className="max-h-52 overflow-y-auto py-1 text-sm text-[#191c1e]">
+                                        {availableIps
+                                            .filter((ip) => !values.ipAddressIds.includes(ip.id))
+                                            .map((ip) => (
+                                                <li key={ip.id}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleAddIp({ id: ip.id, ipAddress: ip.ipAddress })}
+                                                        className="w-full cursor-pointer px-3 py-2 text-left transition hover:bg-[#f2f4f6]"
+                                                    >
+                                                        {ip.ipAddress}
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        {availableIps.filter((ip) => !values.ipAddressIds.includes(ip.id)).length === 0 && (
+                                            <li className="px-3 py-2 text-[#9aa0a6]">Không tìm thấy IP trống</li>
+                                        )}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="block">
+                        <div className="mb-1.5 flex items-center justify-between">
+                            <span className={fieldLabelClassName}>Email</span>
+                            <button
+                                type="button"
+                                onClick={handleAddEmail}
+                                disabled={loading}
+                                className="inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-[#e3000f] transition hover:text-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <Plus className="h-3.5 w-3.5" />
+                                Thêm email
+                            </button>
+                        </div>
+                        <div className="space-y-2">
+                            {values.emails.map((item, index) => (
+                                <div key={index} className="flex items-start gap-2">
+                                    <input
+                                        type="email"
+                                        value={item.email}
+                                        onChange={(event) => handleEmailChange(index, "email", event.target.value)}
+                                        placeholder="Nhập email..."
+                                        disabled={loading}
+                                        required={values.emails.length === 1}
+                                        className={`${fieldClassName} flex-1`}
+                                    />
+                                    <input
+                                        value={item.note ?? ""}
+                                        onChange={(event) => handleEmailChange(index, "note", event.target.value)}
+                                        placeholder="Ghi chú (tuỳ chọn)..."
+                                        disabled={loading}
+                                        className={`${fieldClassName} flex-1`}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveEmail(index)}
+                                        disabled={loading || values.emails.length === 1}
+                                        className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#e3000f] disabled:cursor-not-allowed disabled:opacity-50"
+                                        aria-label="Xoá email"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     <label className="block">

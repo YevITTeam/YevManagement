@@ -42,15 +42,15 @@ export default function CreateUserDialog({ isOpen, roles, onClose, onCreated }: 
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
-        if (!userName.trim() || !deviceName.trim()) {
-            toast.error("Vui lòng nhập đủ Tên đăng nhập Windows và Tên máy.");
+        if (!userName.trim()) {
+            toast.error("Vui lòng nhập Tên đăng nhập Windows.");
             return;
         }
         setIsSaving(true);
         try {
             await AuthApi.createUser({
                 userName: userName.trim(),
-                deviceName: deviceName.trim(),
+                deviceName: deviceName.trim() || undefined,
                 fullName: fullName.trim() || undefined,
                 roleIds: roleIds.length > 0 ? roleIds : undefined,
             });
@@ -101,18 +101,18 @@ export default function CreateUserDialog({ isOpen, roles, onClose, onCreated }: 
 
                     <label className="block">
                         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            Tên máy (Device Name) *
+                            Tên máy (Device Name)
                         </span>
                         <input
                             value={deviceName}
                             onChange={(event) => setDeviceName(event.target.value)}
                             disabled={isSaving}
-                            placeholder="YDC2341-1PCDIT.yev.vn"
+                            placeholder="YDC2341-1PCDIT.yev.vn (tuỳ chọn)"
                             className={inputClassName}
                         />
-                        <p className="mt-1 text-xs text-[#930006]">
-                            Phải khớp CHÍNH XÁC Device Name thật của máy — sai lệch sẽ khiến lần đăng nhập
-                            thật không khớp được tài khoản này.
+                        <p className="mt-1 text-xs text-[#5e3f3a]">
+                            Chỉ để tham khảo/hiển thị, không ảnh hưởng việc khớp tài khoản lúc đăng nhập thật
+                            (server chỉ khớp theo Tên đăng nhập Windows).
                         </p>
                     </label>
 

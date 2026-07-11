@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Calendar, ChevronDown, ChevronUp, Filter, MapPin, Search, Tag, Truck, User, X } from "lucide-react";
+import { Building2, Calendar, ChevronDown, ChevronUp, Filter, Mail, MapPin, Search, Tag, Truck, User, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
@@ -11,12 +11,16 @@ export interface DeviceFilters {
     deviceCode: string;
     manager: string;
     ipAddress: string;
+    email: string;
     supplierName: string;
     purchaseDate: string;
     branch: string;
     deviceType: string;
     status: string;
     expiryDate: string;
+    serialNumber: string;
+    // "" = tất cả, "true"/"false" — dùng string vì DeviceFilters là bộ lọc kiểu string đồng nhất.
+    isUseUsb: string;
 }
 
 export interface DeviceFilterBarProps {
@@ -27,28 +31,43 @@ const defaultFilters: DeviceFilters = {
     deviceCode: "",
     manager: "",
     ipAddress: "",
+    email: "",
     supplierName: "",
     purchaseDate: "",
     branch: "",
     deviceType: "",
     status: "",
     expiryDate: "",
+    serialNumber: "",
+    isUseUsb: "",
 };
 
 const filterLabels: Record<keyof DeviceFilters, string> = {
     deviceCode: "Mã thiết bị",
     manager: "Người quản lý",
     ipAddress: "IP",
+    email: "Email",
     supplierName: "Nhà cung cấp",
     purchaseDate: "Ngày mua",
     branch: "Chi nhánh",
     deviceType: "Loại thiết bị",
     status: "Trạng thái",
     expiryDate: "Hạn sử dụng",
+    serialNumber: "Số Serial",
+    isUseUsb: "Cho phép dùng USB",
 };
 
 // These fields are sent straight to the Device/grid-list API as query params.
-const advancedFields: (keyof DeviceFilters)[] = ["supplierName", "manager", "ipAddress", "purchaseDate", "expiryDate"];
+const advancedFields: (keyof DeviceFilters)[] = [
+    "supplierName",
+    "deviceType",
+    "status",
+    "email",
+    "purchaseDate",
+    "expiryDate",
+    "serialNumber",
+    "isUseUsb",
+];
 
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
@@ -173,39 +192,34 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
 
                         <label className="min-w-[170px] flex-1">
                             <span className={fieldLabelClassName}>
-                                <Tag className="h-3.5 w-3.5" />
-                                Loại thiết bị
+                                <User className="h-3.5 w-3.5" />
+                                Người quản lý
                             </span>
                             <div className="relative">
-                                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <select
-                                    value={filters.deviceType}
-                                    onChange={(event) => handleChange("deviceType", event.target.value)}
+                                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <input
+                                    value={filters.manager}
+                                    onChange={(event) => handleChange("manager", event.target.value)}
+                                    placeholder="Nhập tên người quản lý..."
                                     className={fieldWithIconClassName}
-                                >
-                                    <option value="">Tất cả loại</option>
-                                    {deviceTypes.map((deviceType) => (
-                                        <option key={deviceType.id} value={deviceType.typeName}>
-                                            {deviceType.typeName}
-                                        </option>
-                                    ))}
-                                </select>
+                                />
                             </div>
                         </label>
 
                         <label className="min-w-[180px] flex-1">
-                            <span className={fieldLabelClassName}>Trạng thái</span>
-                            <select
-                                value={filters.status}
-                                onChange={(event) => handleChange("status", event.target.value)}
-                                className={fieldClassName}
-                            >
-                                <option value="">Tất cả trạng thái</option>
-                                <option value="Chưa sử dụng">Chưa sử dụng</option>
-                                <option value="Đang sử dụng">Đang sử dụng</option>
-                                <option value="Chờ thanh lý">Chờ thanh lý</option>
-                                <option value="Đã thanh lý">Đã thanh lý</option>
-                            </select>
+                            <span className={fieldLabelClassName}>
+                                <MapPin className="h-3.5 w-3.5" />
+                                Địa chỉ IP
+                            </span>
+                            <div className="relative">
+                                <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <input
+                                    value={filters.ipAddress}
+                                    onChange={(event) => handleChange("ipAddress", event.target.value)}
+                                    placeholder="Nhập địa chỉ IP..."
+                                    className={fieldWithIconClassName}
+                                />
+                            </div>
                         </label>
                     </div>
 
@@ -256,31 +270,52 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
 
                         <label>
                             <span className={fieldLabelClassName}>
-                                <User className="h-3.5 w-3.5" />
-                                Người quản lý
+                                <Tag className="h-3.5 w-3.5" />
+                                Loại thiết bị
                             </span>
                             <div className="relative">
-                                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <input
-                                    value={filters.manager}
-                                    onChange={(event) => handleChange("manager", event.target.value)}
-                                    placeholder="Nhập tên người quản lý..."
+                                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <select
+                                    value={filters.deviceType}
+                                    onChange={(event) => handleChange("deviceType", event.target.value)}
                                     className={fieldWithIconClassName}
-                                />
+                                >
+                                    <option value="">Tất cả loại</option>
+                                    {deviceTypes.map((deviceType) => (
+                                        <option key={deviceType.id} value={deviceType.typeName}>
+                                            {deviceType.typeName}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </label>
 
                         <label>
+                            <span className={fieldLabelClassName}>Trạng thái</span>
+                            <select
+                                value={filters.status}
+                                onChange={(event) => handleChange("status", event.target.value)}
+                                className={fieldClassName}
+                            >
+                                <option value="">Tất cả trạng thái</option>
+                                <option value="Chưa sử dụng">Chưa sử dụng</option>
+                                <option value="Đang sử dụng">Đang sử dụng</option>
+                                <option value="Chờ thanh lý">Chờ thanh lý</option>
+                                <option value="Đã thanh lý">Đã thanh lý</option>
+                            </select>
+                        </label>
+
+                        <label>
                             <span className={fieldLabelClassName}>
-                                <MapPin className="h-3.5 w-3.5" />
-                                Địa chỉ IP
+                                <Mail className="h-3.5 w-3.5" />
+                                Email
                             </span>
                             <div className="relative">
-                                <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
                                 <input
-                                    value={filters.ipAddress}
-                                    onChange={(event) => handleChange("ipAddress", event.target.value)}
-                                    placeholder="Nhập địa chỉ IP..."
+                                    value={filters.email}
+                                    onChange={(event) => handleChange("email", event.target.value)}
+                                    placeholder="Nhập email..."
                                     className={fieldWithIconClassName}
                                 />
                             </div>
@@ -311,6 +346,35 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 className={fieldClassName}
                             />
                         </label>
+
+                        <label>
+                            <span className={fieldLabelClassName}>
+                                <Tag className="h-3.5 w-3.5" />
+                                Số Serial
+                            </span>
+                            <div className="relative">
+                                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <input
+                                    value={filters.serialNumber}
+                                    onChange={(event) => handleChange("serialNumber", event.target.value)}
+                                    placeholder="Nhập số Serial..."
+                                    className={fieldWithIconClassName}
+                                />
+                            </div>
+                        </label>
+
+                        <label>
+                            <span className={fieldLabelClassName}>Cho phép dùng USB</span>
+                            <select
+                                value={filters.isUseUsb}
+                                onChange={(event) => handleChange("isUseUsb", event.target.value)}
+                                className={fieldClassName}
+                            >
+                                <option value="">Tất cả</option>
+                                <option value="true">Có</option>
+                                <option value="false">Không</option>
+                            </select>
+                        </label>
                     </div>
                 )}
 
@@ -323,7 +387,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 className="flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs text-[#5e3f3a]"
                             >
                                 <span className="font-semibold text-[#191c1e]">{filterLabels[field]}:</span>
-                                {value}
+                                {field === "isUseUsb" ? (value === "true" ? "Có" : "Không") : value}
                                 <button
                                     type="button"
                                     onClick={() => handleRemoveChip(field)}

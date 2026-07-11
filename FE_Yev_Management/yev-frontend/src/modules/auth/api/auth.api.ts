@@ -36,9 +36,9 @@ export const AuthApi = {
     return AuthApi.windowsLogin();
   },
 
-  // Chuẩn bị trước 1 user cho (UserName, DeviceName) cụ thể — dùng khi nhân viên mới chưa từng đăng
-  // nhập Windows lần nào (docs/identity-api-fe.md §4.9). deviceName phải khớp CHÍNH XÁC reverse-DNS
-  // hostname thật của máy, sai lệch sẽ khiến lần đăng nhập thật không khớp được dòng đã tạo này.
+  // Chuẩn bị trước 1 user cho UserName cụ thể — dùng khi nhân viên mới chưa từng đăng nhập Windows
+  // lần nào (docs/identity-api-fe.md §4.9). deviceName (2026-07-11) chỉ để tham khảo/hiển thị,
+  // KHÔNG còn dùng để khớp login (chỉ khớp theo userName).
   createUser: async (data: CreateUserDto) => {
     const response = await api.post<ApiResponse<UserDto>>(ENDPOINTS.AUTH.createUser, data);
     return response.data;

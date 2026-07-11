@@ -10,9 +10,21 @@ interface Props {
     selectedRoleIds: number[];
     onRoleChange: (roleId: number, isChecked: boolean) => void;
     onClose: () => void;
+    onSave: () => Promise<void> | void;
+    isSaving?: boolean;
+    disabled?: boolean;
 }
 
-export default function RoleSelectModal({ isOpen, roles, selectedRoleIds, onRoleChange, onClose }: Props) {
+export default function RoleSelectModal({
+    isOpen,
+    roles,
+    selectedRoleIds,
+    onRoleChange,
+    onClose,
+    onSave,
+    isSaving = false,
+    disabled = false,
+}: Props) {
     const [searchTerm, setSearchTerm] = useState("");
 
     const filteredRoles = useMemo(() => {
@@ -90,7 +102,17 @@ export default function RoleSelectModal({ isOpen, roles, selectedRoleIds, onRole
                         onClick={onClose}
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                     >
-                        Đóng
+                        Hủy
+                    </button>
+                    <button
+                        onClick={() => void onSave()}
+                        disabled={disabled || isSaving}
+                        className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${disabled || isSaving
+                            ? "cursor-not-allowed bg-[#eceef0] text-[#5e3f3a]"
+                            : "bg-[#e3000f] text-white hover:bg-[#b40009]"
+                            }`}
+                    >
+                        {isSaving ? "Đang lưu..." : "Cập nhật"}
                     </button>
                 </div>
             </div>

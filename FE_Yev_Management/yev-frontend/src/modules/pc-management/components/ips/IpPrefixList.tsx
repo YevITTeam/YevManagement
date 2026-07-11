@@ -26,8 +26,6 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
     const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
-    const [formMode, setFormMode] = useState<"create" | "edit">("create");
-    const [editingPrefix, setEditingPrefix] = useState<IpPrefixDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
     const [deletingPrefix, setDeletingPrefix] = useState<IpPrefixDto | null>(null);
@@ -77,21 +75,12 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
     };
 
     const openCreateForm = () => {
-        setFormMode("create");
-        setEditingPrefix(null);
-        setFormOpen(true);
-    };
-
-    const openEditForm = (prefix: IpPrefixDto) => {
-        setFormMode("edit");
-        setEditingPrefix(prefix);
         setFormOpen(true);
     };
 
     const closeForm = () => {
         if (isSaving) return;
         setFormOpen(false);
-        setEditingPrefix(null);
     };
 
     const handleSubmitForm = async (values: IpPrefixFormValues) => {
@@ -106,19 +95,13 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                 description: values.description.trim() || null,
             };
 
-            if (formMode === "create") {
-                await IpApi.createIpPrefix(payload);
-                toast.success("Tạo dải mạng thành công");
-            } else if (editingPrefix) {
-                await IpApi.updateIpPrefix(editingPrefix.id, payload);
-                toast.success("Cập nhật dải mạng thành công");
-            }
+            await IpApi.createIpPrefix(payload);
+            toast.success("Tạo dải mạng thành công, đã sinh 255 địa chỉ IP.");
             setFormOpen(false);
-            setEditingPrefix(null);
             await fetchPrefixes();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo dải mạng thất bại" : "Cập nhật dải mạng thất bại"));
+            toast.error(getApiErrorMessage(err, "Tạo dải mạng thất bại"));
         } finally {
             setIsSaving(false);
         }
@@ -207,22 +190,13 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                                         {prefix.ipAddressCount}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                                        <div className="inline-flex items-center gap-3">
-                                            <button
-                                                onClick={() => openEditForm(prefix)}
-                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                title="Sửa"
-                                            >
-                                                Sửa
-                                            </button>
-                                            <button
-                                                onClick={() => setDeletingPrefix(prefix)}
-                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                                title="Xoá"
-                                            >
-                                                Xoá
-                                            </button>
-                                        </div>
+                                        <button
+                                            onClick={() => setDeletingPrefix(prefix)}
+                                            className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                            title="Xoá"
+                                        >
+                                            Xoá
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -253,8 +227,6 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
 
             <IpPrefixForm
                 isOpen={formOpen}
-                mode={formMode}
-                initial={editingPrefix}
                 loading={isSaving}
                 onClose={closeForm}
                 onSubmit={handleSubmitForm}
@@ -265,8 +237,8 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                 title="Xoá dải mạng"
                 message={
                     <>
-                        Bạn có chắc muốn xoá dải mạng <strong>{deletingPrefix?.prefix}</strong> không? Hành động này không thể
-                        hoàn tác.
+                        Bạn có chắc muốn xoá dải mạng <strong>{deletingPrefix?.prefix}</strong> không? Nếu còn IP đang gán cho
+                        thiết bị, thao tác sẽ bị chặn. Nếu không, xoá dải mạng sẽ <strong>xoá luôn toàn bộ {deletingPrefix?.ipAddressCount ?? 0} địa chỉ IP con</strong> chưa dùng — hành động này không thể hoàn tác.
                     </>
                 }
                 approveLabel="Xoá"

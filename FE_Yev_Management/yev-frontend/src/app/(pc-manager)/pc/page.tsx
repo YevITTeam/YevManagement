@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from "lucide-react";
 import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
@@ -35,12 +35,15 @@ const defaultFilters: DeviceFilters = {
   deviceCode: "",
   manager: "",
   ipAddress: "",
+  email: "",
   supplierName: "",
   purchaseDate: "",
   branch: "",
   deviceType: "",
   status: "",
   expiryDate: "",
+  serialNumber: "",
+  isUseUsb: "",
 };
 
 function formatDate(value: string | null) {
@@ -98,11 +101,40 @@ export default function PcDashboardPage() {
 
   // undefined = mặc định sort theo purchaseDate giảm dần (BE mặc định); true/false = theo deviceCode tăng/giảm dần.
   const [sortDeviceCodeAscending, setSortDeviceCodeAscending] = useState<boolean | undefined>(undefined);
-  const [transferringDevice, setTransferringDevice] = useState<DeviceDto | null>(null);
+  const [transferringDevice, setTransferringDevice] = useState<{ id: number; deviceCode: string; deviceName: string } | null>(null);
+  // docs/asset-api-fe.md §5.10 — điền sẵn máy mới khi mở "Chuyển máy" từ gợi ý pendingTransfers của Import Excel.
+  const [transferPresetNewDeviceId, setTransferPresetNewDeviceId] = useState<number | null>(null);
 
   const toggleSortDeviceCode = () => {
     setSortDeviceCodeAscending((current) => (current === undefined ? true : current === true ? false : undefined));
   };
+
+  // Bảng có nhiều cột (IP/email nhiều dòng) nên thường rộng hơn màn hình — cho phép
+  // giữ chuột kéo ngang để xem hết cột thay vì chỉ trông chờ vào thanh cuộn ở đáy bảng.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isDragScrolling, setIsDragScrolling] = useState(false);
+  const dragStateRef = useRef({ startX: 0, scrollLeft: 0 });
+
+  const handleDragStart = (event: React.MouseEvent<HTMLDivElement>) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    // Không bắt kéo khi bấm vào nút/menu hành động bên trong bảng.
+    if ((event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+    setIsDragScrolling(true);
+    dragStateRef.current = { startX: event.pageX - container.offsetLeft, scrollLeft: container.scrollLeft };
+  };
+
+  const handleDragMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragScrolling) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    event.preventDefault();
+    const x = event.pageX - container.offsetLeft;
+    const walk = x - dragStateRef.current.startX;
+    container.scrollLeft = dragStateRef.current.scrollLeft - walk;
+  };
+
+  const handleDragEnd = () => setIsDragScrolling(false);
 
   // Reset về trang 1 mỗi khi điều kiện lọc thay đổi, để phân trang khớp với tập kết quả mới.
   useEffect(() => {
@@ -111,12 +143,15 @@ export default function PcDashboardPage() {
     filters.deviceCode,
     filters.manager,
     filters.ipAddress,
+    filters.email,
     filters.supplierName,
     filters.purchaseDate,
     filters.branch,
     filters.deviceType,
     filters.status,
     filters.expiryDate,
+    filters.serialNumber,
+    filters.isUseUsb,
     sortDeviceCodeAscending,
   ]);
 
@@ -128,8 +163,11 @@ export default function PcDashboardPage() {
       deviceCode: filters.deviceCode || undefined,
       manager: filters.manager || undefined,
       ipAddress: filters.ipAddress || undefined,
+      email: filters.email || undefined,
       supplierName: filters.supplierName || undefined,
       purchaseDate: filters.purchaseDate || undefined,
+      serialNumber: filters.serialNumber || undefined,
+      isUseUsb: filters.isUseUsb === "" ? undefined : filters.isUseUsb === "true",
       sortDeviceCodeAscending,
     };
     const hasClientOnlyFilters = Boolean(filters.branch || filters.deviceType || filters.status || filters.expiryDate);
@@ -180,12 +218,15 @@ export default function PcDashboardPage() {
     filters.deviceCode,
     filters.manager,
     filters.ipAddress,
+    filters.email,
     filters.supplierName,
     filters.purchaseDate,
     filters.branch,
     filters.deviceType,
     filters.status,
     filters.expiryDate,
+    filters.serialNumber,
+    filters.isUseUsb,
     sortDeviceCodeAscending,
   ]);
 
@@ -311,7 +352,14 @@ export default function PcDashboardPage() {
           <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
         )}
 
-        <div className="overflow-x-auto">
+        <div
+          ref={scrollContainerRef}
+          onMouseDown={handleDragStart}
+          onMouseMove={handleDragMove}
+          onMouseUp={handleDragEnd}
+          onMouseLeave={handleDragEnd}
+          className={`overflow-x-auto ${isDragScrolling ? "cursor-grabbing select-none" : "cursor-grab"}`}
+        >
           <table className="min-w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
@@ -330,20 +378,21 @@ export default function PcDashboardPage() {
                 </th>
                 <th className="whitespace-nowrap px-4 py-3">Loại / NCC</th>
                 <th className="whitespace-nowrap px-4 py-3">Chi nhánh</th>
-                <th className="whitespace-nowrap px-4 py-3">IP</th>
+                <th className="whitespace-nowrap px-4 py-3">Địa chỉ IP</th>
                 <th className="whitespace-nowrap px-4 py-3">Người quản lý</th>
+                <th className="whitespace-nowrap px-4 py-3">Email</th>
                 <th className="whitespace-nowrap px-4 py-3">Mua / Hết hạn</th>
                 <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
                 <th className="whitespace-nowrap px-4 py-3">Ghi chú</th>
-                <th className="sticky right-0 z-10 whitespace-nowrap bg-[#f8fafc] px-2 py-3 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
-                  Hành động
+                <th className="sticky right-0 z-10 w-10 whitespace-nowrap bg-[#f8fafc] px-2 py-3 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
+                  <span className="sr-only">Hành động</span>
                 </th>
               </tr>
             </thead>
             <tbody>
               {!isLoading && devices.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
+                  <td colSpan={10} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
                     Không có dữ liệu thiết bị.
                   </td>
                 </tr>
@@ -367,12 +416,35 @@ export default function PcDashboardPage() {
                       {device.branchName}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top text-sm text-[#5e3f3a]">{device.ipAddress ?? "-"}</td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top">
-                    <div className="text-sm text-[#191c1e]">{device.manager}</div>
-                    <div className="max-w-[180px] truncate text-xs text-[#5e3f3a]" title={device.email ?? undefined}>
-                      {device.email ?? "-"}
-                    </div>
+                  <td className="min-w-[150px] px-4 py-3 align-top">
+                    {device.ipAddresses.length > 0 ? (
+                      <div className="flex flex-col items-start gap-1">
+                        {device.ipAddresses.map((ip, index) => (
+                          <span
+                            key={index}
+                            className="whitespace-nowrap rounded-md border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-medium text-[#191c1e]"
+                          >
+                            {ip}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-[#5e3f3a]">-</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-sm text-[#191c1e]">{device.manager}</td>
+                  <td className="min-w-[180px] px-4 py-3 align-top">
+                    {device.emails.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {device.emails.map((email, index) => (
+                          <div key={index} className="text-xs text-[#5e3f3a]">
+                            {email}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-[#5e3f3a]">-</span>
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 align-top text-xs text-[#5e3f3a]">
                     <div>Mua: {formatDate(device.purchaseDate)}</div>
@@ -387,11 +459,11 @@ export default function PcDashboardPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    <div className="line-clamp-2 max-w-[300px] text-xs text-[#5e3f3a]" title={device.note ?? undefined}>
+                    <div className="line-clamp-3 min-w-[220px] max-w-[280px] text-xs text-[#5e3f3a]" title={device.note ?? undefined}>
                       {device.note || "-"}
                     </div>
                   </td>
-                  <td className="sticky right-0 whitespace-nowrap bg-white px-2 py-3 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)] group-hover:bg-[#f8fafc]">
+                  <td className="sticky right-0 w-10 whitespace-nowrap bg-white px-2 py-3 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)] group-hover:bg-[#f8fafc]">
                     <div className="inline-flex justify-end">
                       <RowActionsMenu
                         actions={[
@@ -399,7 +471,10 @@ export default function PcDashboardPage() {
                           { label: "Sửa", onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
                           {
                             label: "Chuyển máy",
-                            onClick: () => setTransferringDevice(device),
+                            onClick: () => {
+                              setTransferPresetNewDeviceId(null);
+                              setTransferringDevice(device);
+                            },
                             disabled: device.status === 3,
                           },
                           { label: "Xoá", onClick: () => setDeletingDevice(device), variant: "danger" },
@@ -447,6 +522,12 @@ export default function PcDashboardPage() {
           setIsImportOpen(false);
           refetchDevices();
         }}
+        onRequestTransfer={({ oldDeviceId, oldDeviceCode, newDeviceId }) => {
+          setIsImportOpen(false);
+          refetchDevices();
+          setTransferPresetNewDeviceId(newDeviceId);
+          setTransferringDevice({ id: oldDeviceId, deviceCode: oldDeviceCode, deviceName: "" });
+        }}
       />
 
       <ImportDeviceConfigurationDialog
@@ -461,9 +542,14 @@ export default function PcDashboardPage() {
       <TransferDeviceDialog
         isOpen={transferringDevice !== null}
         oldDevice={transferringDevice}
-        onClose={() => setTransferringDevice(null)}
+        initialNewDeviceId={transferPresetNewDeviceId}
+        onClose={() => {
+          setTransferringDevice(null);
+          setTransferPresetNewDeviceId(null);
+        }}
         onTransferred={() => {
           setTransferringDevice(null);
+          setTransferPresetNewDeviceId(null);
           refetchDevices();
         }}
       />

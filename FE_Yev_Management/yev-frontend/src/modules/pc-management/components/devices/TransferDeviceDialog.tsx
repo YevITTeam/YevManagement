@@ -17,11 +17,14 @@ interface TransferableDevice {
 interface TransferDeviceDialogProps {
     isOpen: boolean;
     oldDevice: TransferableDevice | null;
+    // docs/asset-api-fe.md §5.10 — gợi ý "MQL Cũ" từ import Excel (pendingTransfers):
+    // điền sẵn máy mới nhưng vẫn cho người dùng sửa lại trước khi bấm "Chuyển".
+    initialNewDeviceId?: number | null;
     onClose: () => void;
     onTransferred: () => void;
 }
 
-export default function TransferDeviceDialog({ isOpen, oldDevice, onClose, onTransferred }: TransferDeviceDialogProps) {
+export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDeviceId, onClose, onTransferred }: TransferDeviceDialogProps) {
     const [search, setSearch] = useState("");
     const [candidates, setCandidates] = useState<DeviceDto[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -32,9 +35,9 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, onClose, onTra
     useEffect(() => {
         if (!isOpen) return;
         setSearch("");
-        setSelectedDeviceId(null);
+        setSelectedDeviceId(initialNewDeviceId ?? null);
         setNote("");
-    }, [isOpen]);
+    }, [isOpen, initialNewDeviceId]);
 
     useEffect(() => {
         if (!isOpen || !oldDevice) return;

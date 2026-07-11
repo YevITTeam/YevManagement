@@ -1,7 +1,6 @@
 export interface IpAddressDto {
     id: number,
     ipAddress: string,
-    serverIp: string | null,
     deviceId: number | null,
     deviceCode: string | null,
     ipPrefixId: number,
@@ -15,14 +14,11 @@ export interface IpAddressDto {
     note: string | null
 }
 
-export interface IpAddressCreateDto{
-  ipAddress: string,
-  ipPrefixId: number,
-  serverIp: string | null,
-  deviceId: number | null,
-  status: number | null,
+// docs/asset-api-fe.md §4.2 (2026-07-11) — PUT /api/IpAddress/{id} chỉ còn nhận
+// status + note; không còn tạo/xoá IpAddress thủ công (chỉ sinh hàng loạt qua IpPrefix).
+export interface IpAddressUpdateDto {
+  status: number,
   note: string | null
-
 }
 
 export interface IpPrefixDto {
@@ -38,7 +34,7 @@ export interface IpPrefixDto {
 
 export interface IpPrefixCreateDto {
     prefix: string,
-    subnetMask: string | null,  
+    subnetMask: string | null,
     gateway: string | null,
     preferredDns: string | null,
     alternateDns: string | null,
