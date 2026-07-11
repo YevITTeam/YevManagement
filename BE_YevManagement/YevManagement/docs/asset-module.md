@@ -24,7 +24,7 @@
 | `Branch` | `BranchCode`(unique), `BranchName` | 1-N Devices | **Có** |
 | `Supplier` | `SupplierCode`(unique), `SupplierName` | 1-N Devices | **Có** |
 | `DeviceType` | `TypeCode`(unique), `TypeName` | 1-N Devices | **Có** |
-| `IpAddress` | `IpAddress1`(unique **toàn cục**, cột `IpAddress`), `ServerIp?`, `DeviceId?`, `IpPrefixId`(bắt buộc), `Status`, `Note?` | N-1 Device (nullable), N-1 IpPrefix (**bắt buộc**) | **Có** |
+| `IpAddress` | `IpAddress1`(unique **toàn cục**, cột `IpAddress`), `DeviceId?`, `IpPrefixId`(bắt buộc), `Status`, `Note?` (2026-07-11: **bỏ** `ServerIp`) | N-1 Device (nullable), N-1 IpPrefix (**bắt buộc**) | **Có** |
 | `IpPrefix` | `Prefix`(unique **toàn cục**, vd `10.45.1`), `SubnetMask?`, `Gateway?`, `PreferredDns?`, `AlternateDns?`, `Description?` | 1-N IpAddress | **Có** |
 | `DeviceConfiguration` | Cấu hình phần cứng: `Cpu/Ram/HardDrive/Os/Vga/Mainboard/Monitor/Mouse/Keyboard/Headphone/Speaker/Ups/Psu` + `Maker/Model/PowerAdapter/WirelessCard/Nic/Other`(cột viết hoa CPU/RAM/OS/VGA/UPS/PSU/NIC...), `Note?` | 1-1 Device (`DeviceId` unique); 1-1 DeviceConfigurationInitial; 1-N DeviceConfigurationHistory | Không |
 | `DeviceConfigurationInitial` | Snapshot **bất biến** 20 field linh kiện y hệt `DeviceConfiguration` + `CreatedAt` | 1-1 DeviceConfiguration (`DeviceConfigurationId` unique) | Không (xoá cứng qua action riêng) |
@@ -38,14 +38,25 @@
 > `DeviceSoftware` dùng **khoá chính kép** — không có `Id` đơn. Repo/service phải
 > tìm bằng cả `DeviceId + SoftwareId` (dùng `FirstOrDefaultAsync`, không dùng `GetByIdAsync`).
 
-> **`IpAddress.Status` (int)** có ý nghĩa cố định qua enum `IpAddressStatus`
-> (`Asset.Domain/Enums/IpAddressStatus.cs`, enum Domain đầu tiên của project):
-> `0=Available` (chưa gán), `1=Assigned` (đã gán `DeviceId`), `2=Reserved` (giữ chỗ),
-> `3=Disabled` (ngưng dùng). `IpAddressService` tự derive Status theo `DeviceId`
-> (có `DeviceId` → luôn `Assigned`; gỡ `DeviceId` → luôn `Available`) — không cho
-> client tự đặt `Assigned` khi chưa có `DeviceId`. Lưu ý: dữ liệu cũ backfill từ
-> trước khi có rule này có thể còn vài dòng `Status` không khớp `DeviceId` (chưa
-> retroactive fix, chỉ áp dụng cho Create/Update mới).
+> **`IpAddress.Status` (int) — đổi lại còn 3 trạng thái (2026-07-11, quyết định
+> người dùng)** qua enum `IpAddressStatus` (`Asset.Domain/Enums/IpAddressStatus.cs`):
+> `0=Available` (chưa gán), `1=AssignedExternal` (đã gán nhưng **không** có
+> `DeviceId` — IP đang được 1 thiết bị ngoài hệ thống dùng; khi hiển thị
+> `DeviceCode` trả về **"Khác"**), `2=Assigned` (đã gán và **có** `DeviceId` thật).
+> Bỏ hẳn `Reserved`/`Disabled` cũ. **Bất biến:** `Status==Assigned(2)` ⟺
+> `DeviceId != null`; `Status==Available(0)/AssignedExternal(1)` ⟺ `DeviceId == null`.
+>
+> Server tự derive Status khi gán/gỡ thiết bị (gán → `Assigned(2)` + set `DeviceId`;
+> gỡ → `Available(0)` + `DeviceId=null`). `IpAddressService.UpdateAsync` (chỉ đổi
+> `Status`+`Note`, xem bên dưới) chỉ cho chuyển tay giữa `Available(0)` ↔
+> `AssignedExternal(1)` khi IP chưa gắn thiết bị; IP đang gắn (`DeviceId != null`)
+> chỉ đổi được `Note`, muốn đổi Status phải gỡ gán trước.
+>
+> **Migration backfill (chưa apply — người dùng tự chạy sau khi review)**:
+> `Status = CASE WHEN DeviceId IS NOT NULL THEN 2 (Assigned) WHEN Status <> 0 THEN 1
+> (AssignedExternal) ELSE 0 (Available) END` — mọi IP đang có thiết bị → 2; IP
+> không thiết bị nhưng trước đó không phải Available (cũ 1/2/3) → 1 (coi như đang
+> dùng bởi thiết bị ngoài, giữ khỏi pool trống); còn lại → 0. Đảm bảo bất biến trên.
 >
 > **Unique index `IX_DiaChiIPs_DiaChi` trên `IpAddress1` và `IX_TienToIPs_TienTo`
 > trên `IpPrefix.Prefix` đều là unique toàn cục, không lọc `IsDeleted`.** Mọi kiểm
@@ -66,7 +77,38 @@
 > **Tạo `IpPrefix` mới tự động sinh luôn 255 `IpAddress` con** (`n=1..255`,
 > `Status=Available`) trong cùng 1 lần gọi `IpPrefixService.CreateAsync` — không
 > còn action `generate-range` riêng trên `IpAddressController` (đã gộp vào đây).
-> Xoá `IpPrefix` bị chặn (`DomainException`) nếu còn `IpAddress` con `!IsDeleted`.
+>
+> **Không còn Create/Delete thủ công cho từng `IpAddress`, không còn Update cho
+> `IpPrefix` (2026-07-11, quyết định người dùng)**: `IpAddressController` còn
+> `grid-list`/`available`/`{id}` (View) + `PUT {id}` (Update **hạn chế** chỉ đổi
+> `Status`+`Note`) + `assign`/`unassign` (gán/gỡ gán cho Device). `IpPrefixController`
+> chỉ còn `Create` (tự sinh 255 IP con) và `Delete`. `IIpAddressService.CreateAsync/
+> DeleteAsync` và `IIpPrefixService.UpdateAsync` đã xoá khỏi interface +
+> implementation (xoá hẳn action + DTO `CreateIpAddressDto`/`UpdateIpPrefixDto`).
+> `IpAddressService.UpdateAsync` được **giữ lại nhưng thu hẹp**: `UpdateIpAddressDto`
+> chỉ còn `Id`/`Status`/`Note` (bỏ `IpAddress`/`ServerIp`/`IpPrefixId`/`DeviceId`) —
+> logic đổi Status như mô tả ở ghi chú `IpAddressStatus` bên trên.
+>
+> **Bỏ cột `IpAddress.ServerIp` (2026-07-11)**: xoá khỏi entity/DbContext/`IpAddressDto`
+> và DROP cột `ServerIP` trên DB qua migration (chưa apply, xem bên dưới).
+>
+> **Validate cấu hình mạng khi tạo `IpPrefix` (2026-07-11)**: `IpPrefixService.CreateAsync`
+> gọi `ValidateNetworkSettings` (áp dụng logic từ công cụ nội bộ ChangeIP/SetIP.cs,
+> qua `Shared.Application/Helper/NetworkHelper.cs`: `IsValidIpv4`/`GetNetworkClass`/
+> `IsSameSubnet`): `SubnetMask`/`Gateway`/`PreferredDns`/`AlternateDns` nếu có phải
+> là IPv4 hợp lệ; `Gateway` phải thuộc đúng network 3-octet của `Prefix` (cùng dải
+> IP con sẽ sinh), cùng subnet theo `SubnetMask` (nếu có), và không trùng địa chỉ
+> network `.0`/broadcast `.255`. (Quy tắc "không trùng network 3-octet giữa các dải"
+> trong SetIP.cs đã được unique index `IX_TienToIPs_TienTo` trên `Prefix` lo sẵn.)
+>
+> **`IpPrefixService.DeleteAsync` đổi quy tắc chặn xoá** (2026-07-11, đổi — trước
+> đó chặn nếu còn **bất kỳ** `IpAddress` con `!IsDeleted`, quy tắc cũ giờ vô
+> nghĩa vì IP không còn tự xoá tay được nữa nên luôn còn đủ 255 dòng): giờ chỉ
+> chặn (`DomainException`) nếu còn IP con **đang gắn cho Device** (`DeviceId`
+> khác null, `!IsDeleted`) — phải gỡ gán hết trước mới xoá được Prefix. Nếu
+> không còn IP nào đang dùng, `DeleteAsync` **cascade soft-delete toàn bộ IP con
+> chưa dùng** cùng lúc với soft-delete Prefix (đây là cách duy nhất dọn IP chưa
+> dùng vì không còn API xoá tay từng IP).
 
 > **`Device.Status` (int)** có ý nghĩa cố định qua enum `DeviceStatus`
 > (`Asset.Domain/Enums/DeviceStatus.cs`): `0=PendingUse` (Chờ sử dụng, 694 thiết bị
@@ -213,10 +255,24 @@
 > xoá, chấp nhận còn lại vài dòng tham chiếu thiết bị đã soft-delete).
 
 > **Import Device hàng loạt từ Excel (2026-07-10, đã làm)**: theo đúng file mẫu
-> Excel hiện có của người dùng (8 cột theo đúng thứ tự: `MQL`, `Xưởng`, `Loại
-> Thiết Bị`, `Nhà Cung Cấp`, `Ngày Mua`, `Ghi Chú`, `Số SerialNumber`, `MQL Cũ`;
-> dòng 1 là header). Quy trình 2 bước — **bắt buộc xem trước khi ghi DB** theo
-> yêu cầu người dùng:
+> Excel hiện có của người dùng, **13 cột theo đúng thứ tự** (2026-07-11, đổi —
+> thêm 5 cột cấu hình phần cứng): `MQL`, `Xưởng`, `Loại Thiết Bị`, `Nhà Cung
+> Cấp`, `Ngày Mua`, `Ghi Chú`, `Số SerialNumber`, `Hãng`, `Model`, `CPU`, `RAM`,
+> `Ổ Cứng`, `MQL Cũ` (trước đó chỉ 8 cột, `MQL Cũ` ở cột H — mẫu cũ không có 5
+> cột cấu hình); dòng 1 là header. Quy trình 2 bước — **bắt buộc xem trước khi
+> ghi DB** theo yêu cầu người dùng:
+>
+> **5 cột cấu hình `Hãng/Model/CPU/RAM/Ổ Cứng` (2026-07-11, thêm sau)**: hoàn
+> toàn tuỳ chọn, map thẳng vào `DeviceConfiguration.Maker/Model/Cpu/Ram/
+> HardDrive`. Ở bước Confirm, nếu dòng có **ít nhất 1** trong 5 cột này khác
+> rỗng thì sau khi tạo `Device`, `DeviceImportService.ConfirmAsync` gọi luôn
+> `IDeviceConfigurationService.CreateAsync` để tạo kèm `DeviceConfiguration`
+> (chỉ set đúng 5 field này, các field cấu hình còn lại — Mainboard/OS/VGA/...
+> — để trống, sửa lại sau qua màn hình "Cập nhật cấu hình"). Vì Device vừa tạo
+> chắc chắn chưa có config sẵn, luôn `CreateAsync` — không cần nhánh
+> update-nếu-đã-có như `DeviceConfigurationImportService` (import Tanium, cập
+> nhật Device có sẵn). `DeviceImportConfirmResultDto` thêm `CreatedConfigCount`
+> đếm số Device có kèm config.
 >
 > **Định dạng cột "Ngày Mua"**: nếu ô Excel là **kiểu Date thật** (không phải
 > text) thì đọc trực tiếp, không phụ thuộc cách hiển thị. Nếu ô là text,
@@ -257,13 +313,16 @@
 >    vì server luôn tự tra lại theo tên, không tin Id từ client) —
 >    `DeviceImportService.ConfirmAsync` **validate lại từ đầu** theo dữ liệu DB
 >    tại thời điểm confirm (phòng race condition giữa lúc xem preview và lúc bấm
->    xác nhận) — nếu còn dòng lỗi thì **không ghi gì cả**, ném `DomainException`
->    kèm `Errors` là danh sách `"Dòng {n}: {lý do}"` (dùng constructor mới
->    `DomainException(message, List<string> errors)` thêm ở `Shared.Core`, map
->    thẳng vào `ApiResponse.Failure.Errors` qua middleware chung). Nếu toàn bộ
->    hợp lệ, chạy trong 1 `_unitOfWork.BeginTransactionAsync()`/
->    `CommitTransactionAsync()` (rollback nếu có lỗi giữa chừng — atomic cả
->    batch), với từng dòng:
+>    xác nhận). **Dòng lỗi bị BỎ QUA, không chặn cả batch** (2026-07-11, đổi —
+>    trước đó có bất kỳ dòng lỗi nào thì không ghi gì cả, ném `DomainException`).
+>    Chỉ những dòng hợp lệ mới được tạo Device, chạy trong 1
+>    `_unitOfWork.BeginTransactionAsync()`/`CommitTransactionAsync()` (rollback
+>    nếu có lỗi giữa chừng khi ghi các dòng hợp lệ — atomic cho phần được ghi,
+>    không đụng gì nếu `validRows` rỗng). Dòng bị bỏ qua trả về trong
+>    `DeviceImportConfirmResultDto.SkippedRows` (`RowNumber`/`DeviceCode`/
+>    `Errors`) + `SkippedCount`, để FE báo cho người dùng biết dòng nào không
+>    được tạo và lý do — **preview không đổi**, vẫn hiển thị đầy đủ dòng lỗi như
+>    cũ để người dùng sửa file trước khi confirm nếu muốn. Với từng dòng hợp lệ:
 >    - Gọi thẳng `IDeviceService.CreateAsync` (tái dùng nguyên logic tạo Device
 >      đã có, không viết lại) với `DeviceCode`/`SerialNumber`/`Note`/`PurchaseDate`
 >      lấy từ Excel, còn các field **`[Required]` mà Excel không có** thì theo
@@ -542,13 +601,17 @@
   gộp tên `SoftwareGroup`), `CreateSoftwareDto` (+`[Required]` Code/Name/GroupId), `UpdateSoftwareDto`.
 - **SoftwareGroups/**: `SoftwareGroupDto` (Id/Code/Name), `CreateSoftwareGroupDto` (+`[Required]`), `UpdateSoftwareGroupDto`.
 - **IpAddresses/**: `IpAddressDto` (gộp `DeviceCode` + `StatusText` + `Prefix*` từ
-  `IpPrefix`), `CreateIpAddressDto`/`UpdateIpAddressDto` (+`[RegularExpression]`
-  IPv4, `IpPrefixId` `[Required]`), `IpAddressFilterRequest` (`Keyword/Status/DeviceId`,
-  **không có** `all` vì bảng pool lớn), `AssignIpAddressDto` (`DeviceId` `[Required]`).
+  `IpPrefix`; 2026-07-11: bỏ `ServerIp`, `DeviceCode`="Khác" khi Status=1), `Update
+  IpAddressDto` (2026-07-11, tạo lại **thu hẹp** — chỉ `Id`/`Status`/`Note`),
+  `IpAddressFilterRequest` (`Keyword/Status/DeviceId`, **không có** `all` vì bảng
+  pool lớn), `AssignIpAddressDto` (`DeviceId` `[Required]`). **Không còn**
+  `CreateIpAddressDto` (2026-07-11, xoá — không tạo tay từng IP).
 - **IpPrefixes/**: `IpPrefixDto` (gồm `IpAddressCount` đếm IP con), `CreateIpPrefixDto`
   (`Prefix` `[Required]` + `[RegularExpression]` 3 octet, + SubnetMask/Gateway/DNS/
-  Description dùng chung cho cả subnet), `UpdateIpPrefixDto` (**không** có `Prefix`
-  — đổi prefix phải xoá + tạo lại, không hỗ trợ rename).
+  Description dùng chung cho cả subnet — 2026-07-11: `CreateAsync` validate thêm các
+  field IP hợp lệ + Gateway cùng subnet qua `NetworkHelper`, xem ghi chú §1).
+  **Không còn** `UpdateIpPrefixDto` (2026-07-11, xoá — không còn Update cho IpPrefix,
+  đổi prefix/subnet phải xoá + tạo lại, xem ghi chú §1).
 - **DeviceConfigurations/**: `DeviceConfigurationDto` (gộp `DeviceCode`, đủ 20 field
   linh kiện), `CreateDeviceConfigurationDto` (`DeviceId` `[Required]`, còn lại đều
   optional), `UpdateDeviceConfigurationDto` (giống Create + `Id`, **không cho đổi
@@ -594,8 +657,8 @@
 | DeviceSoftware | `DeviceSoftwareService` | `DeviceSoftwareController` `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE, `picker/{deviceId}` (GET), `sync` (PUT, bulk tick) | `[RequirePermission("Asset.DeviceSoftware.*")]` (Picker→`.View`, Sync→`.Update`) |
 | Software | `SoftwareService` (đầy đủ) | `SoftwareController` `/api/Software` | grid-list, all, {id}, POST, PUT, DELETE | `[RequirePermission("Asset.Software.*")]` |
 | SoftwareGroup | `SoftwareGroupService` (đầy đủ) | `SoftwareGroupController` `/api/SoftwareGroup` | grid-list, all, {id}, POST, PUT, DELETE | `[RequirePermission("Asset.SoftwareGroup.*")]` |
-| IpAddress | `IpAddressService` (đầy đủ) | `IpAddressController` `/api/IpAddress` | grid-list, `available` (2026-07-09, không phân trang), {id}, POST, PUT, DELETE, `{id}/assign`, `{id}/unassign` (**không có** `all`/`generate-range`) | `[RequirePermission("Asset.IpAddress.*")]` (assign/unassign dùng chung `Asset.IpAddress.Assign`) |
-| IpPrefix | `IpPrefixService` (đầy đủ, POST tự sinh 255 IP con) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, PUT, DELETE | `[RequirePermission("Asset.IpPrefix.*")]` |
+| IpAddress | `IpAddressService` (2026-07-11: bỏ Create/Delete thủ công, Update chỉ đổi Status+Note; 3 trạng thái mới; bỏ ServerIp) | `IpAddressController` `/api/IpAddress` | grid-list, `available` (2026-07-09, không phân trang), {id}, PUT `{id}` (chỉ Status+Note), `{id}/assign`, `{id}/unassign` (**không còn** POST/DELETE, **không có** `all`/`generate-range`) | `[RequirePermission("Asset.IpAddress.View/.Update/.Assign")]` |
+| IpPrefix | `IpPrefixService` (POST tự sinh 255 IP con; 2026-07-11: bỏ Update, Delete cascade IP con chưa dùng) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, DELETE (**không còn** PUT) | `[RequirePermission("Asset.IpPrefix.View/.Create/.Delete")]` |
 | DeviceConfiguration | `DeviceConfigurationService` (CRUD + snapshot/history) | `DeviceConfigurationController` `/api/DeviceConfiguration` | `by-device/{deviceId}` (trả `null` nếu chưa có), POST, PUT, DELETE (xoá cứng, cascade Initial+History), `{configId}/initial` (GET), `initial/{id}` (DELETE), `{configId}/history` (GET list) — **không có** `grid-list`/`all` | `[RequirePermission("Asset.DeviceConfiguration.*")]` (initial/history GET→`.View`, DeleteInitial→`.Delete`) |
 | TransferHistory | `TransferHistoryService` (2026-07-09, đã làm — "chuyển máy") | `TransferHistoryController` `/api/TransferHistory` | POST (thực hiện chuyển máy), `device/{deviceId}` (GET, lịch sử chuyển máy của 1 thiết bị) — **không có** grid-list/all/PUT/DELETE (audit-log, không sửa/xoá sau khi tạo) | `[RequirePermission("Asset.TransferHistory.Create/.View")]` |
 | DeviceImport | `DeviceImportService` (2026-07-10, mới làm — import Device hàng loạt từ Excel) | `DeviceImportController` `/api/DeviceImport` | `preview` (POST multipart file, chỉ đọc + validate, **không ghi DB**), `confirm` (POST, validate lại rồi ghi DB trong 1 transaction) | `[RequirePermission("Asset.Device.Create")]` (dùng chung, không tách permission riêng) |
@@ -627,20 +690,27 @@
   kèm `.Include(x => x.SoftwareGroup)` để gộp `SoftwareGroupName` vào DTO; `CreateAsync`/
   `UpdateAsync` validate `SoftwareGroupId` tồn tại bằng `_unitOfWork.SoftwareGroups.GetByIdAsync`
   + `OrThrowNotFound` trước khi ghi.
-- **CRUD với FK optional + action gán/gỡ** → xem `IpAddressService`
-  (IpAddress → Device, nullable; IpAddress → IpPrefix, bắt buộc): `Status` tự derive
-  theo `DeviceId` (xem ghi chú `IpAddressStatus` ở §1), có 2 action riêng
-  `AssignToDeviceAsync`/`UnassignAsync` ngoài CRUD chuẩn để đổi `DeviceId`+`Status`
-  cùng lúc mà không cần gọi `UpdateAsync` đầy đủ. Lưu ý: `StatusText` trong
-  `Expression<Func<>>` của `ToPagedResponseAsync` phải viết bằng ternary lồng nhau
-  thay vì gọi method C#, vì EF Core dịch expression đó sang SQL và không hỗ trợ gọi
-  method tuỳ ý.
-- **Master record tự sinh hàng loạt record con** → xem `IpPrefixService.CreateAsync`
-  (IpPrefix 1-N IpAddress): tạo 1 `IpPrefix` xong (`AddAsync` + `SaveChangesAsync` để
-  có `Id`), build luôn danh sách 255 `IpAddress` con (`n=1..255`) bằng LINQ
-  `Enumerable.Range`, rồi `AddRangeAsync` + `SaveChangesAsync` **1 lần** cho cả batch
-  (không loop insert từng bản ghi). Không cần check trùng vì Prefix vừa tạo chắc
-  chắn chưa có IP con nào.
+- **Read-only + Update hạn chế + action gán/gỡ (không có Create/Delete thủ công)**
+  → xem `IpAddressService` (IpAddress → Device, nullable; IpAddress → IpPrefix, bắt
+  buộc): `Status` giữ bất biến theo `DeviceId` (xem ghi chú `IpAddressStatus` ở §1).
+  2026-07-11 (quyết định người dùng): bỏ hẳn `CreateAsync`/`DeleteAsync` — IpAddress
+  chỉ sinh/xoá hàng loạt qua `IpPrefixService`, không cho thêm/xoá tay từng địa chỉ.
+  Còn `GetPagedAsync`/`GetAvailableAsync`/`GetByIdAsync` (đọc), `UpdateAsync` **thu
+  hẹp** chỉ đổi `Status`+`Note` (giữ bất biến: IP có `DeviceId` không đổi Status tay;
+  IP trống chỉ cho `Available`↔`AssignedExternal`), + 2 action `AssignToDeviceAsync`/
+  `UnassignAsync` đổi `DeviceId`+`Status`. Lưu ý: `StatusText` (và `DeviceCode`="Khác"
+  khi Status=1) trong `Expression<Func<>>` của `ToPagedResponseAsync` phải viết bằng
+  ternary lồng nhau thay vì gọi method C#, vì EF Core dịch expression đó sang SQL và
+  không hỗ trợ gọi method tuỳ ý.
+- **Master record tự sinh/dọn hàng loạt record con** → xem `IpPrefixService`
+  (IpPrefix 1-N IpAddress): `CreateAsync` tạo 1 `IpPrefix` xong (`AddAsync` +
+  `SaveChangesAsync` để có `Id`), build luôn danh sách 255 `IpAddress` con
+  (`n=1..255`) bằng LINQ `Enumerable.Range`, rồi `AddRangeAsync` +
+  `SaveChangesAsync` **1 lần** cho cả batch (không loop insert từng bản ghi).
+  Không cần check trùng vì Prefix vừa tạo chắc chắn chưa có IP con nào.
+  `DeleteAsync` (2026-07-11, đổi) làm ngược lại — chặn nếu còn IP con đang gắn
+  Device (`DomainException`), nếu không thì cascade soft-delete toàn bộ IP con
+  chưa dùng cùng lúc với soft-delete Prefix.
 - **Field tính toán + điều khiển quan hệ 1-N ngược chiều (owning side là bảng
   khác)** → xem `DeviceService` (Device 1-N IpAddress, nhưng Device không giữ FK —
   `IpAddress.DeviceId` mới là FK): `CreateAsync`/`UpdateAsync` tự tính
@@ -718,8 +788,10 @@
 
 ## 5. Hiện trạng: ĐÃ XONG / CẦN LÀM TIẾP
 
-**Đã xong:** CRUD Branch/DeviceType/Supplier/Software/SoftwareGroup/IpAddress/
-IpPrefix/Device (đầy đủ, kể cả chọn/gán IP); CRUD DeviceSoftware + picker
+**Đã xong:** CRUD Branch/DeviceType/Supplier/Software/SoftwareGroup/Device (đầy
+đủ, kể cả chọn/gán IP); IpAddress (2026-07-11: chỉ đọc + gán/gỡ, không còn
+Create/Update/Delete thủ công) + IpPrefix (2026-07-11: chỉ Create/Delete, không
+còn Update); CRUD DeviceSoftware + picker
 checkbox-list `GET picker/{deviceId}` + đồng bộ hàng loạt `PUT sync`; CRUD
 DeviceConfiguration (kể cả snapshot "Cấu hình ban đầu" + audit log "Sửa chữa Thay
 thế"); API tổng hợp `GET /api/Device/{id}/detail` (Device + Configuration +
@@ -766,12 +838,14 @@ thiết kế không có API xoá).
 
 `POST /api/DeviceImport/preview` + `POST /api/DeviceImport/confirm` (2026-07-10,
 đã làm, xem ghi chú §1) — import Device hàng loạt từ file Excel mẫu có sẵn của
-người dùng (8 cột `MQL/Xưởng/Loại Thiết Bị/Nhà Cung Cấp/Ngày Mua/Ghi Chú/Số
-SerialNumber/MQL Cũ`), có bước preview validate trước khi ghi DB, `MQL Cũ` tái
-dùng nguyên nghiệp vụ "chuyển máy" của `TransferHistoryService`. Thêm package
-`ClosedXML` 0.105.0 vào `Asset.Application` để đọc `.xlsx`; thêm constructor
-`DomainException(string message, List<string> errors)` ở `Shared.Core` để trả
-lỗi theo từng dòng qua `ApiResponse.Failure.Errors`.
+người dùng (13 cột `MQL/Xưởng/Loại Thiết Bị/Nhà Cung Cấp/Ngày Mua/Ghi Chú/Số
+SerialNumber/Hãng/Model/CPU/RAM/Ổ Cứng/MQL Cũ`, 2026-07-11: thêm 5 cột cấu hình
+Hãng/Model/CPU/RAM/Ổ Cứng — tuỳ chọn, tạo kèm `DeviceConfiguration` nếu có),
+có bước preview validate trước khi ghi DB, `MQL Cũ` tái dùng nguyên nghiệp vụ
+"chuyển máy" của `TransferHistoryService`. Thêm package `ClosedXML` 0.105.0
+vào `Asset.Application` để đọc `.xlsx`; thêm constructor `DomainException(string
+message, List<string> errors)` ở `Shared.Core` để trả lỗi theo từng dòng qua
+`ApiResponse.Failure.Errors`.
 
 `POST /api/DeviceConfigurationImport/preview` + `.../confirm` (2026-07-10, đã
 làm, xem ghi chú §1) — import cấu hình phần cứng hàng loạt từ file kiểm kê

@@ -218,7 +218,6 @@ public partial class AssetDbContext : DbContext
 
             entity.Property(e => e.IpAddress1).HasMaxLength(25).HasColumnName("IpAddress");
             entity.Property(e => e.Note).HasMaxLength(255);
-            entity.Property(e => e.ServerIp).HasMaxLength(15).HasColumnName("ServerIP");
 
             entity.HasOne(d => d.Device).WithMany(p => p.IpAddresses)
                 .HasForeignKey(d => d.DeviceId)

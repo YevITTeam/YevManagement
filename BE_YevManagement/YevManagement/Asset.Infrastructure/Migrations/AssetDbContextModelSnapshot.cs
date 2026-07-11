@@ -576,11 +576,6 @@ namespace Asset.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
-                    b.Property<string>("ServerIp")
-                        .HasMaxLength(15)
-                        .HasColumnType("nvarchar(15)")
-                        .HasColumnName("ServerIP");
-
                     b.Property<int>("Status")
                         .HasColumnType("int");
 

@@ -3,6 +3,7 @@ using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
 using Asset.Domain.Enums;
 using Shared.Application.Abstractions;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
@@ -85,9 +86,13 @@ namespace Asset.Application.Services
 
         public async Task<IpPrefixDto> CreateAsync(CreateIpPrefixDto request)
         {
-            // IX_TienToIPs_TienTo là unique index toàn cục trên DB (không lọc IsDeleted)
+            // IX_TienToIPs_TienTo là unique index toàn cục trên DB (không lọc IsDeleted).
+            // (Đây cũng chính là quy tắc "không cho 2 dải mạng trùng network 3-octet" trong
+            //  công cụ ChangeIP — GetNetworkClass duplicate check — đã được unique index lo.)
             var exists = await _unitOfWork.IpPrefixes.FirstOrDefaultAsync(x => x.Prefix == request.Prefix);
             if (exists != null) throw new DomainException($"Prefix '{request.Prefix}' đã tồn tại.");
+
+            ValidateNetworkSettings(request);
 
             var newPrefix = new IpPrefix
             {
@@ -129,33 +134,68 @@ namespace Asset.Application.Services
             };
         }
 
-        public async Task UpdateAsync(UpdateIpPrefixDto request)
+        // Validate cấu hình mạng khi tạo dải (2026-07-11) — áp dụng logic từ công cụ ChangeIP
+        // nội bộ (SetIP.cs), dùng NetworkHelper: mọi field IP nhập vào (SubnetMask/Gateway/
+        // PreferredDns/AlternateDns) nếu có phải là IPv4 hợp lệ; Gateway phải nằm cùng subnet
+        // với dải IP sẽ sinh (prefix.1..prefix.255) và không được trùng địa chỉ network/broadcast.
+        private static void ValidateNetworkSettings(CreateIpPrefixDto request)
         {
-            var prefix = await _unitOfWork.IpPrefixes.GetByIdAsync(request.Id);
-            prefix.OrThrowNotFound("Prefix", request.Id);
+            if (!string.IsNullOrWhiteSpace(request.SubnetMask) && !NetworkHelper.IsValidIpv4(request.SubnetMask))
+                throw new DomainException($"Subnet Mask '{request.SubnetMask}' không hợp lệ.");
 
-            prefix.SubnetMask = request.SubnetMask;
-            prefix.Gateway = request.Gateway;
-            prefix.PreferredDns = request.PreferredDns;
-            prefix.AlternateDns = request.AlternateDns;
-            prefix.Description = request.Description;
+            if (!string.IsNullOrWhiteSpace(request.PreferredDns) && !NetworkHelper.IsValidIpv4(request.PreferredDns))
+                throw new DomainException($"Preferred DNS '{request.PreferredDns}' không hợp lệ.");
 
-            _unitOfWork.IpPrefixes.Update(prefix);
-            await _unitOfWork.SaveChangesAsync();
+            if (!string.IsNullOrWhiteSpace(request.AlternateDns) && !NetworkHelper.IsValidIpv4(request.AlternateDns))
+                throw new DomainException($"Alternate DNS '{request.AlternateDns}' không hợp lệ.");
+
+            if (!string.IsNullOrWhiteSpace(request.Gateway))
+            {
+                if (!NetworkHelper.IsValidIpv4(request.Gateway))
+                    throw new DomainException($"Gateway '{request.Gateway}' không hợp lệ.");
+
+                // Gateway phải thuộc đúng network 3-octet của prefix (dải IP con là prefix.1..255).
+                if (!string.Equals(NetworkHelper.GetNetworkClass(request.Gateway), request.Prefix, StringComparison.OrdinalIgnoreCase))
+                    throw new DomainException($"Gateway '{request.Gateway}' không nằm trong dải mạng '{request.Prefix}'.");
+
+                // Nếu có SubnetMask, kiểm tra chặt hơn bằng bitwise AND (Gateway cùng subnet với dải).
+                if (!string.IsNullOrWhiteSpace(request.SubnetMask) &&
+                    !NetworkHelper.IsSameSubnet($"{request.Prefix}.1", request.Gateway, request.SubnetMask))
+                    throw new DomainException($"Gateway '{request.Gateway}' không cùng subnet với dải mạng '{request.Prefix}' theo Subnet Mask '{request.SubnetMask}'.");
+
+                // Gateway không được trùng địa chỉ network (.0) hay broadcast (.255) của dải.
+                if (request.Gateway.Trim() == $"{request.Prefix}.0" || request.Gateway.Trim() == $"{request.Prefix}.255")
+                    throw new DomainException($"Gateway '{request.Gateway}' không được trùng địa chỉ network/broadcast của dải mạng.");
+            }
         }
+
+        // Không còn UpdateAsync cho IpPrefix (2026-07-11, quyết định người dùng) — IpPrefix
+        // chỉ được Create/Delete, không cho sửa Prefix/SubnetMask/Gateway/DNS sau khi tạo.
 
         public async Task DeleteAsync(int id)
         {
             var prefix = await _unitOfWork.IpPrefixes.GetByIdAsync(id);
             prefix.OrThrowNotFound("Prefix", id);
 
-            var remainingCount = (await _unitOfWork.IpAddresses.FindAsync(x => x.IpPrefixId == id && !x.IsDeleted)).Count;
-            if (remainingCount > 0)
-                throw new DomainException($"Còn {remainingCount} địa chỉ IP thuộc prefix này, vui lòng xoá hết IP con trước.");
+            var childAddresses = await _unitOfWork.IpAddresses.FindAsync(x => x.IpPrefixId == id && !x.IsDeleted);
+
+            // 2026-07-11 (quyết định người dùng): không còn API xoá tay từng IpAddress, nên
+            // chỉ chặn xoá Prefix nếu còn IP con ĐANG GẮN cho Device (khác quy tắc cũ — chặn
+            // hễ còn bất kỳ IP con nào chưa xoá, điều này giờ luôn đúng vì IP không tự xoá
+            // được nữa). IP con chưa dùng (DeviceId null) tự cascade soft-delete theo Prefix.
+            var inUseAddresses = childAddresses.Where(x => x.DeviceId.HasValue).ToList();
+            if (inUseAddresses.Count > 0)
+                throw new DomainException($"Còn {inUseAddresses.Count} địa chỉ IP thuộc prefix này đang được gán cho thiết bị, vui lòng gỡ gán trước khi xoá.");
+
+            foreach (var address in childAddresses)
+            {
+                address.IsDeleted = true;
+                _unitOfWork.IpAddresses.Update(address);
+            }
 
             prefix.IsDeleted = true;
-
             _unitOfWork.IpPrefixes.Update(prefix);
+
             await _unitOfWork.SaveChangesAsync();
         }
     }

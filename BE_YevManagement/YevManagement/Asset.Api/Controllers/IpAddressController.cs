@@ -39,13 +39,10 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Asset.IpAddress.Create")]
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateIpAddressDto request)
-        {
-            var result = await _ipAddressService.CreateAsync(request);
-            return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Thêm địa chỉ IP thành công.");
-        }
+        // Không còn Create/Delete thủ công cho từng IpAddress (2026-07-11, quyết định người
+        // dùng) — IpAddress chỉ được sinh hàng loạt (255 địa chỉ/prefix) qua
+        // IpPrefixController.Create và dọn theo qua IpPrefixController.Delete. Update được giữ
+        // lại nhưng CHỈ đổi được Status + Note (không đổi IpAddress/DeviceId).
 
         [RequirePermission("Asset.IpAddress.Update")]
         [HttpPut("{id}")]
@@ -55,14 +52,6 @@ namespace Asset.Api.Controllers
 
             await _ipAddressService.UpdateAsync(request);
             return Success(true, "Cập nhật địa chỉ IP thành công.");
-        }
-
-        [RequirePermission("Asset.IpAddress.Delete")]
-        [HttpDelete("{id}")]
-        public async Task<ActionResult<ApiResponse<bool>>> Delete(int id)
-        {
-            await _ipAddressService.DeleteAsync(id);
-            return Success(true, "Xóa địa chỉ IP thành công.");
         }
 
         [RequirePermission("Asset.IpAddress.Assign")]

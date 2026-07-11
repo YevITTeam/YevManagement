@@ -44,9 +44,11 @@ namespace Asset.Application.Services
                 {
                     Id = x.Id,
                     IpAddress = x.IpAddress1,
-                    ServerIp = x.ServerIp,
                     DeviceId = x.DeviceId,
-                    DeviceCode = x.Device != null ? x.Device.DeviceCode : null,
+                    // Status = AssignedExternal (1) → hiển thị "Khác" (gán cho thiết bị ngoài,
+                    // không có DeviceId); Assigned (2) → mã thiết bị thật; Available (0) → null.
+                    DeviceCode = x.Status == (int)IpAddressStatus.AssignedExternal ? "Khác"
+                        : x.Device != null ? x.Device.DeviceCode : null,
                     IpPrefixId = x.IpPrefixId,
                     Prefix = x.IpPrefix.Prefix,
                     PrefixSubnetMask = x.IpPrefix.SubnetMask,
@@ -57,9 +59,8 @@ namespace Asset.Application.Services
                     // Lặp lại logic của GetStatusText tại đây (không gọi method) vì đây là
                     // Expression<Func<>> được EF dịch sang SQL, không hỗ trợ gọi method C# tuỳ ý.
                     StatusText = x.Status == (int)IpAddressStatus.Available ? "Chưa gán"
+                        : x.Status == (int)IpAddressStatus.AssignedExternal ? "Đã gán (khác)"
                         : x.Status == (int)IpAddressStatus.Assigned ? "Đã gán"
-                        : x.Status == (int)IpAddressStatus.Reserved ? "Giữ chỗ"
-                        : x.Status == (int)IpAddressStatus.Disabled ? "Ngưng dùng"
                         : "Không xác định",
                     Note = x.Note
                 }
@@ -78,7 +79,6 @@ namespace Asset.Application.Services
                 {
                     Id = x.Id,
                     IpAddress = x.IpAddress1,
-                    ServerIp = x.ServerIp,
                     DeviceId = x.DeviceId,
                     DeviceCode = null,
                     IpPrefixId = x.IpPrefixId,
@@ -103,109 +103,36 @@ namespace Asset.Application.Services
             return MapToDto(ipAddress);
         }
 
-        public async Task<IpAddressDto> CreateAsync(CreateIpAddressDto request)
-        {
-            var exists = await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.IpAddress1 == request.IpAddress);
-            if (exists != null) throw new DomainException($"Địa chỉ IP '{request.IpAddress}' đã tồn tại.");
-
-            var ipPrefix = await _unitOfWork.IpPrefixes.GetByIdAsync(request.IpPrefixId);
-            ipPrefix.OrThrowNotFound("Prefix", request.IpPrefixId);
-
-            if (!request.IpAddress.StartsWith(ipPrefix.Prefix + "."))
-                throw new DomainException($"Địa chỉ IP '{request.IpAddress}' không thuộc prefix '{ipPrefix.Prefix}'.");
-
-            Device? device = null;
-            int status;
-
-            if (request.DeviceId.HasValue)
-            {
-                device = await _unitOfWork.Devices.GetByIdAsync(request.DeviceId.Value);
-                device.OrThrowNotFound("Thiết bị", request.DeviceId.Value);
-                status = (int)IpAddressStatus.Assigned;
-            }
-            else
-            {
-                status = request.Status ?? (int)IpAddressStatus.Available;
-                if (status == (int)IpAddressStatus.Assigned)
-                    throw new DomainException("Không thể đặt trạng thái 'Đã gán' khi chưa chọn thiết bị.");
-            }
-
-            var newIpAddress = new IpAddress
-            {
-                IpAddress1 = request.IpAddress,
-                ServerIp = request.ServerIp,
-                DeviceId = request.DeviceId,
-                IpPrefixId = request.IpPrefixId,
-                Status = status,
-                Note = request.Note,
-                IsDeleted = false
-            };
-
-            await _unitOfWork.IpAddresses.AddAsync(newIpAddress);
-            await _unitOfWork.SaveChangesAsync();
-
-            var dto = MapToDto(newIpAddress);
-            dto.DeviceCode = device?.DeviceCode;
-            dto.Prefix = ipPrefix.Prefix;
-            dto.PrefixSubnetMask = ipPrefix.SubnetMask;
-            dto.PrefixGateway = ipPrefix.Gateway;
-            dto.PrefixPreferredDns = ipPrefix.PreferredDns;
-            dto.PrefixAlternateDns = ipPrefix.AlternateDns;
-            return dto;
-        }
+        // Không còn CreateAsync/DeleteAsync thủ công cho từng IpAddress (2026-07-11) — IP chỉ
+        // sinh hàng loạt qua IpPrefixService.CreateAsync (255 địa chỉ/prefix) và dọn theo qua
+        // IpPrefixService.DeleteAsync. UpdateAsync được giữ lại nhưng CHỈ cho đổi Status +
+        // Note (không đổi IpAddress/IpPrefix/DeviceId — xem UpdateIpAddressDto).
 
         public async Task UpdateAsync(UpdateIpAddressDto request)
         {
             var ipAddress = await _unitOfWork.IpAddresses.GetByIdAsync(request.Id);
             ipAddress.OrThrowNotFound("Địa chỉ IP", request.Id);
 
-            if (ipAddress.IpAddress1 != request.IpAddress)
+            // Chỉ cho đổi Status + Note (2026-07-11, quyết định người dùng). Giữ bất biến
+            // Status == Assigned(2) ⟺ DeviceId != null:
+            // - IP đang gắn thiết bị (DeviceId != null): không cho đổi Status tay (phải gỡ gán
+            //   trước), chỉ đổi được Note.
+            // - IP chưa gắn (DeviceId == null): chỉ cho đặt Available(0) hoặc AssignedExternal(1),
+            //   không cho đặt Assigned(2) vì không có DeviceId.
+            if (ipAddress.DeviceId.HasValue)
             {
-                var exists = await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.IpAddress1 == request.IpAddress);
-                if (exists != null) throw new DomainException($"Địa chỉ IP '{request.IpAddress}' đã tồn tại.");
-            }
-
-            var ipPrefix = await _unitOfWork.IpPrefixes.GetByIdAsync(request.IpPrefixId);
-            ipPrefix.OrThrowNotFound("Prefix", request.IpPrefixId);
-
-            if (!request.IpAddress.StartsWith(ipPrefix.Prefix + "."))
-                throw new DomainException($"Địa chỉ IP '{request.IpAddress}' không thuộc prefix '{ipPrefix.Prefix}'.");
-
-            int status;
-            if (request.DeviceId.HasValue)
-            {
-                var device = await _unitOfWork.Devices.GetByIdAsync(request.DeviceId.Value);
-                device.OrThrowNotFound("Thiết bị", request.DeviceId.Value);
-                status = (int)IpAddressStatus.Assigned;
-            }
-            else if (ipAddress.DeviceId.HasValue)
-            {
-                status = (int)IpAddressStatus.Available;
+                if (request.Status != (int)IpAddressStatus.Assigned)
+                    throw new DomainException("Địa chỉ IP đang được gán cho thiết bị, vui lòng gỡ gán trước khi đổi trạng thái.");
             }
             else
             {
-                status = request.Status ?? (int)IpAddressStatus.Available;
-                if (status == (int)IpAddressStatus.Assigned)
-                    throw new DomainException("Không thể đặt trạng thái 'Đã gán' khi chưa chọn thiết bị.");
+                if (request.Status != (int)IpAddressStatus.Available && request.Status != (int)IpAddressStatus.AssignedExternal)
+                    throw new DomainException("Chỉ được đặt trạng thái 'Chưa gán' hoặc 'Đã gán (khác)' khi địa chỉ IP chưa gắn thiết bị.");
+
+                ipAddress.Status = request.Status;
             }
 
-            ipAddress.IpAddress1 = request.IpAddress;
-            ipAddress.ServerIp = request.ServerIp;
-            ipAddress.DeviceId = request.DeviceId;
-            ipAddress.IpPrefixId = request.IpPrefixId;
-            ipAddress.Status = status;
             ipAddress.Note = request.Note;
-
-            _unitOfWork.IpAddresses.Update(ipAddress);
-            await _unitOfWork.SaveChangesAsync();
-        }
-
-        public async Task DeleteAsync(int id)
-        {
-            var ipAddress = await _unitOfWork.IpAddresses.GetByIdAsync(id);
-            ipAddress.OrThrowNotFound("Địa chỉ IP", id);
-
-            ipAddress.IsDeleted = true;
 
             _unitOfWork.IpAddresses.Update(ipAddress);
             await _unitOfWork.SaveChangesAsync();
@@ -215,9 +142,6 @@ namespace Asset.Application.Services
         {
             var ipAddress = await _unitOfWork.IpAddresses.GetByIdAsync(id);
             ipAddress.OrThrowNotFound("Địa chỉ IP", id);
-
-            if (ipAddress.Status == (int)IpAddressStatus.Disabled)
-                throw new DomainException("Địa chỉ IP đang bị vô hiệu hoá, không thể gán cho thiết bị.");
 
             var device = await _unitOfWork.Devices.GetByIdAsync(request.DeviceId);
             device.OrThrowNotFound("Thiết bị", request.DeviceId);
@@ -245,9 +169,9 @@ namespace Asset.Application.Services
         {
             Id = ipAddress.Id,
             IpAddress = ipAddress.IpAddress1,
-            ServerIp = ipAddress.ServerIp,
             DeviceId = ipAddress.DeviceId,
-            DeviceCode = ipAddress.Device?.DeviceCode,
+            // AssignedExternal → "Khác"; Assigned → mã thiết bị thật; Available → null.
+            DeviceCode = ipAddress.Status == (int)IpAddressStatus.AssignedExternal ? "Khác" : ipAddress.Device?.DeviceCode,
             IpPrefixId = ipAddress.IpPrefixId,
             Prefix = ipAddress.IpPrefix?.Prefix!,
             PrefixSubnetMask = ipAddress.IpPrefix?.SubnetMask,
@@ -262,9 +186,8 @@ namespace Asset.Application.Services
         private static string GetStatusText(int status) => status switch
         {
             (int)IpAddressStatus.Available => "Chưa gán",
+            (int)IpAddressStatus.AssignedExternal => "Đã gán (khác)",
             (int)IpAddressStatus.Assigned => "Đã gán",
-            (int)IpAddressStatus.Reserved => "Giữ chỗ",
-            (int)IpAddressStatus.Disabled => "Ngưng dùng",
             _ => "Không xác định"
         };
     }

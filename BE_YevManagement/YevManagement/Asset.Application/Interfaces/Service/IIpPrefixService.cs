@@ -12,7 +12,6 @@ namespace Asset.Application.Interfaces.Service
         Task<List<IpPrefixDto>> GetAllActiveAsync();
         Task<IpPrefixDto> GetByIdAsync(int id);
         Task<IpPrefixDto> CreateAsync(CreateIpPrefixDto request);
-        Task UpdateAsync(UpdateIpPrefixDto request);
         Task DeleteAsync(int id);
     }
 }

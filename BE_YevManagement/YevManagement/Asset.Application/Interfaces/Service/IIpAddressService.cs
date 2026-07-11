@@ -11,9 +11,7 @@ namespace Asset.Application.Interfaces.Service
         Task<PagedResponse<IpAddressDto>> GetPagedAsync(IpAddressFilterRequest request);
         Task<List<IpAddressDto>> GetAvailableAsync(string? keyword);
         Task<IpAddressDto> GetByIdAsync(int id);
-        Task<IpAddressDto> CreateAsync(CreateIpAddressDto request);
         Task UpdateAsync(UpdateIpAddressDto request);
-        Task DeleteAsync(int id);
         Task AssignToDeviceAsync(int id, AssignIpAddressDto request);
         Task UnassignAsync(int id);
     }

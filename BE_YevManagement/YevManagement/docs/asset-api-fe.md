@@ -185,31 +185,41 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 // → message: "Thêm prefix thành công, đã sinh 255 địa chỉ IP."
 ```
 
-- **Không thể sửa `prefix`** sau khi tạo — `UpdateIpPrefixDto` không có field `prefix`, chỉ sửa được `SubnetMask/Gateway/DNS/Description`. Đổi prefix phải xoá + tạo lại.
-- **Xoá bị chặn** (400 `DomainException`) nếu còn `IpAddress` con chưa xoá — FE nên hiện thông báo rõ, không cho user tưởng lỗi hệ thống.
-- Sửa `SubnetMask/Gateway/DNS` ở đây tự "cascade" hiển thị cho toàn bộ IP con (vì IpAddress chỉ tham chiếu `IpPrefixId`, không lưu lặp lại các field này).
+- **Không còn PUT (Update) cho IpPrefix** (2026-07-11, đổi — trước đó có thể sửa `SubnetMask/Gateway/DNS/Description` sau khi tạo, giờ bỏ hẳn). Toàn bộ field cố định ngay lúc tạo; muốn đổi phải xoá + tạo lại.
+- **Validate cấu hình mạng khi tạo (2026-07-11)** — POST bị chặn (400 `DomainException`) nếu:
+  - `subnetMask`/`gateway`/`preferredDns`/`alternateDns` (field nào có nhập) **không phải IPv4 hợp lệ** (đúng 4 octet 0–255).
+  - `gateway` **không nằm trong dải mạng** của `prefix` (phải cùng network 3-octet, vd prefix `10.50.2` thì gateway phải là `10.50.2.x`), hoặc không cùng subnet theo `subnetMask`, hoặc trùng địa chỉ `.0`/`.255`.
+  - FE nên validate sơ bộ phía client trước (báo lỗi ngay từng field) để trải nghiệm mượt, nhưng server vẫn là nguồn chặn cuối.
+- **Xoá (DELETE) bị chặn** (400 `DomainException`) nếu còn `IpAddress` con **đang gán cho Device** (2026-07-11, đổi luật chặn — trước đó chặn hễ còn bất kỳ IP con nào chưa xoá; giờ IP không còn xoá tay được nên luật cũ vô nghĩa). Nếu không còn IP nào đang dùng, xoá Prefix sẽ **cascade xoá luôn toàn bộ IP con chưa dùng** — FE nên cảnh báo rõ hệ quả này trước khi xoá (mất luôn cả dải, không chỉ prefix).
 
 ### 4.2. IpAddress — `/api/IpAddress`
 
-**Enum `Status`** (dùng để hiển thị badge màu trên UI):
+**Enum `Status` — đổi lại còn 3 trạng thái (2026-07-11)** (dùng để hiển thị badge màu trên UI):
 
-| Giá trị | Tên | Ý nghĩa | Có thể chọn khi Create/Update Device? |
+| Giá trị | Tên | Ý nghĩa | `deviceCode` hiển thị |
 |---|---|---|---|
-| `0` | Available | Chưa gán | ✅ Có thể chọn |
-| `1` | Assigned | Đã gán cho 1 Device | ❌ Không (server tự set khi gán) |
-| `2` | Reserved | Giữ chỗ | ❌ |
-| `3` | Disabled | Ngưng dùng | ❌ |
+| `0` | Available | Chưa gán (IP còn trống) | `null` |
+| `1` | AssignedExternal | Đã gán nhưng **không có** DeviceId (thiết bị ngoài hệ thống) | **`"Khác"`** |
+| `2` | Assigned | Đã gán và **có** DeviceId (thiết bị trong hệ thống) | mã thiết bị thật |
 
-> `Status` **KHÔNG** cho client tự đặt tuỳ ý ở Create/Update IpAddress trực tiếp — server tự derive theo `DeviceId` (có `DeviceId` → luôn `Assigned`, gỡ `DeviceId` → luôn `Available`). Field `Status` trong request Create/Update chỉ có tác dụng cho `Reserved`/`Disabled` (không gắn Device).
+> **Bất biến:** `status=2` ⟺ IP có `deviceId`; `status=0/1` ⟺ IP **không** có `deviceId`. Với `status=1`, server trả `deviceCode="Khác"` (không có thiết bị thật để tra) và `deviceId=null`.
+>
+> **Sửa IP (PUT) — CHỈ đổi được `status` + `note`** (2026-07-11, đổi — trước đó không có PUT; giờ mở lại nhưng thu hẹp). **Không còn POST (thêm) / DELETE (xoá) tay từng IP**: IP chỉ sinh hàng loạt qua `POST /api/IpPrefix` (255 địa chỉ/prefix) và dọn theo qua `DELETE /api/IpPrefix/{id}`.
+> ```
+> PUT /api/IpAddress/{id}   body: { "id": 6989, "status": 1, "note": "..." }
+> ```
+> Luật đổi `status` qua PUT:
+> - IP **đang gắn thiết bị** (`deviceId != null`, `status=2`): chỉ đổi được `note`; gửi `status` khác `2` → 400 "vui lòng gỡ gán trước khi đổi trạng thái".
+> - IP **chưa gắn** (`deviceId = null`): chỉ cho đặt `status` = `0` (Chưa gán) hoặc `1` (Đã gán khác); gửi `status=2` → 400 (không có thiết bị thì không thể "Đã gán").
+> - Dùng để đánh dấu tay 1 IP là "đang dùng bởi thiết bị ngoài" (0→1) hoặc trả về trống (1→0). Gán cho thiết bị **trong** hệ thống thì đi qua `assign`/luồng Device (tự set `status=2`).
 
 ```jsonc
 // GET /api/IpAddress/grid-list?pageIndex=1&pageSize=50&keyword=&status=0&deviceId= → data.data[]
 {
   "id": 6989,
-  "ipAddress": "1.1.1.104",
-  "serverIp": null,
+  "ipAddress": "1.1.1.104",          // 2026-07-11: đã bỏ field "serverIp"
   "deviceId": null,
-  "deviceCode": null,
+  "deviceCode": null,                // "Khác" khi status=1; mã thiết bị khi status=2
   "ipPrefixId": 28,
   "prefix": "1.1.1",
   "prefixSubnetMask": "255.255.255.0",
@@ -217,7 +227,7 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
   "prefixPreferredDns": "0.45.1.2",
   "prefixAlternateDns": "9.7.6.5",
   "status": 0,
-  "statusText": "Chưa gán",
+  "statusText": "Chưa gán",          // 0→"Chưa gán", 1→"Đã gán (khác)", 2→"Đã gán"
   "note": null
 }
 ```
@@ -476,7 +486,7 @@ Trả `data[]` sort theo `transferDate` mới nhất trước. **Không có** AP
 
 Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang dùng để thêm thiết bị mới) và muốn thêm hàng loạt thay vì tạo tay từng cái. **Bắt buộc quy trình 2 bước — xem trước rồi mới xác nhận**, không có API ghi thẳng file vào DB.
 
-**Mẫu file Excel — 8 cột cố định theo đúng thứ tự, dòng 1 là header** (server luôn bỏ qua dòng 1, ghi gì cũng được):
+**Mẫu file Excel — 13 cột cố định theo đúng thứ tự, dòng 1 là header** (server luôn bỏ qua dòng 1, ghi gì cũng được; 2026-07-11: thêm 5 cột cấu hình Hãng/Model/CPU/RAM/Ổ Cứng giữa "Số SerialNumber" và "MQL Cũ" — trước đó chỉ có 8 cột, "MQL Cũ" ở cột H):
 
 | Cột | Tên trong Excel | Map sang field | Bắt buộc? |
 |---|---|---|---|
@@ -487,9 +497,16 @@ Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang 
 | E | Ngày Mua | Ngày mua (`purchaseDate`) | ✅ Bắt buộc — xem định dạng bên dưới |
 | F | Ghi Chú | Ghi chú (`note`) | Không bắt buộc |
 | G | Số SerialNumber | Số serial (`serialNumber`) | Không bắt buộc — phải unique nếu có nhập |
-| H | MQL Cũ | Mã thiết bị **bị thay thế** bởi thiết bị mới này | Không bắt buộc |
+| H | Hãng | Hãng sản xuất (`maker`, ghi vào `DeviceConfiguration.Maker`) | Không bắt buộc |
+| I | Model | Model (`model`, ghi vào `DeviceConfiguration.Model`) | Không bắt buộc |
+| J | CPU | CPU (`cpu`, ghi vào `DeviceConfiguration.Cpu`) | Không bắt buộc |
+| K | RAM | RAM (`ram`, ghi vào `DeviceConfiguration.Ram`) | Không bắt buộc |
+| L | Ổ Cứng | Ổ cứng (`hardDrive`, ghi vào `DeviceConfiguration.HardDrive`) | Không bắt buộc |
+| M | MQL Cũ | Mã thiết bị **bị thay thế** bởi thiết bị mới này | Không bắt buộc |
 
 > Cột B/C/D là **TÊN** (text), không phải Id — server tự tra theo tên (không phân biệt hoa/thường). **Không tự tạo mới** nếu chưa có sẵn — không khớp tên nào thì dòng đó báo lỗi ở bước preview, chặn import.
+
+> **5 cột cấu hình H–L (Hãng/Model/CPU/RAM/Ổ Cứng) hoàn toàn tuỳ chọn**: nếu dòng có **ít nhất 1** trong 5 cột này khác rỗng, bước Confirm tự tạo kèm 1 `DeviceConfiguration` cho thiết bị vừa tạo (chỉ set đúng 5 field này, các field cấu hình khác — Mainboard/OS/VGA/...— để trống, sửa lại sau qua màn hình "Cập nhật cấu hình"). Nếu cả 5 cột đều rỗng thì không tạo `DeviceConfiguration` gì cả (giống hành vi cũ).
 
 **Định dạng cột "Ngày Mua"**:
 - Ô Excel là **Date thật** → đọc đúng luôn, không cần lo định dạng hiển thị.
@@ -533,6 +550,11 @@ thời điểm gọi).
       "purchaseDate": "2026-01-01T00:00:00",
       "note": "Ghi chú...",
       "serialNumber": null,
+      "maker": "Dell",                    // 5 field cấu hình tuỳ chọn (2026-07-11)
+      "model": "OptiPlex 7010",
+      "cpu": "Core i5-13500",
+      "ram": "16GB",
+      "hardDrive": "512GB SSD",
       "oldDeviceCode": null,
       "resolvedBranchId": 8,              // server đã tra sẵn Id — FE không cần tự tra
       "resolvedDeviceTypeId": 11,
@@ -548,7 +570,9 @@ thời điểm gọi).
       "deviceTypeName": "Access Point",
       "supplierName": "Đỉnh Thiên",
       "purchaseDate": "2026-01-01T00:00:00",
-      "note": null, "serialNumber": null, "oldDeviceCode": null,
+      "note": null, "serialNumber": null,
+      "maker": null, "model": null, "cpu": null, "ram": null, "hardDrive": null,
+      "oldDeviceCode": null,
       "resolvedBranchId": null, "resolvedDeviceTypeId": 11, "resolvedSupplierId": 2, "resolvedOldDeviceId": null,
       "isValid": false,
       "errors": ["Không tìm thấy Xưởng 'Xưởng không tồn tại'."]
@@ -560,7 +584,7 @@ thời điểm gọi).
 }
 ```
 
-FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm nội dung `errors`, để người dùng sửa lại file Excel gốc rồi upload/preview lại. Nút "Xác nhận import" nên **disable** khi `invalidRows > 0` (server cũng tự chặn ở bước confirm nếu cố tình gửi lúc còn lỗi).
+FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm nội dung `errors`, để người dùng sửa lại file Excel gốc rồi upload/preview lại. **Preview không đổi hành vi** — vẫn hiển thị đầy đủ dòng lỗi như trước. Nút "Xác nhận import" **không cần disable** khi `invalidRows > 0` nữa (2026-07-11, đổi — xem hành vi Confirm bên dưới): FE có thể để người dùng bấm Confirm ngay cả khi còn dòng lỗi, các dòng lỗi sẽ tự bị bỏ qua, chỉ dòng hợp lệ được tạo.
 
 **Bước 2 — Confirm (ghi DB thật)**: `POST /api/DeviceImport/confirm` — `Content-Type: application/json`, body gửi lại **đúng mảng `rows`** vừa nhận từ bước preview (chỉ cần các field thô, không cần gửi `resolvedXxxId`/`isValid`/`errors` — server tự tra lại từ đầu theo dữ liệu DB hiện tại, không tin Id do FE gửi lên):
 
@@ -577,6 +601,7 @@ FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm 
       "purchaseDate": "2026-01-01T00:00:00",
       "note": "Ghi chú...",
       "serialNumber": null,
+      "maker": "Dell", "model": "OptiPlex 7010", "cpu": "Core i5-13500", "ram": "16GB", "hardDrive": "512GB SSD",
       "oldDeviceCode": null
     }
   ]
@@ -588,6 +613,7 @@ FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm 
 {
   "createdCount": 1,
   "createdDeviceIds": [17996],
+  "createdConfigCount": 1,            // số Device vừa tạo có kèm DeviceConfiguration (2026-07-11)
   "pendingTransfers": [               // gợi ý "chuyển máy" từ cột MQL Cũ — CHƯA chuyển thật
     {
       "newDeviceId": 17996,
@@ -595,13 +621,21 @@ FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm 
       "oldDeviceId": 17500,
       "oldDeviceCode": "TEST-OLD-001"
     }
+  ],
+  "skippedCount": 1,                  // 2026-07-11: số dòng bị bỏ qua vì còn lỗi validate
+  "skippedRows": [
+    {
+      "rowNumber": 3,
+      "deviceCode": "TEST-IMPORT-002",
+      "errors": ["Không tìm thấy Xưởng 'Xưởng không tồn tại'."]
+    }
   ]
 }
 ```
 
 > FE nên điều hướng người dùng sang màn hình "Chuyển máy" ngay sau khi confirm, dùng `pendingTransfers` để **điền sẵn** danh sách (mỗi dòng = 1 cặp máy cũ/máy mới, cho phép sửa `newDeviceId` nếu người dùng muốn đổi ý), người dùng bấm "Chuyển" từng dòng (hoặc hàng loạt) mới thật sự gọi `POST /api/TransferHistory`. Nếu đóng màn hình mà chưa bấm "Chuyển", gợi ý này **mất luôn** (server không lưu lại) — chỉ tồn tại trong response của lần confirm đó.
 >
-> **Confirm luôn validate lại từ đầu** theo dữ liệu DB tại thời điểm bấm xác nhận (phòng trường hợp có gì đó đổi khác so với lúc xem preview — VD người khác vừa tạo trùng `MQL`). Nếu còn **bất kỳ** dòng nào lỗi, server **không ghi gì cả** (toàn bộ batch — atomic, không có chuyện tạo được nửa chừng) và trả 400 với `errors: string[]`, mỗi phần tử dạng `"Dòng {n}: {lý do}"` — FE xử lý y hệt lỗi 400 thông thường (mục 1.3), không cần logic riêng.
+> **Confirm luôn validate lại từ đầu** theo dữ liệu DB tại thời điểm bấm xác nhận (phòng trường hợp có gì đó đổi khác so với lúc xem preview — VD người khác vừa tạo trùng `MQL`). **Dòng lỗi bị bỏ qua, KHÔNG chặn cả batch nữa** (2026-07-11, đổi hành vi trước đó — trước đây có bất kỳ dòng lỗi nào thì không ghi gì cả và trả 400): giờ chỉ những dòng hợp lệ được tạo Device (kèm `DeviceConfiguration` nếu có), dòng lỗi trả về trong `skippedRows`/`skippedCount` của response 200 bình thường — FE hiển thị thông báo dạng "Đã tạo N thiết bị, bỏ qua M dòng lỗi" và liệt kê `skippedRows` cho người dùng biết dòng nào cần sửa lại rồi import bù sau. Response 400 (`errors: string[]`, dạng `"Dòng {n}: {lý do}"`) giờ chỉ còn xảy ra khi lỗi hệ thống ngoài dự kiến khi ghi các dòng hợp lệ (không phải do dòng lỗi validate nữa).
 
 **Quyền**: dùng chung permission `Asset.Device.Create` cho cả `preview` và `confirm` (không tách permission riêng cho import).
 
@@ -854,8 +888,8 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 | GET | `/api/DeviceType/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Loại thiết bị |
 | GET | `/api/SoftwareGroup/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Nhóm phần mềm |
 | GET | `/api/Software/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Phần mềm (danh mục) |
-| GET | `/api/IpPrefix/grid-list`, `/all`, `/{id}` — POST (tự sinh 255 IP), PUT `/{id}`, DELETE `/{id}` | Dải mạng |
-| GET | `/api/IpAddress/grid-list?...`, `/available?keyword=` (không phân trang, mới 2026-07-09), `/{id}` (không có `/all`) — POST, PUT `/{id}`, DELETE `/{id}`, PUT `/{id}/assign`, PUT `/{id}/unassign` | Địa chỉ IP |
+| GET | `/api/IpPrefix/grid-list`, `/all`, `/{id}` — POST (tự sinh 255 IP), DELETE `/{id}` (cascade IP con chưa dùng; **không còn PUT**, 2026-07-11) | Dải mạng |
+| GET | `/api/IpAddress/grid-list?...`, `/available?keyword=` (không phân trang, mới 2026-07-09), `/{id}` (không có `/all`) — PUT `/{id}` (chỉ đổi status+note), PUT `/{id}/assign`, PUT `/{id}/unassign` (**không còn POST/DELETE thủ công**, 2026-07-11) | Địa chỉ IP |
 | GET | `/api/Device/grid-list?...` (không có `/all`), `/available?keyword=` (không phân trang, máy `Chờ sử dụng`, mới 2026-07-10), `/{id}`, `/{id}/detail` — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
 | GET | `/api/Report/device-list?deviceTypeId=&branchId=&keyword=` (không phân trang, mới 2026-07-09) | Báo cáo in ấn (controller riêng, sẽ gom thêm các báo cáo khác) |
 | POST | `/api/TransferHistory` (mới 2026-07-09) — GET `/api/TransferHistory/device/{deviceId}` | Chuyển máy (di chuyển IP + phần mềm, đổi trạng thái máy cũ) |

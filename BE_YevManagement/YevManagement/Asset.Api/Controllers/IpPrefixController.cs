@@ -49,15 +49,9 @@ namespace Asset.Api.Controllers
                 $"Thêm prefix thành công, đã sinh {result.IpAddressCount} địa chỉ IP.");
         }
 
-        [RequirePermission("Asset.IpPrefix.Update")]
-        [HttpPut("{id}")]
-        public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateIpPrefixDto request)
-        {
-            if (id != request.Id) return Fail<bool>("Id không khớp.");
-
-            await _ipPrefixService.UpdateAsync(request);
-            return Success(true, "Cập nhật prefix thành công.");
-        }
+        // Không còn Update cho IpPrefix (2026-07-11, quyết định người dùng) — IpPrefix chỉ
+        // được Create (tự sinh 255 IpAddress con) và Delete (cascade IP con chưa dùng, chặn
+        // nếu còn IP con đang gán cho Device).
 
         [RequirePermission("Asset.IpPrefix.Delete")]
         [HttpDelete("{id}")]

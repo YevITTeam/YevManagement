@@ -9,8 +9,6 @@ public partial class IpAddress
 
     public string IpAddress1 { get; set; } = null!;
 
-    public string? ServerIp { get; set; }
-
     public int? DeviceId { get; set; }
 
     public int IpPrefixId { get; set; }
