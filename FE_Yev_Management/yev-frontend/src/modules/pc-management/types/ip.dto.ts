@@ -24,6 +24,9 @@ export interface IpAddressUpdateDto {
 export interface IpPrefixDto {
     id: number,
     prefix: string,
+    // null nếu dải cũ tạo trước 2026-07-13 chưa gán Chi nhánh (docs/asset-api-fe.md §4.1).
+    branchId: number | null,
+    branchName: string | null,
     subnetMask: string | null,
     gateway: string | null,
     preferredDns: string | null,
@@ -35,6 +38,18 @@ export interface IpPrefixDto {
 
 export interface IpPrefixCreateDto {
     prefix: string,
+    branchId: number,
+    subnetMask: string | null,
+    gateway: string | null,
+    preferredDns: string | null,
+    alternateDns: string | null,
+    description: string | null
+}
+
+// docs/asset-api-fe.md §4.1 (2026-07-13) — PUT không có prefix (bất biến), chỉ sửa
+// Chi nhánh + cấu hình mạng.
+export interface IpPrefixUpdateDto {
+    branchId: number,
     subnetMask: string | null,
     gateway: string | null,
     preferredDns: string | null,

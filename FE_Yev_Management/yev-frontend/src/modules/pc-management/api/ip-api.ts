@@ -1,5 +1,5 @@
 import { api } from "@/lib/client";
-import type { IpAddressUpdateDto, IpAddressDto, IpPrefixCreateDto, IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
+import type { IpAddressUpdateDto, IpAddressDto, IpPrefixCreateDto, IpPrefixDto, IpPrefixUpdateDto } from "@/modules/pc-management/types/ip.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -16,6 +16,7 @@ const ENDPOINTS = {
         getAllIpPrefix: "/IpPrefix/all",
         getIpPrefixById: (id: number) => `/IpPrefix/${id}`,
         createIpPrefix: "/IpPrefix",
+        updateIpPrefix: (id: number) => `/IpPrefix/${id}`,
         deleteIpPrefix: (id: number) => `/IpPrefix/${id}`,
     }
 } as const;
@@ -100,7 +101,14 @@ export const IpApi = {
         const response = await api.post<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.createIpPrefix, ipPrefixData);
         return response.data;
     },
-    // docs/asset-api-fe.md §4.1 — không còn PUT (2026-07-11), field cố định lúc tạo.
+    // docs/asset-api-fe.md §4.1 (2026-07-13) — cho sửa Chi nhánh + cấu hình mạng, không sửa prefix.
+    updateIpPrefix: async (id: number, ipPrefixData: IpPrefixUpdateDto) => {
+        const response = await api.put<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.updateIpPrefix(id), {
+            id,
+            ...ipPrefixData,
+        });
+        return response.data;
+    },
     deleteIpPrefix: async (id: number) => {
         const response = await api.delete<ApiResponse<void>>(ENDPOINTS.IP_PREFIX.deleteIpPrefix(id));
         return response.data;

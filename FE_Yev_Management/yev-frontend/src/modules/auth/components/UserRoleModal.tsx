@@ -7,6 +7,7 @@ import type { UserDto, RoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleSelectModal from "./RoleSelectModal";
 import CreateUserDialog from "./CreateUserDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -26,6 +27,8 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [openRoleModalUserId, setOpenRoleModalUserId] = useState<number | null>(null);
     const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
     const [savingUserId, setSavingUserId] = useState<number | null>(null);
+    const [deletingUser, setDeletingUser] = useState<UserDto | null>(null);
+    const [isDeletingUser, setIsDeletingUser] = useState(false);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -65,6 +68,8 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const canUpdateUserRoles = hasPermission(currentUser, "Identity.User.UpdateRoles");
     // POST /api/Auth/create-user yêu cầu permission Identity.User.Create (docs/identity-api-fe.md §4.9).
     const canCreateUser = hasPermission(currentUser, "Identity.User.Create");
+    // DELETE /api/Auth/delete-user/{userId} — cùng quy ước đặt tên permission với delete-role (Identity.Role.Delete).
+    const canDeleteUser = hasPermission(currentUser, "Identity.User.Delete");
 
     const filteredUsers = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
@@ -110,6 +115,22 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
         const success = await handleSave(openRoleModalUserId);
         if (success) {
             setOpenRoleModalUserId(null);
+        }
+    };
+
+    const handleDeleteUser = async () => {
+        if (!deletingUser) return;
+        setIsDeletingUser(true);
+        try {
+            await AuthApi.deleteUser(deletingUser.id);
+            toast.success("Xoá người dùng thành công!");
+            setDeletingUser(null);
+            await fetchData();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, "Xoá người dùng thất bại!"));
+        } finally {
+            setIsDeletingUser(false);
         }
     };
 
@@ -244,7 +265,14 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                         </div>
 
                                         <div className="flex items-center justify-end">
-                                            <span className="text-sm text-[#5e3f3a]">Chọn vai trò</span>
+                                            <button
+                                                onClick={() => setDeletingUser(user)}
+                                                disabled={isSelf || !canDeleteUser}
+                                                title={isSelf ? "Không thể tự xoá chính mình" : "Xoá người dùng"}
+                                                className="cursor-pointer text-sm font-semibold text-[#930006] transition hover:text-[#e3000f] disabled:cursor-not-allowed disabled:text-[#5e3f3a] disabled:opacity-60"
+                                            >
+                                                Xoá
+                                            </button>
                                         </div>
                                     </div>
                                 );
@@ -275,6 +303,25 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                 onCreated={() => {
                     setIsCreateUserOpen(false);
                     void fetchData();
+                }}
+            />
+
+            <ConfirmDialog
+                isOpen={deletingUser !== null}
+                title="Xoá người dùng"
+                message={
+                    <>
+                        Bạn có chắc muốn xoá tài khoản{" "}
+                        <strong>{deletingUser?.fullName || deletingUser?.userName}</strong> không? Hành động này không
+                        thể hoàn tác.
+                    </>
+                }
+                approveLabel="Xoá"
+                deniedLabel="Huỷ"
+                loading={isDeletingUser}
+                onApprove={handleDeleteUser}
+                onDenied={() => {
+                    if (!isDeletingUser) setDeletingUser(null);
                 }}
             />
         </div>

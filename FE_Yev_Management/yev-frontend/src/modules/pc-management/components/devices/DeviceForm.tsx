@@ -98,9 +98,20 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
         DeviceTypeApi.getAllDeviceTypes().then((data) => setDeviceTypes(data)).catch((err) => console.error(err));
         SupplierApi.getAllSuppliers().then((data) => setSuppliers(data)).catch((err) => console.error(err));
         BranchApi.getAllBranches().then((data) => setBranches(data)).catch((err) => console.error(err));
-        DeviceGroupApi.getAllDeviceGroups().then((data) => setDeviceGroups(data)).catch((err) => console.error(err));
         DeviceDepartmentApi.getAllDeviceDepartments().then((data) => setDeviceDepartments(data)).catch((err) => console.error(err));
     }, []);
+
+    // Nhóm cascading theo Bộ phận đã chọn (docs/asset-api-fe.md §2.1) — chưa chọn Bộ phận thì
+    // danh sách Nhóm rỗng và dropdown Nhóm bị disable.
+    useEffect(() => {
+        if (!isOpen || !values.departmentId) {
+            setDeviceGroups([]);
+            return;
+        }
+        DeviceGroupApi.getAllDeviceGroups(values.departmentId)
+            .then((data) => setDeviceGroups(data))
+            .catch((err) => console.error(err));
+    }, [isOpen, values.departmentId]);
 
     // Tải danh sách IP còn trống (không phân trang) theo từ khoá tìm kiếm, có debounce.
     useEffect(() => {
@@ -339,27 +350,15 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Nhóm</span>
-                            <select
-                                value={values.groupId ?? ""}
-                                onChange={(event) => handleChange("groupId", event.target.value ? Number(event.target.value) : null)}
-                                disabled={loading}
-                                className={fieldClassName}
-                            >
-                                <option value="">Không gán nhóm</option>
-                                {deviceGroups.map((group) => (
-                                    <option key={group.id} value={group.id}>
-                                        {group.groupName}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label className="block">
                             <span className={fieldLabelClassName}>Bộ phận</span>
                             <select
                                 value={values.departmentId ?? ""}
-                                onChange={(event) => handleChange("departmentId", event.target.value ? Number(event.target.value) : null)}
+                                onChange={(event) => {
+                                    const newDepartmentId = event.target.value ? Number(event.target.value) : null;
+                                    // Đổi Bộ phận thì phải xoá lựa chọn Nhóm hiện tại — Nhóm thuộc Bộ phận cũ
+                                    // gần như chắc chắn không hợp lệ với Bộ phận mới (docs/asset-api-fe.md §2.1).
+                                    setValues((current) => ({ ...current, departmentId: newDepartmentId, groupId: null }));
+                                }}
                                 disabled={loading}
                                 className={fieldClassName}
                             >
@@ -367,6 +366,23 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                 {deviceDepartments.map((department) => (
                                     <option key={department.id} value={department.id}>
                                         {department.departmentName}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <label className="block">
+                            <span className={fieldLabelClassName}>Nhóm</span>
+                            <select
+                                value={values.groupId ?? ""}
+                                onChange={(event) => handleChange("groupId", event.target.value ? Number(event.target.value) : null)}
+                                disabled={loading || !values.departmentId}
+                                className={fieldClassName}
+                            >
+                                <option value="">{values.departmentId ? "Không gán nhóm" : "Chọn Bộ phận trước..."}</option>
+                                {deviceGroups.map((group) => (
+                                    <option key={group.id} value={group.id}>
+                                        {group.groupName}
                                     </option>
                                 ))}
                             </select>

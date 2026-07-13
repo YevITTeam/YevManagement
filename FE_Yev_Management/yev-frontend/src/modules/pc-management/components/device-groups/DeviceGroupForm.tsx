@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
+import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
 
 export interface DeviceGroupFormValues {
+    departmentId: number;
     groupCode: string;
     groupName: string;
 }
@@ -17,20 +20,29 @@ interface DeviceGroupFormProps {
     onSubmit: (values: DeviceGroupFormValues) => void | Promise<void>;
 }
 
-const emptyValues: DeviceGroupFormValues = { groupCode: "", groupName: "" };
+const emptyValues: DeviceGroupFormValues = { departmentId: 0, groupCode: "", groupName: "" };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
+// docs/asset-api-fe.md §2.1 (2026-07-13) — mỗi Nhóm bắt buộc thuộc về 1 Bộ phận.
 export default function DeviceGroupForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: DeviceGroupFormProps) {
     const [values, setValues] = useState<DeviceGroupFormValues>(emptyValues);
+    const [departments, setDepartments] = useState<DeviceDepartmentDto[]>([]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        DeviceDepartmentApi.getAllDeviceDepartments()
+            .then((data) => setDepartments(data))
+            .catch((err) => console.error(err));
+    }, [isOpen]);
 
     useEffect(() => {
         if (isOpen) {
             setValues(
                 initial
-                    ? { groupCode: initial.groupCode, groupName: initial.groupName }
+                    ? { departmentId: initial.departmentId, groupCode: initial.groupCode, groupName: initial.groupName }
                     : emptyValues
             );
         }
@@ -38,13 +50,13 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
 
     if (!isOpen) return null;
 
-    const handleChange = (field: keyof DeviceGroupFormValues, value: string) => {
+    const handleChange = (field: keyof DeviceGroupFormValues, value: string | number) => {
         setValues((current) => ({ ...current, [field]: value }));
     };
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!values.groupCode.trim() || !values.groupName.trim()) return;
+        if (!values.departmentId || !values.groupCode.trim() || !values.groupName.trim()) return;
         onSubmit(values);
     };
 
@@ -73,6 +85,26 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    <label className="block">
+                        <span className={fieldLabelClassName}>Bộ phận</span>
+                        <select
+                            value={values.departmentId || ""}
+                            onChange={(event) => handleChange("departmentId", Number(event.target.value))}
+                            disabled={loading}
+                            required
+                            className={fieldClassName}
+                        >
+                            <option value="" disabled>
+                                Chọn bộ phận...
+                            </option>
+                            {departments.map((department) => (
+                                <option key={department.id} value={department.id}>
+                                    {department.departmentName}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+
                     <label className="block">
                         <span className={fieldLabelClassName}>Mã nhóm</span>
                         <input

@@ -26,6 +26,8 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
     const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
+    const [formMode, setFormMode] = useState<"create" | "edit">("create");
+    const [editingPrefix, setEditingPrefix] = useState<IpPrefixDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
     const [deletingPrefix, setDeletingPrefix] = useState<IpPrefixDto | null>(null);
@@ -75,33 +77,54 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
     };
 
     const openCreateForm = () => {
+        setFormMode("create");
+        setEditingPrefix(null);
+        setFormOpen(true);
+    };
+
+    const openEditForm = (prefix: IpPrefixDto) => {
+        setFormMode("edit");
+        setEditingPrefix(prefix);
         setFormOpen(true);
     };
 
     const closeForm = () => {
         if (isSaving) return;
         setFormOpen(false);
+        setEditingPrefix(null);
     };
 
     const handleSubmitForm = async (values: IpPrefixFormValues) => {
         setIsSaving(true);
         try {
-            const payload = {
-                prefix: values.prefix.trim(),
-                subnetMask: values.subnetMask.trim() || null,
-                gateway: values.gateway.trim() || null,
-                preferredDns: values.preferredDns.trim() || null,
-                alternateDns: values.alternateDns.trim() || null,
-                description: values.description.trim() || null,
-            };
-
-            await IpApi.createIpPrefix(payload);
-            toast.success("Tạo dải mạng thành công, đã sinh 255 địa chỉ IP.");
+            if (formMode === "create") {
+                await IpApi.createIpPrefix({
+                    prefix: values.prefix.trim(),
+                    branchId: values.branchId,
+                    subnetMask: values.subnetMask.trim() || null,
+                    gateway: values.gateway.trim() || null,
+                    preferredDns: values.preferredDns.trim() || null,
+                    alternateDns: values.alternateDns.trim() || null,
+                    description: values.description.trim() || null,
+                });
+                toast.success("Tạo dải mạng thành công, đã sinh 255 địa chỉ IP.");
+            } else if (editingPrefix) {
+                await IpApi.updateIpPrefix(editingPrefix.id, {
+                    branchId: values.branchId,
+                    subnetMask: values.subnetMask.trim() || null,
+                    gateway: values.gateway.trim() || null,
+                    preferredDns: values.preferredDns.trim() || null,
+                    alternateDns: values.alternateDns.trim() || null,
+                    description: values.description.trim() || null,
+                });
+                toast.success("Cập nhật dải mạng thành công");
+            }
             setFormOpen(false);
+            setEditingPrefix(null);
             await fetchPrefixes();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Tạo dải mạng thất bại"));
+            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo dải mạng thất bại" : "Cập nhật dải mạng thất bại"));
         } finally {
             setIsSaving(false);
         }
@@ -157,6 +180,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                 <th className="whitespace-nowrap px-6 py-3">Dải mạng</th>
+                                <th className="whitespace-nowrap px-6 py-3">Chi nhánh</th>
                                 <th className="whitespace-nowrap px-6 py-3">Subnet mask</th>
                                 <th className="whitespace-nowrap px-6 py-3">Gateway</th>
                                 <th className="whitespace-nowrap px-6 py-3">DNS</th>
@@ -168,7 +192,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                         <tbody>
                             {!isLoading && prefixes.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                    <td colSpan={8} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có dữ liệu dải mạng.
                                     </td>
                                 </tr>
@@ -176,6 +200,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                             {prefixes.map((prefix) => (
                                 <tr key={prefix.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-[#191c1e]">{prefix.prefix}</td>
+                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.branchName ?? "—"}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.subnetMask ?? "—"}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.gateway ?? "—"}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">
@@ -190,13 +215,22 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                                         {prefix.usedIpCount} / {prefix.availableIpCount}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                                        <button
-                                            onClick={() => setDeletingPrefix(prefix)}
-                                            className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                            title="Xoá"
-                                        >
-                                            Xoá
-                                        </button>
+                                        <div className="inline-flex items-center gap-3">
+                                            <button
+                                                onClick={() => openEditForm(prefix)}
+                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                title="Sửa"
+                                            >
+                                                Sửa
+                                            </button>
+                                            <button
+                                                onClick={() => setDeletingPrefix(prefix)}
+                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                title="Xoá"
+                                            >
+                                                Xoá
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -227,6 +261,8 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
 
             <IpPrefixForm
                 isOpen={formOpen}
+                mode={formMode}
+                initial={editingPrefix}
                 loading={isSaving}
                 onClose={closeForm}
                 onSubmit={handleSubmitForm}

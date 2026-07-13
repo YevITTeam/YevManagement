@@ -10,6 +10,13 @@ interface PrintDeviceCodeDialogProps {
     onClose: () => void;
 }
 
+// Nhãn in chỉ cần mã + serial — dùng type tối giản này để tái sử dụng
+// cho các nguồn dữ liệu không phải DeviceDto đầy đủ (vd: dòng vừa import Excel).
+export interface DeviceLabelDto {
+    deviceCode: string;
+    serialNumber: string | null;
+}
+
 function escapeHtml(value: string) {
     return value
         .replace(/&/g, "&amp;")
@@ -19,7 +26,7 @@ function escapeHtml(value: string) {
         .replace(/'/g, "&#39;");
 }
 
-function buildPrintHtml(devices: DeviceDto[]) {
+function buildPrintHtml(devices: DeviceLabelDto[]) {
     const labels = devices
         .map(
             (device) => `
@@ -59,7 +66,7 @@ function buildPrintHtml(devices: DeviceDto[]) {
 </html>`;
 }
 
-export function printDeviceLabels(devices: DeviceDto[]) {
+export function printDeviceLabels(devices: DeviceLabelDto[]) {
     const printWindow = window.open("", "_blank", "width=900,height=650");
     if (!printWindow) {
         toast.error("Không thể mở cửa sổ in. Vui lòng cho phép cửa sổ bật lên (popup)." );

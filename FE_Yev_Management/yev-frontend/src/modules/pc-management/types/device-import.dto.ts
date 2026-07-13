@@ -2,12 +2,13 @@
 
 // Dữ liệu thô đọc được từ 1 dòng Excel — dùng chung cho response preview và request confirm.
 // 2026-07-11: thêm 5 cột cấu hình (Hãng/Model/CPU/RAM/Ổ Cứng) giữa "Số SerialNumber" và "MQL Cũ".
+// 2026-07-13: cột "Xưởng"/"Nhà Cung Cấp" đổi khớp theo Mã (branchCode/supplierCode) thay vì Tên.
 export interface DeviceImportRowDto {
     rowNumber: number;
     deviceCode: string;
-    branchName: string;
+    branchCode: string;
     deviceTypeName: string;
-    supplierName: string;
+    supplierCode: string;
     purchaseDate: string;
     note: string | null;
     serialNumber: string | null;

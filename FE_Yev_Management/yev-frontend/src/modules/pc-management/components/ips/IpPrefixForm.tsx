@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BranchApi } from "@/modules/pc-management/api/branch.api";
+import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
+import type { IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
 
 export interface IpPrefixFormValues {
     prefix: string;
+    branchId: number;
     subnetMask: string;
     gateway: string;
     preferredDns: string;
@@ -13,6 +17,8 @@ export interface IpPrefixFormValues {
 
 interface IpPrefixFormProps {
     isOpen: boolean;
+    mode: "create" | "edit";
+    initial?: IpPrefixDto | null;
     loading?: boolean;
     onClose: () => void;
     onSubmit: (values: IpPrefixFormValues) => void | Promise<void>;
@@ -20,6 +26,7 @@ interface IpPrefixFormProps {
 
 const emptyValues: IpPrefixFormValues = {
     prefix: "",
+    branchId: 0,
     subnetMask: "",
     gateway: "",
     preferredDns: "",
@@ -66,6 +73,8 @@ function validateIpPrefixForm(values: IpPrefixFormValues): string | null {
         return "Dải mạng (Prefix) không hợp lệ — phải gồm đúng 3 octet (0-255), ví dụ: 10.50.2.";
     }
 
+    if (!values.branchId) return "Vui lòng chọn Chi nhánh.";
+
     if (subnetMask && !isValidIPv4(subnetMask)) {
         return "Subnet mask không hợp lệ.";
     }
@@ -103,22 +112,40 @@ function validateIpPrefixForm(values: IpPrefixFormValues): string | null {
     return null;
 }
 
-// docs/asset-api-fe.md §4.1 (2026-07-11) — IpPrefix không còn PUT (Update):
-// toàn bộ field cố định ngay lúc tạo, form này chỉ dùng để "Tạo mới".
-export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmit }: IpPrefixFormProps) {
+// docs/asset-api-fe.md §4.1 (2026-07-13) — cho sửa Chi nhánh + cấu hình mạng qua PUT, riêng
+// `prefix` bất biến (đổi prefix vẫn phải xoá + tạo lại dải mới) nên bị disable ở chế độ sửa.
+export default function IpPrefixForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: IpPrefixFormProps) {
     const [values, setValues] = useState<IpPrefixFormValues>(emptyValues);
     const [formError, setFormError] = useState<string | null>(null);
+    const [branches, setBranches] = useState<BranchDto[]>([]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        BranchApi.getAllBranches().then((data) => setBranches(data)).catch((err) => console.error(err));
+    }, [isOpen]);
 
     useEffect(() => {
         if (isOpen) {
-            setValues(emptyValues);
+            setValues(
+                initial
+                    ? {
+                          prefix: initial.prefix,
+                          branchId: initial.branchId ?? 0,
+                          subnetMask: initial.subnetMask ?? "",
+                          gateway: initial.gateway ?? "",
+                          preferredDns: initial.preferredDns ?? "",
+                          alternateDns: initial.alternateDns ?? "",
+                          description: initial.description ?? "",
+                      }
+                    : emptyValues
+            );
             setFormError(null);
         }
-    }, [isOpen]);
+    }, [isOpen, initial]);
 
     if (!isOpen) return null;
 
-    const handleChange = (field: keyof IpPrefixFormValues, value: string) => {
+    const handleChange = (field: keyof IpPrefixFormValues, value: string | number) => {
         setValues((current) => ({ ...current, [field]: value }));
         setFormError(null);
     };
@@ -146,7 +173,7 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="ip-prefix-form-title" className="text-lg font-semibold text-[#191c1e]">
-                        Thêm dải mạng
+                        {mode === "create" ? "Thêm dải mạng" : "Cập nhật dải mạng"}
                     </h3>
                     <button
                         type="button"
@@ -159,7 +186,9 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
                 </div>
 
                 <p className="mb-4 rounded-lg border border-[#d8e2ff] bg-[#f4f5ff] px-3 py-2 text-sm text-[#004494]">
-                    Tạo dải mạng sẽ tự động sinh 255 địa chỉ IP con. Toàn bộ thông tin bên dưới cố định ngay lúc tạo — không thể sửa lại sau này, chỉ có thể xoá rồi tạo lại.
+                    {mode === "create"
+                        ? "Tạo dải mạng sẽ tự động sinh 255 địa chỉ IP con. Dải mạng (Prefix) cố định ngay lúc tạo — không thể sửa lại sau này, chỉ có thể xoá rồi tạo lại."
+                        : "Có thể sửa Chi nhánh và cấu hình mạng. Dải mạng (Prefix) không sửa được — muốn đổi phải xoá rồi tạo lại."}
                 </p>
 
                 {formError && (
@@ -176,13 +205,36 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
                                 value={values.prefix}
                                 onChange={(event) => handleChange("prefix", event.target.value)}
                                 placeholder="Ví dụ: 10.50.2"
-                                disabled={loading}
-                                autoFocus
+                                disabled={loading || mode === "edit"}
+                                autoFocus={mode === "create"}
                                 required
                                 className={fieldClassName}
                             />
                         </label>
 
+                        <label className="block">
+                            <span className={fieldLabelClassName}>Chi nhánh</span>
+                            <select
+                                value={values.branchId || ""}
+                                onChange={(event) => handleChange("branchId", Number(event.target.value))}
+                                disabled={loading}
+                                autoFocus={mode === "edit"}
+                                required
+                                className={fieldClassName}
+                            >
+                                <option value="" disabled>
+                                    Chọn chi nhánh...
+                                </option>
+                                {branches.map((branch) => (
+                                    <option key={branch.id} value={branch.id}>
+                                        {branch.branchName}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
                             <span className={fieldLabelClassName}>Subnet mask</span>
                             <input
@@ -194,19 +246,19 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
                                 className={fieldClassName}
                             />
                         </label>
-                    </div>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>Gateway</span>
-                        <input
-                            value={values.gateway}
-                            onChange={(event) => handleChange("gateway", event.target.value)}
-                            placeholder="Ví dụ: 10.50.2.1"
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>Gateway</span>
+                            <input
+                                value={values.gateway}
+                                onChange={(event) => handleChange("gateway", event.target.value)}
+                                placeholder="Ví dụ: 10.50.2.1"
+                                disabled={loading}
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
+                    </div>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
@@ -260,7 +312,7 @@ export default function IpPrefixForm({ isOpen, loading = false, onClose, onSubmi
                             disabled={loading}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? "Đang tạo..." : "Tạo mới"}
+                            {loading ? "Đang lưu..." : mode === "create" ? "Tạo mới" : "Lưu thay đổi"}
                         </button>
                     </div>
                 </form>

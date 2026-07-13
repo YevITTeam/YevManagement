@@ -12,6 +12,7 @@ import {
   Flag,
   Users,
   Layers,
+  Settings,
 } from "lucide-react";
 
 const navItems = [
@@ -24,6 +25,7 @@ const navItems = [
   { label: "Quản lý bộ phận", href: "/pc/device-departments", icon: Users },
   { label: "Quản lý phần mềm", href: "/pc/softwares", icon: ShieldCheck },
   { label: "Quản lý nhà cung cấp", href: "/pc/suppliers", icon: Package },
+  { label: "Cài đặt hệ thống", href: "/pc/settings", icon: Settings },
 ];
 
 export default function PcManagerSidebar() {

@@ -89,9 +89,9 @@ DELETE /api/{Entity}/{id}                                              → xoá 
 
 ---
 
-## 2. Master data đơn giản (Branch / Supplier / DeviceType / SoftwareGroup / DeviceGroup / DeviceDepartment)
+## 2. Master data đơn giản (Branch / Supplier / DeviceType / SoftwareGroup / DeviceDepartment)
 
-6 entity này **cấu trúc DTO giống hệt nhau** — chỉ đổi tên field:
+5 entity này **cấu trúc DTO giống hệt nhau** — chỉ đổi tên field:
 
 | Entity | Route | Trường Code | Trường Name |
 |---|---|---|---|
@@ -99,15 +99,14 @@ DELETE /api/{Entity}/{id}                                              → xoá 
 | Supplier (Nhà cung cấp) | `/api/Supplier` | `supplierCode` | `supplierName` |
 | DeviceType (Loại thiết bị) | `/api/DeviceType` | `typeCode` | `typeName` |
 | SoftwareGroup (Nhóm phần mềm) | `/api/SoftwareGroup` | `groupCode` | `groupName` |
-| DeviceGroup (Nhóm) | `/api/DeviceGroup` | `groupCode` | `groupName` |
 | DeviceDepartment (Bộ phận) | `/api/DeviceDepartment` | `departmentCode` | `departmentName` |
 
-`DeviceGroup`/`DeviceDepartment` dùng để gán "thiết bị đang ở chỗ nào" trên
-`Device.groupId`/`departmentId` (xem mục 5.5) — mới tạo, chỉ seed sẵn 1 dòng
-mặc định (`code="MD"`, `name="Mặc định"`) mỗi bảng; Admin tự thêm danh sách
-Nhóm/Bộ phận thật qua các endpoint CRUD dưới đây.
+`DeviceDepartment` dùng để gán "thiết bị đang ở Bộ phận nào" trên
+`Device.departmentId` (xem mục 5.5). **`DeviceGroup` (Nhóm) không còn cùng
+khuôn với nhóm này nữa** — từ 2026-07-13, mỗi Nhóm thuộc về đúng 1 Bộ phận
+(1 Bộ phận - N Nhóm), xem mục 2.1 riêng bên dưới.
 
-**Ví dụ Branch** (áp dụng tương tự cho 5 entity còn lại, chỉ đổi tên field):
+**Ví dụ Branch** (áp dụng tương tự cho 4 entity còn lại, chỉ đổi tên field):
 
 ```jsonc
 // GET /api/Branch/{id} → data
@@ -122,6 +121,55 @@ Nhóm/Bộ phận thật qua các endpoint CRUD dưới đây.
 ```
 
 Validate: cả `Code` và `Name` đều `[Required]`.
+
+### 2.1. DeviceGroup (Nhóm) — thuộc về 1 Bộ phận (từ 2026-07-13)
+
+`/api/DeviceGroup` — có `grid-list`, `all`, `{id}`, POST, PUT, DELETE. Khác 5
+entity ở mục 2: mỗi Nhóm **bắt buộc thuộc về 1 `DeviceDepartment`** (1 Bộ phận
+- N Nhóm — VD Bộ phận "Tổng vụ" có các Nhóm "OF"/"HZ"/"YT").
+
+```jsonc
+// GET /api/DeviceGroup/{id} → data
+{
+  "id": 5,
+  "groupCode": "OF",
+  "groupName": "Office (Văn phòng)",
+  "departmentId": 2,
+  "departmentName": "Tổng vụ"          // server tự gộp tên Bộ phận, FE không cần gọi thêm API
+}
+
+// POST /api/DeviceGroup — body
+{
+  "departmentId": 2,     // [Required] — phải là Id có thật trong DeviceDepartment, sai → 404
+  "groupCode": "OF",
+  "groupName": "Office (Văn phòng)"
+}
+// → 400 DomainException "Mã nhóm 'OF' đã tồn tại trong bộ phận '<tên bộ phận>'." nếu trùng
+//   CÙNG Bộ phận. Khác Bộ phận thì được phép trùng groupCode (VD Bộ phận "Quản lý chất lượng"
+//   cũng có 1 Nhóm "OF" riêng, khác bản ghi với Nhóm "OF" của "Tổng vụ").
+```
+
+Validate: `departmentId`, `groupCode`, `groupName` đều `[Required]`.
+
+**Cascading dropdown khi chọn Nhóm cho Device** (mục 5.5) — `GET
+/api/DeviceGroup/all?departmentId={id}` (và `grid-list?departmentId={id}` cho
+bảng có phân trang) lọc Nhóm theo đúng Bộ phận đã chọn. Bỏ `departmentId` = trả
+toàn bộ Nhóm (dùng cho màn quản lý danh mục Nhóm, không dùng cho form Device).
+Luồng UI chuẩn cho form tạo/sửa Device và form tạo/sửa chính Nhóm:
+
+1. Dropdown "Bộ phận" luôn load từ `GET /api/DeviceDepartment/all`, độc lập,
+   hiện luôn.
+2. Dropdown "Nhóm" **disable cho tới khi đã chọn Bộ phận**. Sau khi chọn Bộ
+   phận (hoặc khi mở form sửa Device/Nhóm đã có sẵn `departmentId`), gọi `GET
+   /api/DeviceGroup/all?departmentId={departmentId đã chọn}` để đổ dữ liệu.
+3. **Mỗi lần đổi Bộ phận, phải xoá lựa chọn Nhóm hiện tại** rồi gọi lại API ở
+   bước 2 — Nhóm đang chọn thuộc Bộ phận cũ gần như chắc chắn không hợp lệ với
+   Bộ phận mới.
+4. Submit: nếu có chọn Nhóm thì bắt buộc gửi kèm đúng `departmentId` là Bộ
+   phận cha của Nhóm đó — thiếu `departmentId` hoặc gửi sai cặp sẽ bị server
+   chặn 400 (`"Phải chọn Bộ phận trước khi chọn Nhóm."` hoặc `"Nhóm '<tên>'
+   không thuộc bộ phận đã chọn."`, xem mục 5.5). Chỉ chọn Bộ phận mà chưa chọn
+   Nhóm cụ thể vẫn hợp lệ.
 
 ---
 
@@ -168,6 +216,8 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 {
   "id": 28,
   "prefix": "1.1.1",                 // 3 octet, không có octet thứ 4
+  "branchId": 2,                     // null nếu dải cũ chưa gán Chi nhánh (xem ghi chú bên dưới)
+  "branchName": "Chi nhánh Biên Hòa",
   "subnetMask": "255.255.255.0",
   "gateway": "192.168.60.150",
   "preferredDns": "0.45.1.2",
@@ -179,12 +229,13 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 // grid-list / all: kết quả sort theo GIÁ TRỊ IP (10.45.2 trước 10.45.10), không sort chuỗi.
 ```
 
-**Tạo mới prefix (POST) tự động sinh 255 IpAddress con** (`n=1..255`, `Status=0 Available`) — FE chỉ cần 1 lần gọi, không cần thêm action "generate range":
+**Tạo mới prefix (POST) tự động sinh 255 IpAddress con** (`n=1..255`, `Status=0 Available`) — FE chỉ cần 1 lần gọi, không cần thêm action "generate range". **Bắt buộc chọn Chi nhánh ngay lúc tạo**:
 
 ```jsonc
 // POST /api/IpPrefix — body
 {
   "prefix": "10.50.2",   // [Required] regex đúng 3 octet, vd "10.50.2"
+  "branchId": 2,          // [Required] dải mạng phải gán cho 1 Chi nhánh ngay khi tạo
   "subnetMask": "255.255.255.0",
   "gateway": "10.50.2.1",
   "preferredDns": "8.8.8.8",
@@ -194,12 +245,28 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 // → message: "Thêm prefix thành công, đã sinh 255 địa chỉ IP."
 ```
 
-- **Không có PUT (Update) cho IpPrefix** — toàn bộ field cố định ngay lúc tạo; muốn đổi phải xoá + tạo lại.
-- **Validate cấu hình mạng khi tạo** — POST bị chặn (400 `DomainException`) nếu:
+**Sửa dải mạng (PUT, từ 2026-07-13)** — cho sửa Chi nhánh + cấu hình mạng khi có thay đổi (VD đổi DNS/Gateway), thay vì phải xoá + tạo lại (sẽ mất hết 255 IP con, kể cả IP đang gán Device). **`prefix` không nằm trong body Update** (3 octet định danh vẫn bất biến — đổi `prefix` vẫn phải xoá + tạo lại dải mới):
+
+```jsonc
+// PUT /api/IpPrefix/{id} — body
+{
+  "id": 28,
+  "branchId": 2,          // [Required]
+  "subnetMask": "255.255.255.0",
+  "gateway": "192.168.60.150",
+  "preferredDns": "8.8.8.8",
+  "alternateDns": "8.8.4.4",
+  "description": "Dải mạng phòng IT"
+}
+```
+
+- **Validate cấu hình mạng khi tạo/sửa** — POST/PUT bị chặn (400 `DomainException`) nếu:
+  - `branchId` không tồn tại hoặc đã xoá.
   - `subnetMask`/`gateway`/`preferredDns`/`alternateDns` (field nào có nhập) **không phải IPv4 hợp lệ** (đúng 4 octet 0–255).
   - `gateway` **không nằm trong dải mạng** của `prefix` (phải cùng network 3-octet, vd prefix `10.50.2` thì gateway phải là `10.50.2.x`), hoặc không cùng subnet theo `subnetMask`, hoặc trùng địa chỉ `.0`/`.255`.
   - FE nên validate sơ bộ phía client trước (báo lỗi ngay từng field) để trải nghiệm mượt, nhưng server vẫn là nguồn chặn cuối.
 - **Xoá (DELETE) bị chặn** (400 `DomainException`) nếu còn `IpAddress` con **đang gán cho Device**. Nếu không còn IP nào đang dùng, xoá Prefix sẽ **cascade xoá luôn toàn bộ IP con chưa dùng** — FE nên cảnh báo rõ hệ quả này trước khi xoá (mất luôn cả dải, không chỉ prefix).
+- **Dải mạng cũ tạo trước 2026-07-13** có thể có `branchId=null`/`branchName=null` (chưa có khái niệm Chi nhánh lúc tạo) — FE nên nhắc admin cập nhật Chi nhánh cho các dải này qua PUT.
 
 ### 4.2. IpAddress — `/api/IpAddress`
 
@@ -352,8 +419,8 @@ GET /api/Device/available?keyword=YDF
   "note": "...",
   "serialNumber": "SN-DEMO-001",   // nullable, unique khi có giá trị
   "isUseUsb": false,
-  "replacesOldDeviceId": null,      // máy này dự tính thay thế cho máy nào (gợi ý từ import Excel, xem mục 5.9/5.10), null nếu không có
-  "replacesOldDeviceCode": null,    // mã của replacesOldDeviceId, chỉ có giá trị khi replacesOldDeviceId khác null
+  "suggestedNewDeviceId": null,      // máy MỚI nào được gợi ý để thay thế CHÍNH máy đang xem này (gợi ý từ import Excel, xem mục 5.9/5.10) — chỉ có ý nghĩa khi đang xem 1 máy CŨ, null nếu không có gợi ý
+  "suggestedNewDeviceCode": null,    // mã của suggestedNewDeviceId, chỉ có giá trị khi suggestedNewDeviceId khác null
   "ipAddresses": [                  // có thể nhiều IP
     { "id": 6989, "ipAddress": "1.1.1.104" }
   ],
@@ -386,7 +453,7 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
   "deviceTypeId": 11,                 // [Required] Id thật từ /api/DeviceType/all
   "supplierId": 2,                    // [Required] Id thật từ /api/Supplier/all
   "branchId": 9,                      // [Required] Id thật từ /api/Branch/all
-  "groupId": null,                    // optional — Id thật từ /api/DeviceGroup/all nếu có gán, null nếu bỏ trống
+  "groupId": null,                    // optional — Id thật từ /api/DeviceGroup/all?departmentId={departmentId} nếu có gán, null nếu bỏ trống. Nếu gán thì BẮT BUỘC departmentId khác null và đúng là Bộ phận cha của Nhóm này (xem mục 2.1)
   "departmentId": null,               // optional — Id thật từ /api/DeviceDepartment/all nếu có gán, null nếu bỏ trống
   "manager": "Nguyễn Văn Test",       // [Required]
   "emails": [                         // [Required][MinLength(1)]
@@ -400,7 +467,7 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
   "serialNumber": "SN-TEST-001",      // nullable, [StringLength(100)], phải unique nếu có giá trị
   "isUseUsb": false,                  // mặc định false nếu không gửi
   "ipAddressIds": [6989],             // mảng Id IpAddress đang Status=0 Available (có thể rỗng []); server tự gán + set Assigned cho từng IP
-  "replacesOldDeviceId": null         // nullable — Id máy cũ mà thiết bị này dự tính thay thế; server tự set field này khi import Excel (mục 5.10), FE thường không cần gửi tay trừ khi muốn sửa/tạo gợi ý thủ công
+  "suggestedNewDeviceId": null         // nullable — Id máy MỚI được gợi ý để thay thế CHÍNH thiết bị này (chỉ có ý nghĩa khi tạo/sửa 1 máy CŨ). Từ 2026-07-13, luồng import Excel KHÔNG set field này qua Create/Update nữa — server tự set trực tiếp lên máy CŨ sau khi tạo xong máy mới (xem mục 5.10), FE hầu như không cần gửi tay trừ khi muốn sửa/tạo gợi ý thủ công ngay trên máy CŨ
 }
 ```
 
@@ -408,8 +475,8 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
 > Nếu 1 Id trong `ipAddressIds` trỏ tới IP không phải `Available`, hoặc `ipAddressIds` có Id trùng lặp → 400 `DomainException`.
 > Nếu `serialNumber` khớp với Device khác đã có (kể cả đã soft-delete) → 400 `DomainException` ("Số Serial '...' đã tồn tại."). Để trống/`null` thì không bị check trùng (nhiều Device có thể cùng `serialNumber=null`).
 > `emails` **không** yêu cầu unique — nhiều Device có thể dùng chung 1 email.
-> Nếu `replacesOldDeviceId` được gửi: máy cũ phải tồn tại (`!IsDeleted`) → 404 nếu không tìm thấy; khi sửa (`PUT`) không được trỏ về chính `id` của bản thân → 400 `DomainException`.
-> Nếu `groupId`/`departmentId` được gửi (khác `null`): phải là Id có thật và chưa xoá (`!IsDeleted`) → 404 nếu không tìm thấy. Bỏ trống (`null`) là hợp lệ — không bắt buộc gán Nhóm/Bộ phận.
+> Nếu `suggestedNewDeviceId` được gửi: máy mới đó phải tồn tại (`!IsDeleted`) → 404 nếu không tìm thấy; không được trỏ về chính `id` của bản thân (chỉ check khi `PUT`) → 400 `DomainException`.
+> Nếu `groupId`/`departmentId` được gửi (khác `null`): phải là Id có thật và chưa xoá (`!IsDeleted`) → 404 nếu không tìm thấy. Bỏ trống (`null`) là hợp lệ — không bắt buộc gán Nhóm/Bộ phận. **Từ 2026-07-13**: nếu gửi `groupId` thì bắt buộc phải gửi kèm `departmentId` đúng là Bộ phận cha của Nhóm đó, sai → 400 `DomainException` (`"Phải chọn Bộ phận trước khi chọn Nhóm."` nếu thiếu `departmentId`, hoặc `"Nhóm '<tên>' không thuộc bộ phận đã chọn."` nếu không khớp) — xem luồng UI cascading dropdown ở mục 2.1. Chỉ gửi `departmentId` mà không gửi `groupId` vẫn hợp lệ bình thường.
 
 ### 5.6. Sửa Device — `PUT /api/Device/{id}`
 
@@ -516,11 +583,14 @@ trả về (`data`, có thể `null` nếu không có gợi ý):
 Gợi ý này đến từ cột "MQL Cũ" lúc import Excel máy mới (mục 5.10) — dùng để
 **điền sẵn** `newDeviceId` trên form, người dùng vẫn xem/đổi được sang máy khác
 qua picker `GET /api/Device/available?keyword=` như bình thường trước khi bấm
-"Chuyển". Gợi ý được **lưu lại lâu dài trong DB**, không chỉ tồn tại 1 lần lúc
-import — nếu FE bỏ qua `pendingTransfers` trong response Confirm của bước
-import (VD người dùng đóng màn import mà chưa mở "Chuyển máy" ngay), gợi ý
-không bị mất, mở lại màn "Chuyển máy" trên máy cũ đó bất kỳ lúc nào sau này vẫn
-tự lấy lại được qua API này. Khuyến nghị: FE có thể bỏ qua `pendingTransfers`
+"Chuyển". Gợi ý được **lưu lại lâu dài trong DB ngay trên chính máy cũ**
+(field `suggestedNewDeviceId`, xem mục 5.3 — **từ 2026-07-13** đổi lưu trên
+máy cũ thay vì trên máy mới như trước, nhưng **route/response của API này
+không đổi**, FE không cần sửa gì nếu đã tích hợp trước đó), không chỉ tồn tại
+1 lần lúc import — nếu FE bỏ qua `pendingTransfers` trong response Confirm của
+bước import (VD người dùng đóng màn import mà chưa mở "Chuyển máy" ngay), gợi
+ý không bị mất, mở lại màn "Chuyển máy" trên máy cũ đó bất kỳ lúc nào sau này
+vẫn tự lấy lại được qua API này. Khuyến nghị: FE có thể bỏ qua `pendingTransfers`
 trong response Confirm và luôn gọi API tra cứu này khi mở màn "Chuyển máy".
 Không gọi API này thì form vẫn hoạt động bình thường (chỉ là để đỡ phải gõ tay
 lại cái đã biết trước từ lúc import).
@@ -540,9 +610,9 @@ Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang 
 | Cột | Tên trong Excel | Map sang field | Bắt buộc? |
 |---|---|---|---|
 | A | MQL | Mã thiết bị mới (`deviceCode`) | ✅ Bắt buộc — phải **chưa tồn tại** trong hệ thống |
-| B | Xưởng | Tên Chi nhánh — khớp `branchName` có sẵn | ✅ Bắt buộc |
+| B | Xưởng | **Mã** Chi nhánh (từ 2026-07-13) — khớp `branchCode` có sẵn | ✅ Bắt buộc |
 | C | Loại Thiết Bị | Tên Loại thiết bị — khớp `typeName` có sẵn | ✅ Bắt buộc |
-| D | Nhà Cung Cấp | Tên Nhà cung cấp — khớp `supplierName` có sẵn | ✅ Bắt buộc |
+| D | Nhà Cung Cấp | **Mã** Nhà cung cấp (từ 2026-07-13) — khớp `supplierCode` có sẵn | ✅ Bắt buộc |
 | E | Ngày Mua | Ngày mua (`purchaseDate`) | ✅ Bắt buộc — xem định dạng bên dưới |
 | F | Ghi Chú | Ghi chú (`note`) | Không bắt buộc |
 | G | Số SerialNumber | Số serial (`serialNumber`) | Không bắt buộc — phải unique nếu có nhập |
@@ -553,7 +623,7 @@ Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang 
 | L | Ổ Cứng | Ổ cứng (`hardDrive`, ghi vào `DeviceConfiguration.HardDrive`) | Không bắt buộc |
 | M | MQL Cũ | Mã thiết bị **bị thay thế** bởi thiết bị mới này | Không bắt buộc |
 
-> Cột B/C/D là **TÊN** (text), không phải Id — server tự tra theo tên (không phân biệt hoa/thường). **Không tự tạo mới** nếu chưa có sẵn — không khớp tên nào thì dòng đó báo lỗi ở bước preview, chặn import.
+> **Cột B (Xưởng) và D (Nhà Cung Cấp) nhập MÃ** (`branchCode`/`supplierCode`, VD `HN01`, không phải "Chi nhánh Hà Nội"), khớp không phân biệt hoa/thường — đổi từ khớp theo Tên sang khớp theo Mã (2026-07-13) vì Mã là duy nhất, Tên dễ trùng/gõ sai dấu. **Cột C (Loại Thiết Bị) vẫn khớp theo Tên** (`typeName`, không đổi). Không có Mã/Tên nào khớp (server tự tra, **không tự tạo mới**) thì dòng đó báo lỗi ở bước preview, chặn import dòng đó.
 
 > **5 cột cấu hình H–L (Hãng/Model/CPU/RAM/Ổ Cứng) hoàn toàn tuỳ chọn**: nếu dòng có **ít nhất 1** trong 5 cột này khác rỗng, bước Confirm tự tạo kèm 1 `DeviceConfiguration` cho thiết bị vừa tạo (chỉ set đúng 5 field này, các field cấu hình khác — Mainboard/OS/VGA/...— để trống, sửa lại sau qua màn hình "Cập nhật cấu hình"). Nếu cả 5 cột đều rỗng thì không tạo `DeviceConfiguration` gì cả.
 
@@ -595,9 +665,9 @@ thiết phải giữ state từ response Confirm.
     {
       "rowNumber": 2,                    // số dòng trong Excel — dùng để tô đúng dòng lỗi trên UI
       "deviceCode": "TEST-IMPORT-001",
-      "branchName": "CONFIRM",
+      "branchCode": "TAM",
       "deviceTypeName": "Access Point",
-      "supplierName": "Đỉnh Thiên",
+      "supplierCode": "DTH",
       "purchaseDate": "2026-01-01T00:00:00",
       "note": "Ghi chú...",
       "serialNumber": null,
@@ -617,16 +687,16 @@ thiết phải giữ state từ response Confirm.
     {
       "rowNumber": 3,
       "deviceCode": "TEST-IMPORT-002",
-      "branchName": "Xưởng không tồn tại",
+      "branchCode": "ZZZ",
       "deviceTypeName": "Access Point",
-      "supplierName": "Đỉnh Thiên",
+      "supplierCode": "DTH",
       "purchaseDate": "2026-01-01T00:00:00",
       "note": null, "serialNumber": null,
       "maker": null, "model": null, "cpu": null, "ram": null, "hardDrive": null,
       "oldDeviceCode": null,
       "resolvedBranchId": null, "resolvedDeviceTypeId": 11, "resolvedSupplierId": 2, "resolvedOldDeviceId": null,
       "isValid": false,
-      "errors": ["Không tìm thấy Xưởng 'Xưởng không tồn tại'."]
+      "errors": ["Không tìm thấy Xưởng có mã 'ZZZ'."]
     }
   ],
   "totalRows": 2,
@@ -646,9 +716,9 @@ FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm 
     {
       "rowNumber": 2,
       "deviceCode": "TEST-IMPORT-001",
-      "branchName": "CONFIRM",
+      "branchCode": "TAM",
       "deviceTypeName": "Access Point",
-      "supplierName": "Đỉnh Thiên",
+      "supplierCode": "DTH",
       "purchaseDate": "2026-01-01T00:00:00",
       "note": "Ghi chú...",
       "serialNumber": null,
@@ -935,13 +1005,13 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 | Method | Route | Mô tả |
 |---|---|---|
 | GET | `/api/Branch/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Chi nhánh |
-| GET | `/api/DeviceGroup/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Nhóm (gán trên Device.groupId) |
+| GET | `/api/DeviceGroup/grid-list?departmentId=`, `/all?departmentId=`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Nhóm (thuộc 1 Bộ phận, gán trên Device.groupId) |
 | GET | `/api/DeviceDepartment/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Bộ phận (gán trên Device.departmentId) |
 | GET | `/api/Supplier/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Nhà cung cấp |
 | GET | `/api/DeviceType/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Loại thiết bị |
 | GET | `/api/SoftwareGroup/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Nhóm phần mềm |
 | GET | `/api/Software/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Phần mềm (danh mục) |
-| GET | `/api/IpPrefix/grid-list`, `/all`, `/{id}` — POST (tự sinh 255 IP), DELETE `/{id}` (cascade IP con chưa dùng; **không có PUT**) | Dải mạng |
+| GET | `/api/IpPrefix/grid-list`, `/all`, `/{id}` — POST (tự sinh 255 IP, bắt buộc branchId), PUT `/{id}` (branchId + subnetMask/gateway/DNS/description, không sửa prefix), DELETE `/{id}` (cascade IP con chưa dùng) | Dải mạng |
 | GET | `/api/IpAddress/grid-list?...`, `/available?keyword=` (không phân trang), `/{id}` (không có `/all`) — PUT `/{id}` (chỉ đổi status+note), PUT `/{id}/assign`, PUT `/{id}/unassign` (**không có POST/DELETE thủ công**) | Địa chỉ IP |
 | GET | `/api/Device/grid-list?...` (không có `/all`), `/available?keyword=` (không phân trang, máy `Chờ sử dụng`), `/{id}`, `/{id}/detail`, `/{id}/replacement-suggestion` (gợi ý máy thay thế cho màn "Chuyển máy") — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
 | GET | `/api/Report/device-list?deviceTypeId=&branchId=&keyword=` (không phân trang) | Báo cáo in ấn (controller riêng, sẽ gom thêm các báo cáo khác) |

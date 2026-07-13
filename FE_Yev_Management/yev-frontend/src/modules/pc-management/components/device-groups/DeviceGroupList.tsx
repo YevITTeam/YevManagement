@@ -5,6 +5,8 @@ import { toast } from "react-toastify";
 
 import { DeviceGroupApi } from "@/modules/pc-management/api/device-group.api";
 import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
+import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
+import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import DeviceGroupForm, { type DeviceGroupFormValues } from "./DeviceGroupForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -18,6 +20,9 @@ export default function DeviceGroupList() {
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
+
+    const [departments, setDepartments] = useState<DeviceDepartmentDto[]>([]);
+    const [departmentFilter, setDepartmentFilter] = useState<string>("");
 
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -41,6 +46,7 @@ export default function DeviceGroupList() {
                 pageIndex,
                 pageSize: PAGE_SIZE,
                 keyword: appliedKeyword || undefined,
+                departmentId: departmentFilter ? Number(departmentFilter) : undefined,
             });
             setDeviceGroups(result.data);
             setTotalCount(result.totalCount);
@@ -58,9 +64,15 @@ export default function DeviceGroupList() {
     };
 
     useEffect(() => {
+        DeviceDepartmentApi.getAllDeviceDepartments()
+            .then((data) => setDepartments(data))
+            .catch((err) => console.error(err));
+    }, []);
+
+    useEffect(() => {
         fetchDeviceGroups();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+    }, [pageIndex, appliedKeyword, departmentFilter]);
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -149,7 +161,7 @@ export default function DeviceGroupList() {
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
@@ -157,6 +169,21 @@ export default function DeviceGroupList() {
                             placeholder="Tìm theo mã hoặc tên nhóm..."
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
+                        <select
+                            value={departmentFilter}
+                            onChange={(event) => {
+                                setPageIndex(1);
+                                setDepartmentFilter(event.target.value);
+                            }}
+                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        >
+                            <option value="">Tất cả bộ phận</option>
+                            {departments.map((department) => (
+                                <option key={department.id} value={department.id}>
+                                    {department.departmentName}
+                                </option>
+                            ))}
+                        </select>
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
@@ -181,13 +208,14 @@ export default function DeviceGroupList() {
                                 <th className="px-6 py-3">ID</th>
                                 <th className="px-6 py-3">Mã nhóm</th>
                                 <th className="px-6 py-3">Tên nhóm</th>
+                                <th className="px-6 py-3">Bộ phận</th>
                                 <th className="px-6 py-3 text-right">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && deviceGroups.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có dữ liệu nhóm.
                                     </td>
                                 </tr>
@@ -197,6 +225,7 @@ export default function DeviceGroupList() {
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{deviceGroup.id}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{deviceGroup.groupCode}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{deviceGroup.groupName}</td>
+                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{deviceGroup.departmentName}</td>
                                     <td className="px-6 py-4 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button

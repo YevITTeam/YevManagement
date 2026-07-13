@@ -12,6 +12,7 @@ const ENDPOINTS = {
     createRole: "/Auth/create-role",
     updateRole: (roleId: number) => `/Auth/update-role/${roleId}`,
     deleteRole: (roleId: number) => `/Auth/delete-role/${roleId}`,
+    deleteUser: (userId: number) => `/Auth/delete-user/${userId}`,
   }
 } as const;
 
@@ -70,6 +71,11 @@ export const AuthApi = {
 
   deleteRole: async (roleId: number) => {
     const response = await api.delete<ApiResponse<null>>(ENDPOINTS.AUTH.deleteRole(roleId));
+    return response.data;
+  },
+
+  deleteUser: async (userId: number) => {
+    const response = await api.delete<ApiResponse<null>>(ENDPOINTS.AUTH.deleteUser(userId));
     return response.data;
   },
 };

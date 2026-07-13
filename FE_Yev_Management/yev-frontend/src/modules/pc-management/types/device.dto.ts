@@ -92,10 +92,11 @@ export interface DeviceGetDto {
     serialNumber: string | null;
     isUseUsb: boolean;
     ipAddresses: DeviceIpAddressDto[];
-    // 2026-07-11: máy này dự tính thay thế cho máy nào — gợi ý từ cột "MQL Cũ" lúc import Excel
-    // (docs/asset-api-fe.md §5.3/5.10), null nếu không có. Chỉ để hiển thị/tham khảo.
-    replacesOldDeviceId: number | null;
-    replacesOldDeviceCode: string | null;
+    // 2026-07-13: máy MỚI nào được gợi ý để thay thế CHÍNH máy đang xem này — chỉ có ý nghĩa khi
+    // đang xem 1 máy CŨ, gợi ý từ cột "MQL Cũ" lúc import Excel (docs/asset-api-fe.md §5.3/5.10),
+    // null nếu không có. Chỉ để hiển thị/tham khảo (đổi tên từ replacesOldDeviceId/Code).
+    suggestedNewDeviceId: number | null;
+    suggestedNewDeviceCode: string | null;
 }
 
 // GET /api/Device/{oldDeviceId}/replacement-suggestion — gợi ý điền sẵn máy mới cho màn "Chuyển máy"

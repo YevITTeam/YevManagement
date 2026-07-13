@@ -9,6 +9,8 @@ import type {
     DeviceImportPreviewRowDto,
 } from "@/modules/pc-management/types/device-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { printDeviceLabels } from "@/modules/pc-management/components/PrintDeviceCodeDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 
 interface ImportDeviceDialogProps {
     isOpen: boolean;
@@ -21,6 +23,13 @@ interface ImportDeviceDialogProps {
 
 function formatDate(value: string | null) {
     if (!value) return "-";
+    // BE trả purchaseDate dạng "dd/MM/yyyy" (docs/asset-api-fe.md §5.10) — parse thủ công vì
+    // new Date("dd/MM/yyyy") bị JS hiểu nhầm thành MM/dd/yyyy (kiểu Mỹ), làm lệch ngày/tháng.
+    const slashMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+        const [, day, month, year] = slashMatch;
+        return `${Number(day)}/${Number(month)}/${year}`;
+    }
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleDateString("vi-VN");
@@ -33,6 +42,7 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
     const [rows, setRows] = useState<DeviceImportPreviewRowDto[]>([]);
     const [summary, setSummary] = useState<{ totalRows: number; validRows: number; invalidRows: number } | null>(null);
     const [result, setResult] = useState<DeviceImportConfirmResultDto | null>(null);
+    const [showPrintPrompt, setShowPrintPrompt] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     if (!isOpen) return null;
@@ -44,6 +54,7 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
         setRows([]);
         setSummary(null);
         setResult(null);
+        setShowPrintPrompt(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
@@ -91,9 +102,9 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
             const rawRows = rows.map((row) => ({
                 rowNumber: row.rowNumber,
                 deviceCode: row.deviceCode,
-                branchName: row.branchName,
+                branchCode: row.branchCode,
                 deviceTypeName: row.deviceTypeName,
-                supplierName: row.supplierName,
+                supplierCode: row.supplierCode,
                 purchaseDate: row.purchaseDate,
                 note: row.note,
                 serialNumber: row.serialNumber,
@@ -110,6 +121,9 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                 `Đã tạo ${confirmResult.createdCount} thiết bị` +
                     (confirmResult.skippedCount > 0 ? `, bỏ qua ${confirmResult.skippedCount} dòng lỗi.` : ".")
             );
+            if (confirmResult.createdCount > 0) {
+                setShowPrintPrompt(true);
+            }
         } catch (err) {
             toast.error(getApiErrorMessage(err, "Xác nhận import thất bại."));
         } finally {
@@ -118,6 +132,11 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
     };
 
     const canConfirm = summary !== null && rows.length > 0 && result === null;
+
+    // Các dòng đã tạo thành công = preview rows trừ đi các dòng bị bỏ qua ở bước Confirm.
+    const createdRows = result
+        ? rows.filter((row) => !result.skippedRows.some((skipped) => skipped.rowNumber === row.rowNumber))
+        : [];
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -275,9 +294,9 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                                         <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                             <th className="whitespace-nowrap px-3 py-2">Dòng</th>
                                             <th className="whitespace-nowrap px-3 py-2">MQL</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Xưởng</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Mã Xưởng</th>
                                             <th className="whitespace-nowrap px-3 py-2">Loại thiết bị</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Nhà cung cấp</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Mã NCC</th>
                                             <th className="whitespace-nowrap px-3 py-2">Ngày mua</th>
                                             <th className="whitespace-nowrap px-3 py-2">Serial</th>
                                             <th className="whitespace-nowrap px-3 py-2">Hãng</th>
@@ -298,9 +317,9 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                                             >
                                                 <td className="whitespace-nowrap px-3 py-2 font-semibold text-[#191c1e]">{row.rowNumber}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#191c1e]">{row.deviceCode}</td>
-                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.branchName}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.branchCode}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.deviceTypeName}</td>
-                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.supplierName}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.supplierCode}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{formatDate(row.purchaseDate)}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.serialNumber ?? "-"}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.maker ?? "-"}</td>
@@ -345,6 +364,21 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                     )}
                 </div>
             </div>
+
+            <ConfirmDialog
+                isOpen={showPrintPrompt}
+                title="In mã thiết bị"
+                message={`Đã import thành công ${result?.createdCount ?? 0} thiết bị. Bạn có muốn in mã thiết bị vừa import không?`}
+                approveLabel="In mã"
+                deniedLabel="Để sau"
+                onApprove={() => {
+                    printDeviceLabels(
+                        createdRows.map((row) => ({ deviceCode: row.deviceCode, serialNumber: row.serialNumber }))
+                    );
+                    setShowPrintPrompt(false);
+                }}
+                onDenied={() => setShowPrintPrompt(false)}
+            />
         </div>
     );
 }
