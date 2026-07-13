@@ -27,7 +27,7 @@ namespace Asset.Application.Services
             }
 
             return await _unitOfWork.DeviceGroups.ToPagedResponseAsync(
-                query.OrderBy(x => x.Department.DepartmentCode).ThenBy(x => x.GroupCode),
+                query.OrderBy(x => x.Id),
                 pageIndex,
                 pageSize,
                 x => new DeviceGroupDto
@@ -56,7 +56,7 @@ namespace Asset.Application.Services
                     DepartmentName = x.Department.DepartmentName
                 }
             );
-            return groups.OrderBy(x => x.GroupName).ToList();
+            return groups.OrderBy(x => x.Id).ToList();
         }
 
         public async Task<DeviceGroupDto> GetByIdAsync(int id)

@@ -568,6 +568,12 @@ apply lên DB thật**). Cơ chế:
 
 ### 1.14. DeviceGroup (Nhóm) + DeviceDepartment (Bộ phận) — quan hệ 1 Bộ phận - N Nhóm
 
+**Sắp xếp (2026-07-13, theo yêu cầu)**: `DeviceType`/`DeviceGroup`/
+`DeviceDepartment` — cả `grid-list` lẫn `all` — đổi sang `OrderBy(x => x.Id)`
+(giữ đúng thứ tự tạo/import ban đầu), thay vì sort theo Code/Name như các
+master data khác (`Branch`/`Supplier`/`SoftwareGroup`/`Software` không đổi,
+vẫn sort theo Code/Name).
+
 `DeviceDepartment` (Bộ phận) là master data độc lập (Code/Name, giống pattern
 `Branch`). `DeviceGroup` (Nhóm) **thuộc về đúng 1 `DeviceDepartment`**
 (`DeviceGroup.DepartmentId` **bắt buộc**, không nullable — mỗi Nhóm luôn có

@@ -21,7 +21,7 @@ namespace Asset.Application.Services
             }
 
             return await _unitOfWork.DeviceTypes.ToPagedResponseAsync(
-                query.OrderBy(x => x.TypeCode),
+                query.OrderBy(x => x.Id),
                 pageIndex,
                 pageSize,
                 x => new DeviceTypeDto { Id = x.Id, TypeCode = x.TypeCode, TypeName = x.TypeName }
@@ -34,7 +34,7 @@ namespace Asset.Application.Services
                 predicate: x => !x.IsDeleted,
                 selector: x => new DeviceTypeDto { Id = x.Id, TypeCode = x.TypeCode, TypeName = x.TypeName }
             );
-            return types.OrderBy(x => x.TypeName).ToList();
+            return types.OrderBy(x => x.Id).ToList();
         }
 
         public async Task<DeviceTypeDto> GetByIdAsync(int id)

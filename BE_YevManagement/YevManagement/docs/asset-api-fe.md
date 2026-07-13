@@ -87,6 +87,8 @@ DELETE /api/{Entity}/{id}                                              → xoá 
 
 `GET /all` dùng để đổ dropdown/select (không phân trang, chỉ bản ghi active). `GET /grid-list` dùng cho bảng danh sách có phân trang.
 
+**Thứ tự sắp xếp mặc định khác nhau theo entity** (cả `grid-list` lẫn `all`, không có tham số sort tuỳ chỉnh): `Branch`/`Supplier`/`SoftwareGroup`/`Software` sort theo Code/Name (A-Z). **`DeviceType`/`DeviceGroup`/`DeviceDepartment` sort theo `Id` tăng dần** (từ 2026-07-13, theo yêu cầu — giữ đúng thứ tự tạo/import ban đầu thay vì sắp theo Mã/Tên).
+
 ---
 
 ## 2. Master data đơn giản (Branch / Supplier / DeviceType / SoftwareGroup / DeviceDepartment)

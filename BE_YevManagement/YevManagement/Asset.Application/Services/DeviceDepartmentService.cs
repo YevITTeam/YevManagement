@@ -22,7 +22,7 @@ namespace Asset.Application.Services
             }
 
             return await _unitOfWork.DeviceDepartments.ToPagedResponseAsync(
-                query.OrderBy(x => x.DepartmentCode),
+                query.OrderBy(x => x.Id),
                 pageIndex,
                 pageSize,
                 x => new DeviceDepartmentDto { Id = x.Id, DepartmentCode = x.DepartmentCode, DepartmentName = x.DepartmentName }
@@ -35,7 +35,7 @@ namespace Asset.Application.Services
                 predicate: x => !x.IsDeleted,
                 selector: x => new DeviceDepartmentDto { Id = x.Id, DepartmentCode = x.DepartmentCode, DepartmentName = x.DepartmentName }
             );
-            return departments.OrderBy(x => x.DepartmentName).ToList();
+            return departments.OrderBy(x => x.Id).ToList();
         }
 
         public async Task<DeviceDepartmentDto> GetByIdAsync(int id)
