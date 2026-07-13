@@ -19,7 +19,11 @@ public partial class IpPrefix
 
     public string? Description { get; set; }
 
+    public int? BranchId { get; set; }
+
     public bool IsDeleted { get; set; }
+
+    public virtual Branch? Branch { get; set; }
 
     public virtual ICollection<IpAddress> IpAddresses { get; set; } = new List<IpAddress>();
 }

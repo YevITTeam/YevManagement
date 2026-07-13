@@ -19,7 +19,7 @@
 
 | Entity | Thuộc tính chính | Quan hệ | Soft delete |
 |---|---|---|---|
-| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `GroupId?`, `DepartmentId?`, `Manager`, `PurchaseDate`, `DepreciationMonths`, `ExpirationDate?`(**tính toán**, không nhập tay), `IsOutsourced`, `Status`, `Note?`, `SerialNumber?`(unique khi có giá trị), `IsUseUsb`, `ReplacesOldDeviceId?`(tự tham chiếu, gợi ý máy thay thế) | N-1 Branch/DeviceType/Supplier; N-1 DeviceGroup/DeviceDepartment (optional, xem §1.14); N-1 ReplacesOldDevice (tự tham chiếu, optional); 1-1 DeviceConfiguration; 1-N IpAddresses (nhiều IP/device), 1-N DeviceEmails, DeviceSoftwares, TransferHistory(old/new) | **Có** |
+| `Device` | `DeviceCode`(unique), `DeviceName`, `DeviceTypeId`, `SupplierId`, `BranchId`, `GroupId?`, `DepartmentId?`, `Manager`, `PurchaseDate`, `DepreciationMonths`, `ExpirationDate?`(**tính toán**, không nhập tay), `IsOutsourced`, `Status`, `Note?`, `SerialNumber?`(unique khi có giá trị), `IsUseUsb`, `SuggestedNewDeviceId?`(tự tham chiếu, set trên máy CŨ, gợi ý máy MỚI nào sẽ thay nó — đổi hướng 2026-07-13, xem §1.8) | N-1 Branch/DeviceType/Supplier; N-1 DeviceGroup/DeviceDepartment (optional, xem §1.14); N-1 SuggestedNewDevice (tự tham chiếu, optional); 1-1 DeviceConfiguration; 1-N IpAddresses (nhiều IP/device), 1-N DeviceEmails, DeviceSoftwares, TransferHistory(old/new) | **Có** |
 | `DeviceEmail` | `DeviceId`, `Email`, `Note?` | N-1 Device | **Có** |
 | `Branch` | `BranchCode`(unique), `BranchName` | 1-N Devices | **Có** |
 | `DeviceGroup` | `GroupCode`(unique), `GroupName` | 1-N Devices | **Có** |
@@ -82,13 +82,34 @@ có) + DROP 4 cột cũ trên `IpAddresses`.
 `Status=Available`) trong cùng 1 lần gọi `IpPrefixService.CreateAsync` — không
 có action `generate-range` riêng.
 
-**Không có Create/Delete thủ công cho từng `IpAddress`, không có Update cho
-`IpPrefix`**: `IpAddressController` còn `grid-list`/`available`/`{id}` (View) +
-`PUT {id}` (chỉ đổi `Status`+`Note`) + `assign`/`unassign`. `IpPrefixController`
-chỉ còn `Create` (tự sinh 255 IP con) và `Delete`. `IIpAddressService.CreateAsync/
-DeleteAsync` và `IIpPrefixService.UpdateAsync` không tồn tại trong interface
-(cùng DTO `CreateIpAddressDto`/`UpdateIpPrefixDto` đã xoá). `UpdateIpAddressDto`
+**Không có Create/Delete thủ công cho từng `IpAddress`**: `IpAddressController`
+còn `grid-list`/`available`/`{id}` (View) + `PUT {id}` (chỉ đổi `Status`+`Note`)
++ `assign`/`unassign`. `IIpAddressService.CreateAsync/DeleteAsync` không tồn
+tại trong interface (DTO `CreateIpAddressDto` đã xoá). `UpdateIpAddressDto`
 chỉ còn `Id`/`Status`/`Note`.
+
+**`IpPrefix` có Update (từ 2026-07-13, đổi quyết định trước đó "không cho sửa
+sau khi tạo")**: `IpPrefixController` có `Create` (tự sinh 255 IP con), `Update`
+(PUT `{id}`) và `Delete`. `UpdateIpPrefixDto` (`Id`/`BranchId [Required]`/
+`SubnetMask?`/`Gateway?`/`PreferredDns?`/`AlternateDns?`/`Description?`) —
+**không có `Prefix`**: 3 octet định danh dải vẫn bất biến sau khi tạo (đã sinh
+sẵn 255 `IpAddress` con theo giá trị này) — đổi Prefix vẫn phải xoá + tạo lại
+như cũ. Cho sửa vì lý do thực tế: DNS/Gateway của 1 dải mạng có thể đổi theo
+thời gian, xoá+tạo lại sẽ mất toàn bộ 255 `IpAddress` con (kể cả IP đã gán cho
+Device). `IpPrefixService.UpdateAsync` chạy lại đúng `ValidateNetworkSettings`
+như `CreateAsync` (IPv4 hợp lệ, Gateway cùng subnet, không trùng network/
+broadcast — dùng `prefix.Prefix` hiện có của entity, không nhận từ client) +
+validate `BranchId` tồn tại (`!IsDeleted`) trước khi ghi.
+
+**`IpPrefix.BranchId`** (mới, xem migration `AddIpPrefixBranch` bên dưới): mỗi
+dải mạng gán cho đúng 1 Chi nhánh. Cột DB **nullable** (27 dải cũ trước khi có
+khái niệm này chưa gán Chi nhánh, để `null` cho tới khi Admin tự cập nhật qua
+`PUT`) nhưng `CreateIpPrefixDto.BranchId` **`[Required]`** — mọi dải mạng tạo
+mới từ nay bắt buộc chọn Chi nhánh ngay lúc tạo. `IpPrefixService.CreateAsync`/
+`UpdateAsync` đều validate `BranchId` tồn tại (`!IsDeleted`) qua
+`ValidateBranchIdAsync` (pattern giống `ValidateGroupIdAsync` ở `DeviceService`,
+khác là bắt buộc chứ không optional). `IpPrefixDto` trả kèm `BranchId?`/
+`BranchName?` (join `IpPrefix.Branch`, `null` nếu dải cũ chưa gán).
 
 **Validate cấu hình mạng khi tạo `IpPrefix`**: `IpPrefixService.CreateAsync` gọi
 `ValidateNetworkSettings` (logic theo công cụ nội bộ ChangeIP/SetIP.cs, qua
@@ -255,27 +276,45 @@ hợp** qua `TransferHistoryService.TransferAsync`, không phải CRUD tạo b�
 trả toàn bộ Device `Status=PendingUse` (0) và `!IsDeleted`, lọc theo
 `DeviceCode.Contains(keyword)` nếu có.
 
-**Gợi ý "máy thay thế" lưu xuống DB + endpoint tra cứu**: `Device` có cột tự
-tham chiếu `ReplacesOldDeviceId` (int?, FK → `Devices.Id`, index
-`IX_ThietBis_ThayTheChoId`, constraint `FK_ThietBis_ThietBis_ThayTheChoId`,
-`OnDelete(ClientSetNull)`) — nghĩa là "thiết bị này (máy mới) dự tính thay thế
-cho máy có Id này (máy cũ)". `DeviceImportService.ConfirmAsync` set field này
-khi tạo Device có `MQL Cũ` (qua `CreateDeviceDto.ReplacesOldDeviceId`, cũng có
-sẵn ở `UpdateDeviceDto` để sửa tay — `DeviceService.CreateAsync`/`UpdateAsync`
-validate máy cũ phải tồn tại `!IsDeleted` và không được trỏ vào chính nó).
+**Gợi ý "máy thay thế" lưu xuống DB + endpoint tra cứu (2026-07-13, đổi hướng
+tự tham chiếu)**: `Device` có cột tự tham chiếu `SuggestedNewDeviceId` (int?,
+FK → `Devices.Id`, index `IX_ThietBis_GoiYMayMoiId`, constraint
+`FK_ThietBis_ThietBis_GoiYMayMoiId`, `OnDelete(ClientSetNull)`) — nghĩa là
+"thiết bị này (máy CŨ) dự tính được thay thế bởi máy có Id này (máy MỚI)".
+**Trước 2026-07-13** cột này tên `ReplacesOldDeviceId` và nằm ngược hướng: lưu
+trên máy MỚI, trỏ về máy CŨ nó thay thế (`"máy này thay thế cho máy nào"`).
+Đổi hướng vì lý do thực tế: khi mở màn "Chuyển máy" trên 1 máy CŨ, hướng cũ
+buộc phải dò ngược toàn bộ Device khác xem ai khai `ReplacesOldDeviceId` =
+máy này (có thể nhiều dòng do nhiều lần import chồng nhau); hướng mới đọc
+thẳng 1 cột trên chính máy CŨ đang mở, không cần dò ngược.
+
+`DeviceImportService.ConfirmAsync` set field này: sau khi tạo xong Device mới
+từ 1 dòng Excel có `MQL Cũ`, gọi `DeviceService.SetSuggestedNewDeviceAsync
+(oldDeviceId, newDeviceId)` để ghi thẳng Id máy mới vào `SuggestedNewDeviceId`
+của máy CŨ tương ứng (ghi đè gợi ý cũ nếu máy cũ này từng được 1 lần import
+khác gợi ý trước đó — luôn giữ gợi ý mới nhất, không cần lưu nhiều gợi ý cùng
+lúc). Field cũng có sẵn ở `CreateDeviceDto`/`UpdateDeviceDto` để sửa tay trên
+chính máy CŨ (`DeviceService.CreateAsync`/`UpdateAsync` validate máy MỚI được
+gợi ý phải tồn tại `!IsDeleted` và không được tự trỏ vào chính nó).
 
 `GET /api/Device/{oldDeviceId}/replacement-suggestion` (permission
-`Asset.Device.View`, dùng chung `DeviceController`) trả
+`Asset.Device.View`, dùng chung `DeviceController`, **route/response giữ
+nguyên không đổi** dù đổi cơ chế lưu bên trong) trả
 `DeviceReplacementSuggestionDto? { Id, DeviceCode, DeviceName }` — gọi khi FE
 mở màn "Chuyển máy" trên 1 máy cũ để **tự điền sẵn** ô chọn `NewDeviceId`
 (vẫn có thể đổi qua `GET /api/Device/available`, đây chỉ là gợi ý). Logic chọn
-gợi ý (`DeviceService.GetReplacementSuggestionAsync`): tìm mọi Device có
-`ReplacesOldDeviceId == oldDeviceId`, `Status == PendingUse`, `!IsDeleted` —
-nếu nhiều máy cùng khai (nhiều lần import khác thời điểm cùng trỏ về 1 máy
-cũ), chỉ lấy máy có `Id` lớn nhất (import gần nhất) làm gợi ý duy nhất, không
-trả danh sách. `null` nếu không có gợi ý nào. `DeviceDto` trả kèm
-`ReplacesOldDeviceId`/`ReplacesOldDeviceCode` khi xem chi tiết máy mới. Migration
-`AddDeviceReplacesOldDevice` **đã apply lên DB thật**.
+gợi ý (`DeviceService.GetReplacementSuggestionAsync`): đọc thẳng
+`oldDevice.SuggestedNewDevice` (1 lần load kèm navigation, không cần query
+dò ngược nữa) — chỉ trả về nếu máy mới đó còn tồn tại, `!IsDeleted` và
+`Status == PendingUse` (chưa bị dùng cho lần chuyển máy nào khác kể từ lúc
+được gợi ý), ngược lại trả `null`. `DeviceDto` đổi trả kèm
+`SuggestedNewDeviceId`/`SuggestedNewDeviceCode` (thay cho
+`ReplacesOldDeviceId`/`ReplacesOldDeviceCode` cũ) khi xem chi tiết máy — nay
+field này có ý nghĩa khi xem máy CŨ (gợi ý máy nào sẽ thay nó), không phải khi
+xem máy MỚI. Migration `AddDeviceReplacesOldDevice` (đã apply) + migration nối
+tiếp `RenameDeviceReplacementToSuggestedNewDevice` (đổi hướng tự tham chiếu,
+kèm data-fixup chuyển giá trị hiện có sang đúng dòng máy CŨ, xem bảng migration
+cuối file) — **chờ deploy**.
 
 `GET /api/TransferHistory/device/{deviceId}` trả `List<TransferHistoryDto>` —
 lịch sử chuyển máy liên quan tới 1 Device (dù là vai trò máy cũ hay máy mới),
@@ -347,23 +386,29 @@ nhận BOM. CSV không có kiểu Date thật nên cột "Ngày Mua" luôn parse
      gợi ý vào `DeviceImportConfirmResultDto.PendingTransfers`
      (`DeviceImportPendingTransferDto { NewDeviceId, NewDeviceCode, OldDeviceId,
      OldDeviceCode }`) — thực tế lắp đặt có thể đổi ý. Đồng thời **lưu quan hệ
-     này xuống DB** qua `CreateDeviceDto.ReplacesOldDeviceId` (xem §1.8), vì
-     `PendingTransfers` chỉ trả 1 lần trong response Confirm còn
-     `ReplacesOldDeviceId` tồn tại lâu dài để tra lại sau qua `GET
+     này xuống DB** qua `DeviceService.SetSuggestedNewDeviceAsync(oldDeviceId,
+     newDeviceId)` — ghi thẳng Id máy MỚI vừa tạo vào `SuggestedNewDeviceId`
+     của máy CŨ (xem §1.8), vì `PendingTransfers` chỉ trả 1 lần trong response
+     Confirm còn `SuggestedNewDeviceId` tồn tại lâu dài để tra lại sau qua `GET
      /api/Device/{oldId}/replacement-suggestion`. FE dùng gợi ý để **điền sẵn
      nhưng cho sửa** trên màn "Chuyển máy" — người dùng phải tự bấm "Chuyển"
      thì mới thật sự gọi `POST /api/TransferHistory` (nghiệp vụ y nguyên §1.8,
      chỉ đổi **thời điểm** gọi).
 
 **Validate/resolve từng dòng** (`DeviceImportService.ValidateAndResolveRowsAsync`,
-dùng chung cho cả `preview` và `confirm`): `Xưởng`/`Loại Thiết Bị`/`Nhà Cung
-Cấp` là **tên** (không phải mã) → so khớp case-insensitive với
-`Branch.BranchName`/`DeviceType.TypeName`/`Supplier.SupplierName` đang
-`!IsDeleted`; **không tự tạo mới** — không khớp thì báo lỗi dòng đó, chặn
-import. Tương tự `MQL Cũ` phải khớp đúng 1 `Device.DeviceCode` (`!IsDeleted`)
-đang có sẵn. Các lỗi khác được kiểm: thiếu `MQL`/`Ngày Mua`, `MQL`/Serial trùng
-trong chính file đang import, `MQL`/Serial đã tồn tại trong DB, `MQL Cũ` trùng
-`MQL` mới, `MQL Cũ` bị dùng thay thế ở nhiều dòng trong cùng file.
+dùng chung cho cả `preview` và `confirm`): `Loại Thiết Bị` vẫn khớp theo **tên**
+(case-insensitive với `DeviceType.TypeName`, `!IsDeleted`, không đổi). **`Xưởng`/
+`Nhà Cung Cấp` đổi sang khớp theo MÃ (2026-07-13, đổi từ khớp theo Tên)** —
+so khớp case-insensitive với `Branch.BranchCode`/`Supplier.SupplierCode` đang
+`!IsDeleted` (lý do: Mã là duy nhất, còn Tên dễ trùng/khác nhau về dấu/viết
+tắt giữa các lần nhập liệu, dẫn tới match sai hoặc match hụt). `DeviceImportRowDto`
+đổi 2 field tương ứng `BranchName`→`BranchCode`, `SupplierName`→`SupplierCode`
+(field `DeviceTypeName` giữ nguyên). **Không tự tạo mới** nếu không khớp — báo
+lỗi dòng đó, chặn import dòng đó. Tương tự `MQL Cũ` phải khớp đúng 1
+`Device.DeviceCode` (`!IsDeleted`) đang có sẵn. Các lỗi khác được kiểm: thiếu
+`MQL`/`Ngày Mua`, `MQL`/Serial trùng trong chính file đang import, `MQL`/Serial
+đã tồn tại trong DB, `MQL Cũ` trùng `MQL` mới, `MQL Cũ` bị dùng thay thế ở nhiều
+dòng trong cùng file.
 
 **Chưa làm / giới hạn đã biết**: chưa có endpoint tải file Excel mẫu (FE dùng
 lại file mẫu người dùng đang có). Import chỉ hỗ trợ **tạo mới**, không hỗ trợ
@@ -521,17 +566,81 @@ apply lên DB thật**). Cơ chế:
 - Không có Create/Update DTO cho 2 entity này — hoàn toàn tự sinh (side
   effect), không có API cho client POST/PUT trực tiếp.
 
-### 1.14. DeviceGroup (Nhóm) + DeviceDepartment (Bộ phận)
+### 1.14. DeviceGroup (Nhóm) + DeviceDepartment (Bộ phận) — quan hệ 1 Bộ phận - N Nhóm
 
-2 bảng master data đơn giản (Code/Name, giống hệt pattern `Branch`), dùng để
-phân loại **"thiết bị đang ở chỗ nào"** bên cạnh `Branch`. `Device.GroupId`/
-`DepartmentId` **nullable** — dữ liệu Device cũ (5000+ dòng) chưa gán, chỉ áp
-dụng dần qua Create/Update mới; validate tồn tại (`!IsDeleted`) khi client có
-gửi Id. Migration `AddDeviceGroupAndDepartment` **đã apply lên DB thật**: tạo 2
-bảng `DeviceGroups`/`DeviceDepartments`, thêm 2 cột nullable `GroupId`/
-`DepartmentId` trên `Devices`, và seed sẵn 1 dòng mặc định mỗi bảng
-(`Code="MD"`, `Name="Mặc định"`) — Admin tự thêm/sửa danh sách thật qua CRUD
-API bên dưới.
+`DeviceDepartment` (Bộ phận) là master data độc lập (Code/Name, giống pattern
+`Branch`). `DeviceGroup` (Nhóm) **thuộc về đúng 1 `DeviceDepartment`**
+(`DeviceGroup.DepartmentId` **bắt buộc**, không nullable — mỗi Nhóm luôn có
+đúng 1 Bộ phận cha, khớp sơ đồ tổ chức thực tế: 1 Bộ phận chia thành nhiều
+Nhóm con). `Device.GroupId`/`DepartmentId` vẫn **nullable** trên Device — dữ
+liệu Device cũ (5000+ dòng) chưa gán, chỉ áp dụng dần qua Create/Update mới.
+
+**Ràng buộc khi gán Nhóm/Bộ phận cho Device** (`DeviceService
+.ValidateGroupAndDepartmentAsync`, dùng chung Create/Update): nếu client gửi
+`GroupId` thì **bắt buộc phải gửi kèm `DepartmentId`** và `DepartmentId` đó
+phải đúng là Bộ phận cha của Nhóm đó (`DomainException` nếu thiếu
+`DepartmentId` hoặc Nhóm không thuộc Bộ phận đã chọn) — tránh lưu dữ liệu
+Nhóm/Bộ phận không khớp nhau trên 1 Device. `DepartmentId` vẫn có thể gửi độc
+lập (không kèm `GroupId`) nếu chỉ muốn gán Bộ phận mà chưa xác định Nhóm cụ
+thể.
+
+**`GroupCode` không còn unique toàn cục — chỉ unique trong phạm vi 1 Bộ phận**
+(unique index đổi từ `IX_Nhoms_MaNhom` (`GroupCode`) sang
+`IX_Nhoms_BoPhanId_MaNhom` (`DepartmentId`+`GroupCode`)): 2 Bộ phận khác nhau
+có thể cùng có 1 Nhóm mã `"OF"` (VD Tổng vụ và Quản lý chất lượng đều có
+`GroupCode="OF"`, là 2 bản ghi `DeviceGroup` khác nhau). `DeviceGroupService
+.CreateAsync`/`UpdateAsync` check trùng theo cặp `(DepartmentId, GroupCode)`
+thay vì chỉ `GroupCode`, thông báo lỗi kèm tên Bộ phận (VD `"Mã nhóm 'OF' đã
+tồn tại trong bộ phận 'Quản lý chất lượng'."`).
+
+**Dropdown Nhóm phụ thuộc Bộ phận đã chọn (cascading)**: `GET
+/api/DeviceGroup/all?departmentId=` và `GET /api/DeviceGroup/grid-list
+?departmentId=` (tham số optional, không truyền = toàn bộ Nhóm) — FE dùng để
+chỉ hiện Nhóm thuộc đúng Bộ phận người dùng vừa chọn trên form Device/màn quản
+lý Nhóm, xem mô tả UI chi tiết ở cuối mục này.
+
+Migration `AddDeviceGroupAndDepartment` (đã apply) tạo 2 bảng gốc + seed 1
+dòng mặc định mỗi bảng (`Code="MD"`, `Name="Mặc định"`). Migration
+`ChangeDeviceGroupDepartmentRelation` (2026-07-13, **đã apply lên DB
+thật**, verify 9 Bộ phận / 28 Nhóm) đổi quan hệ: xoá cứng data cũ
+(`DeviceGroups` chỉ có 1 dòng "MD",
+`DeviceDepartments` có "MD" + "IT" tự thêm tay — **đã xác nhận chưa Device nào
+tham chiếu** trước khi xoá), thêm cột bắt buộc `DeviceGroup.DepartmentId` +
+FK/unique composite, rồi import bộ mã Bộ phận/Nhóm chính thức theo sơ đồ tổ
+chức thực tế (9 Bộ phận, 28 Nhóm). **15 mã Nhóm chưa có tên đầy đủ lúc import**
+(`HZ`/`YT`/`PD`/`EC`/`JK`/`MA`/`IM`/`IT`/`PL`/`PR`/`WH`/`SH`/`KS`/`00`/`JP` —
+tạm để `GroupName` = đúng mã Code) — sửa lại tên thật qua `PUT
+/api/DeviceGroup/{id}` khi có thông tin đầy đủ, không cần migration mới.
+
+**Mô tả cho FE — luồng UI liên quan (2026-07-13):**
+
+1. **Màn quản lý "Bộ phận"** (`/api/DeviceDepartment`): CRUD độc lập như cũ,
+   không đổi.
+2. **Màn quản lý "Nhóm"** (`/api/DeviceGroup`): form Create/Update giờ
+   **bắt buộc chọn Bộ phận trước** (dropdown load từ `GET
+   /api/DeviceDepartment/all`) rồi mới nhập `GroupCode`/`GroupName`. Validate
+   trùng mã chỉ áp dụng trong phạm vi Bộ phận đã chọn — đổi Bộ phận của 1 Nhóm
+   đang có thể khiến `GroupCode` cũ hết trùng (hợp lệ) hoặc trùng mới (chặn),
+   server luôn là nguồn xác nhận cuối cùng. Bảng danh sách Nhóm nên hiển thị
+   thêm cột "Bộ phận" (`DepartmentName` trong `DeviceGroupDto`) và có thể lọc
+   theo Bộ phận qua `grid-list?departmentId=`.
+3. **Form Device (gán Nhóm/Bộ phận cho thiết bị)**: đổi từ 2 dropdown độc lập
+   sang **cascading 2 tầng**:
+   - Bước 1: chọn "Bộ phận" — dropdown từ `GET /api/DeviceDepartment/all`
+     (độc lập, không đổi).
+   - Bước 2: dropdown "Nhóm" gọi lại `GET /api/DeviceGroup/all?departmentId=
+     {id vừa chọn}` để chỉ hiện Nhóm thuộc đúng Bộ phận đó. **Mỗi lần người
+     dùng đổi Bộ phận, FE phải tự xoá lựa chọn Nhóm hiện tại** (không giữ
+     `GroupId` cũ vì có thể không còn thuộc Bộ phận mới) và disable dropdown
+     Nhóm cho tới khi đã chọn Bộ phận.
+   - Khi sửa Device đã có sẵn `GroupId`/`DepartmentId` (xem chi tiết qua
+     `GET /api/Device/{id}`, trả kèm `GroupName`/`DepartmentName` trong
+     `DeviceDto`): FE set Bộ phận trước, gọi `GET /api/DeviceGroup/all
+     ?departmentId={departmentId hiện có}` để load đúng danh sách Nhóm rồi mới
+     set giá trị Nhóm đã chọn sẵn.
+   - Submit Create/Update Device: nếu người dùng chọn Nhóm thì bắt buộc phải
+     có Bộ phận đi kèm (ràng buộc server chặn 400 nếu thiếu/không khớp, xem
+     trên) — FE nên validate sơ bộ tương tự phía client trước khi gọi API.
 
 ### 1.15. Xóa hàng loạt Device — xóa MỀM, chỉ cho thiết bị đã thanh lý
 
@@ -604,7 +713,7 @@ request), thực hiện tuần tự trong `IAssetUnitOfWork`:
 - **Branches/**: `BranchDto` (Id/Code/Name), `CreateBranchDto` (+`[Required]`), `UpdateBranchDto`.
 - **Suplliers/** *(giữ nguyên typo folder)*: `SupplierDto`, `CreateSupplierDto`, `UpdateSupplierDto`.
 - **DeviceTypes/**: `DeviceTypeDto`, `CreateDeviceTypeDto`, `UpdateDeviceTypeDto`.
-- **DeviceGroups/**: `DeviceGroupDto` (Id/Code/Name), `CreateDeviceGroupDto` (+`[Required]`), `UpdateDeviceGroupDto` — cùng khuôn `BranchDto`, xem §1.14.
+- **DeviceGroups/**: `DeviceGroupDto` (Id/GroupCode/GroupName/`DepartmentId`/`DepartmentName`), `CreateDeviceGroupDto`/`UpdateDeviceGroupDto` (`DepartmentId [Required]` + GroupCode/GroupName `[Required]`) — Nhóm nay thuộc về đúng 1 Bộ phận, xem §1.14.
 - **DeviceDepartments/**: `DeviceDepartmentDto` (Id/Code/Name), `CreateDeviceDepartmentDto` (+`[Required]`), `UpdateDeviceDepartmentDto` — cùng khuôn `BranchDto`, xem §1.14.
 - **Devices/**:
   - `DeviceFilterRequest` (query grid): `PageIndex=1`, `PageSize=50`, filter
@@ -623,8 +732,8 @@ request), thực hiện tuần tự trong `IAssetUnitOfWork`:
     `GroupId?`/`GroupName?`/`DepartmentId?`/`DepartmentName?` +
     `StatusText` + `IpAddresses: List<DeviceIpAddressDto>` (`Id`/`IpAddress`) +
     `Emails: List<DeviceEmailDto>` (`Id`/`Email`/`Note`) + `ExpirationDate`
-    tính toán + `SerialNumber?`/`IsUseUsb` + `ReplacesOldDeviceId?`/
-    `ReplacesOldDeviceCode?`.
+    tính toán + `SerialNumber?`/`IsUseUsb` + `SuggestedNewDeviceId?`/
+    `SuggestedNewDeviceCode?` (đổi tên 2026-07-13, xem §1.8).
   - `CreateDeviceDto`/`UpdateDeviceDto`: `DeviceCode/DeviceName/Manager`
     `[Required]`, `Emails: List<DeviceEmailInputDto>` `[Required][MinLength(1)]`
     (mỗi item `Email [Required][EmailAddress]` + `Note?`),
@@ -634,8 +743,8 @@ request), thực hiện tuần tự trong `IAssetUnitOfWork`:
     `[Required][Range(1,600)]`, `IsOutsourced` (bool), `Status` `[Range(0,3)]`,
     `Note?`, `IpAddressIds: List<int>` (mỗi Id phải là IP `Available`, không
     giới hạn số lượng), `SerialNumber?` (`[StringLength(100)]`), `IsUseUsb`
-    (bool), `ReplacesOldDeviceId?`. **Không có** `ExpirationDate` (server tự
-    tính, xem §1.5).
+    (bool), `SuggestedNewDeviceId?` (xem §1.8). **Không có** `ExpirationDate`
+    (server tự tính, xem §1.5).
   - `DeviceIpAddressDto` (`Id`/`IpAddress`), `DeviceEmailDto`
     (`Id`/`Email`/`Note`), `DeviceEmailInputDto` (`Email`/`Note`, dùng cho
     Create/Update) — đi kèm entity `DeviceEmail`.
@@ -653,12 +762,13 @@ request), thực hiện tuần tự trong `IAssetUnitOfWork`:
   `CreateIpAddressDto` (không tạo tay từng IP).
 - **IpPrefixes/**: `IpPrefixDto` (không có `IpAddressCount` — thay bằng
   `UsedIpCount` (IP đang dùng, `Status != Available`) + `AvailableIpCount` (IP
-  chưa dùng, `Status == Available`)), `CreateIpPrefixDto` (`Prefix`
-  `[Required]` + `[RegularExpression]` 3 octet, + SubnetMask/Gateway/DNS/
-  Description dùng chung cho cả subnet — `CreateAsync` validate thêm các field
-  IP hợp lệ + Gateway cùng subnet qua `NetworkHelper`, xem §1.2). **Không có**
-  `UpdateIpPrefixDto` (không còn Update cho IpPrefix, đổi prefix/subnet phải
-  xoá + tạo lại).
+  chưa dùng, `Status == Available`); có `BranchId?`/`BranchName?`),
+  `CreateIpPrefixDto` (`Prefix` `[Required]` + `[RegularExpression]` 3 octet,
+  `BranchId [Required]`, + SubnetMask/Gateway/DNS/Description dùng chung cho cả
+  subnet — `CreateAsync` validate thêm các field IP hợp lệ + Gateway cùng
+  subnet qua `NetworkHelper`, xem §1.2), `UpdateIpPrefixDto` (`Id`/
+  `BranchId [Required]`/`SubnetMask?`/`Gateway?`/`PreferredDns?`/
+  `AlternateDns?`/`Description?` — **không có** `Prefix`, xem §1.2).
 - **DeviceConfigurations/**: `DeviceConfigurationDto` (gộp `DeviceCode`, đủ 20
   field linh kiện), `CreateDeviceConfigurationDto` (`DeviceId` `[Required]`,
   còn lại đều optional), `UpdateDeviceConfigurationDto` (giống Create + `Id`;
@@ -710,7 +820,7 @@ request), thực hiện tuần tự trong `IAssetUnitOfWork`:
 | Thực thể | Service | Controller / Route | CRUD | Permission |
 |---|---|---|---|---|
 | Branch | `BranchService` (đầy đủ) | `BranchController` `/api/Branch` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.Branch.*` |
-| DeviceGroup | `DeviceGroupService` (đầy đủ, xem §1.14) | `DeviceGroupController` `/api/DeviceGroup` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.DeviceGroup.*` |
+| DeviceGroup | `DeviceGroupService` (đầy đủ, thuộc về 1 Bộ phận, xem §1.14) | `DeviceGroupController` `/api/DeviceGroup` | grid-list?departmentId=, all?departmentId=, {id}, POST, PUT, DELETE | `Asset.DeviceGroup.*` |
 | DeviceDepartment | `DeviceDepartmentService` (đầy đủ, xem §1.14) | `DeviceDepartmentController` `/api/DeviceDepartment` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.DeviceDepartment.*` |
 | Device | `DeviceService` (đầy đủ) | `DeviceController` `/api/Device` | grid-list, `available` (không phân trang), {id}, `{id}/detail`, `{id}/replacement-suggestion`, POST, PUT, DELETE (xóa mềm), `bulk-delete` (POST, xóa mềm hàng loạt — chỉ thiết bị Đã thanh lý, xem §1.15) (**không có** `all`) | `Asset.Device.*` |
 | AssetSetting | `AssetSettingService` (đầy đủ, xem §1.16) | `AssetSettingController` `/api/AssetSetting` | GET, PUT (thao tác trên đúng 1 dòng cấu hình, không có Id trên route) | `Asset.Setting.View/.Update` |
@@ -721,7 +831,7 @@ request), thực hiện tuần tự trong `IAssetUnitOfWork`:
 | Software | `SoftwareService` (đầy đủ) | `SoftwareController` `/api/Software` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.Software.*` |
 | SoftwareGroup | `SoftwareGroupService` (đầy đủ) | `SoftwareGroupController` `/api/SoftwareGroup` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.SoftwareGroup.*` |
 | IpAddress | `IpAddressService` (không có Create/Delete thủ công, Update chỉ đổi Status+Note) | `IpAddressController` `/api/IpAddress` | grid-list, `available` (không phân trang), {id}, PUT `{id}` (chỉ Status+Note), `{id}/assign`, `{id}/unassign` (**không có** POST/DELETE/`all`/`generate-range`) | `Asset.IpAddress.View/.Update/.Assign` |
-| IpPrefix | `IpPrefixService` (POST tự sinh 255 IP con; Delete cascade IP con chưa dùng) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, DELETE (**không có** PUT) | `Asset.IpPrefix.View/.Create/.Delete` |
+| IpPrefix | `IpPrefixService` (POST tự sinh 255 IP con; PUT sửa Chi nhánh + DNS/Gateway; Delete cascade IP con chưa dùng) | `IpPrefixController` `/api/IpPrefix` | grid-list, all, {id}, POST, PUT (BranchId + SubnetMask/Gateway/DNS/Description, không sửa Prefix), DELETE | `Asset.IpPrefix.View/.Create/.Update/.Delete` |
 | DeviceConfiguration | `DeviceConfigurationService` (CRUD + snapshot/history) | `DeviceConfigurationController` `/api/DeviceConfiguration` | `by-device/{deviceId}` (trả `null` nếu chưa có), POST, PUT, DELETE (xoá cứng, cascade Initial+History), `{configId}/initial` (GET), `initial/{id}` (DELETE), `{configId}/history` (GET list) — **không có** `grid-list`/`all` | `Asset.DeviceConfiguration.*` (initial/history GET→`.View`, DeleteInitial→`.Delete`) |
 | TransferHistory | `TransferHistoryService` ("chuyển máy", xem §1.8) | `TransferHistoryController` `/api/TransferHistory` | POST (thực hiện chuyển máy), `device/{deviceId}` (GET, lịch sử) — **không có** grid-list/all/PUT/DELETE (audit-log) | `Asset.TransferHistory.Create/.View` |
 | DeviceImport | `DeviceImportService` (import Device hàng loạt từ Excel/CSV, xem §1.9) | `DeviceImportController` `/api/DeviceImport` | `preview` (POST multipart file, không ghi DB), `confirm` (POST, validate lại rồi ghi DB trong 1 transaction) | `Asset.Device.Create` (dùng chung, không tách riêng) |
@@ -841,7 +951,8 @@ request), thực hiện tuần tự trong `IAssetUnitOfWork`:
 **Đã xong:** CRUD Branch/DeviceGroup/DeviceDepartment/DeviceType/Supplier/
 Software/SoftwareGroup/Device (đầy đủ, kể cả chọn/gán IP, gán Nhóm/Bộ phận
 optional — xem §1.14); IpAddress (chỉ đọc + gán/gỡ, không có Create/Update/
-Delete thủ công) + IpPrefix (chỉ Create/Delete, không có Update); CRUD
+Delete thủ công) + IpPrefix (Create/Update/Delete — Update sửa Chi nhánh +
+DNS/Gateway, không sửa Prefix, xem §1.2); CRUD
 DeviceSoftware + picker checkbox-list + đồng bộ hàng loạt `PUT sync`; CRUD
 DeviceConfiguration (kể cả snapshot "Cấu hình ban đầu" + audit log "Sửa chữa
 Thay thế"); API tổng hợp `GET /api/Device/{id}/detail`; nghiệp vụ "chuyển máy"
@@ -865,6 +976,9 @@ Domain + DbContext + Migrations.
 | `AddDeviceReplacesOldDevice` | Thêm cột tự tham chiếu `Device.ReplacesOldDeviceId` | **Đã apply** |
 | `AddDeviceGroupAndDepartment` | Tạo bảng `DeviceGroups`/`DeviceDepartments`, thêm cột nullable `Device.GroupId`/`DepartmentId`, seed 1 dòng mặc định mỗi bảng | **Đã apply** |
 | `AddAssetSetting` | Tạo bảng `AssetSettings`, seed 1 dòng mặc định (`LiquidationAfterMonths=2`, xem §1.16) | Chưa apply — chờ deploy |
+| `AddIpPrefixBranch` | Thêm cột nullable `IpPrefix.BranchId` + FK/index tới `Branches` (27 dải cũ để `null`, backfill dần qua PUT) | **Đã apply** (2026-07-13) |
+| `ChangeDeviceGroupDepartmentRelation` | Xoá data cũ (`DeviceGroups`/`DeviceDepartments` chưa Device nào dùng), thêm `DeviceGroup.DepartmentId` bắt buộc + FK/unique composite, import 9 Bộ phận + 28 Nhóm chính thức (xem §1.14) | **Đã apply** (2026-07-13) — đã verify trên DB thật: 9 Bộ phận / 28 Nhóm, đúng số Nhóm mỗi Bộ phận theo ảnh |
+| `RenameDeviceReplacementToSuggestedNewDevice` | Đổi hướng tự tham chiếu `Device.ReplacesOldDeviceId`→`SuggestedNewDeviceId` (đổi tên cột + đổi FK/index + **data-fixup SQL** chuyển giá trị hiện có sang đúng dòng máy CŨ, giữ gợi ý `Id` lớn nhất nếu nhiều máy mới cùng trỏ 1 máy cũ, xem §1.8) | **Đã apply** (2026-07-13) |
 
 Ngoài ra: dữ liệu thật `Software`/`SoftwareGroup` đã được sửa lại qua API CRUD
 sẵn có (không phải migration) — đối chiếu lại với dữ liệu gốc

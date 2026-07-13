@@ -12,6 +12,9 @@ namespace Asset.Application.Dtos.IpPrefixes
             ErrorMessage = "Prefix phải gồm đúng 3 octet hợp lệ, ví dụ 10.3.4")]
         public string Prefix { get; set; } = null!;
 
+        [Required(ErrorMessage = "Chi nhánh không được để trống")]
+        public int BranchId { get; set; }
+
         public string? SubnetMask { get; set; }
 
         public string? Gateway { get; set; }

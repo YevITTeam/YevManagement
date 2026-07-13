@@ -14,4 +14,6 @@ public partial class DeviceDepartment
     public bool IsDeleted { get; set; }
 
     public virtual ICollection<Device> Devices { get; set; } = new List<Device>();
+
+    public virtual ICollection<DeviceGroup> DeviceGroups { get; set; } = new List<DeviceGroup>();
 }

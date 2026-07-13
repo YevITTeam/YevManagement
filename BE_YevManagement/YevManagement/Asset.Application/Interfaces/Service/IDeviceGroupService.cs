@@ -5,8 +5,8 @@ namespace Asset.Application.Interfaces.Service
 {
     public interface IDeviceGroupService
     {
-        Task<PagedResponse<DeviceGroupDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword);
-        Task<List<DeviceGroupDto>> GetAllActiveAsync();
+        Task<PagedResponse<DeviceGroupDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword, int? departmentId = null);
+        Task<List<DeviceGroupDto>> GetAllActiveAsync(int? departmentId = null);
         Task<DeviceGroupDto> GetByIdAsync(int id);
         Task<DeviceGroupDto> CreateAsync(CreateDeviceGroupDto request);
         Task UpdateAsync(UpdateDeviceGroupDto request);

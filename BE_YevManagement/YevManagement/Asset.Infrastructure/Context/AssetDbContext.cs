@@ -84,15 +84,19 @@ public partial class AssetDbContext : DbContext
                 .HasForeignKey(d => d.SupplierId)
                 .HasConstraintName("FK_ThietBis_NhaCungCaps_NhaCungCapId");
 
-            // Self-reference: gợi ý "thiết bị này sẽ thay thế cho máy cũ nào" (điền từ cột
-            // "MQL Cũ" khi import Excel, xem docs/asset-module.md). Chỉ mang tính gợi ý cho
-            // màn hình "Chuyển máy" — không tự động thực hiện TransferHistory.
-            entity.HasIndex(e => e.ReplacesOldDeviceId, "IX_ThietBis_ThayTheChoId");
+            // Self-reference: gợi ý "máy MỚI nào sẽ thay thế cho máy này" — lưu trên chính máy
+            // CŨ (điền từ cột "MQL Cũ" khi import Excel: sau khi tạo máy mới, server ghi Id máy
+            // mới vào SuggestedNewDeviceId của máy cũ tương ứng, xem docs/asset-module.md).
+            // 2026-07-13: đổi hướng tự tham chiếu — trước đó lưu trên máy MỚI (ReplacesOldDeviceId
+            // trỏ về máy cũ), nay lưu trên máy CŨ (trỏ tới máy mới) để màn "Chuyển máy" mở trên
+            // máy cũ đọc thẳng 1 cột, không cần dò ngược nhiều máy mới cùng khai là thay thế cho
+            // nó. Chỉ mang tính gợi ý cho màn hình "Chuyển máy" — không tự động thực hiện TransferHistory.
+            entity.HasIndex(e => e.SuggestedNewDeviceId, "IX_ThietBis_GoiYMayMoiId");
 
-            entity.HasOne(d => d.ReplacesOldDevice).WithMany()
-                .HasForeignKey(d => d.ReplacesOldDeviceId)
+            entity.HasOne(d => d.SuggestedNewDevice).WithMany()
+                .HasForeignKey(d => d.SuggestedNewDeviceId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_ThietBis_ThietBis_ThayTheChoId");
+                .HasConstraintName("FK_ThietBis_ThietBis_GoiYMayMoiId");
 
             // Nhóm/Bộ phận: phân loại "thiết bị đang ở chỗ nào" bên cạnh Branch (chi nhánh).
             // Nullable — dữ liệu thiết bị cũ chưa gán, chỉ bắt buộc dần qua Create/Update mới.
@@ -113,9 +117,16 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<DeviceGroup>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_Nhoms");
-            entity.HasIndex(e => e.GroupCode, "IX_Nhoms_MaNhom").IsUnique();
+            // 1 Bộ phận - N Nhóm (2026-07-13): mã Nhóm không còn unique toàn cục, chỉ unique
+            // trong phạm vi 1 Bộ phận (VD "OF" có thể vừa thuộc Tổng vụ vừa thuộc Quản lý chất
+            // lượng, là 2 Nhóm khác nhau).
+            entity.HasIndex(e => new { e.DepartmentId, e.GroupCode }, "IX_Nhoms_BoPhanId_MaNhom").IsUnique();
             entity.Property(e => e.GroupCode).HasMaxLength(50);
             entity.Property(e => e.GroupName).HasMaxLength(255);
+
+            entity.HasOne(d => d.Department).WithMany(p => p.DeviceGroups)
+                .HasForeignKey(d => d.DepartmentId)
+                .HasConstraintName("FK_Nhoms_BoPhans_BoPhanId");
         });
 
         modelBuilder.Entity<DeviceDepartment>(entity =>
@@ -282,6 +293,7 @@ public partial class AssetDbContext : DbContext
         {
             entity.HasKey(e => e.Id).HasName("PK_TienToIPs");
             entity.HasIndex(e => e.Prefix, "IX_TienToIPs_TienTo").IsUnique();
+            entity.HasIndex(e => e.BranchId, "IX_TienToIPs_ChiNhanhId");
 
             entity.Property(e => e.Prefix).HasMaxLength(15);
             entity.Property(e => e.SubnetMask).HasMaxLength(15);
@@ -289,6 +301,10 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.PreferredDns).HasMaxLength(15).HasColumnName("PreferredDNS");
             entity.Property(e => e.AlternateDns).HasMaxLength(15).HasColumnName("AlternateDNS");
             entity.Property(e => e.Description).HasMaxLength(255);
+
+            entity.HasOne(d => d.Branch).WithMany(p => p.IpPrefixes)
+                .HasForeignKey(d => d.BranchId)
+                .HasConstraintName("FK_TienToIPs_ChiNhanhs_ChiNhanhId");
         });
 
         modelBuilder.Entity<Supplier>(entity =>

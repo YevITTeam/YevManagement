@@ -128,14 +128,14 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<DateTime>("PurchaseDate")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("ReplacesOldDeviceId")
-                        .HasColumnType("int");
-
                     b.Property<string>("SerialNumber")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SuggestedNewDeviceId")
                         .HasColumnType("int");
 
                     b.Property<int>("SupplierId")
@@ -147,6 +147,8 @@ namespace Asset.Infrastructure.Migrations
                     b.HasIndex(new[] { "DepartmentId" }, "IX_ThietBis_BoPhanId");
 
                     b.HasIndex(new[] { "BranchId" }, "IX_ThietBis_ChiNhanhId");
+
+                    b.HasIndex(new[] { "SuggestedNewDeviceId" }, "IX_ThietBis_GoiYMayMoiId");
 
                     b.HasIndex(new[] { "DeviceTypeId" }, "IX_ThietBis_LoaiThietBiId");
 
@@ -160,8 +162,6 @@ namespace Asset.Infrastructure.Migrations
                     b.HasIndex(new[] { "SerialNumber" }, "IX_ThietBis_SoSeri")
                         .IsUnique()
                         .HasFilter("[SerialNumber] IS NOT NULL");
-
-                    b.HasIndex(new[] { "ReplacesOldDeviceId" }, "IX_ThietBis_ThayTheChoId");
 
                     b.ToTable("Devices");
                 });
@@ -566,6 +566,9 @@ namespace Asset.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("GroupCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -582,7 +585,7 @@ namespace Asset.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("PK_Nhoms");
 
-                    b.HasIndex(new[] { "GroupCode" }, "IX_Nhoms_MaNhom")
+                    b.HasIndex(new[] { "DepartmentId", "GroupCode" }, "IX_Nhoms_BoPhanId_MaNhom")
                         .IsUnique();
 
                     b.ToTable("DeviceGroups");
@@ -697,6 +700,9 @@ namespace Asset.Infrastructure.Migrations
                         .HasColumnType("nvarchar(15)")
                         .HasColumnName("AlternateDNS");
 
+                    b.Property<int?>("BranchId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Description")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -724,6 +730,8 @@ namespace Asset.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("PK_TienToIPs");
+
+                    b.HasIndex(new[] { "BranchId" }, "IX_TienToIPs_ChiNhanhId");
 
                     b.HasIndex(new[] { "Prefix" }, "IX_TienToIPs_TienTo")
                         .IsUnique();
@@ -937,10 +945,10 @@ namespace Asset.Infrastructure.Migrations
                         .HasForeignKey("GroupId")
                         .HasConstraintName("FK_ThietBis_Nhoms_NhomId");
 
-                    b.HasOne("Asset.Domain.Entities.Device", "ReplacesOldDevice")
+                    b.HasOne("Asset.Domain.Entities.Device", "SuggestedNewDevice")
                         .WithMany()
-                        .HasForeignKey("ReplacesOldDeviceId")
-                        .HasConstraintName("FK_ThietBis_ThietBis_ThayTheChoId");
+                        .HasForeignKey("SuggestedNewDeviceId")
+                        .HasConstraintName("FK_ThietBis_ThietBis_GoiYMayMoiId");
 
                     b.HasOne("Asset.Domain.Entities.Supplier", "Supplier")
                         .WithMany("Devices")
@@ -957,7 +965,7 @@ namespace Asset.Infrastructure.Migrations
 
                     b.Navigation("DeviceType");
 
-                    b.Navigation("ReplacesOldDevice");
+                    b.Navigation("SuggestedNewDevice");
 
                     b.Navigation("Supplier");
                 });
@@ -1010,6 +1018,18 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("Device");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceGroup", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.DeviceDepartment", "Department")
+                        .WithMany("DeviceGroups")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_Nhoms_BoPhans_BoPhanId");
+
+                    b.Navigation("Department");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.DeviceSoftware", b =>
                 {
                     b.HasOne("Asset.Domain.Entities.Device", "Device")
@@ -1050,6 +1070,16 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("IpPrefix");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.IpPrefix", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Branch", "Branch")
+                        .WithMany("IpPrefixes")
+                        .HasForeignKey("BranchId")
+                        .HasConstraintName("FK_TienToIPs_ChiNhanhs_ChiNhanhId");
+
+                    b.Navigation("Branch");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.Software", b =>
                 {
                     b.HasOne("Asset.Domain.Entities.SoftwareGroup", "SoftwareGroup")
@@ -1084,6 +1114,8 @@ namespace Asset.Infrastructure.Migrations
             modelBuilder.Entity("Asset.Domain.Entities.Branch", b =>
                 {
                     b.Navigation("Devices");
+
+                    b.Navigation("IpPrefixes");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.Device", b =>
@@ -1103,6 +1135,8 @@ namespace Asset.Infrastructure.Migrations
 
             modelBuilder.Entity("Asset.Domain.Entities.DeviceDepartment", b =>
                 {
+                    b.Navigation("DeviceGroups");
+
                     b.Navigation("Devices");
                 });
 

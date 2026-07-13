@@ -80,17 +80,23 @@ namespace Asset.Application.Services
                         IsOutsourced = false,
                         Status = (int)DeviceStatus.PendingUse,
                         Note = row.Note,
-                        SerialNumber = row.SerialNumber,
-                        // Lưu lại gợi ý "MQL Cũ" xuống DB (2026-07-11, thêm sau — trước đó chỉ trả
-                        // về PendingTransfers 1 lần trong response Confirm, không lưu) để màn hình
-                        // "Chuyển máy" mở trên máy cũ sau này vẫn tự hiện được gợi ý máy này qua
-                        // GET /api/Device/{oldId}/replacement-suggestion, dù không xử lý ngay lúc import.
-                        ReplacesOldDeviceId = row.ResolvedOldDeviceId
+                        SerialNumber = row.SerialNumber
                     };
 
                     var created = await _deviceService.CreateAsync(createDto);
                     result.CreatedDeviceIds.Add(created.Id);
                     result.CreatedCount++;
+
+                    // Lưu lại gợi ý "MQL Cũ" xuống DB (2026-07-11, thêm sau — trước đó chỉ trả
+                    // về PendingTransfers 1 lần trong response Confirm, không lưu; 2026-07-13,
+                    // đổi hướng — ghi thẳng Id máy mới vào SuggestedNewDeviceId của máy CŨ thay
+                    // vì set ReplacesOldDeviceId trên máy mới) để màn hình "Chuyển máy" mở trên
+                    // máy cũ sau này vẫn tự hiện được gợi ý máy này qua
+                    // GET /api/Device/{oldId}/replacement-suggestion, dù không xử lý ngay lúc import.
+                    if (row.ResolvedOldDeviceId.HasValue)
+                    {
+                        await _deviceService.SetSuggestedNewDeviceAsync(row.ResolvedOldDeviceId.Value, created.Id);
+                    }
 
                     // Tạo DeviceConfiguration đi kèm nếu dòng Excel có ít nhất 1 trong 5 cột
                     // cấu hình (Hãng/Model/CPU/RAM/Ổ Cứng, mẫu Excel mới 2026-07-11) — Device
@@ -141,9 +147,9 @@ namespace Asset.Application.Services
 
         private async Task<List<DeviceImportRowDto>> ValidateAndResolveRowsAsync(List<DeviceImportRowDto> rawRows)
         {
-            var branches = await _unitOfWork.Branches.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.BranchName });
+            var branches = await _unitOfWork.Branches.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.BranchCode });
             var deviceTypes = await _unitOfWork.DeviceTypes.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.TypeName });
-            var suppliers = await _unitOfWork.Suppliers.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.SupplierName });
+            var suppliers = await _unitOfWork.Suppliers.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.SupplierCode });
 
             var duplicatedCodesInFile = FindDuplicates(rawRows, r => r.DeviceCode);
             var duplicatedOldCodesInFile = FindDuplicates(rawRows, r => r.OldDeviceCode);
@@ -171,15 +177,15 @@ namespace Asset.Application.Services
                 }
 
                 int? branchId = null;
-                var branchName = row.BranchName?.Trim();
-                if (string.IsNullOrWhiteSpace(branchName))
+                var branchCode = row.BranchCode?.Trim();
+                if (string.IsNullOrWhiteSpace(branchCode))
                 {
-                    errors.Add("Thiếu Xưởng.");
+                    errors.Add("Thiếu Mã Xưởng.");
                 }
                 else
                 {
-                    var branch = branches.FirstOrDefault(b => string.Equals(b.BranchName, branchName, StringComparison.OrdinalIgnoreCase));
-                    if (branch == null) errors.Add($"Không tìm thấy Xưởng '{branchName}'.");
+                    var branch = branches.FirstOrDefault(b => string.Equals(b.BranchCode, branchCode, StringComparison.OrdinalIgnoreCase));
+                    if (branch == null) errors.Add($"Không tìm thấy Xưởng có mã '{branchCode}'.");
                     else branchId = branch.Id;
                 }
 
@@ -197,15 +203,15 @@ namespace Asset.Application.Services
                 }
 
                 int? supplierId = null;
-                var supplierName = row.SupplierName?.Trim();
-                if (string.IsNullOrWhiteSpace(supplierName))
+                var supplierCode = row.SupplierCode?.Trim();
+                if (string.IsNullOrWhiteSpace(supplierCode))
                 {
-                    errors.Add("Thiếu Nhà Cung Cấp.");
+                    errors.Add("Thiếu Mã Nhà Cung Cấp.");
                 }
                 else
                 {
-                    var supplier = suppliers.FirstOrDefault(s => string.Equals(s.SupplierName, supplierName, StringComparison.OrdinalIgnoreCase));
-                    if (supplier == null) errors.Add($"Không tìm thấy Nhà Cung Cấp '{supplierName}'.");
+                    var supplier = suppliers.FirstOrDefault(s => string.Equals(s.SupplierCode, supplierCode, StringComparison.OrdinalIgnoreCase));
+                    if (supplier == null) errors.Add($"Không tìm thấy Nhà Cung Cấp có mã '{supplierCode}'.");
                     else supplierId = supplier.Id;
                 }
 
@@ -247,9 +253,9 @@ namespace Asset.Application.Services
                 {
                     RowNumber = row.RowNumber,
                     DeviceCode = deviceCode,
-                    BranchName = branchName,
+                    BranchCode = branchCode,
                     DeviceTypeName = deviceTypeName,
-                    SupplierName = supplierName,
+                    SupplierCode = supplierCode,
                     PurchaseDate = row.PurchaseDate,
                     Note = row.Note,
                     SerialNumber = serialNumber,
@@ -295,6 +301,8 @@ namespace Asset.Application.Services
         // cấu hình): A=MQL, B=Xưởng, C=Loại Thiết Bị, D=Nhà Cung Cấp, E=Ngày Mua, F=Ghi
         // Chú, G=Số SerialNumber, H=Hãng, I=Model, J=CPU, K=RAM, L=Ổ Cứng, M=MQL Cũ
         // (trước đó MQL Cũ ở cột H — mẫu cũ không có 5 cột cấu hình). Dòng 1 là header.
+        // 2026-07-13: cột B (Xưởng)/D (Nhà Cung Cấp) đổi sang nhập MÃ (BranchCode/
+        // SupplierCode) thay vì Tên — Loại Thiết Bị (cột C) vẫn giữ nguyên khớp theo Tên.
         private static List<DeviceImportRowDto> ParseXlsx(Stream stream)
         {
             XLWorkbook workbook;
@@ -321,9 +329,9 @@ namespace Asset.Application.Services
             foreach (var xlRow in usedRange.RowsUsed().Skip(1))
             {
                 var deviceCode = xlRow.Cell(1).GetString().Trim();
-                var branchName = xlRow.Cell(2).GetString().Trim();
+                var branchCode = xlRow.Cell(2).GetString().Trim();
                 var deviceTypeName = xlRow.Cell(3).GetString().Trim();
-                var supplierName = xlRow.Cell(4).GetString().Trim();
+                var supplierCode = xlRow.Cell(4).GetString().Trim();
                 var dateCell = xlRow.Cell(5);
                 var note = xlRow.Cell(6).GetString().Trim();
                 var serialNumber = xlRow.Cell(7).GetString().Trim();
@@ -334,8 +342,8 @@ namespace Asset.Application.Services
                 var hardDrive = xlRow.Cell(12).GetString().Trim();
                 var oldDeviceCode = xlRow.Cell(13).GetString().Trim();
 
-                var isRowEmpty = string.IsNullOrWhiteSpace(deviceCode) && string.IsNullOrWhiteSpace(branchName) &&
-                    string.IsNullOrWhiteSpace(deviceTypeName) && string.IsNullOrWhiteSpace(supplierName) &&
+                var isRowEmpty = string.IsNullOrWhiteSpace(deviceCode) && string.IsNullOrWhiteSpace(branchCode) &&
+                    string.IsNullOrWhiteSpace(deviceTypeName) && string.IsNullOrWhiteSpace(supplierCode) &&
                     string.IsNullOrWhiteSpace(note) && string.IsNullOrWhiteSpace(serialNumber) &&
                     string.IsNullOrWhiteSpace(maker) && string.IsNullOrWhiteSpace(model) &&
                     string.IsNullOrWhiteSpace(cpu) && string.IsNullOrWhiteSpace(ram) &&
@@ -360,9 +368,9 @@ namespace Asset.Application.Services
                 {
                     RowNumber = xlRow.RowNumber(),
                     DeviceCode = string.IsNullOrWhiteSpace(deviceCode) ? null : deviceCode,
-                    BranchName = string.IsNullOrWhiteSpace(branchName) ? null : branchName,
+                    BranchCode = string.IsNullOrWhiteSpace(branchCode) ? null : branchCode,
                     DeviceTypeName = string.IsNullOrWhiteSpace(deviceTypeName) ? null : deviceTypeName,
-                    SupplierName = string.IsNullOrWhiteSpace(supplierName) ? null : supplierName,
+                    SupplierCode = string.IsNullOrWhiteSpace(supplierCode) ? null : supplierCode,
                     PurchaseDate = purchaseDate,
                     Note = string.IsNullOrWhiteSpace(note) ? null : note,
                     SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
@@ -391,9 +399,9 @@ namespace Asset.Application.Services
             {
                 var cells = csvRows[i];
                 var deviceCode = GetCsvCell(cells, 0);
-                var branchName = GetCsvCell(cells, 1);
+                var branchCode = GetCsvCell(cells, 1);
                 var deviceTypeName = GetCsvCell(cells, 2);
-                var supplierName = GetCsvCell(cells, 3);
+                var supplierCode = GetCsvCell(cells, 3);
                 var dateText = GetCsvCell(cells, 4);
                 var note = GetCsvCell(cells, 5);
                 var serialNumber = GetCsvCell(cells, 6);
@@ -404,8 +412,8 @@ namespace Asset.Application.Services
                 var hardDrive = GetCsvCell(cells, 11);
                 var oldDeviceCode = GetCsvCell(cells, 12);
 
-                var isRowEmpty = string.IsNullOrWhiteSpace(deviceCode) && string.IsNullOrWhiteSpace(branchName) &&
-                    string.IsNullOrWhiteSpace(deviceTypeName) && string.IsNullOrWhiteSpace(supplierName) &&
+                var isRowEmpty = string.IsNullOrWhiteSpace(deviceCode) && string.IsNullOrWhiteSpace(branchCode) &&
+                    string.IsNullOrWhiteSpace(deviceTypeName) && string.IsNullOrWhiteSpace(supplierCode) &&
                     string.IsNullOrWhiteSpace(note) && string.IsNullOrWhiteSpace(serialNumber) &&
                     string.IsNullOrWhiteSpace(maker) && string.IsNullOrWhiteSpace(model) &&
                     string.IsNullOrWhiteSpace(cpu) && string.IsNullOrWhiteSpace(ram) &&
@@ -421,9 +429,9 @@ namespace Asset.Application.Services
                 {
                     RowNumber = i + 1,
                     DeviceCode = string.IsNullOrWhiteSpace(deviceCode) ? null : deviceCode,
-                    BranchName = string.IsNullOrWhiteSpace(branchName) ? null : branchName,
+                    BranchCode = string.IsNullOrWhiteSpace(branchCode) ? null : branchCode,
                     DeviceTypeName = string.IsNullOrWhiteSpace(deviceTypeName) ? null : deviceTypeName,
-                    SupplierName = string.IsNullOrWhiteSpace(supplierName) ? null : supplierName,
+                    SupplierCode = string.IsNullOrWhiteSpace(supplierCode) ? null : supplierCode,
                     PurchaseDate = purchaseDate,
                     Note = string.IsNullOrWhiteSpace(note) ? null : note,
                     SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,

@@ -35,7 +35,7 @@ public partial class Device
 
     public bool IsUseUsb { get; set; }
 
-    public int? ReplacesOldDeviceId { get; set; }
+    public int? SuggestedNewDeviceId { get; set; }
 
     public int? GroupId { get; set; }
 
@@ -45,7 +45,7 @@ public partial class Device
 
     public virtual Branch Branch { get; set; } = null!;
 
-    public virtual Device? ReplacesOldDevice { get; set; }
+    public virtual Device? SuggestedNewDevice { get; set; }
 
     public virtual DeviceGroup? DeviceGroup { get; set; }
 

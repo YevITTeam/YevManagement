@@ -244,7 +244,7 @@ namespace Asset.Application.Services
 
         public async Task<DeviceDto> GetByIdAsync(int id)
         {
-            var device = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == id, x => x.Branch, x => x.DeviceType, x => x.Supplier, x => x.ReplacesOldDevice!, x => x.DeviceGroup!, x => x.DeviceDepartment!);
+            var device = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == id, x => x.Branch, x => x.DeviceType, x => x.Supplier, x => x.SuggestedNewDevice!, x => x.DeviceGroup!, x => x.DeviceDepartment!);
             device.OrThrowNotFound("Thiết bị", id);
 
             var ipAddresses = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
@@ -287,10 +287,9 @@ namespace Asset.Application.Services
             var branch = await _unitOfWork.Branches.GetByIdAsync(request.BranchId);
             branch.OrThrowNotFound("Chi nhánh", request.BranchId);
 
-            var group = await ValidateGroupIdAsync(request.GroupId);
-            var department = await ValidateDepartmentIdAsync(request.DepartmentId);
+            var (group, department) = await ValidateGroupAndDepartmentAsync(request.GroupId, request.DepartmentId);
 
-            var replacesOldDevice = await ValidateReplacesOldDeviceIdAsync(request.ReplacesOldDeviceId, currentDeviceId: null);
+            var suggestedNewDevice = await ValidateSuggestedNewDeviceIdAsync(request.SuggestedNewDeviceId, currentDeviceId: null);
 
             var ipAddresses = await ResolveAndValidateIpAddressesAsync(request.IpAddressIds);
 
@@ -312,7 +311,7 @@ namespace Asset.Application.Services
                 Note = request.Note,
                 SerialNumber = request.SerialNumber,
                 IsUseUsb = request.IsUseUsb,
-                ReplacesOldDeviceId = request.ReplacesOldDeviceId,
+                SuggestedNewDeviceId = request.SuggestedNewDeviceId,
                 IsDeleted = false
             };
 
@@ -345,7 +344,7 @@ namespace Asset.Application.Services
             newDevice.Branch = branch;
             newDevice.DeviceType = deviceType;
             newDevice.Supplier = supplier;
-            newDevice.ReplacesOldDevice = replacesOldDevice;
+            newDevice.SuggestedNewDevice = suggestedNewDevice;
             newDevice.DeviceGroup = group;
             newDevice.DeviceDepartment = department;
             return MapToDto(newDevice, ipAddresses, emails);
@@ -377,10 +376,9 @@ namespace Asset.Application.Services
             var branch = await _unitOfWork.Branches.GetByIdAsync(request.BranchId);
             branch.OrThrowNotFound("Chi nhánh", request.BranchId);
 
-            await ValidateGroupIdAsync(request.GroupId);
-            await ValidateDepartmentIdAsync(request.DepartmentId);
+            await ValidateGroupAndDepartmentAsync(request.GroupId, request.DepartmentId);
 
-            await ValidateReplacesOldDeviceIdAsync(request.ReplacesOldDeviceId, currentDeviceId: device!.Id);
+            await ValidateSuggestedNewDeviceIdAsync(request.SuggestedNewDeviceId, currentDeviceId: device!.Id);
 
             await SyncIpAddressesAsync(device.Id, request.IpAddressIds);
             await SyncEmailsAsync(device.Id, request.Emails);
@@ -401,7 +399,7 @@ namespace Asset.Application.Services
             device.Note = request.Note;
             device.SerialNumber = request.SerialNumber;
             device.IsUseUsb = request.IsUseUsb;
-            device.ReplacesOldDeviceId = request.ReplacesOldDeviceId;
+            device.SuggestedNewDeviceId = request.SuggestedNewDeviceId;
 
             _unitOfWork.Devices.Update(device);
             await _unitOfWork.SaveChangesAsync();
@@ -409,19 +407,18 @@ namespace Asset.Application.Services
 
         public async Task<DeviceReplacementSuggestionDto?> GetReplacementSuggestionAsync(int oldDeviceId)
         {
-            var oldDevice = await _unitOfWork.Devices.GetByIdAsync(oldDeviceId);
+            var oldDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == oldDeviceId, x => x.SuggestedNewDevice!);
             oldDevice.OrThrowNotFound("Thiết bị", oldDeviceId);
 
-            // Có thể có nhiều máy cùng khai "MQL Cũ" = máy này qua nhiều lần import khác
-            // nhau (theo quyết định người dùng) — chỉ lấy máy import gần nhất (Id lớn nhất)
-            // còn Status=PendingUse (chưa được dùng để chuyển máy khác) làm gợi ý duy nhất.
-            var candidates = await _unitOfWork.Devices.FindAsync(x =>
-                x.ReplacesOldDeviceId == oldDeviceId &&
-                x.Status == (int)DeviceStatus.PendingUse &&
-                !x.IsDeleted);
-
-            var suggestion = candidates.OrderByDescending(x => x.Id).FirstOrDefault();
-            if (suggestion == null) return null;
+            // Gợi ý đọc thẳng từ cột SuggestedNewDeviceId lưu trên chính máy cũ (2026-07-13,
+            // đổi hướng tự tham chiếu — trước đó phải dò ngược mọi máy mới khai "MQL Cũ" =
+            // máy này rồi chọn máy import gần nhất). Máy import sau luôn ghi đè gợi ý của máy
+            // import trước nên không cần chọn "gần nhất" nữa — chỉ còn 1 gợi ý duy nhất/máy cũ.
+            // Chỉ còn hợp lệ nếu máy mới vẫn còn tồn tại, chưa xoá, và còn "Chờ sử dụng" (chưa
+            // bị dùng cho lần chuyển máy nào khác kể từ lúc được gợi ý).
+            var suggestion = oldDevice!.SuggestedNewDevice;
+            if (suggestion == null || suggestion.IsDeleted || suggestion.Status != (int)DeviceStatus.PendingUse)
+                return null;
 
             return new DeviceReplacementSuggestionDto
             {
@@ -431,38 +428,66 @@ namespace Asset.Application.Services
             };
         }
 
-        // Nhóm/Bộ phận đều optional — chỉ validate tồn tại (!IsDeleted) khi client có gửi Id.
-        private async Task<DeviceGroup?> ValidateGroupIdAsync(int? groupId)
+        // Dùng bởi DeviceImportService: sau khi tạo xong máy MỚI từ cột "MQL Cũ", ghi thẳng
+        // Id máy mới vào SuggestedNewDeviceId của máy CŨ tương ứng — không đi qua UpdateAsync
+        // đầy đủ (không cần re-validate toàn bộ Device, cả 2 Id đã được xác nhận tồn tại ở
+        // bước resolve của Import). Ghi đè gợi ý cũ nếu máy cũ này đã từng được gợi ý trước đó
+        // bởi 1 lần import khác — luôn lấy gợi ý mới nhất.
+        public async Task SetSuggestedNewDeviceAsync(int oldDeviceId, int newDeviceId)
         {
-            if (!groupId.HasValue) return null;
+            var oldDevice = await _unitOfWork.Devices.GetByIdAsync(oldDeviceId);
+            oldDevice.OrThrowNotFound("Thiết bị", oldDeviceId);
 
-            var group = await _unitOfWork.DeviceGroups.FirstOrDefaultAsync(x => x.Id == groupId.Value && !x.IsDeleted);
-            group.OrThrowNotFound("Nhóm", groupId.Value);
-            return group;
+            oldDevice!.SuggestedNewDeviceId = newDeviceId;
+
+            _unitOfWork.Devices.Update(oldDevice);
+            await _unitOfWork.SaveChangesAsync();
         }
 
-        private async Task<DeviceDepartment?> ValidateDepartmentIdAsync(int? departmentId)
+        // Nhóm/Bộ phận đều optional — chỉ validate tồn tại (!IsDeleted) khi client có gửi Id. Từ
+        // khi DeviceGroup thuộc về đúng 1 DeviceDepartment (1 Bộ phận - N Nhóm), gửi kèm GroupId
+        // bắt buộc phải gửi kèm đúng DepartmentId cha của Nhóm đó — tránh lưu dữ liệu Device có
+        // Nhóm/Bộ phận không khớp nhau (VD FE gửi GroupId của Nhóm "OF" thuộc Quản lý chất lượng
+        // nhưng DepartmentId lại là Tổng vụ).
+        private async Task<(DeviceGroup? Group, DeviceDepartment? Department)> ValidateGroupAndDepartmentAsync(int? groupId, int? departmentId)
         {
-            if (!departmentId.HasValue) return null;
+            DeviceDepartment? department = null;
+            if (departmentId.HasValue)
+            {
+                department = await _unitOfWork.DeviceDepartments.FirstOrDefaultAsync(x => x.Id == departmentId.Value && !x.IsDeleted);
+                department.OrThrowNotFound("Bộ phận", departmentId.Value);
+            }
 
-            var department = await _unitOfWork.DeviceDepartments.FirstOrDefaultAsync(x => x.Id == departmentId.Value && !x.IsDeleted);
-            department.OrThrowNotFound("Bộ phận", departmentId.Value);
-            return department;
+            DeviceGroup? group = null;
+            if (groupId.HasValue)
+            {
+                group = await _unitOfWork.DeviceGroups.FirstOrDefaultAsync(x => x.Id == groupId.Value && !x.IsDeleted, x => x.Department);
+                group.OrThrowNotFound("Nhóm", groupId.Value);
+
+                if (!departmentId.HasValue)
+                    throw new DomainException("Phải chọn Bộ phận trước khi chọn Nhóm.");
+
+                if (group!.DepartmentId != departmentId.Value)
+                    throw new DomainException($"Nhóm '{group.GroupName}' không thuộc bộ phận đã chọn.");
+            }
+
+            return (group, department);
         }
 
-        // Dùng chung cho Create/Update: nếu có ReplacesOldDeviceId, máy cũ phải tồn tại
-        // (!IsDeleted) và không được trỏ vào chính nó (chỉ áp dụng khi Update, currentDeviceId != null).
-        // Trả về entity máy cũ (hoặc null nếu không set) để gọi nơi cần gắn navigation ngay.
-        private async Task<Device?> ValidateReplacesOldDeviceIdAsync(int? replacesOldDeviceId, int? currentDeviceId)
+        // Dùng chung cho Create/Update: nếu có SuggestedNewDeviceId, máy mới (được gợi ý) phải
+        // tồn tại (!IsDeleted) và không được trỏ vào chính nó (chỉ áp dụng khi Update,
+        // currentDeviceId != null). Trả về entity máy mới (hoặc null nếu không set) để gọi
+        // nơi cần gắn navigation ngay.
+        private async Task<Device?> ValidateSuggestedNewDeviceIdAsync(int? suggestedNewDeviceId, int? currentDeviceId)
         {
-            if (!replacesOldDeviceId.HasValue) return null;
+            if (!suggestedNewDeviceId.HasValue) return null;
 
-            if (currentDeviceId.HasValue && replacesOldDeviceId.Value == currentDeviceId.Value)
-                throw new DomainException("Thiết bị không thể tự thay thế cho chính nó.");
+            if (currentDeviceId.HasValue && suggestedNewDeviceId.Value == currentDeviceId.Value)
+                throw new DomainException("Thiết bị không thể tự gợi ý chính mình làm máy thay thế.");
 
-            var oldDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == replacesOldDeviceId.Value && !x.IsDeleted);
-            oldDevice.OrThrowNotFound("Thiết bị cũ (thay thế)", replacesOldDeviceId.Value);
-            return oldDevice;
+            var newDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == suggestedNewDeviceId.Value && !x.IsDeleted);
+            newDevice.OrThrowNotFound("Thiết bị mới (gợi ý thay thế)", suggestedNewDeviceId.Value);
+            return newDevice;
         }
 
         public async Task DeleteAsync(int id)
@@ -681,8 +706,8 @@ namespace Asset.Application.Services
             Note = device.Note,
             SerialNumber = device.SerialNumber,
             IsUseUsb = device.IsUseUsb,
-            ReplacesOldDeviceId = device.ReplacesOldDeviceId,
-            ReplacesOldDeviceCode = device.ReplacesOldDevice?.DeviceCode,
+            SuggestedNewDeviceId = device.SuggestedNewDeviceId,
+            SuggestedNewDeviceCode = device.SuggestedNewDevice?.DeviceCode,
             IpAddresses = ipAddresses.Select(ip => new DeviceIpAddressDto { Id = ip.Id, IpAddress = ip.IpAddress1 }).ToList(),
             Emails = emails.Select(e => new DeviceEmailDto { Id = e.Id, Email = e.Email, Note = e.Note }).ToList()
         };

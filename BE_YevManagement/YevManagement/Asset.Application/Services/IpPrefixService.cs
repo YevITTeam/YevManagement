@@ -19,7 +19,7 @@ namespace Asset.Application.Services
 
         public async Task<PagedResponse<IpPrefixDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword)
         {
-            var query = _unitOfWork.IpPrefixes.GetQueryable(false).Where(x => !x.IsDeleted);
+            var query = _unitOfWork.IpPrefixes.GetQueryable(false, x => x.Branch).Where(x => !x.IsDeleted);
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {
@@ -34,6 +34,8 @@ namespace Asset.Application.Services
             {
                 Id = x.Id,
                 Prefix = x.Prefix,
+                BranchId = x.BranchId,
+                BranchName = x.Branch != null ? x.Branch.BranchName : null,
                 SubnetMask = x.SubnetMask,
                 Gateway = x.Gateway,
                 PreferredDns = x.PreferredDns,
@@ -61,6 +63,8 @@ namespace Asset.Application.Services
                 {
                     Id = x.Id,
                     Prefix = x.Prefix,
+                    BranchId = x.BranchId,
+                    BranchName = x.Branch != null ? x.Branch.BranchName : null,
                     SubnetMask = x.SubnetMask,
                     Gateway = x.Gateway,
                     PreferredDns = x.PreferredDns,
@@ -75,7 +79,7 @@ namespace Asset.Application.Services
 
         public async Task<IpPrefixDto> GetByIdAsync(int id)
         {
-            var prefix = await _unitOfWork.IpPrefixes.GetByIdAsync(id);
+            var prefix = await _unitOfWork.IpPrefixes.FirstOrDefaultAsync(x => x.Id == id, x => x.Branch!);
             prefix.OrThrowNotFound("Prefix", id);
 
             var childAddresses = await _unitOfWork.IpAddresses.FindAsync(x => x.IpPrefixId == id && !x.IsDeleted);
@@ -84,8 +88,10 @@ namespace Asset.Application.Services
 
             return new IpPrefixDto
             {
-                Id = prefix.Id,
+                Id = prefix!.Id,
                 Prefix = prefix.Prefix,
+                BranchId = prefix.BranchId,
+                BranchName = prefix.Branch?.BranchName,
                 SubnetMask = prefix.SubnetMask,
                 Gateway = prefix.Gateway,
                 PreferredDns = prefix.PreferredDns,
@@ -104,11 +110,14 @@ namespace Asset.Application.Services
             var exists = await _unitOfWork.IpPrefixes.FirstOrDefaultAsync(x => x.Prefix == request.Prefix);
             if (exists != null) throw new DomainException($"Prefix '{request.Prefix}' đã tồn tại.");
 
-            ValidateNetworkSettings(request);
+            var branch = await ValidateBranchIdAsync(request.BranchId);
+
+            ValidateNetworkSettings(request.Prefix, request.SubnetMask, request.Gateway, request.PreferredDns, request.AlternateDns);
 
             var newPrefix = new IpPrefix
             {
                 Prefix = request.Prefix,
+                BranchId = request.BranchId,
                 SubnetMask = request.SubnetMask,
                 Gateway = request.Gateway,
                 PreferredDns = request.PreferredDns,
@@ -137,6 +146,8 @@ namespace Asset.Application.Services
             {
                 Id = newPrefix.Id,
                 Prefix = newPrefix.Prefix,
+                BranchId = newPrefix.BranchId,
+                BranchName = branch.BranchName,
                 SubnetMask = newPrefix.SubnetMask,
                 Gateway = newPrefix.Gateway,
                 PreferredDns = newPrefix.PreferredDns,
@@ -148,43 +159,72 @@ namespace Asset.Application.Services
             };
         }
 
+        private async Task<Branch> ValidateBranchIdAsync(int branchId)
+        {
+            var branch = await _unitOfWork.Branches.FirstOrDefaultAsync(x => x.Id == branchId && !x.IsDeleted);
+            branch.OrThrowNotFound("Chi nhánh", branchId);
+            return branch!;
+        }
+
         // Validate cấu hình mạng khi tạo dải (2026-07-11) — áp dụng logic từ công cụ ChangeIP
         // nội bộ (SetIP.cs), dùng NetworkHelper: mọi field IP nhập vào (SubnetMask/Gateway/
         // PreferredDns/AlternateDns) nếu có phải là IPv4 hợp lệ; Gateway phải nằm cùng subnet
         // với dải IP sẽ sinh (prefix.1..prefix.255) và không được trùng địa chỉ network/broadcast.
-        private static void ValidateNetworkSettings(CreateIpPrefixDto request)
+        // Dùng chung cho Create/Update — nhận trực tiếp các giá trị nguyên thuỷ vì Update không có
+        // field Prefix riêng (lấy prefix bất biến từ entity hiện có, xem UpdateAsync bên dưới).
+        private static void ValidateNetworkSettings(string prefix, string? subnetMask, string? gateway, string? preferredDns, string? alternateDns)
         {
-            if (!string.IsNullOrWhiteSpace(request.SubnetMask) && !NetworkHelper.IsValidIpv4(request.SubnetMask))
-                throw new DomainException($"Subnet Mask '{request.SubnetMask}' không hợp lệ.");
+            if (!string.IsNullOrWhiteSpace(subnetMask) && !NetworkHelper.IsValidIpv4(subnetMask))
+                throw new DomainException($"Subnet Mask '{subnetMask}' không hợp lệ.");
 
-            if (!string.IsNullOrWhiteSpace(request.PreferredDns) && !NetworkHelper.IsValidIpv4(request.PreferredDns))
-                throw new DomainException($"Preferred DNS '{request.PreferredDns}' không hợp lệ.");
+            if (!string.IsNullOrWhiteSpace(preferredDns) && !NetworkHelper.IsValidIpv4(preferredDns))
+                throw new DomainException($"Preferred DNS '{preferredDns}' không hợp lệ.");
 
-            if (!string.IsNullOrWhiteSpace(request.AlternateDns) && !NetworkHelper.IsValidIpv4(request.AlternateDns))
-                throw new DomainException($"Alternate DNS '{request.AlternateDns}' không hợp lệ.");
+            if (!string.IsNullOrWhiteSpace(alternateDns) && !NetworkHelper.IsValidIpv4(alternateDns))
+                throw new DomainException($"Alternate DNS '{alternateDns}' không hợp lệ.");
 
-            if (!string.IsNullOrWhiteSpace(request.Gateway))
+            if (!string.IsNullOrWhiteSpace(gateway))
             {
-                if (!NetworkHelper.IsValidIpv4(request.Gateway))
-                    throw new DomainException($"Gateway '{request.Gateway}' không hợp lệ.");
+                if (!NetworkHelper.IsValidIpv4(gateway))
+                    throw new DomainException($"Gateway '{gateway}' không hợp lệ.");
 
                 // Gateway phải thuộc đúng network 3-octet của prefix (dải IP con là prefix.1..255).
-                if (!string.Equals(NetworkHelper.GetNetworkClass(request.Gateway), request.Prefix, StringComparison.OrdinalIgnoreCase))
-                    throw new DomainException($"Gateway '{request.Gateway}' không nằm trong dải mạng '{request.Prefix}'.");
+                if (!string.Equals(NetworkHelper.GetNetworkClass(gateway), prefix, StringComparison.OrdinalIgnoreCase))
+                    throw new DomainException($"Gateway '{gateway}' không nằm trong dải mạng '{prefix}'.");
 
                 // Nếu có SubnetMask, kiểm tra chặt hơn bằng bitwise AND (Gateway cùng subnet với dải).
-                if (!string.IsNullOrWhiteSpace(request.SubnetMask) &&
-                    !NetworkHelper.IsSameSubnet($"{request.Prefix}.1", request.Gateway, request.SubnetMask))
-                    throw new DomainException($"Gateway '{request.Gateway}' không cùng subnet với dải mạng '{request.Prefix}' theo Subnet Mask '{request.SubnetMask}'.");
+                if (!string.IsNullOrWhiteSpace(subnetMask) &&
+                    !NetworkHelper.IsSameSubnet($"{prefix}.1", gateway, subnetMask))
+                    throw new DomainException($"Gateway '{gateway}' không cùng subnet với dải mạng '{prefix}' theo Subnet Mask '{subnetMask}'.");
 
                 // Gateway không được trùng địa chỉ network (.0) hay broadcast (.255) của dải.
-                if (request.Gateway.Trim() == $"{request.Prefix}.0" || request.Gateway.Trim() == $"{request.Prefix}.255")
-                    throw new DomainException($"Gateway '{request.Gateway}' không được trùng địa chỉ network/broadcast của dải mạng.");
+                if (gateway.Trim() == $"{prefix}.0" || gateway.Trim() == $"{prefix}.255")
+                    throw new DomainException($"Gateway '{gateway}' không được trùng địa chỉ network/broadcast của dải mạng.");
             }
         }
 
-        // Không còn UpdateAsync cho IpPrefix (2026-07-11, quyết định người dùng) — IpPrefix
-        // chỉ được Create/Delete, không cho sửa Prefix/SubnetMask/Gateway/DNS sau khi tạo.
+        // Update: chỉ cho sửa Chi nhánh + cấu hình mạng (SubnetMask/Gateway/DNS/Description) khi có
+        // thay đổi thực tế (VD đổi DNS/Gateway), thay vì phải xoá dải cũ rồi tạo lại. Prefix (3 octet
+        // định danh, đã sinh sẵn 255 IpAddress con) vẫn bất biến — không nằm trong UpdateIpPrefixDto.
+        public async Task UpdateAsync(UpdateIpPrefixDto request)
+        {
+            var prefix = await _unitOfWork.IpPrefixes.GetByIdAsync(request.Id);
+            prefix.OrThrowNotFound("Prefix", request.Id);
+
+            var branch = await ValidateBranchIdAsync(request.BranchId);
+
+            ValidateNetworkSettings(prefix!.Prefix, request.SubnetMask, request.Gateway, request.PreferredDns, request.AlternateDns);
+
+            prefix.BranchId = branch.Id;
+            prefix.SubnetMask = request.SubnetMask;
+            prefix.Gateway = request.Gateway;
+            prefix.PreferredDns = request.PreferredDns;
+            prefix.AlternateDns = request.AlternateDns;
+            prefix.Description = request.Description;
+
+            _unitOfWork.IpPrefixes.Update(prefix);
+            await _unitOfWork.SaveChangesAsync();
+        }
 
         public async Task DeleteAsync(int id)
         {

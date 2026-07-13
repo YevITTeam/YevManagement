@@ -8,6 +8,8 @@ namespace Asset.Application.Dtos.IpPrefixes
     {
         public int Id { get; set; }
         public string Prefix { get; set; } = null!;
+        public int? BranchId { get; set; }
+        public string? BranchName { get; set; }
         public string? SubnetMask { get; set; }
         public string? Gateway { get; set; }
         public string? PreferredDns { get; set; }

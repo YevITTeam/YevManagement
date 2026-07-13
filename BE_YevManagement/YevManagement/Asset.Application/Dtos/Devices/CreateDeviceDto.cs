@@ -55,9 +55,12 @@ namespace Asset.Application.Dtos.Devices
 
         public List<int> IpAddressIds { get; set; } = new();
 
-        // Gợi ý "máy cũ được thay thế bởi thiết bị này" (điền từ MQL Cũ khi import Excel,
-        // hoặc chọn tay khi tạo Device thường). Optional — chỉ dùng để FE điền sẵn
-        // NewDeviceId trên màn "Chuyển máy" sau này, không tự động chuyển máy.
-        public int? ReplacesOldDeviceId { get; set; }
+        // Gợi ý "máy MỚI nào sẽ thay thế cho chính thiết bị này" (set tay khi hiếm khi cần
+        // tạo sẵn gợi ý cho 1 máy cũ đã tồn tại). Optional — trỏ tới Id 1 Device khác đã có
+        // sẵn trong hệ thống, chỉ dùng để FE điền sẵn NewDeviceId trên màn "Chuyển máy" mở
+        // trên chính thiết bị này sau này, không tự động chuyển máy. Luồng phổ biến (import
+        // Excel cột "MQL Cũ") set field này qua UpdateAsync trên máy CŨ sau khi máy MỚI được
+        // tạo xong, không set ở đây lúc Create — xem DeviceImportService.
+        public int? SuggestedNewDeviceId { get; set; }
     }
 }

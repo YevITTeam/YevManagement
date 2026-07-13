@@ -18,17 +18,19 @@ namespace Asset.Api.Controllers
         [RequirePermission("Asset.DeviceGroup.View")]
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<DeviceGroupDto>>>> GetPaged(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null)
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null, [FromQuery] int? departmentId = null)
         {
-            var result = await _deviceGroupService.GetPagedAsync(pageIndex, pageSize, keyword);
+            var result = await _deviceGroupService.GetPagedAsync(pageIndex, pageSize, keyword, departmentId);
             return Success(result);
         }
 
+        // departmentId: FE dùng để load danh sách Nhóm phụ thuộc Bộ phận đã chọn (dropdown Nhóm
+        // trên form Device chỉ hiện Nhóm thuộc đúng Bộ phận vừa chọn).
         [RequirePermission("Asset.DeviceGroup.View")]
         [HttpGet("all")]
-        public async Task<ActionResult<ApiResponse<List<DeviceGroupDto>>>> GetAllActive()
+        public async Task<ActionResult<ApiResponse<List<DeviceGroupDto>>>> GetAllActive([FromQuery] int? departmentId = null)
         {
-            var result = await _deviceGroupService.GetAllActiveAsync();
+            var result = await _deviceGroupService.GetAllActiveAsync(departmentId);
             return Success(result);
         }
 

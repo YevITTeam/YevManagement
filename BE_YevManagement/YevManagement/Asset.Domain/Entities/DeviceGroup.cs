@@ -11,7 +11,11 @@ public partial class DeviceGroup
 
     public string GroupName { get; set; } = null!;
 
+    public int DepartmentId { get; set; }
+
     public bool IsDeleted { get; set; }
+
+    public virtual DeviceDepartment Department { get; set; } = null!;
 
     public virtual ICollection<Device> Devices { get; set; } = new List<Device>();
 }

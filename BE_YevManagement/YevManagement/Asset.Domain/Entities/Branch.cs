@@ -14,4 +14,6 @@ public partial class Branch
     public bool IsDeleted { get; set; }
 
     public virtual ICollection<Device> Devices { get; set; } = new List<Device>();
+
+    public virtual ICollection<IpPrefix> IpPrefixes { get; set; } = new List<IpPrefix>();
 }
