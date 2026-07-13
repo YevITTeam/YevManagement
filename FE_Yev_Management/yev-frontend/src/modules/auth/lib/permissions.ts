@@ -9,3 +9,10 @@ export const hasAnyPermission = (user: UserDto | null | undefined, codes: string
     if (!user?.permissions?.length) return false;
     return codes.some((code) => user.permissions.includes(code));
 };
+
+// Kiểm tra user có ít nhất 1 permission thuộc 1 module (vd "Asset") hay không — dùng để ẩn/hiện cả
+// 1 khu vực chức năng (menu trang chủ, route guard) mà không cần liệt kê hết mã permission con.
+export const hasModuleAccess = (user: UserDto | null | undefined, modulePrefix: string): boolean => {
+    if (!user?.permissions?.length) return false;
+    return user.permissions.some((code) => code.startsWith(`${modulePrefix}.`));
+};

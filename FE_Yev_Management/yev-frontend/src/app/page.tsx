@@ -1,34 +1,46 @@
 "use client";
 
 import { Cpu, FileText, Notebook, BarChart3 } from "lucide-react";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasModuleAccess } from "@/modules/auth/lib/permissions";
 
 export default function Home() {
+  const { user, isLoading } = useAuth();
+  // Chỉ hiện mục "Quản lý thiết bị" nếu user có ít nhất 1 permission module Asset (role "Quản lý Thiết
+  // bị" hoặc "Admin" được seed sẵn full quyền) — trong lúc đang tải user thì ẩn tạm để tránh chớp UI
+  // cho người không có quyền.
+  const canManagePc = !isLoading && hasModuleAccess(user, "Asset");
+
   const menuItems = [
     {
       title: "Quản lý thiết bị",
       desc: "Theo dõi, kiểm kê tài sản",
       link: "/pc",
-      icon: <Cpu className="w-8 h-8" />
+      icon: <Cpu className="w-8 h-8" />,
+      visible: canManagePc,
     },
     {
       title: "Quản lý hợp đồng",
       desc: "Soạn thảo và lưu trữ hồ sơ",
       link: "#",
-      icon: <FileText className="w-8 h-8" />
+      icon: <FileText className="w-8 h-8" />,
+      visible: true,
     },
     {
       title: "Quản lý tăng ca",
       desc: "Đăng ký hoặc phê duyệt tăng ca",
       link: "#",
-      icon: <Notebook className="w-8 h-8" />
+      icon: <Notebook className="w-8 h-8" />,
+      visible: true,
     },
     {
       title: "Báo cáo thống kê",
       desc: "Xem số liệu tổng quan",
       link: "#",
-      icon: <BarChart3 className="w-8 h-8" />
+      icon: <BarChart3 className="w-8 h-8" />,
+      visible: true,
     },
-  ];
+  ].filter((item) => item.visible);
 
   return (
     <div className="min-h-[80vh] bg-[#f8fafc] px-6 py-10">
