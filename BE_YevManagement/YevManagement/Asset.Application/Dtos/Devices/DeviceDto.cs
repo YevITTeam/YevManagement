@@ -15,6 +15,10 @@ namespace Asset.Application.Dtos.Devices
         public string SupplierName { get; set; } = null!;
         public int BranchId { get; set; }
         public string BranchName { get; set; } = null!;
+        public int? GroupId { get; set; }
+        public string? GroupName { get; set; }
+        public int? DepartmentId { get; set; }
+        public string? DepartmentName { get; set; }
         public string Manager { get; set; } = null!;
         public DateTime PurchaseDate { get; set; }
         public int DepreciationMonths { get; set; }

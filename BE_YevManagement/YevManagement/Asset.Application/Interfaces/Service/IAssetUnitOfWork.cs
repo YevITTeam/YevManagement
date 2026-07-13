@@ -7,6 +7,9 @@ namespace Asset.Application.Interfaces.Service
     {
         IDeviceRepository Devices { get; }
         IBranchRepository Branches { get; }
+        IAssetSettingRepository AssetSettings { get; }
+        IDeviceGroupRepository DeviceGroups { get; }
+        IDeviceDepartmentRepository DeviceDepartments { get; }
         ISoftwareRepository Softwares { get; }
         ISoftwareGroupRepository SoftwareGroups { get; }
         ISupplierRepository Suppliers { get; }

@@ -87,6 +87,14 @@ namespace Identity.Api.Controllers
             }
         }
 
+        [RequirePermission("Identity.User.Delete")]
+        [HttpDelete("delete-user/{userId}")]
+        public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(int userId)
+        {
+            await _service.DeleteUserAsync(userId);
+            return Success(true, "Xóa người dùng thành công!");
+        }
+
         [RequirePermission("Identity.User.UpdateRoles")]
         [HttpPost("update-user-roles")]
         public async Task<ActionResult<ApiResponse<string>>> UpdateUserRoles([FromBody] UpdateUserRolesDto request)

@@ -37,11 +37,19 @@ public partial class Device
 
     public int? ReplacesOldDeviceId { get; set; }
 
+    public int? GroupId { get; set; }
+
+    public int? DepartmentId { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual Branch Branch { get; set; } = null!;
 
     public virtual Device? ReplacesOldDevice { get; set; }
+
+    public virtual DeviceGroup? DeviceGroup { get; set; }
+
+    public virtual DeviceDepartment? DeviceDepartment { get; set; }
 
     public virtual DeviceConfiguration? DeviceConfiguration { get; set; }
 

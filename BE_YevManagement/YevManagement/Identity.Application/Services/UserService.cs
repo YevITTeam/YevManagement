@@ -142,5 +142,17 @@ namespace Identity.Application.Services
                 Roles = roles.Select(r => r.RoleName).ToList()
             };
         }
+
+        // Hard delete: xoá hẳn User khỏi DB (không có IsDeleted trên entity này).
+        // UserRoles/LoginUserIPs/UserPermissions cascade tự động ở DB. Nếu UserName này
+        // đăng nhập Windows lại, MyClaimsTransformation sẽ tạo mới User với role mặc định "Basic".
+        public async Task DeleteUserAsync(int userId)
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            user.OrThrowNotFound("Người dùng", userId);
+
+            _unitOfWork.Users.Delete(user!);
+            await _unitOfWork.SaveChangesAsync();
+        }
     }
 }

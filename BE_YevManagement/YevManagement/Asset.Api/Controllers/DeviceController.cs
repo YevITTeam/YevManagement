@@ -84,5 +84,15 @@ namespace Asset.Api.Controllers
             await _deviceService.DeleteAsync(id);
             return Success(true, "Xóa thiết bị thành công.");
         }
+
+        [RequirePermission("Asset.Device.Delete")]
+        [HttpPost("bulk-delete")]
+        public async Task<ActionResult<ApiResponse<BulkDeleteDeviceResultDto>>> BulkDelete([FromBody] BulkDeleteDeviceRequestDto request)
+        {
+            var result = await _deviceService.BulkDeleteAsync(request.Ids);
+            return Success(result, result.SkippedDevices.Count == 0
+                ? $"Đã xóa {result.DeletedCount} thiết bị."
+                : $"Đã xóa cứng {result.DeletedCount} thiết bị, bỏ qua {result.SkippedDevices.Count} thiết bị.");
+        }
     }
 }

@@ -11,6 +11,9 @@ namespace Asset.Infrastructure.Repositories
             AssetDbContext dbContext,
             IDeviceRepository devices,
             IBranchRepository branches,
+            IAssetSettingRepository assetSettings,
+            IDeviceGroupRepository deviceGroups,
+            IDeviceDepartmentRepository deviceDepartments,
             ISoftwareRepository softwares,
             ISoftwareGroupRepository softwareGroups,
             ISupplierRepository suppliers,
@@ -27,6 +30,9 @@ namespace Asset.Infrastructure.Repositories
         {
             Devices = devices;
             Branches = branches;
+            AssetSettings = assetSettings;
+            DeviceGroups = deviceGroups;
+            DeviceDepartments = deviceDepartments;
             Softwares = softwares;
             SoftwareGroups = softwareGroups;
             Suppliers = suppliers;
@@ -44,6 +50,9 @@ namespace Asset.Infrastructure.Repositories
 
         public IDeviceRepository Devices { get; }
         public IBranchRepository Branches { get; }
+        public IAssetSettingRepository AssetSettings { get; }
+        public IDeviceGroupRepository DeviceGroups { get; }
+        public IDeviceDepartmentRepository DeviceDepartments { get; }
         public ISoftwareRepository Softwares { get; }
         public ISoftwareGroupRepository SoftwareGroups { get; }
         public ISupplierRepository Suppliers { get; }

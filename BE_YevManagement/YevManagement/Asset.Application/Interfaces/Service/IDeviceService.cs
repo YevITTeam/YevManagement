@@ -14,5 +14,6 @@ namespace Asset.Application.Interfaces.Service
         Task<DeviceDto> CreateAsync(CreateDeviceDto request);
         Task UpdateAsync(UpdateDeviceDto request);
         Task DeleteAsync(int id);
+        Task<BulkDeleteDeviceResultDto> BulkDeleteAsync(List<int> ids);
     }
 }

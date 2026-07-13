@@ -17,14 +17,13 @@
 
 ## 1. Khác biệt quan trọng so với module Asset
 
-**(2026-07-10, đã đổi)** Từ giờ **cả 2 module Identity và Asset đều bắt buộc
-JWT Bearer + đủ permission** — không còn phân biệt "Asset mở tự do, Identity siết
-role" như trước:
+**Cả 2 module Identity và Asset đều bắt buộc JWT Bearer + đủ permission** —
+không có endpoint nào mở tự do:
 
 | Endpoint | Cơ chế xác thực |
 |---|---|
 | `POST /api/Auth/windows-login` | **Windows Negotiate** (IWA) — không dùng Bearer token |
-| Tất cả endpoint còn lại (Identity **và** Asset) | **JWT Bearer** + user (qua Role) phải có **permission** cụ thể cho hành động đó (không còn check "role Admin" cứng) — xem mục 3. |
+| Tất cả endpoint còn lại (Identity **và** Asset) | **JWT Bearer** + user (qua Role) phải có **permission** cụ thể cho hành động đó (không phải check "role Admin" cứng) — xem mục 3. |
 
 Envelope response (`ApiResponse<T>`) và cách đọc `data`/`errors` **giống hệt**
 module Asset — xem [asset-api-fe.md §1.1–1.3](asset-api-fe.md#1-quy-ước-chung--bắt-buộc-đọc-trước-khi-tích-hợp)
@@ -68,9 +67,9 @@ const body = await res.json();
     "id": 12,
     "userName": "YEV\\n.truong.da.pcd.it",
     "fullName": "Truong Nguyen",
-    "deviceName": "DESKTOP-ABC123",   // nullable, reverse DNS từ IP
+    "deviceName": "DESKTOP-ABC123",   // nullable, reverse DNS từ IP — chỉ để hiển thị/tham khảo
     "roles": ["Admin"],                // luôn có ít nhất "Basic" (auto-gán khi user mới)
-    "permissions": [                   // 2026-07-10, mới thêm — mã permission suy ra từ roles
+    "permissions": [                   // mã permission hiệu lực, suy ra từ roles + override riêng
       "Asset.Device.View", "Asset.Device.Create", "Identity.Role.View", "..."
     ]
   },
@@ -78,32 +77,29 @@ const body = await res.json();
 }
 ```
 
-- **Định danh đăng nhập là `UserName` suông** (2026-07-11, đổi lại — trước đó
-  2026-07-10 từng dùng cặp `(UserName, DeviceName)`, nhưng `DeviceName` resolve
-  qua reverse-DNS từ IP client không ổn định trong môi trường thật, gây tạo
-  trùng user mỗi lần đăng nhập nên đã bỏ). **Lần đầu 1 user Windows đăng nhập**
-  (chưa từng có `UserName` này trong DB) → server **tự động tạo user mới**
-  trong `YevIdentityManagement`, gán sẵn role `"Basic"` — không cần bước "đăng
-  ký" riêng. Các lần đăng nhập sau (từ bất kỳ máy nào) đều khớp về **đúng 1**
-  dòng user đó, dùng chung 1 bộ Role — **không còn** khái niệm "nhiều dòng user
-  theo từng máy". Muốn nâng quyền (vd lên `Admin`) phải nhờ 1 Admin khác gọi
-  `update-user-roles` (xem mục 4.2), hoặc **Admin tạo trước** user kèm Role
-  mong muốn qua `create-user` (mục 4.9) trước khi người dùng đăng nhập lần đầu.
-- `DeviceName` trả về vẫn resolve qua reverse-DNS mỗi lần login, nhưng giờ chỉ
-  mang tính **hiển thị/tham khảo** (server tự refresh nếu resolve ra giá trị
-  khác, bỏ qua nếu resolve thất bại) — FE **không** nên dùng field này để phân
-  biệt/định danh gì cả vì vẫn có thể không chính xác 100%.
+- **Định danh đăng nhập là `UserName` suông.** `DeviceName` chỉ mang tính hiển
+  thị/tham khảo (resolve qua reverse-DNS mỗi lần login, server tự refresh nếu
+  ra giá trị khác, bỏ qua nếu resolve thất bại) — FE **không** nên dùng field
+  này để phân biệt/định danh gì cả, vì reverse-DNS không ổn định 100% trong môi
+  trường thật.
+- **Lần đầu 1 user Windows đăng nhập** (chưa từng có `UserName` này trong DB) →
+  server **tự động tạo user mới** trong `YevIdentityManagement`, gán sẵn role
+  `"Basic"` — không cần bước "đăng ký" riêng. Các lần đăng nhập sau (từ bất kỳ
+  máy nào) đều khớp về **đúng 1** dòng user đó, dùng chung 1 bộ Role. Muốn nâng
+  quyền (vd lên `Admin`) phải nhờ 1 Admin khác gọi `update-user-roles` (mục
+  4.2), hoặc **Admin tạo trước** user kèm Role mong muốn qua `create-user` (mục
+  4.9) trước khi người dùng đăng nhập lần đầu.
 - Mỗi lần gọi `windows-login` server cũng **ghi/cập nhật** IP + `DeviceName`
   của lần đăng nhập gần nhất — **không phải API read-only**, gọi nhiều lần vẫn
   an toàn (idempotent) nhưng có side-effect ghi DB.
 - `token` hết hạn sau **120 phút** (`JwtSettings:ExpiryMinutes`). Hết hạn → mọi
   request dùng token cũ trả 401, FE phải gọi lại `windows-login` để lấy token
   mới (không có endpoint refresh-token riêng).
-- **Permission tự refresh mỗi request** (2026-07-10) — nếu Admin vừa đổi tập
-  permission của 1 Role, user thuộc role đó có hiệu lực ngay ở request tiếp
-  theo, **không cần** gọi lại `windows-login`. `user.permissions` trả về lúc
-  login chỉ là snapshot tại thời điểm đó — nếu cần permission mới nhất để hiển
-  thị UI (không phải để enforce, BE luôn tự check lại), FE có thể gọi lại
+- **Permission tự refresh mỗi request** — nếu Admin vừa đổi tập permission của
+  1 Role, user thuộc role đó có hiệu lực ngay ở request tiếp theo, **không
+  cần** gọi lại `windows-login`. `user.permissions` trả về lúc login chỉ là
+  snapshot tại thời điểm đó — nếu cần permission mới nhất để hiển thị UI
+  (không phải để enforce, BE luôn tự check lại), FE có thể gọi lại
   `windows-login` hoặc tự decode JWT mới nếu có.
 
 ### 2.3. Dùng token cho các request sau
@@ -119,11 +115,11 @@ ràng buộc.
 
 ---
 
-## 3. Phân quyền hiển thị UI (2026-07-10, đổi sang permission chi tiết)
+## 3. Phân quyền hiển thị UI
 
 `user.roles` vẫn là mảng string tên role (vd `["Basic"]`, `["Admin", "Basic"]`)
-— dùng để hiển thị/quản lý, **không còn dùng để quyết định bật/tắt tính năng**.
-Việc đó giờ dựa vào **`user.permissions`** — mảng mã permission dạng
+— dùng để hiển thị/quản lý, **không dùng để quyết định bật/tắt tính năng**.
+Việc đó dựa vào **`user.permissions`** — mảng mã permission dạng
 `Module.Entity.Action` (vd `"Asset.Device.Delete"`, `"Identity.Role.Create"`).
 
 FE tự quyết định ẩn/hiện nút bấm/menu dựa trên `user.permissions.includes(code)`
@@ -132,15 +128,15 @@ FE tự quyết định ẩn/hiện nút bấm/menu dựa trên `user.permission
 `user.permissions` đã là danh sách **hiệu lực cuối cùng** (base theo Role, đã
 cộng/trừ override riêng theo User nếu có — xem mục 4.8), FE không cần tự tính lại.
 Danh sách đầy đủ mã permission theo module/entity xem
-[identity-module.md §9](identity-module.md#9-phân-quyền-chi-tiết-rbac--permission--2026-07-10);
+[identity-module.md §9](identity-module.md#9-phân-quyền-chi-tiết-rbac--permission);
 lấy toàn bộ danh sách này qua `GET /api/Permission/all` (mục 4.7) để dựng màn
 "quản lý phân quyền" (checkbox permission theo từng Role, hoặc override riêng
 theo User ở mục 4.8).
 
 Role hiện có trong DB (seed sẵn, có thể có thêm qua `create-role`): `Basic`,
-`Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiết bị`. Sau migration nâng cấp permission,
-**chỉ `Admin` được seed sẵn full quyền** — 3 role còn lại chưa có permission nào,
-cần Admin tự gán qua `PUT /api/Permission/role/{roleId}` (mục 4.7).
+`Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiết bị`. **Chỉ `Admin` được seed sẵn
+full quyền** — 3 role còn lại chưa có permission nào, cần Admin tự gán qua
+`PUT /api/Permission/role/{roleId}` (mục 4.7).
 
 ---
 
@@ -210,17 +206,16 @@ Permission: `Identity.Role.Update`.
 
 Permission: `Identity.Role.Delete`. Xoá mềm (`IsDeleted=true`). → 400 "Không tìm thấy quyền để xóa." nếu roleId sai.
 
-### 4.7. Quản lý permission theo Role — `/api/Permission` (mới, 2026-07-10) ⭐
+### 4.7. Quản lý permission theo Role — `/api/Permission`
 
 Dùng để dựng màn "Phân quyền chi tiết": chọn 1 Role, tick các permission muốn
 cấp, lưu lại.
 
-**`GET /api/Permission/all` trả về nhóm 2 cấp Module > Entity (2026-07-11, đổi
-— trước đó là mảng phẳng)**, permission: `Identity.Permission.View`. `Entity`
-được server tự tách từ đoạn giữa của `code` (dạng `Module.Entity.Action`, vd
-`Asset.Device.View` → Entity `Device`). Dùng để dựng UI dạng cây/collapsible
-(cấp 1: Module, cấp 2: Entity, cấp 3: checkbox từng permission) thay vì phải
-tự group lại 1 mảng ~53 dòng phẳng như trước:
+**`GET /api/Permission/all` trả về nhóm 2 cấp Module > Entity**, permission:
+`Identity.Permission.View`. `Entity` được server tự tách từ đoạn giữa của
+`code` (dạng `Module.Entity.Action`, vd `Asset.Device.View` → Entity `Device`).
+Dùng để dựng UI dạng cây/collapsible (cấp 1: Module, cấp 2: Entity, cấp 3:
+checkbox từng permission) thay vì phải tự group lại 1 mảng ~53 dòng phẳng:
 
 ```jsonc
 // GET /api/Permission/all → data — List<PermissionModuleGroupDto>
@@ -247,12 +242,12 @@ tự group lại 1 mảng ~53 dòng phẳng như trước:
     ]
   }
   // tổng cộng vẫn đúng 53 permission, chỉ đổi cách gói — flatten lại
-  // (entities.flatMap(e => e.permissions)) nếu FE cần danh sách phẳng cũ
+  // (entities.flatMap(e => e.permissions)) nếu FE cần danh sách phẳng
 ]
 ```
 
-**Các endpoint permission khác vẫn trả mảng phẳng `List<PermissionDto>` như
-cũ** (không đổi theo `GET /all`):
+**Các endpoint permission khác vẫn trả mảng phẳng `List<PermissionDto>`**
+(không đổi theo `GET /all`):
 
 ```jsonc
 // GET /api/Permission/role/{roleId} → data[] — permission ĐANG được gán cho role này, permission: Identity.Permission.View
@@ -266,7 +261,7 @@ cũ** (không đổi theo `GET /all`):
 **Không có** API tạo/sửa/xoá `Permission` — danh sách 53 mã là cố định (seed qua
 migration BE), FE chỉ đọc (`GET /all`) và gán/gỡ theo Role (`GET`/`PUT /role/{roleId}`).
 
-### 4.8. Override permission riêng theo User — `/api/Permission/user/{userId}` (mới, 2026-07-10) ⭐
+### 4.8. Override permission riêng theo User — `/api/Permission/user/{userId}`
 
 Dùng khi 1 nhân viên cụ thể cần quyền **khác** so với Role đang gán (tránh phải
 tạo hẳn 1 Role mới chỉ cho 1 người) — ví dụ: user thuộc Role "Quản lý PC" (có
@@ -299,7 +294,7 @@ sẵn quyền xem Thiết bị) nhưng muốn **thu hồi riêng** quyền xem T
 **Không cần user đăng nhập lại** — permission hiệu lực tự refresh ngay request
 tiếp theo (cùng cơ chế với đổi permission theo Role, xem mục 2.2).
 
-### 4.9. Tạo user thủ công (pre-provision) — `POST /api/Auth/create-user` (mới, 2026-07-10, sửa 2026-07-11) ⭐
+### 4.9. Tạo user thủ công (pre-provision) — `POST /api/Auth/create-user`
 
 Permission: `Identity.User.Create`. Dùng khi Admin muốn **chuẩn bị trước** 1
 user cho 1 nhân viên cụ thể — ví dụ nhân viên mới sắp nhận máy — **trước khi**
@@ -311,7 +306,7 @@ mặc định `"Basic"` (xem cơ chế khớp ở mục 2.2).
 // body
 {
   "userName": "YEV\\nv.a",          // Windows username đầy đủ (kèm domain nếu có)
-  "deviceName": "YDC-1877",         // optional — chỉ để tham khảo/hiển thị (2026-07-11, không còn dùng để khớp login)
+  "deviceName": "YDC-1877",         // optional — chỉ để tham khảo/hiển thị, không dùng để khớp login
   "fullName": "Nguyễn Văn A",       // optional
   "roleIds": [3]                    // optional, Id thật lấy từ GET /api/Auth/get-all-roles — để trống thì user này coi như Basic khi đăng nhập
 }
@@ -320,12 +315,11 @@ mặc định `"Basic"` (xem cơ chế khớp ở mục 2.2).
 //   không tồn tại/đã bị xoá mềm
 ```
 
-> `deviceName` (2026-07-11) không còn là "chìa khoá" đăng nhập nữa — nhập gì
-> hay để trống cũng không ảnh hưởng việc khớp user lúc login thật (chỉ khớp
-> theo `userName`). Lý do đổi: reverse-DNS hostname server tự nhận diện lúc
-> login không ổn định (NAT, nhiều PTR record...), từng khiến hệ thống tạo trùng
-> user liên tục dù cùng 1 người 1 máy — xem chi tiết ở
-> [identity-module.md](identity-module.md) §5.
+> `deviceName` không phải "chìa khoá" đăng nhập — nhập gì hay để trống cũng
+> không ảnh hưởng việc khớp user lúc login thật (chỉ khớp theo `userName`). Lý
+> do: reverse-DNS hostname server tự nhận diện lúc login không ổn định (NAT,
+> nhiều PTR record...), từng khiến hệ thống tạo trùng user liên tục dù cùng 1
+> người 1 máy — xem chi tiết ở [identity-module.md](identity-module.md) §5.
 
 ---
 
@@ -341,7 +335,7 @@ mặc định `"Basic"` (xem cơ chế khớp ở mục 2.2).
 | POST | `/api/Auth/create-role` | `Identity.Role.Create` | Tạo role |
 | PUT | `/api/Auth/update-role/{roleId}` | `Identity.Role.Update` | Sửa role |
 | DELETE | `/api/Auth/delete-role/{roleId}` | `Identity.Role.Delete` | Xoá mềm role |
-| GET | `/api/Permission/all` | `Identity.Permission.View` | Toàn bộ permission hệ thống, nhóm 2 cấp Module > Entity (`PermissionModuleGroupDto[]`, 2026-07-11 — các endpoint permission khác vẫn phẳng) |
+| GET | `/api/Permission/all` | `Identity.Permission.View` | Toàn bộ permission hệ thống, nhóm 2 cấp Module > Entity (`PermissionModuleGroupDto[]` — các endpoint permission khác vẫn phẳng) |
 | GET | `/api/Permission/role/{roleId}` | `Identity.Permission.View` | Permission hiện tại của 1 role |
 | PUT | `/api/Permission/role/{roleId}` | `Identity.Role.Update` | Gán lại permission cho role |
 | GET | `/api/Permission/user/{userId}` | `Identity.Permission.View` | Override (grant/deny) hiện có của 1 user |
@@ -358,5 +352,5 @@ mặc định `"Basic"` (xem cơ chế khớp ở mục 2.2).
 | Gọi API nào đó trả 401 dù đã đăng nhập | Token hết hạn (120 phút) hoặc thiếu header `Authorization` | Gọi lại `windows-login` lấy token mới |
 | Gọi API nào đó trả 403 dù token còn hạn | User đăng nhập không có permission cho hành động đó (Role của user chưa được gán permission tương ứng) | Nhờ 1 Admin gọi `PUT /api/Permission/role/{roleId}` gán thêm permission cho Role của user, hoặc gán user sang Role phù hợp qua `update-user-roles` |
 | User rõ ràng đã được gán Role có permission X nhưng vẫn 403 khi gọi hành động cần permission X | User có thể đang bị **deny override riêng** (`UserPermission.IsGranted=false`) đè lên permission mà Role cấp | Gọi `GET /api/Permission/user/{userId}` xem override đang áp dụng; nếu cần khôi phục, `PUT /api/Permission/user/{userId}` với `denyPermissionIds` không còn permission đó |
-| Gọi API Asset (Device/Software/IP...) trả 401/403 — trước đây không cần token | Từ 2026-07-10, module Asset đã siết permission, không còn `[AllowAnonymous]` | Gắn `Authorization: Bearer <token>` cho **mọi** request Asset, đảm bảo Role của user có permission tương ứng |
+| Gọi API Asset (Device/Software/IP...) trả 401/403 | Module Asset cũng yêu cầu JWT + permission như Identity, không có endpoint mở tự do (xem mục 1) | Gắn `Authorization: Bearer <token>` cho **mọi** request Asset, đảm bảo Role của user có permission tương ứng |
 | Gọi API từ origin khác `localhost:3000`/`10.45.1.181:3000` bị chặn CORS | Origin chưa nằm trong whitelist CORS ở BE | Báo BE thêm origin vào `Program.cs` (`AddCors`) |

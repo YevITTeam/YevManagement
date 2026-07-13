@@ -1,3 +1,4 @@
+using CompanySystem.HostApi.BackgroundServices;
 using CompanySystem.HostApi.Configurations;
 using CompanySystem.HostApi.Middlewares;
 using Microsoft.AspNetCore.Authorization;
@@ -71,6 +72,8 @@ builder.Services.AddCors(options =>
 
 // Configure dependency injection for Identity and Asset modules
 builder.Services.AddDIConfig(builder.Configuration);
+
+builder.Services.AddHostedService<DeviceLiquidationBackgroundService>();
 
 var app = builder.Build();
 

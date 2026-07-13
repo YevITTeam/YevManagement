@@ -22,6 +22,23 @@ namespace Asset.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Asset.Domain.Entities.AssetSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("LiquidationAfterMonths")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AssetSettings");
+
+                    b.ToTable("AssetSettings");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.Branch", b =>
                 {
                     b.Property<int>("Id")
@@ -63,6 +80,9 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<int>("BranchId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<int>("DepreciationMonths")
                         .HasColumnType("int");
 
@@ -81,6 +101,9 @@ namespace Asset.Infrastructure.Migrations
 
                     b.Property<DateTime?>("ExpirationDate")
                         .HasColumnType("datetime2");
+
+                    b.Property<int?>("GroupId")
+                        .HasColumnType("int");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -121,6 +144,8 @@ namespace Asset.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("PK_ThietBis");
 
+                    b.HasIndex(new[] { "DepartmentId" }, "IX_ThietBis_BoPhanId");
+
                     b.HasIndex(new[] { "BranchId" }, "IX_ThietBis_ChiNhanhId");
 
                     b.HasIndex(new[] { "DeviceTypeId" }, "IX_ThietBis_LoaiThietBiId");
@@ -129,6 +154,8 @@ namespace Asset.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex(new[] { "SupplierId" }, "IX_ThietBis_NhaCungCapId");
+
+                    b.HasIndex(new[] { "GroupId" }, "IX_ThietBis_NhomId");
 
                     b.HasIndex(new[] { "SerialNumber" }, "IX_ThietBis_SoSeri")
                         .IsUnique()
@@ -470,6 +497,36 @@ namespace Asset.Infrastructure.Migrations
                     b.ToTable("DeviceConfigurationInitials");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceDepartment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DepartmentCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("DepartmentName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id")
+                        .HasName("PK_BoPhans");
+
+                    b.HasIndex(new[] { "DepartmentCode" }, "IX_BoPhans_MaBoPhan")
+                        .IsUnique();
+
+                    b.ToTable("DeviceDepartments");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.DeviceEmail", b =>
                 {
                     b.Property<int>("Id")
@@ -499,6 +556,36 @@ namespace Asset.Infrastructure.Migrations
                     b.HasIndex(new[] { "DeviceId" }, "IX_ThietBi_Emails_ThietBiId");
 
                     b.ToTable("DeviceEmails");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("GroupCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("GroupName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id")
+                        .HasName("PK_Nhoms");
+
+                    b.HasIndex(new[] { "GroupCode" }, "IX_Nhoms_MaNhom")
+                        .IsUnique();
+
+                    b.ToTable("DeviceGroups");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.DeviceSoftware", b =>
@@ -833,12 +920,22 @@ namespace Asset.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_ThietBis_ChiNhanhs_ChiNhanhId");
 
+                    b.HasOne("Asset.Domain.Entities.DeviceDepartment", "DeviceDepartment")
+                        .WithMany("Devices")
+                        .HasForeignKey("DepartmentId")
+                        .HasConstraintName("FK_ThietBis_BoPhans_BoPhanId");
+
                     b.HasOne("Asset.Domain.Entities.DeviceType", "DeviceType")
                         .WithMany("Devices")
                         .HasForeignKey("DeviceTypeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("FK_ThietBis_LoaiThietBis_LoaiThietBiId");
+
+                    b.HasOne("Asset.Domain.Entities.DeviceGroup", "DeviceGroup")
+                        .WithMany("Devices")
+                        .HasForeignKey("GroupId")
+                        .HasConstraintName("FK_ThietBis_Nhoms_NhomId");
 
                     b.HasOne("Asset.Domain.Entities.Device", "ReplacesOldDevice")
                         .WithMany()
@@ -853,6 +950,10 @@ namespace Asset.Infrastructure.Migrations
                         .HasConstraintName("FK_ThietBis_NhaCungCaps_NhaCungCapId");
 
                     b.Navigation("Branch");
+
+                    b.Navigation("DeviceDepartment");
+
+                    b.Navigation("DeviceGroup");
 
                     b.Navigation("DeviceType");
 
@@ -998,6 +1099,16 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("TransferHistoryNewDevices");
 
                     b.Navigation("TransferHistoryOldDevices");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceDepartment", b =>
+                {
+                    b.Navigation("Devices");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.DeviceGroup", b =>
+                {
+                    b.Navigation("Devices");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.DeviceType", b =>

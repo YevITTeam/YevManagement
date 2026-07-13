@@ -8,6 +8,8 @@
         public string BranchName { get; set; } = null!;
         public string SupplierName { get; set; } = null!;
         public string DeviceTypeName { get; set; } = null!;
+        public string? GroupName { get; set; }
+        public string? DepartmentName { get; set; }
         public List<string> IpAddresses { get; set; } = new();
         public DateTime PurchaseDate { get; set; }
         public string Manager { get; set; } = null!;

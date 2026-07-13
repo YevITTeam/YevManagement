@@ -22,6 +22,11 @@ namespace Asset.Application.Dtos.Devices
         [Required(ErrorMessage = "Chi nhánh không được để trống")]
         public int BranchId { get; set; }
 
+        // Nhóm/Bộ phận: optional — xác định thiết bị đang ở chỗ nào bên cạnh Branch.
+        public int? GroupId { get; set; }
+
+        public int? DepartmentId { get; set; }
+
         [Required(ErrorMessage = "Người quản lý không được để trống")]
         public string Manager { get; set; } = null!;
 

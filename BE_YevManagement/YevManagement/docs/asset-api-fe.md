@@ -7,7 +7,7 @@
 
 - **Base URL (Development)**: `http://localhost:5000`
 - **Swagger/Scalar UI**: `http://localhost:5000/scalar/v1` (chỉ chạy ở Development, xem trực tiếp toàn bộ schema tại đây)
-- **Auth (2026-07-10, đã siết)**: toàn bộ endpoint Asset giờ **bắt buộc** gửi
+- **Auth**: toàn bộ endpoint Asset **bắt buộc** gửi
   `Authorization: Bearer <token>` (JWT lấy từ `POST /api/Auth/windows-login`, xem
   [identity-api-fe.md](identity-api-fe.md)), **và** user phải có permission tương
   ứng (vd `Asset.Device.View` để gọi `GET /api/Device/grid-list`) — thiếu token →
@@ -89,9 +89,9 @@ DELETE /api/{Entity}/{id}                                              → xoá 
 
 ---
 
-## 2. Master data đơn giản (Branch / Supplier / DeviceType / SoftwareGroup)
+## 2. Master data đơn giản (Branch / Supplier / DeviceType / SoftwareGroup / DeviceGroup / DeviceDepartment)
 
-4 entity này **cấu trúc DTO giống hệt nhau** — chỉ đổi tên field:
+6 entity này **cấu trúc DTO giống hệt nhau** — chỉ đổi tên field:
 
 | Entity | Route | Trường Code | Trường Name |
 |---|---|---|---|
@@ -99,8 +99,15 @@ DELETE /api/{Entity}/{id}                                              → xoá 
 | Supplier (Nhà cung cấp) | `/api/Supplier` | `supplierCode` | `supplierName` |
 | DeviceType (Loại thiết bị) | `/api/DeviceType` | `typeCode` | `typeName` |
 | SoftwareGroup (Nhóm phần mềm) | `/api/SoftwareGroup` | `groupCode` | `groupName` |
+| DeviceGroup (Nhóm) | `/api/DeviceGroup` | `groupCode` | `groupName` |
+| DeviceDepartment (Bộ phận) | `/api/DeviceDepartment` | `departmentCode` | `departmentName` |
 
-**Ví dụ Branch** (áp dụng tương tự cho 3 entity còn lại, chỉ đổi tên field):
+`DeviceGroup`/`DeviceDepartment` dùng để gán "thiết bị đang ở chỗ nào" trên
+`Device.groupId`/`departmentId` (xem mục 5.5) — mới tạo, chỉ seed sẵn 1 dòng
+mặc định (`code="MD"`, `name="Mặc định"`) mỗi bảng; Admin tự thêm danh sách
+Nhóm/Bộ phận thật qua các endpoint CRUD dưới đây.
+
+**Ví dụ Branch** (áp dụng tương tự cho 5 entity còn lại, chỉ đổi tên field):
 
 ```jsonc
 // GET /api/Branch/{id} → data
@@ -166,7 +173,6 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
   "preferredDns": "0.45.1.2",
   "alternateDns": "9.7.6.5",
   "description": null,
-  // 2026-07-11: đã BỎ "ipAddressCount" (luôn = 255) → thay bằng 2 field dưới.
   "usedIpCount": 12,                 // số IP đang sử dụng trong dải (status != 0)
   "availableIpCount": 243            // số IP chưa sử dụng trong dải (status = 0)
 }
@@ -188,16 +194,16 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 // → message: "Thêm prefix thành công, đã sinh 255 địa chỉ IP."
 ```
 
-- **Không còn PUT (Update) cho IpPrefix** (2026-07-11, đổi — trước đó có thể sửa `SubnetMask/Gateway/DNS/Description` sau khi tạo, giờ bỏ hẳn). Toàn bộ field cố định ngay lúc tạo; muốn đổi phải xoá + tạo lại.
-- **Validate cấu hình mạng khi tạo (2026-07-11)** — POST bị chặn (400 `DomainException`) nếu:
+- **Không có PUT (Update) cho IpPrefix** — toàn bộ field cố định ngay lúc tạo; muốn đổi phải xoá + tạo lại.
+- **Validate cấu hình mạng khi tạo** — POST bị chặn (400 `DomainException`) nếu:
   - `subnetMask`/`gateway`/`preferredDns`/`alternateDns` (field nào có nhập) **không phải IPv4 hợp lệ** (đúng 4 octet 0–255).
   - `gateway` **không nằm trong dải mạng** của `prefix` (phải cùng network 3-octet, vd prefix `10.50.2` thì gateway phải là `10.50.2.x`), hoặc không cùng subnet theo `subnetMask`, hoặc trùng địa chỉ `.0`/`.255`.
   - FE nên validate sơ bộ phía client trước (báo lỗi ngay từng field) để trải nghiệm mượt, nhưng server vẫn là nguồn chặn cuối.
-- **Xoá (DELETE) bị chặn** (400 `DomainException`) nếu còn `IpAddress` con **đang gán cho Device** (2026-07-11, đổi luật chặn — trước đó chặn hễ còn bất kỳ IP con nào chưa xoá; giờ IP không còn xoá tay được nên luật cũ vô nghĩa). Nếu không còn IP nào đang dùng, xoá Prefix sẽ **cascade xoá luôn toàn bộ IP con chưa dùng** — FE nên cảnh báo rõ hệ quả này trước khi xoá (mất luôn cả dải, không chỉ prefix).
+- **Xoá (DELETE) bị chặn** (400 `DomainException`) nếu còn `IpAddress` con **đang gán cho Device**. Nếu không còn IP nào đang dùng, xoá Prefix sẽ **cascade xoá luôn toàn bộ IP con chưa dùng** — FE nên cảnh báo rõ hệ quả này trước khi xoá (mất luôn cả dải, không chỉ prefix).
 
 ### 4.2. IpAddress — `/api/IpAddress`
 
-**Enum `Status` — đổi lại còn 3 trạng thái (2026-07-11)** (dùng để hiển thị badge màu trên UI):
+**Enum `Status`** (dùng để hiển thị badge màu trên UI):
 
 | Giá trị | Tên | Ý nghĩa | `deviceCode` hiển thị |
 |---|---|---|---|
@@ -207,7 +213,7 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 
 > **Bất biến:** `status=2` ⟺ IP có `deviceId`; `status=0/1` ⟺ IP **không** có `deviceId`. Với `status=1`, server trả `deviceCode="Khác"` (không có thiết bị thật để tra) và `deviceId=null`.
 >
-> **Sửa IP (PUT) — CHỈ đổi được `status` + `note`** (2026-07-11, đổi — trước đó không có PUT; giờ mở lại nhưng thu hẹp). **Không còn POST (thêm) / DELETE (xoá) tay từng IP**: IP chỉ sinh hàng loạt qua `POST /api/IpPrefix` (255 địa chỉ/prefix) và dọn theo qua `DELETE /api/IpPrefix/{id}`.
+> **Sửa IP (PUT) — CHỈ đổi được `status` + `note`**. **Không có POST (thêm) / DELETE (xoá) tay từng IP**: IP chỉ sinh hàng loạt qua `POST /api/IpPrefix` (255 địa chỉ/prefix) và dọn theo qua `DELETE /api/IpPrefix/{id}`.
 > ```
 > PUT /api/IpAddress/{id}   body: { "id": 6989, "status": 1, "note": "..." }
 > ```
@@ -221,7 +227,7 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 // Kết quả sort theo GIÁ TRỊ IP (10.45.2 trước 10.45.10), không phải sort chuỗi.
 {
   "id": 6989,
-  "ipAddress": "1.1.1.104",          // 2026-07-11: đã bỏ field "serverIp"
+  "ipAddress": "1.1.1.104",          // không có field "serverIp"
   "deviceId": null,
   "deviceCode": null,                // "Khác" khi status=1; mã thiết bị khi status=2
   "ipPrefixId": 28,
@@ -238,11 +244,11 @@ Validate: `softwareCode`, `softwareName`, `softwareGroupId` `[Required]`.
 
 **Query params `grid-list`** (không có tham số `all` — bảng IP quá lớn để load hết):
 `pageIndex`, `pageSize`, `keyword`, `status` (lọc theo enum trên), `isInUse`, `deviceId`.
-`isInUse` (bool, 2026-07-11) là bộ lọc gộp đang/chưa sử dụng: `true`→IP đang dùng
+`isInUse` (bool) là bộ lọc gộp đang/chưa sử dụng: `true`→IP đang dùng
 (`status != 0`), `false`→IP chưa dùng (`status = 0`), bỏ trống→không lọc. Có thể kết
 hợp với `status` (AND). Danh sách luôn sort theo **giá trị IP** (không phải sort chuỗi).
 
-**Danh sách "IP còn trống" để FE làm picker chọn IP khi tạo/sửa Device** — 2 cách (2026-07-09, thêm cách 2):
+**Danh sách "IP còn trống" để FE làm picker chọn IP khi tạo/sửa Device** — 2 cách:
 ```
 GET /api/IpAddress/grid-list?status=0&keyword=&pageIndex=1&pageSize=50   // có phân trang
 GET /api/IpAddress/available?keyword=                                    // không phân trang, trả thẳng mảng
@@ -277,16 +283,11 @@ Route `/api/Device`. **Không có** `GET /all` (danh sách quá lớn, luôn dù
 
 ### 5.2. `GET /api/Device/grid-list` — danh sách (bảng chính)
 
-Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `supplierName` (3 field này match theo `Contains`, đổi từ `StartsWith` 2026-07-11 — xem ghi chú dưới), `purchaseDate` (string, match theo `Contains`), `ipAddress`, `email` (2026-07-11, mới), `note`, `isOutsourced` (bool, thêm 2026-07-09), `serialNumber` (string, `Contains`) và `isUseUsb` (bool, exact match) — 2 field này thêm cùng đợt 2026-07-09.
+Query: `pageIndex`, `pageSize`, `deviceCode`, `manager`, `supplierName` (3 field này match theo `Contains`), `purchaseDate` (string, match theo `Contains`), `ipAddress`, `email`, `groupId`/`departmentId` (int, exact match — lọc thiết bị theo Nhóm/Bộ phận), `note`, `isOutsourced` (bool), `serialNumber` (string, `Contains`), `isUseUsb` (bool, exact match).
 
-> **`ipAddress`/`email`** (2026-07-11): match `Contains` trên **bất kỳ** IP/email nào của Device (Device giờ có thể có nhiều IP + nhiều email — xem mục 5.3/5.5). `ipAddress` đã có sẵn field trước đó nhưng chưa thật sự lọc được gì; từ nay hoạt động đúng.
+> **`ipAddress`/`email`**: match `Contains` trên **bất kỳ** IP/email nào của Device (Device có thể có nhiều IP + nhiều email — xem mục 5.3/5.5).
 
-> **`deviceCode`/`manager`/`supplierName` đổi từ `StartsWith` sang `Contains`**
-> (2026-07-11, theo yêu cầu người dùng): trước đây phải gõ đúng từ đầu chuỗi mới
-> ra kết quả, giờ chỉ cần từ khoá xuất hiện ở bất kỳ vị trí nào trong giá trị là
-> khớp — đồng nhất cách filter với `note`/`serialNumber`/`ipAddress`/`email`.
-
-**`sortDeviceCodeAscending`** (bool, optional, thêm 2026-07-10): không truyền (hoặc bỏ trống) → giữ mặc định sort theo `purchaseDate` giảm dần (mới mua nhất lên đầu); truyền `true` → sort theo `deviceCode` tăng dần; truyền `false` → sort theo `deviceCode` giảm dần. Khi tham số này có giá trị, nó **ghi đè hoàn toàn** sort mặc định theo `purchaseDate`.
+**`sortDeviceCodeAscending`** (bool, optional): không truyền (hoặc bỏ trống) → giữ mặc định sort theo `purchaseDate` giảm dần (mới mua nhất lên đầu); truyền `true` → sort theo `deviceCode` tăng dần; truyền `false` → sort theo `deviceCode` giảm dần. Khi tham số này có giá trị, nó **ghi đè hoàn toàn** sort mặc định theo `purchaseDate`.
 
 ```
 GET /api/Device/grid-list?pageIndex=1&pageSize=50&sortDeviceCodeAscending=true   // mã thiết bị tăng dần
@@ -302,12 +303,14 @@ GET /api/Device/grid-list?pageIndex=1&pageSize=50&sortDeviceCodeAscending=false 
   "branchName": "Chi nhánh Tạm thời (Migrate)",
   "supplierName": "Mai Trung",
   "deviceTypeName": "Desktop",
-  "ipAddresses": [],               // 2026-07-11: mảng IP đang gắn (có thể rỗng, có thể nhiều hơn 1)
+  "groupName": null,                // tên Nhóm nếu đã gán, null nếu chưa (xem mục 5.5)
+  "departmentName": null,           // tên Bộ phận nếu đã gán, null nếu chưa
+  "ipAddresses": [],               // mảng IP đang gắn (có thể rỗng, có thể nhiều hơn 1)
   "purchaseDate": "2026-06-01T00:00:00",
   "manager": "Chưa xác định",
   "expirationDate": "2031-06-01T00:00:00",
   "note": "...",
-  "emails": ["no-email@domain.com"], // 2026-07-11: mảng email (thay field email đơn cũ)
+  "emails": ["no-email@domain.com"], // mảng email
   "status": 0,
   "statusText": "Chờ sử dụng",
   "isOutsourced": false,
@@ -316,7 +319,7 @@ GET /api/Device/grid-list?pageIndex=1&pageSize=50&sortDeviceCodeAscending=false 
 }
 ```
 
-### 5.2b. Chọn máy mới khi "đổi thiết bị" — `GET /api/Device/available?keyword=` (2026-07-10) ⭐
+### 5.2b. Chọn máy mới khi "đổi thiết bị" — `GET /api/Device/available?keyword=`
 
 Không phân trang, trả thẳng `data: DeviceGridDto[]` (cùng shape với item trong
 `grid-list` ở mục 5.2) — luôn lọc `status=0` ("Chờ sử dụng") và chưa xoá,
@@ -338,6 +341,8 @@ GET /api/Device/available?keyword=YDF
   "deviceTypeId": 11, "deviceTypeName": "Access Point",
   "supplierId": 2, "supplierName": "Đỉnh Thiên",
   "branchId": 9, "branchName": "Chi nhánh Tạm thời (Migrate)",
+  "groupId": null, "groupName": null,             // Nhóm, null nếu chưa gán
+  "departmentId": null, "departmentName": null,   // Bộ phận, null nếu chưa gán
   "manager": "Nguyen Van Demo",
   "purchaseDate": "2026-01-15T00:00:00",
   "depreciationMonths": 36,
@@ -345,14 +350,14 @@ GET /api/Device/available?keyword=YDF
   "isOutsourced": false,
   "status": 1, "statusText": "Đang sử dụng",
   "note": "...",
-  "serialNumber": "SN-DEMO-001",   // nullable, unique khi có giá trị (2026-07-09)
-  "isUseUsb": false,                // 2026-07-09
-  "replacesOldDeviceId": null,      // 2026-07-11, mới — máy này dự tính thay thế cho máy nào (gợi ý từ import Excel, xem mục 5.9/5.10), null nếu không có
+  "serialNumber": "SN-DEMO-001",   // nullable, unique khi có giá trị
+  "isUseUsb": false,
+  "replacesOldDeviceId": null,      // máy này dự tính thay thế cho máy nào (gợi ý từ import Excel, xem mục 5.9/5.10), null nếu không có
   "replacesOldDeviceCode": null,    // mã của replacesOldDeviceId, chỉ có giá trị khi replacesOldDeviceId khác null
-  "ipAddresses": [                  // 2026-07-11: thay ipAddressId?/ipAddress? đơn — có thể nhiều IP
+  "ipAddresses": [                  // có thể nhiều IP
     { "id": 6989, "ipAddress": "1.1.1.104" }
   ],
-  "emails": [                       // 2026-07-11: thay field email đơn — có thể nhiều email
+  "emails": [                       // có thể nhiều email
     { "id": 501, "email": "demo.device@company.com", "note": null }
   ]
 }
@@ -381,8 +386,10 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
   "deviceTypeId": 11,                 // [Required] Id thật từ /api/DeviceType/all
   "supplierId": 2,                    // [Required] Id thật từ /api/Supplier/all
   "branchId": 9,                      // [Required] Id thật từ /api/Branch/all
+  "groupId": null,                    // optional — Id thật từ /api/DeviceGroup/all nếu có gán, null nếu bỏ trống
+  "departmentId": null,               // optional — Id thật từ /api/DeviceDepartment/all nếu có gán, null nếu bỏ trống
   "manager": "Nguyễn Văn Test",       // [Required]
-  "emails": [                         // [Required][MinLength(1)] — 2026-07-11, thay field email đơn
+  "emails": [                         // [Required][MinLength(1)]
     { "email": "test.qa@company.com", "note": null }   // mỗi item [Required][EmailAddress]
   ],
   "purchaseDate": "2026-01-15T00:00:00",  // [Required]
@@ -390,10 +397,10 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
   "isOutsourced": false,
   "status": 0,                        // [Range(0,3)], mặc định 0 nếu không gửi
   "note": "Ghi chú tuỳ chọn",         // nullable
-  "serialNumber": "SN-TEST-001",      // nullable, [StringLength(100)], phải unique nếu có giá trị (2026-07-09)
-  "isUseUsb": false,                  // 2026-07-09, mặc định false nếu không gửi
-  "ipAddressIds": [6989],             // 2026-07-11, thay ipAddressId? đơn — mảng Id IpAddress đang Status=0 Available (có thể rỗng []); server tự gán + set Assigned cho từng IP
-  "replacesOldDeviceId": null         // nullable, 2026-07-11 mới — Id máy cũ mà thiết bị này dự tính thay thế; server tự set field này khi import Excel (mục 5.10), FE thường không cần gửi tay trừ khi muốn sửa/tạo gợi ý thủ công
+  "serialNumber": "SN-TEST-001",      // nullable, [StringLength(100)], phải unique nếu có giá trị
+  "isUseUsb": false,                  // mặc định false nếu không gửi
+  "ipAddressIds": [6989],             // mảng Id IpAddress đang Status=0 Available (có thể rỗng []); server tự gán + set Assigned cho từng IP
+  "replacesOldDeviceId": null         // nullable — Id máy cũ mà thiết bị này dự tính thay thế; server tự set field này khi import Excel (mục 5.10), FE thường không cần gửi tay trừ khi muốn sửa/tạo gợi ý thủ công
 }
 ```
 
@@ -402,6 +409,7 @@ Gộp sẵn 3 thứ trong 1 lần gọi — FE mở màn "Chi tiết thiết b�
 > Nếu `serialNumber` khớp với Device khác đã có (kể cả đã soft-delete) → 400 `DomainException` ("Số Serial '...' đã tồn tại."). Để trống/`null` thì không bị check trùng (nhiều Device có thể cùng `serialNumber=null`).
 > `emails` **không** yêu cầu unique — nhiều Device có thể dùng chung 1 email.
 > Nếu `replacesOldDeviceId` được gửi: máy cũ phải tồn tại (`!IsDeleted`) → 404 nếu không tìm thấy; khi sửa (`PUT`) không được trỏ về chính `id` của bản thân → 400 `DomainException`.
+> Nếu `groupId`/`departmentId` được gửi (khác `null`): phải là Id có thật và chưa xoá (`!IsDeleted`) → 404 nếu không tìm thấy. Bỏ trống (`null`) là hợp lệ — không bắt buộc gán Nhóm/Bộ phận.
 
 ### 5.6. Sửa Device — `PUT /api/Device/{id}`
 
@@ -413,7 +421,7 @@ Body giống hệt Create + thêm `id` (phải khớp `{id}` trên URL, sai → 
 
 Soft-delete (`IsDeleted=true`). Mọi IP đang gắn tự động gỡ về `Available`. **Không** tự xoá `DeviceConfiguration`/`DeviceSoftware` liên quan — nếu cần dọn sạch, gọi thêm API xoá riêng.
 
-### 5.8. Báo cáo in ấn — `GET /api/Report/device-list` (2026-07-09)
+### 5.8. Báo cáo in ấn — `GET /api/Report/device-list`
 
 **Lưu ý: nằm ở controller riêng `/api/Report`, không phải `/api/Device`** — vì đây là báo cáo, không phải CRUD thiết bị; các loại báo cáo khác sau này (thống kê phần mềm, tổng số thiết bị toàn công ty...) sẽ gom chung dưới `/api/Report/*`.
 
@@ -434,7 +442,7 @@ GET /api/Report/device-list?deviceTypeId=1&branchId=&keyword=
     "stt": 1,
     "deviceCode": "10SXC92",
     "deviceName": "MP-ENG",
-    "ipAddress": null,            // 2026-07-11: nếu Device có nhiều IP, các IP được nối bằng ", " trong 1 string
+    "ipAddress": null,            // nếu Device có nhiều IP, các IP được nối bằng ", " trong 1 string
     "purchaseDate": "2021-10-01T00:00:00",
     "expirationDate": "2026-10-01T00:00:00",
     "isExpired": false,           // true nếu expirationDate đã qua (so với hôm nay UTC) — FE tự map thành ký hiệu O/X
@@ -446,7 +454,7 @@ GET /api/Report/device-list?deviceTypeId=1&branchId=&keyword=
 
 **Cột "Kỳ T/C" (`financialPeriod`)**: tính từ `expirationDate` (Hạn sử dụng), theo năm tài chính Yazaki chạy **1/7 → 30/6 năm sau**, đánh số liên tục từ 1941 (năm thành lập Yazaki Corporation). Ví dụ `expirationDate=2026-10-01` → tháng 10 ≥ 7 → năm tài chính bắt đầu 2026 → kỳ `2026 − 1940 = 86`. `financialPeriod` là `null` nếu `expirationDate` là `null`.
 
-### 5.9. Chuyển máy — `POST /api/TransferHistory` (2026-07-09)
+### 5.9. Chuyển máy — `POST /api/TransferHistory`
 
 Dùng khi người dùng chuyển từ 1 thiết bị đang dùng (máy cũ) sang 1 thiết bị mới **đã có sẵn trong hệ thống** (tạo trước qua `POST /api/Device` bình thường). Đây là **1 API duy nhất thực hiện toàn bộ nghiệp vụ** — FE không cần tự gọi nhiều API để di chuyển IP/phần mềm/đổi trạng thái.
 
@@ -461,9 +469,9 @@ Dùng khi người dùng chuyển từ 1 thiết bị đang dùng (máy cũ) san
 
 **Server tự động xử lý** (FE không cần làm gì thêm sau khi gọi API này):
 - **Toàn bộ IP đang gắn**: IP đang gắn máy cũ → chuyển sang máy mới. IP nào máy mới đang giữ sẵn mà không thuộc máy cũ → tự gỡ về `Available` (đúng luật "1 IP không được gắn nhiều thiết bị").
-- **Email (`DeviceEmail`, 2026-07-11, mới thêm)**: toàn bộ email của máy cũ → chuyển sang máy mới (giữ nguyên `note`). Không có ràng buộc unique như IP nên email sẵn có của máy mới **được giữ nguyên**, không bị gỡ. Nếu trùng đúng nội dung email đã có ở máy mới thì bỏ dòng cũ (không tạo trùng).
+- **Email (`DeviceEmail`)**: toàn bộ email của máy cũ → chuyển sang máy mới (giữ nguyên `note`). Không có ràng buộc unique như IP nên email sẵn có của máy mới **được giữ nguyên**, không bị gỡ. Nếu trùng đúng nội dung email đã có ở máy mới thì bỏ dòng cũ (không tạo trùng).
 - **Phần mềm cài (`DeviceSoftware`)**: toàn bộ phần mềm đang cài ở máy cũ **chuyển hẳn** sang máy mới (giữ nguyên `installDate`/`licenseKey`). Nếu máy mới đã cài sẵn đúng phần mềm đó rồi → giữ bản ghi của máy mới, bỏ bản ghi cũ (không tạo trùng).
-- **Dữ liệu vai trò/vị trí sử dụng của máy (2026-07-11, chốt lại lần 2)**: chỉ
+- **Dữ liệu vai trò/vị trí sử dụng của máy**: chỉ
   `branchId`/`manager`/`isOutsourced`/`isUseUsb` của máy cũ **ghi đè** lên máy
   mới (dữ liệu gắn theo vị trí/người dùng đang thao tác trên máy). **KHÔNG
   chuyển** (máy mới giữ nguyên dữ liệu vật lý/riêng của chính nó): `deviceTypeId`,
@@ -472,9 +480,7 @@ Dùng khi người dùng chuyển từ 1 thiết bị đang dùng (máy cũ) san
   `deviceName`, `serialNumber`, `note`, cấu hình phần cứng (`DeviceConfiguration`).
 - **Cấu hình phần cứng (`DeviceConfiguration`)**: **không** chuyển — máy mới có cấu hình phần cứng riêng của nó (nhập/sửa qua API `DeviceConfiguration` như bình thường).
 - **Trạng thái máy cũ**: tự đổi thành `status=0` ("Chờ sử dụng"), **trừ khi** máy cũ đã hết hạn sử dụng (`expirationDate` đã qua) thì tự đổi thành `status=2` ("Chờ thanh lý") luôn.
-- **Trạng thái máy mới**: tự đổi thành `status=1` ("Đang sử dụng", 2026-07-10) —
-  FE **không cần** gọi thêm `PUT /api/Device/{id}` để đổi status máy mới sau khi
-  chuyển xong.
+- **Trạng thái máy mới**: tự đổi thành `status=1` ("Đang sử dụng") — FE **không cần** gọi thêm `PUT /api/Device/{id}` để đổi status máy mới sau khi chuyển xong.
 
 ```jsonc
 // Response — data
@@ -495,8 +501,7 @@ Dùng khi người dùng chuyển từ 1 thiết bị đang dùng (máy cũ) san
 `GET /api/Device/available?keyword=` (mục 5.2b) để user chọn máy mới trong số
 các máy "Chờ sử dụng" → `POST /api/TransferHistory` với `oldDeviceId`/`newDeviceId`.
 
-**Tự điền sẵn máy mới gợi ý (2026-07-11, thêm sau)** — khi mở màn "Chuyển máy"
-trên 1 máy cũ, gọi thêm:
+**Tự điền sẵn máy mới gợi ý** — khi mở màn "Chuyển máy" trên 1 máy cũ, gọi thêm:
 ```
 GET /api/Device/{oldDeviceId}/replacement-suggestion
 ```
@@ -511,8 +516,14 @@ trả về (`data`, có thể `null` nếu không có gợi ý):
 Gợi ý này đến từ cột "MQL Cũ" lúc import Excel máy mới (mục 5.10) — dùng để
 **điền sẵn** `newDeviceId` trên form, người dùng vẫn xem/đổi được sang máy khác
 qua picker `GET /api/Device/available?keyword=` như bình thường trước khi bấm
-"Chuyển". Không gọi API này thì form vẫn hoạt động bình thường (chỉ là để đỡ
-phải gõ tay lại cái đã biết trước từ lúc import).
+"Chuyển". Gợi ý được **lưu lại lâu dài trong DB**, không chỉ tồn tại 1 lần lúc
+import — nếu FE bỏ qua `pendingTransfers` trong response Confirm của bước
+import (VD người dùng đóng màn import mà chưa mở "Chuyển máy" ngay), gợi ý
+không bị mất, mở lại màn "Chuyển máy" trên máy cũ đó bất kỳ lúc nào sau này vẫn
+tự lấy lại được qua API này. Khuyến nghị: FE có thể bỏ qua `pendingTransfers`
+trong response Confirm và luôn gọi API tra cứu này khi mở màn "Chuyển máy".
+Không gọi API này thì form vẫn hoạt động bình thường (chỉ là để đỡ phải gõ tay
+lại cái đã biết trước từ lúc import).
 
 **Xem lịch sử chuyển máy của 1 thiết bị** (dù thiết bị đó từng đóng vai trò máy cũ hay máy mới):
 ```
@@ -520,11 +531,11 @@ GET /api/TransferHistory/device/{deviceId}
 ```
 Trả `data[]` sort theo `transferDate` mới nhất trước. **Không có** API sửa/xoá `TransferHistory` — đây là log lịch sử, mỗi lần chuyển máy tạo 1 dòng cố định.
 
-### 5.10. Import Device hàng loạt từ Excel — `/api/DeviceImport` (2026-07-10) ⭐
+### 5.10. Import Device hàng loạt từ Excel — `/api/DeviceImport`
 
 Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang dùng để thêm thiết bị mới) và muốn thêm hàng loạt thay vì tạo tay từng cái. **Bắt buộc quy trình 2 bước — xem trước rồi mới xác nhận**, không có API ghi thẳng file vào DB.
 
-**Mẫu file Excel — 13 cột cố định theo đúng thứ tự, dòng 1 là header** (server luôn bỏ qua dòng 1, ghi gì cũng được; 2026-07-11: thêm 5 cột cấu hình Hãng/Model/CPU/RAM/Ổ Cứng giữa "Số SerialNumber" và "MQL Cũ" — trước đó chỉ có 8 cột, "MQL Cũ" ở cột H):
+**Mẫu file Excel — 13 cột cố định theo đúng thứ tự, dòng 1 là header** (server luôn bỏ qua dòng 1, ghi gì cũng được):
 
 | Cột | Tên trong Excel | Map sang field | Bắt buộc? |
 |---|---|---|---|
@@ -544,7 +555,7 @@ Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang 
 
 > Cột B/C/D là **TÊN** (text), không phải Id — server tự tra theo tên (không phân biệt hoa/thường). **Không tự tạo mới** nếu chưa có sẵn — không khớp tên nào thì dòng đó báo lỗi ở bước preview, chặn import.
 
-> **5 cột cấu hình H–L (Hãng/Model/CPU/RAM/Ổ Cứng) hoàn toàn tuỳ chọn**: nếu dòng có **ít nhất 1** trong 5 cột này khác rỗng, bước Confirm tự tạo kèm 1 `DeviceConfiguration` cho thiết bị vừa tạo (chỉ set đúng 5 field này, các field cấu hình khác — Mainboard/OS/VGA/...— để trống, sửa lại sau qua màn hình "Cập nhật cấu hình"). Nếu cả 5 cột đều rỗng thì không tạo `DeviceConfiguration` gì cả (giống hành vi cũ).
+> **5 cột cấu hình H–L (Hãng/Model/CPU/RAM/Ổ Cứng) hoàn toàn tuỳ chọn**: nếu dòng có **ít nhất 1** trong 5 cột này khác rỗng, bước Confirm tự tạo kèm 1 `DeviceConfiguration` cho thiết bị vừa tạo (chỉ set đúng 5 field này, các field cấu hình khác — Mainboard/OS/VGA/...— để trống, sửa lại sau qua màn hình "Cập nhật cấu hình"). Nếu cả 5 cột đều rỗng thì không tạo `DeviceConfiguration` gì cả.
 
 **Định dạng cột "Ngày Mua"**:
 - Ô Excel là **Date thật** → đọc đúng luôn, không cần lo định dạng hiển thị.
@@ -556,32 +567,26 @@ Dùng khi người dùng có sẵn file Excel (theo đúng mẫu công ty đang 
 |---|---|
 | `deviceName` | = giống `deviceCode` (MQL) |
 | `manager` | Chuỗi rỗng |
-| `emails` | Mảng rỗng `[]` (2026-07-11, file mẫu không có cột email) |
+| `emails` | Mảng rỗng `[]` (file mẫu không có cột email) |
 | `depreciationMonths` | **60 tháng** (cố định) |
 | `status` | `0` — Chờ sử dụng |
 
 → FE nên nhắc người dùng: sau khi import, vào từng thiết bị sửa lại `Tên thiết bị`/`Người quản lý`/`Email`/`Số tháng khấu hao` nếu cần chính xác hơn mặc định.
 
-**Cột "MQL Cũ" — chỉ là GỢI Ý chuyển máy, KHÔNG tự thực hiện** (2026-07-11, đổi
-hành vi trước đó): nếu dòng có giá trị này, `MQL Cũ` vẫn phải khớp đúng 1 thiết
-bị **đang có sẵn, chưa xoá** (không khớp thì báo lỗi dòng đó ở cả preview lẫn
-confirm), nhưng bước Confirm **không** tự gọi nghiệp vụ "chuyển máy" nữa — chỉ
-tạo thiết bị mới, rồi trả về gợi ý trong `pendingTransfers` (xem response bên
-dưới). Lý do: lúc import chỉ là dự tính máy cũ nào sẽ được thay, thực tế lắp
-đặt có thể đổi ý, nên FE dùng gợi ý này để **điền sẵn (nhưng cho sửa)** ô "Thiết
-bị cũ" trên màn hình "Chuyển máy" — người dùng phải tự bấm nút "Chuyển" thì mới
-thật sự gọi `POST /api/TransferHistory` (mục 5.9, nghiệp vụ không đổi, chỉ đổi
-thời điểm gọi).
+**Cột "MQL Cũ" — chỉ là GỢI Ý chuyển máy, KHÔNG tự thực hiện**: nếu dòng có giá
+trị này, `MQL Cũ` vẫn phải khớp đúng 1 thiết bị **đang có sẵn, chưa xoá**
+(không khớp thì báo lỗi dòng đó ở cả preview lẫn confirm), nhưng bước Confirm
+**không** tự gọi nghiệp vụ "chuyển máy" — chỉ tạo thiết bị mới, rồi trả về gợi
+ý trong `pendingTransfers` (xem response bên dưới). Lý do: lúc import chỉ là
+dự tính máy cũ nào sẽ được thay, thực tế lắp đặt có thể đổi ý, nên FE dùng gợi
+ý này để **điền sẵn (nhưng cho sửa)** ô "Thiết bị cũ" trên màn hình "Chuyển
+máy" — người dùng phải tự bấm nút "Chuyển" thì mới thật sự gọi
+`POST /api/TransferHistory` (mục 5.9, nghiệp vụ không đổi, chỉ đổi thời điểm
+gọi). Gợi ý này cũng được **lưu lại lâu dài**, tra lại bất kỳ lúc nào qua
+`GET /api/Device/{oldDeviceId}/replacement-suggestion` (mục 5.9) — không nhất
+thiết phải giữ state từ response Confirm.
 
-**Gợi ý này giờ được lưu lại, không chỉ trả 1 lần lúc import (2026-07-11, thêm
-sau)**: nếu FE bỏ qua `pendingTransfers` lúc đó (VD người dùng đóng màn import
-mà chưa mở "Chuyển máy" ngay), gợi ý **không bị mất** — mở lại màn "Chuyển máy"
-trên máy cũ đó bất kỳ lúc nào sau này vẫn tự lấy lại được qua
-`GET /api/Device/{oldDeviceId}/replacement-suggestion` (xem mục 5.9). Khuyến
-nghị: FE có thể bỏ qua `pendingTransfers` trong response Confirm và luôn gọi
-API tra cứu này khi mở màn "Chuyển máy" thay vì phải giữ state từ lúc import.
-
-**Bước 1 — Preview (chỉ đọc, không ghi DB)**: `POST /api/DeviceImport/preview` — `multipart/form-data`, field file tên `file`. Nhận cả file `.xlsx` lẫn `.csv` (2026-07-11, thêm sau — server tự nhận diện theo đuôi file, CSV tự nhận diện dấu phân cách `,`/`;`).
+**Bước 1 — Preview (chỉ đọc, không ghi DB)**: `POST /api/DeviceImport/preview` — `multipart/form-data`, field file tên `file`. Nhận cả file `.xlsx` lẫn `.csv` (server tự nhận diện theo đuôi file, CSV tự nhận diện dấu phân cách `,`/`;`).
 
 ```jsonc
 // Response — data
@@ -596,7 +601,7 @@ API tra cứu này khi mở màn "Chuyển máy" thay vì phải giữ state t�
       "purchaseDate": "2026-01-01T00:00:00",
       "note": "Ghi chú...",
       "serialNumber": null,
-      "maker": "Dell",                    // 5 field cấu hình tuỳ chọn (2026-07-11)
+      "maker": "Dell",                    // 5 field cấu hình tuỳ chọn
       "model": "OptiPlex 7010",
       "cpu": "Core i5-13500",
       "ram": "16GB",
@@ -630,7 +635,7 @@ API tra cứu này khi mở màn "Chuyển máy" thay vì phải giữ state t�
 }
 ```
 
-FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm nội dung `errors`, để người dùng sửa lại file Excel gốc rồi upload/preview lại. **Preview không đổi hành vi** — vẫn hiển thị đầy đủ dòng lỗi như trước. Nút "Xác nhận import" **không cần disable** khi `invalidRows > 0` nữa (2026-07-11, đổi — xem hành vi Confirm bên dưới): FE có thể để người dùng bấm Confirm ngay cả khi còn dòng lỗi, các dòng lỗi sẽ tự bị bỏ qua, chỉ dòng hợp lệ được tạo.
+FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm nội dung `errors`, để người dùng sửa lại file Excel gốc rồi upload/preview lại. Nút "Xác nhận import" **không cần disable** khi `invalidRows > 0`: FE có thể để người dùng bấm Confirm ngay cả khi còn dòng lỗi, các dòng lỗi sẽ tự bị bỏ qua, chỉ dòng hợp lệ được tạo (xem Confirm bên dưới).
 
 **Bước 2 — Confirm (ghi DB thật)**: `POST /api/DeviceImport/confirm` — `Content-Type: application/json`, body gửi lại **đúng mảng `rows`** vừa nhận từ bước preview (chỉ cần các field thô, không cần gửi `resolvedXxxId`/`isValid`/`errors` — server tự tra lại từ đầu theo dữ liệu DB hiện tại, không tin Id do FE gửi lên):
 
@@ -659,7 +664,7 @@ FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm 
 {
   "createdCount": 1,
   "createdDeviceIds": [17996],
-  "createdConfigCount": 1,            // số Device vừa tạo có kèm DeviceConfiguration (2026-07-11)
+  "createdConfigCount": 1,            // số Device vừa tạo có kèm DeviceConfiguration
   "pendingTransfers": [               // gợi ý "chuyển máy" từ cột MQL Cũ — CHƯA chuyển thật
     {
       "newDeviceId": 17996,
@@ -668,7 +673,7 @@ FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm 
       "oldDeviceCode": "TEST-OLD-001"
     }
   ],
-  "skippedCount": 1,                  // 2026-07-11: số dòng bị bỏ qua vì còn lỗi validate
+  "skippedCount": 1,                  // số dòng bị bỏ qua vì còn lỗi validate
   "skippedRows": [
     {
       "rowNumber": 3,
@@ -679,9 +684,9 @@ FE render bảng preview theo `rows`, tô đỏ các dòng `isValid=false` kèm 
 }
 ```
 
-> FE nên điều hướng người dùng sang màn hình "Chuyển máy" ngay sau khi confirm, dùng `pendingTransfers` để **điền sẵn** danh sách (mỗi dòng = 1 cặp máy cũ/máy mới, cho phép sửa `newDeviceId` nếu người dùng muốn đổi ý), người dùng bấm "Chuyển" từng dòng (hoặc hàng loạt) mới thật sự gọi `POST /api/TransferHistory`. Nếu đóng màn hình mà chưa bấm "Chuyển", gợi ý này **mất luôn** (server không lưu lại) — chỉ tồn tại trong response của lần confirm đó.
->
-> **Confirm luôn validate lại từ đầu** theo dữ liệu DB tại thời điểm bấm xác nhận (phòng trường hợp có gì đó đổi khác so với lúc xem preview — VD người khác vừa tạo trùng `MQL`). **Dòng lỗi bị bỏ qua, KHÔNG chặn cả batch nữa** (2026-07-11, đổi hành vi trước đó — trước đây có bất kỳ dòng lỗi nào thì không ghi gì cả và trả 400): giờ chỉ những dòng hợp lệ được tạo Device (kèm `DeviceConfiguration` nếu có), dòng lỗi trả về trong `skippedRows`/`skippedCount` của response 200 bình thường — FE hiển thị thông báo dạng "Đã tạo N thiết bị, bỏ qua M dòng lỗi" và liệt kê `skippedRows` cho người dùng biết dòng nào cần sửa lại rồi import bù sau. Response 400 (`errors: string[]`, dạng `"Dòng {n}: {lý do}"`) giờ chỉ còn xảy ra khi lỗi hệ thống ngoài dự kiến khi ghi các dòng hợp lệ (không phải do dòng lỗi validate nữa).
+> FE nên điều hướng người dùng sang màn hình "Chuyển máy" ngay sau khi confirm, dùng `pendingTransfers` để **điền sẵn** danh sách (mỗi dòng = 1 cặp máy cũ/máy mới, cho phép sửa `newDeviceId` nếu người dùng muốn đổi ý), người dùng bấm "Chuyển" từng dòng (hoặc hàng loạt) mới thật sự gọi `POST /api/TransferHistory`.
+
+**Confirm luôn validate lại từ đầu** theo dữ liệu DB tại thời điểm bấm xác nhận (phòng trường hợp có gì đó đổi khác so với lúc xem preview — VD người khác vừa tạo trùng `MQL`). **Dòng lỗi bị bỏ qua, KHÔNG chặn cả batch**: chỉ những dòng hợp lệ được tạo Device (kèm `DeviceConfiguration` nếu có), dòng lỗi trả về trong `skippedRows`/`skippedCount` của response 200 bình thường — FE hiển thị thông báo dạng "Đã tạo N thiết bị, bỏ qua M dòng lỗi" và liệt kê `skippedRows` cho người dùng biết dòng nào cần sửa lại rồi import bù sau. Response 400 (`errors: string[]`, dạng `"Dòng {n}: {lý do}"`) chỉ còn xảy ra khi lỗi hệ thống ngoài dự kiến khi ghi các dòng hợp lệ (không phải do dòng lỗi validate).
 
 **Quyền**: dùng chung permission `Asset.Device.Create` cho cả `preview` và `confirm` (không tách permission riêng cho import).
 
@@ -733,7 +738,7 @@ GET /api/DeviceConfiguration/{configId}/history   → DeviceConfigurationHistory
 
 Mỗi phần tử = 18 field linh kiện tại thời điểm sửa + `editedAt` + `editedBy`. **Chỉ sinh dòng mới nếu thực sự có field thay đổi** — `PUT` mà không đổi gì thì không tạo thêm dòng lịch sử (FE gọi PUT thoải mái không sợ spam log). Không có API tạo/sửa trực tiếp entity này (tự động 100%).
 
-### 6.3. Import cấu hình hàng loạt từ file kiểm kê Tanium — `/api/DeviceConfigurationImport` (2026-07-10) ⭐
+### 6.3. Import cấu hình hàng loạt từ file kiểm kê Tanium — `/api/DeviceConfigurationImport`
 
 Dùng khi phòng IT có sẵn file xuất từ Tanium (agent quét toàn bộ máy tính công ty) và muốn cập nhật hàng loạt cấu hình phần cứng thay vì sửa tay từng máy. **Khác hẳn mục 5.10** — feature này **CHỈ cập nhật** thiết bị **đã có sẵn** trong hệ thống, **không tự tạo Device mới** (file Tanium không có Xưởng/Loại thiết bị/Nhà cung cấp/Ngày mua nên không đủ dữ liệu để tạo Device hợp lệ). Cùng quy trình 2 bước bắt buộc như mục 5.10 — xem trước rồi mới xác nhận.
 
@@ -742,7 +747,7 @@ Dùng khi phòng IT có sẵn file xuất từ Tanium (agent quét toàn bộ m�
 | Cột | Tên trong Excel | Map sang field | Ghi chú |
 |---|---|---|---|
 | A | Computer Name | Tách thành Mã + Tên thiết bị | Xem thuật toán tách bên dưới |
-| B | Tanium Client IP Address | Gán làm IP chính của Device | Optional — để trống thì bỏ qua, không lỗi |
+| B | Tanium Client IP Address | Gán làm IP cho Device | Optional — để trống thì bỏ qua, không lỗi |
 | C | Last Logged In User | **Bỏ qua hoàn toàn** | Không lưu vào đâu |
 | D | Manufacturer | `maker` | |
 | E | Model | `model` | |
@@ -750,7 +755,7 @@ Dùng khi phòng IT có sẵn file xuất từ Tanium (agent quét toàn bộ m�
 | G | RAM | `ram` | |
 | H | Size | `hardDrive` | |
 
-> **Chỉ import đúng 5 "họ" mã**: `YDC`, `YLC`, `YDF`, `AC`, `TYC`. Computer Name không khớp 1 trong 5 họ này (VD `Mayhethong`, `BTTB-ATO-xx`, `QAKENSA-MAE-xx`, `DESKTOP-xxxxxxx`, `NUC0xx`, `ACLF/ACELF/ALF-xx`, `YCM-xx`, `yazaki-xx`, các server/VM, và **toàn bộ họ `DA`** — cả `DA-<serial>` lẫn `DA-ENG-<serial>`...) → **loại thầm lặng, không đưa vào `rows`** trả về (không phải lỗi) — xem `outOfScopeSkippedCount` trong response Preview. (Lưu ý: họ `DA` từng được nhận dạng ở bản trước — nay đã bỏ hẳn theo quyết định người dùng 2026-07-10.)
+> **Chỉ import đúng 5 "họ" mã**: `YDC`, `YLC`, `YDF`, `AC`, `TYC`. Computer Name không khớp 1 trong 5 họ này (VD `Mayhethong`, `BTTB-ATO-xx`, `QAKENSA-MAE-xx`, `DESKTOP-xxxxxxx`, `NUC0xx`, `ACLF/ACELF/ALF-xx`, `YCM-xx`, `yazaki-xx`, các server/VM, và **toàn bộ họ `DA`** — cả `DA-<serial>` lẫn `DA-ENG-<serial>`...) → **loại thầm lặng, không đưa vào `rows`** trả về (không phải lỗi) — xem `outOfScopeSkippedCount` trong response Preview.
 
 **Thuật toán tách "Computer Name" → Mã/Tên thiết bị** (server tự làm, FE không cần tự tách):
 1. Bỏ hậu tố domain (`.yev.vn`) nếu có, tách theo dấu `-`.
@@ -762,7 +767,7 @@ Dùng khi phòng IT có sẵn file xuất từ Tanium (agent quét toàn bộ m�
 
 **Mã không khớp Device nào đang có** → dòng đó báo lỗi ở Preview, **không tự tạo Device mới**. **Trùng mã trong cùng file** → báo lỗi cả 2 dòng, **không tự động lấy dòng cuối** — dữ liệu thật cho thấy có Computer Name họ AC bị dùng lại cho các máy vật lý khác nhau theo thời gian, nên chặn để người dùng tự kiểm tra là an toàn hơn tự đoán. **Dòng lỗi Tanium** (bất kỳ cột nào có giá trị bắt đầu bằng `"TSE-Error"` — agent quét lỗi, không thu thập được dữ liệu) → tự động phát hiện, báo lỗi dòng đó, không update gì.
 
-**Bước 1 — Preview**: `POST /api/DeviceConfigurationImport/preview` (`multipart/form-data`, field `file`). Nhận cả `.xlsx` lẫn `.csv` (2026-07-11 — file kiểm kê Tanium thường xuất mặc định dạng CSV, không cần tự convert sang Excel trước khi upload nữa).
+**Bước 1 — Preview**: `POST /api/DeviceConfigurationImport/preview` (`multipart/form-data`, field `file`). Nhận cả `.xlsx` lẫn `.csv` (file kiểm kê Tanium thường xuất mặc định dạng CSV, không cần tự convert sang Excel trước khi upload).
 
 ```jsonc
 // Response — data
@@ -829,9 +834,9 @@ FE render bảng preview theo `rows` (nên hiện cả `parsedDeviceCode`/`parse
 }
 ```
 
-**Luật gán IP theo `taniumIpAddress`** — quan trọng vì ảnh hưởng dữ liệu IP thật, đã đổi 2026-07-10 (thay thế hoàn toàn luật chặn-theo-status trước đó) rồi **đổi tiếp 2026-07-11** (bỏ khái niệm "IP chính", Device giờ hỗ trợ nhiều IP):
+**Luật gán IP theo `taniumIpAddress`** — quan trọng vì ảnh hưởng dữ liệu IP thật:
 - Để trống → bỏ qua, chỉ update cấu hình phần cứng, không đụng IP, không cảnh báo.
-- Khớp được `IpAddress` nào đó trong hệ thống (bất kể IP đó đang chưa gán, đang gán cho **thiết bị khác**, giữ chỗ hay ngưng dùng) → **luôn** gán IP đó cho thiết bị đang import, kể cả phải "cướp" lại từ thiết bị khác đang giữ nó. **Từ 2026-07-11: các IP khác đã gán sẵn cho chính thiết bị đang import KHÔNG bị gỡ** (IP Tanium chỉ được thêm vào, không thay thế).
+- Khớp được `IpAddress` nào đó trong hệ thống (bất kể IP đó đang chưa gán, đang gán cho **thiết bị khác**, giữ chỗ hay ngưng dùng) → **luôn** gán IP đó cho thiết bị đang import, kể cả phải "cướp" lại từ thiết bị khác đang giữ nó. Các IP khác **đã gán sẵn cho chính thiết bị đang import** KHÔNG bị gỡ (Tanium chỉ được thêm vào, không thay thế — Device hỗ trợ nhiều IP).
 - **Không khớp** `IpAddress` nào trong hệ thống → **không chặn dòng** — Cpu/Ram/Model/cấu hình vẫn được tạo/cập nhật bình thường, chỉ riêng IP bị bỏ qua và thêm 1 thông báo vào `warnings` của dòng đó.
 
 **Update cấu hình không đè mất dữ liệu khác**: nếu thiết bị đã có `DeviceConfiguration` từ trước, import chỉ ghi đè đúng 5 field lấy được từ Tanium (`cpu/ram/hardDrive/maker/model`, và **chỉ đè nếu ô Excel không rỗng** — cột trống thì giữ nguyên giá trị cũ), toàn bộ field khác (`mainboard/monitor/mouse/os/vga/...`) **giữ nguyên**, không bị xoá. Nếu thiết bị **chưa có** cấu hình → tạo mới bình thường (kèm sinh "Cấu hình ban đầu" như mục 6.1).
@@ -868,7 +873,7 @@ DELETE /api/DeviceSoftware/device/{deviceId}/software/{softwareId}
 ```
 `POST` báo lỗi 400 nếu phần mềm đã cài sẵn trên device đó (không cho trùng).
 
-### 7.3. Picker checkbox-list — `GET /api/DeviceSoftware/picker/{deviceId}` ⭐
+### 7.3. Picker checkbox-list — `GET /api/DeviceSoftware/picker/{deviceId}`
 
 **Dùng để dựng đúng UI dạng "Update software to Equipment"** (bảng checkbox tick nhiều phần mềm, tick sẵn cái đã cài):
 
@@ -883,7 +888,7 @@ DELETE /api/DeviceSoftware/device/{deviceId}/software/{softwareId}
 ```
 FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với danh sách đã cài.
 
-### 7.4. Lưu hàng loạt sau khi tick — `PUT /api/DeviceSoftware/sync` ⭐
+### 7.4. Lưu hàng loạt sau khi tick — `PUT /api/DeviceSoftware/sync`
 
 Đây là API **duy nhất cần gọi** khi người dùng bấm "Ok" trên dialog picker — gửi lên toàn bộ trạng thái tick hiện tại, KHÔNG cần tự tính diff phía FE:
 
@@ -930,18 +935,20 @@ FE bind `isSelected` thẳng vào checkbox — không cần tự so sánh với 
 | Method | Route | Mô tả |
 |---|---|---|
 | GET | `/api/Branch/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Chi nhánh |
+| GET | `/api/DeviceGroup/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Nhóm (gán trên Device.groupId) |
+| GET | `/api/DeviceDepartment/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Bộ phận (gán trên Device.departmentId) |
 | GET | `/api/Supplier/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Nhà cung cấp |
 | GET | `/api/DeviceType/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Loại thiết bị |
 | GET | `/api/SoftwareGroup/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Nhóm phần mềm |
 | GET | `/api/Software/grid-list`, `/all`, `/{id}` — POST, PUT `/{id}`, DELETE `/{id}` | Phần mềm (danh mục) |
-| GET | `/api/IpPrefix/grid-list`, `/all`, `/{id}` — POST (tự sinh 255 IP), DELETE `/{id}` (cascade IP con chưa dùng; **không còn PUT**, 2026-07-11) | Dải mạng |
-| GET | `/api/IpAddress/grid-list?...`, `/available?keyword=` (không phân trang, mới 2026-07-09), `/{id}` (không có `/all`) — PUT `/{id}` (chỉ đổi status+note), PUT `/{id}/assign`, PUT `/{id}/unassign` (**không còn POST/DELETE thủ công**, 2026-07-11) | Địa chỉ IP |
-| GET | `/api/Device/grid-list?...` (không có `/all`), `/available?keyword=` (không phân trang, máy `Chờ sử dụng`, mới 2026-07-10), `/{id}`, `/{id}/detail`, `/{id}/replacement-suggestion` (gợi ý máy thay thế cho màn "Chuyển máy", mới 2026-07-11) — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
-| GET | `/api/Report/device-list?deviceTypeId=&branchId=&keyword=` (không phân trang, mới 2026-07-09) | Báo cáo in ấn (controller riêng, sẽ gom thêm các báo cáo khác) |
-| POST | `/api/TransferHistory` (mới 2026-07-09) — GET `/api/TransferHistory/device/{deviceId}` | Chuyển máy (di chuyển IP + email + phần mềm + toàn bộ dữ liệu vai trò/sử dụng, đổi trạng thái máy cũ, 2026-07-11: mở rộng đầy đủ dữ liệu) |
-| POST | `/api/DeviceImport/preview` (multipart file, không ghi DB), `/api/DeviceImport/confirm` (mới 2026-07-10) | Import Device hàng loạt từ Excel, có bước xem trước |
+| GET | `/api/IpPrefix/grid-list`, `/all`, `/{id}` — POST (tự sinh 255 IP), DELETE `/{id}` (cascade IP con chưa dùng; **không có PUT**) | Dải mạng |
+| GET | `/api/IpAddress/grid-list?...`, `/available?keyword=` (không phân trang), `/{id}` (không có `/all`) — PUT `/{id}` (chỉ đổi status+note), PUT `/{id}/assign`, PUT `/{id}/unassign` (**không có POST/DELETE thủ công**) | Địa chỉ IP |
+| GET | `/api/Device/grid-list?...` (không có `/all`), `/available?keyword=` (không phân trang, máy `Chờ sử dụng`), `/{id}`, `/{id}/detail`, `/{id}/replacement-suggestion` (gợi ý máy thay thế cho màn "Chuyển máy") — POST, PUT `/{id}`, DELETE `/{id}` | Thiết bị |
+| GET | `/api/Report/device-list?deviceTypeId=&branchId=&keyword=` (không phân trang) | Báo cáo in ấn (controller riêng, sẽ gom thêm các báo cáo khác) |
+| POST | `/api/TransferHistory` — GET `/api/TransferHistory/device/{deviceId}` | Chuyển máy (di chuyển IP + email + phần mềm + toàn bộ dữ liệu vai trò/sử dụng, đổi trạng thái máy cũ) |
+| POST | `/api/DeviceImport/preview` (multipart file, không ghi DB), `/api/DeviceImport/confirm` | Import Device hàng loạt từ Excel, có bước xem trước |
 | GET | `/api/DeviceConfiguration/by-device/{deviceId}` — POST, PUT `/{id}`, DELETE `/{id}`, GET `/{configId}/initial`, DELETE `/initial/{id}`, GET `/{configId}/history` | Cấu hình phần cứng |
-| POST | `/api/DeviceConfigurationImport/preview` (multipart file, không ghi DB), `/api/DeviceConfigurationImport/confirm` (mới 2026-07-10) | Import cấu hình hàng loạt từ file Tanium, chỉ update Device có sẵn |
+| POST | `/api/DeviceConfigurationImport/preview` (multipart file, không ghi DB), `/api/DeviceConfigurationImport/confirm` | Import cấu hình hàng loạt từ file Tanium, chỉ update Device có sẵn |
 | GET | `/api/DeviceSoftware/device/{deviceId}` — POST, PUT, DELETE `/device/{deviceId}/software/{softwareId}`, GET `/picker/{deviceId}`, PUT `/sync` | Phần mềm cài trên thiết bị |
 
 ---

@@ -30,9 +30,21 @@ namespace Asset.Application.Services
                 false,
                 d => d.Branch,
                 d => d.Supplier,
-                d => d.DeviceType);
+                d => d.DeviceType,
+                d => d.DeviceGroup!,
+                d => d.DeviceDepartment!);
 
             query = query.Where(d => !d.IsDeleted);
+
+            if (request.GroupId.HasValue)
+            {
+                query = query.Where(d => d.GroupId == request.GroupId.Value);
+            }
+
+            if (request.DepartmentId.HasValue)
+            {
+                query = query.Where(d => d.DepartmentId == request.DepartmentId.Value);
+            }
 
             if (!string.IsNullOrWhiteSpace(request.DeviceCode))
             {
@@ -105,6 +117,8 @@ namespace Asset.Application.Services
                     BranchName = d.Branch.BranchName,
                     SupplierName = d.Supplier.SupplierName,
                     DeviceTypeName = d.DeviceType.TypeName,
+                    GroupName = d.DeviceGroup != null ? d.DeviceGroup.GroupName : null,
+                    DepartmentName = d.DeviceDepartment != null ? d.DeviceDepartment.DepartmentName : null,
                     IpAddresses = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).ToList(),
                     PurchaseDate = d.PurchaseDate,
                     ExpirationDate = d.ExpirationDate,
@@ -132,7 +146,9 @@ namespace Asset.Application.Services
                 false,
                 d => d.Branch,
                 d => d.Supplier,
-                d => d.DeviceType);
+                d => d.DeviceType,
+                d => d.DeviceGroup!,
+                d => d.DeviceDepartment!);
 
             query = query.Where(d => !d.IsDeleted && d.Status == (int)DeviceStatus.PendingUse);
 
@@ -151,6 +167,8 @@ namespace Asset.Application.Services
                     BranchName = d.Branch.BranchName,
                     SupplierName = d.Supplier.SupplierName,
                     DeviceTypeName = d.DeviceType.TypeName,
+                    GroupName = d.DeviceGroup != null ? d.DeviceGroup.GroupName : null,
+                    DepartmentName = d.DeviceDepartment != null ? d.DeviceDepartment.DepartmentName : null,
                     IpAddresses = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).ToList(),
                     PurchaseDate = d.PurchaseDate,
                     ExpirationDate = d.ExpirationDate,
@@ -226,7 +244,7 @@ namespace Asset.Application.Services
 
         public async Task<DeviceDto> GetByIdAsync(int id)
         {
-            var device = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == id, x => x.Branch, x => x.DeviceType, x => x.Supplier, x => x.ReplacesOldDevice!);
+            var device = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == id, x => x.Branch, x => x.DeviceType, x => x.Supplier, x => x.ReplacesOldDevice!, x => x.DeviceGroup!, x => x.DeviceDepartment!);
             device.OrThrowNotFound("Thiết bị", id);
 
             var ipAddresses = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
@@ -269,6 +287,9 @@ namespace Asset.Application.Services
             var branch = await _unitOfWork.Branches.GetByIdAsync(request.BranchId);
             branch.OrThrowNotFound("Chi nhánh", request.BranchId);
 
+            var group = await ValidateGroupIdAsync(request.GroupId);
+            var department = await ValidateDepartmentIdAsync(request.DepartmentId);
+
             var replacesOldDevice = await ValidateReplacesOldDeviceIdAsync(request.ReplacesOldDeviceId, currentDeviceId: null);
 
             var ipAddresses = await ResolveAndValidateIpAddressesAsync(request.IpAddressIds);
@@ -280,6 +301,8 @@ namespace Asset.Application.Services
                 DeviceTypeId = request.DeviceTypeId,
                 SupplierId = request.SupplierId,
                 BranchId = request.BranchId,
+                GroupId = request.GroupId,
+                DepartmentId = request.DepartmentId,
                 Manager = request.Manager,
                 PurchaseDate = request.PurchaseDate,
                 DepreciationMonths = request.DepreciationMonths,
@@ -323,6 +346,8 @@ namespace Asset.Application.Services
             newDevice.DeviceType = deviceType;
             newDevice.Supplier = supplier;
             newDevice.ReplacesOldDevice = replacesOldDevice;
+            newDevice.DeviceGroup = group;
+            newDevice.DeviceDepartment = department;
             return MapToDto(newDevice, ipAddresses, emails);
         }
 
@@ -352,6 +377,9 @@ namespace Asset.Application.Services
             var branch = await _unitOfWork.Branches.GetByIdAsync(request.BranchId);
             branch.OrThrowNotFound("Chi nhánh", request.BranchId);
 
+            await ValidateGroupIdAsync(request.GroupId);
+            await ValidateDepartmentIdAsync(request.DepartmentId);
+
             await ValidateReplacesOldDeviceIdAsync(request.ReplacesOldDeviceId, currentDeviceId: device!.Id);
 
             await SyncIpAddressesAsync(device.Id, request.IpAddressIds);
@@ -362,6 +390,8 @@ namespace Asset.Application.Services
             device.DeviceTypeId = request.DeviceTypeId;
             device.SupplierId = request.SupplierId;
             device.BranchId = request.BranchId;
+            device.GroupId = request.GroupId;
+            device.DepartmentId = request.DepartmentId;
             device.Manager = request.Manager;
             device.PurchaseDate = request.PurchaseDate;
             device.DepreciationMonths = request.DepreciationMonths;
@@ -399,6 +429,25 @@ namespace Asset.Application.Services
                 DeviceCode = suggestion.DeviceCode,
                 DeviceName = suggestion.DeviceName
             };
+        }
+
+        // Nhóm/Bộ phận đều optional — chỉ validate tồn tại (!IsDeleted) khi client có gửi Id.
+        private async Task<DeviceGroup?> ValidateGroupIdAsync(int? groupId)
+        {
+            if (!groupId.HasValue) return null;
+
+            var group = await _unitOfWork.DeviceGroups.FirstOrDefaultAsync(x => x.Id == groupId.Value && !x.IsDeleted);
+            group.OrThrowNotFound("Nhóm", groupId.Value);
+            return group;
+        }
+
+        private async Task<DeviceDepartment?> ValidateDepartmentIdAsync(int? departmentId)
+        {
+            if (!departmentId.HasValue) return null;
+
+            var department = await _unitOfWork.DeviceDepartments.FirstOrDefaultAsync(x => x.Id == departmentId.Value && !x.IsDeleted);
+            department.OrThrowNotFound("Bộ phận", departmentId.Value);
+            return department;
         }
 
         // Dùng chung cho Create/Update: nếu có ReplacesOldDeviceId, máy cũ phải tồn tại
@@ -440,6 +489,72 @@ namespace Asset.Application.Services
             }
 
             await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Xóa MỀM hàng loạt Device (2026-07-13: đổi từ xóa cứng sang xóa mềm — cùng cơ chế
+        // với DeleteAsync ở trên, chỉ khác là nhận nhiều Id 1 lần; tránh vướng ràng buộc khóa
+        // ngoại của TransferHistory vì xóa mềm chỉ set IsDeleted=true, không đụng khóa chính).
+        // Chỉ cho xóa thiết bị đang ở trạng thái Liquidated (Đã thanh lý) — thiết bị chưa
+        // thanh lý xóa nhầm sẽ mất dữ liệu đang dùng thật. Không tìm thấy Id hoặc Id chưa
+        // thanh lý đều bị bỏ qua (SkippedDevices), không chặn cả batch.
+        public async Task<BulkDeleteDeviceResultDto> BulkDeleteAsync(List<int> ids)
+        {
+            var requestedIds = ids.Distinct().ToList();
+            if (requestedIds.Count == 0)
+                throw new DomainException("Danh sách thiết bị cần xóa đang trống.");
+
+            var devices = await _unitOfWork.Devices.FindAsync(x => requestedIds.Contains(x.Id) && !x.IsDeleted);
+            var foundById = devices.ToDictionary(x => x.Id);
+
+            var result = new BulkDeleteDeviceResultDto();
+
+            foreach (var id in requestedIds.Where(id => !foundById.ContainsKey(id)))
+            {
+                result.SkippedDevices.Add(new BulkDeleteSkippedDeviceDto { Id = id, DeviceCode = "?", Reason = "Không tìm thấy thiết bị." });
+            }
+
+            var notLiquidated = devices.Where(x => x.Status != (int)DeviceStatus.Liquidated).ToList();
+            foreach (var device in notLiquidated)
+            {
+                result.SkippedDevices.Add(new BulkDeleteSkippedDeviceDto
+                {
+                    Id = device.Id,
+                    DeviceCode = device.DeviceCode,
+                    Reason = "Chỉ có thể xóa thiết bị đã thanh lý."
+                });
+            }
+
+            var deletableDevices = devices.Where(x => x.Status == (int)DeviceStatus.Liquidated).ToList();
+            if (deletableDevices.Count == 0)
+                return result;
+
+            var deletableIds = deletableDevices.Select(x => x.Id).ToHashSet();
+
+            foreach (var device in deletableDevices)
+            {
+                device.IsDeleted = true;
+                _unitOfWork.Devices.Update(device);
+            }
+
+            var assignedIps = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId.HasValue && deletableIds.Contains(x.DeviceId.Value));
+            foreach (var ip in assignedIps)
+            {
+                ip.DeviceId = null;
+                ip.Status = (int)IpAddressStatus.Available;
+                _unitOfWork.IpAddresses.Update(ip);
+            }
+
+            var emails = await _unitOfWork.DeviceEmails.FindAsync(x => deletableIds.Contains(x.DeviceId) && !x.IsDeleted);
+            foreach (var email in emails)
+            {
+                email.IsDeleted = true;
+                _unitOfWork.DeviceEmails.Update(email);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            result.DeletedCount = deletableDevices.Count;
+            return result;
         }
 
         // Validates a set of IpAddressIds for a brand-new Device: every Id must exist and be
@@ -552,6 +667,10 @@ namespace Asset.Application.Services
             SupplierName = device.Supplier?.SupplierName!,
             BranchId = device.BranchId,
             BranchName = device.Branch?.BranchName!,
+            GroupId = device.GroupId,
+            GroupName = device.DeviceGroup?.GroupName,
+            DepartmentId = device.DepartmentId,
+            DepartmentName = device.DeviceDepartment?.DepartmentName,
             Manager = device.Manager,
             PurchaseDate = device.PurchaseDate,
             DepreciationMonths = device.DepreciationMonths,

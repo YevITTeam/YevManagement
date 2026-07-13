@@ -16,8 +16,11 @@ public partial class AssetDbContext : DbContext
     }
 
     public virtual DbSet<AuditTrail> AuditTrails { get; set; }
+    public virtual DbSet<AssetSetting> AssetSettings { get; set; }
     public virtual DbSet<Branch> Branches { get; set; }
     public virtual DbSet<Device> Devices { get; set; }
+    public virtual DbSet<DeviceGroup> DeviceGroups { get; set; }
+    public virtual DbSet<DeviceDepartment> DeviceDepartments { get; set; }
     public virtual DbSet<DeviceConfiguration> DeviceConfigurations { get; set; }
     public virtual DbSet<DeviceConfigurationInitial> DeviceConfigurationInitials { get; set; }
     public virtual DbSet<DeviceConfigurationHistory> DeviceConfigurationHistories { get; set; }
@@ -38,6 +41,11 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.Action).HasMaxLength(50);
             entity.Property(e => e.ChangedBy).HasMaxLength(150);
             entity.Property(e => e.TableName).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<AssetSetting>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_AssetSettings");
         });
 
         modelBuilder.Entity<Branch>(entity =>
@@ -85,6 +93,37 @@ public partial class AssetDbContext : DbContext
                 .HasForeignKey(d => d.ReplacesOldDeviceId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_ThietBis_ThietBis_ThayTheChoId");
+
+            // Nhóm/Bộ phận: phân loại "thiết bị đang ở chỗ nào" bên cạnh Branch (chi nhánh).
+            // Nullable — dữ liệu thiết bị cũ chưa gán, chỉ bắt buộc dần qua Create/Update mới.
+            entity.HasIndex(e => e.GroupId, "IX_ThietBis_NhomId");
+            entity.HasIndex(e => e.DepartmentId, "IX_ThietBis_BoPhanId");
+
+            entity.HasOne(d => d.DeviceGroup).WithMany(p => p.Devices)
+                .HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ThietBis_Nhoms_NhomId");
+
+            entity.HasOne(d => d.DeviceDepartment).WithMany(p => p.Devices)
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ThietBis_BoPhans_BoPhanId");
+        });
+
+        modelBuilder.Entity<DeviceGroup>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_Nhoms");
+            entity.HasIndex(e => e.GroupCode, "IX_Nhoms_MaNhom").IsUnique();
+            entity.Property(e => e.GroupCode).HasMaxLength(50);
+            entity.Property(e => e.GroupName).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<DeviceDepartment>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_BoPhans");
+            entity.HasIndex(e => e.DepartmentCode, "IX_BoPhans_MaBoPhan").IsUnique();
+            entity.Property(e => e.DepartmentCode).HasMaxLength(50);
+            entity.Property(e => e.DepartmentName).HasMaxLength(255);
         });
 
         modelBuilder.Entity<DeviceConfiguration>(entity =>

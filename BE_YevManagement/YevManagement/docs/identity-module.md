@@ -19,7 +19,7 @@
 | `Role` | `Id`, `RoleName`(≤50), `Description?`, `IsDeleted` | N-N `Users`, N-N `Permissions` | **Có** (`IsDeleted`) |
 | `LoginUserIP` | `Id`, `UserId`, `IPAddress`, `FirstLoginAt`, `LastLoginAt` | N-1 `User` | Không |
 | `Permission` | `Id`, `Code`(≤150, unique, dạng `Module.Entity.Action`), `Module`(≤50), `Description?`(≤255) | N-N `Roles`, 1-N `UserPermissions` | Không (danh sách cố định, seed qua migration — xem §9) |
-| `UserPermission` | `UserId`, `PermissionId` (khoá kép), `IsGranted` (bool) | N-1 `User`, N-1 `Permission` | Không (2026-07-10, xem §9.1 — override permission riêng theo từng User) |
+| `UserPermission` | `UserId`, `PermissionId` (khoá kép), `IsGranted` (bool) | N-1 `User`, N-1 `Permission` | Không — override permission riêng theo từng User, xem §9.1 |
 
 **Cấu hình quan hệ (Fluent, `IdentityDbContext.OnModelCreating`):**
 - `User` ↔ `Role`: **many-to-many** qua bảng nối `UserRoles` (khoá kép
@@ -48,11 +48,11 @@
 | `UpdateRoleDto` | `RoleName`, `Description?`. |
 | `UpdateUserRolesDto` | `UserId`, `RoleIds: List<int>`. |
 | `PermissionDto` | `Id`, `Code`, `Module`, `Description?` — output-only, không có Create/Update DTO (permission là danh sách cố định). |
-| `PermissionModuleGroupDto` / `PermissionEntityGroupDto` | `PermissionModuleGroupDto`: `Module`, `Entities: List<PermissionEntityGroupDto>`. `PermissionEntityGroupDto`: `Entity`, `Permissions: List<PermissionDto>` — nhóm 2 cấp Module > Entity (Entity tách từ đoạn giữa của `Code` dạng `Module.Entity.Action`), riêng cho response `GET /api/Permission/all` để FE dựng UI gán quyền dạng cây/collapsible thay vì 1 danh sách phẳng ~53 dòng (2026-07-11). |
+| `PermissionModuleGroupDto` / `PermissionEntityGroupDto` | `PermissionModuleGroupDto`: `Module`, `Entities: List<PermissionEntityGroupDto>`. `PermissionEntityGroupDto`: `Entity`, `Permissions: List<PermissionDto>` — nhóm 2 cấp Module > Entity (Entity tách từ đoạn giữa của `Code` dạng `Module.Entity.Action`), riêng cho response `GET /api/Permission/all` để FE dựng UI gán quyền dạng cây/collapsible thay vì 1 danh sách phẳng ~53 dòng. |
 | `UpdateRolePermissionsDto` | `RoleId`, `PermissionIds: List<int>` — gán lại toàn bộ tập permission cho 1 role. |
-| `UserPermissionDto` | `PermissionId`, `Code`, `Module`, `Description?`, `IsGranted` — 1 dòng override hiện có của 1 User (2026-07-10). |
-| `UpdateUserPermissionsDto` | `UserId`, `GrantPermissionIds: List<int>`, `DenyPermissionIds: List<int>` — dùng nội bộ Service (2026-07-10). |
-| `UpdateUserPermissionOverridesDto` | `GrantPermissionIds: List<int>`, `DenyPermissionIds: List<int>` — body request `PUT /api/Permission/user/{userId}` (không lặp lại `UserId` vì đã có trên route, 2026-07-10). |
+| `UserPermissionDto` | `PermissionId`, `Code`, `Module`, `Description?`, `IsGranted` — 1 dòng override hiện có của 1 User. |
+| `UpdateUserPermissionsDto` | `UserId`, `GrantPermissionIds: List<int>`, `DenyPermissionIds: List<int>` — dùng nội bộ Service. |
+| `UpdateUserPermissionOverridesDto` | `GrantPermissionIds: List<int>`, `DenyPermissionIds: List<int>` — body request `PUT /api/Permission/user/{userId}` (không lặp lại `UserId` vì đã có trên route). |
 
 > Ghi chú: `UserDto.UserName`/`FullName` non-nullable nhưng chưa gắn `[Required]`
 > (đang có warning CS8618). `RoleDto` hiện đóng 2 vai (input+output).
@@ -73,10 +73,10 @@
 
 | Service | Method | Ghi chú |
 |---|---|---|
-| `IUserService` / `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync`, `UpdateUserRolesAsync`, `CreateUserAsync` (2026-07-10) | Sync user AD, gán role, cập nhật role. `CreateUserAsync` — Admin **pre-provision** thủ công 1 User (`UserName`+chọn `RoleIds`, `DeviceName?` chỉ để tham khảo) trước khi người đó từng đăng nhập Windows — xem §5.1. |
+| `IUserService` / `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync`, `UpdateUserRolesAsync`, `CreateUserAsync`, `DeleteUserAsync` | Sync user AD, gán role, cập nhật role. `CreateUserAsync` — Admin **pre-provision** thủ công 1 User (`UserName`+chọn `RoleIds`, `DeviceName?` chỉ để tham khảo) trước khi người đó từng đăng nhập Windows — xem §5.1. `DeleteUserAsync` — xóa **cứng** (entity `User` không có `IsDeleted`); `UserRoles`/`LoginUserIPs`/`UserPermissions` cascade tự động ở DB (không cần dọn tay). Nếu `UserName` đó đăng nhập Windows lại sau khi xóa, `MyClaimsTransformation` tạo lại User mới với role mặc định `"Basic"` (mất role/permission override cũ). |
 | `IRoleService` / `RoleService` | `GetAllRolesAsync`, `GetRoleByIdAsync`, `CreateRoleAsync`, `UpdateRoleByIdAsync`, `DeleteRoleByIdAsync` | CRUD role, xoá = soft delete. `CreateRole` ném `DomainException` nếu trùng tên. |
 | `ITokenService` / `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` | Sinh JWT HS256 từ claims (loại bỏ claim `RolesLoaded`), hạn theo `JwtSettings:ExpiryMinutes`. |
-| `IPermissionService` / `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync(roleId)`, `UpdateRolePermissionsAsync(dto)`, `GetUserPermissionOverridesAsync(userId)`, `GetEffectivePermissionsForUserAsync(userId)`, `UpdateUserPermissionOverridesAsync(dto)` | Danh sách permission cố định (chỉ đọc); gán/đổi tập permission của 1 Role (clear rồi add lại theo danh sách Id, giống `UserService.UpdateUserRolesAsync`); 3 method cuối (2026-07-10) quản lý override permission riêng theo User — xem §9.1. |
+| `IPermissionService` / `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync(roleId)`, `UpdateRolePermissionsAsync(dto)`, `GetUserPermissionOverridesAsync(userId)`, `GetEffectivePermissionsForUserAsync(userId)`, `UpdateUserPermissionOverridesAsync(dto)` | Danh sách permission cố định (chỉ đọc); gán/đổi tập permission của 1 Role (clear rồi add lại theo danh sách Id, giống `UserService.UpdateUserRolesAsync`); 3 method cuối quản lý override permission riêng theo User — xem §9.1. |
 
 ---
 
@@ -88,13 +88,20 @@ Luồng: **Windows Negotiate → ClaimsTransformation (đồng bộ DB) → JWT*
    `AddAuthentication` mặc định `JwtBearer` + `.AddNegotiate()` +
    `.AddJwtBearer(...)` (validate Issuer/Audience/Lifetime/SigningKey từ `JwtSettings`).
 2. **`MyClaimsTransformation : IClaimsTransformation`** (`Indentity.Infrastructure/Authentication/`)
-   chạy mỗi request đã xác thực Windows (**và mỗi request JWT** — xem lưu ý bên dưới):
-   - Resolve `deviceName` (reverse DNS qua IP client) — chỉ dùng để **hiển thị/log**
-     (2026-07-11, đổi lại — xem điểm tiếp theo), không còn dùng để khớp `User`.
+   chạy mỗi request đã xác thực Windows **và mỗi request JWT** (lý do xem điểm
+   "RolesLoaded bị loại khỏi JWT" bên dưới):
+   - Resolve `deviceName` (reverse DNS qua IP client) — chỉ dùng để **hiển
+     thị/log**, **KHÔNG** dùng để khớp `User`. ⚠️ **Gotcha:** reverse-DNS PTR
+     lookup trên IP client không ổn định trong môi trường thật (NAT, nhiều PTR
+     record...) — cùng 1 người dùng có thể bị resolve ra 2 hostname khác nhau
+     chỉ trong vài giây. Vì vậy khớp `User` **chỉ** dựa vào `UserName` suông,
+     không bao giờ dùng `DeviceName` làm khoá khớp (từng dùng cặp
+     `(UserName, DeviceName)` làm khoá và gây tạo `User` trùng liên tục — đã bỏ
+     hẳn cách đó). **Data debt còn tồn đọng**: các dòng `User` trùng `UserName`
+     bị tạo rác bởi bug này trước đây chưa được dọn tự động — cần rà tay qua
+     `GET /api/User` để gộp/xoá nếu cần.
    - Nếu chưa có claim `RolesLoaded`: tra `Users` (kèm `.Include(Roles).ThenInclude(Permissions)`
-     + `.Include(UserPermissions).ThenInclude(Permission)`) theo **`UserName` suông**
-     (2026-07-11, đổi lại từ cặp `(UserName, DeviceName)` áp dụng 2026-07-10 —
-     xem lý do đổi bên dưới).
+     + `.Include(UserPermissions).ThenInclude(Permission)`) theo **`UserName` suông**.
    - **`UserName` chưa tồn tại** → tạo User **MỚI**, gán role `"Basic"`, resolve
      `FullName` từ AD (`UserPrincipal.FindByIdentity`, chỉ chạy trên Windows).
    - **`UserName` đã tồn tại** → dùng lại đúng dòng đó (không tạo thêm), chỉ
@@ -105,28 +112,13 @@ Luồng: **Windows Negotiate → ClaimsTransformation (đồng bộ DB) → JWT*
      lực** — base từ `user.Roles.SelectMany(r => r.Permissions)`, cộng
      `UserPermission.IsGranted=true`, trừ `UserPermission.IsGranted=false`; xem công
      thức đầy đủ ở §9.1), `FullName`, `IpAddress`, `DeviceName`, `RolesLoaded=true`.
-
-   > ⚠️ **Lịch sử quyết định — khớp theo `(UserName, DeviceName)` (2026-07-10) rồi
-   > bỏ lại (2026-07-11)**: bản 2026-07-10 từng đổi sang khớp theo cặp
-   > `(UserName, DeviceName)` để cho phép Admin pre-provision Role riêng theo từng
-   > máy (xem §5.1). Nhưng `deviceName` resolve qua **reverse-DNS PTR lookup trên
-   > IP client** (`Dns.GetHostEntry`, không cache, resolve lại mỗi request) **không
-   > ổn định** trong môi trường thật (NAT, nhiều PTR record...) — quan sát được
-   > cùng 1 người dùng bị resolve ra 2 hostname khác nhau chỉ trong vài giây, khiến
-   > hệ thống hiểu nhầm "đăng nhập từ máy lạ" và tự tạo thêm 1 dòng `User` trùng
-   > mỗi lần vào web (dữ liệu rác, sai lệch Role). Quyết định người dùng
-   > (2026-07-11): bỏ hẳn việc dùng `DeviceName` làm khoá khớp, quay lại khớp theo
-   > `UserName` suông — đánh đổi mất tính năng "Role riêng theo từng máy" (1
-   > `UserName` giờ chỉ còn đúng 1 dòng `User`), nhưng đổi lại ổn định tuyệt đối,
-   > không phụ thuộc DNS. **Dữ liệu cũ**: các dòng `User` trùng `UserName` đã bị
-   > tạo rác bởi bug này (trước 2026-07-11) chưa được dọn tự động — cần rà tay
-   > qua `GET /api/User` để gộp/xoá nếu cần.
 3. **`AuthController.WindowsLogin`** (`[Authorize(AuthenticationSchemes="Negotiate")]`)
    đọc claims, gọi `TokenService.GenerateJwtToken(User)` trả `LoginResponseDto`
    (`UserDto.Permissions` lấy từ claim `Permission`). Từ đó client dùng
-   `Authorization: Bearer <token>` cho các request sau.
+   `Authorization: Bearer <token>` cho các request sau. Contract request/response
+   đầy đủ xem [identity-api-fe.md §2](identity-api-fe.md).
 
-### 5.1. Tạo User thủ công (pre-provision) — 2026-07-10 (đổi lại 2026-07-11)
+### 5.1. Tạo User thủ công (pre-provision)
 
 **Mục đích**: cho Admin tạo trước 1 `User` (`UserName` + chọn `RoleIds`) cho
 người **CHƯA từng đăng nhập Windows lần nào** — ví dụ nhân viên mới sắp nhận
@@ -137,18 +129,16 @@ vào mặc định `"Basic"`.
 - `POST /api/Auth/create-user` (`[RequirePermission("Identity.User.Create")]`,
   permission seed qua migration `AddIdentityUserCreatePermission`, đã gán full
   quyền cho `Admin`) — body `CreateUserDto`: `UserName` `[Required]`,
-  `DeviceName?` (2026-07-11: **không còn bắt buộc** — chỉ để tham khảo/hiển
-  thị, không dùng để khớp login nữa, xem lý do đổi ở §5), `FullName?`
-  (optional), `RoleIds: List<int>` (optional, có thể để trống — nếu để trống,
-  User này khi đăng nhập vẫn nhận claim Role mặc định `"Basic"` giống case
-  không có Role nào, nhưng là claim-only, KHÔNG tự thêm Role "Basic" vào DB).
+  `DeviceName?` (**không bắt buộc**, chỉ để tham khảo/hiển thị — không dùng để
+  khớp login), `FullName?` (optional), `RoleIds: List<int>` (optional, có thể
+  để trống — nếu để trống, User này khi đăng nhập vẫn nhận claim Role mặc định
+  `"Basic"` giống case không có Role nào, nhưng là claim-only, KHÔNG tự thêm
+  Role "Basic" vào DB).
 - `UserService.CreateUserAsync`: chặn trùng nếu đã có `User` với đúng `UserName`
-  (2026-07-11, đổi lại từ chặn trùng theo cặp `(UserName, DeviceName)`;
-  `DomainException`); validate mọi `RoleIds` phải tồn tại và chưa xoá mềm
+  (`DomainException`); validate mọi `RoleIds` phải tồn tại và chưa xoá mềm
   (`DomainException` nếu có Id không hợp lệ).
-- **1 `UserName` chỉ còn đúng 1 dòng `User`** (2026-07-11, bỏ tính năng "nhiều
-  dòng User theo từng máy" của bản 2026-07-10 — xem lý do đổi ở §5): đăng nhập
-  từ máy nào cũng khớp về đúng dòng `User` này, dùng chung 1 bộ Role.
+- **Bất biến: 1 `UserName` chỉ ứng với đúng 1 dòng `User`** — đăng nhập từ máy
+  nào cũng khớp về đúng dòng `User` này, dùng chung 1 bộ Role.
 
 > ⚠️ **`RolesLoaded` bị loại khỏi JWT** (`TokenService` filter claim này khi sinh
 > token) → mỗi request dùng Bearer token, `MyClaimsTransformation` chạy lại từ đầu
@@ -161,6 +151,22 @@ vào mặc định `"Basic"`.
 > chạy trên Windows domain-joined (có warning CA1416 khi build). `TransformAsync`
 > có thể ghi DB (tạo user/IP) → windows-login **không** hoàn toàn read-only.
 
+### 5.2. Xóa User
+
+`DELETE /api/Auth/delete-user/{userId}` (`RequirePermission("Identity.User.Delete")`,
+permission seed qua migration `AddUserDeleteAndAssetSettingPermissions`, đã
+gán full quyền cho `Admin`) gọi `UserService.DeleteUserAsync` — xóa **cứng**
+(entity `User` không có `IsDeleted`, khác `Role` là soft-delete). Cascade ở
+tầng DB tự dọn sạch `UserRoles` (bảng nối N-N), `LoginUserIPs`, `UserPermissions`
+liên quan — không cần Service tự xóa tay từng bảng con.
+
+**Đánh đổi đã chấp nhận**: nếu `UserName` vừa xóa đăng nhập Windows lại,
+`MyClaimsTransformation` (xem §5) không tìm thấy `User` theo `UserName` nữa →
+tạo **mới** với role mặc định `"Basic"`, mất toàn bộ role/permission override
+đã gán trước đó (phải cấu hình lại). Đây là hành vi có chủ đích của "xóa cứng"
+(khác với ý tưởng thêm `IsDeleted` — đã cân nhắc nhưng không chọn để tránh
+phải sửa thêm `MyClaimsTransformation`/`GetAllUsersAsync` lọc `IsDeleted`).
+
 ---
 
 ## 6. API Endpoints
@@ -172,9 +178,10 @@ Controller kế thừa `BaseController` (Identity), trả `ApiResponse<T>`.
 | Method | Route | Auth | Mô tả |
 |---|---|---|---|
 | POST | `/api/Auth/windows-login` | Negotiate | Đăng nhập Windows → JWT + profile (kèm `Permissions`). |
-| POST | `/api/Auth/create-user` (2026-07-10) | `RequirePermission("Identity.User.Create")` | Pre-provision thủ công 1 User (`UserName`+`RoleIds`, `DeviceName?` tham khảo) — xem §5.1. |
+| POST | `/api/Auth/create-user` | `RequirePermission("Identity.User.Create")` | Pre-provision thủ công 1 User (`UserName`+`RoleIds`, `DeviceName?` tham khảo) — xem §5.1. |
 | GET | `/api/Auth/get-all-users-with-roles` | `RequirePermission("Identity.User.View")` | Danh sách user + role. |
 | POST | `/api/Auth/update-user-roles` | `RequirePermission("Identity.User.UpdateRoles")` | Cập nhật role cho user (`UpdateUserRolesDto`). |
+| DELETE | `/api/Auth/delete-user/{userId}` | `RequirePermission("Identity.User.Delete")` | Xóa **cứng** User (không phải soft-delete) — xem §5.2. |
 | GET | `/api/Auth/get-all-roles` | `RequirePermission("Identity.Role.View")` | Danh sách role (chưa xoá). |
 | POST | `/api/Auth/create-role` | `RequirePermission("Identity.Role.Create")` | Tạo role (`RoleDto`). |
 | PUT | `/api/Auth/update-role/{roleId}` | `RequirePermission("Identity.Role.Update")` | Sửa role (`UpdateRoleDto`). |
@@ -182,16 +189,16 @@ Controller kế thừa `BaseController` (Identity), trả `ApiResponse<T>`.
 
 Seed role trong DB: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiêt bị` (và có thể thay đổi).
 
-### `Identity.Api/Controllers/PermissionController.cs` — route gốc `/api/Permission` (mới, 2026-07-10)
+### `Identity.Api/Controllers/PermissionController.cs` — route gốc `/api/Permission`
 
 | Method | Route | Auth | Mô tả |
 |---|---|---|---|
-| GET | `/api/Permission/all` | `RequirePermission("Identity.Permission.View")` | Toàn bộ permission hệ thống, **nhóm 2 cấp Module > Entity** (`List<PermissionModuleGroupDto>`, 2026-07-11) — FE dùng để dựng UI gán quyền dạng cây. Các endpoint permission khác (`role/{roleId}`, `user/{userId}`, `user/{userId}/effective`) vẫn trả `List<PermissionDto>` phẳng như cũ. |
+| GET | `/api/Permission/all` | `RequirePermission("Identity.Permission.View")` | Toàn bộ permission hệ thống, **nhóm 2 cấp Module > Entity** (`List<PermissionModuleGroupDto>`) — FE dùng để dựng UI gán quyền dạng cây. Các endpoint permission khác (`role/{roleId}`, `user/{userId}`, `user/{userId}/effective`) vẫn trả `List<PermissionDto>` phẳng như cũ. |
 | GET | `/api/Permission/role/{roleId}` | `RequirePermission("Identity.Permission.View")` | Permission hiện tại của 1 role. |
 | PUT | `/api/Permission/role/{roleId}` | `RequirePermission("Identity.Role.Update")` | Gán lại toàn bộ tập permission cho role (body: `List<int>` permission id). |
-| GET | `/api/Permission/user/{userId}` | `RequirePermission("Identity.Permission.View")` | Danh sách override (grant/deny) hiện có của 1 User (2026-07-10). |
-| GET | `/api/Permission/user/{userId}/effective` | `RequirePermission("Identity.Permission.View")` | Permission **hiệu lực** cuối cùng của 1 User (base theo Role, đã áp override) — dùng để preview "user này thực sự làm được gì" (2026-07-10). |
-| PUT | `/api/Permission/user/{userId}` | `RequirePermission("Identity.User.UpdatePermissions")` | Gán lại override cho User (body `UpdateUserPermissionOverridesDto`: `GrantPermissionIds`, `DenyPermissionIds`) (2026-07-10). |
+| GET | `/api/Permission/user/{userId}` | `RequirePermission("Identity.Permission.View")` | Danh sách override (grant/deny) hiện có của 1 User. |
+| GET | `/api/Permission/user/{userId}/effective` | `RequirePermission("Identity.Permission.View")` | Permission **hiệu lực** cuối cùng của 1 User (base theo Role, đã áp override) — dùng để preview "user này thực sự làm được gì". |
+| PUT | `/api/Permission/user/{userId}` | `RequirePermission("Identity.User.UpdatePermissions")` | Gán lại override cho User (body `UpdateUserPermissionOverridesDto`: `GrantPermissionIds`, `DenyPermissionIds`). |
 
 **Không có** API tạo/sửa/xoá `Permission` — danh sách cố định, chỉ seed qua migration
 (xem §9). Chỉ có CRUD `RolePermission` và `UserPermission` (override) qua các endpoint ở trên.
@@ -203,10 +210,10 @@ Seed role trong DB: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Th
 **Đã xong:**
 - Xác thực Windows → JWT, tự đồng bộ user + lịch sử IP/thiết bị.
 - CRUD Role (soft delete), gán role cho user, liệt kê user.
-- **Phân quyền chi tiết theo permission (RBAC + Permission, 2026-07-10)** — xem §9:
+- **Phân quyền chi tiết theo permission (RBAC + Permission)** — xem §9:
   entity `Permission` + N-N `RolePermission`, enforce qua `[RequirePermission]` trên
   toàn bộ action Identity **và** 12 controller Asset (trước đó `[AllowAnonymous]`).
-- **Override permission riêng theo User (2026-07-10)** — xem §9.1: entity
+- **Override permission riêng theo User** — xem §9.1: entity
   `UserPermission` (grant/deny), cho phép cấp thêm hoặc thu hồi riêng 1 permission
   cho 1 User cụ thể mà không cần tạo Role mới cho từng trường hợp ngoại lệ.
 
@@ -215,14 +222,14 @@ Seed role trong DB: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Th
   xử lý (khác chuẩn ở [architecture-core.md](architecture-core.md) §6). Cân nhắc refactor về ném exception.
 - `RoleService.GetRoleByIdAsync` **không kiểm null** trước khi map → NRE nếu id sai
   (nên dùng `.OrThrowNotFound("Role", roleId)`).
-- Có endpoint tạo User thủ công (`create-user`, §5.1) nhưng vẫn qua `AuthController`
-  (chưa tách `UserController` riêng). Chưa có xoá/sửa User (kể cả sửa `DeviceName`
-  sau khi tạo — muốn đổi phải xoá thẳng trong DB, chưa có API).
+- Có endpoint tạo (`create-user`, §5.1) và xóa cứng (`delete-user`, §5.2) User
+  thủ công nhưng vẫn qua `AuthController` (chưa tách `UserController` riêng).
+  Vẫn chưa có **sửa** User (kể cả sửa `DeviceName` sau khi tạo — muốn đổi phải
+  xoá thẳng trong DB, chưa có API).
 - `UserDto` thiếu `[Required]`; `RoleDto` nên tách input/output.
 - Endpoint Identity **không** `[AllowAnonymous]` — siết bằng `[RequirePermission]`.
-- Role `Basic`/`Quản lý Hợp Đồng`/`Quản lý Thiết bị` **chưa được gán permission
-  nào** sau migration (chỉ `Admin` được seed full quyền) — Admin cần tự cấu hình
-  qua `PUT /api/Permission/role/{roleId}` theo nhu cầu thực tế từng role.
+- Role `Basic`/`Quản lý Hợp Đồng`/`Quản lý Thiết bị` chưa có permission nào sau
+  migration — xem §9 (chỉ `Admin` được seed full quyền).
 
 ---
 
@@ -245,12 +252,13 @@ Seed role trong DB: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Th
 
 ---
 
-## 9. Phân quyền chi tiết (RBAC + Permission) — 2026-07-10
+## 9. Phân quyền chi tiết (RBAC + Permission)
 
 Nâng cấp từ chỗ chỉ có Role thô (`[Authorize(Roles="Admin")]`) sang **permission chi
 tiết theo từng chức năng**: mỗi action controller ứng với 1 mã permission dạng
 `Module.Entity.Action`, Role sở hữu 1 tập Permission (N-N `RolePermissions`), User
-vẫn chỉ có Role như trước (không gán permission thẳng cho User).
+vẫn chỉ có Role như trước (không gán permission thẳng cho User — override riêng lẻ
+xem §9.1).
 
 **Cơ chế enforce — Custom Policy (không phải role check):**
 - `Shared.Application/Authorization/` (dùng chung cho mọi module, cần
@@ -266,18 +274,24 @@ vẫn chỉ có Role như trước (không gán permission thẳng cho User).
 - Đăng ký ở `CompanySystem.HostApi/Program.cs` (cạnh `AddAuthorization`):
   `AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>()` +
   `AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>()`.
-- Claim `Permission` được nạp trong `MyClaimsTransformation` (xem §5) — **tự refresh
-  mỗi request** nhờ JWT không mang claim `RolesLoaded`, nên Admin đổi quyền của 1
-  Role có hiệu lực ngay ở request tiếp theo, không cần user đăng nhập lại.
+- Claim `Permission` được nạp trong `MyClaimsTransformation` (xem §5) và **tự
+  refresh mỗi request** — cơ chế `RolesLoaded` bị loại khỏi JWT khiến việc này
+  xảy ra tự động, chi tiết xem ⚠️ ở §5.1.
 
-**Danh sách permission đã seed (53 mã — 51 mã gốc trong migration
+**Danh sách permission đã seed (64 mã: 51 mã gốc trong migration
 `AddPermissionAndRolePermission` + `Identity.User.UpdatePermissions` thêm ở
 migration `AddUserPermissionOverride` (§9.1) + `Identity.User.Create` thêm ở
-migration `AddIdentityUserCreatePermission` (§5.1)):**
+migration `AddIdentityUserCreatePermission` (§5.1) + 8 mã `Asset.DeviceGroup`/
+`Asset.DeviceDepartment` thêm ở migration `AddDeviceGroupDepartmentPermissions`,
+xem [asset-module.md](asset-module.md) §1.14 + `Identity.User.Delete` (§5.2) và
+`Asset.Setting.View`/`Asset.Setting.Update` (xem [asset-module.md](asset-module.md)
+§1.16) thêm ở migration `AddUserDeleteAndAssetSettingPermissions`):**
 
 | Module.Entity | Action seed |
 |---|---|
 | `Asset.Branch` | View, Create, Update, Delete |
+| `Asset.DeviceGroup` | View, Create, Update, Delete |
+| `Asset.DeviceDepartment` | View, Create, Update, Delete |
 | `Asset.Device` | View, Create, Update, Delete |
 | `Asset.DeviceType` | View, Create, Update, Delete |
 | `Asset.Supplier` | View, Create, Update, Delete |
@@ -289,7 +303,8 @@ migration `AddIdentityUserCreatePermission` (§5.1)):**
 | `Asset.DeviceSoftware` | View, Create, Update, Delete (`picker`→View, `sync`→Update) |
 | `Asset.Report` | View |
 | `Asset.TransferHistory` | View, Create |
-| `Identity.User` | View, UpdateRoles, UpdatePermissions, **Create** (thêm ở migration `AddIdentityUserCreatePermission`, xem §5.1) |
+| `Asset.Setting` | View, Update (thêm ở migration `AddUserDeleteAndAssetSettingPermissions`, xem §1.16 asset-module.md) |
+| `Identity.User` | View, UpdateRoles, UpdatePermissions, Create (§5.1), **Delete** (thêm ở migration `AddUserDeleteAndAssetSettingPermissions`, xem §5.2) |
 | `Identity.Role` | View, Create, Update, Delete |
 | `Identity.Permission` | View |
 
@@ -305,7 +320,7 @@ bị`) **không** được gán mặc định, cần Admin tự cấu hình qua
 `[AllowAnonymous]` cấp class, chuyển sang `[RequirePermission]` từng action — xem
 [asset-module.md](asset-module.md) §4 để biết mã cụ thể theo từng entity.
 
-### 9.1. Override permission riêng theo User (2026-07-10)
+### 9.1. Override permission riêng theo User
 
 **Lý do:** RBAC thuần (chỉ Role) dễ sinh "role rác" khi mỗi nhân viên có nhu cầu
 quyền hơi khác nhau — mỗi tổ hợp khác lại phải tạo 1 Role mới. Giải pháp: giữ

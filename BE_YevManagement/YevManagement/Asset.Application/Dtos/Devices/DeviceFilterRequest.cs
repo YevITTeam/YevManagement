@@ -15,6 +15,8 @@ namespace Asset.Application.Dtos.Devices
         public string? IpAddress { get; set; }
         public string? Email { get; set; }
         public string? SupplierName { get; set; }
+        public int? GroupId { get; set; }
+        public int? DepartmentId { get; set; }
         public string? Note { get; set; }
         public bool? IsOutsourced { get; set; }
         public string? SerialNumber { get; set; }
