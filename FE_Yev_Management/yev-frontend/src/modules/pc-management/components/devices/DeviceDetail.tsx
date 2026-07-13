@@ -138,6 +138,14 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                         <div className="mt-1 text-sm text-[#191c1e]">{device.branchName}</div>
                     </div>
                     <div>
+                        <div className={infoLabelClassName}>Nhóm</div>
+                        <div className="mt-1 text-sm text-[#191c1e]">{device.groupName || "-"}</div>
+                    </div>
+                    <div>
+                        <div className={infoLabelClassName}>Bộ phận</div>
+                        <div className="mt-1 text-sm text-[#191c1e]">{device.departmentName || "-"}</div>
+                    </div>
+                    <div>
                         <div className={infoLabelClassName}>Trạng thái</div>
                         <div className="mt-1 text-sm text-[#191c1e]">{device.statusText}</div>
                     </div>

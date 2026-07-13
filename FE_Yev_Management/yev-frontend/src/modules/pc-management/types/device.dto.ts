@@ -27,6 +27,9 @@ export interface DeviceDto {
     branchName: string;
     supplierName: string;
     deviceTypeName: string;
+    // Tên Nhóm/Bộ phận nếu đã gán (docs/asset-api-fe.md §2/§5.2), null nếu chưa gán.
+    groupName: string | null;
+    departmentName: string | null;
     // Grid-list trả thẳng mảng string (giống emails), khác với DeviceGetDto.ipAddresses ở mục 5.3 (mảng object {id, ipAddress}).
     ipAddresses: string[];
     purchaseDate: string | null;
@@ -48,6 +51,9 @@ export interface CreateUpdateDeviceDto {
     deviceTypeId: number;
     supplierId: number;
     branchId: number;
+    // Id Nhóm/Bộ phận nếu có gán (docs/asset-api-fe.md §5.5), null nếu bỏ trống — không bắt buộc.
+    groupId: number | null;
+    departmentId: number | null;
     manager: string;
     emails: DeviceEmailInputDto[];
     purchaseDate: string;
@@ -70,6 +76,10 @@ export interface DeviceGetDto {
     supplierName: string;
     branchId: number;
     branchName: string;
+    groupId: number | null;
+    groupName: string | null;
+    departmentId: number | null;
+    departmentName: string | null;
     manager: string;
     emails: DeviceEmailDto[];
     purchaseDate: string;

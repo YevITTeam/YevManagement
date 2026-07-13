@@ -5,10 +5,14 @@ import { ChevronDown, Plus, Search, Trash2 } from "lucide-react";
 import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import { SupplierApi } from "@/modules/pc-management/api/supplier.api";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
+import { DeviceGroupApi } from "@/modules/pc-management/api/device-group.api";
+import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
 import { IpApi } from "@/modules/pc-management/api/ip-api";
 import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
 import type { SupplierDto } from "@/modules/pc-management/types/supplier.dto";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
+import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
+import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
 import type { DeviceEmailInputDto, DeviceGetDto, DeviceIpAddressDto } from "@/modules/pc-management/types/device.dto";
 
@@ -18,6 +22,8 @@ export interface DeviceFormValues {
     deviceTypeId: number;
     supplierId: number;
     branchId: number;
+    groupId: number | null;
+    departmentId: number | null;
     manager: string;
     emails: DeviceEmailInputDto[];
     purchaseDate: string;
@@ -52,6 +58,8 @@ const emptyValues: DeviceFormValues = {
     deviceTypeId: 0,
     supplierId: 0,
     branchId: 0,
+    groupId: null,
+    departmentId: null,
     manager: "",
     emails: [{ email: "", note: null }],
     purchaseDate: "",
@@ -78,6 +86,8 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
     const [deviceTypes, setDeviceTypes] = useState<DeviceTypeDto[]>([]);
     const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
     const [branches, setBranches] = useState<BranchDto[]>([]);
+    const [deviceGroups, setDeviceGroups] = useState<DeviceGroupDto[]>([]);
+    const [deviceDepartments, setDeviceDepartments] = useState<DeviceDepartmentDto[]>([]);
     const [availableIps, setAvailableIps] = useState<IpAddressDto[]>([]);
     const [ipSearch, setIpSearch] = useState("");
     const [ipDropdownOpen, setIpDropdownOpen] = useState(false);
@@ -88,6 +98,8 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
         DeviceTypeApi.getAllDeviceTypes().then((data) => setDeviceTypes(data)).catch((err) => console.error(err));
         SupplierApi.getAllSuppliers().then((data) => setSuppliers(data)).catch((err) => console.error(err));
         BranchApi.getAllBranches().then((data) => setBranches(data)).catch((err) => console.error(err));
+        DeviceGroupApi.getAllDeviceGroups().then((data) => setDeviceGroups(data)).catch((err) => console.error(err));
+        DeviceDepartmentApi.getAllDeviceDepartments().then((data) => setDeviceDepartments(data)).catch((err) => console.error(err));
     }, []);
 
     // Tải danh sách IP còn trống (không phân trang) theo từ khoá tìm kiếm, có debounce.
@@ -126,6 +138,8 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                       deviceTypeId: initial.deviceTypeId,
                       supplierId: initial.supplierId,
                       branchId: initial.branchId,
+                      groupId: initial.groupId,
+                      departmentId: initial.departmentId,
                       manager: initial.manager,
                       emails:
                           initial.emails.length > 0
@@ -319,6 +333,40 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                 {branches.map((branch) => (
                                     <option key={branch.id} value={branch.id}>
                                         {branch.branchName}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <label className="block">
+                            <span className={fieldLabelClassName}>Nhóm</span>
+                            <select
+                                value={values.groupId ?? ""}
+                                onChange={(event) => handleChange("groupId", event.target.value ? Number(event.target.value) : null)}
+                                disabled={loading}
+                                className={fieldClassName}
+                            >
+                                <option value="">Không gán nhóm</option>
+                                {deviceGroups.map((group) => (
+                                    <option key={group.id} value={group.id}>
+                                        {group.groupName}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <label className="block">
+                            <span className={fieldLabelClassName}>Bộ phận</span>
+                            <select
+                                value={values.departmentId ?? ""}
+                                onChange={(event) => handleChange("departmentId", event.target.value ? Number(event.target.value) : null)}
+                                disabled={loading}
+                                className={fieldClassName}
+                            >
+                                <option value="">Không gán bộ phận</option>
+                                {deviceDepartments.map((department) => (
+                                    <option key={department.id} value={department.id}>
+                                        {department.departmentName}
                                     </option>
                                 ))}
                             </select>

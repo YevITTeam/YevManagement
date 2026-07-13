@@ -1,11 +1,15 @@
 "use client";
 
-import { Building2, Calendar, ChevronDown, ChevronUp, Filter, Mail, MapPin, Search, Tag, Truck, User, X } from "lucide-react";
+import { Building2, Calendar, ChevronDown, ChevronUp, Filter, Layers, Mail, MapPin, Search, Tag, Truck, User, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
+import { DeviceGroupApi } from "@/modules/pc-management/api/device-group.api";
+import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
+import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
+import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 
 export interface DeviceFilters {
     deviceCode: string;
@@ -21,6 +25,9 @@ export interface DeviceFilters {
     serialNumber: string;
     // "" = tất cả, "true"/"false" — dùng string vì DeviceFilters là bộ lọc kiểu string đồng nhất.
     isUseUsb: string;
+    // "" = tất cả, ngược lại là Id (dạng string) của Nhóm/Bộ phận — lọc chính xác qua API (docs/asset-api-fe.md §5.2).
+    groupId: string;
+    departmentId: string;
 }
 
 export interface DeviceFilterBarProps {
@@ -40,6 +47,8 @@ const defaultFilters: DeviceFilters = {
     expiryDate: "",
     serialNumber: "",
     isUseUsb: "",
+    groupId: "",
+    departmentId: "",
 };
 
 const filterLabels: Record<keyof DeviceFilters, string> = {
@@ -55,6 +64,8 @@ const filterLabels: Record<keyof DeviceFilters, string> = {
     expiryDate: "Hạn sử dụng",
     serialNumber: "Số Serial",
     isUseUsb: "Cho phép dùng USB",
+    groupId: "Nhóm",
+    departmentId: "Bộ phận",
 };
 
 // These fields are sent straight to the Device/grid-list API as query params.
@@ -67,6 +78,8 @@ const advancedFields: (keyof DeviceFilters)[] = [
     "expiryDate",
     "serialNumber",
     "isUseUsb",
+    "groupId",
+    "departmentId",
 ];
 
 const fieldClassName =
@@ -81,6 +94,8 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
     const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
     const [branches, setBranches] = useState<BranchDto[]>([]);
     const [deviceTypes, setDeviceTypes] = useState<DeviceTypeDto[]>([]);
+    const [deviceGroups, setDeviceGroups] = useState<DeviceGroupDto[]>([]);
+    const [deviceDepartments, setDeviceDepartments] = useState<DeviceDepartmentDto[]>([]);
     const isFirstRender = useRef(true);
     const lastSubmitted = useRef<string>(JSON.stringify(defaultFilters));
 
@@ -96,6 +111,18 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
         DeviceTypeApi.getAllDeviceTypes()
             .then((data) => {
                 if (!isCancelled) setDeviceTypes(data);
+            })
+            .catch((err) => console.error(err));
+
+        DeviceGroupApi.getAllDeviceGroups()
+            .then((data) => {
+                if (!isCancelled) setDeviceGroups(data);
+            })
+            .catch((err) => console.error(err));
+
+        DeviceDepartmentApi.getAllDeviceDepartments()
+            .then((data) => {
+                if (!isCancelled) setDeviceDepartments(data);
             })
             .catch((err) => console.error(err));
 
@@ -375,6 +402,50 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 <option value="false">Không</option>
                             </select>
                         </label>
+
+                        <label>
+                            <span className={fieldLabelClassName}>
+                                <Layers className="h-3.5 w-3.5" />
+                                Nhóm
+                            </span>
+                            <div className="relative">
+                                <Layers className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <select
+                                    value={filters.groupId}
+                                    onChange={(event) => handleChange("groupId", event.target.value)}
+                                    className={fieldWithIconClassName}
+                                >
+                                    <option value="">Tất cả nhóm</option>
+                                    {deviceGroups.map((group) => (
+                                        <option key={group.id} value={group.id}>
+                                            {group.groupName}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </label>
+
+                        <label>
+                            <span className={fieldLabelClassName}>
+                                <Users className="h-3.5 w-3.5" />
+                                Bộ phận
+                            </span>
+                            <div className="relative">
+                                <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <select
+                                    value={filters.departmentId}
+                                    onChange={(event) => handleChange("departmentId", event.target.value)}
+                                    className={fieldWithIconClassName}
+                                >
+                                    <option value="">Tất cả bộ phận</option>
+                                    {deviceDepartments.map((department) => (
+                                        <option key={department.id} value={department.id}>
+                                            {department.departmentName}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </label>
                     </div>
                 )}
 
@@ -387,7 +458,15 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 className="flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs text-[#5e3f3a]"
                             >
                                 <span className="font-semibold text-[#191c1e]">{filterLabels[field]}:</span>
-                                {field === "isUseUsb" ? (value === "true" ? "Có" : "Không") : value}
+                                {field === "isUseUsb"
+                                    ? value === "true"
+                                        ? "Có"
+                                        : "Không"
+                                    : field === "groupId"
+                                      ? (deviceGroups.find((group) => String(group.id) === value)?.groupName ?? value)
+                                      : field === "departmentId"
+                                        ? (deviceDepartments.find((department) => String(department.id) === value)?.departmentName ?? value)
+                                        : value}
                                 <button
                                     type="button"
                                     onClick={() => handleRemoveChip(field)}

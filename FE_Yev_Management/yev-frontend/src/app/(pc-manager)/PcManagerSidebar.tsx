@@ -10,6 +10,8 @@ import {
   Package,
   ShieldCheck,
   Flag,
+  Users,
+  Layers,
 } from "lucide-react";
 
 const navItems = [
@@ -18,6 +20,8 @@ const navItems = [
   { label: "Quản lý IP", href: "/pc/ips", icon: Monitor },
   { label: "Quản lý loại thiết bị", href: "/pc/device-types", icon: HardDrive },
   { label: "Quản lý chi nhánh", href: "/pc/branches", icon: Building2 },
+  { label: "Quản lý nhóm", href: "/pc/device-groups", icon: Layers },
+  { label: "Quản lý bộ phận", href: "/pc/device-departments", icon: Users },
   { label: "Quản lý phần mềm", href: "/pc/softwares", icon: ShieldCheck },
   { label: "Quản lý nhà cung cấp", href: "/pc/suppliers", icon: Package },
 ];

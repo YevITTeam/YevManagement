@@ -161,7 +161,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                                 <th className="whitespace-nowrap px-6 py-3">Gateway</th>
                                 <th className="whitespace-nowrap px-6 py-3">DNS</th>
                                 <th className="whitespace-nowrap px-6 py-3">Mô tả</th>
-                                <th className="whitespace-nowrap px-6 py-3 text-right">IP dùng/ có sẵn</th>
+                                <th className="whitespace-nowrap px-6 py-3 text-right">IP đã dùng/ còn trống</th>
                                 <th className="whitespace-nowrap px-6 py-3 text-right">Thao tác</th>
                             </tr>
                         </thead>

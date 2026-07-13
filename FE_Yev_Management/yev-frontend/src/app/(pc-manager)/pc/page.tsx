@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from "lucide-react";
 import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
-import PrintDeviceCodeDialog from "../../../modules/pc-management/components/PrintDeviceCodeDialog";
+import { printDeviceLabels } from "../../../modules/pc-management/components/PrintDeviceCodeDialog";
 import RowActionsMenu from "../../../modules/pc-management/components/RowActionsMenu";
 import DeviceForm, { type DeviceFormValues } from "../../../modules/pc-management/components/devices/DeviceForm";
 import TransferDeviceDialog from "../../../modules/pc-management/components/devices/TransferDeviceDialog";
@@ -44,6 +44,8 @@ const defaultFilters: DeviceFilters = {
   expiryDate: "",
   serialNumber: "",
   isUseUsb: "",
+  groupId: "",
+  departmentId: "",
 };
 
 function formatDate(value: string | null) {
@@ -53,7 +55,7 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleDateString("vi-VN");
 }
 
-// GET /Device/grid-list chỉ hỗ trợ lọc theo deviceCode/manager/ipAddress/supplierName/purchaseDate (xem docs/asset-api-fe.md §5.2).
+// GET /Device/grid-list hỗ trợ lọc theo deviceCode/manager/ipAddress/supplierName/purchaseDate/groupId/departmentId (xem docs/asset-api-fe.md §5.2).
 // branch/deviceType/status/expiryDate chưa có query param tương ứng trên BE, nên khi các field này được set,
 // FE phải tải toàn bộ tập kết quả (đã lọc theo các field BE hỗ trợ) rồi tự lọc + tự phân trang ở client
 // để giữ đúng điều kiện tìm kiếm khi chuyển trang, thay vì chỉ lọc trên dữ liệu của từng trang.
@@ -85,7 +87,6 @@ export default function PcDashboardPage() {
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isPrintOpen, setIsPrintOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isTaniumImportOpen, setIsTaniumImportOpen] = useState(false);
   const router = useRouter();
@@ -98,6 +99,10 @@ export default function PcDashboardPage() {
 
   const [deletingDevice, setDeletingDevice] = useState<DeviceDto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // undefined = mặc định sort theo purchaseDate giảm dần (BE mặc định); true/false = theo deviceCode tăng/giảm dần.
   const [sortDeviceCodeAscending, setSortDeviceCodeAscending] = useState<boolean | undefined>(undefined);
@@ -152,6 +157,8 @@ export default function PcDashboardPage() {
     filters.expiryDate,
     filters.serialNumber,
     filters.isUseUsb,
+    filters.groupId,
+    filters.departmentId,
     sortDeviceCodeAscending,
   ]);
 
@@ -168,6 +175,8 @@ export default function PcDashboardPage() {
       purchaseDate: filters.purchaseDate || undefined,
       serialNumber: filters.serialNumber || undefined,
       isUseUsb: filters.isUseUsb === "" ? undefined : filters.isUseUsb === "true",
+      groupId: filters.groupId === "" ? undefined : Number(filters.groupId),
+      departmentId: filters.departmentId === "" ? undefined : Number(filters.departmentId),
       sortDeviceCodeAscending,
     };
     const hasClientOnlyFilters = Boolean(filters.branch || filters.deviceType || filters.status || filters.expiryDate);
@@ -227,10 +236,41 @@ export default function PcDashboardPage() {
     filters.expiryDate,
     filters.serialNumber,
     filters.isUseUsb,
+    filters.groupId,
+    filters.departmentId,
     sortDeviceCodeAscending,
   ]);
 
   const refetchDevices = () => fetchDevices(pageIndex);
+
+  // Danh sách hiển thị đổi trang/lọc thì bỏ chọn để tránh giữ id không còn hiển thị.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [devices]);
+
+  const toggleSelectDevice = (id: number) => {
+    setSelectedIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((current) => (current.length === devices.length ? [] : devices.map((device) => device.id)));
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      await DeviceApi.bulkDeleteDevices(selectedIds);
+      toast.success(`Xoá ${selectedIds.length} thiết bị thành công`);
+      setIsBulkDeleteOpen(false);
+      setSelectedIds([]);
+      await refetchDevices();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Xoá thiết bị thất bại"));
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
 
   const openCreateForm = () => {
     setFormMode("create");
@@ -293,6 +333,21 @@ export default function PcDashboardPage() {
     }
   };
 
+  const handlePrintSelectedDevices = () => {
+    if (selectedIds.length === 0) {
+      toast.error("Vui lòng chọn ít nhất một thiết bị để in.");
+      return;
+    }
+
+    const selectedDevices = devices.filter((device) => selectedIds.includes(device.id));
+    if (selectedDevices.length === 0) {
+      toast.error("Không tìm thấy thiết bị đã chọn để in.");
+      return;
+    }
+
+    printDeviceLabels(selectedDevices);
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -321,12 +376,6 @@ export default function PcDashboardPage() {
             ⤴ Nhập từ Excel
           </button>
           <button
-            onClick={() => setIsPrintOpen(true)}
-            className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-          >
-            🖨 In mã thiết bị
-          </button>
-          <button
             onClick={openCreateForm}
             className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
           >
@@ -346,6 +395,24 @@ export default function PcDashboardPage() {
               ? "Đang tải dữ liệu..."
               : `Hiển thị ${devices.length} bản ghi (trang ${pageIndex}/${totalPages}, tổng ${totalCount})`}
           </div>
+
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-[#5e3f3a]">Đã chọn {selectedIds.length} thiết bị</span>
+              <button
+                onClick={handlePrintSelectedDevices}
+                className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+              >
+                🖨 In đã chọn
+              </button>
+              <button
+                onClick={() => setIsBulkDeleteOpen(true)}
+                className="cursor-pointer rounded-md border border-[#930006] bg-white px-3 py-1.5 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
+              >
+                Xoá đã chọn
+              </button>
+            </div>
+          )}
         </div>
 
         {error && (
@@ -363,6 +430,15 @@ export default function PcDashboardPage() {
           <table className="min-w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                <th className="w-10 whitespace-nowrap px-4 py-3">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                    checked={devices.length > 0 && selectedIds.length === devices.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Chọn tất cả"
+                  />
+                </th>
                 <th className="whitespace-nowrap px-4 py-3">
                   <button
                     type="button"
@@ -392,13 +468,22 @@ export default function PcDashboardPage() {
             <tbody>
               {!isLoading && devices.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
+                  <td colSpan={11} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
                     Không có dữ liệu thiết bị.
                   </td>
                 </tr>
               )}
               {devices.map((device) => (
                 <tr key={device.id} className="group border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
+                  <td className="w-10 whitespace-nowrap px-4 py-3 align-top">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                      checked={selectedIds.includes(device.id)}
+                      onChange={() => toggleSelectDevice(device.id)}
+                      aria-label={`Chọn thiết bị ${device.deviceCode}`}
+                    />
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 align-top">
                     <div className="text-sm font-semibold text-[#191c1e]">{device.deviceCode}</div>
                     <div className="max-w-[200px] truncate text-xs text-[#5e3f3a]" title={device.deviceName}>
@@ -412,8 +497,14 @@ export default function PcDashboardPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    <div className="max-w-[100px] truncate text-sm text-[#5e3f3a]" title={device.branchName}>
+                    <div className="max-w-[120px] truncate text-xs text-[#5e3f3a]" title={device.branchName}>
                       {device.branchName}
+                    </div>
+                    <div className="max-w-[120px] truncate text-sm text-[#191c1e]" title={device.departmentName ?? undefined}>
+                      {device.departmentName || "-"}
+                    </div>
+                    <div className="max-w-[120px] truncate text-sm text-[#191c1e]" title={device.groupName ?? undefined}>
+                      {device.groupName || "-"}
                     </div>
                   </td>
                   <td className="min-w-[150px] px-4 py-3 align-top">
@@ -509,12 +600,6 @@ export default function PcDashboardPage() {
         </div>
       </section>
 
-      <PrintDeviceCodeDialog
-        isOpen={isPrintOpen}
-        devices={devices}
-        onClose={() => setIsPrintOpen(false)}
-      />
-
       <ImportDeviceDialog
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
@@ -578,6 +663,24 @@ export default function PcDashboardPage() {
         onApprove={handleDelete}
         onDenied={() => {
           if (!isDeleting) setDeletingDevice(null);
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={isBulkDeleteOpen}
+        title="Xoá thiết bị"
+        message={
+          <>
+            Bạn có chắc muốn xoá <strong>{selectedIds.length}</strong> thiết bị đã chọn không? Hành động này không thể
+            hoàn tác.
+          </>
+        }
+        approveLabel="Xoá"
+        deniedLabel="Huỷ"
+        loading={isBulkDeleting}
+        onApprove={handleBulkDelete}
+        onDenied={() => {
+          if (!isBulkDeleting) setIsBulkDeleteOpen(false);
         }}
       />
     </div>

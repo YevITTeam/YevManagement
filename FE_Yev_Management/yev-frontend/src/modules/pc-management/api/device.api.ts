@@ -12,6 +12,7 @@ const ENDPOINTS = {
         createDevice: "/Device",
         updateDevice: (id: number) => `/Device/${id}`,
         deleteDevice: (id: number) => `/Device/${id}`,
+        bulkDeleteDevices: "/Device/bulk-delete",
     }
 } as const;
 
@@ -24,6 +25,9 @@ export interface GetDevicePageNationParams {
     ipAddress?: string;
     email?: string;
     supplierName?: string;
+    // Lọc chính xác theo Id Nhóm/Bộ phận (docs/asset-api-fe.md §5.2) — dùng !== undefined vì 0 cũng là Id hợp lệ.
+    groupId?: number;
+    departmentId?: number;
     note?: string;
     isOutsourced?: boolean;
     serialNumber?: string;
@@ -42,6 +46,8 @@ export const DeviceApi = {
         if (params?.ipAddress) query.set("IpAddress", params.ipAddress);
         if (params?.email) query.set("Email", params.email);
         if (params?.supplierName) query.set("SupplierName", params.supplierName);
+        if (params?.groupId !== undefined) query.set("GroupId", String(params.groupId));
+        if (params?.departmentId !== undefined) query.set("DepartmentId", String(params.departmentId));
         if (params?.note) query.set("Note", params.note);
         if (params?.isOutsourced !== undefined) query.set("IsOutsourced", String(params.isOutsourced));
         if (params?.serialNumber) query.set("SerialNumber", params.serialNumber);
@@ -89,6 +95,10 @@ export const DeviceApi = {
     },
     deleteDevice: async (id: number) => {
         const response = await api.delete<ApiResponse<null>>(ENDPOINTS.DEVICE.deleteDevice(id));
+        return response.data;
+    },
+    bulkDeleteDevices: async (ids: number[]) => {
+        const response = await api.post<ApiResponse<null>>(ENDPOINTS.DEVICE.bulkDeleteDevices, { ids });
         return response.data;
     },
 };

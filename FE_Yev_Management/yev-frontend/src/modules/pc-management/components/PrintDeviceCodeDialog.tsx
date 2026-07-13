@@ -59,6 +59,42 @@ function buildPrintHtml(devices: DeviceDto[]) {
 </html>`;
 }
 
+export function printDeviceLabels(devices: DeviceDto[]) {
+    const printWindow = window.open("", "_blank", "width=900,height=650");
+    if (!printWindow) {
+        toast.error("Không thể mở cửa sổ in. Vui lòng cho phép cửa sổ bật lên (popup)." );
+        return false;
+    }
+
+    try {
+        printWindow.document.write(buildPrintHtml(devices));
+        printWindow.document.close();
+
+        let done = false;
+        const finish = (success: boolean) => {
+            if (done) return;
+            done = true;
+            if (success) {
+                toast.success(`In thành công ${devices.length} nhãn thiết bị.`);
+            } else {
+                toast.error("In không thành công. Vui lòng thử lại.");
+            }
+            printWindow.close();
+        };
+
+        printWindow.onafterprint = () => finish(true);
+
+        printWindow.focus();
+        printWindow.print();
+        return true;
+    } catch (error) {
+        console.error("Print failed:", error);
+        toast.error("In không thành công. Vui lòng thử lại.");
+        printWindow.close();
+        return false;
+    }
+}
+
 export default function PrintDeviceCodeDialog({ isOpen, devices, onClose }: PrintDeviceCodeDialogProps) {
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [search, setSearch] = useState("");
@@ -112,39 +148,10 @@ export default function PrintDeviceCodeDialog({ isOpen, devices, onClose }: Prin
             return;
         }
 
-        const printWindow = window.open("", "_blank", "width=900,height=650");
-        if (!printWindow) {
-            toast.error("Không thể mở cửa sổ in. Vui lòng cho phép cửa sổ bật lên (popup).");
-            return;
+        const handled = printDeviceLabels(selected);
+        if (handled) {
+            onClose();
         }
-
-        try {
-            printWindow.document.write(buildPrintHtml(selected));
-            printWindow.document.close();
-
-            let done = false;
-            const finish = (success: boolean) => {
-                if (done) return;
-                done = true;
-                if (success) {
-                    toast.success(`In thành công ${selected.length} nhãn thiết bị.`);
-                } else {
-                    toast.error("In không thành công. Vui lòng thử lại.");
-                }
-                printWindow.close();
-            };
-
-            printWindow.onafterprint = () => finish(true);
-
-            printWindow.focus();
-            printWindow.print();
-        } catch (error) {
-            console.error("Print failed:", error);
-            toast.error("In không thành công. Vui lòng thử lại.");
-            printWindow.close();
-        }
-
-        onClose();
     };
 
     return (
