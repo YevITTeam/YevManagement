@@ -558,7 +558,7 @@ export default function PcDashboardPage() {
                     <div className="inline-flex justify-end">
                       <RowActionsMenu
                         actions={[
-                          { label: "Chi tiết", onClick: () => router.push(`/pc/devices/${device.id}`) },
+                          { label: "Chi tiết", onClick: () => router.push(`/pc/devices/detail?id=${device.id}`) },
                           { label: "Sửa", onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
                           {
                             label: "Chuyển máy",
