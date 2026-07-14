@@ -495,6 +495,9 @@ namespace Asset.Application.Services
             var device = await _unitOfWork.Devices.GetByIdAsync(id);
             device.OrThrowNotFound("Thiết bị", id);
 
+            if (device.Status != (int)DeviceStatus.PendingLiquidation)
+                throw new DomainException("Chỉ có thể xóa thiết bị đang chờ thanh lý.");
+
             device.IsDeleted = true;
             _unitOfWork.Devices.Update(device);
 
@@ -519,9 +522,9 @@ namespace Asset.Application.Services
         // Xóa MỀM hàng loạt Device (2026-07-13: đổi từ xóa cứng sang xóa mềm — cùng cơ chế
         // với DeleteAsync ở trên, chỉ khác là nhận nhiều Id 1 lần; tránh vướng ràng buộc khóa
         // ngoại của TransferHistory vì xóa mềm chỉ set IsDeleted=true, không đụng khóa chính).
-        // Chỉ cho xóa thiết bị đang ở trạng thái Liquidated (Đã thanh lý) — thiết bị chưa
-        // thanh lý xóa nhầm sẽ mất dữ liệu đang dùng thật. Không tìm thấy Id hoặc Id chưa
-        // thanh lý đều bị bỏ qua (SkippedDevices), không chặn cả batch.
+        // Chỉ cho xóa thiết bị đang ở trạng thái PendingLiquidation (Chờ thanh lý) — thiết bị
+        // chưa/đã qua trạng thái này xóa nhầm sẽ mất dữ liệu đang dùng thật. Không tìm thấy Id
+        // hoặc Id không ở trạng thái chờ thanh lý đều bị bỏ qua (SkippedDevices), không chặn cả batch.
         public async Task<BulkDeleteDeviceResultDto> BulkDeleteAsync(List<int> ids)
         {
             var requestedIds = ids.Distinct().ToList();
@@ -538,18 +541,18 @@ namespace Asset.Application.Services
                 result.SkippedDevices.Add(new BulkDeleteSkippedDeviceDto { Id = id, DeviceCode = "?", Reason = "Không tìm thấy thiết bị." });
             }
 
-            var notLiquidated = devices.Where(x => x.Status != (int)DeviceStatus.Liquidated).ToList();
-            foreach (var device in notLiquidated)
+            var notPendingLiquidation = devices.Where(x => x.Status != (int)DeviceStatus.PendingLiquidation).ToList();
+            foreach (var device in notPendingLiquidation)
             {
                 result.SkippedDevices.Add(new BulkDeleteSkippedDeviceDto
                 {
                     Id = device.Id,
                     DeviceCode = device.DeviceCode,
-                    Reason = "Chỉ có thể xóa thiết bị đã thanh lý."
+                    Reason = "Chỉ có thể xóa thiết bị đang chờ thanh lý."
                 });
             }
 
-            var deletableDevices = devices.Where(x => x.Status == (int)DeviceStatus.Liquidated).ToList();
+            var deletableDevices = devices.Where(x => x.Status == (int)DeviceStatus.PendingLiquidation).ToList();
             if (deletableDevices.Count == 0)
                 return result;
 

@@ -18,6 +18,9 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
+# Local publish output
+publish_backend/
+
 # .NET Core
 project.lock.json
 project.fragment.lock.json

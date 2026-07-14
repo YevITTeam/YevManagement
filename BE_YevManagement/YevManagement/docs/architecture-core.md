@@ -1,306 +1,114 @@
 # architecture-core.md — Lõi hệ thống (Shared layer)
 
-> Tài liệu hoá **những gì ĐÃ CÓ** ở tầng dùng chung. Đây là hợp đồng (contract)
-> mà mọi module phải tuân theo. Khi code module mới, đây là các lớp bạn kế thừa
-> và tái sử dụng — **không viết lại**.
+> Hợp đồng tầng dùng chung. Code module mới **kế thừa** các lớp này, không viết lại.
 
-Cây phụ thuộc (dependency direction), mũi tên = "phụ thuộc vào":
-
+**Dependency direction** (`A → B` = A phụ thuộc B):
 ```
-{Module}.Api ──► {Module}.Application ──► {Module}.Domain
-      │                    │
-      │                    ├──► Shared.Application ──► Shared.Core
-      ▼                    ▼
-CompanySystem.HostApi   Shared.Application
-      ▲
-      └── {Module}.Infrastructure ──► {Module}.Application, {Module}.Domain, Shared.Infrastructure
-                                                                                    │
-                                                              Shared.Infrastructure ─┴─► Shared.Application, Shared.Core
+{Module}.Api → {Module}.Application → {Module}.Domain
+{Module}.Infrastructure → {Module}.Application + {Module}.Domain + Shared.Infrastructure
+Shared.Infrastructure → Shared.Application → Shared.Core
+CompanySystem.HostApi → tất cả (composition root)
 ```
-
-Quy tắc vàng: **Domain không phụ thuộc gì. Application không biết Infrastructure.
-Host là nơi duy nhất ráp mọi thứ lại.**
+Luật vàng: **Domain không phụ thuộc gì. Application không biết Infrastructure. Host ráp mọi thứ.**
 
 ---
 
-## 1. Repository Pattern — `IGenericRepository<T>` / `GenericRepository<T, TDbContext>`
+## 1. Repository — `IGenericRepository<T>` / `GenericRepository<T, TDbContext>`
+- Interface: `Shared.Application/Abstraction/` (ns `Shared.Application.Abstractions`). Impl: `Shared.Infrastructure/Repositories/`.
+- Generic theo cả `T` và `TDbContext` (mỗi module 1 DbContext).
 
-- **Interface:** `Shared.Application/Abstraction/IGenericRepository.cs`
-  (namespace `Shared.Application.Abstractions`).
-- **Cài đặt:** `Shared.Infrastructure/Repositories/GenericRepository.cs`.
-
-Generic theo cả entity `T` và `TDbContext` (vì mỗi module có DbContext riêng):
-
-```csharp
-public class GenericRepository<T, TDbContext> : IGenericRepository<T>
-    where T : class
-    where TDbContext : DbContext
-```
-
-**Các API sẵn có** (dùng lại, đừng viết query thô nếu đã có helper):
-
+Method sẵn có (dùng lại, đừng viết query thô):
 | Method | Công dụng |
 |---|---|
-| `GetByIdAsync(object id)` | Tìm theo khoá chính (dùng `FindAsync`). |
-| `GetAllAsync()` | Lấy tất cả (không filter). |
-| `AddAsync` / `AddRangeAsync` | Thêm 1 / nhiều entity (chưa Save). |
-| `Update` / `Delete` / `RemoveRange` | Đánh dấu sửa/xoá (chưa Save). |
-| `FirstOrDefaultAsync(predicate, ...includes)` | Lấy 1 bản ghi kèm `Include` navigation. |
-| `FindAsync(predicate)` | List theo điều kiện (tracking). |
-| `FindWithIncludesAsync(predicate, ...includes)` | List + Include; `predicate = null` → lấy tất cả. |
-| `SelectAsync(predicate, selector)` | Projection sang DTO, **AsNoTracking** (đọc nhanh). |
-| `GetQueryable(isTracking, ...includes)` | Trả `IQueryable<T>` để Service tự build filter động. |
-| `GetPagedAsync(query, pageIndex, pageSize)` | Cắt trang thô. |
-| `ToPagedResponseAsync(query, pageIndex, pageSize, selector)` | **Cách phân trang chuẩn** → trả thẳng `PagedResponse<TResult>`. |
-| `ToListAsync(query, selector)` | (2026-07-09, mới thêm) Materialize `IQueryable<T>` đã filter/`OrderBy` thành `List<TResult>` projection — dùng khi Service cần build `IQueryable` động (`.Where` theo filter optional) rồi trả **toàn bộ** kết quả, không phân trang (ví dụ báo cáo). Khác `SelectAsync` ở chỗ nhận `IQueryable` đã compose sẵn thay vì 1 `predicate` đơn, nên hỗ trợ `OrderBy`/nhiều `.Where` nối tiếp trước khi gọi. |
+| `GetByIdAsync(id)` | Tìm theo PK (`FindAsync`). |
+| `GetAllAsync()` | Tất cả (không filter). |
+| `AddAsync`/`AddRangeAsync`/`Update`/`Delete`/`RemoveRange` | Đánh dấu thay đổi (chưa Save). |
+| `FirstOrDefaultAsync(pred, ...includes)` | 1 bản ghi + Include. |
+| `FindAsync(pred)` / `FindWithIncludesAsync(pred, ...includes)` | List (pred=null → tất cả). |
+| `SelectAsync(pred, selector)` | Projection DTO, **AsNoTracking**. |
+| `GetQueryable(isTracking, ...includes)` | `IQueryable<T>` để build filter động. |
+| `ToPagedResponseAsync(query, pageIndex, pageSize, selector)` | **Phân trang chuẩn** → `PagedResponse<TResult>` (tự đếm TotalCount/Pages). |
+| `ToListAsync(query, selector)` | Materialize `IQueryable` đã compose (nhiều `.Where`/`OrderBy`) → `List<TResult>`, **không phân trang** (báo cáo). |
 
-**Quy ước quan trọng:**
-- Repository con **chỉ thêm** method đặc thù không generic hoá được (ví dụ
-  `UserRepository.GetUserWithRolesAsync`). Nếu không cần gì thêm, class con để rỗng:
-  ```csharp
-  public class BranchRepository : GenericRepository<Branch, AssetDbContext>, IBranchRepository
-  {
-      public BranchRepository(AssetDbContext dbContext) : base(dbContext) { }
-  }
-  ```
-- **Phân trang luôn dùng `ToPagedResponseAsync`** với `IQueryable` đã filter +
-  `OrderBy`, kèm `selector` projection sang DTO. Nó tự đếm `TotalCount` và tính `TotalPages`.
-- **Lọc soft-delete là thủ công**: `GetQueryable(false).Where(x => !x.IsDeleted)`.
-  Không có global query filter — quên `.Where` là lộ bản ghi đã xoá.
-
----
+Quy ước:
+- Repo con để **rỗng** nếu không cần method đặc thù: `class BranchRepository : GenericRepository<Branch, AssetDbContext>, IBranchRepository { public BranchRepository(AssetDbContext db) : base(db) {} }`.
+- **Soft-delete lọc thủ công**: `GetQueryable(false).Where(x => !x.IsDeleted)` — KHÔNG có global filter.
 
 ## 2. Unit of Work — `IUnitOfWork` / `BaseUnitOfWork<TDbContext>`
-
-- **Interface:** `Shared.Application/Abstraction/IUnitOfWork.cs`.
-- **Cài đặt:** `Shared.Infrastructure/Repositories/BaseUnitOfWork.cs`
-  (namespace `Shared.Infrastructure.Data`).
-
+- Interface: `Shared.Application/Abstraction/`. Impl: `Shared.Infrastructure/Repositories/` (ns `Shared.Infrastructure.Data`).
+- `IUnitOfWork`: `SaveChangesAsync(ct)`, `BeginTransactionAsync`, `CommitTransactionAsync` (tự Save+Commit+Dispose), `RollbackTransactionAsync`. `Begin` idempotent.
+- Mỗi module mở rộng UoW, phơi bày repo thành property (cửa ngõ duy nhất Service chạm DB):
 ```csharp
-public interface IUnitOfWork : IDisposable
-{
-    Task<int> SaveChangesAsync(CancellationToken ct = default);
-    Task BeginTransactionAsync(CancellationToken ct = default);
-    Task CommitTransactionAsync(CancellationToken ct = default);   // tự SaveChanges + Commit + Dispose transaction
-    Task RollbackTransactionAsync(CancellationToken ct = default);
-}
-```
-
-`BaseUnitOfWork<TDbContext>` quản lý 1 `IDbContextTransaction` nội bộ:
-`Begin` (idempotent — gọi 2 lần không tạo transaction mới), `Commit` (Save rồi
-Commit, luôn Dispose transaction trong `finally`), `Rollback` tương tự.
-
-**Mỗi module mở rộng UoW này** để gom toàn bộ repository của module thành các
-property, đó là "cửa ngõ" duy nhất Service chạm vào dữ liệu:
-
-```csharp
-// Application: hợp đồng
-public interface IAssetUnitOfWork : IUnitOfWork
-{
-    IDeviceRepository Devices { get; }
-    IBranchRepository Branches { get; }
-    // ... mọi repo khác
-}
-
-// Infrastructure: cài đặt — repos được DI bơm vào qua constructor
-public class AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>, IAssetUnitOfWork
-{
-    public AssetUnitOfWork(AssetDbContext db, IDeviceRepository devices, IBranchRepository branches, ...)
-        : base(db)
-    { Devices = devices; Branches = branches; ... }
-
+public interface IAssetUnitOfWork : IUnitOfWork { IDeviceRepository Devices { get; } /*...*/ }
+public class AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>, IAssetUnitOfWork {
+    public AssetUnitOfWork(AssetDbContext db, IDeviceRepository devices, ...) : base(db) { Devices = devices; }
     public IDeviceRepository Devices { get; }
-    public IBranchRepository Branches { get; }
 }
 ```
-
-> Vì `AssetDbContext` và tất cả repository đều Scoped, chúng **chia sẻ cùng một
-> DbContext instance** trong 1 request → thay đổi từ nhiều repo được lưu chung
-> bởi 1 `SaveChangesAsync`.
-
----
+- DbContext + repo đều Scoped → chia sẻ 1 DbContext/request → 1 `SaveChangesAsync` lưu chung.
 
 ## 3. Service base — `BaseService<TUnitOfWork>`
-
-- **File:** `Shared.Application/Abstraction/BaseService.cs` (namespace `Shared.Application.Services`).
-
+`Shared.Application/Abstraction/BaseService.cs` (ns `Shared.Application.Services`): field `protected readonly TUnitOfWork _unitOfWork;`.
 ```csharp
-public abstract class BaseService<TUnitOfWork> where TUnitOfWork : IUnitOfWork
-{
-    protected readonly TUnitOfWork _unitOfWork;
-    protected BaseService(TUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
+public class BranchService : BaseService<IAssetUnitOfWork>, IBranchService {
+    public BranchService(IAssetUnitOfWork uow) : base(uow) { }
 }
 ```
+Luồng chuẩn: lấy query/entity qua `_unitOfWork.{Repo}` → check nghiệp vụ (ném exception) → Add/Update/Delete → `await _unitOfWork.SaveChangesAsync()` → map DTO thủ công → return. **KHÔNG inject DbContext thẳng. SaveChanges gọi ở Service.**
 
-Mọi Service kế thừa và truyền `I{Module}UnitOfWork` vào:
-
-```csharp
-public class BranchService : BaseService<IAssetUnitOfWork>, IBranchService
-{
-    public BranchService(IAssetUnitOfWork unitOfWork) : base(unitOfWork) { }
-    // Truy cập: _unitOfWork.Branches.<repo methods>, _unitOfWork.SaveChangesAsync()
-}
-```
-
-**Luồng chuẩn của một Service method** (tham chiếu `BranchService`):
-1. Lấy `IQueryable` / entity qua `_unitOfWork.{Repo}`.
-2. Kiểm tra nghiệp vụ, ném `DomainException`/`NotFoundException` nếu vi phạm.
-3. `AddAsync`/`Update`/`Delete` qua repo.
-4. `await _unitOfWork.SaveChangesAsync();`
-5. Map sang DTO (thủ công) và return.
-
----
-
-## 4. Response Wrappers
-
-- **`ApiResponse<T>`** — `Shared.Application/Wrapper/ApiResponse.cs`:
-  ```jsonc
-  {
-    "isSuccess": true,
-    "message": "Action Success",
-    "data": { ... },
-    "errors": null,
-    "timestamp": "2026-07-07T06:25:42Z"
-  }
-  ```
-  Factory: `ApiResponse<T>.Success(data, msg)`, `ApiResponse<T>.Failure(msg, errors)`.
-- **`PagedResponse<T>`** — `Shared.Application/Wrapper/PagedResponse.cs`:
-  chứa `Data`, `PageIndex`, `PageSize`, `TotalCount`, `TotalPages`, và cờ tính
-  sẵn `HasNextPage`/`HasPreviousPage`. Được tạo bởi `ToPagedResponseAsync`.
-
-`PageIndex` bắt đầu từ **1** (không phải 0).
-
----
+## 4. Response Wrappers (`Shared.Application/Wrapper/`)
+- `ApiResponse<T>`: `{ isSuccess, message, data, errors: string[]?, timestamp }`. Factory `.Success(data, msg)` / `.Failure(msg, errors)`.
+- `PagedResponse<T>`: `Data, PageIndex, PageSize, TotalCount, TotalPages, HasNextPage, HasPreviousPage`. Tạo bởi `ToPagedResponseAsync`. **PageIndex bắt đầu từ 1.**
 
 ## 5. BaseController (per-module)
-
-Mỗi module Api có `BaseController` riêng (ví dụ `Asset.Api/Controllers/BaseController.cs`,
-`Identity.Api/Controllers/BaseController.cs`) — **cùng khuôn**:
-
+Mỗi module Api có `BaseController` riêng, cùng khuôn:
 ```csharp
-[ApiController]
-[Route("api/[controller]")]
-public class BaseController : ControllerBase
-{
-    protected ActionResult<ApiResponse<T>> Success<T>(T data, string message = "Success");   // 200
-    protected ActionResult<ApiResponse<T>> Fail<T>(string message);                          // 400
-    protected IActionResult CreatedSuccess<T>(string actionName, object routeValues, T data, string message); // 201
-    protected IActionResult NoContentSuccess();                                              // 204
+[ApiController] [Route("api/[controller]")]
+public class BaseController : ControllerBase {
+    protected ActionResult<ApiResponse<T>> Success<T>(T data, string msg="Success");   // 200
+    protected ActionResult<ApiResponse<T>> Fail<T>(string msg);                        // 400
+    protected IActionResult CreatedSuccess<T>(string action, object route, T data, string msg); // 201
+    protected IActionResult NoContentSuccess();                                        // 204
 }
 ```
+Controller nghiệp vụ kế thừa, inject Service (interface), bọc `Success(...)`. Tên controller → URL (`BranchController` → `/api/Branch`).
 
-Controller nghiệp vụ kế thừa `BaseController`, inject Service (interface), gọi
-Service rồi bọc `Success(...)`. Route action đặt qua `[HttpGet("grid-list")]`,
-`[HttpPost]`, `[HttpPut("{id}")]`, `[HttpDelete("{id}")]`... Tên controller quyết
-định URL (`BranchController` → `/api/Branch`).
+**Auth**: Host bật `FallbackPolicy = DefaultPolicy` → mọi endpoint yêu cầu đăng nhập. Toàn bộ controller Asset + Identity gắn `[RequirePermission("Module.Entity.Action")]` (`Shared.Application/Authorization/`, policy-based, check claim `Permission` trong JWT) từng action. Không còn `[AllowAnonymous]`/`[Authorize(Roles=...)]`. Chi tiết + danh sách mã: [identity-module.md](identity-module.md) §9.
 
-> **Auth hiện trạng (2026-07-10, đã siết permission chi tiết):** Host bật
-> `FallbackPolicy = DefaultPolicy` → mặc định MỌI endpoint yêu cầu đăng nhập.
-> Toàn bộ controller Asset **và** Identity đều gắn
-> `[RequirePermission("Module.Entity.Action")]` (attribute ở
-> `Shared.Application/Authorization/`, policy-based, check claim `Permission`
-> trong JWT) trên từng action — không còn `[AllowAnonymous]`/`[Authorize(Roles=...)]`
-> nào. Chi tiết cơ chế + danh sách mã permission xem
-> [identity-module.md](identity-module.md) §9.
-
----
-
-## 6. Exception Handling
-
-Phân cấp exception ở `Shared.Core/Exceptions/`:
-
+## 6. Exception Handling (`Shared.Core/Exceptions/`)
 ```
-BaseException (abstract): có StatusCode + List<string>? Errors
-├── DomainException(message)          → StatusCode 400 (lỗi nghiệp vụ)
-└── NotFoundException(entityName, key) → StatusCode 404, message "{entity} with ID ({key}) not exist."
+BaseException (abstract): StatusCode + List<string>? Errors
+├── DomainException(msg)          → 400 (lỗi nghiệp vụ)
+└── NotFoundException(entity, key) → 404 "{entity} with ID ({key}) not exist."
 ```
+`GuardExtensions`: `branch.OrThrowNotFound("Chi nhánh", id)` (404 nếu null), `value.OrThrow("msg")` (400 nếu null).
 
-`GuardExtensions` (dùng cho pattern "lấy rồi kiểm null"):
+Middleware `CompanySystem.HostApi/Middlewares/HandleExceptionMiddleware.cs` map exception → `ApiResponse.Failure` + status: `BaseException` dùng StatusCode/Errors của nó; `ValidationException`/`ArgumentException`/`InvalidOperationException` → 400; `UnauthorizedAccessException` → 401; `KeyNotFoundException` → 404; `DbUpdateException` → 500; còn lại → 500.
 
-```csharp
-branch.OrThrowNotFound("Chi nhánh", id);   // ném NotFoundException nếu null
-value.OrThrow("Thông báo lỗi");            // ném DomainException nếu null
-```
+→ **Trong Service cứ ném exception**, đừng tự dựng `ApiResponse.Failure`. (Legacy `AuthController`/`UserService` vẫn try/catch thủ công — code mới không theo.)
 
-**Middleware toàn cục** `CompanySystem.HostApi/Middlewares/HandleExceptionMiddleware.cs`
-bắt mọi exception → map sang `ApiResponse.Failure` + HTTP status đúng:
-- `BaseException` → dùng `StatusCode` + `Errors` của nó.
-- `ValidationException` → 400. `UnauthorizedAccessException` → 401.
-  `KeyNotFoundException` → 404. `ArgumentException`/`InvalidOperationException` → 400.
-  `DbUpdateException` → 500 "database error". Còn lại → 500.
-
-→ **Trong Service, cứ ném exception** (`DomainException`/`NotFoundException`),
-đừng tự dựng `ApiResponse.Failure`. Middleware lo phần còn lại.
-(Lưu ý: một số code cũ trong `AuthController`/`UserService` vẫn `try/catch` +
-`Fail<>()` thủ công — đó là legacy, code mới nên theo hướng ném exception.)
-
----
-
-## 7. Đăng ký Dependency Injection — cơ chế THẬT (Scrutor)
-
-> ⚠️ Điểm dễ hiểu nhầm: mỗi Infrastructure có sẵn hàm `AddAssetModule` /
-> `AddIdentityModule`, **nhưng host KHÔNG gọi chúng**. Nguồn sự thật là
-> `CompanySystem.HostApi/Configurations/DependencyInjection.cs` → `AddDIConfig`.
+## 7. DI (Scrutor) — nguồn sự thật: `CompanySystem.HostApi/Configurations/DependencyInjection.cs` → `AddDIConfig`
+> Các hàm `AddAssetModule`/`AddIdentityModule` trong Infrastructure **KHÔNG được host gọi**.
 
 `AddDIConfig` làm 3 việc:
+1. `AddDbContext<IdentityDbContext/AssetDbContext>(o => o.UseSqlServer(conn))`.
+2. **Scrutor auto-register**: quét assembly `Identity*`/`Attendance*`/`Asset*`/`Shared*`, lấy class tên kết thúc `Repository`|`UnitOfWork`|`Service` → `AsImplementedInterfaces().WithScopedLifetime()`.
+3. `AddHttpContextAccessor()` + `IClaimsTransformation` (Identity).
 
-1. **Đăng ký DbContext** của từng module (đọc connection string):
-   ```csharp
-   services.AddDbContext<IdentityDbContext>(o => o.UseSqlServer(identityConn));
-   services.AddDbContext<AssetDbContext>(o => o.UseSqlServer(pcManagementConn));
-   ```
-2. **Auto-register bằng Scrutor** theo quy ước tên — quét mọi assembly
-   `Identity*`, `Attendance*`, `Asset*`, `Shared*`, lấy class có tên kết thúc
-   bằng `Repository` | `UnitOfWork` | `Service`, đăng ký `AsImplementedInterfaces`
-   + `WithScopedLifetime`:
-   ```csharp
-   services.Scan(scan => scan
-     .FromApplicationDependencies(a =>
-         a.FullName.StartsWith("Identity") || a.FullName.StartsWith("Attendance") ||
-         a.FullName.StartsWith("Asset")    || a.FullName.StartsWith("Shared"))
-     .AddClasses(c => c.Where(t =>
-         t.Name.EndsWith("Repository") || t.Name.EndsWith("UnitOfWork") || t.Name.EndsWith("Service")))
-     .AsImplementedInterfaces()
-     .WithScopedLifetime());
-   ```
-3. `AddHttpContextAccessor()` + đăng ký `IClaimsTransformation` (Identity).
+→ Code mới chỉ cần đặt đúng tên (`FooService : IFooService`) là tự DI. Không sửa `AddDIConfig` trừ khi cần lifetime khác/tên lệ quy ước/service không interface.
 
-**Hệ quả cho code mới:** chỉ cần đặt đúng tên (`FooService : IFooService`,
-`FooRepository : IFooRepository`) là tự động được DI — **không phải sửa
-`AddDIConfig`**. Trừ khi: cần lifetime khác Scoped, hoặc tên không theo quy ước,
-hoặc cần đăng ký một service không có interface tương ứng.
+**Controllers**: `Program.cs` nạp qua `AddApplicationPart(typeof(Xxx.Api.AssemblyReference).Assembly)`. Thêm module Api mới → thêm 1 dòng `AddApplicationPart`.
 
-**Controllers**: `Program.cs` nạp controller của các module Api qua
-`AddApplicationPart(typeof(Xxx.Api.AssemblyReference).Assembly)`. Khi thêm module
-Api mới có controller, phải thêm 1 dòng `AddApplicationPart` cho assembly đó
-(đó là công dụng của class rỗng `AssemblyReference`).
-
----
-
-## 8. Pipeline Host (Program.cs) — thứ tự middleware
-
+## 8. Pipeline Host (Program.cs) — thứ tự
 ```
-HandleExceptionMiddleware          // bọc ngoài cùng để bắt mọi lỗi
-→ (Development) MapOpenApi + MapScalarApiReference (AllowAnonymous)
-→ UseHttpsRedirection
-→ UseCors("AllowNextJs")           // origin localhost:3000, 10.45.1.181:3000, AllowCredentials
-→ UseForwardedHeaders              // lấy đúng client IP/scheme sau proxy
-→ UseAuthentication → UseAuthorization
-→ MapControllers
+HandleExceptionMiddleware → (Dev) MapOpenApi + MapScalarApiReference
+→ UseHttpsRedirection → UseCors("AllowNextJs" = localhost:3000, 10.45.1.181:3000, AllowCredentials)
+→ UseForwardedHeaders → UseAuthentication → UseAuthorization → MapControllers
 ```
 
-Chi tiết cấu hình Auth (JWT + Negotiate) xem [identity-module.md](identity-module.md).
-
----
-
-## 9. Quy ước & "bẫy" cần nhớ
-
-- **Namespace:** Domain mới dùng file-scoped (`namespace X;`); Application/
-  Infrastructure phần lớn block-scoped (`namespace X { }`). Giữ theo file lân cận.
-- **Entity là `partial class`** (do scaffold từ DB) — có thể mở rộng bằng file partial khác.
-- **`TimeHelper.GetCurrentUtcTime()`** = `DateTime.UtcNow.AddHours(7)` (giờ VN).
-  Lưu ý nhiều chỗ code lại dùng `DateTime.UtcNow` trực tiếp — không nhất quán, cân nhắc khi thêm mốc thời gian.
-- **Mapping thủ công** khắp nơi; giữ nguyên phong cách, đừng thêm AutoMapper.
-- **EF Fluent config ánh xạ tên Anh → tên bảng/cột tiếng Việt** (DB legacy), ví dụ
-  `Branch` → bảng có PK `PK_ChiNhanhs`, cột `MaChiNhanh`. Khi thêm entity mới vào
-  DbContext đã có, tuân theo cách đặt tên constraint/index đang dùng.
+## 9. Bẫy cần nhớ
+- **Namespace**: Domain mới file-scoped; Application/Infrastructure phần lớn block-scoped. Theo file lân cận.
+- **Entity là `partial class`** (scaffold từ DB).
+- **`TimeHelper.GetCurrentUtcTime()`** = `DateTime.UtcNow.AddHours(7)` (giờ VN). Nhiều chỗ vẫn dùng `DateTime.UtcNow` trực tiếp — không nhất quán.
+- **Mapping thủ công** khắp nơi (KHÔNG AutoMapper).
+- **EF Fluent map tên Anh → bảng/cột tiếng Việt** (DB legacy): `Branch` → PK `PK_ChiNhanhs`, cột `MaChiNhanh`. Giữ quy ước đặt tên constraint/index đang dùng.

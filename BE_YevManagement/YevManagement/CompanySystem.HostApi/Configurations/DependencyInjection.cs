@@ -1,4 +1,5 @@
 ﻿using Asset.Infrastructure.Context;
+using Attendance.Infrastructure.Context;
 using Identity.Infrastructure.Authentication;
 using Identity.Infrastructure.Context;
 using Microsoft.AspNetCore.Authentication;
@@ -12,11 +13,14 @@ namespace CompanySystem.HostApi.Configurations
         {
             var identityConnectionString = configuration.GetConnectionString("IdentityManagementConnection");
             var pcManagementConnectionString = configuration.GetConnectionString("PCManagementConnection");
+            var otManagementConnectionString = configuration.GetConnectionString("OTManagementConnection");
 
             services.AddDbContext<IdentityDbContext>(options =>
                 options.UseSqlServer(identityConnectionString));
             services.AddDbContext<AssetDbContext>(options =>
                 options.UseSqlServer(pcManagementConnectionString));
+            services.AddDbContext<AttendanceDbContext>(options =>
+                options.UseSqlServer(otManagementConnectionString));
 
 
             services.Scan(scan => scan
