@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasModuleAccess } from "@/modules/auth/lib/permissions";
 

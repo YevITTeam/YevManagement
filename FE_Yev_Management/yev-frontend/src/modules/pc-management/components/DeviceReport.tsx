@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/navigation";
 import { toast } from "react-toastify";
 import { Computer, Monitor, HardDrive, Clock } from "lucide-react";
 

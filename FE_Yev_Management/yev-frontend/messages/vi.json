@@ -1,0 +1,33 @@
+{
+  "Common": {
+    "save": "Lưu",
+    "cancel": "Huỷ",
+    "delete": "Xoá",
+    "add": "Thêm mới",
+    "edit": "Sửa"
+  },
+  "Navigation": {
+    "home": "Trang chủ",
+    "admin": "Admin",
+    "pcManagerTagline": "Quản lý PC",
+    "devices": "Quản lý Thiết bị",
+    "reports": "Báo cáo thống kê",
+    "ips": "Quản lý IP",
+    "deviceTypes": "Quản lý loại thiết bị",
+    "branches": "Quản lý chi nhánh",
+    "deviceGroups": "Quản lý nhóm",
+    "deviceDepartments": "Quản lý bộ phận",
+    "softwares": "Quản lý phần mềm",
+    "suppliers": "Quản lý nhà cung cấp",
+    "settings": "Cài đặt hệ thống"
+  },
+  "Header": {
+    "productName": "YEV Management",
+    "tagline": "Asset Management Suite",
+    "refreshPermissions": "Làm mới quyền",
+    "refreshPermissionsTitle": "Đăng nhập lại để cập nhật quyền mới được cấp",
+    "admin": "Admin",
+    "notLoggedIn": "Chưa đăng nhập",
+    "language": "Ngôn ngữ"
+  }
+}

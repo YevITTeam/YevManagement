@@ -1,0 +1,33 @@
+{
+  "Common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "add": "新規追加",
+    "edit": "編集"
+  },
+  "Navigation": {
+    "home": "ホーム",
+    "admin": "管理者",
+    "pcManagerTagline": "PC管理",
+    "devices": "機器管理",
+    "reports": "統計レポート",
+    "ips": "IPアドレス管理",
+    "deviceTypes": "機器種別管理",
+    "branches": "支店管理",
+    "deviceGroups": "グループ管理",
+    "deviceDepartments": "部門管理",
+    "softwares": "ソフトウェア管理",
+    "suppliers": "仕入先管理",
+    "settings": "システム設定"
+  },
+  "Header": {
+    "productName": "YEV Management",
+    "tagline": "Asset Management Suite",
+    "refreshPermissions": "権限を更新",
+    "refreshPermissionsTitle": "新しく付与された権限を反映するには再ログインしてください",
+    "admin": "管理者",
+    "notLoggedIn": "未ログイン",
+    "language": "言語"
+  }
+}

@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, usePathname } from "@/navigation";
+import { useTranslations } from "next-intl";
 import {
   Building2,
   Computer,
@@ -16,19 +16,20 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { label: "Quản lý Thiết bị", href: "/pc", icon: Computer },
-  { label: "Báo cáo thống kê", href: "/pc/reports", icon: Flag },
-  { label: "Quản lý IP", href: "/pc/ips", icon: Monitor },
-  { label: "Quản lý loại thiết bị", href: "/pc/device-types", icon: HardDrive },
-  { label: "Quản lý chi nhánh", href: "/pc/branches", icon: Building2 },
-  { label: "Quản lý nhóm", href: "/pc/device-groups", icon: Layers },
-  { label: "Quản lý bộ phận", href: "/pc/device-departments", icon: Users },
-  { label: "Quản lý phần mềm", href: "/pc/softwares", icon: ShieldCheck },
-  { label: "Quản lý nhà cung cấp", href: "/pc/suppliers", icon: Package },
-  { label: "Cài đặt hệ thống", href: "/pc/settings", icon: Settings },
-];
+  { key: "devices", href: "/pc", icon: Computer },
+  { key: "reports", href: "/pc/reports", icon: Flag },
+  { key: "ips", href: "/pc/ips", icon: Monitor },
+  { key: "deviceTypes", href: "/pc/device-types", icon: HardDrive },
+  { key: "branches", href: "/pc/branches", icon: Building2 },
+  { key: "deviceGroups", href: "/pc/device-groups", icon: Layers },
+  { key: "deviceDepartments", href: "/pc/device-departments", icon: Users },
+  { key: "softwares", href: "/pc/softwares", icon: ShieldCheck },
+  { key: "suppliers", href: "/pc/suppliers", icon: Package },
+  { key: "settings", href: "/pc/settings", icon: Settings },
+] as const;
 
 export default function PcManagerSidebar() {
+  const t = useTranslations("Navigation");
   const pathname = usePathname() || "";
 
   return (
@@ -41,7 +42,7 @@ export default function PcManagerSidebar() {
           </div>
           <div>
             <div className="text-lg font-semibold text-[#191c1e]">YEV IT</div>
-            <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">Quản lý PC</div>
+            <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">{t("pcManagerTagline")}</div>
           </div>
         </div>
       </div>
@@ -55,7 +56,7 @@ export default function PcManagerSidebar() {
 
           return (
             <Link
-              key={item.label} // Sử dụng item.label làm key để tránh lỗi trùng lặp key nếu có href giống nhau
+              key={item.key}
               href={item.href}
               className={`flex items-center gap-3 border-l-4 px-5 py-3 text-sm font-medium transition ${isActive
                 ? "border-[#e3000f] bg-[#eceef0] text-[#191c1e]"
@@ -66,7 +67,7 @@ export default function PcManagerSidebar() {
                 size={18}
                 className={isActive ? "text-[#e3000f]" : "text-[#5e3f3a]"}
               />
-              <span>{item.label}</span>
+              <span>{t(item.key)}</span>
             </Link>
           );
         })}
