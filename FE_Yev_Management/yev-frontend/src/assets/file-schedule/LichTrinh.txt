@@ -1,0 +1,54 @@
+{
+  "members": [
+    {
+      "id": "fd4cac24-ac35-4766-ac60-bdc75a20a8ae",
+      "name": "Nguyễn Nhật Trường"
+    },
+    {
+      "id": "4f64bbc3-c819-4551-a05f-f4e1f9c3b1b7",
+      "name": "Phan Nguyễn Mạnh Cường"
+    }
+  ],
+  "plans": [
+    {
+      "id": "p1",
+      "name": "Kế hoạch phát triển PC",
+      "startDate": "2026-07-01",
+      "endDate": "2026-07-21",
+      "tasks": [
+        {
+          "id": "s1",
+          "content": "Phân tích yêu cầu",
+          "assigneeId": "fd4cac24-ac35-4766-ac60-bdc75a20a8ae",
+          "status": "done",
+          "dueDate": "2026-07-16",
+          "completedDate": "2026-07-14"
+        },
+        {
+          "id": "s2",
+          "content": "Liệt kê yêu cầu",
+          "assigneeId": "4f64bbc3-c819-4551-a05f-f4e1f9c3b1b7",
+          "status": "done",
+          "dueDate": "2026-07-18",
+          "completedDate": "2026-07-14"
+        }
+      ]
+    },
+    {
+      "id": "8b78989f-5f52-4f77-8c94-e2fa8224e0ce",
+      "name": "Kế hoạch phát triển OT",
+      "startDate": "2026-07-10",
+      "endDate": "2026-07-20",
+      "tasks": [
+        {
+          "id": "11bb325a-7f4f-4277-8cc7-b5903b0c7bf8",
+          "content": "Thu thập yêu cầu",
+          "assigneeId": "",
+          "status": "todo",
+          "dueDate": "2026-07-15",
+          "completedDate": ""
+        }
+      ]
+    }
+  ]
+}

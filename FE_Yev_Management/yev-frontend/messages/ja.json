@@ -36,6 +36,8 @@
     "subtitle": "以下から項目を選択し、現在の機器管理と同じ操作でシステムの各業務を開始してください。",
     "devicesTitle": "機器管理",
     "devicesDesc": "資産の追跡・棚卸",
+    "scheduleTitle": "ソフトウェア開発スケジュール",
+    "scheduleDesc": "計画・期間・作業フロー",
     "contractsTitle": "契約管理",
     "contractsDesc": "書類の作成・保管",
     "overtimeTitle": "残業管理",

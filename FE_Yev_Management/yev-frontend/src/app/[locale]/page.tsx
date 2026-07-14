@@ -1,6 +1,6 @@
 "use client";
 
-import { Cpu, FileText, Notebook, BarChart3 } from "lucide-react";
+import { Cpu, FileText, Notebook, BarChart3, CalendarClock } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -21,6 +21,13 @@ export default function Home() {
       link: "/pc",
       icon: <Cpu className="w-8 h-8" />,
       visible: canManagePc,
+    },
+    {
+      title: t("scheduleTitle"),
+      desc: t("scheduleDesc"),
+      link: "/schedule",
+      icon: <CalendarClock className="w-8 h-8" />,
+      visible: true,
     },
     {
       title: t("contractsTitle"),
