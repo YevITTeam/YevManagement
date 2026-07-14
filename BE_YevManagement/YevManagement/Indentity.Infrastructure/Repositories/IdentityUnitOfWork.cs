@@ -11,13 +11,25 @@ namespace Identity.Infrastructure.Repositories
 {
     public class IdentityUnitOfWork : BaseUnitOfWork<IdentityDbContext>, IIdentityUnitOfWork
     {
-        public IdentityUnitOfWork(IdentityDbContext dbContext, IUserReposiory users, IRoleRepository roles) : base(dbContext)
+        public IdentityUnitOfWork(
+            IdentityDbContext dbContext,
+            IUserReposiory users,
+            IRoleRepository roles,
+            ILoginUserIPRepository loginUserIPs,
+            IPermissionRepository permissions,
+            IUserPermissionRepository userPermissions) : base(dbContext)
         {
             Users = users;
             Roles = roles;
+            LoginUserIPs = loginUserIPs;
+            Permissions = permissions;
+            UserPermissions = userPermissions;
         }
 
         public IUserReposiory Users { get; }
-        public IRoleRepository Roles { get; }   
+        public IRoleRepository Roles { get; }
+        public ILoginUserIPRepository LoginUserIPs { get; }
+        public IPermissionRepository Permissions { get; }
+        public IUserPermissionRepository UserPermissions { get; }
     }
 }

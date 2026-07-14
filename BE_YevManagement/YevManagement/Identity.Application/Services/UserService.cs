@@ -1,7 +1,9 @@
 ﻿using Identity.Application.Dtos.UserDto;
 using Identity.Application.Interfaces.Service;
 using Identity.Domain.Entities;
+using Shared.Application.Helper;
 using Shared.Application.Services;
+using Shared.Core.Exceptions;
 
 namespace Identity.Application.Services
 {
@@ -11,21 +13,9 @@ namespace Identity.Application.Services
         {
         }
 
-        public async Task<List<RoleDto>> GetAllRolesAsync()
-        {
-            var roles = await _unitOfWork.Roles.GetAllAsync();
-
-            return roles.Select(role => new RoleDto
-            {
-                Id = role.Id,
-                RoleName = role.RoleName,
-                Description = role.Description
-            }).ToList();
-        }
-
         public async Task<List<UserDto>> GetAllUsersAsync()
         {
-            var users = await _unitOfWork.Users.GetAllAsync();
+            var users = await _unitOfWork.Users.FindWithIncludesAsync(null,x =>x.Roles);
 
             return users.Select(user => new UserDto
             {
@@ -58,7 +48,7 @@ namespace Identity.Application.Services
             {
                 UserName = username,
                 FullName = fullName,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = TimeHelper.GetCurrentUtcTime(),
 
                 Roles = new List<Role>
                 {
@@ -82,7 +72,7 @@ namespace Identity.Application.Services
         {
             if (request == null || request.RoleIds == null)
             {
-                throw new ArgumentException("Dữ liệu cấp quyền không hợp lệ.");
+                throw new Exception("Dữ liệu cấp quyền không hợp lệ.");
             }
 
             var user = await _unitOfWork.Users.FirstOrDefaultAsync(
@@ -108,6 +98,60 @@ namespace Identity.Application.Services
             }
 
             _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task<UserDto> CreateUserAsync(CreateUserDto request)
+        {
+            var userName = request.UserName.Trim();
+            var deviceName = string.IsNullOrWhiteSpace(request.DeviceName) ? null : request.DeviceName.Trim();
+
+            // Định danh đăng nhập là UserName suông (2026-07-11, đổi lại — xem
+            // MyClaimsTransformation). Không cho tạo trùng UserName để tránh 2 dòng User
+            // cùng khớp 1 lần đăng nhập thật.
+            var existingUser = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == userName);
+            if (existingUser != null)
+                throw new DomainException($"Người dùng '{userName}' đã tồn tại.");
+
+            var roles = new List<Role>();
+            if (request.RoleIds.Any())
+            {
+                roles = (await _unitOfWork.Roles.FindAsync(r => request.RoleIds.Contains(r.Id) && !r.IsDeleted)).ToList();
+                if (roles.Count != request.RoleIds.Distinct().Count())
+                    throw new DomainException("Một số quyền (Role) được chọn không tồn tại.");
+            }
+
+            var newUser = new User
+            {
+                UserName = userName,
+                DeviceName = deviceName,
+                FullName = request.FullName,
+                CreatedAt = TimeHelper.GetCurrentUtcTime(),
+                Roles = roles
+            };
+
+            await _unitOfWork.Users.AddAsync(newUser);
+            await _unitOfWork.SaveChangesAsync();
+
+            return new UserDto
+            {
+                Id = newUser.Id,
+                UserName = newUser.UserName,
+                FullName = newUser.FullName,
+                DeviceName = newUser.DeviceName,
+                Roles = roles.Select(r => r.RoleName).ToList()
+            };
+        }
+
+        // Hard delete: xoá hẳn User khỏi DB (không có IsDeleted trên entity này).
+        // UserRoles/LoginUserIPs/UserPermissions cascade tự động ở DB. Nếu UserName này
+        // đăng nhập Windows lại, MyClaimsTransformation sẽ tạo mới User với role mặc định "Basic".
+        public async Task DeleteUserAsync(int userId)
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(userId);
+            user.OrThrowNotFound("Người dùng", userId);
+
+            _unitOfWork.Users.Delete(user!);
             await _unitOfWork.SaveChangesAsync();
         }
     }

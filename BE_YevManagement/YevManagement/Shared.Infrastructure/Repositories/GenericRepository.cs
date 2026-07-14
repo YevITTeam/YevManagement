@@ -1,10 +1,11 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using Shared.Application.Abstractions;
+using Shared.Application.Wrapper;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
-using Shared.Application.Abstractions;
 
 namespace Shared.Infrastructure.Repositories
 {
@@ -65,6 +66,11 @@ namespace Shared.Infrastructure.Repositories
                 query = query.Include(include);
             }
 
+            if(predicate == null)
+            {
+                return await query.ToListAsync();
+            }
+
             return await query.Where(predicate).ToListAsync();
         }
 
@@ -76,6 +82,47 @@ namespace Shared.Infrastructure.Repositories
                                .Where(predicate)
                                .Select(selector)
                                .ToListAsync();
+        }
+
+        public IQueryable<T> GetQueryable(bool isTracking = false, params Expression<Func<T, object>>[] includes)
+        {
+            var query = isTracking ? _dbSet.AsTracking() : _dbSet.AsNoTracking();
+            foreach (var include in includes)
+            {
+                query = query.Include(include);
+            }
+            return query;
+        }
+
+        public async Task<IReadOnlyList<T>> GetPagedAsync(IQueryable<T> query, int pageIndex, int pageSize)
+        {
+            return await query.Skip((pageIndex - 1) * pageSize)
+                              .Take(pageSize)
+                              .ToListAsync();
+        }
+
+        public async Task<PagedResponse<TResult>> ToPagedResponseAsync<TResult>(
+            IQueryable<T> query,
+            int pageIndex,
+            int pageSize,
+            Expression<Func<T, TResult>> selector)
+        {
+            var totalCount = await query.CountAsync();
+
+            var items = await query
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize)
+                .Select(selector)
+                .ToListAsync();
+
+            return new PagedResponse<TResult>(items, totalCount, pageIndex, pageSize);
+        }
+
+        public async Task<List<TResult>> ToListAsync<TResult>(
+            IQueryable<T> query,
+            Expression<Func<T, TResult>> selector)
+        {
+            return await query.Select(selector).ToListAsync();
         }
     }
 }

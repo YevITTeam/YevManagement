@@ -8,11 +8,6 @@ namespace Identity.Application.Interfaces.Repository
 {
     public interface IUserReposiory : IGenericRepository<User>
     {
-        //Task<User> GetUserWithRolesAsync(string username);
-        //Task<User> CreateUserAsync(string username, string fullName, int basicRoleId);
-        //Task<int> GetRoleIdByNameAsync(string roleName);
-        //Task<List<User>> GetAllUsersAsync();
-
-        //Task UpdateUserRolesAsync(int userId, List<int> roleIds);
+        Task<User?> GetUserWithRolesAsync(string userName);
     }
 }

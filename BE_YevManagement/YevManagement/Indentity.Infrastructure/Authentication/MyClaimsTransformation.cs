@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Shared.Application.Helper;
 using System.DirectoryServices.AccountManagement;
 using System.Net;
 using System.Net.Sockets;
@@ -34,16 +35,26 @@ namespace Identity.Infrastructure.Authentication
             var dbIdentity = new ClaimsIdentity("DbRoles", ClaimTypes.Name, ClaimTypes.Role);
 
             string? ipAddress = GetClientIp();
-            string? deviceName = null;
+            // DeviceName chỉ còn mang tính tham khảo/hiển thị (2026-07-11, đổi lại —
+            // xem ghi chú dưới), không dùng để khớp User nữa nên resolve sau cũng được,
+            // nhưng vẫn resolve ở đây để set/refresh cho User tìm được bên dưới.
+            string? deviceName = GetClientDeviceName(ipAddress);
 
             using (var scope = _serviceProvider.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
 
-                // THÊM INCLUDE LoginUserIPs để tải dữ liệu lịch sử IP lên
+                // Khớp User theo UserName suông (2026-07-11, đổi lại từ cặp (UserName,
+                // DeviceName) áp dụng 2026-07-10). Lý do đổi: DeviceName resolve qua
+                // reverse-DNS trên IP client không ổn định (NAT, nhiều PTR record...) —
+                // cùng 1 người có thể bị resolve ra 2 hostname khác nhau chỉ trong vài giây,
+                // khiến hệ thống hiểu nhầm là "máy lạ" và tự tạo thêm 1 User trùng mỗi lần
+                // đăng nhập. Đánh đổi: mất tính năng "Role riêng theo từng máy" của
+                // UserService.CreateUserAsync — giờ 1 UserName chỉ còn đúng 1 dòng User.
                 var user = await dbContext.Users
-                    .Include(x => x.Roles)
+                    .Include(x => x.Roles).ThenInclude(r => r.Permissions)
                     .Include(x => x.LoginUserIPs)
+                    .Include(x => x.UserPermissions).ThenInclude(up => up.Permission)
                     .FirstOrDefaultAsync(a => a.UserName == windowsUsername);
 
                 if (user == null)
@@ -54,7 +65,8 @@ namespace Identity.Infrastructure.Authentication
                     {
                         UserName = windowsUsername,
                         FullName = actualFullName,
-                        CreatedAt = DateTime.UtcNow,
+                        DeviceName = deviceName,
+                        CreatedAt = TimeHelper.GetCurrentUtcTime(),
                         Roles = new List<Role>(),
                         LoginUserIPs = new List<LoginUserIP>() // Khởi tạo list IP cho user mới
                     };
@@ -68,10 +80,10 @@ namespace Identity.Infrastructure.Authentication
                     dbContext.Users.Add(user);
                 }
 
-                // Cập nhật thông tin Network & Device
-                deviceName = GetClientDeviceName(ipAddress);
                 bool isUpdated = false;
 
+                // Refresh DeviceName hiển thị theo lần đăng nhập gần nhất (không đụng tới
+                // nếu resolve thất bại/null — tránh xoá mất giá trị Admin đã pre-provision).
                 if (!string.IsNullOrEmpty(deviceName) && user.DeviceName != deviceName)
                 {
                     user.DeviceName = deviceName;
@@ -86,7 +98,7 @@ namespace Identity.Infrastructure.Authentication
 
                     if (existingIpRecord != null)
                     {
-                        existingIpRecord.LastLoginAt = DateTime.UtcNow;
+                        existingIpRecord.LastLoginAt = TimeHelper.GetCurrentUtcTime();
                         isUpdated = true;
                     }
                     else
@@ -94,8 +106,8 @@ namespace Identity.Infrastructure.Authentication
                         user.LoginUserIPs.Add(new LoginUserIP
                         {
                             IPAddress = ipAddress,
-                            FirstLoginAt = DateTime.UtcNow,
-                            LastLoginAt = DateTime.UtcNow
+                            FirstLoginAt = TimeHelper.GetCurrentUtcTime(),
+                            LastLoginAt = TimeHelper.GetCurrentUtcTime()
                         });
                         isUpdated = true;
                     }
@@ -124,6 +136,25 @@ namespace Identity.Infrastructure.Authentication
                 if (!string.IsNullOrEmpty(user.FullName))
                 {
                     dbIdentity.AddClaim(new Claim("FullName", user.FullName));
+                }
+
+                if (user.Roles != null)
+                {
+                    // Permission hiệu lực = permission theo Role, cộng permission được cấp
+                    // riêng (UserPermission.IsGranted=true), trừ permission bị thu hồi riêng
+                    // (IsGranted=false) — deny override luôn thắng grant từ Role.
+                    var basePermissionCodes = user.Roles.SelectMany(r => r.Permissions).Select(p => p.Code);
+
+                    var userPermissions = user.UserPermissions ?? new List<UserPermission>();
+                    var grantedCodes = userPermissions.Where(up => up.IsGranted).Select(up => up.Permission.Code);
+                    var deniedCodes = userPermissions.Where(up => !up.IsGranted).Select(up => up.Permission.Code).ToHashSet();
+
+                    var effectiveCodes = basePermissionCodes.Union(grantedCodes).Except(deniedCodes).Distinct();
+
+                    foreach (var code in effectiveCodes)
+                    {
+                        dbIdentity.AddClaim(new Claim("Permission", code));
+                    }
                 }
             }
 

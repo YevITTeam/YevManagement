@@ -8,8 +8,14 @@ namespace Identity.Application.Interfaces.Service
 {
     public interface IIdentityUnitOfWork : IUnitOfWork
     {
-        IUserReposiory Users{ get; }
+        IUserReposiory Users { get; }
 
         IRoleRepository Roles { get; }
+
+        ILoginUserIPRepository LoginUserIPs { get; }
+
+        IPermissionRepository Permissions { get; }
+
+        IUserPermissionRepository UserPermissions { get; }
     }
 }

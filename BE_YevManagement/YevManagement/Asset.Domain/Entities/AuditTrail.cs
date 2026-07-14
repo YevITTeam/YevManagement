@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Asset.Domain;
+namespace Asset.Domain.Models;
 
 public partial class AuditTrail
 {

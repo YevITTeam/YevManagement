@@ -28,6 +28,16 @@ namespace Shared.Application.Wrapper
             };
         }
 
+        public static ApiResponse<PagedResponse<T>> Success(PagedResponse<T> data, string message = "Action Success")
+        {
+            return new ApiResponse<PagedResponse<T>>
+            {
+                IsSuccess = true,
+                Data = data,
+                Message = message
+            };
+        }
+
         public static ApiResponse<T> Failure(string message, List<string>? errors = null)
         {
             return new ApiResponse<T>
