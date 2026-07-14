@@ -29,5 +29,18 @@
     "admin": "Admin",
     "notLoggedIn": "Chưa đăng nhập",
     "language": "Ngôn ngữ"
+  },
+  "Home": {
+    "eyebrow": "Hệ thống quản lý",
+    "title": "Chào mừng đến Hệ thống",
+    "subtitle": "Chọn một mục bên dưới để bắt đầu quản lý các hoạt động của hệ thống theo phong cách quản lý thiết bị hiện tại.",
+    "devicesTitle": "Quản lý thiết bị",
+    "devicesDesc": "Theo dõi, kiểm kê tài sản",
+    "contractsTitle": "Quản lý hợp đồng",
+    "contractsDesc": "Soạn thảo và lưu trữ hồ sơ",
+    "overtimeTitle": "Quản lý tăng ca",
+    "overtimeDesc": "Đăng ký hoặc phê duyệt tăng ca",
+    "reportsTitle": "Báo cáo thống kê",
+    "reportsDesc": "Xem số liệu tổng quan"
   }
 }
