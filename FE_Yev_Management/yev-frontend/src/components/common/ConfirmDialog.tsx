@@ -49,18 +49,18 @@ export default function ConfirmDialog({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="confirm-title"
-                className="z-60 bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6"
+                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
-                <h3 id="confirm-title" className="text-lg font-semibold text-gray-800 mb-2">
+                <h3 id="confirm-title" className="mb-2 text-lg font-semibold text-[#191c1e]">
                     {title}
                 </h3>
 
-                <div className="text-sm text-gray-600 mb-4">{message}</div>
+                <div className="mb-5 text-sm text-[#5e3f3a]">{message}</div>
 
                 <div className="flex justify-end gap-3">
                     <button
                         onClick={() => onDenied?.()}
-                        className="cursor-pointer px-3 py-1.5 rounded-md border bg-white text-gray-700"
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={loading}
                     >
                         {deniedLabel}
@@ -68,7 +68,7 @@ export default function ConfirmDialog({
 
                     <button
                         onClick={() => onApprove()}
-                        className="cursor-pointer px-3 py-1.5 rounded-md bg-red-600 text-white"
+                        className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={loading}
                     >
                         {loading ? "Đang..." : approveLabel}

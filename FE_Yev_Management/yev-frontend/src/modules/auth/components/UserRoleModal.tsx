@@ -1,12 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Edit2, Save, Search, ShieldCheck } from "lucide-react";
-import { AdminApi } from "@/modules/auth/api/admin.api";
+import { Edit2, Save, Search } from "lucide-react";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto, RoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleSelectModal from "./RoleSelectModal";
+import CreateUserDialog from "./CreateUserDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { getApiErrorMessage } from "@/lib/apiError";
+import { hasPermission } from "@/modules/auth/lib/permissions";
+import { useAuth } from "@/modules/auth/context/AuthContext";
 
 interface Props {
     isOpen: boolean;
@@ -14,26 +18,27 @@ interface Props {
 }
 
 export default function UserRoleModal({ isOpen, onClose }: Props) {
+    const { user: currentUser } = useAuth();
     const [users, setUsers] = useState<UserDto[]>([]);
     const [roles, setRoles] = useState<RoleDto[]>([]);
-    const [currentUser, setCurrentUser] = useState<UserDto | null>(null);
     const [selectedRolesMap, setSelectedRolesMap] = useState<Record<number, number[]>>({});
     const [isLoading, setIsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [openRoleModalUserId, setOpenRoleModalUserId] = useState<number | null>(null);
+    const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+    const [savingUserId, setSavingUserId] = useState<number | null>(null);
+    const [deletingUser, setDeletingUser] = useState<UserDto | null>(null);
+    const [isDeletingUser, setIsDeletingUser] = useState(false);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [usersData, rolesData, meData] = await Promise.all([
-                AdminApi.getUsers(),
-                AdminApi.getRoles(),
-                AuthApi.getMe(),
+            const [usersData, rolesData] = await Promise.all([
+                AuthApi.getAllUsersWithRoles(),
+                AuthApi.getAllRoles(),
             ]);
-
             setUsers(usersData);
             setRoles(rolesData);
-            setCurrentUser(meData);
 
             const initialRoleMap: Record<number, number[]> = {};
             usersData.forEach((user: UserDto) => {
@@ -53,18 +58,22 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
 
     useEffect(() => {
         if (!isOpen) return;
-
         const timer = window.setTimeout(() => {
             void fetchData();
         }, 0);
-
         return () => window.clearTimeout(timer);
     }, [fetchData, isOpen]);
+
+    // POST /api/Auth/update-user-roles yêu cầu permission Identity.User.UpdateRoles (docs/identity-api-fe.md §4.2).
+    const canUpdateUserRoles = hasPermission(currentUser, "Identity.User.UpdateRoles");
+    // POST /api/Auth/create-user yêu cầu permission Identity.User.Create (docs/identity-api-fe.md §4.9).
+    const canCreateUser = hasPermission(currentUser, "Identity.User.Create");
+    // DELETE /api/Auth/delete-user/{userId} — cùng quy ước đặt tên permission với delete-role (Identity.Role.Delete).
+    const canDeleteUser = hasPermission(currentUser, "Identity.User.Delete");
 
     const filteredUsers = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
         if (!term) return users;
-
         return users.filter((user) => {
             return (
                 user.userName.toLowerCase().includes(term) ||
@@ -84,150 +93,185 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     };
 
     const handleSave = async (userId: number) => {
+        setSavingUserId(userId);
         try {
             const roleIds = selectedRolesMap[userId] || [];
-            await AdminApi.updateUserRoles({ userId, roleIds });
+            await AuthApi.updateUserRoles({ userId, roleIds });
             toast.success("Cập nhật quyền thành công!");
             await fetchData();
-        } catch {
-            toast.error("Cập nhật thất bại!");
+            return true;
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, "Cập nhật thất bại!"));
+            return false;
+        } finally {
+            setSavingUserId(null);
+        }
+    };
+
+    const handleSaveFromModal = async () => {
+        if (openRoleModalUserId === null) return;
+
+        const success = await handleSave(openRoleModalUserId);
+        if (success) {
+            setOpenRoleModalUserId(null);
+        }
+    };
+
+    const handleDeleteUser = async () => {
+        if (!deletingUser) return;
+        setIsDeletingUser(true);
+        try {
+            await AuthApi.deleteUser(deletingUser.id);
+            toast.success("Xoá người dùng thành công!");
+            setDeletingUser(null);
+            await fetchData();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, "Xoá người dùng thất bại!"));
+        } finally {
+            setIsDeletingUser(false);
         }
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2">
-                        <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
-                            <ShieldCheck className="h-4 w-4" />
-                            Quản lý phân quyền
-                        </div>
-                        <div>
-                            <h2 className="text-2xl font-semibold text-slate-900">Phân quyền người dùng</h2>
-                            <p className="text-sm text-slate-500">
-                                Cập nhật vai trò cho từng tài khoản bằng bảng danh sách trực quan.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                            <p className="text-xs uppercase tracking-wide text-slate-400">Tổng người dùng</p>
-                            <p className="text-lg font-semibold text-slate-900">{users.length}</p>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                            <p className="text-xs uppercase tracking-wide text-slate-400">Tổng vai trò</p>
-                            <p className="text-lg font-semibold text-slate-900">{roles.length}</p>
-                        </div>
-                        {onClose && (
-                            <button
-                                onClick={onClose}
-                                className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-red-300 hover:text-red-500"
-                            >
-                                Đóng
-                            </button>
-                        )}
-                    </div>
+        <div className="space-y-8">
+            {/* Header Section */}
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền người dùng</h1>
+                    <p className="mt-1 text-[15px] text-[#5e3f3a]">
+                        Cập nhật vai trò cho từng tài khoản hệ thống.
+                    </p>
                 </div>
-
-                <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="relative w-full sm:max-w-sm">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            value={searchTerm}
-                            onChange={(event) => setSearchTerm(event.target.value)}
-                            placeholder="Tìm tên tài khoản hoặc họ tên"
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white"
-                        />
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e]">
+                        Tổng user: {users.length}
                     </div>
+                    <div className="rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e]">
+                        Tổng roles: {roles.length}
+                    </div>
+                    {canCreateUser && (
+                        <button
+                            onClick={() => setIsCreateUserOpen(true)}
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                        >
+                            + Tạo user
+                        </button>
+                    )}
+                    {onClose && (
+                        <button
+                            onClick={onClose}
+                            className="rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                        >
+                            Đóng
+                        </button>
+                    )}
                 </div>
             </div>
 
+            {/* Table Section */}
             {isLoading ? (
-                <div className="flex min-h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm text-slate-500 shadow-sm">
+                <div className="flex min-h-40 items-center justify-center border border-[#e0e3e5] bg-white text-sm text-[#5e3f3a]">
                     Đang tải dữ liệu...
                 </div>
             ) : (
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div className="hidden border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600 md:grid md:grid-cols-[1.4fr_1.2fr_0.8fr]">
+                <section className="overflow-hidden border border-[#e0e3e5] bg-white">
+                    {/* Search / Filter Bar */}
+                    <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="relative w-full sm:max-w-sm">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                            <input
+                                value={searchTerm}
+                                onChange={(event) => setSearchTerm(event.target.value)}
+                                placeholder="Tìm tài khoản hoặc tên..."
+                                className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white pl-9 pr-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            />
+                        </div>
+                        <div className="text-sm font-medium text-[#5e3f3a]">
+                            Hiển thị {filteredUsers.length} bản ghi
+                        </div>
+                    </div>
+
+                    {/* Table Header */}
+                    <div className="hidden border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a] md:grid md:grid-cols-[1.4fr_1.2fr_0.8fr]">
                         <div>Người dùng</div>
                         <div>Vai trò</div>
                         <div className="text-right">Thao tác</div>
                     </div>
 
-                    <div className="divide-y divide-slate-100">
+                    {/* Table Body */}
+                    <div className="divide-y divide-[#e0e3e5]">
                         {filteredUsers.length === 0 ? (
-                            <div className="px-4 py-10 text-center text-sm text-slate-500">
+                            <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">
                                 Không tìm thấy người dùng phù hợp.
                             </div>
                         ) : (
                             filteredUsers.map((user) => {
                                 const isSelf = currentUser?.userName === user.userName;
+                                const isDisabled = isSelf || !canUpdateUserRoles;
                                 const currentSelectedIds = selectedRolesMap[user.id] || [];
 
                                 return (
                                     <div
                                         key={user.id}
-                                        className={`grid gap-4 px-4 py-4 md:grid-cols-[1.4fr_1.2fr_0.8fr] ${isSelf ? "bg-rose-50/40" : "bg-white"}`}
+                                        className={`grid gap-4 px-4 py-4 md:grid-cols-[1.4fr_1.2fr_0.8fr] align-top transition hover:bg-[#f8fafc] ${isSelf ? "bg-[#fff4f2]/40" : "bg-white"
+                                            }`}
                                     >
                                         <div className="flex flex-col gap-1">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <span className="text-base font-semibold text-slate-800">
+                                                <span className="text-sm font-semibold text-[#191c1e]">
                                                     {user.fullName || user.userName}
                                                 </span>
                                                 {isSelf && (
-                                                    <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-600">
-                                                        Bạn
+                                                    <span className="border border-[#e9bcb6] bg-[#fff4f2] px-2 py-0.5 text-[10px] font-semibold tracking-wider text-[#930006]">
+                                                        BẠN
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-slate-500">{user.userName}</p>
+                                            <p className="text-sm text-[#5e3f3a]">{user.userName}</p>
                                         </div>
 
-                                        <div className="flex flex-col gap-3">
+                                        <div className="flex flex-col gap-3 justify-center">
                                             <button
                                                 onClick={() => setOpenRoleModalUserId(user.id)}
-                                                disabled={isSelf}
-                                                className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition ${isSelf
-                                                    ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                                                    : "border-slate-200 bg-white text-slate-700 hover:border-blue-500 hover:bg-blue-50"
+                                                disabled={isDisabled}
+                                                className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${isDisabled
+                                                    ? "cursor-not-allowed border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a] opacity-60"
+                                                    : "border-[#e0e3e5] bg-white text-[#191c1e] hover:border-[#e3000f] hover:bg-[#fff4f2]"
                                                     }`}
                                             >
-                                                <span className="flex flex-wrap gap-2">
+                                                <span className="flex flex-wrap gap-1.5">
                                                     {currentSelectedIds.length > 0 ? (
                                                         currentSelectedIds.map((roleId) => {
                                                             const role = roles.find((item) => item.id === roleId);
                                                             return role ? (
                                                                 <span
                                                                     key={role.id}
-                                                                    className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
+                                                                    className="border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-medium text-[#191c1e]"
                                                                 >
                                                                     {role.roleName}
                                                                 </span>
                                                             ) : null;
                                                         })
                                                     ) : (
-                                                        <span className="text-sm text-slate-400">Chọn vai trò...</span>
+                                                        <span className="text-[#5e3f3a]">Chọn vai trò...</span>
                                                     )}
                                                 </span>
-                                                <Edit2 className="cursor-pointer h-4 w-4 flex-shrink-0" />
+                                                <Edit2 className="h-4 w-4 flex-shrink-0 text-[#5e3f3a]" />
                                             </button>
                                         </div>
 
                                         <div className="flex items-center justify-end">
                                             <button
-                                                onClick={() => handleSave(user.id)}
-                                                disabled={isSelf}
-                                                className={`inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${isSelf
-                                                    ? "cursor-not-allowed bg-slate-200 text-slate-500"
-                                                    : "bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98]"
-                                                    }`}
+                                                onClick={() => setDeletingUser(user)}
+                                                disabled={isSelf || !canDeleteUser}
+                                                title={isSelf ? "Không thể tự xoá chính mình" : "Xoá người dùng"}
+                                                className="cursor-pointer text-sm font-semibold text-[#930006] transition hover:text-[#e3000f] disabled:cursor-not-allowed disabled:text-[#5e3f3a] disabled:opacity-60"
                                             >
-                                                <Save className="h-4 w-4" />
-                                                <span>Cập nhật</span>
+                                                Xoá
                                             </button>
                                         </div>
                                     </div>
@@ -235,10 +279,10 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                             })
                         )}
                     </div>
-                </div>
+                </section>
             )}
 
-            {/* Modal để chọn vai trò */}
+            {/* Role Select Modal */}
             {openRoleModalUserId !== null && (
                 <RoleSelectModal
                     isOpen={true}
@@ -246,8 +290,40 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     selectedRoleIds={selectedRolesMap[openRoleModalUserId] || []}
                     onRoleChange={(roleId, isChecked) => handleCheckboxChange(openRoleModalUserId, roleId, isChecked)}
                     onClose={() => setOpenRoleModalUserId(null)}
+                    onSave={handleSaveFromModal}
+                    isSaving={savingUserId !== null}
+                    disabled={currentUser?.userName === users.find((user) => user.id === openRoleModalUserId)?.userName || !canUpdateUserRoles}
                 />
             )}
+
+            <CreateUserDialog
+                isOpen={isCreateUserOpen}
+                roles={roles}
+                onClose={() => setIsCreateUserOpen(false)}
+                onCreated={() => {
+                    setIsCreateUserOpen(false);
+                    void fetchData();
+                }}
+            />
+
+            <ConfirmDialog
+                isOpen={deletingUser !== null}
+                title="Xoá người dùng"
+                message={
+                    <>
+                        Bạn có chắc muốn xoá tài khoản{" "}
+                        <strong>{deletingUser?.fullName || deletingUser?.userName}</strong> không? Hành động này không
+                        thể hoàn tác.
+                    </>
+                }
+                approveLabel="Xoá"
+                deniedLabel="Huỷ"
+                loading={isDeletingUser}
+                onApprove={handleDeleteUser}
+                onDenied={() => {
+                    if (!isDeletingUser) setDeletingUser(null);
+                }}
+            />
         </div>
     );
 }

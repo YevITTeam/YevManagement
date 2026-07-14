@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminApi } from "@/modules/auth/api/admin.api";
 import type { RoleDto, CreateRoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleForm from "./RoleForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { AuthApi } from "../../api/auth.api";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 export default function RoleList() {
     const [roles, setRoles] = useState<RoleDto[]>([]);
@@ -20,11 +21,11 @@ export default function RoleList() {
     const fetchRoles = async () => {
         setLoading(true);
         try {
-            const data = await AdminApi.getRoles();
+            const data = await AuthApi.getAllRoles();
             setRoles(data);
         } catch (err) {
             console.error(err);
-            toast.error("Không thể tải danh sách quyền");
+            toast.error(getApiErrorMessage(err, "Không thể tải danh sách quyền"));
         } finally {
             setLoading(false);
         }
@@ -36,37 +37,37 @@ export default function RoleList() {
 
     const handleCreate = async (data: CreateRoleDto) => {
         try {
-            await AdminApi.createRoles(data);
+            await AuthApi.createRole(data.roleName, data.description);
             toast.success("Tạo quyền thành công");
             setShowCreate(false);
             await fetchRoles();
         } catch (err) {
             console.error(err);
-            toast.error("Tên quyền đã tồn tại hoặc không hợp lệ.");
+            toast.error(getApiErrorMessage(err, "Tên quyền đã tồn tại hoặc không hợp lệ."));
         }
     };
 
     const handleUpdate = async (data: CreateRoleDto, id?: number) => {
         if (!id) return;
         try {
-            await AdminApi.updateRoles(String(id), data);
+            await AuthApi.updateRole(id, data.roleName, data.description);
             toast.success("Cập nhật quyền thành công");
             setEditing(null);
             await fetchRoles();
         } catch (err) {
             console.error(err);
-            toast.error("Cập nhật thất bại");
+            toast.error(getApiErrorMessage(err, "Cập nhật thất bại"));
         }
     };
 
     const handleDelete = async (id: number) => {
         try {
-            await AdminApi.deleteRoles(String(id));
+            await AuthApi.deleteRole(id);
             toast.success("Xoá thành công");
             await fetchRoles();
         } catch (err) {
             console.error(err);
-            toast.error("Xoá thất bại");
+            toast.error(getApiErrorMessage(err, "Xoá thất bại"));
         } finally {
             // Xong xuôi thì đóng dialog và reset id
             setOpenDialog(false);
@@ -81,23 +82,23 @@ export default function RoleList() {
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Quản lý Roles</h2>
+        <div className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-[#191c1e]">Quản lý Roles</h2>
                 <div className="flex items-center gap-2">
                     {!showCreate && !editing && (
                         <button
                             onClick={() => setShowCreate(true)}
-                            className="cursor-pointer px-3 py-1 rounded-md bg-green-600 text-white"
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
                         >
-                            Tạo Role
+                            + Tạo Role
                         </button>
                     )}
                 </div>
             </div>
 
             {showCreate && (
-                <div className="mb-4 border rounded p-4 bg-gray-50">
+                <div className="mb-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-4">
                     <RoleForm
                         onCancel={() => setShowCreate(false)}
                         onSubmit={async (d) => await handleCreate(d)}
@@ -106,7 +107,7 @@ export default function RoleList() {
             )}
 
             {editing && (
-                <div className="mb-4 border rounded p-4 bg-gray-50">
+                <div className="mb-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-4">
                     <RoleForm
                         initial={{ id: editing.id, roleName: editing.roleName, description: editing.description }}
                         onCancel={() => setEditing(null)}
@@ -117,32 +118,32 @@ export default function RoleList() {
 
             <div className="overflow-x-auto">
                 {loading ? (
-                    <div className="py-6 text-center text-gray-500">Đang tải...</div>
+                    <div className="py-6 text-center text-sm text-[#5e3f3a]">Đang tải...</div>
                 ) : (
-                    <table className="w-full text-left border-collapse">
+                    <table className="min-w-full border-collapse text-left text-sm">
                         <thead>
-                            <tr className="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider">
-                                <th className="p-3 border-b">Tên quyền</th>
-                                <th className="p-3 border-b">Mô tả</th>
-                                <th className="p-3 border-b text-center">Hành động</th>
+                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                <th className="px-4 py-3">Tên quyền</th>
+                                <th className="px-4 py-3">Mô tả</th>
+                                <th className="px-4 py-3 text-center">Hành động</th>
                             </tr>
                         </thead>
                         <tbody>
                             {roles.map((r) => (
-                                <tr key={r.id} className="border-b hover:bg-gray-50">
-                                    <td className="p-3 font-medium text-gray-800">{r.roleName}</td>
-                                    <td className="p-3 text-gray-600">{r.description || "-"}</td>
-                                    <td className="p-3 text-center">
-                                        <div className="inline-flex gap-2">
+                                <tr key={r.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                    <td className="px-4 py-3 font-semibold text-[#191c1e]">{r.roleName}</td>
+                                    <td className="px-4 py-3 text-[#5e3f3a]">{r.description || "-"}</td>
+                                    <td className="px-4 py-3 text-center">
+                                        <div className="inline-flex items-center gap-3">
                                             <button
                                                 onClick={() => setEditing(r)}
-                                                className="cursor-pointer px-3 py-1 rounded-md border text-sm"
+                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
                                             >
                                                 Sửa
                                             </button>
                                             <button
                                                 onClick={() => openDeleteConfirm(r.id)}
-                                                className="cursor-pointer px-3 py-1 rounded-md bg-red-600 text-white text-sm"
+                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
                                             >
                                                 Xoá
                                             </button>
