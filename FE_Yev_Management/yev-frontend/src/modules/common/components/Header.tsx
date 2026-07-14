@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname } from "next/navigation";
-import Link from "next/link";
+import { Link, usePathname } from "@/navigation";
+import { useTranslations } from "next-intl";
 import { RefreshCw } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission } from "@/modules/auth/lib/permissions";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 // Menu "Admin" hiện ra nếu user có ít nhất 1 permission quản trị Identity (docs/identity-api-fe.md §3 —
 // FE ẩn/hiện UI dựa trên user.permissions, không còn dựa vào role "Admin" cứng).
@@ -18,6 +19,7 @@ const IDENTITY_ADMIN_PERMISSIONS = [
 ];
 
 export default function Header() {
+  const t = useTranslations("Header");
   const pathname = usePathname() || "";
   const hasSidebar = pathname.startsWith("/pc");
   const { user, isLoading, refreshUser } = useAuth();
@@ -50,14 +52,16 @@ export default function Header() {
             Y
           </div>
           <div className="leading-tight">
-            <div className="text-base font-semibold text-[#191c1e]">YEV Management</div>
+            <div className="text-base font-semibold text-[#191c1e]">{t("productName")}</div>
             <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">
-              Asset Management Suite
+              {t("tagline")}
             </div>
           </div>
         </Link>
 
         <div className="flex items-center gap-3">
+          <LanguageSwitcher />
+
           {isLoading ? (
             <div className="h-9 w-40 animate-pulse rounded-md bg-[#eceef0]" />
           ) : user ? (
@@ -66,11 +70,11 @@ export default function Header() {
                 type="button"
                 onClick={handleRefreshPermissions}
                 disabled={isRefreshing}
-                title="Đăng nhập lại để cập nhật quyền mới được cấp"
+                title={t("refreshPermissionsTitle")}
                 className="cursor-pointer flex items-center gap-2 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#5e3f3a] transition hover:border-[#e3000f]/30 hover:text-[#e3000f] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Làm mới quyền</span>
+                <span className="hidden sm:inline">{t("refreshPermissions")}</span>
               </button>
 
               {canSeeAdmin && (
@@ -79,7 +83,7 @@ export default function Header() {
                   className="hidden items-center gap-2 rounded-lg border border-[#e3000f]/15 bg-[#fff5f5] px-3 py-2 text-sm font-semibold text-[#e3000f] transition hover:border-[#e3000f]/30 hover:bg-[#ffe8e8] sm:flex"
                 >
                   <span className="text-base">⚙</span>
-                  <span>Admin</span>
+                  <span>{t("admin")}</span>
                 </Link>
               )}
 
@@ -95,7 +99,7 @@ export default function Header() {
               </div>
             </>
           ) : (
-            <span className="text-sm font-medium text-[#5e3f3a]">Chưa đăng nhập</span>
+            <span className="text-sm font-medium text-[#5e3f3a]">{t("notLoggedIn")}</span>
           )}
         </div>
       </div>

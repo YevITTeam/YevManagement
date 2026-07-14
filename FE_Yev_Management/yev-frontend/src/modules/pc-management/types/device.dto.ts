@@ -114,3 +114,16 @@ export interface DeviceDetailDto {
     configuration: DeviceConfigurationDto | null;
     softwares: DeviceSoftwareDeviceDto[];
 }
+
+// Thiết bị bị bỏ qua khi xoá hàng loạt (vd đang được dùng ở nghiệp vụ khác) kèm lý do từ BE.
+export interface SkippedDeviceDto {
+    id: number;
+    deviceCode: string;
+    reason: string;
+}
+
+// POST /Device/bulk-delete trả về số lượng xoá thành công + danh sách máy bị bỏ qua (nếu có).
+export interface BulkDeleteResultDto {
+    deletedCount: number;
+    skippedDevices: SkippedDeviceDto[];
+}

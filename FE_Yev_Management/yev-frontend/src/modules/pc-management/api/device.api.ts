@@ -1,5 +1,5 @@
 import { api } from "@/lib/client";
-import type { DeviceDto,CreateUpdateDeviceDto,DeviceDetailDto,DeviceGetDto,DeviceReplacementSuggestionDto } from "@/modules/pc-management/types/device.dto";
+import type { DeviceDto,CreateUpdateDeviceDto,DeviceDetailDto,DeviceGetDto,DeviceReplacementSuggestionDto,BulkDeleteResultDto } from "@/modules/pc-management/types/device.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -98,7 +98,7 @@ export const DeviceApi = {
         return response.data;
     },
     bulkDeleteDevices: async (ids: number[]) => {
-        const response = await api.post<ApiResponse<null>>(ENDPOINTS.DEVICE.bulkDeleteDevices, { ids });
+        const response = await api.post<ApiResponse<BulkDeleteResultDto>>(ENDPOINTS.DEVICE.bulkDeleteDevices, { ids });
         return response.data;
     },
 };

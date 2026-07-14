@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/navigation";
 import { toast } from "react-toastify";
 
 import { DeviceApi } from "@/modules/pc-management/api/device.api";

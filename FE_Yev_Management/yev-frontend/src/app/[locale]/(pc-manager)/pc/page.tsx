@@ -3,18 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from "lucide-react";
-import DeviceFilterBar, { type DeviceFilters } from "../../../modules/pc-management/components/DeviceFilterBar";
-import { printDeviceLabels } from "../../../modules/pc-management/components/PrintDeviceCodeDialog";
-import RowActionsMenu from "../../../modules/pc-management/components/RowActionsMenu";
-import DeviceForm, { type DeviceFormValues } from "../../../modules/pc-management/components/devices/DeviceForm";
-import TransferDeviceDialog from "../../../modules/pc-management/components/devices/TransferDeviceDialog";
-import ImportDeviceDialog from "../../../modules/pc-management/components/devices/ImportDeviceDialog";
-import ImportDeviceConfigurationDialog from "../../../modules/pc-management/components/devices/ImportDeviceConfigurationDialog";
+import DeviceFilterBar, { type DeviceFilters } from "@/modules/pc-management/components/DeviceFilterBar";
+import { printDeviceLabels } from "@/modules/pc-management/components/PrintDeviceCodeDialog";
+import RowActionsMenu from "@/modules/pc-management/components/RowActionsMenu";
+import DeviceForm, { type DeviceFormValues } from "@/modules/pc-management/components/devices/DeviceForm";
+import TransferDeviceDialog from "@/modules/pc-management/components/devices/TransferDeviceDialog";
+import ImportDeviceDialog from "@/modules/pc-management/components/devices/ImportDeviceDialog";
+import ImportDeviceConfigurationDialog from "@/modules/pc-management/components/devices/ImportDeviceConfigurationDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
-import { DeviceApi } from "../../../modules/pc-management/api/device.api";
-import type { DeviceDto, DeviceGetDto } from "../../../modules/pc-management/types/device.dto";
+import { DeviceApi } from "@/modules/pc-management/api/device.api";
+import type { DeviceDto, DeviceGetDto, SkippedDeviceDto } from "@/modules/pc-management/types/device.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/navigation';
 const statusLabels: Record<number, string> = {
   0: "Chưa sử dụng",
   1: "Đang sử dụng",
@@ -260,8 +260,18 @@ export default function PcDashboardPage() {
     if (selectedIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
-      await DeviceApi.bulkDeleteDevices(selectedIds);
-      toast.success(`Xoá ${selectedIds.length} thiết bị thành công`);
+      const { deletedCount, skippedDevices } = await DeviceApi.bulkDeleteDevices(selectedIds);
+
+      if (deletedCount > 0) {
+        toast.success(`Xoá thành công ${deletedCount} thiết bị`);
+      }
+      if (skippedDevices.length > 0) {
+        toast.warning(
+          `Bỏ qua ${skippedDevices.length} thiết bị: ` +
+            skippedDevices.map((skipped: SkippedDeviceDto) => `${skipped.deviceCode} (${skipped.reason})`).join(", ")
+        );
+      }
+
       setIsBulkDeleteOpen(false);
       setSelectedIds([]);
       await refetchDevices();
@@ -558,7 +568,7 @@ export default function PcDashboardPage() {
                     <div className="inline-flex justify-end">
                       <RowActionsMenu
                         actions={[
-                          { label: "Chi tiết", onClick: () => router.push(`/pc/devices/detail?id=${device.id}`) },
+                          { label: "Chi tiết", onClick: () => router.push(`/pc/devices/${device.id}`) },
                           { label: "Sửa", onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
                           {
                             label: "Chuyển máy",

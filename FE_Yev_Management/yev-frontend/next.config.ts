@@ -1,8 +1,14 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
-  output: 'export',
+  /* config options here */
+  allowedDevOrigins: ['10.45.1.181'],
+  // output: 'export',
   trailingSlash: true,
+  reactCompiler: true,
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

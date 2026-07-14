@@ -1,0 +1,46 @@
+{
+  "Common": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "add": "新規追加",
+    "edit": "編集"
+  },
+  "Navigation": {
+    "home": "ホーム",
+    "admin": "管理者",
+    "pcManagerTagline": "PC管理",
+    "devices": "機器管理",
+    "reports": "統計レポート",
+    "ips": "IPアドレス管理",
+    "deviceTypes": "機器種別管理",
+    "branches": "支店管理",
+    "deviceGroups": "グループ管理",
+    "deviceDepartments": "部門管理",
+    "softwares": "ソフトウェア管理",
+    "suppliers": "仕入先管理",
+    "settings": "システム設定"
+  },
+  "Header": {
+    "productName": "YEV Management",
+    "tagline": "Asset Management Suite",
+    "refreshPermissions": "権限を更新",
+    "refreshPermissionsTitle": "新しく付与された権限を反映するには再ログインしてください",
+    "admin": "管理者",
+    "notLoggedIn": "未ログイン",
+    "language": "言語"
+  },
+  "Home": {
+    "eyebrow": "システム管理",
+    "title": "システムへようこそ",
+    "subtitle": "以下から項目を選択し、現在の機器管理と同じ操作でシステムの各業務を開始してください。",
+    "devicesTitle": "機器管理",
+    "devicesDesc": "資産の追跡・棚卸",
+    "contractsTitle": "契約管理",
+    "contractsDesc": "書類の作成・保管",
+    "overtimeTitle": "残業管理",
+    "overtimeDesc": "残業の申請・承認",
+    "reportsTitle": "統計レポート",
+    "reportsDesc": "概要データを表示"
+  }
+}
