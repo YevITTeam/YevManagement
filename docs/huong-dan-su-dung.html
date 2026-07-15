@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hướng dẫn sử dụng — YEV Management Portal</title>
+<style>
+  :root{
+    /* YEV design tokens — khớp FE (tailwind classes trong code) */
+    --yev-red:#e3000f; --yev-red-hover:#b40009; --yev-red-dark:#930006;
+    --yev-text:#191c1e; --yev-muted:#5e3f3a;
+    --yev-border:#e0e3e5; --yev-bg:#f8fafc; --yev-bg-side:#f7f9fb;
+    --yev-accent:#fff4f2; --yev-accent-ring:#ffe0e3; --yev-accent-border:#e9bcb6;
+    --slate-50:#f8fafc; --slate-100:#eceef0; --slate-200:#e0e3e5; --slate-300:#cbd5e1;
+    --slate-400:#94a3b8; --slate-500:#64748b; --slate-600:#475569; --slate-700:#334155;
+    --slate-800:#1e293b; --slate-900:#0f172a;
+    --radius-lg:12px; --radius-xl:16px; --radius-2xl:20px;
+    --shadow-sm:0 1px 2px rgba(25,28,30,.06); --shadow-md:0 4px 12px rgba(25,28,30,.08); --shadow-xl:0 12px 28px rgba(25,28,30,.14);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif; color:var(--yev-text); background:var(--yev-bg); line-height:1.6;}
+  a{color:var(--yev-red);}
+  .layout{display:flex; min-height:100vh;}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:1.1rem; margin-bottom:4px; color:var(--yev-text);}
+  .brand .yev-logo{width:32px; height:32px; background:var(--yev-red); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.9rem;}
+  nav.toc a:hover{background:var(--yev-accent); color:var(--yev-red);}
+  .badge-date{color:var(--yev-red-dark); background:var(--yev-accent); border:1px solid var(--yev-accent-border);}
+  .note{background:var(--yev-accent); border:1px solid var(--yev-accent-border); color:var(--yev-red-dark);}
+  ol.steps > li::before{background:var(--yev-red);}
+  nav.toc{display:flex; flex-direction:column; gap:2px;}
+  nav.toc a{display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--yev-muted); font-size:.9rem; padding:9px 12px; border-radius:10px; transition:.15s;}
+  .sidebar{width:270px; flex-shrink:0; background:#fff; border-right:1px solid var(--yev-border); position:sticky; top:0; height:100vh; overflow-y:auto; padding:24px 18px;}
+  .brand-sub{font-size:.78rem; color:var(--yev-muted); margin-bottom:22px;}
+  nav.toc .icon{width:16px; text-align:center; flex-shrink:0;}
+  nav.toc .section-label{
+    font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--slate-400); margin:16px 0 6px 12px;
+  }
+  nav.toc .section-label:first-child{margin-top:0;}
+
+  /* ===== Main content ===== */
+  main{flex:1; min-width:0; padding:40px clamp(20px,4vw,64px) 100px;}
+  .page-header{margin-bottom:40px;}
+  .page-header h1{font-size:2.1rem; font-weight:900; color:var(--slate-900); margin:0 0 8px;}
+  .page-header p{color:var(--slate-500); margin:0; font-size:.95rem;}
+  .badge-date{
+    display:inline-flex; align-items:center; gap:6px; margin-top:14px; font-size:.78rem; font-weight:600;
+    padding:5px 12px; border-radius:999px;
+  }
+
+  section{margin-bottom:56px; scroll-margin-top:24px;}
+  section h2{font-size:1.5rem; font-weight:800; color:var(--yev-text); margin:0 0 6px; display:flex; align-items:center; gap:10px;}
+  section > .lead{color:var(--yev-muted); margin:0 0 22px; font-size:.95rem; max-width:760px;}
+  h3.step-title{font-size:1.05rem; font-weight:700; color:var(--yev-text); margin:28px 0 10px;}
+
+  .card{background:#fff; border:1px solid var(--yev-border); border-radius:var(--radius-2xl); box-shadow:var(--shadow-sm); padding:24px;}
+  .note{display:flex; gap:10px; align-items:flex-start; border-radius:var(--radius-lg); padding:14px 16px; font-size:.88rem; margin:16px 0;}
+  .note.warn{background:#fffbeb; border:1px solid #fde68a; color:#92400e;}
+  .note b{font-weight:700;}
+
+  ol.steps{margin:0; padding-left:0; list-style:none; counter-reset:step;}
+  ol.steps > li{counter-increment:step; position:relative; padding:2px 0 18px 40px; font-size:.92rem; color:var(--yev-muted);}
+  ol.steps > li::before{
+    content:counter(step); position:absolute; left:0; top:0; width:26px; height:26px; border-radius:50%;
+    color:#fff; font-size:.78rem; font-weight:700; display:flex; align-items:center; justify-content:center;
+  }
+  ol.steps > li::after{content:""; position:absolute; left:13px; top:26px; bottom:0; width:1px; background:var(--yev-border);}
+  ol.steps > li:last-child::after{display:none;}
+  ol.steps b{color:var(--yev-text);}
+
+  .mockup-frame{margin:16px 0 8px; border:1px solid var(--yev-border); border-radius:var(--radius-xl); overflow:hidden; box-shadow:var(--shadow-md); background:#fff;}
+  .mockup-caption{font-size:.8rem; color:var(--slate-400); text-align:center; margin:6px 0 0;}
+
+  /* Lucide icons — khớp lucide-react trong FE */
+  .lc{display:inline-block; vertical-align:middle; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;}
+  .lc-16{width:16px; height:16px;}
+  .lc-18{width:18px; height:18px;}
+  .lc-32{width:32px; height:32px;}
+  .mk-tile .ic-box .lc{color:var(--yev-red);}
+  .mk-tile .ic-box svg{width:32px; height:32px; stroke:var(--yev-red);}
+  .mk-admin-btn2 .ico svg{width:16px; height:16px;}
+  .mk-admin-btn2.active .ico svg{stroke:var(--yev-red);}
+  .mk-pc-nav .ico svg{width:18px; height:18px;}
+  .mk-pc-nav .item.active .ico svg{stroke:var(--yev-red);}
+  .mk-btn-sm svg{width:16px; height:16px;}
+  .soon-card .ic svg{width:32px; height:32px; stroke:var(--slate-400);}
+
+  /* ===== Mockup components — mirror FE_Yev_Management/yev-frontend ===== */
+  .mk-header{background:var(--yev-bg-side); border-bottom:1px solid var(--yev-border); padding:0 20px; display:flex; align-items:center; justify-content:space-between; height:64px;}
+  .mk-brand{display:flex; align-items:center; gap:12px;}
+  .mk-logo-y{width:40px; height:40px; background:var(--yev-red); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.1rem; box-shadow:var(--shadow-sm);}
+  .mk-brand-name{font-size:.95rem; font-weight:600; color:var(--yev-text); line-height:1.2;}
+  .mk-brand-tag{font-size:.62rem; font-weight:600; text-transform:uppercase; letter-spacing:.2em; color:var(--yev-muted);}
+  .mk-header-right{display:flex; align-items:center; gap:10px;}
+  .mk-guest{font-size:.85rem; color:var(--yev-muted); font-weight:500;}
+  .mk-btn-sm{display:inline-flex; align-items:center; gap:6px; font-size:.78rem; font-weight:600; padding:8px 12px; border-radius:8px; border:1px solid var(--yev-border); background:#fff; color:var(--yev-muted);}
+  .mk-btn-sm.admin{color:var(--yev-red); background:#fff5f5; border-color:rgba(227,0,15,.15);}
+  .mk-user{display:flex; align-items:center; gap:10px; border-left:1px solid var(--yev-border); padding-left:10px;}
+  .mk-user .txt{text-align:right;}
+  .mk-user .name{font-size:.82rem; font-weight:600; color:var(--yev-text);}
+  .mk-user .login{font-size:.7rem; color:var(--yev-muted);}
+  .mk-avatar{width:40px; height:40px; border-radius:50%; background:var(--yev-text); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:.82rem;}
+
+  .mk-home{background:var(--yev-bg); padding:24px;}
+  .mk-hero{background:#fff; border:1px solid var(--yev-border); border-radius:var(--radius-2xl); padding:28px 24px; text-align:center; box-shadow:var(--shadow-sm); margin-bottom:20px;}
+  .mk-eyebrow{font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.2em; color:var(--yev-muted); margin:0;}
+  .mk-home h1{font-size:1.6rem; font-weight:600; color:var(--yev-text); margin:10px 0 8px;}
+  .mk-subtitle{font-size:.88rem; color:var(--yev-muted); margin:0;}
+  .mk-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px;}
+  @media (max-width:720px){ .mk-grid{grid-template-columns:repeat(2,1fr);} }
+  .mk-tile{background:#fff; border:1px solid var(--yev-border); border-radius:var(--radius-2xl); padding:22px; box-shadow:var(--shadow-sm); position:relative;}
+  .mk-tile .ic-box{width:48px; height:48px; border-radius:12px; background:var(--yev-accent); color:var(--yev-red); display:flex; align-items:center; justify-content:center; margin-bottom:14px;}
+  .mk-tile h4{margin:0 0 6px; font-size:.95rem; font-weight:600; color:var(--yev-text);}
+  .mk-tile p{margin:0; font-size:.78rem; color:var(--yev-muted);}
+  .mk-tile .soon{position:absolute; top:12px; right:12px; font-size:.6rem; font-weight:700; color:var(--yev-muted); background:var(--slate-100); border:1px solid var(--yev-border); padding:2px 7px; border-radius:999px;}
+
+  .mk-admin{display:flex; min-height:300px; background:var(--yev-bg);}
+  .mk-admin-side{width:220px; flex-shrink:0; background:#fff; border-right:1px solid var(--yev-border); padding:16px; box-shadow:var(--shadow-sm);}
+  .mk-admin-side .lbl{font-size:.68rem; font-weight:600; text-transform:uppercase; letter-spacing:.15em; color:var(--yev-muted); padding:0 8px 12px;}
+  .mk-admin-btn2{display:flex; align-items:center; gap:10px; width:100%; padding:12px 14px; border-radius:8px; font-size:.82rem; font-weight:500; color:var(--yev-muted); margin-bottom:4px; border:none; background:#fff; text-align:left;}
+  .mk-admin-btn2.active{background:var(--yev-accent); color:var(--yev-red); font-weight:600;}
+  .mk-admin-btn2.disabled{opacity:.5; cursor:not-allowed;}
+  .mk-admin-btn2 .ico{display:flex; align-items:center; flex-shrink:0;}
+  .mk-admin-main{flex:1; padding:24px; display:flex; align-items:center; justify-content:center;}
+  .mk-welcome{background:#fff; border:1px solid var(--yev-border); border-radius:var(--radius-xl); padding:32px; text-align:center; box-shadow:var(--shadow-sm); max-width:360px;}
+  .mk-welcome .welcome-ic{display:flex; justify-content:center; margin-bottom:10px; color:var(--yev-muted);}
+  .mk-welcome h4{margin:0 0 6px; font-size:1.2rem; font-weight:600; color:var(--yev-text);}
+  .mk-welcome p{margin:0; font-size:.82rem; color:var(--yev-muted);}
+
+  .mk-page-head{display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:14px;}
+  .mk-page-head h4{margin:0; font-size:1.2rem; font-weight:600; color:var(--yev-text);}
+  .mk-page-head .sub{margin:4px 0 0; font-size:.88rem; color:var(--yev-muted);}
+  .mk-toolbar{display:flex; gap:6px; flex-wrap:wrap;}
+  .mk-chip{font-size:.68rem; font-weight:600; padding:6px 10px; border-radius:6px; border:1px solid var(--yev-border); background:#fff; color:var(--yev-text);}
+  .mk-chip.red{background:var(--yev-red); color:#fff; border-color:var(--yev-red);}
+  .mk-chip.danger{color:var(--yev-red-dark); border-color:var(--yev-red-dark); background:#fff;}
+  .mk-stat-pill{font-size:.78rem; font-weight:600; padding:8px 14px; border-radius:8px; border:1px solid var(--yev-border); background:#fff; color:var(--yev-text);}
+
+  .mk-section{border:1px solid var(--yev-border); background:#fff; overflow:hidden;}
+  .mk-filter-bar{background:var(--yev-bg); border-bottom:1px solid var(--yev-border); padding:14px; font-size:.75rem; color:var(--yev-muted);}
+  .mk-table-meta{padding:12px 14px; border-bottom:1px solid var(--yev-border); font-size:.78rem; font-weight:500; color:var(--yev-muted); background:#fff;}
+  table.mk-table{width:100%; border-collapse:collapse; font-size:.78rem;}
+  table.mk-table thead th{text-align:left; background:var(--yev-bg); color:var(--yev-muted); font-size:.62rem; font-weight:600; text-transform:uppercase; letter-spacing:.15em; padding:10px 12px; border-bottom:1px solid var(--yev-border);}
+  table.mk-table td{padding:10px 12px; border-bottom:1px solid var(--yev-border); vertical-align:middle; color:var(--yev-text);}
+  table.mk-table tr.self{background:rgba(255,244,242,.4);}
+  .mk-name{font-weight:600; color:var(--yev-text);}
+  .mk-username{font-size:.72rem; color:var(--yev-muted);}
+  .mk-tag-you{font-size:.58rem; font-weight:700; letter-spacing:.05em; color:var(--yev-red-dark); background:var(--yev-accent); border:1px solid var(--yev-accent-border); padding:2px 7px; margin-left:6px;}
+  .mk-role-chip{display:inline-block; font-size:.68rem; font-weight:500; color:var(--yev-text); background:var(--yev-bg); border:1px solid var(--yev-border); padding:3px 8px; margin:2px 3px 2px 0;}
+  .mk-role-select{display:flex; justify-content:space-between; align-items:center; width:100%; padding:8px 10px; border:1px solid var(--yev-border); border-radius:8px; background:#fff; font-size:.78rem; color:var(--yev-text);}
+
+  .mk-btn{display:inline-flex; align-items:center; gap:6px; font-size:.75rem; font-weight:600; padding:7px 14px; border-radius:8px; border:1px solid transparent;}
+  .mk-btn.primary{background:var(--yev-red); color:#fff;}
+  .mk-btn.red{background:var(--yev-red-dark); color:#fff;}
+  .mk-btn.outline{background:#fff; color:var(--yev-text); border-color:var(--yev-border);}
+  .mk-btn.disabled{background:var(--slate-100); color:var(--slate-400); cursor:not-allowed;}
+
+  .mk-user-row{display:grid; grid-template-columns:1.4fr 1.2fr .8fr; gap:12px; padding:14px; border-bottom:1px solid var(--yev-border); align-items:center;}
+  .mk-user-row.self{background:rgba(255,244,242,.4);}
+  .mk-user-row-head{display:grid; grid-template-columns:1.4fr 1.2fr .8fr; gap:12px; padding:10px 14px; background:var(--yev-bg); border-bottom:1px solid var(--yev-border); font-size:.62rem; font-weight:600; text-transform:uppercase; letter-spacing:.2em; color:var(--yev-muted);}
+
+  .mk-pc{display:flex; min-height:320px; background:var(--yev-bg);}
+  .mk-pc-side{width:190px; flex-shrink:0; background:var(--yev-bg-side); border-right:1px solid var(--yev-border); padding:20px 0; display:flex; flex-direction:column;}
+  .mk-pc-brand{display:flex; align-items:center; gap:10px; padding:0 18px 16px;}
+  .mk-pc-brand .mk-logo-y{width:40px; height:40px; font-size:1rem;}
+  .mk-pc-brand .t1{font-size:.95rem; font-weight:600; color:var(--yev-text);}
+  .mk-pc-brand .t2{font-size:.58rem; font-weight:600; text-transform:uppercase; letter-spacing:.2em; color:var(--yev-muted);}
+  .mk-pc-nav .item{display:flex; align-items:center; gap:10px; padding:10px 18px; font-size:.78rem; font-weight:500; color:var(--yev-muted); border-left:4px solid transparent;}
+  .mk-pc-nav .item.active{border-left-color:var(--yev-red); background:var(--slate-100); color:var(--yev-text);}
+  .mk-pc-nav .item .ico{display:flex; align-items:center; flex-shrink:0;}
+  .mk-pc-nav .item.active .ico{color:var(--yev-red);}
+  .mk-pc-foot{margin-top:auto; border-top:1px solid var(--yev-border); padding:14px 18px 0;}
+  .mk-pc-foot-inner{display:flex; align-items:center; gap:10px; background:#fff; padding:10px;}
+  .mk-pc-foot .mini-logo{width:36px; height:36px; background:var(--yev-red); color:#fff; display:flex; align-items:center; justify-content:center; font-size:.72rem; font-weight:700;}
+  .mk-pc-main{flex:1; padding:20px;}
+  .mk-panel{padding:20px;}
+
+  .mk-kpi-row{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px;}
+  .mk-kpi{background:#fff; border:1px solid var(--yev-border); border-radius:var(--radius-xl); padding:14px; box-shadow:var(--shadow-sm);}
+  .mk-kpi .n{font-size:1.3rem; font-weight:600; color:var(--yev-text);}
+  .mk-kpi .l{font-size:.65rem; color:var(--yev-muted); margin-top:2px;}
+  .mk-tabs{display:flex; gap:2px; border-bottom:1px solid var(--yev-border); margin-bottom:12px;}
+  .mk-tab{padding:8px 14px; font-size:.75rem; font-weight:600; color:var(--yev-muted); border-bottom:2px solid transparent;}
+  .mk-tab.on{color:var(--yev-red); border-bottom-color:var(--yev-red);}
+  .mk-lang{display:inline-flex; gap:2px; border:1px solid var(--yev-border); border-radius:8px; padding:3px; background:#fff;}
+  .mk-lang span{padding:4px 10px; font-size:.68rem; font-weight:600; border-radius:6px; color:var(--yev-muted);}
+  .mk-lang .on{background:var(--yev-red); color:#fff;}
+
+  .mk-status{display:inline-block; font-size:.62rem; font-weight:600; padding:3px 8px; border-radius:999px; border:1px solid transparent;}
+  .mk-status.s1{background:var(--yev-red); color:#fff; border-color:var(--yev-red);}
+  .mk-status.s0{background:#eef2f6; color:#475569; border-color:#cbd5e1;}
+  .mk-status.inherit{background:var(--yev-bg); color:var(--yev-muted); border-color:var(--yev-border);}
+  .mk-status.grant{background:#dcfce7; color:#166534; border-color:#16a34a;}
+  .mk-status.deny{background:#fef3c7; color:#b45309; border-color:#f59e0b;}
+
+  .mk-perm-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:.78rem;}
+  .mk-perm-box{border:1px solid var(--yev-border); border-radius:10px; padding:12px; background:var(--yev-bg);}
+  .mk-perm-box h5{margin:0 0 6px; font-size:.82rem; color:var(--yev-text);}
+  .mk-perm-box ul{margin:0; padding-left:16px; color:var(--yev-muted);}
+
+  .mk-form{background:var(--yev-bg); border:1px solid var(--yev-border); border-radius:10px; padding:16px;}
+  .mk-field{margin-bottom:10px;}
+  .mk-field label{display:block; font-size:.74rem; font-weight:600; color:var(--yev-muted); margin-bottom:4px;}
+  .mk-input{width:100%; border:1px solid var(--yev-border); border-radius:8px; padding:8px 10px; font-size:.78rem; color:var(--yev-muted); background:#fff;}
+
+  .soon-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;}
+  .soon-card{background:#fff; border:1px dashed var(--yev-border); border-radius:var(--radius-xl); padding:18px; text-align:center; color:var(--yev-muted);}
+  .soon-card .ic{display:flex; justify-content:center; margin-bottom:8px; color:var(--slate-400);}
+  .soon-card h4{margin:0 0 4px; font-size:.9rem; color:var(--yev-text);}
+  .soon-card .tag{display:inline-block; margin-top:8px; font-size:.65rem; font-weight:700; color:#92400e; background:#fffbeb; border:1px solid #fde68a; padding:3px 9px; border-radius:999px;}
+
+  .faq{border:1px solid var(--yev-border); border-radius:12px; margin-bottom:10px; overflow:hidden; background:#fff;}
+  .faq summary{padding:14px 16px; font-weight:600; font-size:.9rem; cursor:pointer; color:var(--yev-text); list-style:none; display:flex; justify-content:space-between; align-items:center;}
+  .faq summary::-webkit-details-marker{display:none;}
+  .faq summary::after{content:"+"; font-size:1.2rem; color:var(--slate-400);}
+  .faq[open] summary::after{content:"–";}
+  .faq .a{padding:0 16px 16px; font-size:.85rem; color:var(--yev-muted);}
+
+  footer{border-top:1px solid var(--yev-border); padding:24px clamp(20px,4vw,64px); font-size:.78rem; color:var(--slate-400); text-align:center;}
+
+  @media (max-width:860px){
+    .sidebar{display:none;}
+    main{padding:28px 18px 80px;}
+    .mk-kpi-row{grid-template-columns:repeat(2,1fr);}
+    .mk-perm-grid{grid-template-columns:1fr;}
+    .mk-user-row,.mk-user-row-head{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <aside class="sidebar">
+    <div class="brand"><span class="yev-logo">Y</span><span>YEV Management Portal</span></div>
+    <div class="brand-sub">Hướng dẫn sử dụng hệ thống</div>
+    <nav class="toc">
+      <div class="section-label">Bắt đầu</div>
+      <a href="#gioi-thieu"><span class="icon">📘</span> Giới thiệu hệ thống</a>
+      <a href="#dang-nhap"><span class="icon">🔐</span> Đăng nhập vào hệ thống</a>
+      <a href="#phan-quyen-truy-cap"><span class="icon">🔒</span> Phân quyền truy cập</a>
+      <a href="#da-ngon-ngu"><span class="icon">🌐</span> Đa ngôn ngữ &amp; làm mới quyền</a>
+      <a href="#trang-chu"><span class="icon">🏠</span> Trang chủ</a>
+      <div class="section-label">Quản lý thiết bị</div>
+      <a href="#pc-tong-quan"><span class="icon">🖥️</span> Tổng quan module PC</a>
+      <a href="#pc-thiet-bi"><span class="icon">💻</span> Quản lý thiết bị</a>
+      <a href="#pc-chi-tiet"><span class="icon">📋</span> Chi tiết thiết bị</a>
+      <a href="#pc-bao-cao"><span class="icon">📊</span> Báo cáo thống kê</a>
+      <a href="#pc-ip"><span class="icon">🌐</span> Quản lý IP</a>
+      <a href="#pc-master-data"><span class="icon">🗂️</span> Danh mục dữ liệu</a>
+      <a href="#pc-cai-dat"><span class="icon">⚙️</span> Cài đặt hệ thống</a>
+      <div class="section-label">Khu vực quản trị</div>
+      <a href="#khu-vuc-admin"><span class="icon">🛠️</span> Khu vực Admin</a>
+      <a href="#gan-vai-tro"><span class="icon">👥</span> Gán vai trò người dùng</a>
+      <a href="#quan-ly-roles"><span class="icon">🔑</span> Quản lý Roles</a>
+      <a href="#phan-quyen-role"><span class="icon">🛡️</span> Phân quyền theo Role</a>
+      <a href="#phan-quyen-user"><span class="icon">🛡️</span> Phân quyền riêng User</a>
+      <div class="section-label">Khác</div>
+      <a href="#sap-ra-mat"><span class="icon">🚧</span> Tính năng sắp ra mắt</a>
+      <a href="#faq"><span class="icon">❓</span> Câu hỏi thường gặp</a>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="page-header">
+      <h1>Hướng dẫn sử dụng — YEV Management Portal</h1>
+      <p>Tài liệu hướng dẫn dành cho người dùng nội bộ — bao gồm đăng nhập, module Quản lý thiết bị, khu vực Admin Identity và cơ chế phân quyền theo permission.</p>
+      <span class="badge-date">🗓️ Cập nhật lần cuối: 14/07/2026</span>
+    </div>
+
+    <!-- 1. GIỚI THIỆU -->
+    <section id="gioi-thieu">
+      <h2>📘 Giới thiệu hệ thống</h2>
+      <p class="lead">Tổng quan về YEV Management Portal và các nhóm chức năng chính.</p>
+      <div class="card">
+        <p style="margin:0 0 12px;"><b>YEV Management Portal</b> là cổng quản lý nội bộ tập trung hoá các hoạt động vận hành của công ty. Hiện tại hệ thống có <b>2 module chính đã sẵn sàng sử dụng</b>:</p>
+        <ul style="margin:0 0 12px; padding-left:20px; font-size:.92rem; color:var(--slate-700);">
+          <li><b>Quản lý thiết bị (Asset/PC)</b> — kiểm kê máy tính, IP, phần mềm, báo cáo thống kê, xuất PDF.</li>
+          <li><b>Quản trị Identity (Admin)</b> — quản lý user, role, phân quyền chi tiết theo từng hành động.</li>
+        </ul>
+        <p style="margin:0;">Người dùng truy cập bằng tài khoản mạng công ty (Windows SSO). Quyền truy cập được kiểm soát theo <b>permission</b> (không chỉ dựa vào tên role "Admin").</p>
+      </div>
+    </section>
+
+    <!-- 2. DANG NHAP -->
+    <section id="dang-nhap">
+      <h2>🔐 Đăng nhập vào hệ thống</h2>
+      <p class="lead">Hệ thống dùng cơ chế <b>đăng nhập một lần qua mạng công ty (Windows SSO)</b> — bạn không cần nhập tên đăng nhập/mật khẩu thủ công.</p>
+
+      <div class="note">
+        <span>ℹ️</span>
+        <span>Khi bạn mở trang web trong mạng nội bộ công ty (đã đăng nhập Windows bằng tài khoản domain), hệ thống sẽ <b>tự động nhận diện và đăng nhập</b> cho bạn ngay khi tải trang — không có màn hình nhập mật khẩu riêng.</span>
+      </div>
+
+      <h3 class="step-title">Trạng thái "Chưa đăng nhập"</h3>
+      <p style="font-size:.88rem; color:var(--slate-600); margin:0 0 4px;">Nếu đăng nhập Windows chưa thành công hoặc trình duyệt chưa xác thực được, góc phải thanh header sẽ hiện dòng chữ <b>"Chưa đăng nhập"</b>:</p>
+      <div class="mockup-frame">
+        <div class="mk-header">
+          <div class="mk-brand">
+            <div class="mk-logo-y">Y</div>
+            <div><div class="mk-brand-name">YEV Management</div><div class="mk-brand-tag">Asset Management Suite</div></div>
+          </div>
+          <div class="mk-header-right"><span class="mk-guest">Chưa đăng nhập</span></div>
+        </div>
+      </div>
+      <p class="mockup-caption">Thanh header khi hệ thống chưa xác thực được người dùng</p>
+
+      <h3 class="step-title">Trạng thái đã đăng nhập</h3>
+      <p style="font-size:.88rem; color:var(--slate-600); margin:0 0 4px;">Sau khi xác thực thành công, header hiển thị họ tên, tên đăng nhập, avatar, nút <b>đổi ngôn ngữ (VI/JA)</b>, nút <b>"Làm mới quyền"</b> và (nếu có permission quản trị) link <b>"Admin"</b>:</p>
+      <div class="mockup-frame">
+        <div class="mk-header">
+          <div class="mk-brand">
+            <div class="mk-logo-y">Y</div>
+            <div><div class="mk-brand-name">YEV Management</div><div class="mk-brand-tag">Asset Management Suite</div></div>
+          </div>
+          <div class="mk-header-right">
+            <span class="mk-lang"><span class="on">VI</span><span>JA</span></span>
+            <span class="mk-btn-sm"><i data-lucide="refresh-cw" class="lc lc-16"></i> Làm mới quyền</span>
+            <span class="mk-btn-sm admin"><i data-lucide="settings" class="lc lc-16"></i> Admin</span>
+            <div class="mk-user">
+              <div class="txt"><div class="name">Nguyễn Văn A</div><div class="login">nguyenvana</div></div>
+              <div class="mk-avatar">N</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="mockup-caption">Thanh header khi đã đăng nhập — nút Admin chỉ hiện khi có ít nhất 1 permission Identity quản trị</p>
+
+      <div class="note">
+        <span>ℹ️</span>
+        <span>Lần đầu đăng nhập Windows, hệ thống <b>tự tạo user mới</b> với role <b>Basic</b>. Muốn truy cập module PC hoặc Admin, cần được quản trị viên gán role/permission phù hợp.</span>
+      </div>
+    </section>
+
+    <!-- PHAN QUYEN TRUY CAP -->
+    <section id="phan-quyen-truy-cap">
+      <h2>🔒 Phân quyền truy cập</h2>
+      <p class="lead">Hệ thống kiểm soát quyền theo <b>permission</b> (mã quyền), không dựa vào role "Admin" cứng. UI ẩn/hiện menu theo permission; backend vẫn enforce 403 nếu gọi API không đủ quyền.</p>
+
+      <div class="card">
+        <div class="mk-perm-grid">
+          <div class="mk-perm-box">
+            <h5>🏠 Tile "Quản lý thiết bị" (trang chủ)</h5>
+            <ul>
+              <li>Cần ít nhất 1 permission bắt đầu bằng <code>Asset.</code></li>
+              <li>Ví dụ: <code>Asset.Device.View</code></li>
+              <li>Gõ thẳng URL <code>/pc</code> cũng bị chặn nếu không có quyền</li>
+            </ul>
+          </div>
+          <div class="mk-perm-box">
+            <h5>⚙ Link "Admin" (header)</h5>
+            <ul>
+              <li>Cần ít nhất 1 trong các permission:</li>
+              <li><code>Identity.User.View</code></li>
+              <li><code>Identity.User.UpdateRoles</code></li>
+              <li><code>Identity.Role.View</code></li>
+              <li><code>Identity.Permission.View</code></li>
+            </ul>
+          </div>
+          <div class="mk-perm-box">
+            <h5>👥 Gán vai trò người dùng</h5>
+            <ul>
+              <li>Xem danh sách: <code>Identity.User.View</code></li>
+              <li>Cập nhật role: <code>Identity.User.UpdateRoles</code></li>
+              <li>Tạo user: <code>Identity.User.Create</code></li>
+              <li>Xóa user: <code>Identity.User.Delete</code></li>
+            </ul>
+          </div>
+          <div class="mk-perm-box">
+            <h5>🛡 Phân quyền chi tiết</h5>
+            <ul>
+              <li>Quản lý Roles: <code>Identity.Role.View</code></li>
+              <li>Phân quyền Role/User: <code>Identity.Permission.View</code></li>
+              <li>Lưu override User: <code>Identity.User.UpdatePermissions</code></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="note warn">
+        <span>⚠️</span>
+        <span>Permission trên API <b>tự cập nhật ngay</b> sau khi Admin đổi quyền Role. Tuy nhiên menu/nút trên giao diện có thể cần bấm <a href="#da-ngon-ngu">Làm mới quyền</a> để cập nhật hiển thị mà không cần đóng tab.</span>
+      </div>
+    </section>
+
+    <!-- DA NGON NGU -->
+    <section id="da-ngon-ngu">
+      <h2>🌐 Đa ngôn ngữ &amp; làm mới quyền</h2>
+      <p class="lead">Hệ thống hỗ trợ <b>Tiếng Việt (VI)</b> và <b>Tiếng Nhật (JA)</b>. Locale mặc định VI không có tiền tố URL; JA dùng tiền tố <code>/ja/</code>.</p>
+
+      <h3 class="step-title">Đổi ngôn ngữ</h3>
+      <ol class="steps">
+        <li>Ở góc phải header, nhấn nút <b>VI</b> hoặc <b>JA</b> trong khối chọn ngôn ngữ.</li>
+        <li>Hệ thống chuyển locale <b>không reload trang</b> — giữ nguyên màn hình và dữ liệu form đang nhập.</li>
+        <li>Phần UI tĩnh (header, trang chủ, sidebar PC) đã được dịch. Nội dung bảng/form module PC và Admin vẫn hiển thị tiếng Việt.</li>
+      </ol>
+
+      <div class="mockup-frame" style="padding:20px; text-align:center;">
+        <span class="mk-lang"><span class="on">VI</span><span>JA</span></span>
+        <p class="mockup-caption" style="margin-top:10px;">Language Switcher trên header</p>
+      </div>
+
+      <h3 class="step-title">Làm mới quyền</h3>
+      <ol class="steps">
+        <li>Sau khi Admin vừa cấp/thu hồi quyền cho role của bạn, nhấn nút <b>"↻ Làm mới quyền"</b> trên header.</li>
+        <li>Hệ thống xóa token cũ và đăng nhập Windows lại để lấy danh sách permission mới.</li>
+        <li>Menu/tile ẩn hiện theo quyền mới — ví dụ thấy tile "Quản lý thiết bị" hoặc link Admin.</li>
+      </ol>
+    </section>
+
+    <!-- 3. TRANG CHU -->
+    <section id="trang-chu">
+      <h2>🏠 Trang chủ</h2>
+      <p class="lead">Sau khi đăng nhập, trang chủ hiển thị các nhóm chức năng của hệ thống dưới dạng thẻ (card).</p>
+
+      <div class="mockup-frame">
+        <div class="mk-home">
+          <div class="mk-hero">
+            <p class="mk-eyebrow">Hệ thống quản lý</p>
+            <h1>Chào mừng đến Hệ thống</h1>
+            <p class="mk-subtitle">Chọn một mục bên dưới để bắt đầu quản lý các hoạt động của hệ thống theo phong cách quản lý thiết bị hiện tại.</p>
+          </div>
+          <div class="mk-grid">
+            <div class="mk-tile"><div class="ic-box"><i data-lucide="cpu" class="lc lc-32"></i></div><h4>Quản lý thiết bị</h4><p>Theo dõi, kiểm kê tài sản</p></div>
+            <div class="mk-tile"><span class="soon">Sắp ra mắt</span><div class="ic-box"><i data-lucide="file-text" class="lc lc-32"></i></div><h4>Quản lý hợp đồng</h4><p>Soạn thảo và lưu trữ hồ sơ</p></div>
+            <div class="mk-tile"><span class="soon">Sắp ra mắt</span><div class="ic-box"><i data-lucide="notebook" class="lc lc-32"></i></div><h4>Quản lý tăng ca</h4><p>Đăng ký hoặc phê duyệt tăng ca</p></div>
+            <div class="mk-tile"><span class="soon">Sắp ra mắt</span><div class="ic-box"><i data-lucide="bar-chart-3" class="lc lc-32"></i></div><h4>Báo cáo thống kê</h4><p>Xem số liệu tổng quan</p></div>
+          </div>
+        </div>
+      </div>
+      <p class="mockup-caption">Trang chủ — tile "Quản lý thiết bị" chỉ hiện khi user có permission module Asset</p>
+
+      <div class="note">
+        <span>ℹ️</span>
+        <span>Tile <b>"Quản lý thiết bị"</b> dẫn tới <code>/pc</code> và đã sẵn sàng sử dụng. Ba tile còn lại (Hợp đồng, Tăng ca, Báo cáo tổng) vẫn đang phát triển. <b>Báo cáo thiết bị</b> nằm trong module PC tại <code>/pc/reports</code>.</span>
+      </div>
+    </section>
+
+    <!-- PC TONG QUAN -->
+    <section id="pc-tong-quan">
+      <h2>🖥️ Tổng quan module Quản lý thiết bị</h2>
+      <p class="lead">Module PC (route <code>/pc</code>) dùng để quản lý tài sản CNTT: thiết bị, IP, phần mềm, danh mục và báo cáo. Truy cập từ tile trang chủ hoặc URL trực tiếp (cần permission <code>Asset.*</code>).</p>
+
+      <div class="mockup-frame">
+        <div class="mk-pc">
+          <div class="mk-pc-side">
+            <div class="mk-pc-brand">
+              <div class="mk-logo-y">Y</div>
+              <div><div class="t1">YEV IT</div><div class="t2">Quản lý PC</div></div>
+            </div>
+            <nav class="mk-pc-nav">
+              <div class="item active"><span class="ico"><i data-lucide="computer" class="lc lc-18"></i></span> Quản lý Thiết bị</div>
+              <div class="item"><span class="ico"><i data-lucide="flag" class="lc lc-18"></i></span> Báo cáo thống kê</div>
+              <div class="item"><span class="ico"><i data-lucide="monitor" class="lc lc-18"></i></span> Quản lý IP</div>
+              <div class="item"><span class="ico"><i data-lucide="hard-drive" class="lc lc-18"></i></span> Quản lý loại thiết bị</div>
+              <div class="item"><span class="ico"><i data-lucide="building-2" class="lc lc-18"></i></span> Quản lý chi nhánh</div>
+              <div class="item"><span class="ico"><i data-lucide="layers" class="lc lc-18"></i></span> Quản lý nhóm</div>
+              <div class="item"><span class="ico"><i data-lucide="users" class="lc lc-18"></i></span> Quản lý bộ phận</div>
+              <div class="item"><span class="ico"><i data-lucide="shield-check" class="lc lc-18"></i></span> Quản lý phần mềm</div>
+              <div class="item"><span class="ico"><i data-lucide="package" class="lc lc-18"></i></span> Quản lý nhà cung cấp</div>
+              <div class="item"><span class="ico"><i data-lucide="settings" class="lc lc-18"></i></span> Cài đặt hệ thống</div>
+            </nav>
+            <div class="mk-pc-foot">
+              <div class="mk-pc-foot-inner">
+                <div class="mini-logo">QT</div>
+                <div><div class="mk-name" style="font-size:.78rem;">Quản trị viên</div><div class="mk-username">Phòng IT</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="mk-pc-main">
+            <div class="mk-page-head"><div><h4>Quản lý Thiết bị</h4><p class="sub">Quản lý và theo dõi thiết bị phần cứng qua các văn phòng.</p></div></div>
+            <p style="margin:0; font-size:.78rem; color:var(--yev-muted);">Sidebar cố định bên trái · header thu hẹp bên phải khi ở <code>/pc/*</code></p>
+          </div>
+        </div>
+      </div>
+      <p class="mockup-caption">Layout module Quản lý thiết bị</p>
+    </section>
+
+    <!-- PC THIET BI -->
+    <section id="pc-thiet-bi">
+      <h2>💻 Quản lý thiết bị</h2>
+      <p class="lead">Trang chính <code>/pc</code> — danh sách thiết bị với lọc, phân trang, CRUD, import Excel, đồng bộ Tanium, chuyển máy và in nhãn.</p>
+
+      <ol class="steps">
+        <li>Từ trang chủ, nhấn tile <b>"Quản lý thiết bị"</b> hoặc truy cập <code>/pc</code>.</li>
+        <li>Dùng thanh lọc để tìm theo mã thiết bị, người quản lý, IP, email, NCC, ngày mua, serial, USB, nhóm, bộ phận, chi nhánh, loại, trạng thái, ngày hết hạn.</li>
+        <li>Nhấn <b>"Thêm mới"</b> để tạo thiết bị, hoặc menu hành động trên từng dòng để <b>Sửa / Xóa / Chuyển máy</b>.</li>
+        <li>Tick chọn nhiều dòng → <b>Xóa hàng loạt</b> hoặc <b>In nhãn</b> mã thiết bị.</li>
+        <li>Dùng <b>Import Excel</b> để nhập hàng loạt; <b>Đồng bộ Tanium</b> để import cấu hình phần cứng.</li>
+        <li>Nhấn mã thiết bị hoặc <b>"Xem chi tiết"</b> để vào trang chi tiết.</li>
+      </ol>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <div class="mk-page-head">
+            <div><h4>Quản lý Thiết bị</h4><p class="sub">Quản lý và theo dõi thiết bị phần cứng qua các văn phòng.</p></div>
+            <div class="mk-toolbar">
+              <span class="mk-chip">Xem báo cáo</span>
+              <span class="mk-chip">↻ Đồng bộ từ Tanium</span>
+              <span class="mk-chip">⤴ Nhập từ Excel</span>
+              <span class="mk-chip red">+ Thêm mới</span>
+            </div>
+          </div>
+          <div class="mk-section">
+            <div class="mk-filter-bar">DeviceFilterBar — mã TB · người quản lý · IP · email · chi nhánh · trạng thái...</div>
+            <div class="mk-table-meta">Hiển thị 50 bản ghi (trang 1/5, tổng 248)</div>
+            <table class="mk-table">
+              <thead><tr><th>☑</th><th>Thiết bị</th><th>Loại / NCC</th><th>Chi nhánh</th><th>Trạng thái</th><th></th></tr></thead>
+              <tbody>
+                <tr><td>☑</td><td class="mk-name">PC-HN-001</td><td>Laptop · Dell</td><td>Hà Nội</td><td><span class="mk-status s1">Đang sử dụng</span></td><td>⋮</td></tr>
+                <tr><td></td><td class="mk-name">PC-HN-002</td><td>Desktop · HP</td><td>Hà Nội</td><td><span class="mk-status s0">Chưa sử dụng</span></td><td>⋮</td></tr>
+                <tr><td></td><td class="mk-name">PC-DN-015</td><td>Laptop · Lenovo</td><td>Đà Nẵng</td><td><span class="mk-status s2">Chờ thanh lý</span></td><td>⋮</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <p class="mockup-caption">Bảng danh sách thiết bị với lọc và thao tác hàng loạt</p>
+
+      <div class="note">
+        <span>ℹ️</span>
+        <span><b>Trạng thái thiết bị:</b> Chưa sử dụng · Đang sử dụng · Chờ thanh lý · Đã thanh lý · Thuê ngoài. Hệ thống có thể tự chuyển sang "Chờ thanh lý" sau ngày hết hạn (cấu hình tại <a href="#pc-cai-dat">Cài đặt hệ thống</a>).</span>
+      </div>
+    </section>
+
+    <!-- PC CHI TIET -->
+    <section id="pc-chi-tiet">
+      <h2>📋 Chi tiết thiết bị</h2>
+      <p class="lead">Trang <code>/pc/devices/[id]</code> hiển thị thông tin đầy đủ và 3 tab: Cấu hình phần cứng, Phần mềm, Lịch sử chuyển máy.</p>
+
+      <ol class="steps">
+        <li>Từ danh sách thiết bị, mở thiết bị cần xem.</li>
+        <li>Tab <b>Cấu hình phần cứng</b>: CPU, RAM, HDD, VGA, OS, phụ kiện và lịch sử thay đổi cấu hình.</li>
+        <li>Tab <b>Phần mềm</b>: gán phần mềm, license key, ngày cài đặt; lọc/sắp theo ưu tiên.</li>
+        <li>Tab <b>Lịch sử chuyển máy</b>: xem các lần chuyển giao thiết bị.</li>
+        <li>Dùng nút <b>Sửa</b>, <b>Chuyển máy</b> hoặc <b>Làm mới</b> ở đầu trang khi cần.</li>
+      </ol>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <div class="mk-page-head"><div><h4>PC-HN-001 — Laptop Dell</h4><p class="sub">Hà Nội · Đang sử dụng · Hết hạn 31/12/2026</p></div></div>
+          <div class="mk-tabs"><span class="mk-tab on">Cấu hình phần cứng</span><span class="mk-tab">Phần mềm</span><span class="mk-tab">Lịch sử chuyển máy</span></div>
+          <table class="mk-table">
+            <thead><tr><th>Thành phần</th><th>Giá trị</th><th>Cập nhật</th></tr></thead>
+            <tbody>
+              <tr><td>CPU</td><td>Intel Core i7-1265U</td><td>01/03/2026</td></tr>
+              <tr><td>RAM</td><td>16 GB</td><td>01/03/2026</td></tr>
+              <tr><td>OS</td><td>Windows 11 Pro</td><td>15/01/2026</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="mockup-caption">Trang chi tiết thiết bị — tab Cấu hình phần cứng</p>
+    </section>
+
+    <!-- PC BAO CAO -->
+    <section id="pc-bao-cao">
+      <h2>📊 Báo cáo thống kê (module PC)</h2>
+      <p class="lead">Trang <code>/pc/reports</code> — dashboard KPI, biểu đồ phân bổ và danh sách thiết bị sắp/đã hết hạn. Có thể xuất PDF.</p>
+
+      <ol class="steps">
+        <li>Trong sidebar PC, chọn <b>"Báo cáo thống kê"</b>.</li>
+        <li>Xem 4 KPI: Tổng thiết bị, Đang sử dụng, Chưa sử dụng, Sắp hết hạn (≤90 ngày).</li>
+        <li>Xem biểu đồ phân bổ theo trạng thái, chi nhánh (top 6), loại thiết bị (top 6).</li>
+        <li>Cuộn xuống bảng thiết bị sắp/đã hết hạn — nhấn mã để mở chi tiết.</li>
+        <li>Nhấn <b>"Xuất PDF"</b> để in báo cáo danh sách thiết bị.</li>
+      </ol>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <h4 style="margin:0 0 12px;">Báo cáo thống kê thiết bị</h4>
+          <div class="mk-kpi-row">
+            <div class="mk-kpi"><div class="n">248</div><div class="l">Tổng TB</div></div>
+            <div class="mk-kpi"><div class="n">198</div><div class="l">Đang dùng</div></div>
+            <div class="mk-kpi"><div class="n">32</div><div class="l">Chưa dùng</div></div>
+            <div class="mk-kpi"><div class="n">12</div><div class="l">Sắp hết hạn</div></div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div class="mk-perm-box"><h5>Theo trạng thái</h5><p style="margin:0; font-size:.72rem; color:var(--slate-500);">Đang sử dụng ████████ 80%</p></div>
+            <div class="mk-perm-box"><h5>Theo chi nhánh</h5><p style="margin:0; font-size:.72rem; color:var(--slate-500);">Hà Nội ██████ 45%</p></div>
+          </div>
+          <div style="margin-top:12px; text-align:right;"><span class="mk-btn primary">📄 Xuất PDF</span></div>
+        </div>
+      </div>
+      <p class="mockup-caption">Dashboard báo cáo thiết bị — khác với tile "Báo cáo thống kê" trên trang chủ (chưa triển khai)</p>
+    </section>
+
+    <!-- PC IP -->
+    <section id="pc-ip">
+      <h2>🌐 Quản lý IP</h2>
+      <p class="lead">Trang <code>/pc/ips</code> gồm 2 tab: quản lý địa chỉ IP và dải mạng (prefix).</p>
+
+      <h3 class="step-title">Tab "Địa chỉ IP"</h3>
+      <ol class="steps">
+        <li>Xem danh sách IP đã sinh tự động từ dải mạng.</li>
+        <li>Tìm kiếm, lọc theo trạng thái (Trống / Đang dùng / Đặt trước...).</li>
+        <li>Chỉ được <b>sửa trạng thái và ghi chú</b> — không tạo/xóa IP thủ công.</li>
+      </ol>
+
+      <h3 class="step-title">Tab "Dải mạng (Prefix)"</h3>
+      <ol class="steps">
+        <li>Nhấn <b>"+ Thêm dải mạng"</b> để tạo prefix mới (gắn chi nhánh, subnet...).</li>
+        <li>Hệ thống tự sinh hàng loạt địa chỉ IP thuộc dải.</li>
+        <li>Xóa prefix sẽ <b>cascade xóa</b> toàn bộ IP trong dải — cần xác nhận cẩn thận.</li>
+      </ol>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <h4 style="margin:0 0 8px;">Quản lý IP</h4>
+          <div class="mk-tabs"><span class="mk-tab on">Địa chỉ IP</span><span class="mk-tab">Dải mạng (Prefix)</span></div>
+          <table class="mk-table">
+            <thead><tr><th>Địa chỉ</th><th>Chi nhánh</th><th>Trạng thái</th><th>Thiết bị</th></tr></thead>
+            <tbody>
+              <tr><td>10.1.10.15</td><td>Hà Nội</td><td><span class="mk-status s1">Đang dùng</span></td><td>PC-HN-001</td></tr>
+              <tr><td>10.1.10.16</td><td>Hà Nội</td><td><span class="mk-status s0">Trống</span></td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="mockup-caption">Quản lý IP — 2 tab Địa chỉ IP và Dải mạng</p>
+    </section>
+
+    <!-- PC MASTER DATA -->
+    <section id="pc-master-data">
+      <h2>🗂️ Danh mục dữ liệu (master data)</h2>
+      <p class="lead">Các trang danh mục dùng chung cho module PC — thao tác CRUD cơ bản: tìm kiếm, phân trang, thêm/sửa/xóa.</p>
+
+      <table class="mk-table" style="margin:16px 0; background:#fff; border:1px solid var(--slate-200); border-radius:12px; overflow:hidden;">
+        <thead><tr><th>Menu sidebar</th><th>Route</th><th>Chức năng</th></tr></thead>
+        <tbody>
+          <tr><td class="mk-name">Quản lý loại thiết bị</td><td><code>/pc/device-types</code></td><td>CRUD loại thiết bị (Laptop, Desktop...)</td></tr>
+          <tr><td class="mk-name">Quản lý chi nhánh</td><td><code>/pc/branches</code></td><td>CRUD chi nhánh, IP prefix</td></tr>
+          <tr><td class="mk-name">Quản lý nhóm</td><td><code>/pc/device-groups</code></td><td>CRUD nhóm thiết bị (mã + tên)</td></tr>
+          <tr><td class="mk-name">Quản lý bộ phận</td><td><code>/pc/device-departments</code></td><td>CRUD bộ phận sử dụng (mã + tên)</td></tr>
+          <tr><td class="mk-name">Quản lý phần mềm</td><td><code>/pc/softwares</code></td><td>2 tab: Phần mềm + Nhóm phần mềm — CRUD đầy đủ</td></tr>
+          <tr><td class="mk-name">Quản lý nhà cung cấp</td><td><code>/pc/suppliers</code></td><td>CRUD nhà cung cấp (mã + tên)</td></tr>
+        </tbody>
+      </table>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <div class="mk-page-head"><h4>Quản lý chi nhánh</h4><span class="mk-chip red">+ Thêm mới</span></div>
+          <div class="mk-section">
+            <div class="mk-filter-bar">🔍 Tìm kiếm...</div>
+          <table class="mk-table">
+            <thead><tr><th>Mã</th><th>Tên chi nhánh</th><th>Hành động</th></tr></thead>
+            <tbody>
+              <tr><td>HN</td><td>Hà Nội</td><td><span class="mk-btn outline">Sửa</span> <span class="mk-btn red">Xoá</span></td></tr>
+              <tr><td>DN</td><td>Đà Nẵng</td><td><span class="mk-btn outline">Sửa</span> <span class="mk-btn red">Xoá</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="mockup-caption">Ví dụ trang danh mục — Quản lý chi nhánh (các trang master data khác có layout tương tự)</p>
+    </section>
+
+    <!-- PC CAI DAT -->
+    <section id="pc-cai-dat">
+      <h2>⚙️ Cài đặt hệ thống (module PC)</h2>
+      <p class="lead">Trang <code>/pc/settings</code> — cấu hình quy tắc tự động chuyển trạng thái thiết bị sau ngày hết hạn.</p>
+
+      <ol class="steps">
+        <li>Trong sidebar PC, chọn <b>"Cài đặt hệ thống"</b>.</li>
+        <li>Nhập <b>số tháng sau ngày hết hạn</b> để hệ thống tự chuyển thiết bị sang trạng thái <b>"Chờ thanh lý"</b>.</li>
+        <li>Nhấn <b>"Lưu"</b> để áp dụng cấu hình.</li>
+      </ol>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <h4 style="margin:0 0 12px;">Cài đặt Asset</h4>
+          <div class="mk-form">
+            <div class="mk-field"><label>Số tháng sau ngày hết hạn → Chờ thanh lý</label><div class="mk-input">3</div></div>
+            <div style="text-align:right;"><span class="mk-btn primary">Lưu</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="mockup-caption">Panel cài đặt module Quản lý thiết bị</p>
+    </section>
+
+    <!-- 4. KHU VUC ADMIN -->
+    <section id="khu-vuc-admin">
+      <h2>🛠️ Khu vực Admin</h2>
+      <p class="lead">Khu vực quản trị Identity tại <code>/admin</code> — quản lý user, role và phân quyền chi tiết. Menu hiển thị theo <b>permission</b>, không phụ thuộc cứng vào role "Admin".</p>
+
+      <div class="note">
+        <span>🔒</span>
+        <span><b>Điều kiện truy cập:</b> nhìn thấy link <b>"Admin"</b> trên header khi có ít nhất 1 permission Identity quản trị. Vào <code>/admin</code> mà không có quyền nào → hiện thông báo <i>"Tài khoản của bạn chưa được cấp quyền quản trị nào."</i></span>
+      </div>
+
+      <ol class="steps">
+        <li>Đăng nhập bằng tài khoản đã được cấp permission quản trị.</li>
+        <li>Nhấn link <b>"Admin"</b> trên header.</li>
+        <li>Chọn mục sidebar tương ứng nhu cầu (mỗi mục cần permission riêng — xem <a href="#phan-quyen-truy-cap">Phân quyền truy cập</a>).</li>
+      </ol>
+
+      <div class="mockup-frame">
+        <div class="mk-admin">
+          <div class="mk-admin-side">
+            <div class="lbl">Quản trị hệ thống</div>
+            <div class="mk-admin-btn2 active"><span class="ico"><i data-lucide="users" class="lc lc-16"></i></span> Gán vai trò người dùng</div>
+            <div class="mk-admin-btn2"><span class="ico"><i data-lucide="key" class="lc lc-16"></i></span> Quản lý Roles</div>
+            <div class="mk-admin-btn2"><span class="ico"><i data-lucide="shield" class="lc lc-16"></i></span> Phân quyền theo Role</div>
+            <div class="mk-admin-btn2"><span class="ico"><i data-lucide="shield-check" class="lc lc-16"></i></span> Phân quyền riêng theo User</div>
+            <div class="mk-admin-btn2 disabled"><span class="ico"><i data-lucide="bar-chart-3" class="lc lc-16"></i></span> Báo cáo số liệu</div>
+            <div class="mk-admin-btn2 disabled"><span class="ico"><i data-lucide="settings" class="lc lc-16"></i></span> Cài đặt chung</div>
+          </div>
+          <div class="mk-admin-main">
+            <div class="mk-welcome">
+              <div class="welcome-ic"><span style="font-size:2.8rem;">👋</span></div>
+              <h4>Xin chào Quản trị viên!</h4>
+              <p>Bạn đang ở trong khu vực điều khiển hệ thống YEV.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="mockup-caption">Khu vực Admin — 4 mục đang hoạt động, 2 mục khoá (đang phát triển)</p>
+    </section>
+
+    <!-- GAN VAI TRO -->
+    <section id="gan-vai-tro">
+      <h2>👥 Gán vai trò người dùng</h2>
+      <p class="lead">Gán/thu hồi role cho từng user, tạo user mới trước khi đăng nhập Windows lần đầu, hoặc xóa user. Cần permission <code>Identity.User.View</code>.</p>
+
+      <ol class="steps">
+        <li>Trong Admin, chọn <b>"Gán vai trò người dùng"</b>.</li>
+        <li>(Tuỳ chọn) Tìm theo tên đăng nhập hoặc họ tên.</li>
+        <li>Nhấn ô vai trò → popup <b>"Chọn vai trò"</b> → tick/bỏ tick → <b>Đóng</b>.</li>
+        <li>Nhấn <b>"Cập nhật"</b> trên dòng user (cần <code>Identity.User.UpdateRoles</code>).</li>
+        <li><b>Tạo user mới</b> (nút trên bảng, cần <code>Identity.User.Create</code>): nhập username Windows + gán role trước khi user login lần đầu.</li>
+        <li><b>Xóa user</b> (cần <code>Identity.User.Delete</code>) — xác nhận trong hộp thoại.</li>
+      </ol>
+
+      <div class="note warn">
+        <span>⚠️</span>
+        <span>Bạn <b>không thể tự sửa role của chính mình</b> — dòng có nhãn <b>"Bạn"</b> bị khoá, tránh tự thu hồi quyền quản trị.</span>
+      </div>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <div class="mk-page-head">
+            <div><h4>Phân quyền người dùng</h4><p class="sub">Cập nhật vai trò cho từng tài khoản hệ thống.</p></div>
+            <div class="mk-toolbar">
+              <span class="mk-stat-pill">Tổng user: 18</span>
+              <span class="mk-stat-pill">Tổng roles: 4</span>
+              <span class="mk-chip red">+ Tạo user</span>
+            </div>
+          </div>
+          <div class="mk-section">
+            <div class="mk-filter-bar">🔍 Tìm tài khoản hoặc tên... · Hiển thị 18 bản ghi</div>
+            <div class="mk-user-row-head"><div>Người dùng</div><div>Vai trò</div><div style="text-align:right;">Thao tác</div></div>
+            <div class="mk-user-row">
+              <div><div class="mk-name">Trần Thị B</div><div class="mk-username">tranthib</div></div>
+              <div><div class="mk-role-select"><span class="mk-role-chip">Quản lý Thiết bị</span> ▾</div></div>
+              <div style="text-align:right;"><span class="mk-btn primary">Cập nhật</span> <span class="mk-btn red">Xoá</span></div>
+            </div>
+            <div class="mk-user-row self">
+              <div><div class="mk-name">Nguyễn Văn A<span class="mk-tag-you">BẠN</span></div><div class="mk-username">nguyenvana</div></div>
+              <div><div class="mk-role-select" style="opacity:.6;"><span class="mk-role-chip">Admin</span> ▾</div></div>
+              <div style="text-align:right;"><span class="mk-btn disabled">Cập nhật</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="mockup-caption">Bảng gán vai trò — hỗ trợ tạo/xóa user</p>
+    </section>
+
+    <!-- QUAN LY ROLES -->
+    <section id="quan-ly-roles">
+      <h2>🔑 Quản lý Roles</h2>
+      <p class="lead">CRUD vai trò (role) dùng để nhóm permission. Cần <code>Identity.Role.View</code> để xem; tạo/sửa/xóa cần permission tương ứng.</p>
+
+      <h3 class="step-title">Tạo Role mới</h3>
+      <ol class="steps">
+        <li>Chọn <b>"Quản lý Roles"</b> trong sidebar Admin.</li>
+        <li>Nhấn <b>"Tạo Role"</b> → nhập Tên quyền và Mô tả (tuỳ chọn).</li>
+        <li>Nhấn <b>"Tạo quyền"</b> để lưu.</li>
+        <li>Sau khi tạo role, vào <a href="#phan-quyen-role">Phân quyền theo Role</a> để gán permission cụ thể.</li>
+      </ol>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <div class="mk-page-head"><h4>Quản lý Roles</h4><span class="mk-chip red">Tạo Role</span></div>
+          <table class="mk-table">
+            <thead><tr><th>Tên quyền</th><th>Mô tả</th><th style="text-align:center;">Hành động</th></tr></thead>
+            <tbody>
+              <tr><td class="mk-name">Admin</td><td>Toàn quyền hệ thống</td><td style="text-align:center;"><span class="mk-btn outline">Sửa</span> <span class="mk-btn red">Xoá</span></td></tr>
+              <tr><td class="mk-name">Quản lý Thiết bị</td><td>Quản lý module Asset/PC</td><td style="text-align:center;"><span class="mk-btn outline">Sửa</span> <span class="mk-btn red">Xoá</span></td></tr>
+              <tr><td class="mk-name">Basic</td><td>Quyền cơ bản (tự gán user mới)</td><td style="text-align:center;"><span class="mk-btn outline">Sửa</span> <span class="mk-btn red">Xoá</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="mockup-caption">Bảng quản lý Roles</p>
+
+      <div class="note warn">
+        <span>⚠️</span>
+        <span>Xoá role <b>không thể hoàn tác</b>. User đang gán role đó sẽ mất vai trò tương ứng.</span>
+      </div>
+    </section>
+
+    <!-- PHAN QUYEN ROLE -->
+    <section id="phan-quyen-role">
+      <h2>🛡️ Phân quyền theo Role</h2>
+      <p class="lead">Gán bộ permission cho từng role theo cấu trúc Module → Entity → Permission. Cần <code>Identity.Permission.View</code>.</p>
+
+      <ol class="steps">
+        <li>Chọn <b>"Phân quyền theo Role"</b> trong sidebar Admin.</li>
+        <li>Chọn role cần cấu hình từ dropdown bên trái.</li>
+        <li>Tick/bỏ tick permission theo từng module (Asset, Identity...).</li>
+        <li>Có thể tick cả nhóm (entity) để chọn/bỏ hàng loạt.</li>
+        <li>Nhấn <b>"Lưu thay đổi"</b> để áp dụng — user thuộc role đó có hiệu lực ngay trên API.</li>
+      </ol>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <h4 style="margin:0 0 12px;">Phân quyền theo Role — <span style="color:var(--blue-600);">Quản lý Thiết bị</span></h4>
+          <div class="mk-perm-box" style="margin-bottom:10px;">
+            <h5>Module: Asset</h5>
+            <p style="margin:4px 0; font-size:.78rem;"><input type="checkbox" checked> <b>Device</b> — View · Create · Update · Delete · Import · Transfer...</p>
+            <p style="margin:4px 0; font-size:.78rem;"><input type="checkbox" checked> <b>Branch</b> — View · Create · Update · Delete</p>
+            <p style="margin:4px 0; font-size:.78rem;"><input type="checkbox"> <b>Software</b> — View · Create · Update · Delete</p>
+          </div>
+          <div style="text-align:right;"><span class="mk-btn primary">💾 Lưu thay đổi</span></div>
+        </div>
+      </div>
+      <p class="mockup-caption">Ma trận permission theo role — nhóm theo module/entity</p>
+    </section>
+
+    <!-- PHAN QUYEN USER -->
+    <section id="phan-quyen-user">
+      <h2>🛡️ Phân quyền riêng theo User</h2>
+      <p class="lead">Override permission cho từng user cụ thể, ngoài quyền kế thừa từ role. Cần <code>Identity.Permission.View</code> để xem; lưu cần <code>Identity.User.UpdatePermissions</code>.</p>
+
+      <ol class="steps">
+        <li>Chọn <b>"Phân quyền riêng theo User"</b> trong sidebar Admin.</li>
+        <li>Tìm và chọn user cần cấu hình.</li>
+        <li>Với mỗi permission, chọn 1 trong 3 trạng thái:
+          <ul style="margin:8px 0 0; padding-left:18px;">
+            <li><b>Kế thừa</b> — theo role (mặc định)</li>
+            <li><b>Cấp thêm</b> — grant riêng cho user này</li>
+            <li><b>Thu hồi</b> — deny riêng, ghi đè quyền từ role</li>
+          </ul>
+        </li>
+        <li>Nhấn <b>"Lưu thay đổi"</b> để áp dụng override.</li>
+      </ol>
+
+      <div class="mockup-frame">
+        <div class="mk-panel">
+          <h4 style="margin:0 0 12px;">Override quyền — Trần Thị B</h4>
+          <table class="mk-table">
+            <thead><tr><th>Permission</th><th>Từ Role</th><th>Override</th></tr></thead>
+            <tbody>
+              <tr><td><code>Asset.Device.Delete</code></td><td>✅ Có</td><td><span class="mk-status inherit">Kế thừa</span></td></tr>
+              <tr><td><code>Asset.Device.Import</code></td><td>❌ Không</td><td><span class="mk-status grant">Cấp thêm</span></td></tr>
+              <tr><td><code>Asset.Device.Update</code></td><td>✅ Có</td><td><span class="mk-status deny">Thu hồi</span></td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:12px; text-align:right;"><span class="mk-btn primary">💾 Lưu thay đổi</span></div>
+        </div>
+      </div>
+      <p class="mockup-caption">Override permission riêng — bổ sung hoặc thu hồi ngoài role</p>
+
+      <div class="note">
+        <span>ℹ️</span>
+        <span>Dùng override khi cần cấp/thu hồi quyền lẻ cho 1 user mà không tạo role mới. Quyền hiệu lực = role + override.</span>
+      </div>
+    </section>
+
+    <!-- SAP RA MAT -->
+    <section id="sap-ra-mat">
+      <h2>🚧 Tính năng sắp ra mắt</h2>
+      <p class="lead">Các module/tính năng dưới đây chưa có giao diện sử dụng hoặc vẫn đang phát triển.</p>
+      <div class="soon-grid">
+        <div class="soon-card"><div class="ic"><i data-lucide="file-text" class="lc lc-32"></i></div><h4>Quản lý hợp đồng</h4>Soạn thảo và lưu trữ hồ sơ hợp đồng<div class="tag">Đang phát triển</div></div>
+        <div class="soon-card"><div class="ic"><i data-lucide="notebook" class="lc lc-32"></i></div><h4>Quản lý tăng ca</h4>Đăng ký hoặc phê duyệt tăng ca (BE Attendance đã có)<div class="tag">Đang phát triển</div></div>
+        <div class="soon-card"><div class="ic"><i data-lucide="bar-chart-3" class="lc lc-32"></i></div><h4>Báo cáo tổng (trang chủ)</h4>Báo cáo tổng quan toàn hệ thống — khác <code>/pc/reports</code><div class="tag">Đang phát triển</div></div>
+        <div class="soon-card"><div class="ic"><i data-lucide="bar-chart-3" class="lc lc-32"></i></div><h4>Admin: Báo cáo số liệu</h4>Báo cáo trong khu vực Admin<div class="tag">Đang phát triển</div></div>
+        <div class="soon-card"><div class="ic"><i data-lucide="settings" class="lc lc-32"></i></div><h4>Admin: Cài đặt chung</h4>Cài đặt toàn hệ thống<div class="tag">Đang phát triển</div></div>
+        <div class="soon-card"><div class="ic"><i data-lucide="languages" class="lc lc-32"></i></div><h4>Dịch nội dung động</h4>Dịch dữ liệu bảng/form module PC sang JA<div class="tag">Giai đoạn sau</div></div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq">
+      <h2>❓ Câu hỏi thường gặp</h2>
+      <details class="faq" open>
+        <summary>Tôi thấy "Chưa đăng nhập", phải làm sao?</summary>
+        <div class="a">Thường do trình duyệt chưa xác thực Windows (ngoài mạng công ty, chưa VPN, hoặc trình duyệt chặn Negotiate). Thử tải lại trang; nếu vẫn lỗi, liên hệ IT kiểm tra domain/VPN và cấu hình xác thực Windows.</div>
+      </details>
+      <details class="faq">
+        <summary>Tại sao tôi không thấy tile "Quản lý thiết bị"?</summary>
+        <div class="a">Tile này chỉ hiện khi tài khoản có ít nhất 1 permission <code>Asset.*</code> (ví dụ qua role "Quản lý Thiết bị"). Liên hệ quản trị viên để được gán role/permission phù hợp qua <a href="#gan-vai-tro">Gán vai trò người dùng</a> hoặc <a href="#phan-quyen-user">Phân quyền riêng User</a>.</div>
+      </details>
+      <details class="faq">
+        <summary>Tại sao tôi không thấy link "Admin"?</summary>
+        <div class="a">Link Admin hiện khi có ít nhất 1 permission: <code>Identity.User.View</code>, <code>Identity.User.UpdateRoles</code>, <code>Identity.Role.View</code> hoặc <code>Identity.Permission.View</code>. Không nhất thiết phải có role tên "Admin".</div>
+      </details>
+      <details class="faq">
+        <summary>Admin vừa cấp quyền mới nhưng tôi vẫn chưa thấy menu?</summary>
+        <div class="a">Nhấn nút <b>"Làm mới quyền"</b> trên header để đăng nhập lại và cập nhật danh sách permission trên giao diện. API đã có hiệu lực ngay; chỉ UI cần refresh.</div>
+      </details>
+      <details class="faq">
+        <summary>Vì sao không sửa được role của chính mình?</summary>
+        <div class="a">Cơ chế bảo vệ: tài khoản đang đăng nhập không thể tự đổi role của mình, tránh tự thu hồi quyền quản trị.</div>
+      </details>
+      <details class="faq">
+        <summary>"Báo cáo thống kê" trên trang chủ khác gì báo cáo trong module PC?</summary>
+        <div class="a">Tile <b>"Báo cáo thống kê"</b> trên trang chủ là báo cáo tổng toàn hệ thống — <b>chưa triển khai</b>. Báo cáo thiết bị đã có tại <code>/pc/reports</code> trong module Quản lý thiết bị.</div>
+      </details>
+    </section>
+  </main>
+</div>
+
+<footer>© YEV Management Portal — Tài liệu hướng dẫn nội bộ, không chia sẻ ra ngoài công ty.</footer>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

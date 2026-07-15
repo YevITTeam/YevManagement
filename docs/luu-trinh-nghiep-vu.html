@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lưu trình nghiệp vụ — YEV Management Portal</title>
+<style>
+  :root{
+    --yev-red:#e3000f; --yev-red-hover:#b40009; --yev-red-dark:#930006;
+    --yev-text:#191c1e; --yev-muted:#5e3f3a;
+    --yev-border:#e0e3e5; --yev-bg:#f8fafc; --yev-bg-side:#f7f9fb;
+    --yev-accent:#fff4f2; --yev-accent-ring:#ffe0e3; --yev-accent-border:#e9bcb6;
+    --slate-50:#f8fafc; --slate-100:#eceef0; --slate-200:#e0e3e5; --slate-300:#cbd5e1;
+    --slate-400:#94a3b8; --slate-500:#64748b; --slate-600:#475569; --slate-700:#334155;
+    --slate-800:#1e293b; --slate-900:#0f172a;
+    --ok:#166534; --ok-bg:#dcfce7; --ok-bd:#86efac;
+    --warn:#92400e; --warn-bg:#fffbeb; --warn-bd:#fde68a;
+    --info:#1e40af; --info-bg:#eff6ff; --info-bd:#bfdbfe;
+    --radius-lg:12px; --radius-xl:16px; --radius-2xl:20px;
+    --shadow-sm:0 1px 2px rgba(25,28,30,.06); --shadow-md:0 4px 12px rgba(25,28,30,.08);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif; color:var(--yev-text); background:var(--yev-bg); line-height:1.55;}
+  a{color:var(--yev-red);}
+  code{font-size:.85em; background:var(--slate-100); padding:1px 5px; border-radius:4px;}
+  .layout{display:flex; min-height:100vh;}
+
+  .sidebar{width:280px; flex-shrink:0; background:#fff; border-right:1px solid var(--yev-border); position:sticky; top:0; height:100vh; overflow-y:auto; padding:24px 16px;}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:1.05rem; color:var(--yev-text);}
+  .brand .logo{width:32px; height:32px; background:var(--yev-red); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.9rem;}
+  .brand-sub{font-size:.75rem; color:var(--yev-muted); margin:4px 0 20px;}
+  nav.toc{display:flex; flex-direction:column; gap:2px;}
+  nav.toc .section-label{font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--slate-400); margin:14px 0 4px 10px;}
+  nav.toc .section-label:first-child{margin-top:0;}
+  nav.toc a{display:block; text-decoration:none; color:var(--yev-muted); font-size:.84rem; padding:8px 12px; border-radius:8px; transition:.15s;}
+  nav.toc a:hover{background:var(--yev-accent); color:var(--yev-red);}
+  nav.toc a .num{display:inline-block; width:22px; font-weight:700; color:var(--yev-red); font-size:.78rem;}
+
+  main{flex:1; min-width:0; padding:36px clamp(18px,3.5vw,56px) 90px;}
+  .page-header{margin-bottom:36px;}
+  .page-header h1{font-size:2rem; font-weight:900; color:var(--slate-900); margin:0 0 8px;}
+  .page-header p{color:var(--slate-500); margin:0; font-size:.95rem; max-width:720px;}
+  .badge-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
+  .badge{display:inline-flex; align-items:center; gap:6px; font-size:.75rem; font-weight:600; padding:5px 12px; border-radius:999px; border:1px solid;}
+  .badge.live{background:var(--ok-bg); color:var(--ok); border-color:var(--ok-bd);}
+  .badge.soon{background:var(--warn-bg); color:var(--warn); border-color:var(--warn-bd);}
+  .badge.date{background:var(--yev-accent); color:var(--yev-red-dark); border-color:var(--yev-accent-border);}
+
+  section{margin-bottom:56px; scroll-margin-top:20px;}
+  section h2{font-size:1.35rem; font-weight:800; margin:0 0 6px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  section h2 .tag{font-size:.68rem; font-weight:700; padding:3px 9px; border-radius:999px; border:1px solid;}
+  section h2 .tag.live{background:var(--ok-bg); color:var(--ok); border-color:var(--ok-bd);}
+  section h2 .tag.soon{background:var(--warn-bg); color:var(--warn); border-color:var(--warn-bd);}
+  .lead{color:var(--yev-muted); margin:0 0 16px; font-size:.92rem; max-width:780px;}
+  h3{font-size:1rem; font-weight:700; margin:24px 0 12px; color:var(--slate-800);}
+
+  .card{background:#fff; border:1px solid var(--yev-border); border-radius:var(--radius-2xl); box-shadow:var(--shadow-sm); padding:20px 22px; margin-bottom:14px;}
+  .note{display:flex; gap:10px; align-items:flex-start; border-radius:var(--radius-lg); padding:12px 14px; font-size:.86rem; margin:12px 0;}
+  .note.info{background:var(--info-bg); border:1px solid var(--info-bd); color:var(--info);}
+  .note.warn{background:var(--warn-bg); border:1px solid var(--warn-bd); color:var(--warn);}
+
+  .actors{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px;}
+  .actor{font-size:.78rem; font-weight:600; padding:5px 11px; border-radius:8px; background:var(--slate-100); color:var(--slate-700); border:1px solid var(--yev-border);}
+  .actor.sys{background:var(--info-bg); color:var(--info); border-color:var(--info-bd);}
+  .actor.admin{background:var(--yev-accent); color:var(--yev-red-dark); border-color:var(--yev-accent-border);}
+  .actor.it{background:#f0fdf4; color:#166534; border-color:#bbf7d0;}
+
+  /* ===== Storyboard ===== */
+  .sb{display:flex; flex-direction:column; gap:0;}
+  .sb-step{display:flex; gap:14px; padding:0 0 20px; position:relative;}
+  .sb-step:not(:last-child)::before{
+    content:""; position:absolute; left:15px; top:32px; bottom:0; width:2px; background:var(--slate-200);
+  }
+  .sb-num{
+    flex-shrink:0; width:32px; height:32px; border-radius:50%; background:var(--yev-red); color:#fff;
+    font-size:.78rem; font-weight:700; display:flex; align-items:center; justify-content:center; z-index:1;
+  }
+  .sb-num.sys{background:var(--info);}
+  .sb-num.ok{background:#15803d;}
+  .sb-num.fail{background:#b91c1c;}
+  .sb-body{flex:1; min-width:0;}
+  .sb-body h4{margin:4px 0 10px; font-size:.95rem; font-weight:700; color:var(--slate-800);}
+  .sb-note{margin:8px 0 0; font-size:.82rem; color:var(--slate-500);}
+  .sb-frame{
+    border:1px solid var(--yev-border); border-radius:var(--radius-xl); overflow:hidden;
+    box-shadow:var(--shadow-sm); background:#fff; max-width:640px;
+  }
+  .sb-frame.compact .mk-pc-side{width:140px;}
+  .sb-frame.compact .mk-pc{min-height:auto;}
+  .sb-frame.compact .mk-pc-nav .item{padding:7px 12px; font-size:.7rem;}
+  .sb-sys{
+    display:flex; align-items:flex-start; gap:12px; max-width:640px;
+    background:var(--info-bg); border:1px solid var(--info-bd); border-radius:var(--radius-xl); padding:14px 16px;
+  }
+  .sb-sys .ico{width:36px; height:36px; border-radius:10px; background:#fff; border:1px solid var(--info-bd); display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0;}
+  .sb-sys .t{font-size:.88rem; font-weight:700; color:var(--info); margin:0 0 4px;}
+  .sb-sys .d{font-size:.8rem; color:var(--slate-600); margin:0;}
+
+  .sb-branch{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:6px; max-width:680px;}
+  .sb-branch-col{border:1px solid var(--yev-border); border-radius:var(--radius-xl); padding:12px; background:var(--slate-50);}
+  .sb-branch-col .bl{display:inline-block; font-size:.7rem; font-weight:700; padding:3px 9px; border-radius:999px; margin-bottom:10px;}
+  .sb-branch-col .bl.yes{background:var(--ok-bg); color:var(--ok);}
+  .sb-branch-col .bl.no{background:#fee2e2; color:#b91c1c;}
+  .sb-branch-col .sb-frame{max-width:100%;}
+  .sb-branch-col .sb-note{margin-top:8px;}
+
+  .sb-arrow{text-align:center; color:var(--slate-400); font-size:.75rem; font-weight:600; padding:2px 0 10px 46px;}
+
+  .toc-overview{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin-top:8px;}
+  .toc-card{background:#fff; border:1px solid var(--yev-border); border-radius:var(--radius-xl); padding:14px 16px; text-decoration:none; color:inherit; display:block; transition:.15s;}
+  .toc-card:hover{border-color:var(--yev-red); box-shadow:var(--shadow-md);}
+  .toc-card .n{font-size:.72rem; font-weight:700; color:var(--yev-red);}
+  .toc-card h4{margin:4px 0 4px; font-size:.88rem; color:var(--yev-text);}
+  .toc-card p{margin:0; font-size:.76rem; color:var(--yev-muted);}
+
+  /* ===== Mockup (từ huong-dan-su-dung) ===== */
+  .mk-header{background:var(--yev-bg-side); border-bottom:1px solid var(--yev-border); padding:0 16px; display:flex; align-items:center; justify-content:space-between; height:52px;}
+  .mk-brand{display:flex; align-items:center; gap:10px;}
+  .mk-logo-y{width:32px; height:32px; background:var(--yev-red); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.95rem; box-shadow:var(--shadow-sm);}
+  .mk-brand-name{font-size:.85rem; font-weight:600; color:var(--yev-text); line-height:1.2;}
+  .mk-brand-tag{font-size:.55rem; font-weight:600; text-transform:uppercase; letter-spacing:.15em; color:var(--yev-muted);}
+  .mk-header-right{display:flex; align-items:center; gap:8px;}
+  .mk-guest{font-size:.78rem; color:var(--yev-muted); font-weight:500;}
+  .mk-btn-sm{display:inline-flex; align-items:center; gap:4px; font-size:.7rem; font-weight:600; padding:6px 10px; border-radius:7px; border:1px solid var(--yev-border); background:#fff; color:var(--yev-muted);}
+  .mk-btn-sm.admin{color:var(--yev-red); background:#fff5f5; border-color:rgba(227,0,15,.15);}
+  .mk-user{display:flex; align-items:center; gap:8px; border-left:1px solid var(--yev-border); padding-left:8px;}
+  .mk-user .txt{text-align:right;}
+  .mk-user .name{font-size:.75rem; font-weight:600; color:var(--yev-text);}
+  .mk-user .login{font-size:.65rem; color:var(--yev-muted);}
+  .mk-avatar{width:32px; height:32px; border-radius:50%; background:var(--yev-text); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:.75rem;}
+
+  .mk-home{background:var(--yev-bg); padding:16px;}
+  .mk-hero{background:#fff; border:1px solid var(--yev-border); border-radius:var(--radius-xl); padding:16px; text-align:center; margin-bottom:12px;}
+  .mk-eyebrow{font-size:.65rem; font-weight:600; text-transform:uppercase; letter-spacing:.15em; color:var(--yev-muted); margin:0;}
+  .mk-home h1{font-size:1.15rem; font-weight:600; color:var(--yev-text); margin:6px 0 4px;}
+  .mk-subtitle{font-size:.75rem; color:var(--yev-muted); margin:0;}
+  .mk-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
+  .mk-tile{background:#fff; border:1px solid var(--yev-border); border-radius:12px; padding:12px; position:relative;}
+  .mk-tile.dim{opacity:.45;}
+  .mk-tile .ic-box{width:36px; height:36px; border-radius:8px; background:var(--yev-accent); color:var(--yev-red); display:flex; align-items:center; justify-content:center; margin-bottom:8px; font-size:.9rem; font-weight:700;}
+  .mk-tile h4{margin:0 0 2px; font-size:.78rem; font-weight:600; color:var(--yev-text);}
+  .mk-tile p{margin:0; font-size:.65rem; color:var(--yev-muted);}
+  .mk-tile .soon{position:absolute; top:8px; right:8px; font-size:.55rem; font-weight:700; color:var(--yev-muted); background:var(--slate-100); border:1px solid var(--yev-border); padding:2px 6px; border-radius:999px;}
+  .mk-tile.hl{border-color:var(--yev-red); box-shadow:0 0 0 2px var(--yev-accent-ring);}
+
+  .mk-admin{display:flex; min-height:200px; background:var(--yev-bg);}
+  .mk-admin-side{width:160px; flex-shrink:0; background:#fff; border-right:1px solid var(--yev-border); padding:12px;}
+  .mk-admin-side .lbl{font-size:.6rem; font-weight:600; text-transform:uppercase; letter-spacing:.1em; color:var(--yev-muted); padding:0 6px 8px;}
+  .mk-admin-btn2{display:flex; align-items:center; gap:8px; width:100%; padding:8px 10px; border-radius:7px; font-size:.72rem; font-weight:500; color:var(--yev-muted); margin-bottom:3px; border:none; background:#fff; text-align:left;}
+  .mk-admin-btn2.active{background:var(--yev-accent); color:var(--yev-red); font-weight:600;}
+  .mk-admin-main{flex:1; padding:14px; overflow:auto;}
+
+  .mk-page-head{display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
+  .mk-page-head h4{margin:0; font-size:1rem; font-weight:600; color:var(--yev-text);}
+  .mk-page-head .sub{margin:2px 0 0; font-size:.75rem; color:var(--yev-muted);}
+  .mk-toolbar{display:flex; gap:5px; flex-wrap:wrap;}
+  .mk-chip{font-size:.65rem; font-weight:600; padding:5px 8px; border-radius:6px; border:1px solid var(--yev-border); background:#fff; color:var(--yev-text);}
+  .mk-chip.red{background:var(--yev-red); color:#fff; border-color:var(--yev-red);}
+  .mk-chip.danger{color:var(--yev-red-dark); border-color:var(--yev-red-dark); background:#fff;}
+  .mk-chip.hl{outline:2px solid var(--yev-red); outline-offset:1px;}
+
+  .mk-section{border:1px solid var(--yev-border); background:#fff; overflow:hidden;}
+  .mk-filter-bar{background:var(--yev-bg); border-bottom:1px solid var(--yev-border); padding:10px; font-size:.7rem; color:var(--yev-muted);}
+  .mk-table-meta{padding:8px 10px; border-bottom:1px solid var(--yev-border); font-size:.7rem; color:var(--yev-muted);}
+  table.mk-table{width:100%; border-collapse:collapse; font-size:.72rem;}
+  table.mk-table thead th{text-align:left; background:var(--yev-bg); color:var(--yev-muted); font-size:.58rem; font-weight:600; text-transform:uppercase; letter-spacing:.1em; padding:8px 10px; border-bottom:1px solid var(--yev-border);}
+  table.mk-table td{padding:8px 10px; border-bottom:1px solid var(--yev-border); vertical-align:middle; color:var(--yev-text);}
+  table.mk-table tr.self{background:rgba(255,244,242,.4);}
+  table.mk-table tr.hl{background:var(--yev-accent);}
+  .mk-name{font-weight:600; color:var(--yev-text);}
+  .mk-username{font-size:.65rem; color:var(--yev-muted);}
+  .mk-tag-you{font-size:.55rem; font-weight:700; color:var(--yev-red-dark); background:var(--yev-accent); border:1px solid var(--yev-accent-border); padding:1px 6px; margin-left:4px;}
+  .mk-role-chip{display:inline-block; font-size:.62rem; font-weight:500; color:var(--yev-text); background:var(--yev-bg); border:1px solid var(--yev-border); padding:2px 6px; margin:1px 2px 1px 0;}
+
+  .mk-btn{display:inline-flex; align-items:center; gap:4px; font-size:.7rem; font-weight:600; padding:6px 12px; border-radius:7px; border:1px solid transparent;}
+  .mk-btn.primary{background:var(--yev-red); color:#fff;}
+  .mk-btn.outline{background:#fff; color:var(--yev-text); border-color:var(--yev-border);}
+  .mk-btn.disabled{background:var(--slate-100); color:var(--slate-400); cursor:not-allowed;}
+
+  .mk-pc{display:flex; min-height:220px; background:var(--yev-bg);}
+  .mk-pc-side{width:150px; flex-shrink:0; background:var(--yev-bg-side); border-right:1px solid var(--yev-border); padding:12px 0; display:flex; flex-direction:column;}
+  .mk-pc-brand{display:flex; align-items:center; gap:8px; padding:0 12px 10px;}
+  .mk-pc-brand .mk-logo-y{width:28px; height:28px; font-size:.8rem;}
+  .mk-pc-brand .t1{font-size:.8rem; font-weight:600; color:var(--yev-text);}
+  .mk-pc-brand .t2{font-size:.52rem; font-weight:600; text-transform:uppercase; letter-spacing:.12em; color:var(--yev-muted);}
+  .mk-pc-nav .item{display:flex; align-items:center; gap:6px; padding:7px 12px; font-size:.68rem; font-weight:500; color:var(--yev-muted); border-left:3px solid transparent;}
+  .mk-pc-nav .item.active{border-left-color:var(--yev-red); background:var(--slate-100); color:var(--yev-text);}
+  .mk-pc-main{flex:1; padding:12px; min-width:0;}
+  .mk-panel{padding:14px;}
+
+  .mk-kpi-row{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px;}
+  .mk-kpi{background:#fff; border:1px solid var(--yev-border); border-radius:10px; padding:10px;}
+  .mk-kpi .n{font-size:1.1rem; font-weight:600; color:var(--yev-text);}
+  .mk-kpi .l{font-size:.6rem; color:var(--yev-muted); margin-top:2px;}
+  .mk-tabs{display:flex; gap:2px; border-bottom:1px solid var(--yev-border); margin-bottom:10px;}
+  .mk-tab{padding:6px 12px; font-size:.7rem; font-weight:600; color:var(--yev-muted); border-bottom:2px solid transparent;}
+  .mk-tab.on{color:var(--yev-red); border-bottom-color:var(--yev-red);}
+  .mk-lang{display:inline-flex; gap:2px; border:1px solid var(--yev-border); border-radius:7px; padding:2px; background:#fff;}
+  .mk-lang span{padding:3px 8px; font-size:.62rem; font-weight:600; border-radius:5px; color:var(--yev-muted);}
+  .mk-lang .on{background:var(--yev-red); color:#fff;}
+
+  .mk-status{display:inline-block; font-size:.6rem; font-weight:600; padding:2px 7px; border-radius:999px; border:1px solid transparent;}
+  .mk-status.s0{background:#eef2f6; color:#475569; border-color:#cbd5e1;}
+  .mk-status.s1{background:#dcfce7; color:#166534; border-color:#86efac;}
+  .mk-status.s2{background:#fff7ed; color:#c2410c; border-color:#fdba74;}
+  .mk-status.s3{background:#f1f5f9; color:#64748b; border-color:#cbd5e1;}
+  .mk-status.inherit{background:var(--yev-bg); color:var(--yev-muted); border-color:var(--yev-border);}
+  .mk-status.grant{background:#dcfce7; color:#166534; border-color:#16a34a;}
+  .mk-status.deny{background:#fef3c7; color:#b45309; border-color:#f59e0b;}
+
+  .mk-form{background:var(--yev-bg); border:1px solid var(--yev-border); border-radius:10px; padding:12px;}
+  .mk-field{margin-bottom:8px;}
+  .mk-field label{display:block; font-size:.68rem; font-weight:600; color:var(--yev-muted); margin-bottom:3px;}
+  .mk-input{width:100%; border:1px solid var(--yev-border); border-radius:7px; padding:6px 8px; font-size:.72rem; color:var(--yev-muted); background:#fff;}
+  .mk-dialog{padding:14px; background:#fff;}
+  .mk-dialog h5{margin:0 0 10px; font-size:.9rem; font-weight:700;}
+  .mk-dialog-actions{display:flex; justify-content:flex-end; gap:6px; margin-top:12px;}
+  .mk-ok-row{background:#f0fdf4 !important;}
+  .mk-err-row{background:#fef2f2 !important; color:#b91c1c;}
+
+  .mk-perm-box{border:1px solid var(--yev-border); border-radius:8px; padding:10px; background:var(--yev-bg); font-size:.72rem;}
+  .mk-perm-box h5{margin:0 0 4px; font-size:.75rem; color:var(--yev-text);}
+
+  @media (max-width:900px){
+    .sidebar{display:none;}
+    .sb-branch{grid-template-columns:1fr;}
+    .mk-grid{grid-template-columns:repeat(2,1fr);}
+    .mk-kpi-row{grid-template-columns:repeat(2,1fr);}
+  }
+  @media print{
+    .sidebar{display:none;}
+    .sb-step{break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">Y</span> YEV Portal</div>
+    <div class="brand-sub">Lưu trình · Storyboard UI</div>
+    <nav class="toc">
+      <div class="section-label">Tổng quan</div>
+      <a href="#overview">Tổng quan hệ thống</a>
+      <div class="section-label">Xác thực &amp; quyền</div>
+      <a href="#f1"><span class="num">01</span>Đăng nhập SSO</a>
+      <a href="#f2"><span class="num">02</span>Kiểm tra quyền</a>
+      <a href="#f3"><span class="num">03</span>Admin User / Role</a>
+      <div class="section-label">Quản lý thiết bị</div>
+      <a href="#f4"><span class="num">04</span>Vòng đời thiết bị</a>
+      <a href="#f5"><span class="num">05</span>Tạo TB &amp; In nhãn</a>
+      <a href="#f6"><span class="num">06</span>Import Excel</a>
+      <a href="#f7"><span class="num">07</span>Import Tanium</a>
+      <a href="#f8"><span class="num">08</span>Chuyển máy</a>
+      <a href="#f9"><span class="num">09</span>Xóa thiết bị</a>
+      <a href="#f10"><span class="num">10</span>Quản lý IP</a>
+      <a href="#f11"><span class="num">11</span>Thanh lý tự động</a>
+      <a href="#f12"><span class="num">12</span>Báo cáo</a>
+      <div class="section-label">Sắp ra mắt</div>
+      <a href="#f13"><span class="num">13</span>Duyệt đơn OT</a>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="page-header">
+      <h1>Lưu trình nghiệp vụ</h1>
+      <p>Storyboard từng bước với <b>mockup giao diện</b> — giúp khách hàng hình dung màn hình thực tế của YEV Management Portal.</p>
+      <div class="badge-row">
+        <span class="badge date">Cập nhật: 07/2026</span>
+        <span class="badge live">Live: Identity + Asset</span>
+        <span class="badge soon">Soon: OT, Hợp đồng</span>
+      </div>
+    </header>
+
+    <!-- OVERVIEW -->
+    <section id="overview">
+      <h2>Tổng quan hệ thống</h2>
+      <p class="lead">Sau đăng nhập Windows SSO, người dùng chọn module trên trang chủ. Mỗi bước bên dưới là một màn hình (hoặc bước hệ thống).</p>
+      <div class="toc-overview">
+        <a class="toc-card" href="#f1"><div class="n">01–03</div><h4>Đăng nhập &amp; quyền</h4><p>SSO, tile module, Admin</p></a>
+        <a class="toc-card" href="#f4"><div class="n">04–09</div><h4>Thiết bị PC</h4><p>Tạo, in nhãn, import, chuyển, xóa</p></a>
+        <a class="toc-card" href="#f10"><div class="n">10–12</div><h4>IP · Thanh lý · Báo cáo</h4><p>Prefix, job, PDF</p></a>
+        <a class="toc-card" href="#f13"><div class="n">13</div><h4>Duyệt OT</h4><p>Sắp ra mắt</p></a>
+      </div>
+    </section>
+
+    <!-- F1 -->
+    <section id="f1">
+      <h2>01 · Đăng nhập Windows SSO <span class="tag live">Live</span></h2>
+      <p class="lead">Không có màn hình mật khẩu — trình duyệt xác thực tài khoản Windows trong mạng công ty / VPN.</p>
+      <div class="actors"><span class="actor">Nhân viên</span><span class="actor sys">Browser + AD</span><span class="actor sys">Backend Identity</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Mở portal — chưa xác thực</h4>
+              <div class="sb-frame">
+                <div class="mk-header">
+                  <div class="mk-brand"><div class="mk-logo-y">Y</div><div><div class="mk-brand-name">YEV Management</div><div class="mk-brand-tag">Asset Management Suite</div></div></div>
+                  <div class="mk-header-right"><span class="mk-guest">Chưa đăng nhập</span></div>
+                </div>
+              </div>
+              <p class="sb-note">Header góc phải hiện “Chưa đăng nhập” khi SSO chưa thành công.</p>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num sys">2</div>
+            <div class="sb-body">
+              <h4>Hệ thống xác thực Windows</h4>
+              <div class="sb-sys">
+                <div class="ico">🔐</div>
+                <div>
+                  <p class="t">Windows Negotiate / Kerberos</p>
+                  <p class="d">Browser gửi credentials → <code>POST /api/Auth/windows-login</code> → đồng bộ user DB, cấp JWT.</p>
+                </div>
+              </div>
+              <p class="sb-note">User mới lần đầu → tạo tài khoản + role <b>Basic</b>.</p>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num ok">3</div>
+            <div class="sb-body">
+              <h4>Đã đăng nhập</h4>
+              <div class="sb-frame">
+                <div class="mk-header">
+                  <div class="mk-brand"><div class="mk-logo-y">Y</div><div><div class="mk-brand-name">YEV Management</div><div class="mk-brand-tag">Asset Management Suite</div></div></div>
+                  <div class="mk-header-right">
+                    <span class="mk-lang"><span class="on">VI</span><span>JA</span></span>
+                    <span class="mk-btn-sm">↻ Làm mới quyền</span>
+                    <span class="mk-btn-sm admin">⚙ Admin</span>
+                    <div class="mk-user"><div class="txt"><div class="name">Nguyễn Văn A</div><div class="login">nguyenvana</div></div><div class="mk-avatar">N</div></div>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Hiện tên, avatar, VI/JA, “Làm mới quyền”; nút Admin chỉ khi có permission Identity.</p>
+            </div>
+          </div>
+        </div>
+        <div class="note warn">Sau khi Admin đổi quyền: API áp dụng ngay — UI cần bấm <b>Làm mới quyền</b> để hiện/ẩn menu đúng.</div>
+      </div>
+    </section>
+
+    <!-- F2 -->
+    <section id="f2">
+      <h2>02 · Kiểm tra quyền truy cập <span class="tag live">Live</span></h2>
+      <p class="lead">Tile / menu chỉ hiện khi có Permission. Backend vẫn trả 403 nếu gọi API thiếu quyền.</p>
+      <div class="actors"><span class="actor">Nhân viên</span><span class="actor sys">Frontend Guard</span><span class="actor sys">Backend API</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Trang chủ — có quyền Asset</h4>
+              <div class="sb-frame">
+                <div class="mk-home">
+                  <div class="mk-hero"><p class="mk-eyebrow">Hệ thống quản lý</p><h1>Chào mừng đến Hệ thống</h1><p class="mk-subtitle">Chọn một mục bên dưới để bắt đầu</p></div>
+                  <div class="mk-grid">
+                    <div class="mk-tile hl"><div class="ic-box">PC</div><h4>Quản lý thiết bị</h4><p>Theo dõi, kiểm kê</p></div>
+                    <div class="mk-tile"><span class="soon">Sắp ra mắt</span><div class="ic-box">HD</div><h4>Quản lý hợp đồng</h4><p>Hồ sơ hợp đồng</p></div>
+                    <div class="mk-tile"><span class="soon">Sắp ra mắt</span><div class="ic-box">OT</div><h4>Quản lý tăng ca</h4><p>Đăng ký tăng ca</p></div>
+                    <div class="mk-tile"><span class="soon">Sắp ra mắt</span><div class="ic-box">BC</div><h4>Báo cáo thống kê</h4><p>Số liệu tổng quan</p></div>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Tile “Quản lý thiết bị” hiện khi có ≥ 1 permission <code>Asset.*</code>.</p>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num">2</div>
+            <div class="sb-body">
+              <h4>Nhánh quyền</h4>
+              <div class="sb-branch">
+                <div class="sb-branch-col">
+                  <span class="bl yes">Có quyền Asset</span>
+                  <div class="sb-frame">
+                    <div class="mk-home" style="padding:10px;">
+                      <div class="mk-tile hl" style="max-width:160px;"><div class="ic-box">PC</div><h4>Quản lý thiết bị</h4><p>Vào được /pc</p></div>
+                    </div>
+                  </div>
+                  <p class="sb-note">Cho phép vào module PC.</p>
+                </div>
+                <div class="sb-branch-col">
+                  <span class="bl no">Không có quyền</span>
+                  <div class="sb-frame">
+                    <div class="mk-home" style="padding:10px;">
+                      <div class="mk-tile dim" style="max-width:160px;"><div class="ic-box">PC</div><h4>Quản lý thiết bị</h4><p>Tile ẩn / redirect</p></div>
+                    </div>
+                  </div>
+                  <p class="sb-note">Ẩn tile; gõ <code>/pc</code> bị chặn về trang chủ.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F3 -->
+    <section id="f3">
+      <h2>03 · Admin: User · Role · Phân quyền <span class="tag live">Live</span></h2>
+      <p class="lead">Admin gán Role cho User, cấu hình Permission theo Role, hoặc override theo từng User.</p>
+      <div class="actors"><span class="actor admin">Admin</span><span class="actor">User được cấp quyền</span></div>
+
+      <h3>A. Gán Role cho User</h3>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Vào Admin → Gán vai trò</h4>
+              <div class="sb-frame">
+                <div class="mk-admin">
+                  <div class="mk-admin-side">
+                    <div class="lbl">Quản trị</div>
+                    <div class="mk-admin-btn2 active">👥 Gán vai trò</div>
+                    <div class="mk-admin-btn2">🔑 Quản lý Roles</div>
+                    <div class="mk-admin-btn2">🛡 Phân quyền Role</div>
+                    <div class="mk-admin-btn2">🛡 Phân quyền User</div>
+                  </div>
+                  <div class="mk-admin-main">
+                    <div class="mk-page-head"><div><h4>Gán vai trò người dùng</h4><p class="sub">Chọn role cho từng tài khoản</p></div></div>
+                    <table class="mk-table">
+                      <thead><tr><th>Người dùng</th><th>Vai trò</th><th></th></tr></thead>
+                      <tbody>
+                        <tr class="self"><td><span class="mk-name">Nguyễn Văn A</span><span class="mk-tag-you">BẠN</span><div class="mk-username">nguyenvana</div></td><td><span class="mk-role-chip">Admin</span></td><td><span class="mk-btn disabled">Khóa</span></td></tr>
+                        <tr class="hl"><td><span class="mk-name">Trần Thị B</span><div class="mk-username">tranthib</div></td><td><span class="mk-role-chip">Basic</span> <span class="mk-role-chip">Quản lý TB</span></td><td><span class="mk-btn primary">Lưu</span></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Không được tự đổi role của chính mình (dòng “BẠN” bị khóa).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>B. Phân quyền theo Role</h3>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Tick Permission theo Role</h4>
+              <div class="sb-frame">
+                <div class="mk-panel">
+                  <div class="mk-page-head"><div><h4>Phân quyền — Role: Quản lý Thiết bị</h4></div><span class="mk-btn primary">Lưu</span></div>
+                  <table class="mk-table">
+                    <thead><tr><th>Module</th><th>Quyền</th><th>☑</th></tr></thead>
+                    <tbody>
+                      <tr><td>Asset</td><td>Device.View</td><td>☑</td></tr>
+                      <tr><td>Asset</td><td>Device.Create</td><td>☑</td></tr>
+                      <tr><td>Asset</td><td>TransferHistory.Create</td><td>☑</td></tr>
+                      <tr><td>Identity</td><td>User.View</td><td>☐</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <p class="sb-note">Lưu thay thế toàn bộ quyền của Role — mọi user thuộc Role nhận quyền mới.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>C. Override theo User</h3>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Kế thừa / Cấp thêm / Thu hồi</h4>
+              <div class="sb-frame">
+                <div class="mk-panel">
+                  <div class="mk-page-head"><div><h4>Phân quyền User — tranthib</h4></div><span class="mk-btn primary">Lưu</span></div>
+                  <table class="mk-table">
+                    <thead><tr><th>Permission</th><th>Trạng thái</th></tr></thead>
+                    <tbody>
+                      <tr><td>Asset.Device.View</td><td><span class="mk-status inherit">Kế thừa</span></td></tr>
+                      <tr><td>Asset.Report.View</td><td><span class="mk-status grant">Cấp thêm</span></td></tr>
+                      <tr><td>Asset.Setting.Update</td><td><span class="mk-status deny">Thu hồi</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <p class="sb-note">Công thức: <code>effective = (role ∪ grant) − deny</code> — deny luôn thắng.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F4 -->
+    <section id="f4">
+      <h2>04 · Vòng đời trạng thái thiết bị <span class="tag live">Live</span></h2>
+      <p class="lead">Bốn trạng thái trên danh sách thiết bị. Job nền tự chuyển theo hạn khấu hao.</p>
+      <div class="actors"><span class="actor it">Nhân viên IT</span><span class="actor sys">Background Job</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Danh sách thiết bị — các trạng thái</h4>
+              <div class="sb-frame">
+                <div class="mk-panel">
+                  <div class="mk-page-head"><div><h4>Quản lý Thiết bị</h4><p class="sub">Theo dõi trạng thái vòng đời</p></div></div>
+                  <div class="mk-section">
+                    <table class="mk-table">
+                      <thead><tr><th>Thiết bị</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead>
+                      <tbody>
+                        <tr><td class="mk-name">PC-HN-002</td><td><span class="mk-status s0">Chờ sử dụng</span></td><td>Máy mới / sau chuyển</td></tr>
+                        <tr><td class="mk-name">PC-HN-001</td><td><span class="mk-status s1">Đang sử dụng</span></td><td>Đã gán người dùng</td></tr>
+                        <tr><td class="mk-name">PC-DN-015</td><td><span class="mk-status s2">Chờ thanh lý</span></td><td>Hết hạn khấu hao</td></tr>
+                        <tr><td class="mk-name">PC-HCM-088</td><td><span class="mk-status s3">Đã thanh lý</span></td><td>Sau thêm N tháng</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Tạo/Import → Chờ sử dụng → (Chuyển máy) Đang sử dụng → (job) Chờ thanh lý → Đã thanh lý.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F5 -->
+    <section id="f5">
+      <h2>05 · Tạo thiết bị &amp; In nhãn <span class="tag live">Live</span></h2>
+      <p class="lead">Tạo thiết bị thủ công trên <code>/pc</code>, rồi in nhãn mã (từng máy hoặc hàng loạt). Nhãn gồm <b>mã thiết bị</b> + <b>serial</b>, in qua cửa sổ trình duyệt (lưới 3 cột).</p>
+      <div class="actors"><span class="actor it">Nhân viên IT</span></div>
+
+      <h3>A. Tạo thiết bị thủ công</h3>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Bấm “Thêm mới”</h4>
+              <div class="sb-frame">
+                <div class="mk-panel">
+                  <div class="mk-page-head">
+                    <div><h4>Quản lý Thiết bị</h4></div>
+                    <div class="mk-toolbar">
+                      <span class="mk-chip">Xem báo cáo</span>
+                      <span class="mk-chip">↻ Đồng bộ Tanium</span>
+                      <span class="mk-chip">⤴ Nhập Excel</span>
+                      <span class="mk-chip red hl">+ Thêm mới</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Nút đỏ “Thêm mới” trên toolbar danh sách. Cần <code>Asset.Device.Create</code>.</p>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num">2</div>
+            <div class="sb-body">
+              <h4>Điền form tạo thiết bị</h4>
+              <div class="sb-frame">
+                <div class="mk-dialog">
+                  <h5>Thêm thiết bị mới</h5>
+                  <div class="mk-form">
+                    <div class="mk-field"><label>Mã thiết bị *</label><div class="mk-input">PC-HN-099</div></div>
+                    <div class="mk-field"><label>Serial *</label><div class="mk-input">SN-ABC-12345</div></div>
+                    <div class="mk-field"><label>Chi nhánh · Loại · IP</label><div class="mk-input">Hà Nội · Laptop · 10.1.2.50 (Trống)</div></div>
+                  </div>
+                  <div class="mk-dialog-actions">
+                    <span class="mk-btn outline">Hủy</span>
+                    <span class="mk-btn primary">Tạo</span>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Validate: mã/serial không trùng; IP phải Available; Group cần Department.</p>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num ok">3</div>
+            <div class="sb-body">
+              <h4>Thiết bị xuất hiện trong danh sách</h4>
+              <div class="sb-frame">
+                <div class="mk-section">
+                  <table class="mk-table">
+                    <thead><tr><th>Thiết bị</th><th>Trạng thái</th></tr></thead>
+                    <tbody>
+                      <tr class="hl"><td class="mk-name">PC-HN-099</td><td><span class="mk-status s0">Chờ sử dụng</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <p class="sb-note">Status mặc định: <b>Chờ sử dụng</b>. Có thể in nhãn ngay (phần B).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>B. In nhãn — từng máy hoặc hàng loạt</h3>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Tick thiết bị trên danh sách</h4>
+              <div class="sb-branch">
+                <div class="sb-branch-col">
+                  <span class="bl yes">In 1 máy</span>
+                  <div class="sb-frame">
+                    <div class="mk-section">
+                      <div class="mk-table-meta" style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>Đã chọn <b>1</b> thiết bị</span>
+                        <span class="mk-chip hl">🖨 In đã chọn</span>
+                      </div>
+                      <table class="mk-table">
+                        <thead><tr><th>☑</th><th>Thiết bị</th><th>Serial</th></tr></thead>
+                        <tbody>
+                          <tr class="hl"><td>☑</td><td class="mk-name">PC-HN-099</td><td>SN-ABC-12345</td></tr>
+                          <tr><td>☐</td><td class="mk-name">PC-HN-001</td><td>SN-OLD-0001</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <p class="sb-note">Tick 1 dòng → hiện thanh “In đã chọn”.</p>
+                </div>
+                <div class="sb-branch-col">
+                  <span class="bl alt" style="background:var(--info-bg); color:var(--info);">In hàng loạt</span>
+                  <div class="sb-frame">
+                    <div class="mk-section">
+                      <div class="mk-table-meta" style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>Đã chọn <b>3</b> thiết bị</span>
+                        <span class="mk-chip hl">🖨 In đã chọn</span>
+                      </div>
+                      <table class="mk-table">
+                        <thead><tr><th>☑</th><th>Thiết bị</th></tr></thead>
+                        <tbody>
+                          <tr class="hl"><td>☑</td><td class="mk-name">PC-HN-099</td></tr>
+                          <tr class="hl"><td>☑</td><td class="mk-name">PC-HN-100</td></tr>
+                          <tr class="hl"><td>☑</td><td class="mk-name">PC-HN-101</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <p class="sb-note">Tick nhiều dòng (hoặc “Chọn tất cả” trên trang) → in cùng lúc.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num">2</div>
+            <div class="sb-body">
+              <h4>Bấm “🖨 In đã chọn”</h4>
+              <div class="sb-frame">
+                <div class="mk-panel">
+                  <div class="mk-page-head">
+                    <div><h4>Quản lý Thiết bị</h4><p class="sub">Hiển thị 50 bản ghi…</p></div>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--yev-border); border-bottom:1px solid var(--yev-border);">
+                    <span style="font-size:.78rem; color:var(--yev-muted);">Đã chọn 3 thiết bị</span>
+                    <span class="mk-chip hl">🖨 In đã chọn</span>
+                    <span class="mk-chip danger">Xoá đã chọn</span>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Thanh thao tác hàng loạt chỉ hiện khi <b>đã chọn ≥ 1</b> thiết bị.</p>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num">3</div>
+            <div class="sb-body">
+              <h4>Cửa sổ in — bản nhãn</h4>
+              <div class="sb-frame">
+                <div class="mk-dialog">
+                  <h5>In mã thiết bị <span style="font-weight:500; font-size:.72rem; color:var(--slate-500);">· cửa sổ trình duyệt</span></h5>
+                  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:4px 0 8px;">
+                    <div style="border:1px solid #191c1e; border-radius:6px; padding:10px 8px; text-align:center;">
+                      <div style="font-size:.85rem; font-weight:700; letter-spacing:.04em;">PC-HN-099</div>
+                      <div style="font-size:.72rem; font-weight:700; color:#555; margin-top:4px;">SN-ABC-12345</div>
+                    </div>
+                    <div style="border:1px solid #191c1e; border-radius:6px; padding:10px 8px; text-align:center;">
+                      <div style="font-size:.85rem; font-weight:700; letter-spacing:.04em;">PC-HN-100</div>
+                      <div style="font-size:.72rem; font-weight:700; color:#555; margin-top:4px;">SN-XYZ-0002</div>
+                    </div>
+                    <div style="border:1px solid #191c1e; border-radius:6px; padding:10px 8px; text-align:center;">
+                      <div style="font-size:.85rem; font-weight:700; letter-spacing:.04em;">PC-HN-101</div>
+                      <div style="font-size:.72rem; font-weight:700; color:#555; margin-top:4px;">Không có</div>
+                    </div>
+                  </div>
+                  <div class="mk-dialog-actions">
+                    <span class="mk-btn outline">Hủy</span>
+                    <span class="mk-btn primary">🖨 In</span>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Mỗi nhãn: <b>mã thiết bị</b> (to) + <b>serial</b> (hoặc “Không có”). Lưới 3 cột / trang. Cần cho phép popup trình duyệt.</p>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num ok">4</div>
+            <div class="sb-body">
+              <h4>Kết quả</h4>
+              <div class="sb-sys">
+                <div class="ico">🖨</div>
+                <div>
+                  <p class="t">In thành công N nhãn thiết bị</p>
+                  <p class="d">Toast thành công sau khi hộp thoại in của trình duyệt hoàn tất. Nếu chặn popup → báo lỗi “Không thể mở cửa sổ in”.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="note info">In chạy hoàn toàn trên FE (không gọi API riêng). Chọn 1 máy hay nhiều máy đều dùng cùng nút <b>In đã chọn</b>.</div>
+      </div>
+
+      <h3>C. In nhãn ngay sau Import Excel</h3>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Import xong → hỏi in mã</h4>
+              <div class="sb-frame">
+                <div class="mk-dialog">
+                  <h5>In mã thiết bị</h5>
+                  <p style="margin:0 0 12px; font-size:.82rem; color:var(--yev-muted);">Đã import thành công <b>48</b> thiết bị. Bạn có muốn in mã thiết bị vừa import không?</p>
+                  <div class="mk-dialog-actions">
+                    <span class="mk-btn outline">Để sau</span>
+                    <span class="mk-btn primary hl">In mã</span>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Chọn <b>In mã</b> → in toàn bộ máy vừa tạo (mã + serial). <b>Để sau</b> → đóng, in thủ công như phần B.</p>
+            </div>
+          </div>
+        </div>
+        <div class="note warn">Luồng Import chi tiết xem <a href="#f6">06 · Import Excel</a>. Phần này chỉ mô tả bước hỏi in sau khi import thành công.</div>
+      </div>
+    </section>
+
+    <!-- F6 -->
+    <section id="f6">
+      <h2>06 · Import thiết bị Excel <span class="tag live">Live</span></h2>
+      <p class="lead">Hai bước: Preview (Valid/Invalid) → Confirm chỉ tạo dòng hợp lệ. Cột “MQL Cũ” chỉ gợi ý chuyển máy.</p>
+      <div class="actors"><span class="actor it">Nhân viên IT</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Bước 1 — Preview</h4>
+              <div class="sb-frame">
+                <div class="mk-dialog">
+                  <h5>Nhập từ Excel — Xem trước</h5>
+                  <div class="mk-table-meta">Hợp lệ: 48 · Lỗi: 2 · File: devices.xlsx</div>
+                  <table class="mk-table">
+                    <thead><tr><th>Dòng</th><th>Mã TB</th><th>Kết quả</th></tr></thead>
+                    <tbody>
+                      <tr class="mk-ok-row"><td>2</td><td>PC-HN-100</td><td>✓ Hợp lệ</td></tr>
+                      <tr class="mk-ok-row"><td>3</td><td>PC-HN-101</td><td>✓ Hợp lệ · gợi ý MQL Cũ</td></tr>
+                      <tr class="mk-err-row"><td>4</td><td>PC-HN-001</td><td>✗ Trùng mã</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="mk-dialog-actions"><span class="mk-btn outline">Hủy</span><span class="mk-btn primary">Xác nhận import</span></div>
+                </div>
+              </div>
+              <p class="sb-note">Chỉ các dòng ✓ được tạo khi Confirm.</p>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num ok">2</div>
+            <div class="sb-body">
+              <h4>Bước 2 — Confirm xong</h4>
+              <div class="sb-sys">
+                <div class="ico">✓</div>
+                <div>
+                  <p class="t">Đã tạo 48 thiết bị · Bỏ qua 2 dòng lỗi</p>
+                  <p class="d">Nếu có “MQL Cũ” → hệ thống gợi ý chuyển máy (không tự chuyển). Tiếp theo có hỏi <b>In mã</b> — xem <a href="#f5">05 · In nhãn (phần C)</a>.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F7 -->
+    <section id="f7">
+      <h2>07 · Import cấu hình Tanium <span class="tag live">Live</span></h2>
+      <p class="lead">Cập nhật CPU/RAM/HDD cho thiết bị đã tồn tại. Chỉ nhận Computer Name thuộc họ YDC/YLC/YDF/AC/TYC.</p>
+      <div class="actors"><span class="actor it">Nhân viên IT</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Đồng bộ từ Tanium — Preview</h4>
+              <div class="sb-frame">
+                <div class="mk-dialog">
+                  <h5>Đồng bộ cấu hình Tanium</h5>
+                  <table class="mk-table">
+                    <thead><tr><th>Computer</th><th>CPU / RAM</th><th>Kết quả</th></tr></thead>
+                    <tbody>
+                      <tr class="mk-ok-row"><td>YDC-HN-001</td><td>i7 / 16GB</td><td>✓ Map PC-HN-001</td></tr>
+                      <tr><td style="opacity:.5">LAPTOP-XYZ</td><td>—</td><td>Bỏ qua (không thuộc họ YEV)</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="mk-dialog-actions"><span class="mk-btn outline">Hủy</span><span class="mk-btn primary">Xác nhận</span></div>
+                </div>
+              </div>
+              <p class="sb-note">Confirm còn lỗi → rollback toàn batch.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F8 -->
+    <section id="f8">
+      <h2>08 · Chuyển máy <span class="tag live">Live</span></h2>
+      <p class="lead">Chuyển IP, email, phần mềm, chi nhánh… từ máy cũ sang máy mới. Ghi lịch sử TransferHistory.</p>
+      <div class="actors"><span class="actor it">Nhân viên IT</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Chọn máy cũ → Chuyển máy</h4>
+              <div class="sb-frame">
+                <div class="mk-section">
+                  <table class="mk-table">
+                    <thead><tr><th>Thiết bị</th><th>Trạng thái</th><th></th></tr></thead>
+                    <tbody>
+                      <tr class="hl"><td class="mk-name">PC-HN-001</td><td><span class="mk-status s1">Đang sử dụng</span></td><td><span class="mk-chip hl">Chuyển máy</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num">2</div>
+            <div class="sb-body">
+              <h4>Dialog chọn máy mới</h4>
+              <div class="sb-frame">
+                <div class="mk-dialog">
+                  <h5>Chuyển máy</h5>
+                  <div class="mk-form">
+                    <div class="mk-field"><label>Máy cũ</label><div class="mk-input">PC-HN-001 (Đang sử dụng)</div></div>
+                    <div class="mk-field"><label>Máy mới *</label><div class="mk-input">PC-HN-099 — Chờ sử dụng ▼</div></div>
+                    <p style="margin:0; font-size:.7rem; color:var(--slate-500);">Chỉ hiện máy trạng thái “Chờ sử dụng”. Có thể có gợi ý từ import.</p>
+                  </div>
+                  <div class="mk-dialog-actions"><span class="mk-btn outline">Hủy</span><span class="mk-btn primary">Xác nhận chuyển</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num ok">3</div>
+            <div class="sb-body">
+              <h4>Kết quả sau chuyển</h4>
+              <div class="sb-branch">
+                <div class="sb-branch-col">
+                  <span class="bl yes">Máy mới</span>
+                  <div class="sb-frame">
+                    <table class="mk-table">
+                      <tbody><tr><td class="mk-name">PC-HN-099</td><td><span class="mk-status s1">Đang sử dụng</span></td></tr></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="sb-branch-col">
+                  <span class="bl no">Máy cũ</span>
+                  <div class="sb-frame">
+                    <table class="mk-table">
+                      <tbody>
+                        <tr><td class="mk-name">PC-HN-001</td><td><span class="mk-status s0">Chờ sử dụng</span></td></tr>
+                        <tr><td colspan="2" style="font-size:.65rem; color:var(--slate-500);">Nếu hết hạn → Chờ thanh lý</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">IP / email / phần mềm đã chuyển sang máy mới.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F9 -->
+    <section id="f9">
+      <h2>09 · Xóa thiết bị <span class="tag live">Live</span></h2>
+      <p class="lead">Chỉ xóa được khi trạng thái <b>Chờ thanh lý</b>. Xóa mềm; IP trả về Trống.</p>
+      <div class="actors"><span class="actor it">Nhân viên IT</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Nhánh theo trạng thái</h4>
+              <div class="sb-branch">
+                <div class="sb-branch-col">
+                  <span class="bl yes">Chờ thanh lý → Cho xóa</span>
+                  <div class="sb-frame">
+                    <div class="mk-panel" style="padding:10px;">
+                      <div class="mk-page-head">
+                        <div><span class="mk-name">PC-DN-015</span> <span class="mk-status s2">Chờ thanh lý</span></div>
+                        <span class="mk-chip danger hl">Xóa</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p class="sb-note">Soft-delete · gỡ IP.</p>
+                </div>
+                <div class="sb-branch-col">
+                  <span class="bl no">Khác → Từ chối</span>
+                  <div class="sb-frame">
+                    <div class="mk-panel" style="padding:10px;">
+                      <div class="mk-page-head">
+                        <div><span class="mk-name">PC-HN-001</span> <span class="mk-status s1">Đang sử dụng</span></div>
+                        <span class="mk-btn disabled">Xóa</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p class="sb-note">Bulk xóa bỏ qua máy không đủ điều kiện.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F10 -->
+    <section id="f10">
+      <h2>10 · Quản lý IP <span class="tag live">Live</span></h2>
+      <p class="lead">Tạo Prefix → sinh 255 IP Trống. Không tạo/xóa IP lẻ thủ công.</p>
+      <div class="actors"><span class="actor it">Nhân viên IT</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Tab Dải mạng — tạo Prefix</h4>
+              <div class="sb-frame">
+                <div class="mk-pc compact">
+                  <div class="mk-pc-side">
+                    <div class="mk-pc-brand"><div class="mk-logo-y">Y</div><div><div class="t1">YEV IT</div><div class="t2">Quản lý PC</div></div></div>
+                    <nav class="mk-pc-nav">
+                      <div class="item">Thiết bị</div>
+                      <div class="item active">Quản lý IP</div>
+                      <div class="item">Cài đặt</div>
+                    </nav>
+                  </div>
+                  <div class="mk-pc-main">
+                    <div class="mk-tabs"><span class="mk-tab">Địa chỉ IP</span><span class="mk-tab on">Dải mạng</span></div>
+                    <div class="mk-dialog" style="padding:0;">
+                      <div class="mk-form">
+                        <div class="mk-field"><label>Prefix (3 octet)</label><div class="mk-input">10.1.2</div></div>
+                        <div class="mk-field"><label>Chi nhánh</label><div class="mk-input">Hà Nội</div></div>
+                      </div>
+                      <div class="mk-dialog-actions"><span class="mk-btn primary">+ Tạo Prefix</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Sau tạo: hệ thống sinh 255 IP trạng thái Available.</p>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num">2</div>
+            <div class="sb-body">
+              <h4>Tab Địa chỉ IP — danh sách</h4>
+              <div class="sb-frame">
+                <div class="mk-panel">
+                  <div class="mk-tabs"><span class="mk-tab on">Địa chỉ IP</span><span class="mk-tab">Dải mạng</span></div>
+                  <table class="mk-table">
+                    <thead><tr><th>IP</th><th>Trạng thái</th><th>Thiết bị</th></tr></thead>
+                    <tbody>
+                      <tr><td>10.1.2.10</td><td><span class="mk-status s0">Trống</span></td><td>—</td></tr>
+                      <tr><td>10.1.2.11</td><td><span class="mk-status s1">Đang gắn</span></td><td>PC-HN-001</td></tr>
+                      <tr><td>10.1.2.12</td><td><span class="mk-status s2">Gán ngoài</span></td><td>—</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <p class="sb-note">Xóa Prefix bị chặn nếu còn IP đang gắn thiết bị.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F11 -->
+    <section id="f11">
+      <h2>11 · Thanh lý tự động <span class="tag live">Live</span></h2>
+      <p class="lead">Job chạy 00:30 mỗi ngày. Thời gian chờ cấu hình tại Cài đặt hệ thống.</p>
+      <div class="actors"><span class="actor sys">DeviceLiquidationBackgroundService</span><span class="actor it">Admin IT</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Cài đặt số tháng chờ thanh lý</h4>
+              <div class="sb-frame">
+                <div class="mk-pc compact">
+                  <div class="mk-pc-side">
+                    <div class="mk-pc-brand"><div class="mk-logo-y">Y</div><div><div class="t1">YEV IT</div><div class="t2">Quản lý PC</div></div></div>
+                    <nav class="mk-pc-nav"><div class="item active">Cài đặt hệ thống</div></nav>
+                  </div>
+                  <div class="mk-pc-main">
+                    <div class="mk-page-head"><div><h4>Cài đặt hệ thống</h4></div></div>
+                    <div class="mk-form">
+                      <div class="mk-field"><label>Số tháng chờ sau hết hạn (LiquidationAfterMonths)</label><div class="mk-input">3</div></div>
+                      <div class="mk-dialog-actions"><span class="mk-btn primary">Lưu</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num sys">2</div>
+            <div class="sb-body">
+              <h4>Job nền 00:30</h4>
+              <div class="sb-sys">
+                <div class="ico">⏰</div>
+                <div>
+                  <p class="t">DeviceLiquidationBackgroundService</p>
+                  <p class="d"><b>Bước 1:</b> Hết ExpirationDate → Chờ thanh lý.<br><b>Bước 2:</b> Hết hạn + N tháng → Đã thanh lý.</p>
+                </div>
+              </div>
+              <p class="sb-note">Không có màn hình riêng — kết quả thấy trên danh sách thiết bị (status đổi).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F12 -->
+    <section id="f12">
+      <h2>12 · Báo cáo thiết bị <span class="tag live">Live</span></h2>
+      <p class="lead">Dashboard KPI tại <code>/pc/reports</code>. Xuất PDF ngay trên trình duyệt.</p>
+      <div class="actors"><span class="actor it">Nhân viên IT / Quản lý</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Xem dashboard &amp; xuất PDF</h4>
+              <div class="sb-frame">
+                <div class="mk-panel">
+                  <div class="mk-page-head">
+                    <div><h4>Báo cáo thống kê thiết bị</h4></div>
+                    <span class="mk-btn primary hl">📄 Xuất PDF</span>
+                  </div>
+                  <div class="mk-kpi-row">
+                    <div class="mk-kpi"><div class="n">248</div><div class="l">Tổng TB</div></div>
+                    <div class="mk-kpi"><div class="n">198</div><div class="l">Đang dùng</div></div>
+                    <div class="mk-kpi"><div class="n">32</div><div class="l">Chưa dùng</div></div>
+                    <div class="mk-kpi"><div class="n">12</div><div class="l">Sắp hết hạn</div></div>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                    <div class="mk-perm-box"><h5>Theo trạng thái</h5><p style="margin:0; font-size:.65rem; color:var(--slate-500);">Đang sử dụng ████ 80%</p></div>
+                    <div class="mk-perm-box"><h5>Theo chi nhánh</h5><p style="margin:0; font-size:.65rem; color:var(--slate-500);">Hà Nội ████ 45%</p></div>
+                  </div>
+                </div>
+              </div>
+              <p class="sb-note">Cần <code>Asset.Report.View</code>. PDF tạo phía FE (jsPDF).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- F13 -->
+    <section id="f13">
+      <h2>13 · Duyệt đơn tăng ca (OT) <span class="tag soon">Sắp ra mắt</span></h2>
+      <p class="lead">Đã có schema DB — <b>chưa có API/FE</b>. Storyboard dưới đây là quy trình dự kiến.</p>
+      <div class="actors"><span class="actor">Người nộp</span><span class="actor">Trưởng Line</span><span class="actor">Trưởng phòng</span><span class="actor admin">Tổng Giám đốc</span></div>
+      <div class="card">
+        <div class="sb">
+          <div class="sb-step">
+            <div class="sb-num">1</div>
+            <div class="sb-body">
+              <h4>Trang chủ — tile Tăng ca (chưa mở)</h4>
+              <div class="sb-frame">
+                <div class="mk-home" style="padding:12px;">
+                  <div class="mk-tile" style="max-width:200px;"><span class="soon">Sắp ra mắt</span><div class="ic-box">OT</div><h4>Quản lý tăng ca</h4><p>Đăng ký hoặc phê duyệt</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sb-step">
+            <div class="sb-num">2</div>
+            <div class="sb-body">
+              <h4>Luồng duyệt dự kiến (mock)</h4>
+              <div class="sb-frame">
+                <div class="mk-panel">
+                  <div class="mk-page-head"><div><h4>Đơn OT-2026-001</h4><p class="sub">Nguyễn Văn A · Line 3 · Pending</p></div></div>
+                  <table class="mk-table">
+                    <thead><tr><th>Cấp</th><th>Người duyệt</th><th>Kết quả</th></tr></thead>
+                    <tbody>
+                      <tr><td>1. Trưởng Line</td><td>Theo LineId + Scope</td><td><span class="mk-status s1">ApprovedByLine</span></td></tr>
+                      <tr><td>2. Trưởng phòng</td><td>Theo DepartmentId</td><td><span class="mk-status s1">ApprovedByDept</span></td></tr>
+                      <tr><td>3. Tổng Giám đốc</td><td>Bypass scope</td><td><span class="mk-status s1">Completed</span></td></tr>
+                    </tbody>
+                  </table>
+                  <p style="margin:10px 0 0; font-size:.72rem; color:var(--warn);">Tại bất kỳ cấp: Từ chối → Rejected · Kết thúc. Có thể bắt buộc chữ ký số.</p>
+                </div>
+              </div>
+              <p class="sb-note">Gate kép dự kiến: Permission RBAC + <code>UserApprovalScope</code>.</p>
+            </div>
+          </div>
+        </div>
+        <div class="note warn">Phần này chỉ minh họa thiết kế — chưa triển khai trên hệ thống.</div>
+      </div>
+    </section>
+
+    <footer style="margin-top:40px; padding-top:20px; border-top:1px solid var(--yev-border); color:var(--slate-500); font-size:.82rem;">
+      YEV Management Portal · Storyboard lưu trình nghiệp vụ · Song song với <a href="huong-dan-su-dung.html">Hướng dẫn sử dụng</a>
+    </footer>
+  </main>
+</div>
+</body>
+</html>
