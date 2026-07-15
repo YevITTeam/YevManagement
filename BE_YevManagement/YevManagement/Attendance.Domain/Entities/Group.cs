@@ -12,7 +12,13 @@ public partial class Group
 
     public string? GroupNameJp { get; set; }
 
+    public int DepartmentId { get; set; }
+
     public bool IsDeleted { get; set; }
 
+    public virtual Department Department { get; set; } = null!;
+
     public virtual ICollection<OtForm> OtForms { get; set; } = new List<OtForm>();
+
+    public virtual ICollection<Employee> Employees { get; set; } = new List<Employee>();
 }

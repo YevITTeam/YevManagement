@@ -1,12 +1,13 @@
 namespace Attendance.Domain.Entities;
 
-// Ánh xạ 1 User (Identity, khác DB) được phép duyệt OtForm thuộc phạm vi (ScopeType, ScopeId) nào,
-// ở cấp duyệt (ApprovalLevel) nào. VD: UserId=123 duyệt cấp LineManager của Line có Id=5.
+// Ánh xạ 1 User (Identity, khác DB — lưu UserName) được phép duyệt OtForm thuộc phạm vi
+// (ScopeType, ScopeId) nào, ở cấp duyệt (ApprovalLevel) nào. VD: UserName="nguyenvana" duyệt cấp
+// DepartmentManager của Department có Id=5.
 public partial class UserApprovalScope
 {
     public int Id { get; set; }
 
-    public int UserId { get; set; }
+    public string UserName { get; set; } = null!;
 
     // Lưu enum Attendance.Domain.Enums.ScopeType dưới dạng int.
     public int ScopeType { get; set; }

@@ -15,8 +15,6 @@ public partial class AttendanceDbContext : DbContext
     }
 
     public virtual DbSet<Department> Departments { get; set; }
-    public virtual DbSet<Area> Areas { get; set; }
-    public virtual DbSet<Line> Lines { get; set; }
     public virtual DbSet<Group> Groups { get; set; }
     public virtual DbSet<Reason> Reasons { get; set; }
     public virtual DbSet<OtCase> OtCases { get; set; }
@@ -38,28 +36,18 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.DepartmentNameJp).HasMaxLength(255);
         });
 
-        modelBuilder.Entity<Area>(entity =>
-        {
-            entity.HasIndex(e => e.AreaCode, "IX_Areas_AreaCode").IsUnique();
-            entity.Property(e => e.AreaCode).HasMaxLength(50);
-            entity.Property(e => e.AreaName).HasMaxLength(255);
-            entity.Property(e => e.AreaDescription).HasMaxLength(500);
-        });
-
-        modelBuilder.Entity<Line>(entity =>
-        {
-            entity.HasIndex(e => e.LineCode, "IX_Lines_LineCode").IsUnique();
-            entity.Property(e => e.LineCode).HasMaxLength(50);
-            entity.Property(e => e.LineNameVn).HasMaxLength(255);
-            entity.Property(e => e.LineNameJp).HasMaxLength(255);
-        });
-
         modelBuilder.Entity<Group>(entity =>
         {
             entity.HasIndex(e => e.GroupCode, "IX_Groups_GroupCode").IsUnique();
+            entity.HasIndex(e => e.DepartmentId, "IX_Groups_DepartmentId");
             entity.Property(e => e.GroupCode).HasMaxLength(50);
             entity.Property(e => e.GroupNameVn).HasMaxLength(255);
             entity.Property(e => e.GroupNameJp).HasMaxLength(255);
+
+            entity.HasOne(d => d.Department).WithMany(p => p.Groups)
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_Groups_Departments_DepartmentId");
         });
 
         modelBuilder.Entity<Reason>(entity =>
@@ -78,36 +66,32 @@ public partial class AttendanceDbContext : DbContext
         modelBuilder.Entity<Employee>(entity =>
         {
             entity.HasIndex(e => e.Code, "IX_Employees_Code").IsUnique();
+            entity.HasIndex(e => e.GroupId, "IX_Employees_GroupId");
+
             entity.Property(e => e.Code).HasMaxLength(50);
             entity.Property(e => e.FirstName).HasMaxLength(150);
             entity.Property(e => e.LastName).HasMaxLength(150);
             entity.Property(e => e.MonthToDate).HasPrecision(10, 2);
             entity.Property(e => e.YearToDate).HasPrecision(10, 2);
+
+            entity.HasOne(d => d.Group).WithMany(p => p.Employees)
+                .HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_Employees_Groups_GroupId");
         });
 
         modelBuilder.Entity<OtForm>(entity =>
         {
-            entity.HasIndex(e => e.AreaId, "IX_OtForms_AreaId");
-            entity.HasIndex(e => e.LineId, "IX_OtForms_LineId");
             entity.HasIndex(e => e.GroupId, "IX_OtForms_GroupId");
             entity.HasIndex(e => e.DepartmentId, "IX_OtForms_DepartmentId");
             entity.HasIndex(e => e.ReasonId, "IX_OtForms_ReasonId");
             entity.HasIndex(e => e.OtCaseId, "IX_OtForms_OtCaseId");
-            entity.HasIndex(e => e.CreatedByUserId, "IX_OtForms_CreatedByUserId");
+            entity.HasIndex(e => e.CreatedByUserName, "IX_OtForms_CreatedByUserName");
             entity.HasIndex(e => e.Status, "IX_OtForms_Status");
 
+            entity.Property(e => e.CreatedByUserName).HasMaxLength(100);
             entity.Property(e => e.SubReason).HasMaxLength(500);
             entity.Property(e => e.TotalHour).HasPrecision(10, 2);
-
-            entity.HasOne(d => d.Area).WithMany(p => p.OtForms)
-                .HasForeignKey(d => d.AreaId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_OtForms_Areas_AreaId");
-
-            entity.HasOne(d => d.Line).WithMany(p => p.OtForms)
-                .HasForeignKey(d => d.LineId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_OtForms_Lines_LineId");
 
             entity.HasOne(d => d.Group).WithMany(p => p.OtForms)
                 .HasForeignKey(d => d.GroupId)
@@ -162,14 +146,16 @@ public partial class AttendanceDbContext : DbContext
         modelBuilder.Entity<UserApprovalScope>(entity =>
         {
             entity.HasIndex(e => new { e.ScopeType, e.ScopeId }, "IX_UserApprovalScopes_ScopeType_ScopeId");
-            entity.HasIndex(e => e.UserId, "IX_UserApprovalScopes_UserId");
+            entity.HasIndex(e => e.UserName, "IX_UserApprovalScopes_UserName");
+            entity.Property(e => e.UserName).HasMaxLength(100);
         });
 
         modelBuilder.Entity<OtFormApprovalHistory>(entity =>
         {
             entity.HasIndex(e => e.OtFormId, "IX_OtFormApprovalHistories_OtFormId");
-            entity.HasIndex(e => e.ApproverUserId, "IX_OtFormApprovalHistories_ApproverUserId");
+            entity.HasIndex(e => e.ApproverUserName, "IX_OtFormApprovalHistories_ApproverUserName");
 
+            entity.Property(e => e.ApproverUserName).HasMaxLength(100);
             entity.Property(e => e.Comment).HasMaxLength(500);
 
             entity.HasOne(d => d.OtForm).WithMany(p => p.OtFormApprovalHistories)
@@ -179,7 +165,8 @@ public partial class AttendanceDbContext : DbContext
 
         modelBuilder.Entity<UserSignature>(entity =>
         {
-            entity.HasIndex(e => e.UserId, "IX_UserSignatures_UserId").IsUnique();
+            entity.HasIndex(e => e.UserName, "IX_UserSignatures_UserName").IsUnique();
+            entity.Property(e => e.UserName).HasMaxLength(100);
         });
 
         OnModelCreatingPartial(modelBuilder);

@@ -9,6 +9,7 @@
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 	</ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Attendance.Application\Attendance.Application.csproj" />
     <ProjectReference Include="..\Attendance.Infrastructure\Attendance.Infrastructure.csproj" />
   </ItemGroup>
 

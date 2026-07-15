@@ -7,10 +7,6 @@ public partial class OtForm
 {
     public int Id { get; set; }
 
-    public int AreaId { get; set; }
-
-    public int LineId { get; set; }
-
     public int GroupId { get; set; }
 
     public int DepartmentId { get; set; }
@@ -31,17 +27,14 @@ public partial class OtForm
 
     public int NumberOfEmployee { get; set; }
 
-    // Người tạo đơn, tham chiếu Identity.User (khác DB, không có FK constraint thật — xem docs/attendance-module.md).
-    public int CreatedByUserId { get; set; }
+    // Người tạo đơn — lưu UserName (Identity.User nằm ở DB khác, JWT không có claim UserId dạng số,
+    // chỉ có UserName), theo đúng convention Asset.Domain.Models.AuditTrail.ChangedBy.
+    public string CreatedByUserName { get; set; } = null!;
 
     // Lưu enum Attendance.Domain.Enums.OtFormStatus dưới dạng int (theo convention Asset.Domain.Entities.Device.Status).
     public int Status { get; set; }
 
     public bool IsDeleted { get; set; }
-
-    public virtual Area Area { get; set; } = null!;
-
-    public virtual Line Line { get; set; } = null!;
 
     public virtual Group Group { get; set; } = null!;
 

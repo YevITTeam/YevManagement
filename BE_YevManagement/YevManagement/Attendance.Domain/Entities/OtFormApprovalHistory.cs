@@ -9,8 +9,8 @@ public partial class OtFormApprovalHistory
 
     public int OtFormId { get; set; }
 
-    // Người tạo/duyệt, tham chiếu Identity.User (khác DB, không có FK constraint thật).
-    public int ApproverUserId { get; set; }
+    // Người tạo/duyệt — lưu UserName, cùng lý do với OtForm.CreatedByUserName.
+    public string ApproverUserName { get; set; } = null!;
 
     // Lưu enum Attendance.Domain.Enums.ApprovalLevel dưới dạng int.
     public int ApprovalLevel { get; set; }

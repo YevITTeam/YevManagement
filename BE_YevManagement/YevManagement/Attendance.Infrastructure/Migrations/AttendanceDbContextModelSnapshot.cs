@@ -22,39 +22,6 @@ namespace Attendance.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("Attendance.Domain.Entities.Area", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AreaCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("AreaDescription")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("AreaName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex(new[] { "AreaCode" }, "IX_Areas_AreaCode")
-                        .IsUnique();
-
-                    b.ToTable("Areas");
-                });
-
             modelBuilder.Entity("Attendance.Domain.Entities.Department", b =>
                 {
                     b.Property<int>("Id")
@@ -106,6 +73,9 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<int>("GroupId")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
@@ -127,6 +97,8 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "Code" }, "IX_Employees_Code")
                         .IsUnique();
 
+                    b.HasIndex(new[] { "GroupId" }, "IX_Employees_GroupId");
+
                     b.ToTable("Employees");
                 });
 
@@ -137,6 +109,9 @@ namespace Attendance.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("int");
 
                     b.Property<string>("GroupCode")
                         .IsRequired()
@@ -157,43 +132,12 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex(new[] { "DepartmentId" }, "IX_Groups_DepartmentId");
+
                     b.HasIndex(new[] { "GroupCode" }, "IX_Groups_GroupCode")
                         .IsUnique();
 
                     b.ToTable("Groups");
-                });
-
-            modelBuilder.Entity("Attendance.Domain.Entities.Line", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("LineCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("LineNameJp")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("LineNameVn")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex(new[] { "LineCode" }, "IX_Lines_LineCode")
-                        .IsUnique();
-
-                    b.ToTable("Lines");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtCase", b =>
@@ -219,6 +163,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<bool>("RequireSignature")
                         .HasColumnType("bit");
 
+                    b.Property<int>("RequiredApprovalLevel")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex(new[] { "Code" }, "IX_OtCases_Code")
@@ -235,11 +182,10 @@ namespace Attendance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("AreaId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("CreatedByUserId")
-                        .HasColumnType("int");
+                    b.Property<string>("CreatedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
@@ -255,9 +201,6 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
-
-                    b.Property<int>("LineId")
-                        .HasColumnType("int");
 
                     b.Property<int>("NumberOfEmployee")
                         .HasColumnType("int");
@@ -284,15 +227,11 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex(new[] { "AreaId" }, "IX_OtForms_AreaId");
-
-                    b.HasIndex(new[] { "CreatedByUserId" }, "IX_OtForms_CreatedByUserId");
+                    b.HasIndex(new[] { "CreatedByUserName" }, "IX_OtForms_CreatedByUserName");
 
                     b.HasIndex(new[] { "DepartmentId" }, "IX_OtForms_DepartmentId");
 
                     b.HasIndex(new[] { "GroupId" }, "IX_OtForms_GroupId");
-
-                    b.HasIndex(new[] { "LineId" }, "IX_OtForms_LineId");
 
                     b.HasIndex(new[] { "OtCaseId" }, "IX_OtForms_OtCaseId");
 
@@ -320,8 +259,10 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<int>("ApprovalLevel")
                         .HasColumnType("int");
 
-                    b.Property<int>("ApproverUserId")
-                        .HasColumnType("int");
+                    b.Property<string>("ApproverUserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Comment")
                         .HasMaxLength(500)
@@ -335,7 +276,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex(new[] { "ApproverUserId" }, "IX_OtFormApprovalHistories_ApproverUserId");
+                    b.HasIndex(new[] { "ApproverUserName" }, "IX_OtFormApprovalHistories_ApproverUserName");
 
                     b.HasIndex(new[] { "OtFormId" }, "IX_OtFormApprovalHistories_OtFormId");
 
@@ -453,14 +394,16 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<int>("ScopeType")
                         .HasColumnType("int");
 
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
 
                     b.HasIndex(new[] { "ScopeType", "ScopeId" }, "IX_UserApprovalScopes_ScopeType_ScopeId");
 
-                    b.HasIndex(new[] { "UserId" }, "IX_UserApprovalScopes_UserId");
+                    b.HasIndex(new[] { "UserName" }, "IX_UserApprovalScopes_UserName");
 
                     b.ToTable("UserApprovalScopes");
                 });
@@ -480,26 +423,45 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex(new[] { "UserId" }, "IX_UserSignatures_UserId")
+                    b.HasIndex(new[] { "UserName" }, "IX_UserSignatures_UserName")
                         .IsUnique();
 
                     b.ToTable("UserSignatures");
                 });
 
-            modelBuilder.Entity("Attendance.Domain.Entities.OtForm", b =>
+            modelBuilder.Entity("Attendance.Domain.Entities.Employee", b =>
                 {
-                    b.HasOne("Attendance.Domain.Entities.Area", "Area")
-                        .WithMany("OtForms")
-                        .HasForeignKey("AreaId")
+                    b.HasOne("Attendance.Domain.Entities.Group", "Group")
+                        .WithMany("Employees")
+                        .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("FK_OtForms_Areas_AreaId");
+                        .HasConstraintName("FK_Employees_Groups_GroupId");
 
+                    b.Navigation("Group");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.Group", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Department", "Department")
+                        .WithMany("Groups")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_Groups_Departments_DepartmentId");
+
+                    b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtForm", b =>
+                {
                     b.HasOne("Attendance.Domain.Entities.Department", "Department")
                         .WithMany("OtForms")
                         .HasForeignKey("DepartmentId")
@@ -513,13 +475,6 @@ namespace Attendance.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_OtForms_Groups_GroupId");
-
-                    b.HasOne("Attendance.Domain.Entities.Line", "Line")
-                        .WithMany("OtForms")
-                        .HasForeignKey("LineId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_OtForms_Lines_LineId");
 
                     b.HasOne("Attendance.Domain.Entities.OtCase", "OtCase")
                         .WithMany("OtForms")
@@ -535,13 +490,9 @@ namespace Attendance.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_OtForms_Reasons_ReasonId");
 
-                    b.Navigation("Area");
-
                     b.Navigation("Department");
 
                     b.Navigation("Group");
-
-                    b.Navigation("Line");
 
                     b.Navigation("OtCase");
 
@@ -593,13 +544,10 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtForm");
                 });
 
-            modelBuilder.Entity("Attendance.Domain.Entities.Area", b =>
-                {
-                    b.Navigation("OtForms");
-                });
-
             modelBuilder.Entity("Attendance.Domain.Entities.Department", b =>
                 {
+                    b.Navigation("Groups");
+
                     b.Navigation("OtForms");
                 });
 
@@ -610,11 +558,8 @@ namespace Attendance.Infrastructure.Migrations
 
             modelBuilder.Entity("Attendance.Domain.Entities.Group", b =>
                 {
-                    b.Navigation("OtForms");
-                });
+                    b.Navigation("Employees");
 
-            modelBuilder.Entity("Attendance.Domain.Entities.Line", b =>
-                {
                     b.Navigation("OtForms");
                 });
 

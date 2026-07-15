@@ -8,7 +8,7 @@ public partial class UserSignature
 {
     public int Id { get; set; }
 
-    public int UserId { get; set; }
+    public string UserName { get; set; } = null!;
 
     public byte[] SignatureImage { get; set; } = null!;
 

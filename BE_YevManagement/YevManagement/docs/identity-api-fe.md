@@ -1,6 +1,6 @@
 # identity-api-fe.md — API Identity cho Frontend
 
-> Hợp đồng API cho đội FE (login + quản trị user/role). Implementation: [identity-module.md](identity-module.md). Module Asset: [asset-api-fe.md](asset-api-fe.md).
+> Hợp đồng API cho đội FE (login + quản trị user/role). Implementation: [identity-module.md](identity-module.md). Module Asset: [asset-api-fe.md](asset-api-fe.md) · Module Attendance: [attendance-api-fe.md](attendance-api-fe.md).
 
 - **Base URL (Dev)**: `http://localhost:5000` · Scalar UI `/scalar/v1`.
 - **CORS**: chỉ `http://localhost:3000` + `http://10.45.1.181:3000` (`AllowCredentials`). Origin khác → báo BE thêm whitelist.
