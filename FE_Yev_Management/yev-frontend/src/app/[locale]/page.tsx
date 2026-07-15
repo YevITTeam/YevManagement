@@ -13,6 +13,9 @@ export default function Home() {
   // bị" hoặc "Admin" được seed sẵn full quyền) — trong lúc đang tải user thì ẩn tạm để tránh chớp UI
   // cho người không có quyền.
   const canManagePc = !isLoading && hasModuleAccess(user, "Asset");
+  // Chỉ hiện mục "Quản lý tăng ca" nếu user có ít nhất 1 permission module Attendance
+  // (docs/attendance-api-fe.md) — cùng cách gate với tile PC ở trên.
+  const canManageOt = !isLoading && hasModuleAccess(user, "Attendance");
 
   const menuItems = [
     {
@@ -39,16 +42,9 @@ export default function Home() {
     {
       title: t("overtimeTitle"),
       desc: t("overtimeDesc"),
-      link: "#",
+      link: "/ot",
       icon: <Notebook className="w-8 h-8" />,
-      visible: true,
-    },
-    {
-      title: t("reportsTitle"),
-      desc: t("reportsDesc"),
-      link: "#",
-      icon: <BarChart3 className="w-8 h-8" />,
-      visible: true,
+      visible: canManageOt,
     },
   ].filter((item) => item.visible);
 

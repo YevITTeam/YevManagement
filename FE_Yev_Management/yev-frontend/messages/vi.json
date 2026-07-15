@@ -19,7 +19,14 @@
     "deviceDepartments": "Quản lý bộ phận",
     "softwares": "Quản lý phần mềm",
     "suppliers": "Quản lý nhà cung cấp",
-    "settings": "Cài đặt hệ thống"
+    "settings": "Cài đặt hệ thống",
+    "otManagerTagline": "Quản lý tăng ca",
+    "otCreate": "Tạo đơn tăng ca",
+    "otMyForms": "Đơn của tôi",
+    "otPendingApprovals": "Chờ tôi duyệt",
+    "otCategories": "Danh mục",
+    "otApprovalScopes": "Phân quyền duyệt",
+    "otSignature": "Chữ ký của tôi"
   },
   "Header": {
     "productName": "YEV Management",

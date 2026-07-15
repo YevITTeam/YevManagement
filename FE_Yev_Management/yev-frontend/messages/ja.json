@@ -19,7 +19,14 @@
     "deviceDepartments": "部門管理",
     "softwares": "ソフトウェア管理",
     "suppliers": "仕入先管理",
-    "settings": "システム設定"
+    "settings": "システム設定",
+    "otManagerTagline": "残業管理",
+    "otCreate": "残業申請作成",
+    "otMyForms": "自分の申請",
+    "otPendingApprovals": "承認待ち",
+    "otCategories": "マスタ管理",
+    "otApprovalScopes": "承認権限設定",
+    "otSignature": "自分の署名"
   },
   "Header": {
     "productName": "YEV Management",

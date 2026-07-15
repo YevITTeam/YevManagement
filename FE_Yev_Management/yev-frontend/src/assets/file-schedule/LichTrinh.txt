@@ -7,36 +7,64 @@
     {
       "id": "4f64bbc3-c819-4551-a05f-f4e1f9c3b1b7",
       "name": "Phan Nguyễn Mạnh Cường"
+    },
+    {
+      "id": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+      "name": "Tất cả thành viên"
     }
   ],
   "plans": [
     {
       "id": "p1",
-      "name": "Kế hoạch phát triển PC",
-      "startDate": "2026-07-01",
-      "endDate": "2026-07-21",
+      "name": "Phát triển PC",
+      "startDate": "2026-06-29",
+      "endDate": "2026-07-20",
       "tasks": [
         {
           "id": "s1",
           "content": "Phân tích yêu cầu",
-          "assigneeId": "fd4cac24-ac35-4766-ac60-bdc75a20a8ae",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
           "status": "done",
-          "dueDate": "2026-07-16",
-          "completedDate": "2026-07-14"
+          "dueDate": "2026-07-03",
+          "completedDate": "2026-07-02"
         },
         {
           "id": "s2",
           "content": "Liệt kê yêu cầu",
           "assigneeId": "4f64bbc3-c819-4551-a05f-f4e1f9c3b1b7",
           "status": "done",
-          "dueDate": "2026-07-18",
-          "completedDate": "2026-07-14"
+          "dueDate": "2026-07-07",
+          "completedDate": "2026-07-07"
+        },
+        {
+          "id": "4f568780-b3fb-41e8-9cf7-ddb561c583ba",
+          "content": "Thiết kế database",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "done",
+          "dueDate": "2026-07-09",
+          "completedDate": "2026-07-09"
+        },
+        {
+          "id": "ad371b3e-960e-495a-938c-60cf4e71e51c",
+          "content": "Thiết kế kiến trúc",
+          "assigneeId": "fd4cac24-ac35-4766-ac60-bdc75a20a8ae",
+          "status": "done",
+          "dueDate": "2026-07-09",
+          "completedDate": "2026-07-08"
+        },
+        {
+          "id": "6706e629-06c4-4e33-a9ac-a6cd129a94c4",
+          "content": "Phát triển phần mềm",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "done",
+          "dueDate": "2026-07-20",
+          "completedDate": "2026-07-20"
         }
       ]
     },
     {
       "id": "8b78989f-5f52-4f77-8c94-e2fa8224e0ce",
-      "name": "Kế hoạch phát triển OT",
+      "name": "Phát triển OT",
       "startDate": "2026-07-10",
       "endDate": "2026-07-20",
       "tasks": [
@@ -46,6 +74,14 @@
           "assigneeId": "",
           "status": "todo",
           "dueDate": "2026-07-15",
+          "completedDate": ""
+        },
+        {
+          "id": "d9bac34d-81c9-449b-8b2d-dbcc90bac3af",
+          "content": "Thiết kế database",
+          "assigneeId": "",
+          "status": "todo",
+          "dueDate": "",
           "completedDate": ""
         }
       ]

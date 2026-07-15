@@ -5,6 +5,7 @@ import { CalendarClock } from "lucide-react";
 
 import type { SchedulePlan } from "../types/schedule";
 import { addDays, diffDays, formatShort, formatVN, parseDate, toISODate, todayUTC } from "../lib/date";
+import { getVariance, varianceMeta } from "../lib/task";
 
 interface ScheduleGanttProps {
   plans: SchedulePlan[];
@@ -13,7 +14,11 @@ interface ScheduleGanttProps {
 }
 
 const LABEL_WIDTH = 176; // px — cột tên kế hoạch bên trái
-const ROW_HEIGHT = 44; // px — chiều cao mỗi hàng
+const ROW_HEIGHT = 52; // px — chiều cao mỗi hàng
+const PLAN_BAR_TOP = 8; // bar "dự tính" (đỏ) nằm trên
+const PLAN_BAR_HEIGHT = 24;
+const ACTUAL_LINE_TOP = 38; // line "thực tế" (xanh) nằm dưới
+const ACTUAL_LINE_HEIGHT = 6;
 
 type DragMode = "move" | "start" | "end";
 
@@ -25,6 +30,19 @@ const pickTickStep = (totalDays: number): number => {
   if (totalDays <= 365) return 30;
   return 60;
 };
+
+// Ngày hoàn thành thực tế của kế hoạch = ngày hoàn thành muộn nhất trong các task.
+// null nếu chưa task nào có ngày hoàn thành.
+const getActualEnd = (plan: SchedulePlan): Date | null => {
+  const dates = plan.tasks
+    .map((task) => parseDate(task.completedDate))
+    .filter((date): date is Date => date !== null);
+  if (dates.length === 0) return null;
+  return dates.reduce((acc, date) => (date > acc ? date : acc), dates[0]);
+};
+
+const isAllDone = (plan: SchedulePlan): boolean =>
+  plan.tasks.length > 0 && plan.tasks.every((task) => task.status === "done");
 
 export default function ScheduleGantt({ plans, onChangeDates }: ScheduleGanttProps) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -46,9 +64,10 @@ export default function ScheduleGantt({ plans, onChangeDates }: ScheduleGanttPro
     .map((plan) => {
       const start = parseDate(plan.startDate);
       const end = parseDate(plan.endDate);
-      return start && end && diffDays(start, end) >= 0 ? { plan, start, end } : null;
+      if (!start || !end || diffDays(start, end) < 0) return null;
+      return { start, end, actualEnd: getActualEnd(plan) };
     })
-    .filter((item): item is { plan: SchedulePlan; start: Date; end: Date } => item !== null);
+    .filter((item): item is { start: Date; end: Date; actualEnd: Date | null } => item !== null);
 
   if (dated.length === 0) {
     return (
@@ -58,9 +77,13 @@ export default function ScheduleGantt({ plans, onChangeDates }: ScheduleGanttPro
     );
   }
 
-  // Miền thời gian = [min start, max end] + đệm 2 bên để có chỗ kéo dài bar.
+  // Miền thời gian = [min start, max(end, ngày hoàn thành thực tế)] + đệm 2 bên.
+  // Tính cả ngày thực tế để line xanh không bị tràn ra ngoài khi kế hoạch xong trễ.
   const minStart = dated.reduce((acc, item) => (item.start < acc ? item.start : acc), dated[0].start);
-  const maxEnd = dated.reduce((acc, item) => (item.end > acc ? item.end : acc), dated[0].end);
+  const maxEnd = dated.reduce((acc, item) => {
+    const candidate = item.actualEnd && item.actualEnd > item.end ? item.actualEnd : item.end;
+    return candidate > acc ? candidate : acc;
+  }, dated[0].end);
   const rawSpan = diffDays(minStart, maxEnd) + 1;
   const pad = Math.max(3, Math.round(rawSpan * 0.15));
   const domainStart = addDays(minStart, -pad);
@@ -81,11 +104,22 @@ export default function ScheduleGantt({ plans, onChangeDates }: ScheduleGanttPro
 
   return (
     <div className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-[#191c1e]">
-          <CalendarClock className="h-4 w-4 text-[#e3000f]" /> Biểu đồ thời gian
-        </h2>
-        <span className="hidden text-xs text-[#5e3f3a] sm:block">Kéo thân bar để dời, kéo hai mép để đổi ngày</span>
+      <div className="flex flex-col gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-[#191c1e]">
+            <CalendarClock className="h-4 w-4 text-[#e3000f]" /> Biểu đồ thời gian
+          </h2>
+          {/* Chú thích màu */}
+          <div className="flex items-center gap-3 text-xs text-[#5e3f3a]">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-4 rounded-sm bg-[#e3000f]" /> Dự tính
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-1.5 w-4 rounded-full bg-[#059669]" /> Thực tế
+            </span>
+          </div>
+        </div>
+        <span className="hidden text-xs text-[#5e3f3a] lg:block">Kéo thân bar để dời, kéo hai mép để đổi ngày</span>
       </div>
 
       <div className="overflow-x-auto">
@@ -119,6 +153,8 @@ export default function ScheduleGantt({ plans, onChangeDates }: ScheduleGanttPro
             const start = parseDate(plan.startDate);
             const end = parseDate(plan.endDate);
             const valid = start && end && diffDays(start, end) >= 0;
+            const actualEnd = getActualEnd(plan);
+
             return (
               <div key={plan.id} className="flex border-b border-[#f1f5f9] last:border-b-0">
                 <div
@@ -138,27 +174,40 @@ export default function ScheduleGantt({ plans, onChangeDates }: ScheduleGanttPro
                     />
                   )}
                   {valid && dayWidth > 0 ? (
-                    <GanttBar
-                      key={`${plan.startDate}-${plan.endDate}`}
-                      startOffset={diffDays(domainStart, start)}
-                      span={diffDays(start, end) + 1}
-                      dayWidth={dayWidth}
-                      totalDays={totalDays}
-                      startDate={start}
-                      endDate={end}
-                      progress={
-                        plan.tasks.length > 0
-                          ? plan.tasks.filter((task) => task.status === "done").length / plan.tasks.length
-                          : 0
-                      }
-                      onCommit={(startOffset, endOffset) => {
-                        const newStart = toISODate(addDays(domainStart, startOffset));
-                        const newEnd = toISODate(addDays(domainStart, endOffset));
-                        if (newStart !== plan.startDate || newEnd !== plan.endDate) {
-                          onChangeDates(plan.id, newStart, newEnd);
+                    <>
+                      <GanttBar
+                        key={`${plan.startDate}-${plan.endDate}`}
+                        startOffset={diffDays(domainStart, start)}
+                        span={diffDays(start, end) + 1}
+                        dayWidth={dayWidth}
+                        totalDays={totalDays}
+                        startDate={start}
+                        endDate={end}
+                        progress={
+                          plan.tasks.length > 0
+                            ? plan.tasks.filter((task) => task.status === "done").length / plan.tasks.length
+                            : 0
                         }
-                      }}
-                    />
+                        onCommit={(startOffset, endOffset) => {
+                          const newStart = toISODate(addDays(domainStart, startOffset));
+                          const newEnd = toISODate(addDays(domainStart, endOffset));
+                          if (newStart !== plan.startDate || newEnd !== plan.endDate) {
+                            onChangeDates(plan.id, newStart, newEnd);
+                          }
+                        }}
+                      />
+                      {actualEnd && (
+                        <ActualLine
+                          startOffset={diffDays(domainStart, start)}
+                          endOffset={diffDays(domainStart, actualEnd)}
+                          dayWidth={dayWidth}
+                          startDate={start}
+                          actualEnd={actualEnd}
+                          plannedEndISO={plan.endDate}
+                          finished={isAllDone(plan)}
+                        />
+                      )}
+                    </>
                   ) : (
                     <div className="flex h-full items-center pl-2 text-xs italic text-[#9aa0a6]">Chưa đặt ngày</div>
                   )}
@@ -169,6 +218,49 @@ export default function ScheduleGantt({ plans, onChangeDates }: ScheduleGanttPro
         </div>
       </div>
     </div>
+  );
+}
+
+interface ActualLineProps {
+  startOffset: number;
+  endOffset: number;
+  dayWidth: number;
+  startDate: Date;
+  actualEnd: Date;
+  plannedEndISO: string;
+  finished: boolean; // đã xong toàn bộ task hay chưa
+}
+
+// Line xanh: thời gian làm thực tế (từ ngày bắt đầu kế hoạch → ngày hoàn thành task muộn nhất).
+function ActualLine({
+  startOffset,
+  endOffset,
+  dayWidth,
+  startDate,
+  actualEnd,
+  plannedEndISO,
+  finished,
+}: ActualLineProps) {
+  const from = Math.min(startOffset, endOffset);
+  const to = Math.max(startOffset, endOffset);
+  const variance = varianceMeta(getVariance(plannedEndISO, toISODate(actualEnd)));
+
+  const rangeText = `${formatVN(startDate)} → ${formatVN(actualEnd)}`;
+  const title = finished
+    ? `Thực tế: ${rangeText}${variance ? ` (${variance.label} so với dự tính)` : ""}`
+    : `Thực tế (đang chạy): ${rangeText}`;
+
+  return (
+    <div
+      className={`absolute rounded-full ${finished ? "bg-[#059669]" : "bg-[#059669]/60"}`}
+      style={{
+        top: ACTUAL_LINE_TOP,
+        height: ACTUAL_LINE_HEIGHT,
+        left: from * dayWidth,
+        width: Math.max((to - from + 1) * dayWidth, 4),
+      }}
+      title={title}
+    />
   );
 }
 
@@ -242,13 +334,14 @@ function GanttBar({ startOffset, span, dayWidth, totalDays, startDate, endDate, 
 
   return (
     <div
-      className="group absolute top-1/2 flex -translate-y-1/2 items-center rounded-md bg-[#e3000f] text-white shadow-sm"
+      className="group absolute flex items-center rounded-md bg-[#e3000f] text-white shadow-sm"
       style={{
+        top: PLAN_BAR_TOP,
+        height: PLAN_BAR_HEIGHT,
         left: previewStart * dayWidth,
         width: Math.max((previewEnd - previewStart + 1) * dayWidth, 6),
-        height: ROW_HEIGHT - 16,
       }}
-      title={`${formatVN(previewStartDate)} → ${formatVN(previewEndDate)}`}
+      title={`Dự tính: ${formatVN(previewStartDate)} → ${formatVN(previewEndDate)}`}
     >
       {/* mép trái: đổi ngày bắt đầu */}
       <span
