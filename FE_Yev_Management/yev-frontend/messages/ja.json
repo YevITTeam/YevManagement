@@ -26,7 +26,9 @@
     "otPendingApprovals": "承認待ち",
     "otCategories": "マスタ管理",
     "otApprovalScopes": "承認権限設定",
-    "otSignature": "自分の署名"
+    "otSignature": "自分の署名",
+    "collapseSidebar": "サイドバーを折りたたむ",
+    "expandSidebar": "サイドバーを展開する"
   },
   "Header": {
     "productName": "YEV Management",

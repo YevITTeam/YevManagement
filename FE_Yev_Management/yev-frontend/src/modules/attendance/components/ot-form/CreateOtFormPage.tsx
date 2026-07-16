@@ -41,6 +41,65 @@ const emptyProcessPart: ProcessPartDto = {
     anotherSuggestionJp: null,
 };
 
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+
+const timeSelectClassName =
+    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+
+// Input giờ/phút dựng bằng 2 <select> thay cho <input type="time"> — trình duyệt (đặc biệt Firefox)
+// bỏ qua thuộc tính lang và luôn hiển thị theo định dạng hệ điều hành (có thể ra AM/PM), nên tự dựng
+// để đảm bảo LUÔN nhập/hiển thị 24h bất kể trình duyệt/OS.
+function TimePicker24h({
+    value,
+    onChange,
+    disabled,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+    disabled?: boolean;
+}) {
+    const [hour, minute] = value ? value.split(":") : ["", ""];
+
+    return (
+        <div className="flex items-center gap-1.5">
+            <select
+                value={hour}
+                onChange={(event) => onChange(`${event.target.value}:${minute || "00"}`)}
+                disabled={disabled}
+                required
+                className={timeSelectClassName}
+            >
+                <option value="" disabled>
+                    Giờ
+                </option>
+                {HOUR_OPTIONS.map((h) => (
+                    <option key={h} value={h}>
+                        {h}
+                    </option>
+                ))}
+            </select>
+            <span className="text-sm font-semibold text-[#5e3f3a]">:</span>
+            <select
+                value={minute}
+                onChange={(event) => onChange(`${hour || "00"}:${event.target.value}`)}
+                disabled={disabled}
+                required
+                className={timeSelectClassName}
+            >
+                <option value="" disabled>
+                    Phút
+                </option>
+                {MINUTE_OPTIONS.map((m) => (
+                    <option key={m} value={m}>
+                        {m}
+                    </option>
+                ))}
+            </select>
+        </div>
+    );
+}
+
 export default function CreateOtFormPage() {
     const router = useRouter();
 
@@ -280,26 +339,12 @@ export default function CreateOtFormPage() {
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Giờ bắt đầu</span>
-                            <input
-                                type="time"
-                                value={startTime}
-                                onChange={(event) => setStartTime(event.target.value)}
-                                disabled={isSubmitting}
-                                required
-                                className={fieldClassName}
-                            />
+                            <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting} />
                         </label>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Giờ kết thúc</span>
-                            <input
-                                type="time"
-                                value={endTime}
-                                onChange={(event) => setEndTime(event.target.value)}
-                                disabled={isSubmitting}
-                                required
-                                className={fieldClassName}
-                            />
+                            <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting} />
                         </label>
 
                         <label className="block">

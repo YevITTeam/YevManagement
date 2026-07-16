@@ -29,7 +29,7 @@ export default function OtHomePage() {
         <div className="space-y-8">
             <div>
                 <h1 className="text-2xl font-semibold text-[#191c1e]">Quản lý tăng ca</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">Lập và duyệt Giấy đề nghị làm ngoài giờ (YEV-22-024).</p>
+                <p className="mt-1 text-[15px] text-[#5e3f3a]">Lập và duyệt Giấy đề nghị làm ngoài giờ.</p>
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">

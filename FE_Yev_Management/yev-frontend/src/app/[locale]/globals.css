@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
-
+:root {
+  --sidebar-w: 13.75rem;
+}
 
 body {
   margin: 0;
