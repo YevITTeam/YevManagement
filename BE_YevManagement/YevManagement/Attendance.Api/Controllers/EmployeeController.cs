@@ -41,6 +41,16 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
+        // Không gắn [RequirePermission] — chỉ cần đăng nhập. Nhân viên tự tra employeeId của chính
+        // mình (màn "Lũy kế của tôi") qua Employee.UserName khớp CurrentUserName. 404 nếu tài khoản
+        // đang đăng nhập chưa được Admin gán cho nhân viên nào (Employee.UserName vẫn null).
+        [HttpGet("me")]
+        public async Task<ActionResult<ApiResponse<EmployeeDto>>> GetMe()
+        {
+            var result = await _employeeService.GetByUserNameAsync(CurrentUserName);
+            return Success(result);
+        }
+
         [RequirePermission("Attendance.Employee.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateEmployeeDto request)
@@ -65,6 +75,18 @@ namespace Attendance.Api.Controllers
         {
             await _employeeService.DeleteAsync(id);
             return Success(true, "Xóa nhân viên thành công.");
+        }
+
+        // Không gắn [RequirePermission] — chỉ cần đăng nhập (FallbackPolicy). Cho phép chính nhân
+        // viên (Employee.UserName khớp CurrentUserName) tự chỉnh lũy kế của mình, vì không phải ai
+        // cũng làm đúng giờ OT đã đăng ký trong form. Người có quyền Attendance.Employee.Update
+        // (Admin) chỉnh được cho bất kỳ nhân viên nào.
+        [HttpPatch("{id}/adjust-accumulation")]
+        public async Task<ActionResult<ApiResponse<bool>>> AdjustAccumulation(int id, [FromBody] AdjustEmployeeAccumulationDto request)
+        {
+            var canAdjustAny = User.HasClaim("Permission", "Attendance.Employee.Update");
+            await _employeeService.AdjustAccumulationAsync(id, CurrentUserName, canAdjustAny, request);
+            return Success(true, "Cập nhật lũy kế thành công.");
         }
     }
 }

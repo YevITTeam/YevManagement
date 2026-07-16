@@ -15,6 +15,8 @@ namespace Attendance.Application.Dtos.Employees
         [Required(ErrorMessage = "Tên không được để trống")]
         public string LastName { get; set; } = null!;
 
+        public string? UserName { get; set; }
+
         public decimal MonthToDate { get; set; }
 
         public decimal YearToDate { get; set; }

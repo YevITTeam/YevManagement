@@ -35,6 +35,7 @@ namespace Identity.Api.Controllers
             var roles = User.Claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value).ToList();
             var permissions = User.Claims.Where(c => c.Type == "Permission").Select(c => c.Value).Distinct().ToList();
             var deviceName = User.Claims.FirstOrDefault(c => c.Type == "DeviceName")?.Value;
+            var email = User.Claims.FirstOrDefault(c => c.Type == "Email")?.Value;
 
             int userId = 0;
             var idClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
@@ -50,7 +51,8 @@ namespace Identity.Api.Controllers
                 FullName = fullName,
                 Roles = roles,
                 Permissions = permissions,
-                DeviceName = deviceName
+                DeviceName = deviceName,
+                Email = email
             };
 
             var token = _tokenService.GenerateJwtToken(User);

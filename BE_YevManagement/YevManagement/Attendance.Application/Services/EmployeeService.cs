@@ -30,8 +30,11 @@ namespace Attendance.Application.Services
                     Code = x.Code,
                     FirstName = x.FirstName,
                     LastName = x.LastName,
+                    UserName = x.UserName,
                     MonthToDate = x.MonthToDate,
                     YearToDate = x.YearToDate,
+                    AccumulationYear = x.AccumulationYear,
+                    AccumulationMonth = x.AccumulationMonth,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group.GroupNameVn
                 }
@@ -49,8 +52,11 @@ namespace Attendance.Application.Services
                     Code = x.Code,
                     FirstName = x.FirstName,
                     LastName = x.LastName,
+                    UserName = x.UserName,
                     MonthToDate = x.MonthToDate,
                     YearToDate = x.YearToDate,
+                    AccumulationYear = x.AccumulationYear,
+                    AccumulationMonth = x.AccumulationMonth,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group.GroupNameVn
                 }
@@ -69,8 +75,33 @@ namespace Attendance.Application.Services
                 Code = employee.Code,
                 FirstName = employee.FirstName,
                 LastName = employee.LastName,
+                UserName = employee.UserName,
                 MonthToDate = employee.MonthToDate,
                 YearToDate = employee.YearToDate,
+                AccumulationYear = employee.AccumulationYear,
+                AccumulationMonth = employee.AccumulationMonth,
+                GroupId = employee.GroupId,
+                GroupNameVn = employee.Group.GroupNameVn
+            };
+        }
+
+        // Nhân viên tự tra employeeId của chính mình (màn "Lũy kế của tôi") — so khớp Employee.UserName.
+        public async Task<EmployeeDto> GetByUserNameAsync(string userName)
+        {
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted, x => x.Group);
+            employee.OrThrowNotFound("Nhân viên (tài khoản chưa được gán cho nhân viên nào)", userName);
+
+            return new EmployeeDto
+            {
+                Id = employee!.Id,
+                Code = employee.Code,
+                FirstName = employee.FirstName,
+                LastName = employee.LastName,
+                UserName = employee.UserName,
+                MonthToDate = employee.MonthToDate,
+                YearToDate = employee.YearToDate,
+                AccumulationYear = employee.AccumulationYear,
+                AccumulationMonth = employee.AccumulationMonth,
                 GroupId = employee.GroupId,
                 GroupNameVn = employee.Group.GroupNameVn
             };
@@ -84,13 +115,23 @@ namespace Attendance.Application.Services
             var exists = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Code == request.Code && !x.IsDeleted);
             if (exists != null) throw new DomainException($"Mã nhân viên '{request.Code}' đã tồn tại.");
 
+            if (!string.IsNullOrWhiteSpace(request.UserName))
+            {
+                var existsUserName = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == request.UserName && !x.IsDeleted);
+                if (existsUserName != null) throw new DomainException($"Tài khoản '{request.UserName}' đã được gán cho nhân viên khác.");
+            }
+
+            var now = DateTime.UtcNow;
             var newEmployee = new Employee
             {
                 Code = request.Code,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
+                UserName = request.UserName,
                 MonthToDate = request.MonthToDate,
                 YearToDate = request.YearToDate,
+                AccumulationYear = now.Year,
+                AccumulationMonth = now.Month,
                 GroupId = request.GroupId,
                 IsDeleted = false
             };
@@ -104,8 +145,11 @@ namespace Attendance.Application.Services
                 Code = newEmployee.Code,
                 FirstName = newEmployee.FirstName,
                 LastName = newEmployee.LastName,
+                UserName = newEmployee.UserName,
                 MonthToDate = newEmployee.MonthToDate,
                 YearToDate = newEmployee.YearToDate,
+                AccumulationYear = newEmployee.AccumulationYear,
+                AccumulationMonth = newEmployee.AccumulationMonth,
                 GroupId = newEmployee.GroupId,
                 GroupNameVn = group!.GroupNameVn
             };
@@ -122,17 +166,27 @@ namespace Attendance.Application.Services
                 if (exists != null) throw new DomainException($"Mã nhân viên '{request.Code}' đã tồn tại.");
             }
 
+            if (!string.IsNullOrWhiteSpace(request.UserName) && employee.UserName != request.UserName)
+            {
+                var existsUserName = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == request.UserName && !x.IsDeleted);
+                if (existsUserName != null) throw new DomainException($"Tài khoản '{request.UserName}' đã được gán cho nhân viên khác.");
+            }
+
             if (employee.GroupId != request.GroupId)
             {
                 var group = await _unitOfWork.Groups.GetByIdAsync(request.GroupId);
                 group.OrThrowNotFound("Nhóm", request.GroupId);
             }
 
+            var now = DateTime.UtcNow;
             employee.Code = request.Code;
             employee.FirstName = request.FirstName;
             employee.LastName = request.LastName;
+            employee.UserName = request.UserName;
             employee.MonthToDate = request.MonthToDate;
             employee.YearToDate = request.YearToDate;
+            employee.AccumulationYear = now.Year;
+            employee.AccumulationMonth = now.Month;
             employee.GroupId = request.GroupId;
 
             _unitOfWork.Employees.Update(employee);
@@ -145,6 +199,26 @@ namespace Attendance.Application.Services
             employee.OrThrowNotFound("Nhân viên", id);
 
             employee!.IsDeleted = true;
+
+            _unitOfWork.Employees.Update(employee);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Nhân viên tự chỉnh lũy kế của chính mình (canAdjustAny=false, so khớp UserName), hoặc
+        // người có quyền Attendance.Employee.Update chỉnh cho bất kỳ ai (canAdjustAny=true).
+        public async Task AdjustAccumulationAsync(int employeeId, string currentUserName, bool canAdjustAny, AdjustEmployeeAccumulationDto request)
+        {
+            var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
+            employee.OrThrowNotFound("Nhân viên", employeeId);
+
+            if (!canAdjustAny && employee!.UserName != currentUserName)
+                throw new DomainException("Bạn không có quyền chỉnh lũy kế của nhân viên này.");
+
+            var now = DateTime.UtcNow;
+            employee!.MonthToDate = request.MonthToDate;
+            employee.YearToDate = request.YearToDate;
+            employee.AccumulationYear = now.Year;
+            employee.AccumulationMonth = now.Month;
 
             _unitOfWork.Employees.Update(employee);
             await _unitOfWork.SaveChangesAsync();

@@ -90,6 +90,20 @@ namespace Identity.Infrastructure.Authentication
                     isUpdated = true;
                 }
 
+                // Email: chỉ tự resolve khi ĐANG TRỐNG (khác DeviceName vốn refresh mỗi lần đổi) —
+                // Email dùng để gửi mail xác nhận chữ ký/duyệt đơn (Attendance module) nên không nên
+                // tự đổi âm thầm nếu đã có sẵn; nhưng vẫn tự "chữa lành" cho user cũ chưa có Email
+                // (tạo trước khi tính năng này tồn tại) ở lần đăng nhập kế tiếp mà không cần Admin gán tay.
+                if (string.IsNullOrEmpty(user.Email))
+                {
+                    var resolvedEmail = GetActualEmail(windowsUsername);
+                    if (!string.IsNullOrEmpty(resolvedEmail))
+                    {
+                        user.Email = resolvedEmail;
+                        isUpdated = true;
+                    }
+                }
+
                 if (!string.IsNullOrEmpty(ipAddress))
                 {
                     if (user.LoginUserIPs == null) user.LoginUserIPs = new List<LoginUserIP>();
@@ -136,6 +150,11 @@ namespace Identity.Infrastructure.Authentication
                 if (!string.IsNullOrEmpty(user.FullName))
                 {
                     dbIdentity.AddClaim(new Claim("FullName", user.FullName));
+                }
+
+                if (!string.IsNullOrEmpty(user.Email))
+                {
+                    dbIdentity.AddClaim(new Claim("Email", user.Email));
                 }
 
                 if (user.Roles != null)
@@ -203,6 +222,30 @@ namespace Identity.Infrastructure.Authentication
                 catch { /* Bỏ qua nếu lỗi kết nối AD */ }
             }
             return windowsUsername;
+        }
+
+        // Resolve email từ thuộc tính AD "mail" qua UserPrincipal.EmailAddress — cùng cơ chế
+        // System.DirectoryServices.AccountManagement như GetActualFullName ở trên (PrincipalContext
+        // + UserPrincipal.FindByIdentity theo SamAccountName), tách hàm riêng thay vì gộp chung để
+        // không đụng vào logic GetActualFullName đang chạy ổn định.
+        private string? GetActualEmail(string windowsUsername)
+        {
+            var parts = windowsUsername.Split('\\');
+            if (parts.Length != 2 || parts[0].Equals("AzureAD", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            try
+            {
+                ContextType type = parts[0].Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase)
+                    ? ContextType.Machine
+                    : ContextType.Domain;
+
+                using var pc = new PrincipalContext(type, parts[0]);
+                var up = UserPrincipal.FindByIdentity(pc, IdentityType.SamAccountName, parts[1]);
+
+                return string.IsNullOrEmpty(up?.EmailAddress) ? null : up.EmailAddress;
+            }
+            catch { return null; }
         }
 
         private string? GetClientIp()

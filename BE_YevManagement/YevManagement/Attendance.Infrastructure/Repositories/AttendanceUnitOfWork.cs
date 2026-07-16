@@ -19,7 +19,9 @@ namespace Attendance.Infrastructure.Repositories
             IProcessPartRepository processParts,
             IUserApprovalScopeRepository userApprovalScopes,
             IOtFormApprovalHistoryRepository otFormApprovalHistories,
-            IUserSignatureRepository userSignatures) : base(dbContext)
+            IUserSignatureRepository userSignatures,
+            IPendingSignatureConfirmationRepository pendingSignatureConfirmations,
+            IOtFormApprovalEmailTokenRepository otFormApprovalEmailTokens) : base(dbContext)
         {
             Departments = departments;
             Groups = groups;
@@ -32,6 +34,8 @@ namespace Attendance.Infrastructure.Repositories
             UserApprovalScopes = userApprovalScopes;
             OtFormApprovalHistories = otFormApprovalHistories;
             UserSignatures = userSignatures;
+            PendingSignatureConfirmations = pendingSignatureConfirmations;
+            OtFormApprovalEmailTokens = otFormApprovalEmailTokens;
         }
 
         public IDepartmentRepository Departments { get; }
@@ -45,5 +49,7 @@ namespace Attendance.Infrastructure.Repositories
         public IUserApprovalScopeRepository UserApprovalScopes { get; }
         public IOtFormApprovalHistoryRepository OtFormApprovalHistories { get; }
         public IUserSignatureRepository UserSignatures { get; }
+        public IPendingSignatureConfirmationRepository PendingSignatureConfirmations { get; }
+        public IOtFormApprovalEmailTokenRepository OtFormApprovalEmailTokens { get; }
     }
 }

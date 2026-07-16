@@ -5,6 +5,7 @@
 - **Base URL (Dev)**: `http://localhost:5000` · Scalar UI `/scalar/v1`.
 - **CORS**: chỉ `http://localhost:3000` + `http://10.45.1.181:3000` (`AllowCredentials`). Origin khác → báo BE thêm whitelist.
 - Envelope `ApiResponse<T>` + cách đọc `data`/`errors` giống Asset — xem [asset-api-fe.md §1](asset-api-fe.md).
+- **Cập nhật 2026-07-16**: `UserDto` thêm `email` (nullable, tự resolve từ AD, không tự nhập/sửa được) — trả về ở `windows-login` (mục 2) và `get-all-users-with-roles` (mục 4.1). Phục vụ tính năng gửi email xác nhận cập nhật chữ ký/duyệt đơn ở module Attendance.
 
 ## 1. Auth
 | Endpoint | Cơ chế |
@@ -29,6 +30,7 @@ const res = await fetch("http://localhost:5000/api/Auth/windows-login", {
   "user": {
     "id": 12, "userName": "YEV\\n.truong.da.pcd.it", "fullName": "Truong Nguyen",
     "deviceName": "DESKTOP-ABC123",  // nullable, reverse-DNS, chỉ hiển thị
+    "email": "n.truong@yazaki.com",  // nullable, xem ghi chú bên dưới
     "roles": ["Admin"],              // luôn có ít nhất "Basic"
     "permissions": ["Asset.Device.View", "..."]  // mã hiệu lực (roles + override)
   },
@@ -36,10 +38,11 @@ const res = await fetch("http://localhost:5000/api/Auth/windows-login", {
 }
 ```
 - **Định danh = `UserName` suông.** `DeviceName` chỉ hiển thị (reverse-DNS không ổn định) — FE **đừng** dùng để định danh.
-- Lần đầu 1 `UserName` login → server tự tạo user + gán `"Basic"` (không cần "đăng ký"). Nâng quyền: nhờ Admin `update-user-roles` hoặc Admin `create-user` trước (mục 4.9).
-- `windows-login` có **side-effect ghi DB** (IP + DeviceName) nhưng idempotent.
+- **`email`** (2026-07-16, mới) — tự resolve từ thuộc tính AD `mail` ngay lần đăng nhập đầu tiên (giống `fullName`), **không** phải do user tự nhập. Nullable — có thể `null` nếu tài khoản AD chưa cấu hình mail, hoặc user đã tồn tại từ trước tính năng này và chưa đăng nhập lại lần nào kể từ đó (BE tự "chữa lành" — chỉ set nếu đang trống, ở lần đăng nhập kế tiếp). Đây **không phải field để FE sửa** — không có endpoint nào cho phép update `email` trực tiếp; muốn đổi phải sửa trong AD rồi chờ user đăng nhập lại (hoặc Admin không có cách set tay). Dùng bởi module Attendance để gửi email xác nhận cập nhật chữ ký/duyệt đơn — xem [attendance-api-fe.md §6b/§4.6](attendance-api-fe.md).
+- `windows-login` có **side-effect ghi DB** (IP + DeviceName + Email nếu đang trống) nhưng idempotent.
 - `token` hết hạn **120 phút** → 401, gọi lại `windows-login` (không có refresh-token).
 - **Permission tự refresh mỗi request** — Admin đổi permission Role có hiệu lực ngay request sau, không cần login lại. `user.permissions` lúc login chỉ là snapshot.
+- **JWT cũng có claim `Email`** (nếu có giá trị, cùng cách claim `FullName` đã có) — nhưng FE không cần tự decode JWT, dùng thẳng `data.user.email` ở trên là đủ.
 
 Request sau: `headers: { Authorization: 'Bearer ${token}' }`.
 
@@ -49,7 +52,7 @@ Dùng **`user.permissions`** (mảng `Module.Entity.Action`) để bật/tắt t
 ## 4. Quản trị User & Role
 Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, thiếu permission→403).
 
-- **4.1 `GET /api/Auth/get-all-users-with-roles`** (`Identity.User.View`) → `[{id, userName, fullName, deviceName, roles:[]}]`.
+- **4.1 `GET /api/Auth/get-all-users-with-roles`** (`Identity.User.View`) → `[{id, userName, fullName, deviceName, email, roles:[]}]` (`email` mới 2026-07-16, xem mục 2 — hữu ích để Admin kiểm tra AD có resolve đúng mail cho user hay chưa trước khi họ báo "không nhận được email xác nhận"). Lưu ý danh sách này **không trả `permissions`** (khác `windows-login`) — luôn là mảng rỗng nếu FE cố đọc.
 - **4.2 `POST /api/Auth/update-user-roles`** (`Identity.User.UpdateRoles`) — body `{userId, roleIds:[1,2]}`. `roleIds` = **toàn bộ** danh sách cuối (gửi thiếu = gỡ role đó).
 - **4.3 `GET /api/Auth/get-all-roles`** (`Identity.Role.View`) → `[{id, roleName, description}]`.
 - **4.4 `POST /api/Auth/create-role`** (`Identity.Role.Create`) — `{roleName, description}`, 400 nếu trống/trùng.

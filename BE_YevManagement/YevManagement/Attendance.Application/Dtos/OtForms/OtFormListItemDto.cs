@@ -11,7 +11,13 @@ namespace Attendance.Application.Dtos.OtForms
         public int NumberOfEmployee { get; set; }
         public string CreatedByUserName { get; set; } = null!;
 
+        // Snapshot Họ tên người tạo — FE luôn ưu tiên hiển thị field này, fallback CreatedByUserName nếu null.
+        public string? CreatedByFullName { get; set; }
+
         // Enum Attendance.Domain.Enums.OtFormStatus.
         public int Status { get; set; }
+
+        // true khi Status == Pending (chưa cấp nào duyệt) — dùng để hiện/ẩn nút "Sửa" ngay trên danh sách.
+        public bool IsEditable { get; set; }
     }
 }

@@ -49,5 +49,9 @@ namespace Attendance.Api.Controllers
         // UserName trên các bảng Attendance vì Identity.User nằm ở DB khác, không có claim UserId dạng số.
         protected string CurrentUserName => User.Identity?.Name
             ?? throw new UnauthorizedAccessException("Không xác định được người dùng hiện tại.");
+
+        // Họ tên hiển thị từ JWT claim "FullName" (nạp bởi MyClaimsTransformation từ Identity.User.FullName).
+        // Null nếu tài khoản chưa được Admin nhập FullName — dùng snapshot để in PDF không cần gọi chéo Identity.
+        protected string? CurrentFullName => User.FindFirst("FullName")?.Value;
     }
 }

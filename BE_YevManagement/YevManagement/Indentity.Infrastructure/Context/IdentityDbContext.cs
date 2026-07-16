@@ -56,6 +56,7 @@ public partial class IdentityDbContext : DbContext
         {
             entity.Property(e => e.DeviceName).HasMaxLength(100);
             entity.Property(e => e.UserName).HasMaxLength(100);
+            entity.Property(e => e.Email).HasMaxLength(255);
 
             entity.HasMany(d => d.Roles).WithMany(p => p.Users)
                 .UsingEntity<Dictionary<string, object>>(

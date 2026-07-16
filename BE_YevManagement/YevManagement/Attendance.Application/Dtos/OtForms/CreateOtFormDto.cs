@@ -33,9 +33,5 @@ namespace Attendance.Application.Dtos.OtForms
         public List<CreateOtFormEmployeeItemDto> Employees { get; set; } = new();
 
         public ProcessPartDto? ProcessPart { get; set; }
-
-        // Chữ ký "Người đề nghị" (Trưởng Group) — bắt buộc, ký ngay lúc tạo đơn (xem docs/attendance-module.md).
-        [Required(ErrorMessage = "Chữ ký người đề nghị không được để trống")]
-        public byte[] SubmitterSignatureImage { get; set; } = null!;
     }
 }

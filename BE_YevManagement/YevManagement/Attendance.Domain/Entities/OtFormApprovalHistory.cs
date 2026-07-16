@@ -12,6 +12,10 @@ public partial class OtFormApprovalHistory
     // Người tạo/duyệt — lưu UserName, cùng lý do với OtForm.CreatedByUserName.
     public string ApproverUserName { get; set; } = null!;
 
+    // Snapshot claim "FullName" của JWT tại thời điểm ký — để in PDF không cần FE gọi chéo API Identity.
+    // Null nếu tài khoản đó chưa từng được Admin nhập FullName lúc create-user.
+    public string? ApproverFullName { get; set; }
+
     // Lưu enum Attendance.Domain.Enums.ApprovalLevel dưới dạng int.
     public int ApprovalLevel { get; set; }
 

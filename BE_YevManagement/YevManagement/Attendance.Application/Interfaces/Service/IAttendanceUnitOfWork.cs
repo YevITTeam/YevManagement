@@ -16,5 +16,7 @@ namespace Attendance.Application.Interfaces.Service
         IUserApprovalScopeRepository UserApprovalScopes { get; }
         IOtFormApprovalHistoryRepository OtFormApprovalHistories { get; }
         IUserSignatureRepository UserSignatures { get; }
+        IPendingSignatureConfirmationRepository PendingSignatureConfirmations { get; }
+        IOtFormApprovalEmailTokenRepository OtFormApprovalEmailTokens { get; }
     }
 }

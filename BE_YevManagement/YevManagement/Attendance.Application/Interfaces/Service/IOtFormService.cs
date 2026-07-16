@@ -12,10 +12,18 @@ namespace Attendance.Application.Interfaces.Service
 
         Task<OtFormDto> GetByIdAsync(int id);
 
-        Task<OtFormDto> CreateAsync(string createdByUserName, CreateOtFormDto request);
+        Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request);
 
-        Task ApproveAsync(int id, string approverUserName, bool isGeneralDirector, ApproveOtFormDto request);
+        Task<OtFormDto> UpdateAsync(int id, string currentUserName, UpdateOtFormDto request);
 
-        Task RejectAsync(int id, string approverUserName, bool isGeneralDirector, RejectOtFormDto request);
+        Task ApproveAsync(int id, string approverUserName, string? approverFullName, bool isGeneralDirector, ApproveOtFormDto request);
+
+        Task RejectAsync(int id, string approverUserName, string? approverFullName, bool isGeneralDirector, RejectOtFormDto request);
+
+        // Kênh bổ sung qua email (link Duyệt/Từ chối, [AllowAnonymous] ở Controller) — token tự nó
+        // là thông tin xác thực duy nhất, xem docs/attendance-module.md.
+        Task<OtFormDto> GetByEmailTokenAsync(string token);
+        Task ApproveByEmailTokenAsync(string token, ApproveOtFormDto request);
+        Task RejectByEmailTokenAsync(string token, RejectOtFormDto request);
     }
 }

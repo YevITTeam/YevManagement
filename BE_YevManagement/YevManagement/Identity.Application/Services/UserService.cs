@@ -23,6 +23,7 @@ namespace Identity.Application.Services
                 UserName = user.UserName,
                 FullName = user.FullName,
                 DeviceName = user.DeviceName,
+                Email = user.Email,
                 Roles = user.Roles.Select(r => r.RoleName).ToList()
             }).ToList();
         }

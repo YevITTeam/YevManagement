@@ -9,6 +9,14 @@ public partial class ProcessPart
 
     public bool IsEat { get; set; }
 
+    // Số lượng từng loại phiếu ăn khi IsEat = true — người lập đơn tự nhập tay (không tự tính từ
+    // danh sách nhân viên), xem docs/attendance-module.md.
+    public int MainTicketCount { get; set; }
+
+    public int SecondaryTicketCount { get; set; }
+
+    public int MilkCount { get; set; }
+
     public bool IsTransportation { get; set; }
 
     public bool IsUseCopyRoom { get; set; }
