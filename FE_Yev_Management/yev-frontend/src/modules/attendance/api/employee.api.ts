@@ -1,5 +1,5 @@
 import { api } from "@/lib/client";
-import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import type { AdjustEmployeeAccumulationDto, EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -8,6 +8,8 @@ const ENDPOINTS = {
         getAllEmployees: "/Employee/all",
         getEmployeeById: (id: number) => `/Employee/${id}`,
         getEmployeesByGroup: (groupId: number) => `/Employee/by-group/${groupId}`,
+        getMe: "/Employee/me",
+        adjustAccumulation: (id: number) => `/Employee/${id}/adjust-accumulation`,
         createEmployee: "/Employee",
         updateEmployee: (id: number) => `/Employee/${id}`,
         deleteEmployee: (id: number) => `/Employee/${id}`,
@@ -24,6 +26,7 @@ export interface CreateUpdateEmployeeDto {
     code: string;
     firstName: string;
     lastName: string;
+    userName?: string | null;
     monthToDate: number;
     yearToDate: number;
     groupId: number;
@@ -52,6 +55,16 @@ export const EmployeeApi = {
     // Chọn nhân viên hàng loạt khi lập đơn OT (docs/attendance-api-fe.md §3.5).
     getEmployeesByGroup: async (groupId: number) => {
         const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByGroup(groupId));
+        return response.data;
+    },
+    // Không cần permission — chỉ cần đăng nhập. 404 nếu chưa được Admin gán userName (docs §3.6).
+    getMe: async () => {
+        const response = await api.get<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.getMe);
+        return response.data;
+    },
+    // Không cần permission Attendance.Employee.* — BE tự kiểm tra chính chủ hoặc Attendance.Employee.Update (docs §3.6).
+    adjustAccumulation: async (id: number, data: AdjustEmployeeAccumulationDto) => {
+        const response = await api.patch<ApiResponse<boolean>>(ENDPOINTS.EMPLOYEE.adjustAccumulation(id), data);
         return response.data;
     },
     createEmployee: async (data: CreateUpdateEmployeeDto) => {

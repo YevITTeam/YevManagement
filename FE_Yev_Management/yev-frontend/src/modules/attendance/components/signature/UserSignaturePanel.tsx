@@ -8,12 +8,15 @@ import type { UserSignatureDto } from "@/modules/attendance/types/user-signature
 import SignatureCanvas from "./SignatureCanvas";
 import { getApiErrorMessage } from "@/lib/apiError";
 
-// docs/attendance-api-fe.md §6 — mỗi user tự đăng ký 1 chữ ký dùng tham khảo/auto-fill lúc duyệt.
+// docs/attendance-api-fe.md §6/§6b — mỗi user tự đăng ký 1 chữ ký, BE tự lấy chữ ký này khi tạo/duyệt
+// đơn. ⚠️ 2026-07-16: PUT /me KHÔNG còn áp dụng ngay — chỉ gửi email xác nhận, chữ ký cũ vẫn có hiệu
+// lực cho tới khi user tự bấm xác nhận qua link email (trang public /xac-nhan-chu-ky).
 export default function UserSignaturePanel() {
     const [signature, setSignature] = useState<UserSignatureDto | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [draftBase64, setDraftBase64] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [confirmationSent, setConfirmationSent] = useState(false);
 
     const fetchSignature = async () => {
         setIsLoading(true);
@@ -39,12 +42,12 @@ export default function UserSignaturePanel() {
         }
         setIsSaving(true);
         try {
-            const data = await UserSignatureApi.upsertMySignature({ signatureImage: draftBase64 });
-            setSignature(data);
-            toast.success("Cập nhật chữ ký thành công");
+            await UserSignatureApi.upsertMySignature({ signatureImage: draftBase64 });
+            setConfirmationSent(true);
+            toast.success("Đã gửi email xác nhận cập nhật chữ ký — vui lòng kiểm tra hộp thư trong 30 phút.");
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Cập nhật chữ ký thất bại"));
+            toast.error(getApiErrorMessage(err, "Gửi yêu cầu cập nhật chữ ký thất bại"));
         } finally {
             setIsSaving(false);
         }
@@ -55,7 +58,7 @@ export default function UserSignaturePanel() {
             <div>
                 <h1 className="text-2xl font-semibold text-[#191c1e]">Chữ ký của tôi</h1>
                 <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                    Đăng ký chữ ký cá nhân để dùng tham khảo/gợi ý điền sẵn khi duyệt đơn tăng ca.
+                    Đăng ký chữ ký cá nhân — BE tự dùng chữ ký này khi bạn tạo đơn (Người đề nghị) hoặc duyệt đơn tăng ca.
                 </p>
             </div>
 
@@ -64,26 +67,52 @@ export default function UserSignaturePanel() {
                     <div className="py-8 text-center text-sm text-[#5e3f3a]">Đang tải dữ liệu...</div>
                 ) : (
                     <>
-                        {signature?.updatedAt && (
-                            <p className="text-xs text-[#5e3f3a]">
-                                Cập nhật lần cuối: {new Date(signature.updatedAt).toLocaleString("vi-VN")}
-                            </p>
-                        )}
-                        <SignatureCanvas
-                            key={signature?.updatedAt ?? "empty"}
-                            initialImage={signature?.signatureImage ?? null}
-                            onChange={setDraftBase64}
-                            disabled={isSaving}
-                        />
-                        <div className="flex justify-end">
-                            <button
-                                onClick={handleSave}
-                                disabled={isSaving}
-                                className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                {isSaving ? "Đang lưu..." : "Lưu chữ ký"}
-                            </button>
+                        <div>
+                            <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                Chữ ký đang có hiệu lực
+                            </div>
+                            {signature ? (
+                                <>
+                                    <img
+                                        src={`data:image/png;base64,${signature.signatureImage}`}
+                                        alt="Chữ ký hiện tại"
+                                        className="h-24 w-full rounded-lg border border-[#e0e3e5] bg-white object-contain"
+                                    />
+                                    <p className="mt-1 text-xs text-[#5e3f3a]">
+                                        Cập nhật lần cuối: {new Date(signature.updatedAt).toLocaleString("vi-VN")}
+                                    </p>
+                                </>
+                            ) : (
+                                <p className="rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-sm text-[#9a5b00]">
+                                    Chưa đăng ký chữ ký.
+                                </p>
+                            )}
                         </div>
+
+                        {confirmationSent ? (
+                            <div className="rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
+                                Đã gửi email xác nhận cập nhật chữ ký — vui lòng kiểm tra hộp thư và bấm xác nhận trong vòng
+                                30 phút. Chữ ký cũ vẫn có hiệu lực cho tới khi bạn xác nhận xong.
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                        Ký chữ ký mới
+                                    </div>
+                                    <SignatureCanvas key="draft" onChange={setDraftBase64} disabled={isSaving} />
+                                </div>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={isSaving}
+                                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {isSaving ? "Đang gửi..." : "Gửi email xác nhận cập nhật"}
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </>
                 )}
             </section>

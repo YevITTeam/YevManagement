@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
+import EmployeeImportDialog from "./EmployeeImportDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
@@ -33,6 +34,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
 
     const [deletingEmployee, setDeletingEmployee] = useState<EmployeeDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    const [importOpen, setImportOpen] = useState(false);
 
     const fetchEmployees = async () => {
         setIsLoading(true);
@@ -151,6 +154,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         >
                             Tìm kiếm
                         </button>
+                        <button
+                            onClick={() => setImportOpen(true)}
+                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                        >
+                            Import Excel
+                        </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
                         {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${employees.length} / ${totalCount} bản ghi`}
@@ -167,6 +176,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
                                 <th className="px-6 py-3">Mã NV</th>
                                 <th className="px-6 py-3">Họ và tên</th>
+                                <th className="px-6 py-3">Tài khoản AD</th>
                                 <th className="px-6 py-3">Nhóm</th>
                                 <th className="px-6 py-3">Lũy kế tháng</th>
                                 <th className="px-6 py-3">Lũy kế năm</th>
@@ -176,7 +186,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         <tbody>
                             {!isLoading && employees.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                    <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có dữ liệu nhân viên.
                                     </td>
                                 </tr>
@@ -187,6 +197,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">
                                         {employee.lastName} {employee.firstName}
                                     </td>
+                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.groupNameVn}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.monthToDate}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.yearToDate}</td>
@@ -234,6 +245,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     </button>
                 </div>
             </section>
+
+            <EmployeeImportDialog
+                isOpen={importOpen}
+                onClose={() => setImportOpen(false)}
+                onImported={fetchEmployees}
+            />
 
             <EmployeeForm
                 isOpen={formOpen}

@@ -8,6 +8,8 @@ import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormListItemDto } from "@/modules/attendance/types/ot-form.dto";
 import { otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 
 const PAGE_SIZE = 10;
 
@@ -24,6 +26,8 @@ function formatDate(value: string) {
 // mình duyệt, BE tự lọc theo cấp/scope) dùng chung shape OtFormListItemDto + phân trang.
 export default function OtFormListPage({ mode }: OtFormListPageProps) {
     const router = useRouter();
+    const { user } = useAuth();
+    const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const [forms, setForms] = useState<OtFormListItemDto[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -109,12 +113,13 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                                 <th className="px-6 py-3">Số NV</th>
                                 <th className="px-6 py-3">Người tạo</th>
                                 <th className="px-6 py-3">Trạng thái</th>
+                                {mode === "my-forms" && <th className="px-6 py-3 text-right">Thao tác</th>}
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && forms.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                    <td colSpan={mode === "my-forms" ? 8 : 7} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có đơn nào.
                                     </td>
                                 </tr>
@@ -133,7 +138,9 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                                     <td className="px-6 py-4 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
                                     <td className="px-6 py-4 align-top text-sm text-[#191c1e]">{form.totalHour}</td>
                                     <td className="px-6 py-4 align-top text-sm text-[#191c1e]">{form.numberOfEmployee}</td>
-                                    <td className="px-6 py-4 align-top text-sm text-[#5e3f3a]">{form.createdByUserName}</td>
+                                    <td className="px-6 py-4 align-top text-sm text-[#5e3f3a]">
+                                        {form.createdByFullName ?? form.createdByUserName}
+                                    </td>
                                     <td className="px-6 py-4 align-top">
                                         <span
                                             className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
@@ -141,6 +148,21 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                                             {otFormStatusLabels[form.status] ?? "Không xác định"}
                                         </span>
                                     </td>
+                                    {mode === "my-forms" && (
+                                        <td className="px-6 py-4 align-top text-right">
+                                            {form.isEditable && canCreate && (
+                                                <button
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        router.push(`/ot/forms/${form.id}/edit`);
+                                                    }}
+                                                    className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                >
+                                                    Sửa
+                                                </button>
+                                            )}
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>

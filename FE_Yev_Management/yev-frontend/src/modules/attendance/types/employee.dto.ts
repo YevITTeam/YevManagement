@@ -3,9 +3,20 @@ export interface EmployeeDto {
     code: string;
     firstName: string;
     lastName: string;
+    // Tài khoản AD của chính nhân viên (nullable) — dùng cho "Lũy kế của tôi" (docs §3.5/§3.6).
+    userName: string | null;
     // Giờ OT lũy kế (docs/attendance-api-fe.md §3.5) — dùng cảnh báo TH3 vượt 25h/tháng hoặc 300h/năm.
     monthToDate: number;
     yearToDate: number;
+    // Tháng/năm mà monthToDate/yearToDate đang phản ánh — BE tự stamp, rollover tự động theo tháng/năm.
+    accumulationYear: number;
+    accumulationMonth: number;
     groupId: number;
     groupNameVn: string;
+}
+
+// Body PATCH /api/Employee/{id}/adjust-accumulation — docs §3.6, cả 2 field bắt buộc >= 0.
+export interface AdjustEmployeeAccumulationDto {
+    monthToDate: number;
+    yearToDate: number;
 }

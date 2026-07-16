@@ -16,30 +16,43 @@ import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormEmployeeInputDto, ProcessPartDto } from "@/modules/attendance/types/ot-form.dto";
-import SignatureCanvas from "../signature/SignatureCanvas";
+import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
+function toMinutes(time: string): number {
+    if (!time) return NaN;
+    const [h, m] = time.split(":").map(Number);
+    return h * 60 + m;
+}
+
 function computeTotalHour(startTime: string, endTime: string): number {
     if (!startTime || !endTime) return 0;
-    const [sh, sm] = startTime.split(":").map(Number);
-    const [eh, em] = endTime.split(":").map(Number);
-    const startMinutes = sh * 60 + sm;
-    let endMinutes = eh * 60 + em;
+    const startMinutes = toMinutes(startTime);
+    let endMinutes = toMinutes(endTime);
     if (endMinutes < startMinutes) endMinutes += 24 * 60; // qua ngày hôm sau
     return Math.round(((endMinutes - startMinutes) / 60) * 100) / 100;
 }
 
 const emptyProcessPart: ProcessPartDto = {
     isEat: false,
+    mainTicketCount: 0,
+    secondaryTicketCount: 0,
+    milkCount: 0,
     isTransportation: false,
     isUseCopyRoom: false,
     anotherSuggestionVn: null,
     anotherSuggestionJp: null,
 };
+
+interface EmployeeOverride {
+    endTime: string;
+    noteVn: string;
+    noteJp: string;
+}
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
 const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
@@ -100,8 +113,14 @@ function TimePicker24h({
     );
 }
 
-export default function CreateOtFormPage() {
+interface CreateOtFormPageProps {
+    // Có giá trị → màn "Sửa đơn" (đổ sẵn dữ liệu, submit gọi PUT thay vì POST) — docs §1.3.A/§4.1b.
+    otFormId?: number;
+}
+
+export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const router = useRouter();
+    const isEditMode = otFormId !== undefined;
 
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [groups, setGroups] = useState<GroupDto[]>([]);
@@ -119,12 +138,17 @@ export default function CreateOtFormPage() {
     const [subReason, setSubReason] = useState("");
 
     const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
-    const [employeeOverrides, setEmployeeOverrides] = useState<Record<number, { noteVn: string; noteJp: string }>>({});
+    const [employeeOverrides, setEmployeeOverrides] = useState<Record<number, EmployeeOverride>>({});
 
     const [processPartEnabled, setProcessPartEnabled] = useState(false);
     const [processPart, setProcessPart] = useState<ProcessPartDto>(emptyProcessPart);
 
-    const [signature, setSignature] = useState<string | null>(null);
+    // Chữ ký "Người đề nghị" (2026-07-16) không còn nhập ở màn này — BE tự lấy từ UserSignature đã
+    // đăng ký sẵn. FE chỉ kiểm tra trước để chặn user bấm Submit rồi mới nhận lỗi 400 (docs §4.1/§8).
+    const [hasSignature, setHasSignature] = useState<boolean | null>(null);
+
+    const [isLoadingInitial, setIsLoadingInitial] = useState(isEditMode);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
@@ -133,7 +157,55 @@ export default function CreateOtFormPage() {
         OtCaseApi.getAllOtCases().then(setOtCases).catch((err) => console.error(err));
     }, []);
 
-    // Cascading Nhóm theo Bộ phận — đổi Bộ phận thì xoá lựa chọn Nhóm (docs/attendance-api-fe.md §3.2/§8).
+    useEffect(() => {
+        if (isEditMode) return; // Sửa đơn không ký lại — không cần kiểm tra chữ ký.
+        UserSignatureApi.getMySignature()
+            .then((data) => setHasSignature(Boolean(data)))
+            .catch(() => setHasSignature(false));
+    }, [isEditMode]);
+
+    // Đổ sẵn dữ liệu đơn khi Sửa — set state trực tiếp (không qua handler) để KHÔNG bị 2 effect bên
+    // dưới tự xoá lựa chọn Nhóm/Nhân viên vừa đổ sẵn.
+    useEffect(() => {
+        if (!isEditMode || !otFormId) return;
+        setIsLoadingInitial(true);
+        setLoadError(null);
+        OtFormApi.getOtFormById(otFormId)
+            .then((data) => {
+                if (!data.isEditable) {
+                    setLoadError("Đơn đã qua ít nhất 1 cấp duyệt, không thể sửa nữa.");
+                    return;
+                }
+                setDepartmentId(data.departmentId);
+                setGroupId(data.groupId);
+                setReasonId(data.reasonId);
+                setOtCaseId(data.otCaseId);
+                setDate(data.date);
+                setStartTime(data.startTime.slice(0, 5));
+                setEndTime(data.endTime.slice(0, 5));
+                setSubReason(data.subReason ?? "");
+                setSelectedEmployeeIds(data.employees.map((e) => e.employeeId));
+                setEmployeeOverrides(
+                    Object.fromEntries(
+                        data.employees.map((e) => [
+                            e.employeeId,
+                            { endTime: e.endTime.slice(0, 5), noteVn: e.noteVn ?? "", noteJp: e.noteJp ?? "" },
+                        ])
+                    )
+                );
+                setProcessPartEnabled(Boolean(data.processPart));
+                setProcessPart(data.processPart ?? emptyProcessPart);
+            })
+            .catch((err) => {
+                console.error(err);
+                setLoadError(getApiErrorMessage(err, "Không thể tải đơn tăng ca để sửa."));
+            })
+            .finally(() => setIsLoadingInitial(false));
+    }, [isEditMode, otFormId]);
+
+    // Cascading Nhóm theo Bộ phận — chỉ TẢI danh sách, không tự xoá lựa chọn (việc xoá do handler
+    // người dùng chủ động đổi Bộ phận quyết định, xem handleDepartmentChange) để không phá dữ liệu
+    // vừa đổ sẵn lúc Sửa đơn (docs/attendance-api-fe.md §3.2/§8).
     useEffect(() => {
         if (!departmentId) {
             setGroups([]);
@@ -144,10 +216,8 @@ export default function CreateOtFormPage() {
             .catch((err) => console.error(err));
     }, [departmentId]);
 
-    // Chọn nhân viên hàng loạt theo Nhóm (docs §3.5/§8) — đổi Nhóm thì xoá lựa chọn nhân viên cũ.
+    // Tải nhân viên theo Nhóm — không tự xoá lựa chọn (lý do như trên).
     useEffect(() => {
-        setSelectedEmployeeIds([]);
-        setEmployeeOverrides({});
         if (!groupId) {
             setGroupEmployees([]);
             return;
@@ -163,18 +233,34 @@ export default function CreateOtFormPage() {
         setSelectedEmployeeIds((current) =>
             current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId]
         );
+        setEmployeeOverrides((current) =>
+            current[employeeId] ? current : { ...current, [employeeId]: { endTime, noteVn: "", noteJp: "" } }
+        );
     };
 
-    const handleEmployeeNoteChange = (employeeId: number, field: "noteVn" | "noteJp", value: string) => {
+    const handleEmployeeOverrideChange = (employeeId: number, field: keyof EmployeeOverride, value: string) => {
         setEmployeeOverrides((current) => ({
             ...current,
-            [employeeId]: { noteVn: current[employeeId]?.noteVn ?? "", noteJp: current[employeeId]?.noteJp ?? "", [field]: value },
+            [employeeId]: {
+                endTime: current[employeeId]?.endTime ?? endTime,
+                noteVn: current[employeeId]?.noteVn ?? "",
+                noteJp: current[employeeId]?.noteJp ?? "",
+                [field]: value,
+            },
         }));
     };
 
     const handleDepartmentChange = (value: string) => {
         setDepartmentId(value ? Number(value) : null);
         setGroupId(null);
+        setSelectedEmployeeIds([]);
+        setEmployeeOverrides({});
+    };
+
+    const handleGroupChange = (value: string) => {
+        setGroupId(value ? Number(value) : null);
+        setSelectedEmployeeIds([]);
+        setEmployeeOverrides({});
     };
 
     const handleSubmit = async (event: React.FormEvent) => {
@@ -193,53 +279,92 @@ export default function CreateOtFormPage() {
             toast.error("Vui lòng điền đầy đủ thông tin bắt buộc và chọn ít nhất 1 nhân viên.");
             return;
         }
-        if (!signature) {
-            toast.error("Vui lòng ký vào khung chữ ký Người đề nghị.");
+        if (!isEditMode && hasSignature === false) {
+            toast.error("Bạn chưa đăng ký chữ ký — vào \"Chữ ký của tôi\" để đăng ký trước khi tạo đơn.");
             return;
+        }
+
+        const orderStartMinutes = toMinutes(`${startTime}:00`);
+        const orderEndMinutes = toMinutes(`${endTime}:00`);
+        for (const employeeId of selectedEmployeeIds) {
+            const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
+            const employeeEndMinutes = toMinutes(`${employeeEndTime}:00`);
+            if (employeeEndMinutes <= orderStartMinutes || employeeEndMinutes > orderEndMinutes) {
+                const employee = groupEmployees.find((e) => e.id === employeeId);
+                toast.error(
+                    `Giờ kết thúc của nhân viên ${employee?.code ?? employeeId} phải sau giờ bắt đầu và không vượt quá giờ kết thúc của đơn.`
+                );
+                return;
+            }
         }
 
         const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
             employeeId,
-            startTime: `${startTime}:00`,
-            endTime: `${endTime}:00`,
+            endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
             noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
             noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
         }));
 
+        const payload = {
+            groupId,
+            departmentId,
+            reasonId,
+            otCaseId,
+            startTime: `${startTime}:00`,
+            endTime: `${endTime}:00`,
+            subReason: subReason.trim() || null,
+            totalHour,
+            date,
+            employees,
+            processPart: processPartEnabled ? processPart : null,
+        };
+
         setIsSubmitting(true);
         try {
-            const result = await OtFormApi.createOtForm({
-                groupId,
-                departmentId,
-                reasonId,
-                otCaseId,
-                startTime: `${startTime}:00`,
-                endTime: `${endTime}:00`,
-                subReason: subReason.trim() || null,
-                totalHour,
-                date,
-                employees,
-                processPart: processPartEnabled ? processPart : null,
-                submitterSignatureImage: signature,
-            });
-            toast.success("Tạo đơn tăng ca thành công");
+            const result = isEditMode && otFormId
+                ? await OtFormApi.updateOtForm(otFormId, payload)
+                : await OtFormApi.createOtForm(payload);
+            toast.success(isEditMode ? "Cập nhật đơn tăng ca thành công" : "Tạo đơn tăng ca thành công");
             router.push(`/ot/forms/${result.id}`);
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Tạo đơn tăng ca thất bại"));
+            toast.error(getApiErrorMessage(err, isEditMode ? "Cập nhật đơn tăng ca thất bại" : "Tạo đơn tăng ca thất bại"));
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    if (isLoadingInitial) {
+        return <div className="py-16 text-center text-sm text-[#5e3f3a]">Đang tải dữ liệu...</div>;
+    }
+
+    if (loadError) {
+        return <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{loadError}</div>;
+    }
+
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">Tạo đơn tăng ca</h1>
+                <h1 className="text-2xl font-semibold text-[#191c1e]">{isEditMode ? `Sửa đơn tăng ca #${otFormId}` : "Tạo đơn tăng ca"}</h1>
                 <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                    Điền thông tin đơn, chọn nhân viên làm ngoài giờ và ký xác nhận với vai trò Người đề nghị.
+                    {isEditMode
+                        ? "Chỉ có thể sửa khi đơn đang chờ Trưởng phòng duyệt (Pending)."
+                        : "Điền thông tin đơn, chọn nhân viên làm ngoài giờ. Chữ ký Người đề nghị lấy tự động từ chữ ký đã đăng ký."}
                 </p>
             </div>
+
+            {!isEditMode && hasSignature === false && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
+                    <span>Bạn chưa đăng ký chữ ký cá nhân — đăng ký trước khi gửi đơn.</span>
+                    <button
+                        type="button"
+                        onClick={() => router.push("/ot/signature")}
+                        className="cursor-pointer rounded-lg border border-[#9a5b00] px-3 py-1.5 text-xs font-semibold text-[#9a5b00] transition hover:bg-[#fff0d8]"
+                    >
+                        Đăng ký chữ ký
+                    </button>
+                </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
@@ -269,7 +394,7 @@ export default function CreateOtFormPage() {
                             <span className={fieldLabelClassName}>Nhóm</span>
                             <select
                                 value={groupId ?? ""}
-                                onChange={(event) => setGroupId(event.target.value ? Number(event.target.value) : null)}
+                                onChange={(event) => handleGroupChange(event.target.value)}
                                 disabled={isSubmitting || !departmentId}
                                 required
                                 className={fieldClassName}
@@ -382,6 +507,7 @@ export default function CreateOtFormPage() {
                                         <th className="px-3 py-2">Mã NV</th>
                                         <th className="px-3 py-2">Họ và tên</th>
                                         <th className="px-3 py-2">Lũy kế tháng/năm</th>
+                                        <th className="px-3 py-2">Giờ kết thúc</th>
                                         <th className="px-3 py-2">Ghi chú</th>
                                     </tr>
                                 </thead>
@@ -409,9 +535,16 @@ export default function CreateOtFormPage() {
                                                     {isOverLimit && " ⚠"}
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
+                                                    <TimePicker24h
+                                                        value={employeeOverrides[employee.id]?.endTime ?? endTime}
+                                                        onChange={(value) => handleEmployeeOverrideChange(employee.id, "endTime", value)}
+                                                        disabled={isSubmitting || !checked}
+                                                    />
+                                                </td>
+                                                <td className="px-3 py-2 align-top">
                                                     <input
                                                         value={employeeOverrides[employee.id]?.noteVn ?? ""}
-                                                        onChange={(event) => handleEmployeeNoteChange(employee.id, "noteVn", event.target.value)}
+                                                        onChange={(event) => handleEmployeeOverrideChange(employee.id, "noteVn", event.target.value)}
                                                         placeholder="Ghi chú (tuỳ chọn)..."
                                                         disabled={isSubmitting || !checked}
                                                         className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
@@ -442,42 +575,89 @@ export default function CreateOtFormPage() {
                     </label>
 
                     {processPartEnabled && (
-                        <div className="grid gap-4 md:grid-cols-3">
-                            <label className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={processPart.isEat}
-                                    onChange={(event) => setProcessPart((current) => ({ ...current, isEat: event.target.checked }))}
-                                    disabled={isSubmitting}
-                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                />
-                                <span className="text-sm text-[#191c1e]">Ăn uống</span>
-                            </label>
-                            <label className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={processPart.isTransportation}
-                                    onChange={(event) =>
-                                        setProcessPart((current) => ({ ...current, isTransportation: event.target.checked }))
-                                    }
-                                    disabled={isSubmitting}
-                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                />
-                                <span className="text-sm text-[#191c1e]">Xe đưa đón</span>
-                            </label>
-                            <label className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={processPart.isUseCopyRoom}
-                                    onChange={(event) =>
-                                        setProcessPart((current) => ({ ...current, isUseCopyRoom: event.target.checked }))
-                                    }
-                                    disabled={isSubmitting}
-                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                />
-                                <span className="text-sm text-[#191c1e]">Sử dụng phòng copy</span>
-                            </label>
-                            <label className="block md:col-span-3">
+                        <div className="space-y-4">
+                            <div className="grid gap-4 md:grid-cols-3">
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={processPart.isEat}
+                                        onChange={(event) => setProcessPart((current) => ({ ...current, isEat: event.target.checked }))}
+                                        disabled={isSubmitting}
+                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                    />
+                                    <span className="text-sm text-[#191c1e]">Ăn uống</span>
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={processPart.isTransportation}
+                                        onChange={(event) =>
+                                            setProcessPart((current) => ({ ...current, isTransportation: event.target.checked }))
+                                        }
+                                        disabled={isSubmitting}
+                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                    />
+                                    <span className="text-sm text-[#191c1e]">Xe đưa đón</span>
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={processPart.isUseCopyRoom}
+                                        onChange={(event) =>
+                                            setProcessPart((current) => ({ ...current, isUseCopyRoom: event.target.checked }))
+                                        }
+                                        disabled={isSubmitting}
+                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                    />
+                                    <span className="text-sm text-[#191c1e]">Sử dụng phòng copy</span>
+                                </label>
+                            </div>
+
+                            {processPart.isEat && (
+                                <div className="grid gap-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-4 md:grid-cols-3">
+                                    <label className="block">
+                                        <span className={fieldLabelClassName}>Phiếu chính</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={processPart.mainTicketCount}
+                                            onChange={(event) =>
+                                                setProcessPart((current) => ({ ...current, mainTicketCount: Number(event.target.value) }))
+                                            }
+                                            disabled={isSubmitting}
+                                            className={fieldClassName}
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className={fieldLabelClassName}>Phiếu phụ</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={processPart.secondaryTicketCount}
+                                            onChange={(event) =>
+                                                setProcessPart((current) => ({ ...current, secondaryTicketCount: Number(event.target.value) }))
+                                            }
+                                            disabled={isSubmitting}
+                                            className={fieldClassName}
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className={fieldLabelClassName}>Sữa</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={processPart.milkCount}
+                                            onChange={(event) =>
+                                                setProcessPart((current) => ({ ...current, milkCount: Number(event.target.value) }))
+                                            }
+                                            disabled={isSubmitting}
+                                            className={fieldClassName}
+                                        />
+                                    </label>
+                                </div>
+                            )}
+
+                            <label className="block">
                                 <span className={fieldLabelClassName}>Đề nghị khác (VN)</span>
                                 <input
                                     value={processPart.anotherSuggestionVn ?? ""}
@@ -492,13 +672,6 @@ export default function CreateOtFormPage() {
                     )}
                 </section>
 
-                <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                        Chữ ký Người đề nghị <span className="text-[#930006]">*</span>
-                    </h2>
-                    <SignatureCanvas onChange={setSignature} disabled={isSubmitting} />
-                </section>
-
                 <div className="flex justify-end gap-3">
                     <button
                         type="button"
@@ -510,10 +683,10 @@ export default function CreateOtFormPage() {
                     </button>
                     <button
                         type="submit"
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || (!isEditMode && hasSignature === false)}
                         className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {isSubmitting ? "Đang tạo..." : "Tạo đơn"}
+                        {isSubmitting ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo đơn"}
                     </button>
                 </div>
             </form>

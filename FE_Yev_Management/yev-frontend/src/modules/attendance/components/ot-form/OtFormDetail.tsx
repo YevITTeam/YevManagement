@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
+import { useLocale } from "next-intl";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormDto } from "@/modules/attendance/types/ot-form.dto";
@@ -14,10 +15,10 @@ import {
     otFormStatusClasses,
     otFormStatusLabels,
 } from "@/modules/attendance/types/enums";
-import SignatureCanvas from "../signature/SignatureCanvas";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
+import { useRouter, getPathname } from "@/navigation";
 
 interface OtFormDetailProps {
     id: number;
@@ -43,15 +44,16 @@ const TIMELINE_LEVELS = [0, 1, 2, 3];
 
 export default function OtFormDetail({ id }: OtFormDetailProps) {
     const { user } = useAuth();
+    const router = useRouter();
+    const locale = useLocale();
     const [form, setForm] = useState<OtFormDto | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [requireSignatureToApprove, setRequireSignatureToApprove] = useState(false);
+    const [hasMySignature, setHasMySignature] = useState<boolean | null>(null);
 
     const [actionOpen, setActionOpen] = useState<"approve" | "reject" | null>(null);
     const [comment, setComment] = useState("");
-    const [approveSignature, setApproveSignature] = useState<string | null>(null);
-    const [mySignaturePreview, setMySignaturePreview] = useState<string | null>(null);
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
     const fetchForm = async () => {
@@ -83,14 +85,20 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const nextLevel = form ? nextApprovalLevelFromStatus(form.status) : null;
     const showApprovalActions = canApprove && nextLevel !== null;
 
+    // Nút "Sửa" (docs §1.2): isEditable=true + chính người tạo + có quyền tạo đơn.
+    const canEdit =
+        Boolean(form?.isEditable) &&
+        form?.createdByUserName === user?.userName &&
+        hasPermission(user, "Attendance.OTForm.Create");
+    const canPrint = form?.status === 3;
+
     const openAction = (type: "approve" | "reject") => {
         setComment("");
-        setApproveSignature(null);
         setActionOpen(type);
         if (type === "approve") {
             UserSignatureApi.getMySignature()
-                .then((data) => setMySignaturePreview(data?.signatureImage ?? null))
-                .catch((err) => console.error(err));
+                .then((data) => setHasMySignature(Boolean(data)))
+                .catch(() => setHasMySignature(false));
         }
     };
 
@@ -100,13 +108,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     };
 
     const handleApprove = async () => {
-        if (requireSignatureToApprove && !approveSignature) {
-            toast.error("Trường hợp này yêu cầu ký khi duyệt.");
+        if (requireSignatureToApprove && hasMySignature === false) {
+            toast.error("Trường hợp này yêu cầu đã đăng ký chữ ký trước khi duyệt — vào \"Chữ ký của tôi\" để đăng ký.");
             return;
         }
         setIsSubmittingAction(true);
         try {
-            await OtFormApi.approveOtForm(id, { comment: comment.trim() || null, signatureImage: approveSignature });
+            await OtFormApi.approveOtForm(id, { comment: comment.trim() || null });
             toast.success("Duyệt đơn thành công");
             setActionOpen(null);
             await fetchForm();
@@ -154,11 +162,35 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         {form.departmentNameVn} — {form.groupNameVn}
                     </p>
                 </div>
-                <span
-                    className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
-                >
-                    {otFormStatusLabels[form.status] ?? "Không xác định"}
-                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                    <span
+                        className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
+                    >
+                        {otFormStatusLabels[form.status] ?? "Không xác định"}
+                    </span>
+                    {canEdit && (
+                        <button
+                            onClick={() => router.push(`/ot/forms/${form.id}/edit`)}
+                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                        >
+                            Sửa đơn
+                        </button>
+                    )}
+                    {canPrint && (
+                        <button
+                            onClick={() =>
+                                window.open(
+                                    getPathname({ href: `/ot-print/${form.id}`, locale }),
+                                    "_blank",
+                                    "noopener,noreferrer"
+                                )
+                            }
+                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                        >
+                            In đơn
+                        </button>
+                    )}
+                </div>
             </div>
 
             <section className="grid gap-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm md:grid-cols-2 lg:grid-cols-3">
@@ -182,7 +214,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                 </div>
                 <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Người tạo</div>
-                    <div className="mt-1 text-sm text-[#191c1e]">{form.createdByUserName}</div>
+                    <div className="mt-1 text-sm text-[#191c1e]">{form.createdByFullName ?? form.createdByUserName}</div>
                 </div>
                 {form.subReason && (
                     <div>
@@ -200,6 +232,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         <span>Xe đưa đón: {form.processPart.isTransportation ? "Có" : "Không"}</span>
                         <span>Phòng copy: {form.processPart.isUseCopyRoom ? "Có" : "Không"}</span>
                     </div>
+                    {form.processPart.isEat && (
+                        <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
+                            <span>Phiếu chính: {form.processPart.mainTicketCount}</span>
+                            <span>Phiếu phụ: {form.processPart.secondaryTicketCount}</span>
+                            <span>Sữa: {form.processPart.milkCount}</span>
+                        </div>
+                    )}
                     {form.processPart.anotherSuggestionVn && (
                         <p className="mt-2 text-sm text-[#5e3f3a]">Đề nghị khác: {form.processPart.anotherSuggestionVn}</p>
                     )}
@@ -217,20 +256,29 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 <th className="px-6 py-3">Mã NV</th>
                                 <th className="px-6 py-3">Họ và tên</th>
                                 <th className="px-6 py-3">Thời gian</th>
+                                <th className="px-6 py-3">Lũy kế tháng/năm</th>
+                                <th className="px-6 py-3">Phiếu ăn</th>
                                 <th className="px-6 py-3">Ghi chú</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {form.employees.map((employee) => (
-                                <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
-                                    <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{employee.employeeCode}</td>
-                                    <td className="px-6 py-3 text-sm text-[#191c1e]">{employee.fullName}</td>
-                                    <td className="px-6 py-3 text-sm text-[#5e3f3a]">
-                                        {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
-                                    </td>
-                                    <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.noteVn || "-"}</td>
-                                </tr>
-                            ))}
+                            {form.employees.map((employee) => {
+                                const isOverLimit = employee.monthToDate > 25 || employee.yearToDate > 300;
+                                return (
+                                    <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
+                                        <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{employee.employeeCode}</td>
+                                        <td className="px-6 py-3 text-sm text-[#191c1e]">{employee.fullName}</td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">
+                                            {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
+                                        </td>
+                                        <td className={`px-6 py-3 text-sm ${isOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                            {employee.monthToDate}h / {employee.yearToDate}h
+                                        </td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.isEligibleForMeal ? "✅" : "-"}</td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.noteVn || "-"}</td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -248,14 +296,16 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 </div>
                                 {history ? (
                                     <div className="mt-2 space-y-2">
-                                        <div className="text-sm font-semibold text-[#191c1e]">{history.approverUserName}</div>
+                                        <div className="text-sm font-semibold text-[#191c1e]">
+                                            {history.approverFullName ?? history.approverUserName}
+                                        </div>
                                         <div className="text-xs text-[#5e3f3a]">{approvalActionLabels[history.action]}</div>
                                         <div className="text-xs text-[#5e3f3a]">{formatDateTime(history.actionAt)}</div>
                                         {history.comment && <div className="text-xs text-[#191c1e]">"{history.comment}"</div>}
                                         {history.hasSignature && history.signatureImage && (
                                             <img
                                                 src={`data:image/png;base64,${history.signatureImage}`}
-                                                alt={`Chữ ký ${history.approverUserName}`}
+                                                alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}
                                                 className="h-16 w-full rounded border border-[#e0e3e5] object-contain"
                                             />
                                         )}
@@ -323,16 +373,16 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                             </label>
 
                             {actionOpen === "approve" && (
-                                <div>
-                                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                        Chữ ký {requireSignatureToApprove && <span className="text-[#930006]">*</span>}
-                                    </span>
-                                    <SignatureCanvas
-                                        key={mySignaturePreview ?? "empty"}
-                                        initialImage={mySignaturePreview}
-                                        onChange={setApproveSignature}
-                                        disabled={isSubmittingAction}
-                                    />
+                                <div
+                                    className={`rounded-lg border px-3 py-2 text-xs ${
+                                        requireSignatureToApprove && hasMySignature === false
+                                            ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                            : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                    }`}
+                                >
+                                    {requireSignatureToApprove && hasMySignature === false
+                                        ? "Trường hợp này yêu cầu chữ ký nhưng bạn chưa đăng ký — vào \"Chữ ký của tôi\" để đăng ký trước khi duyệt."
+                                        : "Chữ ký duyệt sẽ tự lấy từ chữ ký đã đăng ký của bạn (\"Chữ ký của tôi\")."}
                                 </div>
                             )}
 

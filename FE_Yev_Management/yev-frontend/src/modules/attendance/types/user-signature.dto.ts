@@ -8,3 +8,10 @@ export interface UserSignatureDto {
 export interface UpsertUserSignatureDto {
     signatureImage: string;
 }
+
+// GET /api/UserSignature/confirm/{token} — docs §6b. Ảnh chữ ký ĐANG CHỜ xác nhận (chưa áp dụng).
+export interface SignatureConfirmationPreviewDto {
+    userName: string;
+    signatureImage: string;
+    expiresAt: string;
+}

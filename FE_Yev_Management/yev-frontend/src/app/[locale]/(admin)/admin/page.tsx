@@ -78,13 +78,6 @@ export default function AdminDashboard() {
             )}
           </>
         )}
-
-        <button className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-[#5e3f3a] opacity-50">
-          <span>📊</span> Báo cáo số liệu
-        </button>
-        <button className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-[#5e3f3a] opacity-50">
-          <span>⚙️</span> Cài đặt chung
-        </button>
       </aside>
 
       <main className="flex-1 overflow-y-auto p-8">

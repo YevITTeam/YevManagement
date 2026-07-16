@@ -20,7 +20,17 @@ const tabs: { key: CategoryTab; label: string; addLabel: string }[] = [
 
 export default function CategoryManagement() {
     const [activeTab, setActiveTab] = useState<CategoryTab>("departments");
-    const [loading, setLoading] = useState(false);
+    // Cả 5 list giờ mounted song song (xem ghi chú bên dưới) nên mỗi list phải báo loading vào
+    // đúng slot riêng của nó — nếu dùng chung 1 state boolean, list nào báo xong (setLoading(false))
+    // sau cùng sẽ đè mất trạng thái loading thật của tab đang xem.
+    const [loadingByTab, setLoadingByTab] = useState<Record<CategoryTab, boolean>>({
+        departments: false,
+        groups: false,
+        reasons: false,
+        "ot-cases": false,
+        employees: false,
+    });
+    const loading = loadingByTab[activeTab];
 
     const departmentRef = useRef<ListHandle>(null);
     const groupRef = useRef<ListHandle>(null);
@@ -85,11 +95,29 @@ export default function CategoryManagement() {
                 })}
             </div>
 
-            {activeTab === "departments" && <DepartmentList ref={departmentRef} onLoadingChange={setLoading} />}
-            {activeTab === "groups" && <GroupList ref={groupRef} onLoadingChange={setLoading} />}
-            {activeTab === "reasons" && <ReasonList ref={reasonRef} onLoadingChange={setLoading} />}
-            {activeTab === "ot-cases" && <OtCaseList ref={otCaseRef} onLoadingChange={setLoading} />}
-            {activeTab === "employees" && <EmployeeList ref={employeeRef} onLoadingChange={setLoading} />}
+            {/*
+                Cố ý giữ cả 5 list luôn mounted (ẩn/hiện bằng "hidden", không unmount) thay vì
+                `{activeTab === "x" && <XList/>}` như trước — conditional mount khiến mỗi lần đổi tab
+                list cũ bị huỷ và list mới phải gọi lại API + chờ load lại từ đầu, nên bấm qua đủ 5 tab
+                là 5 lần chờ tuần tự. Giữ mounted giúp cả 5 API gọi song song ngay khi vào "Danh mục"
+                (chỉ phải chờ 1 lần, tốc độ = list chậm nhất chứ không phải tổng cả 5) và tab đã xem rồi
+                thì chuyển qua lại tức thì, không phải tải lại.
+            */}
+            <div className={activeTab === "departments" ? "" : "hidden"}>
+                <DepartmentList ref={departmentRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, departments: value }))} />
+            </div>
+            <div className={activeTab === "groups" ? "" : "hidden"}>
+                <GroupList ref={groupRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, groups: value }))} />
+            </div>
+            <div className={activeTab === "reasons" ? "" : "hidden"}>
+                <ReasonList ref={reasonRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, reasons: value }))} />
+            </div>
+            <div className={activeTab === "ot-cases" ? "" : "hidden"}>
+                <OtCaseList ref={otCaseRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, "ot-cases": value }))} />
+            </div>
+            <div className={activeTab === "employees" ? "" : "hidden"}>
+                <EmployeeList ref={employeeRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, employees: value }))} />
+            </div>
         </div>
     );
 }

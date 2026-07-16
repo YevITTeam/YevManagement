@@ -22,7 +22,7 @@ interface CreateFormState {
     userName: string;
     scopeType: number; // 0=Group, 1=Department
     scopeId: number;
-    approvalLevel: number; // 1=DepartmentManager, 2=WorkshopManager
+    approvalLevel: number; // 0=Submitter (quyền tạo đơn), 1=DepartmentManager, 2=WorkshopManager
 }
 
 const emptyForm: CreateFormState = { userName: "", scopeType: 0, scopeId: 0, approvalLevel: 1 };
@@ -103,7 +103,8 @@ export default function UserApprovalScopeManager() {
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
-        if (!form.userName.trim() || !form.scopeId || !form.approvalLevel) return;
+        // approvalLevel=0 (Submitter) là giá trị hợp lệ — không dùng truthy check kẻo bị coi là falsy.
+        if (!form.userName.trim() || !form.scopeId) return;
         setIsSaving(true);
         try {
             await UserApprovalScopeApi.createScope({
@@ -147,8 +148,8 @@ export default function UserApprovalScopeManager() {
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền duyệt tăng ca</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Khai báo Trưởng phòng/Trưởng xưởng phụ trách duyệt cho từng Nhóm/Bộ phận. Tổng Giám Đốc không cần khai
-                        báo ở đây (chỉ cần gán Role).
+                        Khai báo Trưởng Group được tạo đơn (Người đề nghị) và Trưởng phòng/Trưởng xưởng phụ trách duyệt
+                        cho từng Nhóm/Bộ phận. Tổng Giám Đốc không cần khai báo ở đây (chỉ cần gán Role).
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -335,6 +336,7 @@ export default function UserApprovalScopeManager() {
                                     disabled={isSaving}
                                     className={fieldClassName}
                                 >
+                                    <option value={0}>{approvalLevelLabels[0]} (quyền tạo đơn)</option>
                                     <option value={1}>{approvalLevelLabels[1]}</option>
                                     <option value={2}>{approvalLevelLabels[2]}</option>
                                 </select>

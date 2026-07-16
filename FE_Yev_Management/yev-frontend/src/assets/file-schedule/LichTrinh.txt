@@ -71,7 +71,7 @@
         {
           "id": "11bb325a-7f4f-4277-8cc7-b5903b0c7bf8",
           "content": "Thu thập yêu cầu",
-          "assigneeId": "",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
           "status": "todo",
           "dueDate": "2026-07-15",
           "completedDate": ""
@@ -79,7 +79,39 @@
         {
           "id": "d9bac34d-81c9-449b-8b2d-dbcc90bac3af",
           "content": "Thiết kế database",
-          "assigneeId": "",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "todo",
+          "dueDate": "",
+          "completedDate": ""
+        },
+        {
+          "id": "1784177098270-ts934noljgm",
+          "content": "Tạo module",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "todo",
+          "dueDate": "",
+          "completedDate": ""
+        },
+        {
+          "id": "1784177112223-ooyem6sxo4",
+          "content": "Hình thành chức năng cơ bản",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "todo",
+          "dueDate": "",
+          "completedDate": ""
+        },
+        {
+          "id": "1784177123176-gzu5aq159o",
+          "content": "Import dữ liệu",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "todo",
+          "dueDate": "",
+          "completedDate": ""
+        },
+        {
+          "id": "1784177135145-32f3mfuwcwv",
+          "content": "Phát triền tính năng",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
           "status": "todo",
           "dueDate": "",
           "completedDate": ""

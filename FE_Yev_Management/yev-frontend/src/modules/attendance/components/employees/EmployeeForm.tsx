@@ -9,6 +9,7 @@ export interface EmployeeFormValues {
     code: string;
     firstName: string;
     lastName: string;
+    userName: string | null;
     monthToDate: number;
     yearToDate: number;
     groupId: number;
@@ -23,7 +24,15 @@ interface EmployeeFormProps {
     onSubmit: (values: EmployeeFormValues) => void | Promise<void>;
 }
 
-const emptyValues: EmployeeFormValues = { code: "", firstName: "", lastName: "", monthToDate: 0, yearToDate: 0, groupId: 0 };
+const emptyValues: EmployeeFormValues = {
+    code: "",
+    firstName: "",
+    lastName: "",
+    userName: null,
+    monthToDate: 0,
+    yearToDate: 0,
+    groupId: 0,
+};
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -48,6 +57,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                           code: initial.code,
                           firstName: initial.firstName,
                           lastName: initial.lastName,
+                          userName: initial.userName,
                           monthToDate: initial.monthToDate,
                           yearToDate: initial.yearToDate,
                           groupId: initial.groupId,
@@ -127,6 +137,19 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             />
                         </label>
                     </div>
+
+                    <label className="block">
+                        <span className={fieldLabelClassName}>Tài khoản AD (userName, tuỳ chọn)</span>
+                        <input
+                            value={values.userName ?? ""}
+                            onChange={(event) =>
+                                setValues((current) => ({ ...current, userName: event.target.value.trim() ? event.target.value : null }))
+                            }
+                            placeholder="VD: YEV\n.van.a — dùng cho Lũy kế của tôi"
+                            disabled={loading}
+                            className={fieldClassName}
+                        />
+                    </label>
 
                     <label className="block">
                         <span className={fieldLabelClassName}>Nhóm</span>

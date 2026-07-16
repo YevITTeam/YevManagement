@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { FilePlus2, ClipboardList, ClipboardCheck, FolderCog, ShieldCheck, PenTool, PanelLeftClose } from "lucide-react";
+import { FilePlus2, ClipboardList, ClipboardCheck, FolderCog, ShieldCheck, PenTool, PanelLeftClose, CalendarClock } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -14,14 +14,18 @@ interface OtNavItem {
     permission?: string;
 }
 
+// Permission theo từng mục — bảng Vai trò → Menu (docs/attendance-api-fe.md §1.1). "Lũy kế của tôi"
+// (otAccumulation) cố ý KHÔNG gắn permission — bất kỳ user đăng nhập nào cũng thấy được (§3.6/§1.4).
 const navItems: OtNavItem[] = [
-    { key: "otCreate", href: "/ot/create", icon: FilePlus2 },
-    { key: "otMyForms", href: "/ot/my-forms", icon: ClipboardList },
-    { key: "otPendingApprovals", href: "/ot/pending-approvals", icon: ClipboardCheck },
-    { key: "otCategories", href: "/ot/categories", icon: FolderCog },
+    { key: "otCreate", href: "/ot/create", icon: FilePlus2, permission: "Attendance.OTForm.Create" },
+    { key: "otMyForms", href: "/ot/my-forms", icon: ClipboardList, permission: "Attendance.OTForm.Create" },
+    { key: "otPendingApprovals", href: "/ot/pending-approvals", icon: ClipboardCheck, permission: "Attendance.OTForm.Approve" },
+    // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này.
+    { key: "otCategories", href: "/ot/categories", icon: FolderCog, permission: "Attendance.Department.View" },
     // Chỉ Admin/người có quyền quản trị phạm vi duyệt mới thấy mục này (docs/attendance-api-fe.md §5).
     { key: "otApprovalScopes", href: "/ot/approval-scopes", icon: ShieldCheck, permission: "Attendance.UserApprovalScope.View" },
-    { key: "otSignature", href: "/ot/signature", icon: PenTool },
+    { key: "otSignature", href: "/ot/signature", icon: PenTool, permission: "Attendance.UserSignature.Update" },
+    { key: "otAccumulation", href: "/ot/accumulation", icon: CalendarClock },
 ];
 
 export default function OtManagerSidebar() {

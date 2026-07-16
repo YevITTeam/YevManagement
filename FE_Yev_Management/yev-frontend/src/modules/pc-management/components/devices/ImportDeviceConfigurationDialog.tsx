@@ -216,8 +216,8 @@ export default function ImportDeviceConfigurationDialog({
                                 className="flex-1 text-sm text-[#191c1e] file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-[#f8fafc] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#191c1e] hover:file:bg-[#f2f4f6]"
                             />
                             <a
-                                href="/assets/file-samples/computerNameSample.xlsx"
-                                download="computerNameSample.xlsx"
+                                href="/assets/file-samples/ComputerNameSample.xlsx"
+                                download="ComputerNameSample.xlsx"
                                 className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                             >
                                 Tải file mẫu

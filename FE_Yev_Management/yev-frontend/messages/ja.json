@@ -27,6 +27,7 @@
     "otCategories": "マスタ管理",
     "otApprovalScopes": "承認権限設定",
     "otSignature": "自分の署名",
+    "otAccumulation": "自分の累計",
     "collapseSidebar": "サイドバーを折りたたむ",
     "expandSidebar": "サイドバーを展開する"
   },
