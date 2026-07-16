@@ -7,12 +7,20 @@ namespace Attendance.Application.Interfaces.Service
     {
         Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(string userName, int pageIndex, int pageSize);
 
+        // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — tách riêng khỏi GetPendingApprovalsAsync
+        // vì gate bằng permission Attendance.OTForm.Create, không phải .Approve.
+        Task<PagedResponse<OtFormListItemDto>> GetPendingSubmissionsAsync(
+            string currentUserName, bool isAdmin, int pageIndex, int pageSize);
+
         Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
             string approverUserName, bool isGeneralDirector, int pageIndex, int pageSize);
 
         Task<OtFormDto> GetByIdAsync(int id);
 
         Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request);
+
+        // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).
+        Task<OtFormDto> ApproveSubmitterAsync(int id, string approverUserName, string? approverFullName, bool isAdmin, ApproveOtFormDto request);
 
         Task<OtFormDto> UpdateAsync(int id, string currentUserName, UpdateOtFormDto request);
 

@@ -24,5 +24,11 @@ namespace Identity.Application.Services
 
             return roles.SelectMany(r => r.Users).Select(u => u.UserName).Distinct().ToList();
         }
+
+        public async Task<bool> IsUserInRoleAsync(string userName, string roleName)
+        {
+            var users = await _unitOfWork.Users.FindWithIncludesAsync(u => u.UserName == userName, u => u.Roles);
+            return users.Any(u => u.Roles.Any(r => r.RoleName == roleName && !r.IsDeleted));
+        }
     }
 }

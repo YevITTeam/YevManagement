@@ -74,7 +74,7 @@ FinancialPeriod = fiscalYearStartYear - 1940
 2. **Chuyển toàn bộ IP** Old→New (IP New đang giữ mà không thuộc Old → gỡ về `Available`).
 3. **Chuyển Email**: re-point `DeviceId` Old→New (không cần gỡ vì không unique; trùng nội dung với New → soft-delete dòng cũ).
 4. **Chuyển DeviceSoftware**: re-point `DeviceId` (giữ `InstallDate`/`LicenseKey`); trùng khoá kép ở New → giữ New, xóa cứng Old.
-5. **Copy 4 field vị trí/người dùng** Old→New (ghi đè): `BranchId`/`Manager`/`IsOutsourced`/`IsUseUsb`. **KHÔNG copy** (thuộc tính vật lý của New): `DeviceTypeId`/`SupplierId`/`PurchaseDate`/`ExpirationDate`/`DepreciationMonths`/`DeviceCode`/`DeviceName`/`SerialNumber`/`Note`/`DeviceConfiguration`.
+5. **Copy 6 field vị trí/người dùng** Old→New (ghi đè): `BranchId`/`Manager`/`IsOutsourced`/`IsUseUsb`/`GroupId`/`DepartmentId`(2026-07-16, bổ sung Nhóm+Bộ phận). **KHÔNG copy** (thuộc tính vật lý của New): `DeviceTypeId`/`SupplierId`/`PurchaseDate`/`ExpirationDate`/`DepreciationMonths`/`DeviceCode`/`DeviceName`/`SerialNumber`/`Note`/`DeviceConfiguration`.
 6. **Status Old** → `PendingUse(0)`, trừ khi Old đã hết hạn (`IsExpired`) → `PendingLiquidation(2)`.
 6b. **Status New** → `InUse(1)` tự động.
 7. `DeviceConfiguration` **không đụng** (không copy, không xóa).
@@ -141,6 +141,17 @@ Bảng `AssetSettings` (seed 1 dòng `Id=1, LiquidationAfterMonths=2`) — cấu
   2. Device `PendingLiquidation(2)`, `ExpirationDate.AddMonths(LiquidationAfterMonths) < hôm nay` → `Liquidated(3)`. **Mốc tính từ `ExpirationDate`** (không phải lúc vào trạng thái chờ).
   3. 1 Save cho cả 2 bước. Lỗi log qua `ILogger`, không crash, thử lại hôm sau.
 
+### 1.17. `AuditTrail` — ghi log Create/Update/Delete tự động (2026-07-16)
+**Tự động, không cần sửa Service nào.** Chặn tại 1 điểm duy nhất: `AssetDbContext.SaveChangesAsync` override (`Asset.Infrastructure/Context/AssetDbContext.AuditTrail.cs`, partial class riêng — không đụng file scaffold `AssetDbContext.cs`) đọc `ChangeTracker.Entries()` trước/sau khi save để tự sinh `AuditTrail`. Entity mới thêm sau này **tự động được audit**, không cần nhớ gọi gì thêm.
+- **Phạm vi**: toàn bộ entity qua `AssetDbContext` (Device, DeviceGroup, DeviceDepartment, Branch, Supplier, DeviceType, Software, SoftwareGroup, IpAddress, IpPrefix, DeviceConfiguration, DeviceEmail, DeviceSoftware, TransferHistory, AssetSetting...). **Loại trừ** 3 bảng tự thân đã là log/snapshot: `AuditTrail`, `DeviceConfigurationHistory`, `DeviceConfigurationInitial` (audit lồng audit vô nghĩa).
+- **`Action`**: `Create` (`EntityState.Added`), `Update` (`Modified`, field thường đổi), `Delete` (`Modified` với `IsDeleted` false→true, **hoặc** `EntityState.Deleted` với entity hard-delete như `DeviceSoftware`/`TransferHistory`/`DeviceConfiguration`), `Restore` (`IsDeleted` true→false).
+- **`OldValues`/`NewValues`**: JSON **diff-based** — chỉ field thực sự đổi (so `property.OriginalValue` vs `CurrentValue`, không dựa `IsModified` vì `GenericRepository.Update()` gọi `DbSet.Update()` đánh dấu Modified cả entity). `Modified` không đổi field nào thật (diff rỗng) → **không tạo** bản ghi audit. `Create`: `OldValues=null`, `NewValues`=toàn bộ field (kèm `Id` — lấy **sau** khi save đầu tiên vì cột identity chưa có giá trị lúc entity còn `Added`). `Delete` (hard): `OldValues`=toàn bộ field, `NewValues=null`.
+- **`RecordId`**: cột khoá chính đầu tiên (đủ cho toàn bộ entity `int Id` đơn). Riêng `DeviceSoftware` (khoá kép `DeviceId+SoftwareId`) lấy `DeviceId` làm `RecordId`, `SoftwareId` vẫn nằm trong Old/NewValues nên không mất thông tin.
+- **`ChangedBy`**: `HttpContext.User.Identity.Name` qua `IHttpContextAccessor` (constructor mới của `AssetDbContext`, DI tự resolve nhờ `AddHttpContextAccessor()` đã có sẵn). Không có HttpContext (vd `DeviceLiquidationBackgroundService` chạy nền lúc 00:30) → `"System"`.
+- **2 lần `SaveChangesAsync`**: lần 1 lưu dữ liệu nghiệp vụ chính (để Added entity có Id); lần 2 lưu riêng các dòng `AuditTrail` vừa build. Lần 2 lỗi → chỉ log qua `ILogger`, **không** rollback/throw — audit là best-effort, không được làm mất dữ liệu nghiệp vụ đã lưu thành công.
+- **API xem lại**: `AuditTrailService`/`AuditTrailController` (`Asset.Application/Asset.Api`) — `GET /api/AuditTrail/grid-list` (phân trang, filter `TableName/RecordId/Action/ChangedBy/FromDate/ToDate`, sort `ChangedAt` mới nhất trước) + `GET /api/AuditTrail/record?tableName=&recordId=` (lịch sử 1 bản ghi cụ thể, vd xem toàn bộ log của 1 Device). Permission `Asset.AuditTrail.View` (seed migration `AddAssetAuditTrailPermission` bên Identity — **CHƯA apply**, chờ `dotnet ef database update` như các migration khác ở §5).
+- **Bảng `AuditTrails` đã tồn tại sẵn trong DB thật** (không qua migration Asset nào — thuộc DB scaffold gốc), nên phần ghi log hoạt động ngay, không cần chờ migration nào bên Asset.
+
 ## 2. DTOs (`Asset.Application/Dtos/`)
 - **Master data** (Branches/Suplliers/DeviceTypes/SoftwareGroups): `{Entity}Dto`(Id/Code/Name), `Create...`(+`[Required]`), `Update...`.
 - **DeviceGroups**: `DeviceGroupDto`(+`DepartmentId`/`DepartmentName`), `Create/UpdateDeviceGroupDto`(`DepartmentId[Required]`+Code/Name).
@@ -186,7 +197,7 @@ Bảng `AssetSettings` (seed 1 dòng `Id=1, LiquidationAfterMonths=2`) — cấu
 | TransferHistory | `/api/TransferHistory` | POST(chuyển máy), `device/{deviceId}`. **Không** PUT/DELETE | `Asset.TransferHistory.Create/.View` |
 | DeviceImport | `/api/DeviceImport` | `preview`, `confirm` | `Asset.Device.Create` |
 | DeviceConfigurationImport | `/api/DeviceConfigurationImport` | `preview`, `confirm` | `Asset.DeviceConfiguration.Update` |
-| AuditTrail | ❌ chưa có | — | — |
+| AuditTrail | `/api/AuditTrail` | `grid-list`(phân trang+filter), `record?tableName=&recordId=`. **Không** POST/PUT/DELETE (ghi tự động qua `SaveChangesAsync`, §1.17) | `Asset.AuditTrail.View` |
 
 **Pattern service mẫu để nhân bản:**
 - **CRUD chuẩn** → `BranchService` (soft-delete, check trùng code, `OrThrowNotFound`, `ToPagedResponseAsync`, `GetAllActiveAsync` dùng `SelectAsync`).
@@ -216,7 +227,7 @@ Ngoài ra: dữ liệu `Software`/`SoftwareGroup` đã sửa qua API CRUD (32 gr
 **Bug đã biết (chưa fix)**: `SoftwareGroupService.UpdateAsync` so `GroupCode` cũ/mới **trong bộ nhớ** (case-sensitive) nhưng check trùng SQL collation **case-insensitive** → đổi `GroupCode` chỉ khác hoa/thường luôn 400 "đã tồn tại". Cần so case-insensitive (hoặc so `Id` bản ghi trùng ≠ `request.Id`).
 
 ## 6. Cần làm tiếp
-1. **AuditTrail**: chưa có Application/Api.
+1. ~~**AuditTrail**: chưa có Application/Api.~~ Đã xong (§1.17, 2026-07-16) — còn chờ apply migration `AddAssetAuditTrailPermission` (Identity) để permission `Asset.AuditTrail.View` có hiệu lực.
 2. **Auth**: xong `[RequirePermission]`. Admin cần gán permission cho role `Basic`/`Quản lý Hợp Đồng`/`Quản lý Thiết bị`.
 3. **Warning** `CS8602/8603/8604` (null deref/return) trong Service — nên dùng `OrThrowNotFound`.
 4. **Field ngoài phạm vi Device** (Email 2/3, Sticky Notes) — chưa làm, cần hỏi trước (CLAUDE.md §4.2).

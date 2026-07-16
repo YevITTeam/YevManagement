@@ -1,7 +1,9 @@
 using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Interfaces.Service;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Shared.Application.Authorization;
+using Shared.Application.Interfaces;
 using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
@@ -9,11 +11,22 @@ namespace Attendance.Api.Controllers
     public class EmployeeController : BaseController
     {
         private readonly IEmployeeService _employeeService;
+        private readonly IEmailService _emailService;
 
-        public EmployeeController(IEmployeeService employeeService)
+        public EmployeeController(IEmployeeService employeeService, IEmailService emailService)
         {
             _employeeService = employeeService;
+            _emailService = emailService;
         }
+
+        [AllowAnonymous]
+        [HttpGet("test")]
+        public async Task<ActionResult<ApiResponse<string>>> TestMail()
+        {
+            await _emailService.SendAsync("m.cuong.da.pcd.it@yev.vn", "Test Gửi Mail Tự Động", "<p> Xin Chào </p>");
+            return Success("Đã gửi");
+        }
+
 
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("grid-list")]

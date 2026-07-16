@@ -29,6 +29,18 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
+        // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — dùng permission Create vì Trưởng
+        // Group role không có Attendance.OTForm.Approve.
+        [RequirePermission("Attendance.OTForm.Create")]
+        [HttpGet("pending-submissions")]
+        public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingSubmissions(
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
+        {
+            var isAdmin = User.IsInRole(AdminRole);
+            var result = await _otFormService.GetPendingSubmissionsAsync(CurrentUserName, isAdmin, pageIndex, pageSize);
+            return Success(result);
+        }
+
         // Đơn đang chờ CHÍNH mình duyệt (Trưởng phòng/Trưởng xưởng theo UserApprovalScope, hoặc TGĐ bypass scope).
         [RequirePermission("Attendance.OTForm.Approve")]
         [HttpGet("pending-approvals")]
@@ -48,20 +60,33 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Tạo đơn — chữ ký "Người đề nghị" BE tự lấy từ UserSignature đã đăng ký sẵn của người gọi.
-        // Người gọi phải được gán UserApprovalScope (ApprovalLevel=Submitter) khớp group/department của
-        // đơn, trừ Admin bypass — cho phép nhiều người trong cùng Group cùng tạo đơn, không chỉ 1 Trưởng Group.
+        // Tạo đơn — chỉ tạo bản nháp (Draft), CHƯA ký "Người đề nghị". Người tạo đơn chỉ chịu trách
+        // nhiệm nhập liệu; Trưởng nhóm phải tự gọi POST /{id}/submit để ký duyệt thì đơn mới thật sự
+        // vào luồng (xem docs/attendance-module.md).
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateOtFormDto request)
         {
             var isAdmin = User.IsInRole(AdminRole);
             var result = await _otFormService.CreateAsync(CurrentUserName, CurrentFullName, isAdmin, request);
-            return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công.");
+            return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công (đang ở trạng thái nháp, chờ Trưởng nhóm ký duyệt).");
         }
 
-        // Sửa toàn bộ đơn — chỉ chính người tạo và chỉ khi đơn còn Pending (Service validate cả 2 điều
-        // kiện). Qua ít nhất 1 cấp duyệt là khóa cứng, không sửa được nữa (xem docs/attendance-module.md).
+        // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).
+        // BE tự lấy chữ ký từ UserSignature đã đăng ký sẵn của người gọi. Người gọi phải được gán
+        // UserApprovalScope (ApprovalLevel=Submitter, chỉ Role "Trưởng Group" mới được gán) khớp
+        // group/department của đơn, trừ Admin bypass (xem docs/attendance-module.md).
+        [RequirePermission("Attendance.OTForm.Create")]
+        [HttpPost("{id}/submit")]
+        public async Task<ActionResult<ApiResponse<OtFormDto>>> Submit(int id, [FromBody] ApproveOtFormDto request)
+        {
+            var isAdmin = User.IsInRole(AdminRole);
+            var result = await _otFormService.ApproveSubmitterAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
+            return Success(result, "Trưởng nhóm ký duyệt thành công, đơn đã chuyển lên chờ Trưởng phòng.");
+        }
+
+        // Sửa toàn bộ đơn — chỉ chính người tạo và chỉ khi đơn còn Draft hoặc Pending (Service validate
+        // cả 2 điều kiện). Qua cấp Trưởng phòng trở lên là khóa cứng, không sửa được nữa (xem docs/attendance-module.md).
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> Update(int id, [FromBody] UpdateOtFormDto request)

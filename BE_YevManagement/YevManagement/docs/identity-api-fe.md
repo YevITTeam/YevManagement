@@ -52,7 +52,7 @@ Dùng **`user.permissions`** (mảng `Module.Entity.Action`) để bật/tắt t
 ## 4. Quản trị User & Role
 Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, thiếu permission→403).
 
-- **4.1 `GET /api/Auth/get-all-users-with-roles`** (`Identity.User.View`) → `[{id, userName, fullName, deviceName, email, roles:[]}]` (`email` mới 2026-07-16, xem mục 2 — hữu ích để Admin kiểm tra AD có resolve đúng mail cho user hay chưa trước khi họ báo "không nhận được email xác nhận"). Lưu ý danh sách này **không trả `permissions`** (khác `windows-login`) — luôn là mảng rỗng nếu FE cố đọc.
+- **4.1 `GET /api/Auth/get-all-users-with-roles?roleId=`** (`Identity.User.View`) → `[{id, userName, fullName, deviceName, email, roles:[]}]` (`email` mới 2026-07-16, xem mục 2 — hữu ích để Admin kiểm tra AD có resolve đúng mail cho user hay chưa trước khi họ báo "không nhận được email xác nhận"). `roleId` optional (mới 2026-07-16) — lọc user thuộc Role đó; không truyền → trả toàn bộ. Không phân trang. Lưu ý danh sách này **không trả `permissions`** (khác `windows-login`) — luôn là mảng rỗng nếu FE cố đọc.
 - **4.2 `POST /api/Auth/update-user-roles`** (`Identity.User.UpdateRoles`) — body `{userId, roleIds:[1,2]}`. `roleIds` = **toàn bộ** danh sách cuối (gửi thiếu = gỡ role đó).
 - **4.3 `GET /api/Auth/get-all-roles`** (`Identity.Role.View`) → `[{id, roleName, description}]`.
 - **4.4 `POST /api/Auth/create-role`** (`Identity.Role.Create`) — `{roleName, description}`, 400 nếu trống/trùng.

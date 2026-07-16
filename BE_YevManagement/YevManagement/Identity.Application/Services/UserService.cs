@@ -13,9 +13,11 @@ namespace Identity.Application.Services
         {
         }
 
-        public async Task<List<UserDto>> GetAllUsersAsync()
+        public async Task<List<UserDto>> GetAllUsersAsync(int? roleId = null)
         {
-            var users = await _unitOfWork.Users.FindWithIncludesAsync(null,x =>x.Roles);
+            var users = roleId.HasValue
+                ? await _unitOfWork.Users.FindWithIncludesAsync(x => x.Roles.Any(r => r.Id == roleId.Value), x => x.Roles)
+                : await _unitOfWork.Users.FindWithIncludesAsync(null, x => x.Roles);
 
             return users.Select(user => new UserDto
             {

@@ -263,6 +263,13 @@ Mã không khớp Device → lỗi preview. Trùng mã trong file → lỗi cả
 ```
 Luật: `items`=**toàn bộ** đang tick. Có trong items chưa cài → tạo mới (dùng key/date **của item đó**, `installDate` trống→UtcNow). Đang cài không còn trong items → **gỡ hẳn** (xóa cứng). **Giữ tick → không đụng** (dù gửi key/date mới — vô nghĩa; muốn sửa dùng 7.2 PUT). Trùng `softwareId` → 400. Id không tồn tại → 400. Response = danh sách sau đồng bộ (refresh UI ngay).
 
+## 7b. AuditTrail — `/api/AuditTrail` (lịch sử Create/Update/Delete, ghi tự động, chỉ đọc)
+Ai sửa/xóa gì, lúc nào — ghi tự động ở BE mỗi lần Create/Update/Delete bất kỳ entity Asset nào, FE **không cần gọi API nào để ghi log**, chỉ cần API xem lại.
+- **7b.1 `GET /grid-list?pageIndex=&pageSize=&tableName=&recordId=&action=&changedBy=&fromDate=&toDate=`** → phân trang chuẩn (§1.2). Mỗi dòng: `{ id, tableName, recordId, action, oldValues, newValues, changedBy, changedAt }`. `tableName` = tên entity C# (`"Device"`, `"Branch"`, `"DeviceGroup"`...), `action` ∈ `Create|Update|Delete|Restore`. `oldValues`/`newValues` là **chuỗi JSON** (object `{field: value}`, chỉ field thực sự đổi — FE tự `JSON.parse` nếu muốn hiển thị diff đẹp; `null` khi không áp dụng (vd `Create` không có `oldValues`)).
+- **7b.2 `GET /record?tableName=Device&recordId=5`** → `List` không phân trang, mới nhất trước — dùng cho tab "Lịch sử" trong màn chi tiết 1 bản ghi (vd 1 Device cụ thể).
+- `changedBy` = username đăng nhập lúc thao tác; nền hệ thống tự chạy (vd `DeviceLiquidationBackgroundService`) → `"System"`.
+- Permission `Asset.AuditTrail.View` — **cần Admin gán** cho role muốn xem (chưa role nào có sẵn ngoài `Admin`).
+
 ## 8. Tổng hợp endpoint
 | Route | Ghi chú |
 |---|---|
@@ -277,6 +284,7 @@ Luật: `items`=**toàn bộ** đang tick. Có trong items chưa cài → tạo 
 | `/api/DeviceConfiguration` | `by-device/{deviceId}`, POST, PUT{id}, DELETE{id}, `{configId}/initial`, `initial/{id}`, `{configId}/history` |
 | `/api/DeviceConfigurationImport` | `preview`/`confirm` (Tanium, chỉ update) |
 | `/api/DeviceSoftware` | `device/{deviceId}`, POST, PUT, DELETE `device/{deviceId}/software/{softwareId}`, `picker/{deviceId}`, `sync` |
+| `/api/AuditTrail` | `grid-list` (filter+phân trang), `record?tableName=&recordId=`. Chỉ đọc, ghi tự động ở BE |
 
 `DELETE /api/Device/{id}` và `bulk-delete` (`POST /api/Device/bulk-delete`, `{ ids:[] }`, permission `Asset.Device.Delete`): xóa mềm, **chỉ** thiết bị `PendingLiquidation(2)` "Chờ thanh lý"; `DELETE {id}` trả lỗi 400 nếu sai trạng thái, `bulk-delete` bỏ qua và trả kết quả `{ deletedCount, skippedDevices:[{id,deviceCode,reason}] }`.
 

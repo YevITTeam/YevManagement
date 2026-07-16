@@ -68,9 +68,9 @@ namespace Identity.Api.Controllers
 
         [RequirePermission("Identity.User.View")]
         [HttpGet("get-all-users-with-roles")]
-        public async Task<ActionResult<ApiResponse<List<UserDto>>>> GetAllUsersWithRoles()
+        public async Task<ActionResult<ApiResponse<List<UserDto>>>> GetAllUsersWithRoles([FromQuery] int? roleId)
         {
-            var users = await _service.GetAllUsersAsync();
+            var users = await _service.GetAllUsersAsync(roleId);
             return Success(users, "Lấy danh sách người dùng và quyền thành công!");
         }
 

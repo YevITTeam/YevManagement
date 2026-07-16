@@ -2,6 +2,7 @@ using Attendance.Application.Dtos.UserApprovalScopes;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
+using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
@@ -10,7 +11,17 @@ namespace Attendance.Application.Services
 {
     public class UserApprovalScopeService : BaseService<IAttendanceUnitOfWork>, IUserApprovalScopeService
     {
-        public UserApprovalScopeService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
+        // Role duy nhất được phép giữ ApprovalLevel=Submitter — chữ ký "Người đề nghị" trên OT Form
+        // bắt buộc phải là chữ ký Trưởng nhóm, không phải người tạo đơn thông thường
+        // (xem docs/attendance-module.md — Bước Trưởng nhóm ký duyệt).
+        private const string GroupLeaderRoleName = "Trưởng Group";
+
+        private readonly IUserDirectoryService _userDirectoryService;
+
+        public UserApprovalScopeService(IAttendanceUnitOfWork unitOfWork, IUserDirectoryService userDirectoryService) : base(unitOfWork)
+        {
+            _userDirectoryService = userDirectoryService;
+        }
 
         public async Task<PagedResponse<UserApprovalScopeDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword)
         {
@@ -41,6 +52,13 @@ namespace Attendance.Application.Services
         public async Task<UserApprovalScopeDto> CreateAsync(CreateUserApprovalScopeDto request)
         {
             var scopeName = await ResolveScopeNameAsync(request.ScopeType, request.ScopeId);
+
+            if (request.ApprovalLevel == (int)ApprovalLevel.Submitter)
+            {
+                var isGroupLeader = await _userDirectoryService.IsUserInRoleAsync(request.UserName, GroupLeaderRoleName);
+                if (!isGroupLeader)
+                    throw new DomainException($"'{request.UserName}' chưa giữ Role 'Trưởng Group' — chỉ Trưởng nhóm mới được gán quyền ký/duyệt cấp Submitter (Người đề nghị).");
+            }
 
             var exists = await _unitOfWork.UserApprovalScopes.FirstOrDefaultAsync(x =>
                 !x.IsDeleted && x.UserName == request.UserName && x.ScopeType == request.ScopeType &&

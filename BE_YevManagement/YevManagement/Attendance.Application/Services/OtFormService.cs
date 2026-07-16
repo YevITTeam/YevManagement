@@ -55,7 +55,46 @@ namespace Attendance.Application.Services
                 CreatedByUserName = x.CreatedByUserName,
                 CreatedByFullName = x.CreatedByFullName,
                 Status = x.Status,
-                IsEditable = x.Status == (int)OtFormStatus.Pending
+                IsEditable = IsEditableStatus(x.Status)
+            });
+        }
+
+        // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — endpoint riêng, gate bằng
+        // Attendance.OTForm.Create (không phải .Approve, vì Trưởng Group role không có permission
+        // Approve — xem docs/attendance-module.md §Người tạo đơn KHÁC Trưởng nhóm).
+        public async Task<PagedResponse<OtFormListItemDto>> GetPendingSubmissionsAsync(
+            string currentUserName, bool isAdmin, int pageIndex, int pageSize)
+        {
+            List<int> submitterDepartmentIds = new();
+            List<int> submitterGroupIds = new();
+
+            if (!isAdmin)
+            {
+                var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
+                    !x.IsDeleted && x.UserName == currentUserName && x.ApprovalLevel == (int)ApprovalLevel.Submitter);
+
+                submitterDepartmentIds = scopes.Where(s => s.ScopeType == (int)ScopeType.Department).Select(s => s.ScopeId).ToList();
+                submitterGroupIds = scopes.Where(s => s.ScopeType == (int)ScopeType.Group).Select(s => s.ScopeId).ToList();
+            }
+
+            var draftQuery = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
+                .Where(x => !x.IsDeleted && x.Status == (int)OtFormStatus.Draft &&
+                    (isAdmin || submitterDepartmentIds.Contains(x.DepartmentId) || submitterGroupIds.Contains(x.GroupId)))
+                .OrderBy(x => x.Date);
+
+            return await _unitOfWork.OtForms.ToPagedResponseAsync(draftQuery, pageIndex, pageSize, x => new OtFormListItemDto
+            {
+                Id = x.Id,
+                GroupNameVn = x.Group.GroupNameVn,
+                DepartmentNameVn = x.Department.DepartmentNameVn,
+                OtCaseCode = x.OtCase.Code,
+                Date = x.Date,
+                TotalHour = x.TotalHour,
+                NumberOfEmployee = x.NumberOfEmployee,
+                CreatedByUserName = x.CreatedByUserName,
+                CreatedByFullName = x.CreatedByFullName,
+                Status = x.Status,
+                IsEditable = IsEditableStatus(x.Status)
             });
         }
 
@@ -99,7 +138,7 @@ namespace Attendance.Application.Services
                 CreatedByUserName = x.CreatedByUserName,
                 CreatedByFullName = x.CreatedByFullName,
                 Status = x.Status,
-                IsEditable = x.Status == (int)OtFormStatus.Pending
+                IsEditable = IsEditableStatus(x.Status)
             });
         }
 
@@ -136,7 +175,7 @@ namespace Attendance.Application.Services
                 CreatedByUserName = otForm.CreatedByUserName,
                 CreatedByFullName = otForm.CreatedByFullName,
                 Status = otForm.Status,
-                IsEditable = otForm.Status == (int)OtFormStatus.Pending,
+                IsEditable = IsEditableStatus(otForm.Status),
                 Employees = employees.Select(x => new OtFormEmployeeDto
                 {
                     EmployeeId = x.EmployeeId,
@@ -209,12 +248,6 @@ namespace Attendance.Application.Services
 
             await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
 
-            // Chữ ký "Người đề nghị" luôn bắt buộc, lấy từ chữ ký đã đăng ký sẵn (UserSignature) của
-            // chính người tạo đơn — không nhận ảnh chữ ký từ request nữa (xem docs/attendance-module.md).
-            var submitterSignature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == createdByUserName);
-            if (submitterSignature == null)
-                throw new DomainException("Bạn chưa đăng ký chữ ký. Vui lòng đăng ký chữ ký (PUT /api/UserSignature/me) trước khi tạo đơn.");
-
             var newOtForm = new OtForm
             {
                 GroupId = request.GroupId,
@@ -229,7 +262,10 @@ namespace Attendance.Application.Services
                 NumberOfEmployee = request.Employees.Count,
                 CreatedByUserName = createdByUserName,
                 CreatedByFullName = createdByFullName,
-                Status = (int)OtFormStatus.Pending,
+                // Chỉ là Draft — CHƯA có chữ ký "Người đề nghị". Trưởng nhóm phải tự gọi
+                // POST /{id}/submit để ký duyệt thì đơn mới chuyển sang Pending (chờ Trưởng phòng)
+                // (xem docs/attendance-module.md — người tạo đơn khác với người chịu trách nhiệm ký).
+                Status = (int)OtFormStatus.Draft,
                 IsDeleted = false
             };
 
@@ -264,26 +300,68 @@ namespace Attendance.Application.Services
                 });
             }
 
-            // Bước 0 bắt buộc: Trưởng Group ký "Người đề nghị" ngay lúc tạo đơn — cùng 1 SaveChangesAsync
-            // với OtForm nên atomic với nhau (xem docs/attendance-module.md).
+            await _unitOfWork.SaveChangesAsync();
+
+            // Đơn mới ở trạng thái Draft, cần Trưởng nhóm ký duyệt trước tiên (POST /{id}/submit) —
+            // gửi email kèm link Duyệt/Từ chối cho mọi người đủ quyền (kênh bổ sung, không thay thế nút trong app).
+            await NotifyEligibleApproversAsync(newOtForm, ApprovalLevel.Submitter);
+
+            return await GetByIdAsync(newOtForm.Id);
+        }
+
+        // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).
+        // Tách riêng khỏi CreateAsync vì người tạo đơn (data entry) không nhất thiết là Trưởng nhóm;
+        // chữ ký "Người đề nghị" luôn phải là chữ ký thật của Trưởng nhóm (xem docs/attendance-module.md).
+        public async Task<OtFormDto> ApproveSubmitterAsync(int id, string approverUserName, string? approverFullName, bool isAdmin, ApproveOtFormDto request)
+        {
+            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+            otForm.OrThrowNotFound("Đơn tăng ca", id);
+
+            if (otForm!.Status != (int)OtFormStatus.Draft)
+                throw new DomainException("Đơn không ở trạng thái nháp (Draft), không thể ký duyệt cấp Trưởng nhóm nữa.");
+
+            // Cùng cơ chế Scope với CreateAsync — chỉ Trưởng nhóm được gán UserApprovalScope(Submitter)
+            // khớp đúng Group/Department của đơn mới được ký duyệt. Admin bypass.
+            if (!isAdmin)
+            {
+                var approverScopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
+                    !x.IsDeleted && x.UserName == approverUserName && x.ApprovalLevel == (int)ApprovalLevel.Submitter);
+
+                var authorized = approverScopes.Any(s =>
+                    (s.ScopeType == (int)ScopeType.Department && s.ScopeId == otForm.DepartmentId) ||
+                    (s.ScopeType == (int)ScopeType.Group && s.ScopeId == otForm.GroupId));
+
+                if (!authorized)
+                    throw new DomainException("Bạn không được phân quyền ký duyệt (cấp Trưởng nhóm) cho nhóm/bộ phận của đơn này.");
+            }
+
+            // Chữ ký "Người đề nghị" luôn bắt buộc, lấy từ chữ ký đã đăng ký sẵn (UserSignature) của
+            // chính Trưởng nhóm đang ký — không nhận ảnh chữ ký từ request (xem docs/attendance-module.md).
+            var submitterSignature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == approverUserName);
+            if (submitterSignature == null)
+                throw new DomainException("Bạn chưa đăng ký chữ ký. Vui lòng đăng ký chữ ký (PUT /api/UserSignature/me) trước khi ký duyệt.");
+
             await _unitOfWork.OtFormApprovalHistories.AddAsync(new OtFormApprovalHistory
             {
-                OtForm = newOtForm,
-                ApproverUserName = createdByUserName,
-                ApproverFullName = createdByFullName,
+                OtFormId = otForm.Id,
+                ApproverUserName = approverUserName,
+                ApproverFullName = approverFullName,
                 ApprovalLevel = (int)ApprovalLevel.Submitter,
                 Action = (int)ApprovalAction.Submitted,
+                Comment = request.Comment,
                 SignatureImage = submitterSignature.SignatureImage,
                 ActionAt = DateTime.UtcNow
             });
 
+            otForm.Status = (int)OtFormStatus.Pending;
+            _unitOfWork.OtForms.Update(otForm);
+
             await _unitOfWork.SaveChangesAsync();
 
-            // Đơn mới luôn cần Trưởng phòng (DepartmentManager) duyệt trước tiên — gửi email kèm
-            // link Duyệt/Từ chối cho mọi người đủ quyền (kênh bổ sung, không thay thế nút trong app).
-            await NotifyEligibleApproversAsync(newOtForm, ApprovalLevel.DepartmentManager);
+            // Đơn đã có chữ ký Trưởng nhóm, giờ cần Trưởng phòng (DepartmentManager) duyệt tiếp.
+            await NotifyEligibleApproversAsync(otForm, ApprovalLevel.DepartmentManager);
 
-            return await GetByIdAsync(newOtForm.Id);
+            return await GetByIdAsync(otForm.Id);
         }
 
         // Sửa toàn bộ đơn (danh mục + nhân viên + ProcessPart) — chỉ chính người tạo mới sửa được,
@@ -297,8 +375,8 @@ namespace Attendance.Application.Services
             if (otForm!.CreatedByUserName != currentUserName)
                 throw new DomainException("Bạn chỉ có thể sửa đơn do chính mình tạo.");
 
-            if (otForm.Status != (int)OtFormStatus.Pending)
-                throw new DomainException("Đơn đã được duyệt ít nhất 1 cấp, không thể sửa nữa.");
+            if (!IsEditableStatus(otForm.Status))
+                throw new DomainException("Đơn đã được Trưởng phòng duyệt trở lên, không thể sửa nữa.");
 
             var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == request.GroupId && !x.IsDeleted);
             group.OrThrowNotFound("Nhóm", request.GroupId);
@@ -473,9 +551,18 @@ namespace Attendance.Application.Services
         public async Task ApproveByEmailTokenAsync(string token, ApproveOtFormDto request)
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: true);
-            var isGeneralDirector = emailToken.ApprovalLevel == (int)ApprovalLevel.GeneralDirector;
 
-            await ApproveAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, isGeneralDirector, request);
+            // Cấp Submitter (Trưởng nhóm ký duyệt Draft) đi qua nhánh xử lý riêng — không có khái
+            // niệm isGeneralDirector/isAdmin qua kênh email (xem docs/attendance-module.md).
+            if ((ApprovalLevel)emailToken.ApprovalLevel == ApprovalLevel.Submitter)
+            {
+                await ApproveSubmitterAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, isAdmin: false, request);
+            }
+            else
+            {
+                var isGeneralDirector = emailToken.ApprovalLevel == (int)ApprovalLevel.GeneralDirector;
+                await ApproveAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, isGeneralDirector, request);
+            }
 
             emailToken.UsedAt = DateTime.UtcNow;
             _unitOfWork.OtFormApprovalEmailTokens.Update(emailToken);
@@ -637,6 +724,7 @@ namespace Attendance.Application.Services
 
             var currentLevel = ((OtFormStatus)otForm!.Status) switch
             {
+                OtFormStatus.Draft => throw new DomainException("Đơn đang ở trạng thái nháp, cần Trưởng nhóm ký duyệt (POST /{id}/submit) trước khi duyệt/từ chối ở các cấp tiếp theo."),
                 OtFormStatus.Pending => ApprovalLevel.DepartmentManager,
                 OtFormStatus.ApprovedByDepartment => ApprovalLevel.WorkshopManager,
                 OtFormStatus.ApprovedByWorkshop => ApprovalLevel.GeneralDirector,
@@ -663,6 +751,11 @@ namespace Attendance.Application.Services
 
             return (otForm, currentLevel);
         }
+
+        // Editable ở cả Draft (chưa ai ký) và Pending (đã có chữ ký Trưởng nhóm nhưng Trưởng phòng
+        // chưa duyệt) — chỉ khóa cứng khi qua tới cấp Trưởng phòng trở lên (xem docs/attendance-module.md).
+        private static bool IsEditableStatus(int status) =>
+            status == (int)OtFormStatus.Draft || status == (int)OtFormStatus.Pending;
 
         private static OtFormStatus DetermineNextStatus(ApprovalLevel justApprovedLevel, ApprovalLevel requiredApprovalLevel)
         {

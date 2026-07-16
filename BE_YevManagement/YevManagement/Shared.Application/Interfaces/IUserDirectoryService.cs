@@ -13,5 +13,10 @@ namespace Shared.Application.Interfaces
         // dùng để gửi email cho toàn bộ Tổng Giám Đốc (không có UserApprovalScope để tra như
         // DepartmentManager/WorkshopManager).
         Task<List<string>> GetUserNamesInRoleAsync(string roleName);
+
+        // 1 UserName cụ thể có đang giữ Role này không — dùng để chặn Admin gán
+        // UserApprovalScope(ApprovalLevel=Submitter) cho người không phải Trưởng Group
+        // (xem docs/attendance-module.md — chữ ký "Người đề nghị" bắt buộc phải là Trưởng nhóm).
+        Task<bool> IsUserInRoleAsync(string userName, string roleName);
     }
 }
