@@ -17,16 +17,19 @@ namespace Attendance.Application.Services
 
         private readonly IUserDirectoryService _userDirectoryService;
         private readonly IEmailService _emailService;
+        private readonly IEmailTemplateRenderer _emailTemplateRenderer;
         private readonly IConfiguration _configuration;
 
         public UserSignatureService(
             IAttendanceUnitOfWork unitOfWork,
             IUserDirectoryService userDirectoryService,
             IEmailService emailService,
+            IEmailTemplateRenderer emailTemplateRenderer,
             IConfiguration configuration) : base(unitOfWork)
         {
             _userDirectoryService = userDirectoryService;
             _emailService = emailService;
+            _emailTemplateRenderer = emailTemplateRenderer;
             _configuration = configuration;
         }
 
@@ -61,12 +64,25 @@ namespace Attendance.Application.Services
 
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
             var link = $"{baseUrl}/xac-nhan-chu-ky?token={pending.Token}";
-            var html = $"<p>Bạn vừa yêu cầu cập nhật chữ ký lúc {now:HH:mm dd/MM/yyyy} (UTC).</p>" +
-                       $"<p><a href=\"{link}\">Nhấn vào đây để xác nhận cập nhật chữ ký</a> " +
-                       $"(link hết hạn sau {ConfirmationExpiryMinutes} phút).</p>" +
-                       "<p>Nếu không phải bạn thực hiện yêu cầu này, vui lòng bỏ qua email.</p>";
 
-            await _emailService.SendAsync(email, "Xác nhận cập nhật chữ ký - YevManagement", html);
+            // Render template lỗi (thiếu file, sai định dạng...) không được làm hỏng nghiệp vụ chính
+            // (đăng ký chữ ký vẫn phải thành công) — cùng nguyên tắc với EmailService.SendAsync nuốt lỗi SMTP.
+            try
+            {
+                var html = _emailTemplateRenderer.Render("UserSignature/RequestUpdateConfirmation.html", new Dictionary<string, string>
+                {
+                    ["RequestedAt"] = now.ToString("HH:mm dd/MM/yyyy"),
+                    ["ConfirmLink"] = link,
+                    ["ExpiryMinutes"] = ConfirmationExpiryMinutes.ToString()
+                });
+
+                await _emailService.SendAsync(email, "Xác nhận cập nhật chữ ký - YevManagement", html);
+            }
+            catch (FileNotFoundException)
+            {
+                // Thiếu file template là lỗi triển khai (deploy quên copy EmailTemplates/), bỏ qua gửi
+                // mail chứ không chặn luồng chính.
+            }
         }
 
         public async Task<SignatureConfirmationPreviewDto> GetPendingConfirmationAsync(string token)

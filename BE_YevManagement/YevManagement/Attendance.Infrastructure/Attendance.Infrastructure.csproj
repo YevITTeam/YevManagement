@@ -12,4 +12,12 @@
     <ProjectReference Include="..\Shared.Infrastructure\Shared.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Template email của module Attendance — copy nguyên thư mục EmailTemplates/ ra cạnh DLL sau
+         build để EmailTemplateService (Shared.Infrastructure) đọc được lúc chạy (xem docs/attendance-module.md). -->
+    <Content Include="EmailTemplates\**\*.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

@@ -24,16 +24,19 @@ namespace Attendance.Application.Services
 
         private readonly IUserDirectoryService _userDirectoryService;
         private readonly IEmailService _emailService;
+        private readonly IEmailTemplateRenderer _emailTemplateRenderer;
         private readonly IConfiguration _configuration;
 
         public OtFormService(
             IAttendanceUnitOfWork unitOfWork,
             IUserDirectoryService userDirectoryService,
             IEmailService emailService,
+            IEmailTemplateRenderer emailTemplateRenderer,
             IConfiguration configuration) : base(unitOfWork)
         {
             _userDirectoryService = userDirectoryService;
             _emailService = emailService;
+            _emailTemplateRenderer = emailTemplateRenderer;
             _configuration = configuration;
         }
 
@@ -83,6 +86,37 @@ namespace Attendance.Application.Services
                 .OrderBy(x => x.Date);
 
             return await _unitOfWork.OtForms.ToPagedResponseAsync(draftQuery, pageIndex, pageSize, x => new OtFormListItemDto
+            {
+                Id = x.Id,
+                GroupNameVn = x.Group.GroupNameVn,
+                DepartmentNameVn = x.Department.DepartmentNameVn,
+                OtCaseCode = x.OtCase.Code,
+                Date = x.Date,
+                TotalHour = x.TotalHour,
+                NumberOfEmployee = x.NumberOfEmployee,
+                CreatedByUserName = x.CreatedByUserName,
+                CreatedByFullName = x.CreatedByFullName,
+                Status = x.Status,
+                IsEditable = IsEditableStatus(x.Status)
+            });
+        }
+
+        // Lịch sử đơn CHÍNH mình đã xử lý (Ký/Duyệt/Từ chối) ở BẤT KỲ cấp nào (Submitter/DepartmentManager/
+        // WorkshopManager/GeneralDirector) — dùng chung cho cả 4 vai trò vì tất cả đều có sẵn permission
+        // Attendance.OTForm.View. Trước đây không có cách nào xem lại: `my-forms` chỉ lọc theo người TẠO
+        // đơn (không phải người ký/duyệt), còn `pending-submissions`/`pending-approvals` chỉ hiện đơn
+        // CHƯA xử lý — đơn vừa xử lý xong lập tức biến mất khỏi 2 danh sách đó (xem docs/attendance-module.md).
+        public async Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(string userName, int pageIndex, int pageSize)
+        {
+            var actedFormIds = await _unitOfWork.OtFormApprovalHistories.SelectAsync(
+                h => h.ApproverUserName == userName, h => h.OtFormId);
+            var distinctFormIds = actedFormIds.Distinct().ToList();
+
+            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
+                .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id))
+                .OrderByDescending(x => x.Id);
+
+            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, x => new OtFormListItemDto
             {
                 Id = x.Id,
                 GroupNameVn = x.Group.GroupNameVn,
@@ -626,11 +660,25 @@ namespace Attendance.Application.Services
                 hasNewToken = true;
 
                 var link = $"{baseUrl}/xac-nhan-don?token={emailToken.Token}";
-                var html = $"<p>Có đơn tăng ca #{otForm.Id} đang chờ bạn duyệt.</p>" +
-                           $"<p><a href=\"{link}\">Nhấn vào đây để xem chi tiết và Duyệt/Từ chối</a> " +
-                           $"(link hết hạn sau {EmailApprovalTokenExpiryDays} ngày).</p>";
 
-                await _emailService.SendAsync(email, $"Đơn tăng ca #{otForm.Id} đang chờ bạn duyệt - YevManagement", html);
+                // Render template lỗi không được làm hỏng nghiệp vụ chính (tạo/duyệt đơn vẫn phải
+                // thành công) — cùng nguyên tắc với EmailService.SendAsync nuốt lỗi SMTP.
+                try
+                {
+                    var html = _emailTemplateRenderer.Render("OtForm/ApprovalNotification.html", new Dictionary<string, string>
+                    {
+                        ["OtFormId"] = otForm.Id.ToString(),
+                        ["ConfirmLink"] = link,
+                        ["ExpiryDays"] = EmailApprovalTokenExpiryDays.ToString()
+                    });
+
+                    await _emailService.SendAsync(email, $"Đơn tăng ca #{otForm.Id} đang chờ bạn duyệt - YevManagement", html);
+                }
+                catch (FileNotFoundException)
+                {
+                    // Thiếu file template là lỗi triển khai (deploy quên copy EmailTemplates/), bỏ qua
+                    // gửi mail cho người này chứ không chặn cả luồng thông báo.
+                }
             }
 
             if (hasNewToken)

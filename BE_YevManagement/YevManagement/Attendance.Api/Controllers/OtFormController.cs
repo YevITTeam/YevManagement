@@ -52,6 +52,18 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
+        // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối (bất kỳ cấp nào) — dùng chung cho cả 4 vai trò vì
+        // tất cả đều có sẵn Attendance.OTForm.View. Khác my-forms (chỉ hiện đơn TỰ TẠO) và pending-*
+        // (chỉ hiện đơn CHƯA xử lý) — đây là nơi xem lại đơn ĐÃ xử lý xong.
+        [RequirePermission("Attendance.OTForm.View")]
+        [HttpGet("my-actions")]
+        public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyActions(
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
+        {
+            var result = await _otFormService.GetMyActionsAsync(CurrentUserName, pageIndex, pageSize);
+            return Success(result);
+        }
+
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> GetById(int id)

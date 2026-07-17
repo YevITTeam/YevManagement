@@ -15,6 +15,10 @@ namespace Attendance.Application.Interfaces.Service
         Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
             string approverUserName, bool isGeneralDirector, int pageIndex, int pageSize);
 
+        // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 vai trò
+        // (Trưởng Group/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc), gate bằng Attendance.OTForm.View.
+        Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(string userName, int pageIndex, int pageSize);
+
         Task<OtFormDto> GetByIdAsync(int id);
 
         Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request);
