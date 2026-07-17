@@ -89,7 +89,7 @@ export default function RolePermissionManager() {
                 </div>
             ) : roles.length === 0 ? (
                 <div className="flex min-h-40 items-center justify-center border border-[#e0e3e5] bg-white text-sm text-[#5e3f3a]">
-                    Chưa có vai trò nào — tạo vai trò ở mục "Quản lý Roles" trước.
+                    Chưa có vai trò nào — tạo vai trò ở mục &quot;Quản lý Roles&quot; trước.
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">

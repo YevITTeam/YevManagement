@@ -317,8 +317,9 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                         </div>
                                         <div className="text-xs text-[#5e3f3a]">{approvalActionLabels[history.action]}</div>
                                         <div className="text-xs text-[#5e3f3a]">{formatDateTime(history.actionAt)}</div>
-                                        {history.comment && <div className="text-xs text-[#191c1e]">"{history.comment}"</div>}
+                                        {history.comment && <div className="text-xs text-[#191c1e]">&quot;{history.comment}&quot;</div>}
                                         {history.hasSignature && history.signatureImage && (
+                                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
                                             <img
                                                 src={`data:image/png;base64,${history.signatureImage}`}
                                                 alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}

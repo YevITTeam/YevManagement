@@ -2,7 +2,7 @@ export interface ApiResponse<T> {
     isSuccess: boolean;
     message: string;
     data: T;
-    errors: any | null;
+    errors: unknown | null;
     timestamp: string;
 }
 
@@ -19,6 +19,6 @@ export interface ApiResponseWithPageNation<T> {
         hasNextPage: boolean;
         hasPreviousPage: boolean
     };
-    errors: [String];
+    errors: string[];
     timestamp: string;
 }

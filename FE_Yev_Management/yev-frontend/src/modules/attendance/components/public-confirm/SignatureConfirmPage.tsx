@@ -63,6 +63,7 @@ export default function SignatureConfirmPage() {
                         <p className="text-sm text-[#5e3f3a]">
                             Tài khoản: <span className="font-semibold text-[#191c1e]">{preview.userName}</span>
                         </p>
+                        {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây */}
                         <img
                             src={`data:image/png;base64,${preview.signatureImage}`}
                             alt="Chữ ký mới đang chờ xác nhận"

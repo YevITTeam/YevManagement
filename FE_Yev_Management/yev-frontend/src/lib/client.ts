@@ -106,7 +106,7 @@ const fetchClient = async <T>(
   options: RequestInit = {}
 ): Promise<T> => {
   const url = `${BASE_URL}${endpoint}`;
-  let token = getStoredToken();
+  const token = getStoredToken();
   const headers = new Headers(options.headers);
 
   if (token) {
@@ -125,7 +125,6 @@ const fetchClient = async <T>(
 
   let response = await fetch(url, defaultOptions);
   let payload: unknown = null;
-  const contentType = response.headers.get("content-type") ?? "";
 
   // -----------------------------------------------------------
   // XỬ LÝ AUTO RE-LOGIN KHI GẶP LỖI 401 (TOKEN HẾT HẠN)

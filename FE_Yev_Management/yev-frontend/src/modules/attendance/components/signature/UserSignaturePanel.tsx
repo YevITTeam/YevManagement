@@ -64,6 +64,7 @@ export default function UserSignaturePanel() {
                             </div>
                             {signature ? (
                                 <>
+                                    {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây */}
                                     <img
                                         src={`data:image/png;base64,${signature.signatureImage}`}
                                         alt="Chữ ký hiện tại"

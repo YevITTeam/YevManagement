@@ -274,6 +274,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                                 return (
                                     <td key={col.level} className={`${cell} h-20 text-center align-middle`}>
                                         {history?.hasSignature && history.signatureImage ? (
+                                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
                                             <img
                                                 src={`data:image/png;base64,${history.signatureImage}`}
                                                 alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Edit2, Save, Search } from "lucide-react";
+import { Edit2, Search } from "lucide-react";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto, RoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";

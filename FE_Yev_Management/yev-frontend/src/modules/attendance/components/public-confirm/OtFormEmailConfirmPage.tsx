@@ -189,7 +189,7 @@ export default function OtFormEmailConfirmPage() {
                                         </div>
                                         <div className="text-xs text-[#5e3f3a]">{approvalActionLabels[history.action]}</div>
                                         <div className="text-xs text-[#5e3f3a]">{formatDateTime(history.actionAt)}</div>
-                                        {history.comment && <div className="text-xs text-[#191c1e]">"{history.comment}"</div>}
+                                        {history.comment && <div className="text-xs text-[#191c1e]">&quot;{history.comment}&quot;</div>}
                                     </div>
                                 ) : (
                                     <div className="mt-2 text-xs text-[#9aa0a6]">Chưa xử lý</div>

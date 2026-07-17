@@ -1,6 +1,6 @@
 "use client";
 
-import { Cpu, FileText, Notebook, BarChart3, CalendarClock } from "lucide-react";
+import { Cpu, FileText, Notebook, CalendarClock } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
