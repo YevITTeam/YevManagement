@@ -14,7 +14,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 const PAGE_SIZE = 10;
 
 interface OtFormListPageProps {
-    mode: "my-forms" | "pending-submissions" | "pending-approvals";
+    mode: "my-forms" | "pending-submissions" | "pending-approvals" | "my-actions";
 }
 
 function formatDate(value: string) {
@@ -50,7 +50,9 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                 ? OtFormApi.getMyForms({ pageIndex, pageSize: PAGE_SIZE })
                 : mode === "pending-submissions"
                 ? OtFormApi.getPendingSubmissions({ pageIndex, pageSize: PAGE_SIZE })
-                : OtFormApi.getPendingApprovals({ pageIndex, pageSize: PAGE_SIZE }),
+                : mode === "pending-approvals"
+                ? OtFormApi.getPendingApprovals({ pageIndex, pageSize: PAGE_SIZE })
+                : OtFormApi.getMyActions({ pageIndex, pageSize: PAGE_SIZE }),
         [mode, pageIndex],
         (result) => {
             setForms(result.data);
@@ -64,13 +66,21 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
     );
 
     const title =
-        mode === "my-forms" ? "Đơn của tôi" : mode === "pending-submissions" ? "Chờ tôi ký duyệt" : "Chờ tôi duyệt";
+        mode === "my-forms"
+            ? "Đơn của tôi"
+            : mode === "pending-submissions"
+            ? "Chờ tôi ký duyệt"
+            : mode === "pending-approvals"
+            ? "Chờ tôi duyệt"
+            : "Đơn tôi đã xử lý";
     const description =
         mode === "my-forms"
             ? "Danh sách đơn tăng ca do bạn tạo."
             : mode === "pending-submissions"
             ? "Danh sách đơn tăng ca đang Nháp, chờ bạn ký duyệt \"Người đề nghị\" trước khi vào luồng duyệt."
-            : "Danh sách đơn tăng ca đang chờ bạn duyệt ở cấp hiện tại.";
+            : mode === "pending-approvals"
+            ? "Danh sách đơn tăng ca đang chờ bạn duyệt ở cấp hiện tại."
+            : "Danh sách đơn tăng ca bạn đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào (kể cả đơn đã xử lý xong).";
     const columnCount = mode === "my-forms" ? 8 : 7;
 
     return (
