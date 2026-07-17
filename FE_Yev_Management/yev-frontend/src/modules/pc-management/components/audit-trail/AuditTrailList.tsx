@@ -116,7 +116,7 @@ export default function AuditTrailList() {
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
                 <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Đối tượng (tableName)</span>
+                        <span className={fieldLabelClassName}>Đối tượng</span>
                         <input
                             value={tableName}
                             onChange={(event) => setTableName(event.target.value)}
