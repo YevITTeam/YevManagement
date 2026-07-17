@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { FilePlus2, ClipboardList, ClipboardCheck, FolderCog, ShieldCheck, PenTool, PanelLeftClose, CalendarClock, FileSignature } from "lucide-react";
+import { FilePlus2, ClipboardList, ClipboardCheck, FolderCog, ShieldCheck, PenTool, PanelLeftClose, CalendarClock, FileSignature, History } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -23,6 +23,8 @@ const navItems: OtNavItem[] = [
     // dùng chung permission Create vì Role "Trưởng Group" không có Approve (docs §1.1/§4.2a).
     { key: "otPendingSubmissions", href: "/ot/pending-submissions", icon: FileSignature, permission: "Attendance.OTForm.Create" },
     { key: "otPendingApprovals", href: "/ot/pending-approvals", icon: ClipboardCheck, permission: "Attendance.OTForm.Approve" },
+    // Lịch sử đơn CHÍNH user đã Ký/Duyệt/Từ chối — dùng chung permission View cho cả 4 Role (docs §4.2b/§1.4).
+    { key: "otMyActions", href: "/ot/my-actions", icon: History, permission: "Attendance.OTForm.View" },
     // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này.
     { key: "otCategories", href: "/ot/categories", icon: FolderCog, permission: "Attendance.Department.View" },
     // Chỉ Admin/người có quyền quản trị phạm vi duyệt mới thấy mục này (docs/attendance-api-fe.md §5).

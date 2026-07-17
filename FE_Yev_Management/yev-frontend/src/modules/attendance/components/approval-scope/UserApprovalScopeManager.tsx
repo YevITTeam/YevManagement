@@ -9,6 +9,8 @@ import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import { AuthApi } from "@/modules/auth/api/auth.api";
+import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { approvalLevelLabels, scopeTypeLabels } from "@/modules/attendance/types/enums";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -28,6 +30,10 @@ interface CreateFormState {
 
 const emptyForm: CreateFormState = { userName: "", scopeType: 0, scopeId: 0, approvalLevel: 1 };
 
+// Ràng buộc BE (docs/attendance-api-fe.md §5, đợt 4): approvalLevel=0 (Submitter) chỉ tạo được nếu
+// userName đang giữ đúng Role này — tên phải khớp tuyệt đối với BE.
+const SUBMITTER_ROLE_NAME = "Trưởng Group";
+
 // docs/attendance-api-fe.md §5 — Admin gán phạm vi duyệt cho Trưởng phòng/Trưởng xưởng. Không có PUT: sửa = xoá + tạo lại.
 export default function UserApprovalScopeManager() {
     const [scopes, setScopes] = useState<UserApprovalScopeDto[]>([]);
@@ -43,6 +49,7 @@ export default function UserApprovalScopeManager() {
 
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+    const [usersWithRoles, setUsersWithRoles] = useState<UserDto[]>([]);
 
     const [formOpen, setFormOpen] = useState(false);
     const [form, setForm] = useState<CreateFormState>(emptyForm);
@@ -68,7 +75,17 @@ export default function UserApprovalScopeManager() {
     useEffect(() => {
         GroupApi.getAllGroups().then(setGroups).catch((err) => console.error(err));
         DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
+        // Chỉ để tra Role trước khi cho chọn Cấp duyệt "Người đề nghị" — không chặn màn nếu lỗi/thiếu quyền.
+        AuthApi.getAllUsersWithRoles().then(setUsersWithRoles).catch((err) => console.error(err));
     }, []);
+
+    // Docs §5: chỉ chặn được khi tìm thấy đúng tài khoản (khớp userName tuyệt đối) và xác nhận thiếu Role —
+    // không tìm thấy (vd đang gõ dở, sai hoa/thường theo AD) thì để BE tự quyết định, tránh chặn nhầm.
+    const matchedUser = usersWithRoles.find(
+        (u) => u.userName.trim().toLowerCase() === form.userName.trim().toLowerCase()
+    );
+    const submitterRoleMissing =
+        form.approvalLevel === 0 && matchedUser !== undefined && !matchedUser.roles.includes(SUBMITTER_ROLE_NAME);
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -89,6 +106,10 @@ export default function UserApprovalScopeManager() {
         event.preventDefault();
         // approvalLevel=0 (Submitter) là giá trị hợp lệ — không dùng truthy check kẻo bị coi là falsy.
         if (!form.userName.trim() || !form.scopeId) return;
+        if (submitterRoleMissing) {
+            toast.error(`Tài khoản chưa giữ Role "${SUBMITTER_ROLE_NAME}" — gán Role qua Quản lý người dùng trước khi thêm phân quyền Người đề nghị.`);
+            return;
+        }
         setIsSaving(true);
         try {
             await UserApprovalScopeApi.createScope({
@@ -326,6 +347,24 @@ export default function UserApprovalScopeManager() {
                                 </select>
                             </label>
 
+                            {form.approvalLevel === 0 && form.userName.trim() && (
+                                <div
+                                    className={`rounded-lg border px-3 py-2 text-xs ${
+                                        submitterRoleMissing
+                                            ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                            : matchedUser
+                                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                            : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                    }`}
+                                >
+                                    {submitterRoleMissing
+                                        ? `Tài khoản "${form.userName.trim()}" chưa giữ Role "${SUBMITTER_ROLE_NAME}" — BE sẽ từ chối. Gán Role này qua Quản lý người dùng trước.`
+                                        : matchedUser
+                                        ? `Tài khoản đã giữ Role "${SUBMITTER_ROLE_NAME}" ✓`
+                                        : `Không tìm thấy tài khoản này trong danh sách người dùng — kiểm tra lại chính tả trước khi gửi.`}
+                                </div>
+                            )}
+
                             <div className="flex justify-end gap-3 pt-2">
                                 <button
                                     type="button"
@@ -337,7 +376,7 @@ export default function UserApprovalScopeManager() {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={isSaving}
+                                    disabled={isSaving || submitterRoleMissing}
                                     className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isSaving ? "Đang lưu..." : "Tạo mới"}

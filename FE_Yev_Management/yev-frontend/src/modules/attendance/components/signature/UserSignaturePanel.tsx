@@ -5,7 +5,7 @@ import { toast } from "react-toastify";
 
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import type { UserSignatureDto } from "@/modules/attendance/types/user-signature.dto";
-import SignatureCanvas from "./SignatureCanvas";
+import SignatureUpload from "./SignatureUpload";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
@@ -28,7 +28,7 @@ export default function UserSignaturePanel() {
 
     const handleSave = async () => {
         if (!draftBase64) {
-            toast.error("Vui lòng ký vào khung trước khi lưu.");
+            toast.error("Vui lòng chọn ảnh chữ ký trước khi lưu.");
             return;
         }
         setIsSaving(true);
@@ -90,9 +90,12 @@ export default function UserSignaturePanel() {
                             <>
                                 <div>
                                     <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                        Ký chữ ký mới
+                                        Tải ảnh chữ ký mới lên
                                     </div>
-                                    <SignatureCanvas key="draft" onChange={setDraftBase64} disabled={isSaving} />
+                                    <p className="mb-2 text-xs text-[#5e3f3a]">
+                                        Chọn ảnh chụp/scan chữ ký tay thật (PNG/JPG) — không vẽ bằng chuột/tay trên web.
+                                    </p>
+                                    <SignatureUpload key="draft" onChange={setDraftBase64} disabled={isSaving} />
                                 </div>
                                 <div className="flex justify-end">
                                     <button

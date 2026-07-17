@@ -16,6 +16,7 @@ const ENDPOINTS = {
         getMyForms: "/OtForm/my-forms",
         getPendingSubmissions: "/OtForm/pending-submissions",
         getPendingApprovals: "/OtForm/pending-approvals",
+        getMyActions: "/OtForm/my-actions",
         getOtFormById: (id: number) => `/OtForm/${id}`,
         updateOtForm: (id: number) => `/OtForm/${id}`,
         submitOtForm: (id: number) => `/OtForm/${id}/submit`,
@@ -77,6 +78,17 @@ export const OtFormApi = {
         if (params?.pageSize) query.set("PageSize", String(params.pageSize));
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.OT_FORM.getPendingApprovals}?${queryString}` : ENDPOINTS.OT_FORM.getPendingApprovals;
+        const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
+        return response.data;
+    },
+    // Lịch sử đơn CHÍNH user gọi đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 Role,
+    // vá lỗ hổng UX đơn biến mất khỏi pending-submissions/pending-approvals sau khi xử lý (docs §4.2b).
+    getMyActions: async (params?: GetOtFormListParams) => {
+        const query = new URLSearchParams();
+        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
+        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        const queryString = query.toString();
+        const url = queryString ? `${ENDPOINTS.OT_FORM.getMyActions}?${queryString}` : ENDPOINTS.OT_FORM.getMyActions;
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
         return response.data;
     },
