@@ -29,6 +29,10 @@ function formatTime(value: string) {
 
 const cell = "border border-black px-2 py-1 align-top";
 const labelCell = `${cell} bg-[#f2f2f2] font-semibold whitespace-nowrap`;
+// Ô lũy kế (Tháng/Năm) chỉ chứa 1 số ngắn — thu nhỏ chữ + padding để nhường không gian cho cột
+// "Thời gian" và "Họ và tên" (theo yêu cầu người dùng, 2 cột này cần hiển thị rộng hơn).
+const cellSm = "border border-black px-1 py-1 align-top text-[9px]";
+const labelCellSm = `${cellSm} bg-[#f2f2f2] font-semibold whitespace-nowrap`;
 
 // 4 ô ký theo đúng mẫu giấy gốc YEV-22-024 (src/assets/file-samples/FormOT.xlsx, đối chiếu thêm bản PDF
 // mới hơn src/assets/file-ot-form/FormOT.pdf) — thứ tự trên giấy đi từ cấp cao nhất xuống thấp nhất, NGƯỢC
@@ -50,7 +54,7 @@ function findHistory(histories: OtFormApprovalHistoryDto[], level: number) {
 // là thông tin tĩnh của BẢN THÂN FORM (không đổi theo từng đơn) nên hard-code, không lấy từ OtCaseDto.
 function FormFooterNotes() {
     return (
-        <div className="mt-3 space-y-1 text-[11px] leading-tight text-black">
+        <div className="mt-3 space-y-1 text-[8px] leading-tight text-black">
             <p>① TH1: Tăng ca ngày thường: Ký duyệt cấp Trưởng phòng　場合１：平日残業：部長以上がサイン</p>
             <p>② TH2: Tăng ca ngày nghỉ quy định/chủ nhật/Lễ: Ký duyệt cấp Trưởng xưởng　場合２：法定休日/日曜/祝日の残業：工場長がサイン</p>
             <p>③ TH3: Trường hợp lũy kế tăng ca trên 25 giờ/tháng, 300h/năm: Ký duyệt cấp TGĐ　場合３：月間の累計残業が月25時間、年間300時間を超える場合：社長の承認が必要</p>
@@ -74,10 +78,23 @@ function EmployeeTable({ employees, rowCount }: { employees: OtFormEmployeeDto[]
                 <div className="text-base font-bold uppercase">Danh sách nhân viên làm ngoài giờ</div>
                 <div className="text-sm">社員の残業一覧</div>
             </div>
-            <table className="w-full border-collapse">
+            {/* border ngay trên <table> — tránh bug Chrome/Edge làm rớt viền phải khi in (đặc biệt dễ
+                gặp với table-fixed + width %, làm tròn subpixel ở DPI in khác DPI màn hình). */}
+            <table className="w-full table-fixed border-collapse border border-black">
+                {/* Cố định tỉ lệ cột — nới rộng "Họ và tên"/"Thời gian", thu hẹp 2 ô lũy kế
+                    (Tháng/Năm) vì mỗi ô chỉ chứa 1 số ngắn. */}
+                <colgroup>
+                    <col className="w-[5%]" />
+                    <col className="w-[24%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[19%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[24%]" />
+                </colgroup>
                 <thead>
                     <tr>
-                        <th rowSpan={2} className={`${labelCell} w-10 text-center`}>
+                        <th rowSpan={2} className={`${labelCell} text-center`}>
                             Stt
                         </th>
                         <th rowSpan={2} className={labelCell}>
@@ -97,8 +114,10 @@ function EmployeeTable({ employees, rowCount }: { employees: OtFormEmployeeDto[]
                         </th>
                         {/* Tháng/Năm nằm CHUNG dòng "Lũy kế" (2 dòng header dùng rowSpan/colSpan), khớp
                             đúng bản PDF đính kèm — không tách thành 1 dòng header trống riêng như trước. */}
-                        <th className={`${labelCell} text-center`} colSpan={2}>
-                            Lũy kế (tổng số giờ tăng ca trong năm)
+                        <th className={`${labelCellSm} text-center`} colSpan={2}>
+                            Lũy kế (Tổng số giờ tăng
+                            <br/>
+                             ca trong năm)
                             <br />
                             残業累計
                         </th>
@@ -109,8 +128,8 @@ function EmployeeTable({ employees, rowCount }: { employees: OtFormEmployeeDto[]
                         </th>
                     </tr>
                     <tr>
-                        <th className={`${labelCell} text-center`}>Tháng 月</th>
-                        <th className={`${labelCell} text-center`}>Năm 年間</th>
+                        <th className={`${labelCellSm} text-center`}>Tháng 月</th>
+                        <th className={`${labelCellSm} text-center`}>Năm 年間</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -122,8 +141,8 @@ function EmployeeTable({ employees, rowCount }: { employees: OtFormEmployeeDto[]
                             <td className={cell}>
                                 {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
                             </td>
-                            <td className={`${cell} text-center`}>{employee.monthToDate}</td>
-                            <td className={`${cell} text-center`}>{employee.yearToDate}</td>
+                            <td className={`${cellSm} text-center`}>{employee.monthToDate}</td>
+                            <td className={`${cellSm} text-center`}>{employee.yearToDate}</td>
                             <td className={cell}>{employee.noteVn || ""}</td>
                         </tr>
                     ))}
@@ -133,8 +152,8 @@ function EmployeeTable({ employees, rowCount }: { employees: OtFormEmployeeDto[]
                             <td className={cell}>&nbsp;</td>
                             <td className={cell}></td>
                             <td className={cell}></td>
-                            <td className={cell}></td>
-                            <td className={cell}></td>
+                            <td className={cellSm}></td>
+                            <td className={cellSm}></td>
                             <td className={cell}></td>
                         </tr>
                     ))}
@@ -148,6 +167,9 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
     const [form, setForm] = useState<OtFormDto | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [paperSize, setPaperSize] = useState<PaperSize>("a4");
+    // Chỉ tự động chọn khổ giấy lần đầu (khi vừa tải xong đơn) — sau khi người dùng đã bấm chọn tay
+    // 1 lần thì tôn trọng lựa chọn đó, không tự đổi lại nữa dù state form có thay đổi.
+    const [paperSizeTouched, setPaperSizeTouched] = useState(false);
 
     useEffect(() => {
         OtFormApi.getOtFormById(id)
@@ -157,6 +179,19 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                 setError(getApiErrorMessage(err, "Không thể tải đơn tăng ca để in."));
             });
     }, [id]);
+
+    // Đơn có số nhân viên vừa đủ trong 1 mặt A5 (<= A5_EMPLOYEE_CAPACITY) thì tự động chọn A5 để tiết
+    // kiệm giấy — đơn nhiều người hơn sức chứa 1 mặt A5 thì giữ mặc định A4.
+    useEffect(() => {
+        if (form && !paperSizeTouched) {
+            setPaperSize(form.employees.length <= A5_EMPLOYEE_CAPACITY ? "a5" : "a4");
+        }
+    }, [form, paperSizeTouched]);
+
+    function selectPaperSize(size: PaperSize) {
+        setPaperSizeTouched(true);
+        setPaperSize(size);
+    }
 
     if (error) {
         return <div className="p-8 text-sm text-[#930006]">{error}</div>;
@@ -181,7 +216,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                 <div className="flex items-center gap-2 text-sm text-[#5e3f3a]">
                     <span className="font-semibold text-[#191c1e]">Khổ giấy:</span>
                     <button
-                        onClick={() => setPaperSize("a4")}
+                        onClick={() => selectPaperSize("a4")}
                         className={`cursor-pointer rounded-lg border px-3 py-1.5 font-semibold transition ${
                             paperSize === "a4"
                                 ? "border-[#e3000f] bg-[#fff4f2] text-[#e3000f]"
@@ -191,7 +226,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                         A4 (1 mặt, không giới hạn số người)
                     </button>
                     <button
-                        onClick={() => setPaperSize("a5")}
+                        onClick={() => selectPaperSize("a5")}
                         className={`cursor-pointer rounded-lg border px-3 py-1.5 font-semibold transition ${
                             paperSize === "a5"
                                 ? "border-[#e3000f] bg-[#fff4f2] text-[#e3000f]"
@@ -214,12 +249,15 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                     <span>YAZAKI EDS VIETNAM,LTD.</span>
                 </div>
                 <div className="mb-4 text-center">
-                    <div className="text-lg font-bold tracking-[0.3em]">残業許可お願い</div>
                     <div className="text-xl font-bold italic">GIẤY ĐỀ NGHỊ LÀM NGOÀI GIỜ</div>
+                    <div className="text-lg font-bold tracking-[0.3em]">残業許可お願い</div>
+                    
                 </div>
 
                 {/* Bảng ký duyệt */}
-                <table className="w-full border-collapse">
+                {/* border ngay trên <table> (không chỉ dựa vào border của các ô) — tránh bug Chrome/Edge
+                    làm rớt mất viền phải khi in do làm tròn subpixel ở DPI in khác DPI màn hình. */}
+                <table className="w-full border-collapse border border-black">
                     <thead>
                         <tr>
                             {SIGNATURE_COLUMNS.map((col) => (
@@ -257,7 +295,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                 </table>
 
                 {/* Thông tin đơn */}
-                <table className="mt-[-1px] w-full border-collapse">
+                <table className="mt-[-1px] w-full border-collapse border border-black">
                     <tbody>
                         <tr>
                             <td className={`${labelCell} w-1/4`}>工程名 (Tên công đoạn)</td>
@@ -289,7 +327,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                 </table>
 
                 {/* Lý do + Phần xử lý */}
-                <table className="mt-[-1px] w-full border-collapse">
+                <table className="mt-[-1px] w-full border-collapse border border-black">
                     <tbody>
                         <tr>
                             <td className={`${labelCell} w-20 text-center`}>
