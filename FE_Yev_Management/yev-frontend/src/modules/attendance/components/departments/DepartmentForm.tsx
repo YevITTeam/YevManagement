@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface DepartmentFormValues {
     departmentCode: string;
@@ -27,19 +28,17 @@ const fieldClassName =
 export default function DepartmentForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: DepartmentFormProps) {
     const [values, setValues] = useState<DepartmentFormValues>(emptyValues);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? {
-                          departmentCode: initial.departmentCode,
-                          departmentNameVn: initial.departmentNameVn,
-                          departmentNameJp: initial.departmentNameJp,
-                      }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(
+            current
+                ? {
+                      departmentCode: current.departmentCode,
+                      departmentNameVn: current.departmentNameVn,
+                      departmentNameJp: current.departmentNameJp,
+                  }
+                : emptyValues
+        );
+    });
 
     if (!isOpen) return null;
 

@@ -15,6 +15,7 @@ import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
 import type { DeviceEmailInputDto, DeviceGetDto, DeviceIpAddressDto } from "@/modules/pc-management/types/device.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface DeviceFormValues {
     deviceCode: string;
@@ -102,12 +103,17 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
     }, []);
 
     // Nhóm cascading theo Bộ phận đã chọn (docs/asset-api-fe.md §2.1) — chưa chọn Bộ phận thì
-    // danh sách Nhóm rỗng và dropdown Nhóm bị disable.
+    // danh sách Nhóm rỗng và dropdown Nhóm bị disable. Reset "về rỗng" tính ngay trong render
+    // (so sánh snapshot) — effect chỉ còn lo phần fetch thật (đã là .then()/.catch() thuần).
+    const departmentKey = `${isOpen}|${values.departmentId}`;
+    const [prevDepartmentKey, setPrevDepartmentKey] = useState(departmentKey);
+    if (prevDepartmentKey !== departmentKey) {
+        setPrevDepartmentKey(departmentKey);
+        if (!isOpen || !values.departmentId) setDeviceGroups([]);
+    }
+
     useEffect(() => {
-        if (!isOpen || !values.departmentId) {
-            setDeviceGroups([]);
-            return;
-        }
+        if (!isOpen || !values.departmentId) return;
         DeviceGroupApi.getAllDeviceGroups(values.departmentId)
             .then((data) => setDeviceGroups(data))
             .catch((err) => console.error(err));
@@ -136,38 +142,37 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [ipDropdownOpen]);
 
-    useEffect(() => {
-        if (!isOpen) return;
+    useDialogReset(isOpen, initial, (current) => {
         setIpSearch("");
         setIpDropdownOpen(false);
-        setSelectedIps(initial?.ipAddresses ?? []);
+        setSelectedIps(current?.ipAddresses ?? []);
         setValues(
-            initial
+            current
                 ? {
-                      deviceCode: initial.deviceCode,
-                      deviceName: initial.deviceName,
-                      deviceTypeId: initial.deviceTypeId,
-                      supplierId: initial.supplierId,
-                      branchId: initial.branchId,
-                      groupId: initial.groupId,
-                      departmentId: initial.departmentId,
-                      manager: initial.manager,
+                      deviceCode: current.deviceCode,
+                      deviceName: current.deviceName,
+                      deviceTypeId: current.deviceTypeId,
+                      supplierId: current.supplierId,
+                      branchId: current.branchId,
+                      groupId: current.groupId,
+                      departmentId: current.departmentId,
+                      manager: current.manager,
                       emails:
-                          initial.emails.length > 0
-                              ? initial.emails.map((item) => ({ email: item.email, note: item.note }))
+                          current.emails.length > 0
+                              ? current.emails.map((item) => ({ email: item.email, note: item.note }))
                               : [{ email: "", note: null }],
-                      purchaseDate: toDateInputValue(initial.purchaseDate),
-                      depreciationMonths: initial.depreciationMonths,
-                      isOutsourced: initial.isOutsourced,
-                      status: initial.status,
-                      note: initial.note ?? "",
-                      serialNumber: initial.serialNumber ?? "",
-                      isUseUsb: initial.isUseUsb,
-                      ipAddressIds: initial.ipAddresses.map((ip) => ip.id),
+                      purchaseDate: toDateInputValue(current.purchaseDate),
+                      depreciationMonths: current.depreciationMonths,
+                      isOutsourced: current.isOutsourced,
+                      status: current.status,
+                      note: current.note ?? "",
+                      serialNumber: current.serialNumber ?? "",
+                      isUseUsb: current.isUseUsb,
+                      ipAddressIds: current.ipAddresses.map((ip) => ip.id),
                   }
                 : emptyValues
         );
-    }, [isOpen, initial]);
+    });
 
     if (!isOpen) return null;
 

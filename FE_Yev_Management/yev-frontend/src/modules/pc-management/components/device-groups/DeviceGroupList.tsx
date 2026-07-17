@@ -10,13 +10,12 @@ import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-d
 import DeviceGroupForm, { type DeviceGroupFormValues } from "./DeviceGroupForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 export default function DeviceGroupList() {
     const [deviceGroups, setDeviceGroups] = useState<DeviceGroupDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -38,41 +37,31 @@ export default function DeviceGroupList() {
     const [deletingDeviceGroup, setDeletingDeviceGroup] = useState<DeviceGroupDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchDeviceGroups = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await DeviceGroupApi.getDeviceGroupPageNation({
+    const { isLoading, error, refetch: fetchDeviceGroups } = useFetchEffect(
+        () =>
+            DeviceGroupApi.getDeviceGroupPageNation({
                 pageIndex,
                 pageSize: PAGE_SIZE,
                 keyword: appliedKeyword || undefined,
                 departmentId: departmentFilter ? Number(departmentFilter) : undefined,
-            });
+            }),
+        [pageIndex, appliedKeyword, departmentFilter],
+        (result) => {
             setDeviceGroups(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách nhóm.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        },
+        "Không thể tải danh sách nhóm.",
+        (message) => toast.error(message)
+    );
 
     useEffect(() => {
         DeviceDepartmentApi.getAllDeviceDepartments()
             .then((data) => setDepartments(data))
             .catch((err) => console.error(err));
     }, []);
-
-    useEffect(() => {
-        fetchDeviceGroups();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword, departmentFilter]);
 
     const handleSearch = () => {
         setPageIndex(1);

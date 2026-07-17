@@ -166,7 +166,7 @@ function EmployeeTable({ employees, rowCount }: { employees: OtFormEmployeeDto[]
 export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
     const [form, setForm] = useState<OtFormDto | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [paperSize, setPaperSize] = useState<PaperSize>("a4");
+    const [manualPaperSize, setManualPaperSize] = useState<PaperSize>("a4");
     // Chỉ tự động chọn khổ giấy lần đầu (khi vừa tải xong đơn) — sau khi người dùng đã bấm chọn tay
     // 1 lần thì tôn trọng lựa chọn đó, không tự đổi lại nữa dù state form có thay đổi.
     const [paperSizeTouched, setPaperSizeTouched] = useState(false);
@@ -181,16 +181,14 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
     }, [id]);
 
     // Đơn có số nhân viên vừa đủ trong 1 mặt A5 (<= A5_EMPLOYEE_CAPACITY) thì tự động chọn A5 để tiết
-    // kiệm giấy — đơn nhiều người hơn sức chứa 1 mặt A5 thì giữ mặc định A4.
-    useEffect(() => {
-        if (form && !paperSizeTouched) {
-            setPaperSize(form.employees.length <= A5_EMPLOYEE_CAPACITY ? "a5" : "a4");
-        }
-    }, [form, paperSizeTouched]);
+    // kiệm giấy — đơn nhiều người hơn sức chứa 1 mặt A5 thì giữ mặc định A4. Tính trực tiếp trong
+    // render (không qua effect+state riêng) — chỉ dùng state cho lựa chọn THỦ CÔNG của người dùng.
+    const autoPaperSize: PaperSize = form && form.employees.length <= A5_EMPLOYEE_CAPACITY ? "a5" : "a4";
+    const paperSize = paperSizeTouched ? manualPaperSize : autoPaperSize;
 
     function selectPaperSize(size: PaperSize) {
         setPaperSizeTouched(true);
-        setPaperSize(size);
+        setManualPaperSize(size);
     }
 
     if (error) {

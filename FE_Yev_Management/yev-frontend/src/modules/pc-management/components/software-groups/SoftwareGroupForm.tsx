@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { SoftwareGroupDto } from "@/modules/pc-management/types/software-group.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface SoftwareGroupFormValues {
     groupCode: string;
@@ -26,15 +27,9 @@ const fieldClassName =
 export default function SoftwareGroupForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: SoftwareGroupFormProps) {
     const [values, setValues] = useState<SoftwareGroupFormValues>(emptyValues);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? { groupCode: initial.groupCode, groupName: initial.groupName }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(current ? { groupCode: current.groupCode, groupName: current.groupName } : emptyValues);
+    });
 
     if (!isOpen) return null;
 

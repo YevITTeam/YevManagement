@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 import { useRouter } from "@/navigation";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormListItemDto } from "@/modules/attendance/types/ot-form.dto";
 import { otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
-import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 interface OtFormListPageProps {
-    mode: "my-forms" | "pending-approvals";
+    mode: "my-forms" | "pending-submissions" | "pending-approvals";
 }
 
 function formatDate(value: string) {
@@ -29,8 +29,6 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const [forms, setForms] = useState<OtFormListItemDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -38,44 +36,42 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
     const [hasNextPage, setHasNextPage] = useState(false);
     const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
-    const fetchForms = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result =
-                mode === "my-forms"
-                    ? await OtFormApi.getMyForms({ pageIndex, pageSize: PAGE_SIZE })
-                    : await OtFormApi.getPendingApprovals({ pageIndex, pageSize: PAGE_SIZE });
+    // Đổi mode (chuyển menu) → về trang 1, phát hiện bằng so sánh snapshot ngay trong render
+    // (React khuyến khích thay effect chỉ để "phản ứng" theo prop/state khác đổi).
+    const [prevMode, setPrevMode] = useState(mode);
+    if (prevMode !== mode) {
+        setPrevMode(mode);
+        setPageIndex(1);
+    }
+
+    const { isLoading, error, refetch: fetchForms } = useFetchEffect(
+        () =>
+            mode === "my-forms"
+                ? OtFormApi.getMyForms({ pageIndex, pageSize: PAGE_SIZE })
+                : mode === "pending-submissions"
+                ? OtFormApi.getPendingSubmissions({ pageIndex, pageSize: PAGE_SIZE })
+                : OtFormApi.getPendingApprovals({ pageIndex, pageSize: PAGE_SIZE }),
+        [mode, pageIndex],
+        (result) => {
             setForms(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách đơn tăng ca.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        },
+        "Không thể tải danh sách đơn tăng ca.",
+        (message) => toast.error(message)
+    );
 
-    useEffect(() => {
-        setPageIndex(1);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode]);
-
-    useEffect(() => {
-        fetchForms();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, pageIndex]);
-
-    const title = mode === "my-forms" ? "Đơn của tôi" : "Chờ tôi duyệt";
+    const title =
+        mode === "my-forms" ? "Đơn của tôi" : mode === "pending-submissions" ? "Chờ tôi ký duyệt" : "Chờ tôi duyệt";
     const description =
         mode === "my-forms"
             ? "Danh sách đơn tăng ca do bạn tạo."
+            : mode === "pending-submissions"
+            ? "Danh sách đơn tăng ca đang Nháp, chờ bạn ký duyệt \"Người đề nghị\" trước khi vào luồng duyệt."
             : "Danh sách đơn tăng ca đang chờ bạn duyệt ở cấp hiện tại.";
+    const columnCount = mode === "my-forms" ? 8 : 7;
 
     return (
         <div className="space-y-8">
@@ -119,7 +115,7 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                         <tbody>
                             {!isLoading && forms.length === 0 && (
                                 <tr>
-                                    <td colSpan={mode === "my-forms" ? 8 : 7} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                    <td colSpan={columnCount} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có đơn nào.
                                     </td>
                                 </tr>

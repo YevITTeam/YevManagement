@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 import { useLocale } from "next-intl";
 
@@ -19,6 +19,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useRouter, getPathname } from "@/navigation";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 interface OtFormDetailProps {
     id: number;
@@ -47,43 +48,39 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const router = useRouter();
     const locale = useLocale();
     const [form, setForm] = useState<OtFormDto | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [requireSignatureToApprove, setRequireSignatureToApprove] = useState(false);
     const [hasMySignature, setHasMySignature] = useState<boolean | null>(null);
 
-    const [actionOpen, setActionOpen] = useState<"approve" | "reject" | null>(null);
+    const [actionOpen, setActionOpen] = useState<"submit" | "approve" | "reject" | null>(null);
     const [comment, setComment] = useState("");
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
-    const fetchForm = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
+    const { isLoading, error, refetch: fetchForm } = useFetchEffect(
+        async () => {
             const data = await OtFormApi.getOtFormById(id);
-            setForm(data);
+            let requireSignature = false;
             try {
                 const otCase = await OtCaseApi.getOtCaseById(data.otCaseId);
-                setRequireSignatureToApprove(otCase.requireSignature);
+                requireSignature = otCase.requireSignature;
             } catch (err) {
                 console.error(err);
             }
-        } catch (err) {
-            console.error(err);
-            setError(getApiErrorMessage(err, "Không thể tải chi tiết đơn tăng ca."));
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchForm();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [id]);
+            return { data, requireSignature };
+        },
+        [id],
+        (result) => {
+            setForm(result.data);
+            setRequireSignatureToApprove(result.requireSignature);
+        },
+        "Không thể tải chi tiết đơn tăng ca."
+    );
 
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
     const nextLevel = form ? nextApprovalLevelFromStatus(form.status) : null;
     const showApprovalActions = canApprove && nextLevel !== null;
+    // Nút "Ký duyệt" (Trưởng nhóm, đợt 4): chỉ hiện khi đơn còn Draft(5) và user có quyền tạo đơn —
+    // đơn giản hoá theo gợi ý docs §1.2 (BE tự chặn 400 nếu user không đúng scope Submitter).
+    const canSubmit = form?.status === 5 && hasPermission(user, "Attendance.OTForm.Create");
 
     // Nút "Sửa" (docs §1.2): isEditable=true + chính người tạo + có quyền tạo đơn.
     const canEdit =
@@ -92,10 +89,10 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         hasPermission(user, "Attendance.OTForm.Create");
     const canPrint = form?.status === 3;
 
-    const openAction = (type: "approve" | "reject") => {
+    const openAction = (type: "submit" | "approve" | "reject") => {
         setComment("");
         setActionOpen(type);
-        if (type === "approve") {
+        if (type === "approve" || type === "submit") {
             UserSignatureApi.getMySignature()
                 .then((data) => setHasMySignature(Boolean(data)))
                 .catch(() => setHasMySignature(false));
@@ -105,6 +102,25 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const closeAction = () => {
         if (isSubmittingAction) return;
         setActionOpen(null);
+    };
+
+    const handleSubmit = async () => {
+        if (hasMySignature === false) {
+            toast.error("Bạn chưa đăng ký chữ ký — vào \"Chữ ký của tôi\" để đăng ký trước khi ký duyệt.");
+            return;
+        }
+        setIsSubmittingAction(true);
+        try {
+            await OtFormApi.submitOtForm(id, { comment: comment.trim() || null });
+            toast.success("Ký duyệt \"Người đề nghị\" thành công — đơn đã chuyển sang chờ Trưởng phòng duyệt.");
+            setActionOpen(null);
+            await fetchForm();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, "Ký duyệt thất bại"));
+        } finally {
+            setIsSubmittingAction(false);
+        }
     };
 
     const handleApprove = async () => {
@@ -319,6 +335,17 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                 </div>
             </section>
 
+            {canSubmit && (
+                <div className="flex justify-end">
+                    <button
+                        onClick={() => openAction("submit")}
+                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                    >
+                        Ký duyệt &quot;Người đề nghị&quot;
+                    </button>
+                </div>
+            )}
+
             {showApprovalActions && (
                 <div className="flex justify-end gap-3">
                     <button
@@ -346,7 +373,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     >
                         <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                             <h3 className="text-lg font-semibold text-[#191c1e]">
-                                {actionOpen === "approve" ? "Duyệt đơn" : "Từ chối đơn"}
+                                {actionOpen === "submit" ? "Ký duyệt \"Người đề nghị\"" : actionOpen === "approve" ? "Duyệt đơn" : "Từ chối đơn"}
                             </h3>
                             <button
                                 onClick={closeAction}
@@ -371,6 +398,20 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                 />
                             </label>
+
+                            {actionOpen === "submit" && (
+                                <div
+                                    className={`rounded-lg border px-3 py-2 text-xs ${
+                                        hasMySignature === false
+                                            ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                            : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                    }`}
+                                >
+                                    {hasMySignature === false
+                                        ? "Bạn chưa đăng ký chữ ký — vào \"Chữ ký của tôi\" để đăng ký trước khi ký duyệt."
+                                        : "Chữ ký \"Người đề nghị\" sẽ tự lấy từ chữ ký đã đăng ký của bạn (\"Chữ ký của tôi\")."}
+                                </div>
+                            )}
 
                             {actionOpen === "approve" && (
                                 <div
@@ -397,11 +438,17 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={actionOpen === "approve" ? handleApprove : handleReject}
+                                    onClick={actionOpen === "submit" ? handleSubmit : actionOpen === "approve" ? handleApprove : handleReject}
                                     disabled={isSubmittingAction}
                                     className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    {isSubmittingAction ? "Đang xử lý..." : actionOpen === "approve" ? "Xác nhận duyệt" : "Xác nhận từ chối"}
+                                    {isSubmittingAction
+                                        ? "Đang xử lý..."
+                                        : actionOpen === "submit"
+                                        ? "Xác nhận ký duyệt"
+                                        : actionOpen === "approve"
+                                        ? "Xác nhận duyệt"
+                                        : "Xác nhận từ chối"}
                                 </button>
                             </div>
                         </div>

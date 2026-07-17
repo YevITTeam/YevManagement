@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface DeviceTypeFormValues {
     typeCode: string;
@@ -26,15 +27,9 @@ const fieldClassName =
 export default function DeviceTypeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: DeviceTypeFormProps) {
     const [values, setValues] = useState<DeviceTypeFormValues>(emptyValues);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? { typeCode: initial.typeCode, typeName: initial.typeName }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(current ? { typeCode: current.typeCode, typeName: current.typeName } : emptyValues);
+    });
 
     if (!isOpen) return null;
 

@@ -9,6 +9,7 @@ import type { DeviceSoftwareDeviceDto } from "@/modules/pc-management/types/devi
 import { getApiErrorMessage } from "@/lib/apiError";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import DeviceSoftwarePickerDialog from "./DeviceSoftwarePickerDialog";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 interface DeviceSoftwarePanelProps {
     deviceId: number;
@@ -105,11 +106,11 @@ export default function DeviceSoftwarePanel({ deviceId, softwares, onChanged }: 
         setPrioritySort((current) => (current === "none" ? "asc" : current === "asc" ? "desc" : "none"));
     };
 
-    useEffect(() => {
-        if (!editingItem) return;
-        setEditLicenseKey(editingItem.licenseKey ?? "");
-        setEditInstallDate(toDateInputValue(editingItem.installDate));
-    }, [editingItem]);
+    useDialogReset(editingItem !== null, editingItem, (current) => {
+        if (!current) return;
+        setEditLicenseKey(current.licenseKey ?? "");
+        setEditInstallDate(toDateInputValue(current.installDate));
+    });
 
     const openEdit = (item: DeviceSoftwareDeviceDto) => setEditingItem(item);
     const closeEdit = () => {

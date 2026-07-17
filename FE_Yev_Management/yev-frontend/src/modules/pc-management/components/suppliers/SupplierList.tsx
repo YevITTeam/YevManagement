@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { SupplierApi } from "@/modules/pc-management/api/supplier.api";
@@ -7,13 +7,12 @@ import type { SupplierDto } from "@/modules/pc-management/types/supplier.dto";
 import SupplierForm, { type SupplierFormValues } from "./SupplierForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 export default function SupplierList() {
     const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -32,34 +31,19 @@ export default function SupplierList() {
     const [deletingSupplier, setDeletingSupplier] = useState<SupplierDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchSuppliers = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await SupplierApi.getSupplierPageNation({
-                pageIndex,
-                pageSize: PAGE_SIZE,
-                keyword: appliedKeyword || undefined,
-            });
+    const { isLoading, error, refetch: fetchSuppliers } = useFetchEffect(
+        () => SupplierApi.getSupplierPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+        [pageIndex, appliedKeyword],
+        (result) => {
             setSuppliers(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách nhà cung cấp.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchSuppliers();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+        },
+        "Không thể tải danh sách nhà cung cấp.",
+        (message) => toast.error(message)
+    );
 
     const handleSearch = () => {
         setPageIndex(1);

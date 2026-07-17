@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface BranchFormValues {
     branchCode: string;
@@ -26,15 +27,9 @@ const fieldClassName =
 export default function BranchForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: BranchFormProps) {
     const [values, setValues] = useState<BranchFormValues>(emptyValues);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? { branchCode: initial.branchCode, branchName: initial.branchName }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(current ? { branchCode: current.branchCode, branchName: current.branchName } : emptyValues);
+    });
 
     if (!isOpen) return null;
 

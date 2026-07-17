@@ -12,6 +12,7 @@ import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { approvalLevelLabels, scopeTypeLabels } from "@/modules/attendance/types/enums";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
@@ -30,8 +31,6 @@ const emptyForm: CreateFormState = { userName: "", scopeType: 0, scopeId: 0, app
 // docs/attendance-api-fe.md §5 — Admin gán phạm vi duyệt cho Trưởng phòng/Trưởng xưởng. Không có PUT: sửa = xoá + tạo lại.
 export default function UserApprovalScopeManager() {
     const [scopes, setScopes] = useState<UserApprovalScopeDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -52,34 +51,19 @@ export default function UserApprovalScopeManager() {
     const [deletingScope, setDeletingScope] = useState<UserApprovalScopeDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchScopes = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await UserApprovalScopeApi.getScopePageNation({
-                pageIndex,
-                pageSize: PAGE_SIZE,
-                keyword: appliedKeyword || undefined,
-            });
+    const { isLoading, error, refetch: fetchScopes } = useFetchEffect(
+        () => UserApprovalScopeApi.getScopePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+        [pageIndex, appliedKeyword],
+        (result) => {
             setScopes(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách phân quyền duyệt.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchScopes();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+        },
+        "Không thể tải danh sách phân quyền duyệt.",
+        (message) => toast.error(message)
+    );
 
     useEffect(() => {
         GroupApi.getAllGroups().then(setGroups).catch((err) => console.error(err));

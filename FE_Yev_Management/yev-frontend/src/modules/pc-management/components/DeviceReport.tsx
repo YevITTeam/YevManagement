@@ -1,13 +1,13 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "@/navigation";
 import { toast } from "react-toastify";
 import { Computer, Monitor, HardDrive, Clock } from "lucide-react";
 
 import { DeviceApi } from "@/modules/pc-management/api/device.api";
 import type { DeviceDto } from "@/modules/pc-management/types/device.dto";
-import { getApiErrorMessage } from "@/lib/apiError";
 import DeviceListReportPrintDialog from "./DeviceListReportPrintDialog";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 1000;
 const DAY_MS = 86_400_000;
@@ -96,14 +96,10 @@ export default function DeviceReport() {
     const [devices, setDevices] = useState<DeviceDto[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [now, setNow] = useState(0);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [isPrintOpen, setIsPrintOpen] = useState(false);
 
-    const fetchDevices = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
+    const { isLoading, error, refetch: fetchDevices } = useFetchEffect(
+        async () => {
             const firstPage = await DeviceApi.getDevicePageNation({ pageIndex: 1, pageSize: PAGE_SIZE });
             let allDevices = firstPage.data;
             const totalPages = firstPage.totalPages ?? 1;
@@ -117,22 +113,17 @@ export default function DeviceReport() {
                 allDevices = restPages.reduce((acc, page) => acc.concat(page.data), allDevices);
             }
 
-            setDevices(allDevices);
-            setTotalCount(firstPage.totalCount);
+            return { allDevices, totalCount: firstPage.totalCount };
+        },
+        [],
+        (result) => {
+            setDevices(result.allDevices);
+            setTotalCount(result.totalCount);
             setNow(Date.now());
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải dữ liệu báo cáo thiết bị.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchDevices();
-    }, []);
+        },
+        "Không thể tải dữ liệu báo cáo thiết bị.",
+        (message) => toast.error(message)
+    );
 
     const stats = useMemo(() => {
         const total = devices.length;

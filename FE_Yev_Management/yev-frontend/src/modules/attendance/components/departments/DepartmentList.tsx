@@ -9,13 +9,12 @@ import DepartmentForm, { type DepartmentFormValues } from "./DepartmentForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function DepartmentList({ onLoadingChange }, ref) {
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -34,34 +33,19 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
     const [deletingDepartment, setDeletingDepartment] = useState<DepartmentDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchDepartments = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await DepartmentApi.getDepartmentPageNation({
-                pageIndex,
-                pageSize: PAGE_SIZE,
-                keyword: appliedKeyword || undefined,
-            });
+    const { isLoading, error, refetch: fetchDepartments } = useFetchEffect(
+        () => DepartmentApi.getDepartmentPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+        [pageIndex, appliedKeyword],
+        (result) => {
             setDepartments(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách bộ phận.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchDepartments();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+        },
+        "Không thể tải danh sách bộ phận.",
+        (message) => toast.error(message)
+    );
 
     useEffect(() => {
         onLoadingChange?.(isLoading);

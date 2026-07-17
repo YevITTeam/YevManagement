@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface GroupFormValues {
     departmentId: number;
@@ -39,20 +40,18 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
             .catch((err) => console.error(err));
     }, [isOpen]);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? {
-                          departmentId: initial.departmentId,
-                          groupCode: initial.groupCode,
-                          groupNameVn: initial.groupNameVn,
-                          groupNameJp: initial.groupNameJp,
-                      }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(
+            current
+                ? {
+                      departmentId: current.departmentId,
+                      groupCode: current.groupCode,
+                      groupNameVn: current.groupNameVn,
+                      groupNameJp: current.groupNameJp,
+                  }
+                : emptyValues
+        );
+    });
 
     if (!isOpen) return null;
 

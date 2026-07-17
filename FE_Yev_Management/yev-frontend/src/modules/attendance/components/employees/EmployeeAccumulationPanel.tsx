@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -15,32 +16,23 @@ const fieldClassName =
 // chỉ hoạt động nếu Admin đã gán Employee.userName = username AD của họ.
 export default function EmployeeAccumulationPanel() {
     const [employee, setEmployee] = useState<EmployeeDto | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
     const [notLinked, setNotLinked] = useState(false);
 
     const [monthToDate, setMonthToDate] = useState(0);
     const [yearToDate, setYearToDate] = useState(0);
     const [isSaving, setIsSaving] = useState(false);
 
-    const fetchMe = async () => {
-        setIsLoading(true);
-        setNotLinked(false);
-        try {
-            const data = await EmployeeApi.getMe();
+    const { isLoading, refetch: fetchMe } = useFetchEffect(
+        () => EmployeeApi.getMe(),
+        [],
+        (data) => {
             setEmployee(data);
             setMonthToDate(data.monthToDate);
             setYearToDate(data.yearToDate);
-        } catch (err) {
-            console.error(err);
-            setNotLinked(true);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchMe();
-    }, []);
+        },
+        "Tài khoản chưa được gán nhân viên tương ứng.",
+        () => setNotLinked(true)
+    );
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();

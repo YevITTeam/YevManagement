@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { TransferHistoryApi } from "@/modules/pc-management/api/transfer-history.api";
 import type { TransferHistoryDto } from "@/modules/pc-management/types/transfer-history.dto";
-import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 interface DeviceTransferHistoryPanelProps {
     deviceId: number;
@@ -17,30 +17,14 @@ function formatDateTime(value: string) {
 
 export default function DeviceTransferHistoryPanel({ deviceId }: DeviceTransferHistoryPanelProps) {
     const [history, setHistory] = useState<TransferHistoryDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        let isCancelled = false;
-        setIsLoading(true);
-        setError(null);
-        TransferHistoryApi.getTransferHistoryByDevice(deviceId)
-            .then((result) => {
-                if (!isCancelled) setHistory(result);
-            })
-            .catch((err) => {
-                if (isCancelled) return;
-                const message = getApiErrorMessage(err, "Không thể tải lịch sử chuyển máy.");
-                setError(message);
-                toast.error(message);
-            })
-            .finally(() => {
-                if (!isCancelled) setIsLoading(false);
-            });
-        return () => {
-            isCancelled = true;
-        };
-    }, [deviceId]);
+    const { isLoading, error } = useFetchEffect(
+        () => TransferHistoryApi.getTransferHistoryByDevice(deviceId),
+        [deviceId],
+        (result) => setHistory(result),
+        "Không thể tải lịch sử chuyển máy.",
+        (message) => toast.error(message)
+    );
 
     return (
         <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">

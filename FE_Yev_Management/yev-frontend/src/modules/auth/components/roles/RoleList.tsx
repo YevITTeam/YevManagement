@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { RoleDto, CreateRoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleForm from "./RoleForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { AuthApi } from "../../api/auth.api";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 export default function RoleList() {
     const [roles, setRoles] = useState<RoleDto[]>([]);
-    const [loading, setLoading] = useState(false);
 
     const [showCreate, setShowCreate] = useState(false);
     const [editing, setEditing] = useState<RoleDto | null>(null);
@@ -18,22 +18,13 @@ export default function RoleList() {
     const [deletingId, setDeletingId] = useState<number | null>(null);
     const [openDialog, setOpenDialog] = useState(false);
 
-    const fetchRoles = async () => {
-        setLoading(true);
-        try {
-            const data = await AuthApi.getAllRoles();
-            setRoles(data);
-        } catch (err) {
-            console.error(err);
-            toast.error(getApiErrorMessage(err, "Không thể tải danh sách quyền"));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchRoles();
-    }, []);
+    const { isLoading: loading, refetch: fetchRoles } = useFetchEffect(
+        () => AuthApi.getAllRoles(),
+        [],
+        (data) => setRoles(data),
+        "Không thể tải danh sách quyền",
+        (message) => toast.error(message)
+    );
 
     const handleCreate = async (data: CreateRoleDto) => {
         try {

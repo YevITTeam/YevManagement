@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
 import { approvalLevelLabels } from "@/modules/attendance/types/enums";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface OtCaseFormValues {
     code: string;
@@ -32,20 +33,18 @@ const fieldClassName =
 export default function OtCaseForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: OtCaseFormProps) {
     const [values, setValues] = useState<OtCaseFormValues>(emptyValues);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? {
-                          code: initial.code,
-                          description: initial.description,
-                          requireSignature: initial.requireSignature,
-                          requiredApprovalLevel: initial.requiredApprovalLevel,
-                      }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(
+            current
+                ? {
+                      code: current.code,
+                      description: current.description,
+                      requireSignature: current.requireSignature,
+                      requiredApprovalLevel: current.requiredApprovalLevel,
+                  }
+                : emptyValues
+        );
+    });
 
     if (!isOpen) return null;
 

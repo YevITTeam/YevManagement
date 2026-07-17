@@ -143,8 +143,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [processPartEnabled, setProcessPartEnabled] = useState(false);
     const [processPart, setProcessPart] = useState<ProcessPartDto>(emptyProcessPart);
 
-    // Chữ ký "Người đề nghị" (2026-07-16) không còn nhập ở màn này — BE tự lấy từ UserSignature đã
-    // đăng ký sẵn. FE chỉ kiểm tra trước để chặn user bấm Submit rồi mới nhận lỗi 400 (docs §4.1/§8).
+    // Chữ ký "Người đề nghị" (đợt 4, 2026-07-16) KHÔNG còn gắn với bước tạo đơn — POST /api/OtForm chỉ
+    // tạo status=Draft chưa ký, chữ ký thật chỉ bắt buộc ở bước Ký duyệt riêng (POST /{id}/submit, màn
+    // "Chờ tôi ký duyệt"). Ở đây chỉ hiện gợi ý mềm, KHÔNG chặn nút Tạo đơn.
     const [hasSignature, setHasSignature] = useState<boolean | null>(null);
 
     const [isLoadingInitial, setIsLoadingInitial] = useState(isEditMode);
@@ -168,8 +169,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // dưới tự xoá lựa chọn Nhóm/Nhân viên vừa đổ sẵn.
     useEffect(() => {
         if (!isEditMode || !otFormId) return;
-        setIsLoadingInitial(true);
-        setLoadError(null);
         OtFormApi.getOtFormById(otFormId)
             .then((data) => {
                 if (!data.isEditable) {
@@ -206,22 +205,28 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // Cascading Nhóm theo Bộ phận — chỉ TẢI danh sách, không tự xoá lựa chọn (việc xoá do handler
     // người dùng chủ động đổi Bộ phận quyết định, xem handleDepartmentChange) để không phá dữ liệu
     // vừa đổ sẵn lúc Sửa đơn (docs/attendance-api-fe.md §3.2/§8).
+    const [prevDepartmentId, setPrevDepartmentId] = useState(departmentId);
+    if (prevDepartmentId !== departmentId) {
+        setPrevDepartmentId(departmentId);
+        if (!departmentId) setGroups([]);
+    }
+
     useEffect(() => {
-        if (!departmentId) {
-            setGroups([]);
-            return;
-        }
+        if (!departmentId) return;
         GroupApi.getGroupsByDepartment(departmentId)
             .then(setGroups)
             .catch((err) => console.error(err));
     }, [departmentId]);
 
     // Tải nhân viên theo Nhóm — không tự xoá lựa chọn (lý do như trên).
+    const [prevGroupId, setPrevGroupId] = useState(groupId);
+    if (prevGroupId !== groupId) {
+        setPrevGroupId(groupId);
+        if (!groupId) setGroupEmployees([]);
+    }
+
     useEffect(() => {
-        if (!groupId) {
-            setGroupEmployees([]);
-            return;
-        }
+        if (!groupId) return;
         EmployeeApi.getEmployeesByGroup(groupId)
             .then(setGroupEmployees)
             .catch((err) => console.error(err));
@@ -277,10 +282,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             selectedEmployeeIds.length === 0
         ) {
             toast.error("Vui lòng điền đầy đủ thông tin bắt buộc và chọn ít nhất 1 nhân viên.");
-            return;
-        }
-        if (!isEditMode && hasSignature === false) {
-            toast.error("Bạn chưa đăng ký chữ ký — vào \"Chữ ký của tôi\" để đăng ký trước khi tạo đơn.");
             return;
         }
 
@@ -348,14 +349,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 <h1 className="text-2xl font-semibold text-[#191c1e]">{isEditMode ? `Sửa đơn tăng ca #${otFormId}` : "Tạo đơn tăng ca"}</h1>
                 <p className="mt-1 text-[15px] text-[#5e3f3a]">
                     {isEditMode
-                        ? "Chỉ có thể sửa khi đơn đang chờ Trưởng phòng duyệt (Pending)."
-                        : "Điền thông tin đơn, chọn nhân viên làm ngoài giờ. Chữ ký Người đề nghị lấy tự động từ chữ ký đã đăng ký."}
+                        ? "Chỉ có thể sửa khi đơn đang Nháp hoặc chờ Trưởng phòng duyệt."
+                        : "Điền thông tin đơn, chọn nhân viên làm ngoài giờ. Đơn tạo ra ở trạng thái Nháp — cần Trưởng nhóm ký duyệt riêng (\"Chờ tôi ký duyệt\") mới vào luồng duyệt."}
                 </p>
             </div>
 
             {!isEditMode && hasSignature === false && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
-                    <span>Bạn chưa đăng ký chữ ký cá nhân — đăng ký trước khi gửi đơn.</span>
+                    <span>Bạn chưa đăng ký chữ ký cá nhân — cần đăng ký trước khi ký duyệt &quot;Người đề nghị&quot; ở bước sau.</span>
                     <button
                         type="button"
                         onClick={() => router.push("/ot/signature")}
@@ -683,7 +684,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     </button>
                     <button
                         type="submit"
-                        disabled={isSubmitting || (!isEditMode && hasSignature === false)}
+                        disabled={isSubmitting}
                         className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {isSubmitting ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo đơn"}

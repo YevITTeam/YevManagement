@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
@@ -12,6 +12,7 @@ import {
     otFormStatusLabels,
 } from "@/modules/attendance/types/enums";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 function formatDate(value: string) {
     if (!value) return "-";
@@ -36,34 +37,23 @@ export default function OtFormEmailConfirmPage() {
     const token = searchParams.get("token") ?? "";
 
     const [form, setForm] = useState<OtFormDto | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
 
     const [comment, setComment] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [actionResult, setActionResult] = useState<"approved" | "rejected" | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
-    const fetchForm = () => {
-        if (!token) {
-            setLoadError("Thiếu token trong đường link.");
-            setIsLoading(false);
-            return;
-        }
-        setIsLoading(true);
-        OtFormApi.getOtFormByEmailToken(token)
-            .then(setForm)
-            .catch((err) => {
-                console.error(err);
-                setLoadError(getApiErrorMessage(err, "Không thể tải đơn tăng ca — link có thể đã hết hạn hoặc đã được xử lý."));
-            })
-            .finally(() => setIsLoading(false));
-    };
-
-    useEffect(() => {
-        fetchForm();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [token]);
+    // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
+    // đúng câu thông báo riêng này thay vì rơi về fallback chung.
+    const { isLoading, error: loadError } = useFetchEffect(
+        () =>
+            token
+                ? OtFormApi.getOtFormByEmailToken(token)
+                : Promise.reject(new Error(JSON.stringify({ message: "Thiếu token trong đường link." }))),
+        [token],
+        (data) => setForm(data),
+        "Không thể tải đơn tăng ca — link có thể đã hết hạn hoặc đã được xử lý."
+    );
 
     const handleApprove = async () => {
         setIsSubmitting(true);

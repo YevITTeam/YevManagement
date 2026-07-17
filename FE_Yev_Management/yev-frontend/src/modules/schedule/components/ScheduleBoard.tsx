@@ -13,6 +13,7 @@ import ScheduleGantt from "./ScheduleGantt";
 import MembersBar from "./MembersBar";
 import PlanTaskTable from "./PlanTaskTable";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const makeId = (): string =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -31,9 +32,7 @@ const emptyTask = (): ScheduleTask => ({
 export default function ScheduleBoard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [plans, setPlans] = useState<SchedulePlan[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   // Có thay đổi chưa lưu xuống file hay không.
   const [dirty, setDirty] = useState(false);
 
@@ -43,27 +42,17 @@ export default function ScheduleBoard() {
 
   const [deletingPlan, setDeletingPlan] = useState<SchedulePlan | null>(null);
 
-  const fetchBoard = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const board = await ScheduleApi.getBoard();
+  const { isLoading, error, refetch: fetchBoard } = useFetchEffect(
+    () => ScheduleApi.getBoard(),
+    [],
+    (board) => {
       setMembers(board.members);
       setPlans(board.plans);
       setDirty(false);
-    } catch (err) {
-      console.error(err);
-      const message = err instanceof Error ? err.message : "Không thể tải lịch trình.";
-      setError(message);
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchBoard();
-  }, []);
+    },
+    "Không thể tải lịch trình.",
+    (message) => toast.error(message)
+  );
 
   // Cảnh báo khi rời trang mà còn thay đổi chưa lưu.
   useEffect(() => {

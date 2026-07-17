@@ -10,6 +10,7 @@ import type { SoftwareGroupDto } from "@/modules/pc-management/types/software-gr
 import SoftwareForm, { type SoftwareFormValues } from "./SoftwareForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 const PRIORITY_FILTER_ALL = "all";
@@ -21,8 +22,6 @@ type PrioritySort = "none" | "asc" | "desc";
 const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareList({ onLoadingChange }, ref) {
     const [allSoftwares, setAllSoftwares] = useState<SoftwareDto[]>([]);
     const [groups, setGroups] = useState<SoftwareGroupDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -39,25 +38,13 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
     const [deletingSoftware, setDeletingSoftware] = useState<SoftwareDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchSoftwares = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await SoftwareApi.getAllSoftware();
-            setAllSoftwares(result);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách phần mềm.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchSoftwares();
-    }, []);
+    const { isLoading, error, refetch: fetchSoftwares } = useFetchEffect(
+        () => SoftwareApi.getAllSoftware(),
+        [],
+        (result) => setAllSoftwares(result),
+        "Không thể tải danh sách phần mềm.",
+        (message) => toast.error(message)
+    );
 
     useEffect(() => {
         onLoadingChange?.(isLoading);

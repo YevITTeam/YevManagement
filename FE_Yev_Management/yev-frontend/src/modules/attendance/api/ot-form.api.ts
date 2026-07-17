@@ -14,9 +14,11 @@ const ENDPOINTS = {
     OT_FORM: {
         createOtForm: "/OtForm",
         getMyForms: "/OtForm/my-forms",
+        getPendingSubmissions: "/OtForm/pending-submissions",
         getPendingApprovals: "/OtForm/pending-approvals",
         getOtFormById: (id: number) => `/OtForm/${id}`,
         updateOtForm: (id: number) => `/OtForm/${id}`,
+        submitOtForm: (id: number) => `/OtForm/${id}/submit`,
         approveOtForm: (id: number) => `/OtForm/${id}/approve`,
         rejectOtForm: (id: number) => `/OtForm/${id}/reject`,
         emailConfirmGet: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}`,
@@ -48,6 +50,24 @@ export const OtFormApi = {
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.OT_FORM.getMyForms}?${queryString}` : ENDPOINTS.OT_FORM.getMyForms;
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
+        return response.data;
+    },
+    // Đơn Draft đang chờ CHÍNH user gọi (Trưởng nhóm, scope Submitter) ký duyệt — endpoint riêng vì
+    // Role "Trưởng Group" chỉ có permission Create, không có Approve (docs §4.2a).
+    getPendingSubmissions: async (params?: GetOtFormListParams) => {
+        const query = new URLSearchParams();
+        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
+        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        const queryString = query.toString();
+        const url = queryString
+            ? `${ENDPOINTS.OT_FORM.getPendingSubmissions}?${queryString}`
+            : ENDPOINTS.OT_FORM.getPendingSubmissions;
+        const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
+        return response.data;
+    },
+    // Trưởng nhóm ký duyệt "Người đề nghị" — Draft → Pending, chữ ký tự lấy từ UserSignature (docs §4.1a).
+    submitOtForm: async (id: number, data: ApproveOtFormDto) => {
+        const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.submitOtForm(id), data);
         return response.data;
     },
     // BE tự lọc theo cấp/scope của user gọi API — FE không truyền tham số lọc cấp (docs §4.2).

@@ -1,39 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import type { UserSignatureDto } from "@/modules/attendance/types/user-signature.dto";
 import SignatureCanvas from "./SignatureCanvas";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 // docs/attendance-api-fe.md §6/§6b — mỗi user tự đăng ký 1 chữ ký, BE tự lấy chữ ký này khi tạo/duyệt
 // đơn. ⚠️ 2026-07-16: PUT /me KHÔNG còn áp dụng ngay — chỉ gửi email xác nhận, chữ ký cũ vẫn có hiệu
 // lực cho tới khi user tự bấm xác nhận qua link email (trang public /xac-nhan-chu-ky).
 export default function UserSignaturePanel() {
     const [signature, setSignature] = useState<UserSignatureDto | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
     const [draftBase64, setDraftBase64] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [confirmationSent, setConfirmationSent] = useState(false);
 
-    const fetchSignature = async () => {
-        setIsLoading(true);
-        try {
-            const data = await UserSignatureApi.getMySignature();
-            setSignature(data);
-        } catch (err) {
-            console.error(err);
-            toast.error(getApiErrorMessage(err, "Không thể tải chữ ký."));
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchSignature();
-    }, []);
+    const { isLoading } = useFetchEffect(
+        () => UserSignatureApi.getMySignature(),
+        [],
+        (data) => setSignature(data),
+        "Không thể tải chữ ký.",
+        (message) => toast.error(message)
+    );
 
     const handleSave = async () => {
         if (!draftBase64) {

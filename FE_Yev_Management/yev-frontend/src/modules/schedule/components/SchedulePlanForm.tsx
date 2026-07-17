@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { SchedulePlan } from "../types/schedule";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface SchedulePlanFormValues {
   name: string;
@@ -27,12 +28,11 @@ export default function SchedulePlanForm({ isOpen, mode, initial, onClose, onSub
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  useEffect(() => {
-    if (!isOpen) return;
-    setName(initial?.name ?? "");
-    setStartDate(initial?.startDate ?? "");
-    setEndDate(initial?.endDate ?? "");
-  }, [isOpen, initial]);
+  useDialogReset(isOpen, initial, (current) => {
+    setName(current?.name ?? "");
+    setStartDate(current?.startDate ?? "");
+    setEndDate(current?.endDate ?? "");
+  });
 
   // Ngày kết thúc không được trước ngày bắt đầu.
   const dateError = startDate && endDate && endDate < startDate ? "Ngày kết thúc phải sau ngày bắt đầu." : "";

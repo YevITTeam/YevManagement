@@ -8,13 +8,12 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import IpPrefixForm, { type IpPrefixFormValues } from "./IpPrefixForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixList({ onLoadingChange }, ref) {
     const [prefixes, setPrefixes] = useState<IpPrefixDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -33,34 +32,19 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
     const [deletingPrefix, setDeletingPrefix] = useState<IpPrefixDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchPrefixes = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await IpApi.getIpPrefixPageNation({
-                pageIndex,
-                pageSize: PAGE_SIZE,
-                keyword: appliedKeyword || undefined,
-            });
+    const { isLoading, error, refetch: fetchPrefixes } = useFetchEffect(
+        () => IpApi.getIpPrefixPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+        [pageIndex, appliedKeyword],
+        (result) => {
             setPrefixes(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách dải mạng.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchPrefixes();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+        },
+        "Không thể tải danh sách dải mạng.",
+        (message) => toast.error(message)
+    );
 
     useEffect(() => {
         onLoadingChange?.(isLoading);

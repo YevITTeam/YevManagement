@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { DeviceConfigurationApi } from "@/modules/pc-management/api/device-configuration.api";
@@ -12,6 +12,7 @@ import type {
 } from "@/modules/pc-management/types/device-configuration.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 interface DeviceConfigurationPanelProps {
     deviceId: number;
@@ -97,52 +98,35 @@ export default function DeviceConfigurationPanel({ deviceId, deviceCode, configu
     const [deletingConfig, setDeletingConfig] = useState(false);
     const [isDeletingConfig, setIsDeletingConfig] = useState(false);
 
-    const [initialSnapshot, setInitialSnapshot] = useState<DeviceConfigurationInitialDto | null>(null);
-    const [isLoadingInitial, setIsLoadingInitial] = useState(false);
     const [deletingInitial, setDeletingInitial] = useState(false);
     const [isDeletingInitial, setIsDeletingInitial] = useState(false);
 
+    const [initialSnapshot, setInitialSnapshot] = useState<DeviceConfigurationInitialDto | null>(null);
     const [history, setHistory] = useState<DeviceConfigurationHistoryDto[]>([]);
-    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-    useEffect(() => {
+    // Đổ lại field khi `configuration` (prop) đổi — so sánh snapshot ngay trong render thay effect
+    // (xem CLAUDE.md "Pattern reset Form dialog"), vì đây là "adjust state when a prop changes".
+    const [prevConfiguration, setPrevConfiguration] = useState(configuration);
+    if (prevConfiguration !== configuration) {
+        setPrevConfiguration(configuration);
         setValues(toFormValues(configuration));
         setOther(configuration?.other ?? "");
         setNote(configuration?.note ?? "");
-    }, [configuration]);
+    }
 
-    useEffect(() => {
-        if (!configuration) {
-            setInitialSnapshot(null);
-            setHistory([]);
-            return;
-        }
-        let isCancelled = false;
+    const { isLoading: isLoadingInitial } = useFetchEffect(
+        () => (configuration ? DeviceConfigurationApi.getInitialConfiguration(configuration.id) : Promise.resolve(null)),
+        [configuration?.id],
+        (data) => setInitialSnapshot(data),
+        "Không thể tải cấu hình ban đầu."
+    );
 
-        setIsLoadingInitial(true);
-        DeviceConfigurationApi.getInitialConfiguration(configuration.id)
-            .then((result) => {
-                if (!isCancelled) setInitialSnapshot(result);
-            })
-            .catch((err) => console.error(err))
-            .finally(() => {
-                if (!isCancelled) setIsLoadingInitial(false);
-            });
-
-        setIsLoadingHistory(true);
-        DeviceConfigurationApi.getConfigurationHistory(configuration.id)
-            .then((result) => {
-                if (!isCancelled) setHistory(result);
-            })
-            .catch((err) => console.error(err))
-            .finally(() => {
-                if (!isCancelled) setIsLoadingHistory(false);
-            });
-
-        return () => {
-            isCancelled = true;
-        };
-    }, [configuration]);
+    const { isLoading: isLoadingHistory } = useFetchEffect(
+        () => (configuration ? DeviceConfigurationApi.getConfigurationHistory(configuration.id) : Promise.resolve([])),
+        [configuration?.id],
+        (data) => setHistory(data),
+        "Không thể tải lịch sử sửa chữa."
+    );
 
     const handleChange = (field: keyof DeviceComponentFields, value: string) => {
         setValues((current) => ({ ...current, [field]: value }));

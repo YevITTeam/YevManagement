@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
@@ -8,13 +8,12 @@ import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import BranchForm, { type BranchFormValues } from "./BranchForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 export default function BranchList() {
     const [branches, setBranches] = useState<BranchDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -33,34 +32,19 @@ export default function BranchList() {
     const [deletingBranch, setDeletingBranch] = useState<BranchDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchBranches = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await BranchApi.getBranchPageNation({
-                pageIndex,
-                pageSize: PAGE_SIZE,
-                keyword: appliedKeyword || undefined,
-            });
+    const { isLoading, error, refetch: fetchBranches } = useFetchEffect(
+        () => BranchApi.getBranchPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+        [pageIndex, appliedKeyword],
+        (result) => {
             setBranches(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách chi nhánh.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchBranches();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+        },
+        "Không thể tải danh sách chi nhánh.",
+        (message) => toast.error(message)
+    );
 
     const handleSearch = () => {
         setPageIndex(1);

@@ -1,23 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "@/navigation";
 import { toast } from "react-toastify";
 
 import { DeviceApi } from "@/modules/pc-management/api/device.api";
 import type { DeviceDetailDto } from "@/modules/pc-management/types/device.dto";
-import { getApiErrorMessage } from "@/lib/apiError";
 import DeviceForm, { type DeviceFormValues } from "./DeviceForm";
 import DeviceConfigurationPanel from "./DeviceConfigurationPanel";
 import DeviceSoftwarePanel from "./DeviceSoftwarePanel";
 import DeviceTransferHistoryPanel from "./DeviceTransferHistoryPanel";
+import DeviceAuditHistoryPanel from "./DeviceAuditHistoryPanel";
 import TransferDeviceDialog from "./TransferDeviceDialog";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
+import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 interface DeviceDetailProps {
     deviceId: number;
 }
 
-type DetailTab = "configuration" | "software" | "transfer-history";
+type DetailTab = "configuration" | "software" | "transfer-history" | "audit-history";
 
 function formatDate(value: string | null) {
     if (!value) return "-";
@@ -27,32 +31,21 @@ function formatDate(value: string | null) {
 const infoLabelClassName = "text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 
 export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
+    const { user } = useAuth();
+    const canViewAuditTrail = hasPermission(user, "Asset.AuditTrail.View");
     const [detail, setDetail] = useState<DeviceDetailDto | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<DetailTab>("configuration");
 
     const [formOpen, setFormOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [transferOpen, setTransferOpen] = useState(false);
 
-    const fetchDetail = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await DeviceApi.getDeviceDetailById(deviceId);
-            setDetail(result);
-        } catch (err) {
-            setError(getApiErrorMessage(err, "Không thể tải chi tiết thiết bị."));
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchDetail();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [deviceId]);
+    const { isLoading, error, refetch: fetchDetail } = useFetchEffect(
+        () => DeviceApi.getDeviceDetailById(deviceId),
+        [deviceId],
+        (result) => setDetail(result),
+        "Không thể tải chi tiết thiết bị."
+    );
 
     const handleSubmitForm = async (values: DeviceFormValues) => {
         if (!detail) return;
@@ -214,6 +207,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                     { key: "configuration" as const, label: "Cấu hình phần cứng" },
                     { key: "software" as const, label: "Phần mềm" },
                     { key: "transfer-history" as const, label: "Lịch sử chuyển máy" },
+                    ...(canViewAuditTrail ? [{ key: "audit-history" as const, label: "Lịch sử thao tác" }] : []),
                 ].map((tab) => (
                     <button
                         key={tab.key}
@@ -241,6 +235,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                 <DeviceSoftwarePanel deviceId={device.id} softwares={detail.softwares} onChanged={fetchDetail} />
             )}
             {activeTab === "transfer-history" && <DeviceTransferHistoryPanel deviceId={device.id} />}
+            {activeTab === "audit-history" && canViewAuditTrail && <DeviceAuditHistoryPanel deviceId={device.id} />}
 
             <DeviceForm
                 isOpen={formOpen}

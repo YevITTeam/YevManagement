@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import type { SignatureConfirmationPreviewDto } from "@/modules/attendance/types/user-signature.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 // Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-api-fe.md §6b.
 // Mở qua link email "Xác nhận cập nhật chữ ký".
@@ -14,26 +15,21 @@ export default function SignatureConfirmPage() {
     const token = searchParams.get("token") ?? "";
 
     const [preview, setPreview] = useState<SignatureConfirmationPreviewDto | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const [confirmed, setConfirmed] = useState(false);
     const [confirmError, setConfirmError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (!token) {
-            setLoadError("Thiếu token xác nhận trong đường link.");
-            setIsLoading(false);
-            return;
-        }
-        UserSignatureApi.getSignatureConfirmation(token)
-            .then(setPreview)
-            .catch((err) => {
-                console.error(err);
-                setLoadError(getApiErrorMessage(err, "Không thể tải yêu cầu xác nhận chữ ký."));
-            })
-            .finally(() => setIsLoading(false));
-    }, [token]);
+    // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
+    // đúng câu thông báo riêng này thay vì rơi về fallback chung.
+    const { isLoading, error: loadError } = useFetchEffect(
+        () =>
+            token
+                ? UserSignatureApi.getSignatureConfirmation(token)
+                : Promise.reject(new Error(JSON.stringify({ message: "Thiếu token xác nhận trong đường link." }))),
+        [token],
+        (data) => setPreview(data),
+        "Không thể tải yêu cầu xác nhận chữ ký."
+    );
 
     const handleConfirm = async () => {
         setIsConfirming(true);

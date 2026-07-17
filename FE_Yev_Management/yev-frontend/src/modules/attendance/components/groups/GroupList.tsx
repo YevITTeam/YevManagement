@@ -11,13 +11,21 @@ import GroupForm, { type GroupFormValues } from "./GroupForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
+interface GroupPageResult {
+    data: GroupDto[];
+    totalCount: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+    safePageIndex: number;
+}
+
 const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ onLoadingChange }, ref) {
     const [groups, setGroups] = useState<GroupDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -41,10 +49,8 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
 
     // grid-list toàn cục không lọc theo Bộ phận trong docs — nên khi có bộ lọc, tải toàn bộ theo
     // by-department rồi tự phân trang phía FE; khi không lọc thì dùng grid-list bình thường.
-    const fetchGroups = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
+    const { isLoading, error, refetch: fetchGroups } = useFetchEffect<GroupPageResult>(
+        async () => {
             if (departmentFilter) {
                 const all = await GroupApi.getGroupsByDepartment(Number(departmentFilter));
                 const filtered = appliedKeyword
@@ -57,44 +63,40 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                 const computedTotalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
                 const safePageIndex = Math.min(pageIndex, computedTotalPages);
                 const start = (safePageIndex - 1) * PAGE_SIZE;
-                setGroups(filtered.slice(start, start + PAGE_SIZE));
-                setTotalCount(filtered.length);
-                setTotalPages(computedTotalPages);
-                setHasPreviousPage(safePageIndex > 1);
-                setHasNextPage(safePageIndex < computedTotalPages);
-                if (safePageIndex !== pageIndex) setPageIndex(safePageIndex);
-            } else {
-                const result = await GroupApi.getGroupPageNation({
-                    pageIndex,
-                    pageSize: PAGE_SIZE,
-                    keyword: appliedKeyword || undefined,
-                });
-                setGroups(result.data);
-                setTotalCount(result.totalCount);
-                setTotalPages(result.totalPages);
-                setHasNextPage(result.hasNextPage);
-                setHasPreviousPage(result.hasPreviousPage);
+                return {
+                    data: filtered.slice(start, start + PAGE_SIZE),
+                    totalCount: filtered.length,
+                    totalPages: computedTotalPages,
+                    hasPreviousPage: safePageIndex > 1,
+                    hasNextPage: safePageIndex < computedTotalPages,
+                    safePageIndex,
+                };
             }
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách nhóm.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+            const result = await GroupApi.getGroupPageNation({
+                pageIndex,
+                pageSize: PAGE_SIZE,
+                keyword: appliedKeyword || undefined,
+            });
+            return { ...result, safePageIndex: pageIndex };
+        },
+        [pageIndex, appliedKeyword, departmentFilter],
+        (result) => {
+            setGroups(result.data);
+            setTotalCount(result.totalCount);
+            setTotalPages(result.totalPages);
+            setHasNextPage(result.hasNextPage);
+            setHasPreviousPage(result.hasPreviousPage);
+            if (result.safePageIndex !== pageIndex) setPageIndex(result.safePageIndex);
+        },
+        "Không thể tải danh sách nhóm.",
+        (message) => toast.error(message)
+    );
 
     useEffect(() => {
         DepartmentApi.getAllDepartments()
             .then((data) => setDepartments(data))
             .catch((err) => console.error(err));
     }, []);
-
-    useEffect(() => {
-        fetchGroups();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword, departmentFilter]);
 
     useEffect(() => {
         onLoadingChange?.(isLoading);

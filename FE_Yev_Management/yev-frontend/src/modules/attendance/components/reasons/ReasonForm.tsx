@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReasonDto } from "@/modules/attendance/types/reason.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface ReasonFormValues {
     reasonNameVn: string;
@@ -26,13 +27,9 @@ const fieldClassName =
 export default function ReasonForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: ReasonFormProps) {
     const [values, setValues] = useState<ReasonFormValues>(emptyValues);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial ? { reasonNameVn: initial.reasonNameVn, reasonNameJp: initial.reasonNameJp } : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(current ? { reasonNameVn: current.reasonNameVn, reasonNameJp: current.reasonNameJp } : emptyValues);
+    });
 
     if (!isOpen) return null;
 

@@ -13,6 +13,7 @@ export const otFormStatusLabels: Record<number, string> = {
     2: "Chờ Tổng Giám Đốc duyệt",
     3: "Hoàn tất",
     4: "Từ chối",
+    5: "Nháp — chờ Trưởng nhóm ký",
 };
 
 export const otFormStatusClasses: Record<number, string> = {
@@ -21,6 +22,7 @@ export const otFormStatusClasses: Record<number, string> = {
     2: "border border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]",
     3: "border border-emerald-200 bg-emerald-50 text-emerald-600",
     4: "border border-[#e9bcb6] bg-[#fff4f2] text-[#930006]",
+    5: "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]",
 };
 
 export const approvalActionLabels: Record<number, string> = {

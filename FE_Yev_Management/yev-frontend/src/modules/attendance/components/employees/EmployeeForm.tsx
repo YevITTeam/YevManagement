@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface EmployeeFormValues {
     code: string;
@@ -49,23 +50,21 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
             .catch((err) => console.error(err));
     }, [isOpen]);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? {
-                          code: initial.code,
-                          firstName: initial.firstName,
-                          lastName: initial.lastName,
-                          userName: initial.userName,
-                          monthToDate: initial.monthToDate,
-                          yearToDate: initial.yearToDate,
-                          groupId: initial.groupId,
-                      }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(
+            current
+                ? {
+                      code: current.code,
+                      firstName: current.firstName,
+                      lastName: current.lastName,
+                      userName: current.userName,
+                      monthToDate: current.monthToDate,
+                      yearToDate: current.yearToDate,
+                      groupId: current.groupId,
+                  }
+                : emptyValues
+        );
+    });
 
     if (!isOpen) return null;
 

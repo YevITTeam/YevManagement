@@ -8,6 +8,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import IpForm, { type IpFormValues } from "./IpForm";
 import { ipStatusClasses, ipStatusLabels, ipStatusOptions } from "./ip-status";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
@@ -16,8 +17,6 @@ const PAGE_SIZE = 10;
 // Danh sách này chỉ hỗ trợ xem + sửa status/note của từng IP.
 const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddressList({ onLoadingChange }, ref) {
     const [ipAddresses, setIpAddresses] = useState<IpAddressDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -33,35 +32,25 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
     const [editingIp, setEditingIp] = useState<IpAddressDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
-    const fetchIpAddresses = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await IpApi.getIpAddressPageNation({
+    const { isLoading, error, refetch: fetchIpAddresses } = useFetchEffect(
+        () =>
+            IpApi.getIpAddressPageNation({
                 pageIndex,
                 pageSize: PAGE_SIZE,
                 keyword: appliedKeyword || undefined,
                 status: statusFilter !== "" ? Number(statusFilter) : undefined,
-            });
+            }),
+        [pageIndex, appliedKeyword, statusFilter],
+        (result) => {
             setIpAddresses(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách địa chỉ IP.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchIpAddresses();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword, statusFilter]);
+        },
+        "Không thể tải danh sách địa chỉ IP.",
+        (message) => toast.error(message)
+    );
 
     useEffect(() => {
         onLoadingChange?.(isLoading);

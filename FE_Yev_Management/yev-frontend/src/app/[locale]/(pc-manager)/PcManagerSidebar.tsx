@@ -14,8 +14,11 @@ import {
   Layers,
   Settings,
   PanelLeftClose,
+  History,
 } from "lucide-react";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 
 const navItems = [
   { key: "devices", href: "/pc", icon: Computer },
@@ -27,12 +30,16 @@ const navItems = [
   { key: "deviceDepartments", href: "/pc/device-departments", icon: Users },
   { key: "softwares", href: "/pc/softwares", icon: ShieldCheck },
   { key: "suppliers", href: "/pc/suppliers", icon: Package },
+  // Riêng mục này cần permission Asset.AuditTrail.View — theo docs/asset-api-fe.md §7b, chỉ Admin
+  // được seed sẵn, các role khác cần Admin gán tay nên ẩn menu nếu chưa có quyền.
+  { key: "auditTrail", href: "/pc/audit-trail", icon: History, permission: "Asset.AuditTrail.View" },
   { key: "settings", href: "/pc/settings", icon: Settings },
 ] as const;
 
 export default function PcManagerSidebar() {
   const t = useTranslations("Navigation");
   const pathname = usePathname() || "";
+  const { user } = useAuth();
   const { collapsed, toggle } = useSidebarCollapse();
 
   return (
@@ -77,7 +84,9 @@ export default function PcManagerSidebar() {
       </div>
 
       <nav className="mt-8 flex-1 overflow-y-auto overflow-x-hidden">
-        {navItems.map((item) => {
+        {navItems
+          .filter((item) => !("permission" in item) || hasPermission(user, item.permission))
+          .map((item) => {
           // Logic tách riêng cho route gốc "/pc" để tránh highlight sai ở các route con
           const isActive = item.href === "/pc"
             ? pathname === item.href

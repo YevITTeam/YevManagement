@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Save } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthApi } from "@/modules/auth/api/auth.api";
@@ -8,6 +8,7 @@ import { PermissionApi } from "@/modules/auth/api/permission.api";
 import type { RoleDto } from "@/modules/auth/types/auth.dto";
 import type { PermissionDto, PermissionModuleGroupDto } from "@/modules/auth/types/permission.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 export default function RolePermissionManager() {
     const [roles, setRoles] = useState<RoleDto[]>([]);
@@ -16,46 +17,25 @@ export default function RolePermissionManager() {
     const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
     const [selectedPermissionIds, setSelectedPermissionIds] = useState<Set<number>>(new Set());
 
-    const [isLoadingBase, setIsLoadingBase] = useState(true);
-    const [isLoadingRolePermissions, setIsLoadingRolePermissions] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
-    useEffect(() => {
-        const loadBase = async () => {
-            setIsLoadingBase(true);
-            try {
-                const [rolesData, permissionsData] = await Promise.all([
-                    AuthApi.getAllRoles(),
-                    PermissionApi.getAll(),
-                ]);
-                setRoles(rolesData);
-                setModuleGroups(permissionsData);
-                if (rolesData.length > 0) setSelectedRoleId(rolesData[0].id);
-            } catch (err) {
-                toast.error(getApiErrorMessage(err, "Không thể tải danh sách vai trò / quyền."));
-            } finally {
-                setIsLoadingBase(false);
-            }
-        };
-        loadBase();
-    }, []);
+    const { isLoading: isLoadingBase } = useFetchEffect(
+        () => Promise.all([AuthApi.getAllRoles(), PermissionApi.getAll()]),
+        [],
+        ([rolesData, permissionsData]) => {
+            setRoles(rolesData);
+            setModuleGroups(permissionsData);
+            if (rolesData.length > 0) setSelectedRoleId(rolesData[0].id);
+        },
+        "Không thể tải danh sách vai trò / quyền."
+    );
 
-    const loadRolePermissions = useCallback(async (roleId: number) => {
-        setIsLoadingRolePermissions(true);
-        try {
-            const rolePermissions = await PermissionApi.getByRole(roleId);
-            setSelectedPermissionIds(new Set(rolePermissions.map((p) => p.id)));
-        } catch (err) {
-            toast.error(getApiErrorMessage(err, "Không thể tải quyền của vai trò này."));
-        } finally {
-            setIsLoadingRolePermissions(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (selectedRoleId === null) return;
-        loadRolePermissions(selectedRoleId);
-    }, [selectedRoleId, loadRolePermissions]);
+    const { isLoading: isLoadingRolePermissions } = useFetchEffect(
+        () => (selectedRoleId === null ? Promise.resolve([]) : PermissionApi.getByRole(selectedRoleId)),
+        [selectedRoleId],
+        (rolePermissions) => setSelectedPermissionIds(new Set(rolePermissions.map((p) => p.id))),
+        "Không thể tải quyền của vai trò này."
+    );
 
     const togglePermission = (permissionId: number, checked: boolean) => {
         setSelectedPermissionIds((prev) => {
