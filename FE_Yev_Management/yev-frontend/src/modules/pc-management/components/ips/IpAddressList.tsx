@@ -10,7 +10,12 @@ import { ipStatusClasses, ipStatusLabels, ipStatusOptions } from "./ip-status";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
-const PAGE_SIZE = 10;
+// Lấy hẳn 255 địa chỉ IP (đúng số IP tối đa của 1 dải mạng /24) mỗi lần gọi API
+// để giảm số lần bấm "Trang sau" khi xem hết 1 prefix; UI chỉ hiển thị ~10 dòng
+// cùng lúc và cho cuộn bên trong bảng (xem div bọc <table> có overflow-y-auto).
+const PAGE_SIZE = 255;
+const VISIBLE_ROWS = 10;
+const ROW_HEIGHT_PX = 53;
 
 // docs/asset-api-fe.md §4.2 (2026-07-11) — IpAddress không còn tạo/xoá thủ công,
 // chỉ sinh hàng loạt qua IpPrefix (POST) và dọn qua IpPrefix (DELETE cascade).
@@ -142,9 +147,9 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: VISIBLE_ROWS * ROW_HEIGHT_PX }}>
                     <table className="min-w-full border-collapse text-left">
-                        <thead>
+                        <thead className="sticky top-0 z-10">
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                 <th className="whitespace-nowrap px-6 py-3">Địa chỉ IP</th>
                                 <th className="whitespace-nowrap px-6 py-3">Dải mạng</th>
@@ -169,10 +174,11 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{ip.deviceCode ?? "—"}</td>
                                     <td className="whitespace-nowrap px-6 py-4">
                                         <span
-                                            className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
                                                 ipStatusClasses[ip.status] ?? "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
                                             }`}
                                         >
+                                            <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
                                             {ip.statusText || "Không xác định"}
                                         </span>
                                     </td>

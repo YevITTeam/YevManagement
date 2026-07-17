@@ -7,10 +7,12 @@ export const ipStatusLabels: Record<number, string> = {
     2: "Đã gán",
 };
 
+// Đồng bộ tông màu badge trạng thái với bảng Thiết bị (statusClasses ở
+// src/app/[locale]/(pc-manager)/pc/page.tsx) để cùng ngôn ngữ UI trong toàn hệ thống.
 export const ipStatusClasses: Record<number, string> = {
-    0: "border border-emerald-200 bg-emerald-50 text-emerald-600",
-    1: "border border-[#d8e2ff] bg-[#f4f5ff] text-[#004494]",
-    2: "border border-[#e9bcb6] bg-[#fff4f2] text-[#930006]",
+    0: "border border-[#cbd5e1] bg-[#eef2f6] text-[#475569]",
+    1: "border border-[#6366f1] bg-[#eef2ff] text-[#4338ca]",
+    2: "border border-[#16a34a] bg-[#16a34a] text-white",
 };
 
 export const ipStatusOptions = [0, 1, 2] as const;
