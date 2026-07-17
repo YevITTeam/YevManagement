@@ -186,7 +186,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     </span>
                     {canEdit && (
                         <button
-                            onClick={() => router.push(`/ot/forms/${form.id}/edit`)}
+                            onClick={() => router.push({ pathname: "/ot/forms/edit", query: { id: String(form.id) } })}
                             className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
                             Sửa đơn
@@ -196,7 +196,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         <button
                             onClick={() =>
                                 window.open(
-                                    getPathname({ href: `/ot-print/${form.id}`, locale }),
+                                    getPathname({ href: { pathname: "/ot-print", query: { id: String(form.id) } }, locale }),
                                     "_blank",
                                     "noopener,noreferrer"
                                 )

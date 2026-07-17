@@ -334,7 +334,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 ? await OtFormApi.updateOtForm(otFormId, payload)
                 : await OtFormApi.createOtForm(payload);
             toast.success(isEditMode ? "Cập nhật đơn tăng ca thành công" : "Tạo đơn tăng ca thành công");
-            router.push(`/ot/forms/${result.id}`);
+            router.push({ pathname: "/ot/forms", query: { id: String(result.id) } });
         } catch (err) {
             console.error(err);
             toast.error(getApiErrorMessage(err, isEditMode ? "Cập nhật đơn tăng ca thất bại" : "Tạo đơn tăng ca thất bại"));

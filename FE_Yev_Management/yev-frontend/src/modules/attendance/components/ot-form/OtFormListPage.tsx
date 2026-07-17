@@ -133,7 +133,7 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                             {forms.map((form) => (
                                 <tr
                                     key={form.id}
-                                    onClick={() => router.push(`/ot/forms/${form.id}`)}
+                                    onClick={() => router.push({ pathname: "/ot/forms", query: { id: String(form.id) } })}
                                     className="cursor-pointer border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]"
                                 >
                                     <td className="px-6 py-4 align-top">
@@ -160,7 +160,7 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                                                 <button
                                                     onClick={(event) => {
                                                         event.stopPropagation();
-                                                        router.push(`/ot/forms/${form.id}/edit`);
+                                                        router.push({ pathname: "/ot/forms/edit", query: { id: String(form.id) } });
                                                     }}
                                                     className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
                                                 >
