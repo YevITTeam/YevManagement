@@ -29,6 +29,14 @@ function toMinutes(time: string): number {
     return h * 60 + m;
 }
 
+function getTodayStr(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
 function computeTotalHour(startTime: string, endTime: string): number {
     if (!startTime || !endTime) return 0;
     const startMinutes = toMinutes(startTime);
@@ -459,6 +467,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 onChange={(event) => setDate(event.target.value)}
                                 disabled={isSubmitting}
                                 required
+                                min={isEditMode ? undefined : getTodayStr()}
                                 className={fieldClassName}
                             />
                         </label>

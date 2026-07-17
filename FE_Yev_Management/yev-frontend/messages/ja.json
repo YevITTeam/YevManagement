@@ -36,7 +36,7 @@
   },
   "Header": {
     "productName": "YEV Management",
-    "tagline": "Asset Management Suite",
+    "tagline": "Data Management Suite",
     "refreshPermissions": "権限を更新",
     "refreshPermissionsTitle": "新しく付与された権限を反映するには再ログインしてください",
     "admin": "管理者",
