@@ -63,7 +63,7 @@ export const OtFormApi = {
         return response.data;
     },
     // Đơn Draft đang chờ CHÍNH user gọi (Trưởng nhóm, scope Submitter) ký duyệt — endpoint riêng vì
-    // Role "Trưởng Group" chỉ có permission Create, không có Approve (docs §4.2a).
+    // Role "Trưởng Nhóm" chỉ có permission Create, không có Approve (docs §4.2a).
     getPendingSubmissions: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
         if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));

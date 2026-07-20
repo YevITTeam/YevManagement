@@ -2,8 +2,8 @@
 
 // Tên Role Identity chính xác (case-sensitive) của cấp Submitter — dùng ở màn "Phân quyền duyệt"
 // (kiểm tra trước khi cho Admin gán approvalLevel=0) và màn "Đơn tăng ca" (ẩn tab "Chờ tôi ký duyệt"
-// cho Role "Nhân viên" — có OTForm.Create nhưng không phải Trưởng Group nên tab luôn rỗng, docs §1.1).
-export const SUBMITTER_ROLE_NAME = "Trưởng Group";
+// cho Role "Nhân viên" — có OTForm.Create nhưng không phải Trưởng Nhóm nên tab luôn rỗng, docs §1.1).
+export const SUBMITTER_ROLE_NAME = "Trưởng Nhóm";
 
 // Role Identity bắt buộc theo từng approvalLevel khi Admin gán UserApprovalScope — ràng buộc mở rộng
 // cho cả 4 cấp (trước 2026-07-17 chỉ áp dụng cho Submitter), xem docs §5 "Ràng buộc theo đúng Role".

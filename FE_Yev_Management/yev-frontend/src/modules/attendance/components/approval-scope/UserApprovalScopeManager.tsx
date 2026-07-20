@@ -181,7 +181,7 @@ export default function UserApprovalScopeManager() {
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền duyệt tăng ca</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Khai báo Trưởng Group được tạo đơn (Người đề nghị), Trưởng Bộ phận duyệt sau khi Trưởng nhóm ký,
+                        Khai báo Trưởng Nhóm được tạo đơn (Người đề nghị), Trưởng Bộ phận duyệt sau khi Trưởng nhóm ký,
                         và Trưởng phòng/Trưởng xưởng phụ trách duyệt cho từng Bộ phận/Phòng ban. Tổng Giám Đốc không cần
                         khai báo ở đây (chỉ cần gán Role).
                     </p>

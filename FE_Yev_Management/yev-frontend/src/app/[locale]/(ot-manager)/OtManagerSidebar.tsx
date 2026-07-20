@@ -26,7 +26,7 @@ const navItems: OtNavItem[] = [
     { key: "otForms", href: "/ot/list", icon: ClipboardList, permission: "Attendance.OTForm.View" },
     // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này —
     // dùng .Create (không phải .View) vì đợt 2026-07-17 đã cấp thêm Department.View/Group.View/... cho
-    // Role Trưởng Group/Nhân viên (chỉ để load dropdown lúc tạo đơn), gate bằng .View sẽ lộ nhầm mục
+    // Role Trưởng Nhóm/Nhân viên (chỉ để load dropdown lúc tạo đơn), gate bằng .View sẽ lộ nhầm mục
     // quản trị cho 2 role này dù họ không có quyền CRUD gì trong đó.
     { key: "otCategories", href: "/ot/categories", icon: FolderCog, permission: "Attendance.Department.Create" },
     // Chỉ Admin/người có quyền quản trị phạm vi duyệt mới thấy mục này (docs/attendance-api-fe.md §5).

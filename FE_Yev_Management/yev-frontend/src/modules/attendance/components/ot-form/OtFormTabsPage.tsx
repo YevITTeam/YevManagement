@@ -26,7 +26,7 @@ export default function OtFormTabsPage() {
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
     // Role "Nhân viên" (mới 2026-07-17) cũng có OTForm.Create nhưng không có UserApprovalScope(Submitter)
-    // nên tab "Chờ tôi ký duyệt" luôn rỗng — ẩn hẳn cho gọn, chỉ Role "Trưởng Group" mới thấy tab này.
+    // nên tab "Chờ tôi ký duyệt" luôn rỗng — ẩn hẳn cho gọn, chỉ Role "Trưởng Nhóm" mới thấy tab này.
     const isGroupLead = Boolean(user?.roles.includes(SUBMITTER_ROLE_NAME));
 
     const visibleTabs = ALL_TABS.filter((tab) => {
