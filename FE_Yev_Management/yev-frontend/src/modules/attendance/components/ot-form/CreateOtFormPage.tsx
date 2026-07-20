@@ -294,10 +294,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }
 
         const orderStartMinutes = toMinutes(`${startTime}:00`);
-        const orderEndMinutes = toMinutes(`${endTime}:00`);
+        let orderEndMinutes = toMinutes(`${endTime}:00`);
+        if (orderEndMinutes < orderStartMinutes) orderEndMinutes += 24 * 60; // qua ngày hôm sau
         for (const employeeId of selectedEmployeeIds) {
             const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
-            const employeeEndMinutes = toMinutes(`${employeeEndTime}:00`);
+            let employeeEndMinutes = toMinutes(`${employeeEndTime}:00`);
+            if (employeeEndMinutes < orderStartMinutes) employeeEndMinutes += 24 * 60; // qua ngày hôm sau
             if (employeeEndMinutes <= orderStartMinutes || employeeEndMinutes > orderEndMinutes) {
                 const employee = groupEmployees.find((e) => e.id === employeeId);
                 toast.error(
