@@ -11,7 +11,14 @@ import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
-import { SUBMITTER_ROLE_NAME, approvalLevelLabels, scopeTypeLabels } from "@/modules/attendance/types/enums";
+import { EmployeeApi } from "@/modules/attendance/api/employee.api";
+import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import {
+    APPROVAL_LEVEL_ROLE_NAME,
+    APPROVAL_LEVEL_SCOPE_TYPE,
+    approvalLevelLabels,
+    scopeTypeLabels,
+} from "@/modules/attendance/types/enums";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -28,7 +35,7 @@ interface CreateFormState {
     approvalLevel: number; // 0=Submitter (quyền tạo đơn), 1=DepartmentManager, 2=WorkshopManager
 }
 
-const emptyForm: CreateFormState = { userName: "", scopeType: 0, scopeId: 0, approvalLevel: 1 };
+const emptyForm: CreateFormState = { userName: "", scopeType: 1, scopeId: 0, approvalLevel: 1 };
 
 // docs/attendance-api-fe.md §5 — Admin gán phạm vi duyệt cho Trưởng phòng/Trưởng xưởng. Không có PUT: sửa = xoá + tạo lại.
 export default function UserApprovalScopeManager() {
@@ -50,6 +57,9 @@ export default function UserApprovalScopeManager() {
     const [formOpen, setFormOpen] = useState(false);
     const [form, setForm] = useState<CreateFormState>(emptyForm);
     const [isSaving, setIsSaving] = useState(false);
+    // Gợi ý Group tự động khi Admin gõ/chọn 1 tài khoản (docs §1.3.F/§3.5) — best-effort, 404 là bình
+    // thường với Trưởng phòng/Trưởng xưởng/TGĐ/Trưởng Bộ phận (không nhất thiết có hồ sơ Employee).
+    const [suggestedGroup, setSuggestedGroup] = useState<EmployeeDto | null>(null);
 
     const [deletingScope, setDeletingScope] = useState<UserApprovalScopeDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -75,13 +85,35 @@ export default function UserApprovalScopeManager() {
         AuthApi.getAllUsersWithRoles().then(setUsersWithRoles).catch((err) => console.error(err));
     }, []);
 
+    // Xoá gợi ý cũ ngay khi tài khoản gõ đổi — so sánh snapshot trong thân render (không setState đồng
+    // bộ trong effect, theo quy ước react-hooks/set-state-in-effect ở CLAUDE.md).
+    const [suggestionKey, setSuggestionKey] = useState(form.userName);
+    if (suggestionKey !== form.userName) {
+        setSuggestionKey(form.userName);
+        setSuggestedGroup(null);
+    }
+
+    // Debounce 400ms trước khi tra GET /Employee/by-username/{userName} — tránh gọi API mỗi lần gõ phím.
+    useEffect(() => {
+        const userName = form.userName.trim();
+        if (!formOpen || !userName) return;
+        const timer = setTimeout(() => {
+            EmployeeApi.getEmployeeByUsername(userName)
+                .then(setSuggestedGroup)
+                .catch(() => setSuggestedGroup(null)); // 404 bình thường — không phải lỗi (docs §3.5).
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [formOpen, form.userName]);
+
     // Docs §5: chỉ chặn được khi tìm thấy đúng tài khoản (khớp userName tuyệt đối) và xác nhận thiếu Role —
     // không tìm thấy (vd đang gõ dở, sai hoa/thường theo AD) thì để BE tự quyết định, tránh chặn nhầm.
+    // Mở rộng cho cả 4 cấp (trước 2026-07-17 chỉ check Submitter) — xem docs §5 "vá lỗ hổng".
     const matchedUser = usersWithRoles.find(
         (u) => u.userName.trim().toLowerCase() === form.userName.trim().toLowerCase()
     );
-    const submitterRoleMissing =
-        form.approvalLevel === 0 && matchedUser !== undefined && !matchedUser.roles.includes(SUBMITTER_ROLE_NAME);
+    const requiredRoleName = APPROVAL_LEVEL_ROLE_NAME[form.approvalLevel];
+    const requiredRoleMissing =
+        matchedUser !== undefined && requiredRoleName !== undefined && !matchedUser.roles.includes(requiredRoleName);
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -102,8 +134,8 @@ export default function UserApprovalScopeManager() {
         event.preventDefault();
         // approvalLevel=0 (Submitter) là giá trị hợp lệ — không dùng truthy check kẻo bị coi là falsy.
         if (!form.userName.trim() || !form.scopeId) return;
-        if (submitterRoleMissing) {
-            toast.error(`Tài khoản chưa giữ Role "${SUBMITTER_ROLE_NAME}" — gán Role qua Quản lý người dùng trước khi thêm phân quyền Người đề nghị.`);
+        if (requiredRoleMissing) {
+            toast.error(`Tài khoản chưa giữ Role "${requiredRoleName}" — gán Role qua Quản lý người dùng trước khi thêm phân quyền này.`);
             return;
         }
         setIsSaving(true);
@@ -295,16 +327,50 @@ export default function UserApprovalScopeManager() {
                                 />
                             </label>
 
+                            {suggestedGroup && (form.approvalLevel === 0 || form.approvalLevel === 4) && (
+                                <div className="flex items-center justify-between gap-3 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
+                                    <span>
+                                        Gợi ý: tài khoản này thuộc Bộ phận <strong>{suggestedGroup.groupNameVn}</strong>.
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setForm((current) => ({ ...current, scopeType: 0, scopeId: suggestedGroup.groupId }))
+                                        }
+                                        disabled={isSaving}
+                                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-2 py-1 font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                    >
+                                        Dùng gợi ý
+                                    </button>
+                                </div>
+                            )}
+
                             <label className="block">
-                                <span className={fieldLabelClassName}>Phạm vi</span>
+                                <span className={fieldLabelClassName}>Cấp duyệt</span>
                                 <select
-                                    value={form.scopeType}
-                                    onChange={(event) =>
-                                        setForm((current) => ({ ...current, scopeType: Number(event.target.value), scopeId: 0 }))
-                                    }
+                                    value={form.approvalLevel}
+                                    onChange={(event) => {
+                                        const level = Number(event.target.value);
+                                        setForm((current) => ({
+                                            ...current,
+                                            approvalLevel: level,
+                                            scopeType: APPROVAL_LEVEL_SCOPE_TYPE[level] ?? current.scopeType,
+                                            scopeId: 0,
+                                        }));
+                                    }}
                                     disabled={isSaving}
                                     className={fieldClassName}
                                 >
+                                    <option value={0}>{approvalLevelLabels[0]} (quyền tạo đơn)</option>
+                                    <option value={4}>{approvalLevelLabels[4]} (duyệt sau khi Trưởng nhóm ký)</option>
+                                    <option value={1}>{approvalLevelLabels[1]}</option>
+                                    <option value={2}>{approvalLevelLabels[2]}</option>
+                                </select>
+                            </label>
+
+                            <label className="block">
+                                <span className={fieldLabelClassName}>Phạm vi (tự động theo Cấp duyệt)</span>
+                                <select value={form.scopeType} disabled className={fieldClassName}>
                                     <option value={0}>Bộ phận</option>
                                     <option value={1}>Phòng ban</option>
                                 </select>
@@ -330,37 +396,20 @@ export default function UserApprovalScopeManager() {
                                 </select>
                             </label>
 
-                            <label className="block">
-                                <span className={fieldLabelClassName}>Cấp duyệt</span>
-                                <select
-                                    value={form.approvalLevel}
-                                    onChange={(event) =>
-                                        setForm((current) => ({ ...current, approvalLevel: Number(event.target.value) }))
-                                    }
-                                    disabled={isSaving}
-                                    className={fieldClassName}
-                                >
-                                    <option value={0}>{approvalLevelLabels[0]} (quyền tạo đơn)</option>
-                                    <option value={4}>{approvalLevelLabels[4]} (duyệt sau khi Trưởng nhóm ký)</option>
-                                    <option value={1}>{approvalLevelLabels[1]}</option>
-                                    <option value={2}>{approvalLevelLabels[2]}</option>
-                                </select>
-                            </label>
-
-                            {form.approvalLevel === 0 && form.userName.trim() && (
+                            {form.userName.trim() && (
                                 <div
                                     className={`rounded-lg border px-3 py-2 text-xs ${
-                                        submitterRoleMissing
+                                        requiredRoleMissing
                                             ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
                                             : matchedUser
                                             ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                             : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
                                     }`}
                                 >
-                                    {submitterRoleMissing
-                                        ? `Tài khoản "${form.userName.trim()}" chưa giữ Role "${SUBMITTER_ROLE_NAME}" — BE sẽ từ chối. Gán Role này qua Quản lý người dùng trước.`
+                                    {requiredRoleMissing
+                                        ? `Tài khoản "${form.userName.trim()}" chưa giữ Role "${requiredRoleName}" — BE sẽ từ chối. Gán Role này qua Quản lý người dùng trước.`
                                         : matchedUser
-                                        ? `Tài khoản đã giữ Role "${SUBMITTER_ROLE_NAME}" ✓`
+                                        ? `Tài khoản đã giữ Role "${requiredRoleName}" ✓`
                                         : `Không tìm thấy tài khoản này trong danh sách người dùng — kiểm tra lại chính tả trước khi gửi.`}
                                 </div>
                             )}
@@ -376,7 +425,7 @@ export default function UserApprovalScopeManager() {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={isSaving || submitterRoleMissing}
+                                    disabled={isSaving || requiredRoleMissing}
                                     className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isSaving ? "Đang lưu..." : "Tạo mới"}

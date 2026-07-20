@@ -36,6 +36,16 @@ export interface OtFormEmployeeDto {
     isEligibleForMeal: boolean;
 }
 
+// GET /api/OtForm/my-create-scopes — §4.0a, mới 2026-07-17. Bộ phận/Phòng ban mà CHÍNH user gọi
+// được phép tạo đơn (suy từ UserApprovalScope(Submitter) hoặc Employee.GroupId). Mảng rỗng = Admin
+// (không giới hạn phạm vi) HOẶC tài khoản chưa được cấu hình gì — FE tự phân biệt 2 case này.
+export interface MyCreateScopeItemDto {
+    groupId: number;
+    groupNameVn: string;
+    departmentId: number;
+    departmentNameVn: string;
+}
+
 // Body POST /api/OtForm — §4.1. Không còn field chữ ký (BE tự lấy từ UserSignature/me).
 export interface CreateOtFormDto {
     groupId: number;

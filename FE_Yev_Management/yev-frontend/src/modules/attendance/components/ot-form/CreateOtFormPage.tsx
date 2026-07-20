@@ -15,9 +15,11 @@ import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import type { OtFormEmployeeInputDto, ProcessPartDto } from "@/modules/attendance/types/ot-form.dto";
+import type { MyCreateScopeItemDto, OtFormEmployeeInputDto, ProcessPartDto } from "@/modules/attendance/types/ot-form.dto";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -128,7 +130,12 @@ interface CreateOtFormPageProps {
 
 export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const router = useRouter();
+    const { user } = useAuth();
     const isEditMode = otFormId !== undefined;
+    // Admin là role duy nhất có quyền CRUD Danh mục (docs §3, §4.0a) — dùng permission này làm tín hiệu
+    // "không giới hạn phạm vi tạo đơn" khi GET /my-create-scopes trả mảng rỗng (phân biệt với tài
+    // khoản Nhân viên/Trưởng nhóm chưa được cấu hình gì — trường hợp đó phải chặn hẳn màn này).
+    const isUnrestrictedAdmin = hasPermission(user, "Attendance.Department.Create");
 
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [groups, setGroups] = useState<GroupDto[]>([]);
@@ -160,11 +167,62 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [loadError, setLoadError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Bộ phận/Phòng ban CHÍNH user được phép tạo đơn — gọi TRƯỚC khi cho chọn Phòng ban/Bộ phận, để tự
+    // điền sẵn (1 phần tử) hoặc thu hẹp dropdown (nhiều phần tử) thay vì bắt chọn từ toàn bộ danh sách
+    // (docs §4.0a/§1.3.A). null = đang tải, [] = Admin (bypass) HOẶC tài khoản chưa cấu hình gì.
+    const [createScopes, setCreateScopes] = useState<MyCreateScopeItemDto[] | null>(null);
+
     useEffect(() => {
         DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
         ReasonApi.getAllReasons().then(setReasons).catch((err) => console.error(err));
         OtCaseApi.getAllOtCases().then(setOtCases).catch((err) => console.error(err));
     }, []);
+
+    useEffect(() => {
+        OtFormApi.getMyCreateScopes()
+            .then((scopes) => {
+                setCreateScopes(scopes);
+                // Chỉ tự điền sẵn lúc Tạo mới — Sửa đơn đã đổ dữ liệu thật của đơn, không ghi đè (docs §1.3.A).
+                if (!isEditMode && scopes.length === 1) {
+                    setDepartmentId(scopes[0].departmentId);
+                    setGroupId(scopes[0].groupId);
+                }
+            })
+            .catch((err) => {
+                console.error(err);
+                setCreateScopes([]); // Lỗi tải → không chặn màn, coi như không có gợi ý (fallback dropdown tự do).
+            });
+    }, [isEditMode]);
+
+    const isScopeRestricted = createScopes !== null && createScopes.length > 0;
+    // Chỉ khoá cứng dropdown lúc Tạo mới — Sửa đơn vẫn cho đổi Bộ phận/Phòng ban trong phạm vi (docs §4.1b).
+    const isScopeLocked = !isEditMode && isScopeRestricted && createScopes!.length === 1;
+    // Mảng rỗng mà KHÔNG phải Admin → tài khoản chưa được cấp quyền tạo đơn cho Bộ phận nào — chặn hẳn
+    // màn "Tạo đơn tăng ca" thay vì cho vào form rồi chọn linh tinh rồi nhận lỗi 400 (docs §4.0a).
+    const isBlockedNoScope = !isEditMode && createScopes !== null && createScopes.length === 0 && !isUnrestrictedAdmin;
+
+    const visibleDepartments = useMemo(() => {
+        if (!isScopeRestricted) return departments.map((d) => ({ id: d.id, label: d.departmentNameVn }));
+        const map = new Map<number, string>();
+        createScopes!.forEach((s) => map.set(s.departmentId, s.departmentNameVn));
+        if (departmentId && !map.has(departmentId)) {
+            const existing = departments.find((d) => d.id === departmentId);
+            if (existing) map.set(existing.id, existing.departmentNameVn);
+        }
+        return Array.from(map, ([id, label]) => ({ id, label }));
+    }, [isScopeRestricted, createScopes, departments, departmentId]);
+
+    const visibleGroups = useMemo(() => {
+        if (!isScopeRestricted) return groups.map((g) => ({ id: g.id, label: g.groupNameVn }));
+        const options = createScopes!
+            .filter((s) => !departmentId || s.departmentId === departmentId)
+            .map((s) => ({ id: s.groupId, label: s.groupNameVn }));
+        if (groupId && !options.some((o) => o.id === groupId)) {
+            const existing = groups.find((g) => g.id === groupId);
+            if (existing) options.push({ id: existing.id, label: existing.groupNameVn });
+        }
+        return options;
+    }, [isScopeRestricted, createScopes, groups, departmentId, groupId]);
 
     useEffect(() => {
         if (isEditMode) return; // Sửa đơn không ký lại — không cần kiểm tra chữ ký.
@@ -353,6 +411,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         return <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{loadError}</div>;
     }
 
+    if (isBlockedNoScope) {
+        return (
+            <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">
+                Tài khoản chưa được cấp quyền tạo đơn cho Bộ phận nào — liên hệ Admin để được gán phân quyền
+                (&quot;Phân quyền duyệt&quot;) hoặc liên kết hồ sơ nhân viên tương ứng.
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             <div>
@@ -363,6 +430,19 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         : "Điền thông tin đơn, chọn nhân viên làm ngoài giờ. Đơn tạo ra ở trạng thái Nháp — cần Trưởng nhóm ký duyệt riêng (\"Chờ tôi ký duyệt\") mới vào luồng duyệt."}
                 </p>
             </div>
+
+            {!isEditMode && isScopeLocked && (
+                <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
+                    Tài khoản chỉ được tạo đơn cho <strong>{createScopes![0].groupNameVn}</strong> (
+                    {createScopes![0].departmentNameVn}) — đã tự điền sẵn.
+                </div>
+            )}
+
+            {!isEditMode && isScopeRestricted && !isScopeLocked && (
+                <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
+                    Tài khoản chỉ được tạo đơn cho các Bộ phận sau: {createScopes!.map((s) => s.groupNameVn).join(", ")}.
+                </div>
+            )}
 
             {!isEditMode && hasSignature === false && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
@@ -386,16 +466,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <select
                                 value={departmentId ?? ""}
                                 onChange={(event) => handleDepartmentChange(event.target.value)}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || isScopeLocked}
                                 required
                                 className={fieldClassName}
                             >
                                 <option value="" disabled>
                                     Chọn phòng ban...
                                 </option>
-                                {departments.map((department) => (
+                                {visibleDepartments.map((department) => (
                                     <option key={department.id} value={department.id}>
-                                        {department.departmentNameVn}
+                                        {department.label}
                                     </option>
                                 ))}
                             </select>
@@ -406,16 +486,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <select
                                 value={groupId ?? ""}
                                 onChange={(event) => handleGroupChange(event.target.value)}
-                                disabled={isSubmitting || !departmentId}
+                                disabled={isSubmitting || isScopeLocked || !departmentId}
                                 required
                                 className={fieldClassName}
                             >
                                 <option value="" disabled>
                                     {departmentId ? "Chọn bộ phận..." : "Chọn Phòng ban trước..."}
                                 </option>
-                                {groups.map((group) => (
+                                {visibleGroups.map((group) => (
                                     <option key={group.id} value={group.id}>
-                                        {group.groupNameVn}
+                                        {group.label}
                                     </option>
                                 ))}
                             </select>

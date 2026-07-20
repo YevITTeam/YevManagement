@@ -2,6 +2,7 @@ import { api } from "@/lib/client";
 import type {
     ApproveOtFormDto,
     CreateOtFormDto,
+    MyCreateScopeItemDto,
     OtFormDto,
     OtFormListItemDto,
     RejectOtFormDto,
@@ -12,6 +13,7 @@ import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 // Route /OtForm — docs/attendance-api-fe.md §4 (đã cập nhật 2026-07-16: thêm PUT sửa đơn + email-confirm public).
 const ENDPOINTS = {
     OT_FORM: {
+        getMyCreateScopes: "/OtForm/my-create-scopes",
         createOtForm: "/OtForm",
         getMyForms: "/OtForm/my-forms",
         getPendingSubmissions: "/OtForm/pending-submissions",
@@ -35,6 +37,12 @@ export interface GetOtFormListParams {
 }
 
 export const OtFormApi = {
+    // (Các) Bộ phận/Phòng ban CHÍNH user được phép tạo đơn — gọi TRƯỚC khi mở màn "Tạo đơn tăng ca"
+    // để tự điền sẵn/khoá dropdown thay vì bắt chọn lại từ toàn bộ danh sách (docs §4.0a).
+    getMyCreateScopes: async () => {
+        const response = await api.get<ApiResponse<MyCreateScopeItemDto[]>>(ENDPOINTS.OT_FORM.getMyCreateScopes);
+        return response.data;
+    },
     // Response 201, data trả về OtFormDto đầy đủ luôn — không cần gọi lại getOtFormById (docs §4.1).
     createOtForm: async (data: CreateOtFormDto) => {
         const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.createOtForm, data);

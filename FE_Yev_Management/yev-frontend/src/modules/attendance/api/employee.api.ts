@@ -8,6 +8,7 @@ const ENDPOINTS = {
         getAllEmployees: "/Employee/all",
         getEmployeeById: (id: number) => `/Employee/${id}`,
         getEmployeesByGroup: (groupId: number) => `/Employee/by-group/${groupId}`,
+        getEmployeeByUsername: (userName: string) => `/Employee/by-username/${encodeURIComponent(userName)}`,
         getMe: "/Employee/me",
         adjustAccumulation: (id: number) => `/Employee/${id}/adjust-accumulation`,
         createEmployee: "/Employee",
@@ -55,6 +56,13 @@ export const EmployeeApi = {
     // Chọn nhân viên hàng loạt khi lập đơn OT (docs/attendance-api-fe.md §3.5).
     getEmployeesByGroup: async (groupId: number) => {
         const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByGroup(groupId));
+        return response.data;
+    },
+    // Tra Group của 1 userName bất kỳ — gợi ý cho Admin ở màn "Phân quyền duyệt" (docs §3.5). 404 là
+    // bình thường (Trưởng phòng/Trưởng xưởng/TGĐ/Trưởng Bộ phận không nhất thiết có hồ sơ Employee),
+    // caller tự bắt lỗi và coi như "không có gợi ý" thay vì báo lỗi.
+    getEmployeeByUsername: async (userName: string) => {
+        const response = await api.get<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.getEmployeeByUsername(userName));
         return response.data;
     },
     // Không cần permission — chỉ cần đăng nhập. 404 nếu chưa được Admin gán userName (docs §3.6).

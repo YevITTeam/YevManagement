@@ -5,6 +5,26 @@
 // cho Role "Nhân viên" — có OTForm.Create nhưng không phải Trưởng Group nên tab luôn rỗng, docs §1.1).
 export const SUBMITTER_ROLE_NAME = "Trưởng Group";
 
+// Role Identity bắt buộc theo từng approvalLevel khi Admin gán UserApprovalScope — ràng buộc mở rộng
+// cho cả 4 cấp (trước 2026-07-17 chỉ áp dụng cho Submitter), xem docs §5 "Ràng buộc theo đúng Role".
+// BE luôn là nguồn chặn thật (400 nếu sai) — map này chỉ để FE cảnh báo sớm trước khi submit.
+export const APPROVAL_LEVEL_ROLE_NAME: Record<number, string> = {
+    0: SUBMITTER_ROLE_NAME,
+    4: "Trưởng Bộ phận",
+    1: "Trưởng phòng",
+    2: "Trưởng xưởng",
+};
+
+// scopeType bắt buộc theo từng approvalLevel (docs §5 "Ràng buộc ScopeType theo đúng thứ bậc", mới
+// 2026-07-17): Submitter/GroupHead luôn theo Bộ phận (Group), DepartmentManager/WorkshopManager luôn
+// theo Phòng ban (Department). FE ép sẵn PHẠM VI theo approvalLevel đã chọn để tránh lỗi 400.
+export const APPROVAL_LEVEL_SCOPE_TYPE: Record<number, number> = {
+    0: 0, // Submitter → Group
+    4: 0, // GroupHead → Group
+    1: 1, // DepartmentManager → Department
+    2: 1, // WorkshopManager → Department
+};
+
 export const approvalLevelLabels: Record<number, string> = {
     0: "Người đề nghị",
     1: "Trưởng phòng",
