@@ -119,6 +119,10 @@ namespace Identity.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("Email")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<string>("FullName")
                         .HasColumnType("nvarchar(max)");
 

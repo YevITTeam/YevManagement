@@ -67,8 +67,8 @@ namespace Asset.Application.Services
                 _unitOfWork.DeviceEmails.Update(email);
             }
 
-            // Chuyển dữ liệu vai trò/vị trí sử dụng của máy cũ sang máy mới (2026-07-11, chốt lại
-            // lần 2 theo quyết định người dùng): CHỈ BranchId/Manager/IsOutsourced/IsUseUsb — đây là
+            // Chuyển dữ liệu vai trò/vị trí sử dụng của máy cũ sang máy mới (2026-07-16, bổ sung
+            // Group/Department): BranchId/Manager/IsOutsourced/IsUseUsb/GroupId/DepartmentId — đây là
             // dữ liệu gắn theo vị trí/người dùng, không phải thuộc tính vật lý của thiết bị. KHÔNG
             // copy DeviceTypeId/SupplierId/PurchaseDate/ExpirationDate/DepreciationMonths (mỗi máy
             // vật lý có ngày mua/nhà cung cấp/loại/khấu hao riêng, không đại diện cho máy kia), cũng
@@ -78,6 +78,8 @@ namespace Asset.Application.Services
             newDevice.Manager = oldDevice.Manager;
             newDevice.IsOutsourced = oldDevice.IsOutsourced;
             newDevice.IsUseUsb = oldDevice.IsUseUsb;
+            newDevice.GroupId = oldDevice.GroupId;
+            newDevice.DepartmentId = oldDevice.DepartmentId;
 
             // Chuyển phần mềm cài: đổi DeviceId của từng dòng DeviceSoftware sang máy mới.
             // Nếu máy mới đã cài sẵn phần mềm đó rồi (trùng khoá kép DeviceId+SoftwareId) thì

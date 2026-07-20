@@ -24,7 +24,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Trưởng Group dùng liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm.
+        // Trưởng nhóm dùng liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm.
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("by-group/{groupId}")]
         public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByGroup(int groupId)
@@ -38,6 +38,28 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<EmployeeDto>>> GetById(int id)
         {
             var result = await _employeeService.GetByIdAsync(id);
+            return Success(result);
+        }
+
+        // Không gắn [RequirePermission] — chỉ cần đăng nhập. Nhân viên tự tra employeeId của chính
+        // mình (màn "Lũy kế của tôi") qua Employee.UserName khớp CurrentUserName. 404 nếu tài khoản
+        // đang đăng nhập chưa được Admin gán cho nhân viên nào (Employee.UserName vẫn null).
+        [HttpGet("me")]
+        public async Task<ActionResult<ApiResponse<EmployeeDto>>> GetMe()
+        {
+            var result = await _employeeService.GetByUserNameAsync(CurrentUserName);
+            return Success(result);
+        }
+
+        // Admin dùng ở màn "Phân quyền duyệt" (UserApprovalScope) để tra userName bất kỳ đang thuộc
+        // Group/Department nào trước khi gán scope — gợi ý, không bắt buộc (404 nếu userName đó chưa
+        // được gán Employee.UserName, thường gặp với Trưởng phòng/Trưởng xưởng/TGĐ vì họ không nhất
+        // thiết có hồ sơ Employee).
+        [RequirePermission("Attendance.Employee.View")]
+        [HttpGet("by-username/{userName}")]
+        public async Task<ActionResult<ApiResponse<EmployeeDto>>> GetByUserName(string userName)
+        {
+            var result = await _employeeService.GetByUserNameAsync(userName);
             return Success(result);
         }
 
@@ -65,6 +87,18 @@ namespace Attendance.Api.Controllers
         {
             await _employeeService.DeleteAsync(id);
             return Success(true, "Xóa nhân viên thành công.");
+        }
+
+        // Không gắn [RequirePermission] — chỉ cần đăng nhập (FallbackPolicy). Cho phép chính nhân
+        // viên (Employee.UserName khớp CurrentUserName) tự chỉnh lũy kế của mình, vì không phải ai
+        // cũng làm đúng giờ OT đã đăng ký trong form. Người có quyền Attendance.Employee.Update
+        // (Admin) chỉnh được cho bất kỳ nhân viên nào.
+        [HttpPatch("{id}/adjust-accumulation")]
+        public async Task<ActionResult<ApiResponse<bool>>> AdjustAccumulation(int id, [FromBody] AdjustEmployeeAccumulationDto request)
+        {
+            var canAdjustAny = User.HasClaim("Permission", "Attendance.Employee.Update");
+            await _employeeService.AdjustAccumulationAsync(id, CurrentUserName, canAdjustAny, request);
+            return Success(true, "Cập nhật lũy kế thành công.");
         }
     }
 }

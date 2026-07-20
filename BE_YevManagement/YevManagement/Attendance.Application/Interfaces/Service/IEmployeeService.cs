@@ -8,8 +8,12 @@ namespace Attendance.Application.Interfaces.Service
         Task<PagedResponse<EmployeeDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword);
         Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId);
         Task<EmployeeDto> GetByIdAsync(int id);
+        Task<EmployeeDto> GetByUserNameAsync(string userName);
         Task<EmployeeDto> CreateAsync(CreateEmployeeDto request);
         Task UpdateAsync(UpdateEmployeeDto request);
         Task DeleteAsync(int id);
+
+        // canAdjustAny=true (permission Attendance.Employee.Update) bỏ qua check UserName == currentUserName.
+        Task AdjustAccumulationAsync(int employeeId, string currentUserName, bool canAdjustAny, AdjustEmployeeAccumulationDto request);
     }
 }

@@ -204,9 +204,9 @@ namespace Asset.Application.Services
 
         private static string GetStatusText(int status) => status switch
         {
-            (int)IpAddressStatus.Available => "Chưa gán",
-            (int)IpAddressStatus.AssignedExternal => "Đã gán (khác)",
-            (int)IpAddressStatus.Assigned => "Đã gán",
+            (int)IpAddressStatus.Available => "Chưa sử dụng",
+            (int)IpAddressStatus.AssignedExternal => "Đã sử dụng (khác)",
+            (int)IpAddressStatus.Assigned => "Đã sử dụng",
             _ => "Không xác định"
         };
     }

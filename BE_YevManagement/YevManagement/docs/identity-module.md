@@ -39,7 +39,7 @@ Fluent (`IdentityDbContext.OnModelCreating`):
 ## 4. Services
 | Service | Method |
 |---|---|
-| `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync`, `UpdateUserRolesAsync`, `CreateUserAsync` (§5.1), `DeleteUserAsync` (§5.2, **xóa cứng**) |
+| `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync(roleId?)` (lọc theo Role qua `Roles.Any(r => r.Id == roleId)` khi có, 2026-07-16), `UpdateUserRolesAsync`, `CreateUserAsync` (§5.1), `DeleteUserAsync` (§5.2, **xóa cứng**) |
 | `RoleService` | CRUD role (`Create` ném `DomainException` nếu trùng tên; xóa = soft-delete). ⚠️ `GetRoleByIdAsync` **không check null** → NRE nếu id sai (nên `.OrThrowNotFound`) |
 | `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` — JWT HS256, loại claim `RolesLoaded`, hạn `JwtSettings:ExpiryMinutes` |
 | `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync`, `UpdateRolePermissionsAsync` (clear+add lại), `GetUserPermissionOverridesAsync`, `GetEffectivePermissionsForUserAsync`, `UpdateUserPermissionOverridesAsync` (§9.1) |
@@ -122,6 +122,7 @@ Mỗi action ↔ 1 mã `Module.Entity.Action`. Role sở hữu tập Permission 
 | `Asset.Report` | View |
 | `Asset.TransferHistory` | View, Create |
 | `Asset.Setting` | View, Update |
+| `Asset.AuditTrail` | View (seed migration `AddAssetAuditTrailPermission`, 2026-07-16 — **CHƯA apply**) |
 | `Identity.User` | View, UpdateRoles, UpdatePermissions, Create, Delete |
 | `Identity.Role` | View, Create, Update, Delete |
 | `Identity.Permission` | View |

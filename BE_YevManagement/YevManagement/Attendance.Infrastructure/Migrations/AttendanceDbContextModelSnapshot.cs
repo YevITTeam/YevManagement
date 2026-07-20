@@ -63,6 +63,12 @@ namespace Attendance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("AccumulationMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AccumulationYear")
+                        .HasColumnType("int");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -88,6 +94,10 @@ namespace Attendance.Infrastructure.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
 
+                    b.Property<string>("UserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<decimal>("YearToDate")
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
@@ -98,6 +108,10 @@ namespace Attendance.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex(new[] { "GroupId" }, "IX_Employees_GroupId");
+
+                    b.HasIndex(new[] { "UserName" }, "IX_Employees_UserName")
+                        .IsUnique()
+                        .HasFilter("[UserName] IS NOT NULL");
 
                     b.ToTable("Employees");
                 });
@@ -182,6 +196,10 @@ namespace Attendance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("CreatedByFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<string>("CreatedByUserName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -242,6 +260,53 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("OtForms");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalEmailToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ApprovalLevel")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ApproverFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ApproverUserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("OtFormId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "OtFormId" }, "IX_OtFormApprovalEmailTokens_OtFormId");
+
+                    b.HasIndex(new[] { "Token" }, "IX_OtFormApprovalEmailTokens_Token")
+                        .IsUnique();
+
+                    b.ToTable("OtFormApprovalEmailTokens");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalHistory", b =>
                 {
                     b.Property<int>("Id")
@@ -258,6 +323,10 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<int>("ApprovalLevel")
                         .HasColumnType("int");
+
+                    b.Property<string>("ApproverFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<string>("ApproverUserName")
                         .IsRequired()
@@ -313,6 +382,47 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("OtFormEmployees");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.PendingSignatureConfirmation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte[]>("SignatureImage")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "Token" }, "IX_PendingSignatureConfirmations_Token")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "UserName" }, "IX_PendingSignatureConfirmations_UserName");
+
+                    b.ToTable("PendingSignatureConfirmations");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.ProcessPart", b =>
                 {
                     b.Property<int>("Id")
@@ -338,7 +448,16 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<bool>("IsUseCopyRoom")
                         .HasColumnType("bit");
 
+                    b.Property<int>("MainTicketCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MilkCount")
+                        .HasColumnType("int");
+
                     b.Property<int>("OtFormId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SecondaryTicketCount")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -499,6 +618,18 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("Reason");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalEmailToken", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.OtForm", "OtForm")
+                        .WithMany("OtFormApprovalEmailTokens")
+                        .HasForeignKey("OtFormId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormApprovalEmailTokens_OtForms_OtFormId");
+
+                    b.Navigation("OtForm");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalHistory", b =>
                 {
                     b.HasOne("Attendance.Domain.Entities.OtForm", "OtForm")
@@ -570,6 +701,8 @@ namespace Attendance.Infrastructure.Migrations
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtForm", b =>
                 {
+                    b.Navigation("OtFormApprovalEmailTokens");
+
                     b.Navigation("OtFormApprovalHistories");
 
                     b.Navigation("OtFormEmployees");

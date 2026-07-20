@@ -31,6 +31,10 @@ public partial class OtForm
     // chỉ có UserName), theo đúng convention Asset.Domain.Models.AuditTrail.ChangedBy.
     public string CreatedByUserName { get; set; } = null!;
 
+    // Snapshot claim "FullName" của JWT tại thời điểm tạo đơn — để mọi nơi hiển thị (list/detail)
+    // luôn ra được tên người dùng thay vì UserName thô, cùng lý do với OtFormApprovalHistory.ApproverFullName.
+    public string? CreatedByFullName { get; set; }
+
     // Lưu enum Attendance.Domain.Enums.OtFormStatus dưới dạng int (theo convention Asset.Domain.Entities.Device.Status).
     public int Status { get; set; }
 
@@ -49,4 +53,6 @@ public partial class OtForm
     public virtual ICollection<OtFormEmployee> OtFormEmployees { get; set; } = new List<OtFormEmployee>();
 
     public virtual ICollection<OtFormApprovalHistory> OtFormApprovalHistories { get; set; } = new List<OtFormApprovalHistory>();
+
+    public virtual ICollection<OtFormApprovalEmailToken> OtFormApprovalEmailTokens { get; set; } = new List<OtFormApprovalEmailToken>();
 }
