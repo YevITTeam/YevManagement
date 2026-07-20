@@ -361,8 +361,8 @@ export default function UserApprovalScopeManager() {
                                     disabled={isSaving}
                                     className={fieldClassName}
                                 >
-                                    <option value={0}>{approvalLevelLabels[0]} (quyền tạo đơn)</option>
-                                    <option value={4}>{approvalLevelLabels[4]} (duyệt sau khi Trưởng nhóm ký)</option>
+                                    <option value={0}>Người đề nghị</option>
+                                    <option value={4}>{approvalLevelLabels[4]}</option>
                                     <option value={1}>{approvalLevelLabels[1]}</option>
                                     <option value={2}>{approvalLevelLabels[2]}</option>
                                 </select>

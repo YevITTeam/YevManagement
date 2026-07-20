@@ -44,7 +44,7 @@ const SIGNATURE_COLUMNS: { level: number; labelVn: string; labelJp: string }[] =
     { level: 2, labelVn: "Trưởng xưởng", labelJp: "工場長" },
     { level: 1, labelVn: "Trưởng phòng", labelJp: "部長" },
     { level: 4, labelVn: "Trưởng Bộ phận", labelJp: "課長" },
-    { level: 0, labelVn: "Người đề nghị", labelJp: "作成者" },
+    { level: 0, labelVn: "Trưởng nhóm", labelJp: "チームリーダー" },
 ];
 
 function findHistory(histories: OtFormApprovalHistoryDto[], level: number) {
