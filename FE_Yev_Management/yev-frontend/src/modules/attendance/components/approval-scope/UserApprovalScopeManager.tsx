@@ -11,7 +11,7 @@ import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
-import { approvalLevelLabels, scopeTypeLabels } from "@/modules/attendance/types/enums";
+import { SUBMITTER_ROLE_NAME, approvalLevelLabels, scopeTypeLabels } from "@/modules/attendance/types/enums";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -29,10 +29,6 @@ interface CreateFormState {
 }
 
 const emptyForm: CreateFormState = { userName: "", scopeType: 0, scopeId: 0, approvalLevel: 1 };
-
-// Ràng buộc BE (docs/attendance-api-fe.md §5, đợt 4): approvalLevel=0 (Submitter) chỉ tạo được nếu
-// userName đang giữ đúng Role này — tên phải khớp tuyệt đối với BE.
-const SUBMITTER_ROLE_NAME = "Trưởng Group";
 
 // docs/attendance-api-fe.md §5 — Admin gán phạm vi duyệt cho Trưởng phòng/Trưởng xưởng. Không có PUT: sửa = xoá + tạo lại.
 export default function UserApprovalScopeManager() {
@@ -153,8 +149,9 @@ export default function UserApprovalScopeManager() {
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền duyệt tăng ca</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Khai báo Trưởng Group được tạo đơn (Người đề nghị) và Trưởng phòng/Trưởng xưởng phụ trách duyệt
-                        cho từng Nhóm/Bộ phận. Tổng Giám Đốc không cần khai báo ở đây (chỉ cần gán Role).
+                        Khai báo Trưởng Group được tạo đơn (Người đề nghị), Trưởng Bộ phận duyệt sau khi Trưởng nhóm ký,
+                        và Trưởng phòng/Trưởng xưởng phụ trách duyệt cho từng Bộ phận/Phòng ban. Tổng Giám Đốc không cần
+                        khai báo ở đây (chỉ cần gán Role).
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -222,7 +219,9 @@ export default function UserApprovalScopeManager() {
                             )}
                             {scopes.map((scope) => (
                                 <tr key={scope.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{scope.userName}</td>
+                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">
+                                        {scope.userFullName ?? scope.userName}
+                                    </td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{scopeTypeLabels[scope.scopeType]}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{scope.scopeName}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{approvalLevelLabels[scope.approvalLevel]}</td>
@@ -306,13 +305,13 @@ export default function UserApprovalScopeManager() {
                                     disabled={isSaving}
                                     className={fieldClassName}
                                 >
-                                    <option value={0}>Nhóm</option>
-                                    <option value={1}>Bộ phận</option>
+                                    <option value={0}>Bộ phận</option>
+                                    <option value={1}>Phòng ban</option>
                                 </select>
                             </label>
 
                             <label className="block">
-                                <span className={fieldLabelClassName}>{form.scopeType === 0 ? "Nhóm" : "Bộ phận"}</span>
+                                <span className={fieldLabelClassName}>{form.scopeType === 0 ? "Bộ phận" : "Phòng ban"}</span>
                                 <select
                                     value={form.scopeId || ""}
                                     onChange={(event) => setForm((current) => ({ ...current, scopeId: Number(event.target.value) }))}
@@ -321,7 +320,7 @@ export default function UserApprovalScopeManager() {
                                     className={fieldClassName}
                                 >
                                     <option value="" disabled>
-                                        Chọn {form.scopeType === 0 ? "nhóm" : "bộ phận"}...
+                                        Chọn {form.scopeType === 0 ? "bộ phận" : "phòng ban"}...
                                     </option>
                                     {scopeOptions.map((option) => (
                                         <option key={option.id} value={option.id}>
@@ -342,6 +341,7 @@ export default function UserApprovalScopeManager() {
                                     className={fieldClassName}
                                 >
                                     <option value={0}>{approvalLevelLabels[0]} (quyền tạo đơn)</option>
+                                    <option value={4}>{approvalLevelLabels[4]} (duyệt sau khi Trưởng nhóm ký)</option>
                                     <option value={1}>{approvalLevelLabels[1]}</option>
                                     <option value={2}>{approvalLevelLabels[2]}</option>
                                 </select>

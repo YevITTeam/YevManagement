@@ -34,15 +34,16 @@ const labelCell = `${cell} bg-[#f2f2f2] font-semibold whitespace-nowrap`;
 const cellSm = "border border-black px-1 py-1 align-top text-[9px]";
 const labelCellSm = `${cellSm} bg-[#f2f2f2] font-semibold whitespace-nowrap`;
 
-// 4 ô ký theo đúng mẫu giấy gốc YEV-22-024 (src/assets/file-samples/FormOT.xlsx, đối chiếu thêm bản PDF
+// 5 ô ký theo mẫu giấy gốc YEV-22-024 (src/assets/file-samples/FormOT.xlsx, đối chiếu thêm bản PDF
 // mới hơn src/assets/file-ot-form/FormOT.pdf) — thứ tự trên giấy đi từ cấp cao nhất xuống thấp nhất, NGƯỢC
 // với thứ tự approvalLevel tăng dần dùng ở màn Chi tiết đơn. Bản Excel gốc (rev 3/2014) có thêm 1 cột ký
-// "Quản lý bộ phận" ở đầu — bỏ khi in vì hệ thống hiện tại (4 cấp duyệt Submitter→…→GeneralDirector) không
-// có dữ liệu cho cấp này.
+// "Quản lý bộ phận" ở đầu — trước đây bỏ khi in vì hệ thống không có dữ liệu cho cấp này; nay đúng là ô
+// "Trưởng Bộ phận" (GroupHead, mới 2026-07-17, ký SAU Người đề nghị/TRƯỚC Trưởng phòng) nên thêm lại.
 const SIGNATURE_COLUMNS: { level: number; labelVn: string; labelJp: string }[] = [
     { level: 3, labelVn: "Tổng Giám Đốc", labelJp: "社長" },
     { level: 2, labelVn: "Trưởng xưởng", labelJp: "工場長" },
     { level: 1, labelVn: "Trưởng phòng", labelJp: "部長" },
+    { level: 4, labelVn: "Trưởng Bộ phận", labelJp: "課長" },
     { level: 0, labelVn: "Người đề nghị", labelJp: "作成者" },
 ];
 

@@ -47,7 +47,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
     const [deletingGroup, setDeletingGroup] = useState<GroupDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    // grid-list toàn cục không lọc theo Bộ phận trong docs — nên khi có bộ lọc, tải toàn bộ theo
+    // grid-list toàn cục không lọc theo Phòng ban trong docs — nên khi có bộ lọc, tải toàn bộ theo
     // by-department rồi tự phân trang phía FE; khi không lọc thì dùng grid-list bình thường.
     const { isLoading, error, refetch: fetchGroups } = useFetchEffect<GroupPageResult>(
         async () => {
@@ -88,7 +88,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
             setHasPreviousPage(result.hasPreviousPage);
             if (result.safePageIndex !== pageIndex) setPageIndex(result.safePageIndex);
         },
-        "Không thể tải danh sách nhóm.",
+        "Không thể tải danh sách bộ phận.",
         (message) => toast.error(message)
     );
 
@@ -135,17 +135,17 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
         try {
             if (formMode === "create") {
                 await GroupApi.createGroup(values);
-                toast.success("Tạo nhóm thành công");
+                toast.success("Tạo bộ phận thành công");
             } else if (editingGroup) {
                 await GroupApi.updateGroup(editingGroup.id, values);
-                toast.success("Cập nhật nhóm thành công");
+                toast.success("Cập nhật bộ phận thành công");
             }
             setFormOpen(false);
             setEditingGroup(null);
             await fetchGroups();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo nhóm thất bại" : "Cập nhật nhóm thất bại"));
+            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo bộ phận thất bại" : "Cập nhật bộ phận thất bại"));
         } finally {
             setIsSaving(false);
         }
@@ -156,12 +156,12 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
         setIsDeleting(true);
         try {
             await GroupApi.deleteGroup(deletingGroup.id);
-            toast.success("Xoá nhóm thành công");
+            toast.success("Xoá bộ phận thành công");
             setDeletingGroup(null);
             await fetchGroups();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá nhóm thất bại"));
+            toast.error(getApiErrorMessage(err, "Xoá bộ phận thất bại"));
         } finally {
             setIsDeleting(false);
         }
@@ -176,7 +176,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Tìm theo mã hoặc tên nhóm..."
+                            placeholder="Tìm theo mã hoặc tên bộ phận..."
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <select
@@ -187,7 +187,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             }}
                             className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         >
-                            <option value="">Tất cả bộ phận</option>
+                            <option value="">Tất cả phòng ban</option>
                             {departments.map((department) => (
                                 <option key={department.id} value={department.id}>
                                     {department.departmentNameVn}
@@ -215,9 +215,9 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã nhóm</th>
-                                <th className="px-6 py-3">Tên nhóm</th>
-                                <th className="px-6 py-3">Bộ phận</th>
+                                <th className="px-6 py-3">Mã bộ phận</th>
+                                <th className="px-6 py-3">Tên bộ phận</th>
+                                <th className="px-6 py-3">Phòng ban</th>
                                 <th className="px-6 py-3 text-right">Thao tác</th>
                             </tr>
                         </thead>
@@ -225,7 +225,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             {!isLoading && groups.length === 0 && (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu nhóm.
+                                        Không có dữ liệu bộ phận.
                                     </td>
                                 </tr>
                             )}
@@ -290,10 +290,10 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
 
             <ConfirmDialog
                 isOpen={deletingGroup !== null}
-                title="Xoá nhóm"
+                title="Xoá bộ phận"
                 message={
                     <>
-                        Bạn có chắc muốn xoá nhóm <strong>{deletingGroup?.groupNameVn}</strong> không? Hành động này không
+                        Bạn có chắc muốn xoá bộ phận <strong>{deletingGroup?.groupNameVn}</strong> không? Hành động này không
                         thể hoàn tác.
                     </>
                 }

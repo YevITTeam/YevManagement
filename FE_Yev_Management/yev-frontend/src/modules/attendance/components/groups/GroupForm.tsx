@@ -28,7 +28,7 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// docs/attendance-api-fe.md §3.2 — mỗi Nhóm bắt buộc thuộc về 1 Bộ phận.
+// docs/attendance-api-fe.md §3.2 — mỗi Bộ phận bắt buộc thuộc về 1 Phòng ban.
 export default function GroupForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: GroupFormProps) {
     const [values, setValues] = useState<GroupFormValues>(emptyValues);
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
@@ -73,7 +73,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="group-form-title" className="text-lg font-semibold text-[#191c1e]">
-                        {mode === "create" ? "Thêm nhóm" : "Cập nhật nhóm"}
+                        {mode === "create" ? "Thêm bộ phận" : "Cập nhật bộ phận"}
                     </h3>
                     <button
                         type="button"
@@ -87,7 +87,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Bộ phận</span>
+                        <span className={fieldLabelClassName}>Phòng ban</span>
                         <select
                             value={values.departmentId || ""}
                             onChange={(event) => setValues((current) => ({ ...current, departmentId: Number(event.target.value) }))}
@@ -96,7 +96,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             className={fieldClassName}
                         >
                             <option value="" disabled>
-                                Chọn bộ phận...
+                                Chọn phòng ban...
                             </option>
                             {departments.map((department) => (
                                 <option key={department.id} value={department.id}>
@@ -107,11 +107,11 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Mã nhóm</span>
+                        <span className={fieldLabelClassName}>Mã bộ phận</span>
                         <input
                             value={values.groupCode}
                             onChange={(event) => setValues((current) => ({ ...current, groupCode: event.target.value }))}
-                            placeholder="Nhập mã nhóm..."
+                            placeholder="Nhập mã bộ phận..."
                             disabled={loading}
                             autoFocus
                             required
@@ -120,11 +120,11 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Tên nhóm (VN)</span>
+                        <span className={fieldLabelClassName}>Tên bộ phận (VN)</span>
                         <input
                             value={values.groupNameVn}
                             onChange={(event) => setValues((current) => ({ ...current, groupNameVn: event.target.value }))}
-                            placeholder="Nhập tên nhóm..."
+                            placeholder="Nhập tên bộ phận..."
                             disabled={loading}
                             required
                             className={fieldClassName}
@@ -132,7 +132,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Tên nhóm (JP)</span>
+                        <span className={fieldLabelClassName}>Tên bộ phận (JP)</span>
                         <input
                             value={values.groupNameJp ?? ""}
                             onChange={(event) => setValues((current) => ({ ...current, groupNameJp: event.target.value }))}

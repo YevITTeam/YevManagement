@@ -67,7 +67,7 @@ export default function DepartmentForm({ isOpen, mode, initial, loading = false,
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="department-form-title" className="text-lg font-semibold text-[#191c1e]">
-                        {mode === "create" ? "Thêm bộ phận" : "Cập nhật bộ phận"}
+                        {mode === "create" ? "Thêm phòng ban" : "Cập nhật phòng ban"}
                     </h3>
                     <button
                         type="button"
@@ -81,11 +81,11 @@ export default function DepartmentForm({ isOpen, mode, initial, loading = false,
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Mã bộ phận</span>
+                        <span className={fieldLabelClassName}>Mã phòng ban</span>
                         <input
                             value={values.departmentCode}
                             onChange={(event) => handleChange("departmentCode", event.target.value)}
-                            placeholder="Nhập mã bộ phận..."
+                            placeholder="Nhập mã phòng ban..."
                             disabled={loading}
                             autoFocus
                             required
@@ -94,11 +94,11 @@ export default function DepartmentForm({ isOpen, mode, initial, loading = false,
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Tên bộ phận (VN)</span>
+                        <span className={fieldLabelClassName}>Tên phòng ban (VN)</span>
                         <input
                             value={values.departmentNameVn}
                             onChange={(event) => handleChange("departmentNameVn", event.target.value)}
-                            placeholder="Nhập tên bộ phận..."
+                            placeholder="Nhập tên phòng ban..."
                             disabled={loading}
                             required
                             className={fieldClassName}
@@ -106,7 +106,7 @@ export default function DepartmentForm({ isOpen, mode, initial, loading = false,
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Tên bộ phận (JP)</span>
+                        <span className={fieldLabelClassName}>Tên phòng ban (JP)</span>
                         <input
                             value={values.departmentNameJp ?? ""}
                             onChange={(event) => handleChange("departmentNameJp", event.target.value)}

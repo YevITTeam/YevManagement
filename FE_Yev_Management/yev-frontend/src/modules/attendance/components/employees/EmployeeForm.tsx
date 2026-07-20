@@ -151,7 +151,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Nhóm</span>
+                        <span className={fieldLabelClassName}>Bộ phận</span>
                         <select
                             value={values.groupId || ""}
                             onChange={(event) => setValues((current) => ({ ...current, groupId: Number(event.target.value) }))}
@@ -160,7 +160,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             className={fieldClassName}
                         >
                             <option value="" disabled>
-                                Chọn nhóm...
+                                Chọn bộ phận...
                             </option>
                             {groups.map((group) => (
                                 <option key={group.id} value={group.id}>

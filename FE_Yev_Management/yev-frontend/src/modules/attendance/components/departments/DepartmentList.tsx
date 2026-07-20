@@ -43,7 +43,7 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
         },
-        "Không thể tải danh sách bộ phận.",
+        "Không thể tải danh sách phòng ban.",
         (message) => toast.error(message)
     );
 
@@ -84,17 +84,17 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
         try {
             if (formMode === "create") {
                 await DepartmentApi.createDepartment(values);
-                toast.success("Tạo bộ phận thành công");
+                toast.success("Tạo phòng ban thành công");
             } else if (editingDepartment) {
                 await DepartmentApi.updateDepartment(editingDepartment.id, values);
-                toast.success("Cập nhật bộ phận thành công");
+                toast.success("Cập nhật phòng ban thành công");
             }
             setFormOpen(false);
             setEditingDepartment(null);
             await fetchDepartments();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo bộ phận thất bại" : "Cập nhật bộ phận thất bại"));
+            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo phòng ban thất bại" : "Cập nhật phòng ban thất bại"));
         } finally {
             setIsSaving(false);
         }
@@ -105,12 +105,12 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
         setIsDeleting(true);
         try {
             await DepartmentApi.deleteDepartment(deletingDepartment.id);
-            toast.success("Xoá bộ phận thành công");
+            toast.success("Xoá phòng ban thành công");
             setDeletingDepartment(null);
             await fetchDepartments();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá bộ phận thất bại"));
+            toast.error(getApiErrorMessage(err, "Xoá phòng ban thất bại"));
         } finally {
             setIsDeleting(false);
         }
@@ -125,7 +125,7 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Tìm theo mã hoặc tên bộ phận..."
+                            placeholder="Tìm theo mã hoặc tên phòng ban..."
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
@@ -149,7 +149,7 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã bộ phận</th>
+                                <th className="px-6 py-3">Mã phòng ban</th>
                                 <th className="px-6 py-3">Tên (VN)</th>
                                 <th className="px-6 py-3">Tên (JP)</th>
                                 <th className="px-6 py-3 text-right">Thao tác</th>
@@ -159,7 +159,7 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
                             {!isLoading && departments.length === 0 && (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu bộ phận.
+                                        Không có dữ liệu phòng ban.
                                     </td>
                                 </tr>
                             )}
@@ -224,10 +224,10 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
 
             <ConfirmDialog
                 isOpen={deletingDepartment !== null}
-                title="Xoá bộ phận"
+                title="Xoá phòng ban"
                 message={
                     <>
-                        Bạn có chắc muốn xoá bộ phận <strong>{deletingDepartment?.departmentNameVn}</strong> không? Hành động
+                        Bạn có chắc muốn xoá phòng ban <strong>{deletingDepartment?.departmentNameVn}</strong> không? Hành động
                         này không thể hoàn tác.
                     </>
                 }

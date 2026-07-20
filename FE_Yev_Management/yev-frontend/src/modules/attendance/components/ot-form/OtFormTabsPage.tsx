@@ -1,0 +1,99 @@
+"use client";
+
+import { useState } from "react";
+
+import OtFormListPage from "./OtFormListPage";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
+import { SUBMITTER_ROLE_NAME } from "@/modules/attendance/types/enums";
+
+type OtFormTabKey = "my-forms" | "pending-submissions" | "pending-approvals" | "my-actions" | "my-participations";
+
+const ALL_TABS: { key: OtFormTabKey; label: string }[] = [
+    { key: "my-forms", label: "Đơn của tôi" },
+    { key: "pending-submissions", label: "Chờ tôi ký duyệt" },
+    { key: "pending-approvals", label: "Chờ tôi duyệt" },
+    { key: "my-actions", label: "Đơn đã xử lý" },
+    { key: "my-participations", label: "Đơn tôi tham gia" },
+];
+
+// docs/attendance-api-fe.md §1.1/§1.3.B (gộp 2026-07-17) — gộp 4 màn danh sách cũ ("Đơn của tôi"/
+// "Chờ tôi ký duyệt"/"Chờ tôi duyệt"/"Đơn đã xử lý") + 1 tab mới "Đơn tôi tham gia" thành 1 màn "Đơn
+// tăng ca" duy nhất. Chỉ gộp ở tầng UI — BE vẫn giữ nguyên 5 API riêng biệt, mỗi tab gọi đúng 1 API
+// (OtFormListPage đã tự làm việc này qua prop `mode`).
+export default function OtFormTabsPage() {
+    const { user } = useAuth();
+    const canCreate = hasPermission(user, "Attendance.OTForm.Create");
+    const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
+    // Role "Nhân viên" (mới 2026-07-17) cũng có OTForm.Create nhưng không có UserApprovalScope(Submitter)
+    // nên tab "Chờ tôi ký duyệt" luôn rỗng — ẩn hẳn cho gọn, chỉ Role "Trưởng Group" mới thấy tab này.
+    const isGroupLead = Boolean(user?.roles.includes(SUBMITTER_ROLE_NAME));
+
+    const visibleTabs = ALL_TABS.filter((tab) => {
+        if (tab.key === "my-forms") return canCreate;
+        if (tab.key === "pending-submissions") return canCreate && isGroupLead;
+        if (tab.key === "pending-approvals") return canApprove;
+        return true; // "my-actions"/"my-participations" luôn hiện — chỉ cần OTForm.View để vào được cả màn
+    });
+
+    const [activeTab, setActiveTab] = useState<OtFormTabKey | null>(null);
+    const [visitedTabs, setVisitedTabs] = useState<Set<OtFormTabKey>>(new Set());
+
+    // Chọn tab đầu tiên user thấy được làm mặc định — so sánh snapshot ngay trong render (không dùng
+    // effect để setState, xem CLAUDE.md), chỉ chạy đúng 1 lần cho tới khi activeTab được set.
+    const defaultTab = visibleTabs[0]?.key ?? null;
+    if (activeTab === null && defaultTab !== null) {
+        setActiveTab(defaultTab);
+        setVisitedTabs((current) => new Set(current).add(defaultTab));
+    }
+
+    const selectTab = (key: OtFormTabKey) => {
+        setActiveTab(key);
+        setVisitedTabs((current) => (current.has(key) ? current : new Set(current).add(key)));
+    };
+
+    if (visibleTabs.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-semibold text-[#191c1e]">Đơn tăng ca</h1>
+                <p className="mt-1 text-[15px] text-[#5e3f3a]">Danh sách đơn tăng ca theo từng vai trò của bạn.</p>
+            </div>
+
+            <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">
+                {visibleTabs.map((tab) => {
+                    const isActive = activeTab === tab.key;
+                    return (
+                        <button
+                            key={tab.key}
+                            onClick={() => selectTab(tab.key)}
+                            className={`cursor-pointer border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+                                isActive
+                                    ? "border-[#e3000f] text-[#191c1e]"
+                                    : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/*
+                Lazy-mount rồi giữ luôn (giống CategoryManagement) — tab nào chưa từng bấm vào thì chưa
+                mount (chưa gọi API), tab đã ghé qua giữ mounted (ẩn bằng "hidden") để chuyển qua lại
+                tức thì trong phiên này, không tải lại.
+            */}
+            {visibleTabs.map((tab) =>
+                visitedTabs.has(tab.key) ? (
+                    <div key={tab.key} className={activeTab === tab.key ? "" : "hidden"}>
+                        <OtFormListPage mode={tab.key} hideHeading />
+                    </div>
+                ) : null
+            )}
+        </div>
+    );
+}

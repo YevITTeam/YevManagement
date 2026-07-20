@@ -48,7 +48,7 @@ export const GroupApi = {
         const response = await api.get<ApiResponse<GroupDto>>(ENDPOINTS.GROUP.getGroupById(id));
         return response.data;
     },
-    // Cascading dropdown Nhóm theo Bộ phận đã chọn (docs/attendance-api-fe.md §3.2).
+    // Cascading dropdown Bộ phận theo Phòng ban đã chọn (docs/attendance-api-fe.md §3.2).
     getGroupsByDepartment: async (departmentId: number) => {
         const response = await api.get<ApiResponse<GroupDto[]>>(ENDPOINTS.GROUP.getGroupsByDepartment(departmentId));
         return response.data;

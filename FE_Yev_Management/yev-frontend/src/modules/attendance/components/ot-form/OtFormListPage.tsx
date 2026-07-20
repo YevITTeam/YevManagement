@@ -5,16 +5,26 @@ import { toast } from "react-toastify";
 import { useRouter } from "@/navigation";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import type { OtFormListItemDto } from "@/modules/attendance/types/ot-form.dto";
-import { otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
+import type { OtFormApprovalSummaryItemDto, OtFormListItemDto } from "@/modules/attendance/types/ot-form.dto";
+import {
+    approvalLevelLabels,
+    nextApprovalLevelFromStatus,
+    otFormStatusClasses,
+    otFormStatusLabels,
+} from "@/modules/attendance/types/enums";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
+type OtFormListMode = "my-forms" | "pending-submissions" | "pending-approvals" | "my-actions" | "my-participations";
+
 interface OtFormListPageProps {
-    mode: "my-forms" | "pending-submissions" | "pending-approvals" | "my-actions";
+    mode: OtFormListMode;
+    // true khi nhúng trong tab container (OtFormTabsPage) — ẩn hẳn tiêu đề/mô tả riêng của từng mode,
+    // chỉ còn bảng + phân trang, vì tab container đã có 1 tiêu đề chung ở ngoài.
+    hideHeading?: boolean;
 }
 
 function formatDate(value: string) {
@@ -22,9 +32,37 @@ function formatDate(value: string) {
     return new Date(value).toLocaleDateString("vi-VN");
 }
 
+// "Tiến độ duyệt" (approvalSummary, mới 2026-07-17) — mỗi phần tử 1 dòng đã Ký/Duyệt/Từ chối, nối thêm
+// dòng "Đang chờ..." suy từ status nếu đơn chưa Completed/Rejected — có ở cả 5 tab danh sách (§4.2).
+function ApprovalSummaryCell({ summary, status }: { summary: OtFormApprovalSummaryItemDto[]; status: number }) {
+    const nextLevel = nextApprovalLevelFromStatus(status);
+    if (summary.length === 0 && nextLevel === null) {
+        return <span className="text-xs text-[#9aa0a6]">-</span>;
+    }
+    return (
+        <div className="space-y-0.5">
+            {summary.map((item, index) => {
+                const isRejected = item.action === 2;
+                return (
+                    <div
+                        key={index}
+                        className={`text-xs ${isRejected ? "text-[#930006]" : "text-emerald-700"}`}
+                    >
+                        {isRejected ? "✗" : "✓"} {item.approverFullName ?? item.approverUserName} (
+                        {approvalLevelLabels[item.approvalLevel] ?? "?"})
+                    </div>
+                );
+            })}
+            {nextLevel !== null && (
+                <div className="text-xs text-[#9a5b00]">Đang chờ {approvalLevelLabels[nextLevel] ?? "?"}</div>
+            )}
+        </div>
+    );
+}
+
 // docs/attendance-api-fe.md §4.2 — my-forms (đơn do chính mình tạo) và pending-approvals (đơn chờ chính
 // mình duyệt, BE tự lọc theo cấp/scope) dùng chung shape OtFormListItemDto + phân trang.
-export default function OtFormListPage({ mode }: OtFormListPageProps) {
+export default function OtFormListPage({ mode, hideHeading = false }: OtFormListPageProps) {
     const router = useRouter();
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
@@ -52,7 +90,9 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                 ? OtFormApi.getPendingSubmissions({ pageIndex, pageSize: PAGE_SIZE })
                 : mode === "pending-approvals"
                 ? OtFormApi.getPendingApprovals({ pageIndex, pageSize: PAGE_SIZE })
-                : OtFormApi.getMyActions({ pageIndex, pageSize: PAGE_SIZE }),
+                : mode === "my-actions"
+                ? OtFormApi.getMyActions({ pageIndex, pageSize: PAGE_SIZE })
+                : OtFormApi.getMyParticipations({ pageIndex, pageSize: PAGE_SIZE }),
         [mode, pageIndex],
         (result) => {
             setForms(result.data);
@@ -72,7 +112,9 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
             ? "Chờ tôi ký duyệt"
             : mode === "pending-approvals"
             ? "Chờ tôi duyệt"
-            : "Đơn tôi đã xử lý";
+            : mode === "my-actions"
+            ? "Đơn đã xử lý"
+            : "Đơn tôi tham gia";
     const description =
         mode === "my-forms"
             ? "Danh sách đơn tăng ca do bạn tạo."
@@ -80,15 +122,19 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
             ? "Danh sách đơn tăng ca đang Nháp, chờ bạn ký duyệt \"Người đề nghị\" trước khi vào luồng duyệt."
             : mode === "pending-approvals"
             ? "Danh sách đơn tăng ca đang chờ bạn duyệt ở cấp hiện tại."
-            : "Danh sách đơn tăng ca bạn đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào (kể cả đơn đã xử lý xong).";
-    const columnCount = mode === "my-forms" ? 8 : 7;
+            : mode === "my-actions"
+            ? "Danh sách đơn tăng ca bạn đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào (kể cả đơn đã xử lý xong)."
+            : "Danh sách đơn tăng ca bạn CÓ TÊN trong danh sách nhân viên, dù không phải người tạo/ký/duyệt.";
+    const columnCount = mode === "my-forms" ? 9 : 8;
 
     return (
         <div className="space-y-8">
-            <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{title}</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">{description}</p>
-            </div>
+            {!hideHeading && (
+                <div>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">{title}</h1>
+                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{description}</p>
+                </div>
+            )}
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
@@ -112,13 +158,14 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Bộ phận / Nhóm</th>
+                                <th className="px-6 py-3">Phòng ban / Bộ phận</th>
                                 <th className="px-6 py-3">Trường hợp</th>
                                 <th className="px-6 py-3">Ngày</th>
                                 <th className="px-6 py-3">Số giờ</th>
                                 <th className="px-6 py-3">Số NV</th>
                                 <th className="px-6 py-3">Người tạo</th>
                                 <th className="px-6 py-3">Trạng thái</th>
+                                <th className="px-6 py-3">Tiến độ duyệt</th>
                                 {mode === "my-forms" && <th className="px-6 py-3 text-right">Thao tác</th>}
                             </tr>
                         </thead>
@@ -153,6 +200,9 @@ export default function OtFormListPage({ mode }: OtFormListPageProps) {
                                         >
                                             {otFormStatusLabels[form.status] ?? "Không xác định"}
                                         </span>
+                                    </td>
+                                    <td className="px-6 py-4 align-top">
+                                        <ApprovalSummaryCell summary={form.approvalSummary} status={form.status} />
                                     </td>
                                     {mode === "my-forms" && (
                                         <td className="px-6 py-4 align-top text-right">

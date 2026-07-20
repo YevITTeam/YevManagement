@@ -11,8 +11,8 @@ import type { ListHandle } from "./list-toolbar";
 type CategoryTab = "departments" | "groups" | "reasons" | "ot-cases" | "employees";
 
 const tabs: { key: CategoryTab; label: string; addLabel: string }[] = [
-    { key: "departments", label: "Bộ phận", addLabel: "+ Thêm bộ phận" },
-    { key: "groups", label: "Nhóm", addLabel: "+ Thêm nhóm" },
+    { key: "departments", label: "Phòng ban", addLabel: "+ Thêm phòng ban" },
+    { key: "groups", label: "Bộ phận", addLabel: "+ Thêm bộ phận" },
     { key: "reasons", label: "Lý do", addLabel: "+ Thêm lý do" },
     { key: "ot-cases", label: "Trường hợp OT", addLabel: "+ Thêm trường hợp OT" },
     { key: "employees", label: "Nhân viên", addLabel: "+ Thêm nhân viên" },
@@ -20,6 +20,11 @@ const tabs: { key: CategoryTab; label: string; addLabel: string }[] = [
 
 export default function CategoryManagement() {
     const [activeTab, setActiveTab] = useState<CategoryTab>("departments");
+    // Tab nào đã từng được xem thì mới mount (và giữ mounted luôn sau đó) — chỉ tab "departments"
+    // (mặc định) mount ngay từ đầu. Tránh gọi song song cả 5 API mỗi lần vào màn "Danh mục" trong khi
+    // đa số user chỉ xem 1-2 tab/lượt, nhưng vẫn giữ được lợi ích "chuyển tab tức thì, không tải lại"
+    // cho những tab đã ghé qua trong phiên này.
+    const [visitedTabs, setVisitedTabs] = useState<Set<CategoryTab>>(() => new Set(["departments"]));
     // Cả 5 list giờ mounted song song (xem ghi chú bên dưới) nên mỗi list phải báo loading vào
     // đúng slot riêng của nó — nếu dùng chung 1 state boolean, list nào báo xong (setLoading(false))
     // sau cùng sẽ đè mất trạng thái loading thật của tab đang xem.
@@ -55,7 +60,7 @@ export default function CategoryManagement() {
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">Danh mục tăng ca</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Quản lý Bộ phận, Nhóm, Lý do, Trường hợp OT và Nhân viên dùng khi lập đơn tăng ca.
+                        Quản lý Phòng ban, Bộ phận, Lý do, Trường hợp OT và Nhân viên dùng khi lập đơn tăng ca.
                     </p>
                 </div>
 
@@ -82,7 +87,10 @@ export default function CategoryManagement() {
                     return (
                         <button
                             key={tab.key}
-                            onClick={() => setActiveTab(tab.key)}
+                            onClick={() => {
+                                setActiveTab(tab.key);
+                                setVisitedTabs((current) => (current.has(tab.key) ? current : new Set(current).add(tab.key)));
+                            }}
                             className={`cursor-pointer border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
                                 isActive
                                     ? "border-[#e3000f] text-[#191c1e]"
@@ -96,28 +104,36 @@ export default function CategoryManagement() {
             </div>
 
             {/*
-                Cố ý giữ cả 5 list luôn mounted (ẩn/hiện bằng "hidden", không unmount) thay vì
-                `{activeTab === "x" && <XList/>}` như trước — conditional mount khiến mỗi lần đổi tab
-                list cũ bị huỷ và list mới phải gọi lại API + chờ load lại từ đầu, nên bấm qua đủ 5 tab
-                là 5 lần chờ tuần tự. Giữ mounted giúp cả 5 API gọi song song ngay khi vào "Danh mục"
-                (chỉ phải chờ 1 lần, tốc độ = list chậm nhất chứ không phải tổng cả 5) và tab đã xem rồi
-                thì chuyển qua lại tức thì, không phải tải lại.
+                Mount theo kiểu "lazy, rồi giữ luôn" — tab nào chưa từng bấm vào thì chưa mount (chưa gọi
+                API), tab nào đã ghé qua thì giữ mounted (ẩn bằng "hidden", không unmount) để chuyển qua
+                lại tức thì, không tải lại. Khác với mount cả 5 song song ngay từ đầu (bản cũ): tránh gọi
+                5 API cùng lúc khi phần lớn lượt vào màn "Danh mục" chỉ cần xem 1-2 tab.
             */}
-            <div className={activeTab === "departments" ? "" : "hidden"}>
-                <DepartmentList ref={departmentRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, departments: value }))} />
-            </div>
-            <div className={activeTab === "groups" ? "" : "hidden"}>
-                <GroupList ref={groupRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, groups: value }))} />
-            </div>
-            <div className={activeTab === "reasons" ? "" : "hidden"}>
-                <ReasonList ref={reasonRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, reasons: value }))} />
-            </div>
-            <div className={activeTab === "ot-cases" ? "" : "hidden"}>
-                <OtCaseList ref={otCaseRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, "ot-cases": value }))} />
-            </div>
-            <div className={activeTab === "employees" ? "" : "hidden"}>
-                <EmployeeList ref={employeeRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, employees: value }))} />
-            </div>
+            {visitedTabs.has("departments") && (
+                <div className={activeTab === "departments" ? "" : "hidden"}>
+                    <DepartmentList ref={departmentRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, departments: value }))} />
+                </div>
+            )}
+            {visitedTabs.has("groups") && (
+                <div className={activeTab === "groups" ? "" : "hidden"}>
+                    <GroupList ref={groupRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, groups: value }))} />
+                </div>
+            )}
+            {visitedTabs.has("reasons") && (
+                <div className={activeTab === "reasons" ? "" : "hidden"}>
+                    <ReasonList ref={reasonRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, reasons: value }))} />
+                </div>
+            )}
+            {visitedTabs.has("ot-cases") && (
+                <div className={activeTab === "ot-cases" ? "" : "hidden"}>
+                    <OtCaseList ref={otCaseRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, "ot-cases": value }))} />
+                </div>
+            )}
+            {visitedTabs.has("employees") && (
+                <div className={activeTab === "employees" ? "" : "hidden"}>
+                    <EmployeeList ref={employeeRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, employees: value }))} />
+                </div>
+            )}
         </div>
     );
 }

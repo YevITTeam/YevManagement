@@ -39,9 +39,10 @@ function formatTime(value: string) {
     return value?.slice(0, 5) ?? "-";
 }
 
-// 4 ô ký theo mẫu giấy gốc YEV-22-024 (src/assets/file-ot-form/FormOT.pdf): Người đề nghị → Trưởng
-// phòng → Trưởng xưởng → Tổng Giám Đốc. approvalLevel trong lịch sử map trực tiếp vào timeline này.
-const TIMELINE_LEVELS = [0, 1, 2, 3];
+// Thứ tự ký THẬT (không phải thứ tự số enum): Người đề nghị(0) → Trưởng Bộ phận(4, mới 2026-07-17) →
+// Trưởng phòng(1) → Trưởng xưởng(2) → Tổng Giám Đốc(3). approvalLevel trong lịch sử map trực tiếp
+// vào timeline này — xem docs §Đợt 6.
+const TIMELINE_LEVELS = [0, 4, 1, 2, 3];
 
 export default function OtFormDetail({ id }: OtFormDetailProps) {
     const { user } = useAuth();
@@ -302,7 +303,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lịch sử ký duyệt</h2>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                     {TIMELINE_LEVELS.map((level) => {
                         const history = form.approvalHistories.find((item) => item.approvalLevel === level);
                         return (

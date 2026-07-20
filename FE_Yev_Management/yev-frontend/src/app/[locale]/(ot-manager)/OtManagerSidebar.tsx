@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { FilePlus2, ClipboardList, ClipboardCheck, FolderCog, ShieldCheck, PenTool, PanelLeftClose, CalendarClock, FileSignature, History } from "lucide-react";
+import { FilePlus2, ClipboardList, FolderCog, ShieldCheck, PenTool, PanelLeftClose, CalendarClock } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -18,15 +18,16 @@ interface OtNavItem {
 // (otAccumulation) cố ý KHÔNG gắn permission — bất kỳ user đăng nhập nào cũng thấy được (§3.6/§1.4).
 const navItems: OtNavItem[] = [
     { key: "otCreate", href: "/ot/create", icon: FilePlus2, permission: "Attendance.OTForm.Create" },
-    { key: "otMyForms", href: "/ot/my-forms", icon: ClipboardList, permission: "Attendance.OTForm.Create" },
-    // Đơn Draft chờ Trưởng nhóm ký duyệt "Người đề nghị" — endpoint riêng /pending-submissions,
-    // dùng chung permission Create vì Role "Trưởng Group" không có Approve (docs §1.1/§4.2a).
-    { key: "otPendingSubmissions", href: "/ot/pending-submissions", icon: FileSignature, permission: "Attendance.OTForm.Create" },
-    { key: "otPendingApprovals", href: "/ot/pending-approvals", icon: ClipboardCheck, permission: "Attendance.OTForm.Approve" },
-    // Lịch sử đơn CHÍNH user đã Ký/Duyệt/Từ chối — dùng chung permission View cho cả 4 Role (docs §4.2b/§1.4).
-    { key: "otMyActions", href: "/ot/my-actions", icon: History, permission: "Attendance.OTForm.View" },
-    // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này.
-    { key: "otCategories", href: "/ot/categories", icon: FolderCog, permission: "Attendance.Department.View" },
+    // Gộp 2026-07-17: "Đơn của tôi"/"Chờ tôi ký duyệt"/"Chờ tôi duyệt"/"Đơn đã xử lý"/"Đơn tôi tham
+    // gia" giờ là 5 tab trong CÙNG 1 màn — permission gate ở đây chỉ cần OTForm.View (điều kiện chung
+    // nhỏ nhất, đủ cho mọi Role nghiệp vụ); từng tab bên trong tự ẩn/hiện theo permission chi tiết hơn
+    // (xem OtFormTabsPage.tsx).
+    { key: "otForms", href: "/ot/forms", icon: ClipboardList, permission: "Attendance.OTForm.View" },
+    // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này —
+    // dùng .Create (không phải .View) vì đợt 2026-07-17 đã cấp thêm Department.View/Group.View/... cho
+    // Role Trưởng Group/Nhân viên (chỉ để load dropdown lúc tạo đơn), gate bằng .View sẽ lộ nhầm mục
+    // quản trị cho 2 role này dù họ không có quyền CRUD gì trong đó.
+    { key: "otCategories", href: "/ot/categories", icon: FolderCog, permission: "Attendance.Department.Create" },
     // Chỉ Admin/người có quyền quản trị phạm vi duyệt mới thấy mục này (docs/attendance-api-fe.md §5).
     { key: "otApprovalScopes", href: "/ot/approval-scopes", icon: ShieldCheck, permission: "Attendance.UserApprovalScope.View" },
     { key: "otSignature", href: "/ot/signature", icon: PenTool, permission: "Attendance.UserSignature.Update" },

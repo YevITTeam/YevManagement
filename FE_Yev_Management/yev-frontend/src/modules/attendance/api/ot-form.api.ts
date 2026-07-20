@@ -17,6 +17,7 @@ const ENDPOINTS = {
         getPendingSubmissions: "/OtForm/pending-submissions",
         getPendingApprovals: "/OtForm/pending-approvals",
         getMyActions: "/OtForm/my-actions",
+        getMyParticipations: "/OtForm/my-participations",
         getOtFormById: (id: number) => `/OtForm/${id}`,
         updateOtForm: (id: number) => `/OtForm/${id}`,
         submitOtForm: (id: number) => `/OtForm/${id}/submit`,
@@ -89,6 +90,19 @@ export const OtFormApi = {
         if (params?.pageSize) query.set("PageSize", String(params.pageSize));
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.OT_FORM.getMyActions}?${queryString}` : ENDPOINTS.OT_FORM.getMyActions;
+        const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
+        return response.data;
+    },
+    // Đơn mà chính user gọi API CÓ TÊN trong danh sách tăng ca (OtFormEmployee), bất kể có phải người
+    // tạo/ký/duyệt hay không — trả rỗng (không lỗi) nếu account chưa được gán Employee.userName (§4.2c).
+    getMyParticipations: async (params?: GetOtFormListParams) => {
+        const query = new URLSearchParams();
+        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
+        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        const queryString = query.toString();
+        const url = queryString
+            ? `${ENDPOINTS.OT_FORM.getMyParticipations}?${queryString}`
+            : ENDPOINTS.OT_FORM.getMyParticipations;
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
         return response.data;
     },

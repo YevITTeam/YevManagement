@@ -12,6 +12,8 @@
 - **Cập nhật 2026-07-16 (đợt 3 — breaking)**: (1) `ProcessPartDto` thêm `mainTicketCount`/`secondaryTicketCount`/`milkCount` (số lượng phiếu ăn theo loại, nhập tay, chung cho cả đơn — §4.1/§4.1b/§4.3); (2) `PUT /api/UserSignature/me` **đổi hành vi hoàn toàn** — không còn áp dụng chữ ký ngay, mà gửi email xác nhận cho chính user, chữ ký chỉ có hiệu lực sau khi bấm xác nhận qua trang public do FE tự xây (§6, §6b); (3) `POST /api/OtForm/{id}/approve` khi còn cấp duyệt tiếp theo sẽ tự gửi email kèm link Duyệt/Từ chối cho người phù hợp — kênh **bổ sung**, không thay nút trong app (§4.6); (4) thêm `EmployeeImportController` cho Admin import Excel nhân sự hàng loạt (§3.7).
 - **Cập nhật 2026-07-16 (đợt 4 — breaking, tách "người tạo đơn" khỏi "Trưởng nhóm")**: `POST /api/OtForm` **không còn ký "Người đề nghị" ngay** — chỉ tạo đơn ở `status = 5 Draft`. Phải gọi thêm `POST /api/OtForm/{id}/submit` (Trưởng nhóm ký duyệt) thì đơn mới chuyển sang `status = 0 Pending` (chờ Trưởng phòng) — xem §4.1, §4.1a. `isEditable` (`OtFormDto`/`OtFormListItemDto`) giờ đúng khi `status` là `Draft` **hoặc** `Pending` (trước chỉ `Pending`). Admin gán `UserApprovalScope(approvalLevel=Submitter)` giờ **chỉ thành công nếu `userName` đã có Role "Trưởng Group"** — xem §5.
 - **Cập nhật 2026-07-17 (đợt 5)**: thêm `GET /api/OtForm/my-actions` — lịch sử đơn **chính mình đã Ký/Duyệt/Từ chối** ở bất kỳ cấp nào, dùng chung cho cả 4 Role (`Attendance.OTForm.View`). Vá lỗ hổng UX: trước đó đơn vừa xử lý xong (Ký ở `/submit`, hoặc Duyệt/Từ chối ở `/approve`, `/reject`) lập tức biến mất khỏi `pending-submissions`/`pending-approvals`, không có màn nào xem lại — xem §4.2b.
+- **Cập nhật 2026-07-17 (đợt 6 — breaking, thêm cấp duyệt "Trưởng Bộ phận")**: phát hiện qua email thật của công ty rằng luồng duyệt thiếu 1 cấp — sau khi Trưởng nhóm ký, đơn phải qua **Trưởng Bộ phận** (Role mới, permission giống hệt Trưởng phòng/Trưởng xưởng/TGĐ) duyệt trước khi tới Trưởng phòng. Thêm `status = 6 PendingGroupHead` (đơn đã có chữ ký Trưởng nhóm, đang chờ Trưởng Bộ phận — chèn giữa `5 Draft` và `0 Pending` về mặt nghiệp vụ). `POST /{id}/submit` giờ chuyển đơn sang `6` thay vì `0`; Trưởng Bộ phận dùng đúng `POST /{id}/approve`/`/reject` có sẵn (permission `OTForm.Approve`, `approvalLevel=4 GroupHead`), không có endpoint riêng. **Áp dụng bắt buộc cho MỌI Group ngay** — Group nào Admin chưa gán `UserApprovalScope(approvalLevel=GroupHead)` thì đơn của Group đó sẽ kẹt ở `status=6`, không ai duyệt tiếp được cho tới khi gán xong (đã xác nhận chấp nhận rủi ro này với người yêu cầu — không có cơ chế bỏ qua cấp này). Xem §1.1/§1.2/§4.1a/§4.3/§5.
+- **Sửa label sai (2026-07-17)**: `Department` = **Phòng/Phòng ban** (không phải "Bộ phận" như bản trước ghi nhầm ở §3.1), `Group` = **Bộ phận** (không phải "Nhóm").
 
 ## 1. Tổng quan nghiệp vụ, vai trò & luồng UI (đọc trước khi code màn hình)
 
@@ -20,7 +22,9 @@ Giấy tăng ca mô phỏng phiếu giấy thật **YEV-22-024** (Yazaki EDS Vie
 ```
 Người tạo đơn nhập liệu (POST /api/OtForm)   → status = Draft, CHƯA có chữ ký
         ↓
-Trưởng nhóm ký duyệt "Người đề nghị" (POST /{id}/submit)  → status = Pending
+Trưởng nhóm ký duyệt "Người đề nghị" (POST /{id}/submit)  → status = PendingGroupHead
+        ↓
+Trưởng Bộ phận duyệt (GroupHead, MỚI 2026-07-17)  → status = Pending, BẮT BUỘC cho mọi Group
         ↓
 Trưởng phòng duyệt (DepartmentManager)      → dừng nếu OtCase.requiredApprovalLevel = DepartmentManager (TH1)
         ↓
@@ -31,7 +35,8 @@ Tổng Giám Đốc duyệt (GeneralDirector)        → luôn là cấp cuối 
 
 - Mỗi đơn gắn 1 `OtCase` (TH1/TH2/TH3...) — `otCase.requiredApprovalLevel` quyết định cấp nào là **cấp cuối**, đủ cấp đó thì `status → Completed` ngay (không cần đi hết 3 cấp).
 - **"Người tạo đơn" KHÁC "Trưởng nhóm"** (2026-07-16, đợt 4): người gọi `POST /api/OtForm` chỉ chịu trách nhiệm **nhập liệu** — đơn tạo ra ở `status = Draft`, CHƯA có chữ ký "Người đề nghị". Chữ ký này **bắt buộc phải là chữ ký thật của Trưởng nhóm**, chỉ phát sinh khi có người gọi `POST /api/OtForm/{id}/submit` (§4.1a) — có thể là chính người vừa tạo (nếu họ cũng là Trưởng nhóm) hoặc người khác cùng được cấp quyền cho Group đó. Trước khi Trưởng nhóm ký, người tạo vẫn sửa thoải mái qua `PUT /{id}` (§4.1b).
-- **Ai duyệt được gì**: Trưởng phòng/Trưởng xưởng chỉ duyệt đơn thuộc phạm vi được gán qua `UserApprovalScope` (Group hoặc Department cụ thể) **và** đúng cấp đang chờ. Tổng Giám Đốc **bỏ qua** `UserApprovalScope` — chỉ cần có Role `"Tổng Giám Đốc"`.
+- **Trưởng Bộ phận (GroupHead, mới 2026-07-17)**: ngay sau khi Trưởng nhóm ký, đơn chuyển `status = PendingGroupHead` chứ CHƯA tới Trưởng phòng — phải có 1 người giữ Role "Trưởng Bộ phận" (được Admin gán `UserApprovalScope(approvalLevel=GroupHead)` khớp Group/Department của đơn) duyệt qua `POST /{id}/approve` thì mới chuyển tiếp sang `Pending` (chờ Trưởng phòng). **Bắt buộc cho mọi Group** — Group chưa được gán Trưởng Bộ phận thì đơn kẹt tại đây.
+- **Ai duyệt được gì**: Trưởng Bộ phận/Trưởng phòng/Trưởng xưởng chỉ duyệt đơn thuộc phạm vi được gán qua `UserApprovalScope` (Group hoặc Department cụ thể) **và** đúng cấp đang chờ. Tổng Giám Đốc **bỏ qua** `UserApprovalScope` — chỉ cần có Role `"Tổng Giám Đốc"`.
 - **Ai tạo/ký được đơn cho Group nào**: `Attendance.OTForm.Create` (Role Trưởng Group) chỉ là điều kiện **cần** — người gọi `POST /api/OtForm` hoặc `POST /{id}/submit` còn phải có dòng `UserApprovalScope` với `approvalLevel = 0 (Submitter)` khớp `groupId`/`departmentId` của đơn, **trừ Admin bypass**. Nhờ vậy 1 Group có thể có **nhiều người** (Trưởng Group chính + phó nhóm dự phòng) cùng được phép tạo/ký đơn, không giới hạn đúng 1 tài khoản — nhưng **tất cả** đều phải giữ Role "Trưởng Group" (Admin gán `UserApprovalScope` sẽ bị chặn nếu không, xem §5).
 - Ở bất kỳ cấp Trưởng phòng/Trưởng xưởng/TGĐ nào, **Reject** dừng hẳn luồng (`status → Rejected`), không đi tiếp. **Không có Reject ở bước Trưởng nhóm ký duyệt** — nếu Trưởng nhóm không đồng ý nội dung Draft, chỉ cần chưa gọi `/submit`, người tạo sửa lại qua `PUT /{id}` rồi Trưởng nhóm ký sau.
 - Trước khi dùng module này, user (Trưởng Group/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc) phải **đã được Admin**: (1) gán đúng Role qua Identity `update-user-roles`, (2) được tạo dòng `UserApprovalScope` khớp vai trò của mình — Trưởng Group thì `approvalLevel=Submitter` (**yêu cầu đã có Role "Trưởng Group"**), Trưởng phòng/Trưởng xưởng thì `approvalLevel=DepartmentManager/WorkshopManager` (mục 5). Chữ ký (`UserSignature`, mục 6) do **chính user** tự đăng ký, không phải Admin làm hộ.
@@ -41,11 +46,24 @@ Tổng Giám Đốc duyệt (GeneralDirector)        → luôn là cấp cuối 
 
 FE dựng menu dựa vào `user.permissions` (không dựa `user.roles`, xem [identity-api-fe.md §3](identity-api-fe.md)). Bảng dưới liệt kê permission Attendance mỗi Role **đã được seed sẵn** — dùng để biết role nào thấy màn nào (Admin luôn thấy full, không liệt kê riêng):
 
+> **Breaking 2026-07-17 — gộp menu "Đơn tăng ca" thành 1 mục duy nhất, chia tab bên trong**, thay cho 4 mục rời trước đây (Đơn của tôi / Chờ tôi ký duyệt / Chờ tôi duyệt / Đơn tôi đã xử lý). **Chỉ gộp ở tầng UI** — BE vẫn giữ nguyên 5 API riêng biệt (4 API cũ không đổi hành vi + 1 API mới `my-participations`), mỗi tab gọi đúng 1 API:
+>
+> | Tab | API | Điều kiện hiện tab |
+> |---|---|---|
+> | "Đơn của tôi" | `GET /my-forms` (§4.2) | có `OTForm.Create` |
+> | "Chờ tôi ký duyệt" | `GET /pending-submissions` (§4.2a) | có `OTForm.Create` |
+> | "Chờ tôi duyệt" | `GET /pending-approvals` (§4.2) | có `OTForm.Approve` |
+> | "Đơn đã xử lý" | `GET /my-actions` (§4.2b) | luôn hiện — chỉ cần `OTForm.View` |
+> | "Đơn tôi tham gia" (**mới**) | `GET /my-participations` (§4.2c) | luôn hiện — chỉ cần `OTForm.View` |
+>
+> Ẩn tab nào thì không gọi API tương ứng (tránh gọi API sẽ bị 403 vì thiếu permission). Mỗi dòng trong mọi tab đều có kèm `approvalSummary` (§4.2) để hiện ngay "đã được ai duyệt, đang chờ ai" trên danh sách, không cần bấm vào chi tiết.
+
 | Role | Permission Attendance đã gán | Màn hình thấy được |
 |---|---|---|
-| **Trưởng Group** | `OTForm.Create`, `OTForm.View`, `Employee.View`, `UserSignature.Update` | "Tạo đơn tăng ca", "Đơn của tôi", "Chờ tôi ký duyệt" (`pending-submissions`, đơn Draft — §4.2a), "Đơn tôi đã xử lý" (`my-actions` — §4.2b), "Chi tiết đơn", "Cài đặt chữ ký". **Không** thấy "Chờ tôi duyệt" (`pending-approvals`, không có `OTForm.Approve`), không thấy màn Danh mục. |
-| **Trưởng phòng / Trưởng xưởng / Tổng Giám Đốc** | `OTForm.View`, `OTForm.Approve`, `UserSignature.Update` | "Chờ tôi duyệt", "Đơn tôi đã xử lý" (`my-actions` — §4.2b), "Chi tiết đơn" (có nút Duyệt/Từ chối), "Cài đặt chữ ký". **Không** có `OTForm.Create` → không thấy nút "Tạo đơn"; **không** có `Employee.View` → màn của họ không cần gọi API Employee (đã có sẵn tên nhân viên trong `OtFormDto.employees`). |
-| **Admin** | Toàn bộ 28 permission `Attendance.*` | Tất cả màn ở trên **+** "Quản trị danh mục" (Department/Group/Reason/OtCase/Employee) **+** "Phân quyền duyệt" (UserApprovalScope). Đây là role **duy nhất** thấy 2 màn quản trị này — không role nghiệp vụ nào có quyền CRUD danh mục hay tự gán `UserApprovalScope`. |
+| **Trưởng Group** | `OTForm.Create`, `OTForm.View`, `Employee.View`, `UserSignature.Update`, `Department.View`, `Group.View`, `Reason.View`, `OtCase.View` | "Tạo đơn tăng ca", màn **"Đơn tăng ca"** với tab "Đơn của tôi" + "Chờ tôi ký duyệt" + "Đơn đã xử lý" + "Đơn tôi tham gia" (4/5 tab — **không** có tab "Chờ tôi duyệt" vì thiếu `OTForm.Approve`), "Chi tiết đơn", "Cài đặt chữ ký". Không thấy màn Danh mục (có `.View` 4 danh mục chỉ để load dropdown lúc tạo đơn, không có `.Create/.Update/.Delete`). |
+| **Nhân viên** (2026-07-17) | `OTForm.Create`, `OTForm.View`, `Employee.View`, `Department.View`, `Group.View`, `Reason.View`, `OtCase.View` (giống Trưởng Group **trừ** `UserSignature.Update`) | "Tạo đơn tăng ca" (tạo được cho **đúng Group của chính mình** — BE suy ra qua `Employee.GroupId`, không cần Admin gán `UserApprovalScope`, xem §4.1), màn **"Đơn tăng ca"** với tab "Đơn của tôi" + "Đơn đã xử lý" + "Đơn tôi tham gia" (3/5 tab), "Chi tiết đơn" (chỉ xem, không có nút ký/duyệt nào). **Không** thấy tab "Chờ tôi ký duyệt" (không có `UserApprovalScope(Submitter)` nên luôn rỗng — ẩn hẳn tab cho gọn), **không** thấy "Cài đặt chữ ký" (không có `UserSignature.Update`) — Role này **không bao giờ ký/duyệt được**, kể cả gọi thẳng `POST /{id}/submit` cũng bị BE chặn 400. |
+| **Trưởng Bộ phận / Trưởng phòng / Trưởng xưởng / Tổng Giám Đốc** | `OTForm.View`, `OTForm.Approve`, `UserSignature.Update` | Màn **"Đơn tăng ca"** với tab "Chờ tôi duyệt" + "Đơn đã xử lý" + "Đơn tôi tham gia" (3/5 tab), "Chi tiết đơn" (có nút Duyệt/Từ chối), "Cài đặt chữ ký". **Không** có `OTForm.Create` → không thấy nút "Tạo đơn" và không thấy 2 tab "Đơn của tôi"/"Chờ tôi ký duyệt"; **không** có `Employee.View` → màn của họ không cần gọi API Employee (đã có sẵn tên nhân viên trong `OtFormDto.employees`). **Trưởng Bộ phận** (mới, cấp `GroupHead`) dùng chung permission set này — về mặt UI/permission **hoàn toàn giống** Trưởng phòng/Trưởng xưởng/TGĐ, chỉ khác `approvalLevel` khi Admin gán `UserApprovalScope` (§5) và cấp đơn họ thấy trong "Chờ tôi duyệt" (`status=6 PendingGroupHead` thay vì `0/1/2`). |
+| **Admin** | Toàn bộ permission `Attendance.*` | Tất cả màn ở trên (cả 5 tab) **+** "Quản trị danh mục" (Department/Group/Reason/OtCase/Employee) **+** "Phân quyền duyệt" (UserApprovalScope). Đây là role **duy nhất** thấy 2 màn quản trị này — không role nghiệp vụ nào có quyền CRUD danh mục hay tự gán `UserApprovalScope`. |
 
 > Lưu ý quan trọng cho điều hướng: 1 user có thể **có nhiều Role cùng lúc** (VD vừa là Trưởng Group vừa là Trưởng phòng ở 1 case đặc biệt) — JWT gộp permission của mọi Role, nên UI nên **luôn build menu theo permission**, không giả định 1 user chỉ thuộc đúng 1 nhóm màn hình.
 
@@ -56,15 +74,29 @@ FE dựng menu dựa vào `user.permissions` (không dựa `user.roles`, xem [id
 | `status` | Ý nghĩa | Badge gợi ý | Ai đang "cầm bóng" | Trưởng Group thấy gì | Người đang chờ duyệt thấy gì |
 |---|---|---|---|---|---|
 | `5 Draft` | Vừa tạo, CHƯA có chữ ký "Người đề nghị" | Xám "Nháp — chờ Trưởng nhóm ký" | Trưởng nhóm đúng scope (`approvalLevel=Submitter`) | Người tạo: sửa được (`isEditable=true`) | Trưởng nhóm: nút "Ký duyệt" (`POST /{id}/submit`) trong `pending-submissions` (§4.2a) |
-| `0 Pending` | Đã có chữ ký Trưởng nhóm, chờ Trưởng phòng | Vàng "Chờ Trưởng phòng duyệt" | Trưởng phòng đúng scope | Chỉ xem, vẫn còn sửa được (`isEditable=true`) | Trưởng phòng: nút Duyệt/Từ chối trong `pending-approvals` |
+| `6 PendingGroupHead` (**mới**) | Đã có chữ ký Trưởng nhóm, chờ Trưởng Bộ phận | Vàng "Chờ Trưởng Bộ phận duyệt" | Trưởng Bộ phận đúng scope (`approvalLevel=GroupHead`) | Chỉ xem, vẫn còn sửa được (`isEditable=true`) | Trưởng Bộ phận: nút Duyệt/Từ chối trong `pending-approvals` |
+| `0 Pending` | Đã có chữ ký Trưởng Bộ phận, chờ Trưởng phòng | Vàng "Chờ Trưởng phòng duyệt" | Trưởng phòng đúng scope | Chỉ xem, vẫn còn sửa được (`isEditable=true`) | Trưởng phòng: nút Duyệt/Từ chối trong `pending-approvals` |
 | `1 ApprovedByDepartment` | Đã qua Trưởng phòng, chờ Trưởng xưởng | Vàng "Chờ Trưởng xưởng duyệt" | Trưởng xưởng đúng scope | Chỉ xem | Trưởng xưởng: nút Duyệt/Từ chối |
 | `2 ApprovedByWorkshop` | Đã qua Trưởng xưởng, chờ TGĐ | Vàng "Chờ Tổng Giám Đốc duyệt" | Tổng Giám Đốc (bất kỳ ai có Role này) | Chỉ xem | TGĐ: nút Duyệt/Từ chối |
 | `3 Completed` | Đã đủ cấp theo `otCase.requiredApprovalLevel` | Xanh lá "Hoàn tất" | — (kết thúc) | Chỉ xem, hiện nút "In đơn" | Không còn hiện trong `pending-approvals` nữa |
 | `4 Rejected` | Bị từ chối ở 1 cấp bất kỳ | Đỏ "Từ chối" | — (kết thúc) | Chỉ xem, đọc `comment` lý do ở dòng cuối `approvalHistories` | Không còn hiện trong `pending-approvals` nữa |
 
+**Map badge tiện dùng** (JS, gộp từ bảng trên — FE copy thẳng để render badge trạng thái mà không cần tự suy diễn lại):
+```js
+const OT_FORM_STATUS_BADGE = {
+  5: { text: "Nháp — chờ Trưởng nhóm ký", color: "gray" },
+  6: { text: "Chờ Trưởng Bộ phận duyệt", color: "yellow" },
+  0: { text: "Chờ Trưởng phòng duyệt",   color: "yellow" },
+  1: { text: "Chờ Trưởng xưởng duyệt",   color: "yellow" },
+  2: { text: "Chờ Tổng Giám Đốc duyệt",  color: "yellow" },
+  3: { text: "Hoàn tất",                 color: "green" },
+  4: { text: "Từ chối",                  color: "red" },
+};
+```
+
 Quy tắc dựng nút chung cho màn "Chi tiết đơn" (`GET /{id}`):
 - Nút **"Ký duyệt"** (Trưởng nhóm, mới đợt 4) chỉ hiện khi `status = 5 (Draft)` **và** user hiện tại có permission `OTForm.Create` **và** có `UserApprovalScope(approvalLevel=Submitter)` khớp group/department của đơn (hoặc Admin). Đơn giản nhất: **chỉ hiện khi đơn này có mặt trong `GET /pending-submissions` của user hiện tại** (§4.2a — endpoint riêng, không phải `pending-approvals`). Bấm → gọi `POST /api/OtForm/{id}/submit`, không cần canvas ký (chữ ký tự lấy từ `UserSignature` đã đăng ký).
-- Nút **Duyệt/Từ chối** chỉ hiện khi: `status` đang ở 1 trong 3 giá trị `0/1/2` **và** user hiện tại có permission `OTForm.Approve` **và** (là TGĐ khi `status=2`, hoặc có `UserApprovalScope` khớp cấp tương ứng khi `status=0/1`). FE không cần tự tính khớp scope — cứ hiện nút nếu đơn xuất hiện trong `pending-approvals`/gọi approve mà BE trả 400 thì ẩn nút + báo lỗi, đơn giản nhất là: **chỉ hiện nút Duyệt/Từ chối khi đơn này có mặt trong `GET /pending-approvals` của user hiện tại**. Gọi `/approve`/`/reject` (không phải `/submit`) trên đơn `status=5 Draft` sẽ bị BE chặn với lỗi rõ ràng — FE không nên để lọt trường hợp này (dùng đúng nút "Ký duyệt" ở trên).
+- Nút **Duyệt/Từ chối** chỉ hiện khi: `status` đang ở 1 trong 4 giá trị `6/0/1/2` **và** user hiện tại có permission `OTForm.Approve` **và** (là TGĐ khi `status=2`, hoặc có `UserApprovalScope` khớp cấp tương ứng khi `status=6/0/1` — `6→GroupHead`, `0→DepartmentManager`, `1→WorkshopManager`). FE không cần tự tính khớp scope — cứ hiện nút nếu đơn xuất hiện trong `pending-approvals`/gọi approve mà BE trả 400 thì ẩn nút + báo lỗi, đơn giản nhất là: **chỉ hiện nút Duyệt/Từ chối khi đơn này có mặt trong `GET /pending-approvals` của user hiện tại**. Gọi `/approve`/`/reject` (không phải `/submit`) trên đơn `status=5 Draft` sẽ bị BE chặn với lỗi rõ ràng — FE không nên để lọt trường hợp này (dùng đúng nút "Ký duyệt" ở trên).
 - Nút **Sửa** (2026-07-16) chỉ hiện khi `otFormDto.isEditable == true` (tương đương `status` là `5 Draft` **hoặc** `0 Pending`, từ đợt 4) **và** `createdByUserName == user hiện tại` **và** user có permission `OTForm.Create`. Qua cấp Trưởng phòng trở lên (`status >= 1` trừ `5`) là `isEditable = false` vĩnh viễn — khóa cứng, không có cách nào sửa lại được nữa (kể cả Admin), chỉ có thể Reject rồi tạo đơn mới. Bấm "Sửa" → mở lại y hệt form "Tạo đơn tăng ca" (đổ dữ liệu có sẵn), submit gọi `PUT /api/OtForm/{id}` thay vì `POST`.
 - Nút **In đơn** chỉ nên hiện khi `status = 3 (Completed)` (khuyến nghị UI, API không chặn — xem §8).
 - `status = 4 (Rejected)` → ẩn hết nút hành động, chỉ còn xem lý do từ chối (`comment` ở dòng `approvalHistories` cuối, không có `signatureImage` vì Reject không ký).
@@ -99,16 +131,19 @@ Phát sinh khác (ProcessPart, optional): [ ] Ăn  [ ] Xe đưa đón  [ ] Dùng
 Sau khi "Tạo đơn (nháp)"/"Lưu thay đổi" thành công → điều hướng sang "Chi tiết đơn" luôn (dùng `data` trả về từ `POST`/`PUT`).
 Màn "Sửa đơn" chỉ mở được khi `isEditable = true` (xem §1.2) — nếu user cố mở khi đã bị khóa, ẩn hẳn nút "Sửa" thay vì để bấm rồi nhận lỗi 400.
 
-**B. "Đơn của tôi" / "Chờ tôi ký duyệt" / "Chờ tôi duyệt"** (danh sách, dùng chung 1 layout, khác nguồn API)
+**B. "Đơn tăng ca"** (1 màn duy nhất, 5 tab bên trong — gộp 2026-07-17, xem bảng tab ở §1.1, ẩn tab nào thiếu permission tương ứng)
 ```
+[ Đơn của tôi | Chờ tôi ký duyệt | Chờ tôi duyệt | Đơn đã xử lý | Đơn tôi tham gia ]  ← tab, ẩn theo permission
 [Tìm kiếm theo trạng thái?] (tùy chọn, API không hỗ trợ filter status — FE tự filter client-side nếu cần)
-┌────┬─────────┬───────────┬────────┬──────┬────────┬────────────┬───────────┐
-│ Mã │ Nhóm    │ Bộ phận   │ TH     │ Ngày │ Tổng giờ│ Số NV     │ Trạng thái│
-├────┼─────────┼───────────┼────────┼──────┼────────┼────────────┼───────────┤
-│ 10 │ Nhóm 1  │ Xưởng LR  │ TH1    │ 15/7 │ 2.0     │ 1          │ 🟡 Chờ TP │  ← click vào dòng → Chi tiết
-└────┴─────────┴───────────┴────────┴──────┴────────┴────────────┴───────────┘
+┌────┬─────────┬───────────┬────────┬──────┬────────┬────────────┬─────────────────┬──────────────────────┐
+│ Mã │ Nhóm    │ Bộ phận   │ TH     │ Ngày │ Tổng giờ│ Số NV     │ Trạng thái       │ Tiến độ duyệt         │
+├────┼─────────┼───────────┼────────┼──────┼────────┼────────────┼─────────────────┼──────────────────────┤
+│ 10 │ Nhóm 1  │ Xưởng LR  │ TH1    │ 15/7 │ 2.0     │ 1          │ 🟡 Chờ TP duyệt  │ ✓ Ng.Văn A (Trg nhóm)│  ← click vào dòng → Chi tiết
+└────┴─────────┴───────────┴────────┴──────┴────────┴────────────┴─────────────────┴──────────────────────┘
 ```
-"Đơn của tôi" gọi `GET /my-forms` (chỉ Trưởng Group thấy menu này); "Chờ tôi ký duyệt" gọi `GET /pending-submissions` (§4.2a, chỉ Trưởng Group thấy — đơn Draft); "Chờ tôi duyệt" gọi `GET /pending-approvals` (chỉ Trưởng phòng/xưởng/TGĐ thấy, KHÔNG gồm Draft); "Đơn tôi đã xử lý" gọi `GET /my-actions` (§4.2b, cả 4 role đều thấy — đơn đã Ký/Duyệt/Từ chối, không phân biệt cấp).
+Mỗi tab gọi đúng 1 API riêng (không đổi hành vi các API cũ, chỉ gộp UI): "Đơn của tôi" → `GET /my-forms`; "Chờ tôi ký duyệt" → `GET /pending-submissions` (§4.2a, đơn Draft); "Chờ tôi duyệt" → `GET /pending-approvals` (KHÔNG gồm Draft); "Đơn đã xử lý" → `GET /my-actions` (§4.2b — đơn đã Ký/Duyệt/Từ chối, không phân biệt cấp); "Đơn tôi tham gia" (**mới**) → `GET /my-participations` (§4.2c — đơn mình CÓ TÊN trong danh sách tăng ca dù không tạo/ký/duyệt).
+
+Cột "Tiến độ duyệt" render từ `approvalSummary[]` (mảng, mỗi phần tử = 1 lần Ký/Duyệt/Từ chối, sắp theo thời gian) — ví dụ FE hiện dạng chuỗi rút gọn "✓ Tên (Cấp)" cho từng phần tử đã có, rồi nối thêm "đang chờ {cấp kế tiếp suy từ `status`, xem bảng mapping status→cấp đang chờ ở §4.3}" nếu `status` chưa `Completed`/`Rejected`. Không cần gọi `GET /{id}` chỉ để biết đã duyệt tới đâu.
 
 **C. "Chi tiết đơn"** (dùng chung mọi role, đổi phần action theo §1.2)
 ```
@@ -151,17 +186,19 @@ Tải ảnh chữ ký mới lên: [ Chọn file ảnh (PNG/JPG)... ]  → previe
 
 **E. "Quản trị danh mục"** (chỉ Admin) — 5 tab con Department/Group/Reason/OtCase/Employee, mỗi tab là bảng CRUD chuẩn (grid-list + form thêm/sửa) — xem mẫu ở §3, không có gì đặc biệt về UX. Tab Employee có thêm nút "Import Excel" mở màn riêng (§3.7, §8) — chọn file → xem preview → xác nhận.
 
-**F. "Phân quyền duyệt"** (chỉ Admin) — bảng `UserApprovalScope` (grid-list) + form thêm mới (chọn user, ScopeType Group/Department, Scope cụ thể, ApprovalLevel) + nút xóa từng dòng. Không có nút Sửa (theo đúng API, xem §5).
+**F. "Phân quyền duyệt"** (chỉ Admin) — bảng `UserApprovalScope` (grid-list), mỗi dòng hiện **`userFullName ?? userName`** (tên thật, không phải tài khoản AD thô — xem §5) + `scopeName` (tên Group/Department) + `approvalLevel` (Submitter/DepartmentManager/WorkshopManager), để Admin nhìn ra ngay "ai đang là Trưởng nhóm/Trưởng phòng của group/bộ phận nào" + form thêm mới (chọn user, ScopeType Group/Department, Scope cụ thể, ApprovalLevel) + nút xóa từng dòng. Không có nút Sửa (theo đúng API, xem §5).
 
 ### 1.4 Sơ đồ điều hướng tổng thể (menu tree gợi ý)
 
 ```
 Giấy tăng ca (Attendance)
-├── Tạo đơn tăng ca          [Trưởng Group]
-├── Đơn của tôi              [Trưởng Group]  (mỗi dòng Draft/Pending do mình tạo có nút "Sửa")
-├── Chờ tôi ký duyệt         [Trưởng Group]  (đơn Draft — GET /pending-submissions, §4.2a)
-├── Chờ tôi duyệt            [Trưởng phòng / Trưởng xưởng / Tổng Giám Đốc]
-├── Đơn tôi đã xử lý         [Cả 4 role]  (GET /my-actions, §4.2b — xem lại đơn đã Ký/Duyệt/Từ chối)
+├── Tạo đơn tăng ca          [Trưởng Group, Nhân viên]
+├── Đơn tăng ca              [mọi role nghiệp vụ]  (1 mục, 5 tab bên trong — gộp 2026-07-17, xem §1.1/§1.3.B)
+│     ├── Đơn của tôi              [có OTForm.Create]
+│     ├── Chờ tôi ký duyệt         [có OTForm.Create]  (đơn Draft — GET /pending-submissions, §4.2a)
+│     ├── Chờ tôi duyệt            [có OTForm.Approve]
+│     ├── Đơn đã xử lý             [mọi role]  (GET /my-actions, §4.2b)
+│     └── Đơn tôi tham gia (mới)   [mọi role]  (GET /my-participations, §4.2c)
 ├── Cài đặt chữ ký           [mọi role nghiệp vụ]
 ├── Lũy kế của tôi           [nhân viên có Employee.UserName gán sẵn — xem §3.6]
 └── Quản trị (Admin)
@@ -169,7 +206,7 @@ Giấy tăng ca (Attendance)
     ├── Import nhân sự (Excel)
     └── Phân quyền duyệt
 ```
-> **"Sửa đơn tăng ca" KHÔNG phải menu riêng** — chỉ là nút "Sửa" xuất hiện trong "Đơn của tôi"/"Chi tiết đơn" khi `isEditable = true`, mở lại đúng form "Tạo đơn tăng ca" (§1.3.A) với dữ liệu có sẵn.
+> **"Sửa đơn tăng ca" KHÔNG phải menu riêng** — chỉ là nút "Sửa" xuất hiện trong tab "Đơn của tôi"/"Chi tiết đơn" khi `isEditable = true`, mở lại đúng form "Tạo đơn tăng ca" (§1.3.A) với dữ liệu có sẵn.
 > **"Lũy kế của tôi"** không gắn permission Attendance nào (bất kỳ user đăng nhập nào, kể cả không có Role nghiệp vụ) — chỉ hoạt động nếu Admin đã gán `Employee.UserName` = username AD của họ.
 > **2 trang "Xác nhận cập nhật chữ ký" / "Xác nhận duyệt đơn qua email" (§6b, §4.6) KHÔNG nằm trong sơ đồ menu này** — đây là route **public**, chỉ mở qua link trong email, không cần đăng nhập SPA và không hiện trong bất kỳ menu điều hướng nào.
 
@@ -177,13 +214,17 @@ Giấy tăng ca (Attendance)
 
 ```js
 // ApprovalLevel — Attendance.Domain.Enums.ApprovalLevel
-{ 0: "Submitter (Người đề nghị)", 1: "DepartmentManager (Trưởng phòng)",
-  2: "WorkshopManager (Trưởng xưởng)", 3: "GeneralDirector (Tổng Giám Đốc)" }
+{ 0: "Submitter (Trưởng nhóm — ký 'Người đề nghị')", 1: "DepartmentManager (Trưởng phòng)",
+  2: "WorkshopManager (Trưởng xưởng)", 3: "GeneralDirector (Tổng Giám Đốc)",
+  4: "GroupHead (Trưởng Bộ phận — MỚI 2026-07-17, ký SAU Submitter, TRƯỚC DepartmentManager, xem §Đợt 6 đầu file)" }
+// Lưu ý số thứ tự KHÔNG phải thứ tự ký thật: chuỗi ký thật là 0 Submitter → 4 GroupHead → 1 DepartmentManager → 2 WorkshopManager → 3 GeneralDirector (4 được thêm sau cùng nên nằm cuối enum, không chèn giữa — theo quy ước "không renumber giá trị đã lưu DB").
 
 // OtFormStatus — Attendance.Domain.Enums.OtFormStatus
-{ 0: "Pending (Chờ Trưởng phòng duyệt)", 1: "ApprovedByDepartment (Chờ Trưởng xưởng duyệt)",
+{ 5: "Draft (Nháp, chờ Trưởng nhóm ký)", 6: "PendingGroupHead (Đã ký Trưởng nhóm, chờ Trưởng Bộ phận duyệt — MỚI 2026-07-17)",
+  0: "Pending (Đã qua Trưởng Bộ phận, chờ Trưởng phòng duyệt)", 1: "ApprovedByDepartment (Chờ Trưởng xưởng duyệt)",
   2: "ApprovedByWorkshop (Chờ Tổng Giám Đốc duyệt)", 3: "Completed (Hoàn tất)", 4: "Rejected (Từ chối)" }
-// Lưu ý: status không đi tuần tự 1-1 với ApprovalLevel — nó thể hiện "đã qua cấp nào", xem OtCase.requiredApprovalLevel để biết khi nào dừng sớm ở Completed.
+// Lưu ý: giá trị int không đi tuần tự theo thứ tự luồng thật (thứ tự luồng thật: 5 → 6 → 0 → 1 → 2 → 3, xem sơ đồ §1) —
+// mỗi status thể hiện "đã qua cấp nào", xem OtCase.requiredApprovalLevel để biết khi nào dừng sớm ở Completed (option DepartmentManager/WorkshopManager/GeneralDirector).
 
 // ApprovalAction — Attendance.Domain.Enums.ApprovalAction (chỉ xuất hiện trong OtFormApprovalHistoryDto.action)
 { 0: "Submitted", 1: "Approved", 2: "Rejected" }
@@ -202,14 +243,15 @@ GET /api/{Entity}/{id}   POST   PUT /{id} (body có Id khớp)    DELETE /{id} (
 ```
 Permission: `Attendance.{Entity}.{View|Create|Update|Delete}` (tên Entity theo PascalCase ở bảng dưới, VD `Attendance.OtCase.Create`).
 
-### 3.1 Department (Bộ phận) — `/api/Department`
+### 3.1 Department (Phòng/Phòng ban) — `/api/Department`
+> **Sửa label 2026-07-17**: trước đây tài liệu ghi nhầm `Department` = "Bộ phận" — đối chiếu với email thật của công ty thì `Department` = **Phòng/Phòng ban** (khớp "Trưởng phòng"), còn "Bộ phận" là `Group` (§3.2). Field/API không đổi, chỉ sửa lại tên gọi tiếng Việt cho đúng.
 ```jsonc
 // DepartmentDto
 { "id": 1, "departmentCode": "ASSY", "departmentNameVn": "Xưởng lắp ráp", "departmentNameJp": null }
 ```
 POST/PUT body: `departmentCode`[Required], `departmentNameVn`[Required], `departmentNameJp?`. PUT thêm `id` khớp URL.
 
-### 3.2 Group (Nhóm) — `/api/Group` — thuộc 1 Department
+### 3.2 Group (Bộ phận) — `/api/Group` — thuộc 1 Department
 ```jsonc
 // GroupDto
 { "id": 5, "groupCode": "ASSY-01", "groupNameVn": "Nhóm 1", "groupNameJp": null,
@@ -234,7 +276,7 @@ POST/PUT: `reasonNameVn`[Required], `reasonNameJp?`.
 // OtCaseDto
 { "id": 1, "code": "TH1", "description": "Ngày thường", "requireSignature": false, "requiredApprovalLevel": 1 }
 ```
-POST/PUT: `code`[Required], `description?`, `requireSignature`(bool), `requiredApprovalLevel`[Required] (enum `ApprovalLevel` §2 — **chỉ nên chọn `1`/`2`/`3`**, không dùng `0=Submitter` làm cấp cuối). Đây là **master data admin cấu hình sẵn** (thường 3 dòng cố định TH1/TH2/TH3), FE màn tạo đơn chỉ cần dropdown chọn từ `/all`.
+POST/PUT: `code`[Required], `description?`, `requireSignature`(bool), `requiredApprovalLevel`[Required] (enum `ApprovalLevel` §2 — **chỉ nên chọn `1`/`2`/`3`**, không dùng `0=Submitter` hoặc `4=GroupHead` làm cấp cuối — cả 2 cấp này luôn bắt buộc chạy qua trước khi tới cấp `requiredApprovalLevel` thật sự, không phải cấp có thể chọn làm điểm dừng). Đây là **master data admin cấu hình sẵn** (thường 3 dòng cố định TH1/TH2/TH3), FE màn tạo đơn chỉ cần dropdown chọn từ `/all`.
 
 ### 3.5 Employee (Nhân viên) — `/api/Employee` — thuộc 1 Group (bắt buộc)
 ```jsonc
@@ -342,7 +384,11 @@ Pattern **Preview → Confirm** (giống hệt import Device bên module Asset �
 - `employees[].employeeId` **phải cùng `groupId`** với đơn — khác nhóm → 400 (`DomainException`).
 - **KHÔNG có field chữ ký nào trong body** — đơn tạo ra chỉ ở `status = 5 (Draft)`, **CHƯA** ký "Người đề nghị" (đổi từ đợt 4, 2026-07-16: trước đây ký ngay lúc tạo, giờ tách riêng qua `POST /{id}/submit`, xem §4.1a). `approvalHistories` của response sẽ **rỗng**.
 - **`processPart.mainTicketCount`/`secondaryTicketCount`/`milkCount`** (2026-07-16, số nguyên `int`, mặc định `0`) — số lượng phiếu ăn theo loại (phiếu chính/phiếu phụ/sữa), chỉ có ý nghĩa khi `isEat = true`. Người lập đơn **tự nhập tay 3 ô số lượng này** cho **cả đơn** (không phải theo từng nhân viên) — BE không tự tính, không validate tổng khớp `numberOfEmployee` hay `employees[].isEligibleForMeal`. FE nên ẩn 3 ô này khi `isEat = false`.
-- **Phải có `UserApprovalScope(approvalLevel=Submitter)` khớp `groupId`/`departmentId` của đơn** (trừ Admin) — người có Role Trưởng Group nhưng chưa được Admin gán scope cho đúng Group này → 400 (`DomainException` "Bạn không được phân quyền tạo đơn cho nhóm/bộ phận này..."). Nhiều người có thể cùng được gán scope cho 1 Group (mục 5) — nhưng lưu ý điều kiện này chỉ đảm bảo người **tạo** hợp lệ, KHÔNG đồng nghĩa họ đã ký; vẫn cần bước §4.1a.
+- **Điều kiện được phép tạo — 2 nhánh độc lập** (2026-07-17, chỉ cần thoả 1 trong 2, trừ Admin bypass cả 2):
+  1. Có `UserApprovalScope(approvalLevel=Submitter)` khớp `groupId`/`departmentId` của đơn — dành cho Role "Trưởng Group" (Admin gán qua mục 5). Nhiều người có thể cùng được gán scope cho 1 Group.
+  2. **Mới**: tài khoản đang gọi API đã được liên kết với 1 `Employee` (`Employee.UserName`) có **đúng `groupId` với đơn** — dành cho Role "Nhân viên" (không cần Admin gán `UserApprovalScope` gì cả, chỉ cần Employee đã có `userName` đúng và đúng nhóm).
+
+  Không thoả cả 2 nhánh → 400 (`DomainException` "Bạn không được phân quyền tạo đơn cho nhóm/bộ phận này..."). **Lưu ý quan trọng**: dù tạo được bằng nhánh nào, điều kiện này chỉ đảm bảo người **tạo** hợp lệ, KHÔNG đồng nghĩa họ ký được — `POST /{id}/submit` (§4.1a) CHỈ chấp nhận nhánh 1 (`UserApprovalScope`), nên Role "Nhân viên" (chỉ thoả nhánh 2) tạo đơn xong **không tự ký được**, phải chờ đúng Trưởng nhóm của Group đó vào ký.
 - Response `201 Created` (Location header trỏ `GET /{id}`), `data` = `OtFormDto` (§4.3) đầy đủ luôn — không cần gọi lại `GetById`.
 
 ### 4.1a `POST /api/OtForm/{id}/submit` — Trưởng nhóm ký duyệt "Người đề nghị" (mới, đợt 4 — 2026-07-16)
@@ -353,7 +399,7 @@ Pattern **Preview → Confirm** (giống hệt import Device bên module Asset �
 - Chỉ gọi được khi đơn đang `status = 5 (Draft)` — gọi trên đơn đã `Pending` trở lên → 400. Đây là bước **bắt buộc** để đơn thật sự vào luồng, khác với `POST /api/OtForm` (chỉ nhập liệu).
 - Điều kiện y hệt lúc tạo đơn: user gọi phải có `UserApprovalScope(approvalLevel=Submitter)` khớp `groupId`/`departmentId` của đơn (trừ Admin) — **không nhất thiết phải là chính người đã gọi `POST /api/OtForm`**, miễn cùng được cấp quyền cho Group đó.
 - **Bắt buộc đã đăng ký chữ ký** (`GET/PUT /api/UserSignature/me`, mục 6) — chưa đăng ký → 400 ("Bạn chưa đăng ký chữ ký..."). Không nhận `signatureImage` qua body, BE tự lấy từ `UserSignature` đã đăng ký của người gọi, snapshot vào `approvalHistories[0].signatureImage`.
-- Thành công → `status → 0 (Pending)`, đơn xuất hiện trong `pending-approvals` của Trưởng phòng. Response `data` = `OtFormDto` (§4.3) đầy đủ sau khi ký — không cần gọi lại `GetById`.
+- Thành công → `status → 6 (PendingGroupHead)` (**đổi 2026-07-17**, trước là `0 Pending` — giờ chèn thêm bước Trưởng Bộ phận), đơn xuất hiện trong `pending-approvals` của **Trưởng Bộ phận** (không phải Trưởng phòng nữa) — xem §Đợt 6 ở đầu file. Response `data` = `OtFormDto` (§4.3) đầy đủ sau khi ký — không cần gọi lại `GetById`.
 - Permission: `Attendance.OTForm.Create` (dùng chung với quyền tạo đơn, không có permission riêng).
 
 ### 4.1b `PUT /api/OtForm/{id}` — Sửa đơn (2026-07-16)
@@ -385,17 +431,29 @@ Cùng shape `OtFormListItemDto` như `my-forms`/`pending-approvals` (§4.2), nh�
 { "id": 10, "groupNameVn": "Nhóm 1", "departmentNameVn": "Xưởng lắp ráp", "otCaseCode": "TH1",
   "date": "2026-07-15", "totalHour": 2.0, "numberOfEmployee": 1,
   "createdByUserName": "YEV\\n.van.a", "createdByFullName": "Nguyễn Văn A",
-  "status": 0, "isEditable": true }
+  "status": 0, "isEditable": true,
+  "approvalSummary": [
+    { "approvalLevel": 0, "approverUserName": "YEV\\n.van.a", "approverFullName": "Nguyễn Văn A",
+      "action": 0, "actionAt": "2026-07-15T08:00:00Z" }
+  ] }
 ```
 `pending-approvals` tự xác định "cấp hiện tại" của user gọi API (từ Role + `UserApprovalScope`) — FE **không** truyền tham số lọc cấp, chỉ `pageIndex/pageSize`.
 - **Hiển thị người tạo**: FE luôn dùng `createdByFullName ?? createdByUserName` (không hiển thị thẳng `createdByUserName` — yêu cầu "dữ liệu hiển thị lúc nào cũng phải là tên người dùng"). `createdByFullName` có thể `null` nếu tài khoản tạo đơn chưa từng có `FullName` trong Identity lúc tạo.
-- `isEditable` = `status == Draft || status == Pending`, tính độc lập với người xem — ở `pending-approvals` của Trưởng phòng, 1 đơn Pending vẫn có `isEditable=true` nhưng KHÔNG có nghĩa Trưởng phòng sửa được (chỉ chính người tạo mới sửa). FE chỉ hiện nút "Sửa" khi **cả 3 điều kiện**: `isEditable=true` **và** `createdByUserName == user hiện tại` **và** có permission `OTForm.Create` — tức thực tế nút này chỉ có ý nghĩa ở màn "Đơn của tôi" (`my-forms`), không hiện ở "Chờ tôi duyệt".
+- `isEditable` = `status == Draft || status == Pending`, tính độc lập với người xem — ở `pending-approvals` của Trưởng phòng, 1 đơn Pending vẫn có `isEditable=true` nhưng KHÔNG có nghĩa Trưởng phòng sửa được (chỉ chính người tạo mới sửa). FE chỉ hiện nút "Sửa" khi **cả 3 điều kiện**: `isEditable=true` **và** `createdByUserName == user hiện tại` **và** có permission `OTForm.Create` — tức thực tế nút này chỉ có ý nghĩa ở tab "Đơn của tôi" (`my-forms`), không hiện ở "Chờ tôi duyệt".
 - Đơn `status=5 Draft` **không** xuất hiện trong `pending-approvals` — nằm ở endpoint riêng `pending-submissions` (§4.2a), vì cấp ký (Trưởng nhóm) dùng permission `Create` khác với cấp duyệt (`Approve`) — xem §1.2.
+- **`approvalSummary` (mới, 2026-07-17)** — mảng rút gọn từng lần Ký/Duyệt/Từ chối đã xảy ra trên đơn (sắp theo `actionAt` tăng dần), có mặt trên **cả 5 endpoint danh sách** (`my-forms`/`pending-submissions`/`pending-approvals`/`my-actions`/`my-participations`), không chỉ riêng chi tiết đơn. Cùng shape với `approvalHistories` ở §4.3 nhưng bỏ `comment`/`signatureImage`/`hasSignature` (không cần cho danh sách, xem đầy đủ thì vào chi tiết). FE dùng field này để hiện ngay "đã được ai duyệt, đang chờ ai" trên từng dòng danh sách (§1.3.B) — kết hợp thêm `status` để suy ra cấp đang chờ tiếp theo (mapping ở §4.3).
+
+### 4.2c `GET /api/OtForm/my-participations` — Đơn tôi có tên trong danh sách tăng ca (mới, 2026-07-17)
+Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác hẳn: trả về **mọi đơn mà chính user gọi API được liệt kê là nhân viên tăng ca** (`OtFormEmployee`), **bất kể có phải người tạo/ký/duyệt đơn đó hay không**.
+- **Lý do cần endpoint này**: trước đây 1 nhân viên bình thường (không tạo đơn, không ký/duyệt) hoàn toàn không có cách nào tự tra được mình có tên trong đơn tăng ca nào — `my-forms` chỉ lọc theo người **tạo** đơn. Quan trọng nhất với Role "Nhân viên" (mới, xem §1.1) — họ tạo đơn được nhưng phần lớn nhu cầu thực tế là **xem lại đơn mình được liệt kê tăng ca**, kể cả đơn do người khác tạo/nhóm khác tạo hộ.
+- BE tra qua `Employee.userName == <user gọi>` rồi lọc theo `OtFormEmployee.employeeId` — **account chưa được Admin gán `Employee.userName` thì trả danh sách rỗng** (không lỗi, không 404) — FE nên hiện thông báo nhẹ kiểu "Tài khoản chưa liên kết hồ sơ nhân viên, liên hệ Admin" thay vì coi là lỗi.
+- Permission: `Attendance.OTForm.View` — mọi role nghiệp vụ đều có sẵn (kể cả Role "Nhân viên"), không cần quyền riêng.
+- Click vào dòng bất kỳ → `GET /{id}` xem chi tiết như các tab khác (kể cả khi user không có quyền Sửa/Duyệt đơn đó — chỉ xem).
 
 ### 4.2b `GET /api/OtForm/my-actions` — Lịch sử đơn đã xử lý (mới, đợt 5 — 2026-07-17)
 Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác hẳn: trả về **mọi đơn mà chính user gọi API đã từng Ký (`/submit`), Duyệt (`/approve`) hoặc Từ chối (`/reject`)**, bất kể đang ở cấp nào — tra theo `OtFormApprovalHistory.approverUserName`, không phải theo `createdByUserName` (khác `my-forms`) và không lọc theo status "đang chờ" (khác `pending-submissions`/`pending-approvals`).
 - **Lý do cần endpoint này**: trước đợt 5, đơn vừa xử lý xong (Ký/Duyệt/Từ chối) lập tức biến mất khỏi `pending-submissions`/`pending-approvals` — không có màn nào để xem lại "tôi đã xử lý những đơn nào". Đặc biệt quan trọng với Trưởng nhóm: nếu người khác tạo đơn (đúng luồng đợt 4 — người tạo ≠ Trưởng nhóm) thì sau khi Trưởng nhóm ký, đơn đó cũng không nằm trong `my-forms` của họ (vì họ không phải `createdByUserName`) — `my-actions` là nơi DUY NHẤT họ tìm lại được đơn mình đã ký.
-- Dùng chung 1 endpoint cho cả 4 Role (Trưởng Group/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc) vì tất cả đều có sẵn permission `Attendance.OTForm.View` — không cần phân biệt gọi API khác nhau theo Role.
+- Dùng chung 1 endpoint cho cả các Role (kể cả "Nhân viên") vì tất cả đều có sẵn permission `Attendance.OTForm.View` — không cần phân biệt gọi API khác nhau theo Role.
 - **Gồm cả đơn bị chính user đó Từ chối** (không chỉ đơn Ký/Duyệt thành công) — đúng nghĩa "lịch sử đã xử lý", không phải "lịch sử đã đồng ý". Click vào dòng bất kỳ → `GET /{id}` xem lại đầy đủ `approvalHistories` (kèm comment lý do nếu là Từ chối).
 - 1 đơn có thể xuất hiện ở `my-actions` của **nhiều user khác nhau** (VD Trưởng nhóm ký + Trưởng phòng duyệt cùng 1 đơn → cả 2 đều thấy đơn đó trong `my-actions` của riêng mình) — đây là hành vi đúng, không phải trùng lặp lỗi.
 
@@ -425,9 +483,9 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 - `approvalHistories` là **audit trail đầy đủ** từng bước ký/duyệt/từ chối — render như timeline dọc trên UI chi tiết đơn (mỗi dòng = 1 cấp đã xử lý, `action` §2 quyết định icon Ký/Duyệt/Từ chối). **Đây cũng chính là nguồn JSON để FE tự dựng file PDF in đơn** (khớp layout giấy YEV-22-024) — BE không xuất PDF, chỉ cung cấp đủ dữ liệu qua endpoint này. Dòng `action=2 Rejected` KHÔNG có chữ ký (`hasSignature=false`, `signatureImage=null`) — từ chối chỉ ghi `comment` (lý do), không ký.
 - `hasSignature` — cờ tiện dùng để FE quyết định có hiện `<img>` chữ ký hay không **mà không cần** giải mã `signatureImage` trước; `signatureImage` vẫn trả kèm nếu có (base64) để hiện trực tiếp.
 - `approverFullName` — Họ tên hiển thị, snapshot tại đúng thời điểm ký (không đổi theo dù sau này tài khoản đó đổi tên). **Có thể `null`** nếu tài khoản chưa từng có `FullName` trong Identity lúc ký — FE luôn fallback `approverFullName ?? approverUserName` khi hiển thị/in PDF. Áp dụng tương tự cho `createdByFullName ?? createdByUserName` ở cấp đơn.
-- **Ô "Tên công đoạn / 工程名" trên form giấy `YEV-22-024` KHÔNG có field tương ứng trong `OtFormDto`** — BE hiện không lưu trường này (field `AreaLine` cũ từng có nhưng đã bị xóa ở migration `RemoveAreaLineFromOtFormAddGroupDepartment`, thay bằng `groupId`/`departmentId`). FE tự dựng PDF (xem bullet trên) nên **để trống ô này** — `groupNameVn`/`departmentNameVn` là khái niệm khác (Nhóm/Phòng ban), không nên dùng thay thế.
-- **Suy ra "cấp đang chờ ai duyệt/ký tiếp"** từ `status`: `Draft`(5)→đang chờ Trưởng nhóm ký (`POST /{id}/submit`), `Pending`(0)→đang chờ Trưởng phòng, `ApprovedByDepartment`(1)→chờ Trưởng xưởng, `ApprovedByWorkshop`(2)→chờ Tổng Giám Đốc, `Completed`(3)/`Rejected`(4)→hết, ẩn nút Duyệt/Từ chối.
-- `isEditable` = `status == Draft || status == Pending` — điều kiện CẦN (chưa đủ) để hiện nút "Sửa", xem §1.2 và §4.1b.
+- **Ô "Tên công đoạn / 工程名" trên form giấy `YEV-22-024` KHÔNG có field tương ứng trong `OtFormDto`** — BE hiện không lưu trường này (field `AreaLine` cũ từng có nhưng đã bị xóa ở migration `RemoveAreaLineFromOtFormAddGroupDepartment`, thay bằng `groupId`/`departmentId`). FE tự dựng PDF (xem bullet trên) nên **để trống ô này** — `groupNameVn`/`departmentNameVn` là khái niệm khác (Bộ phận/Phòng ban), không nên dùng thay thế.
+- **Suy ra "cấp đang chờ ai duyệt/ký tiếp"** từ `status`: `Draft`(5)→đang chờ Trưởng nhóm ký (`POST /{id}/submit`), `PendingGroupHead`(6, **mới**)→đang chờ Trưởng Bộ phận, `Pending`(0)→đang chờ Trưởng phòng, `ApprovedByDepartment`(1)→chờ Trưởng xưởng, `ApprovedByWorkshop`(2)→chờ Tổng Giám Đốc, `Completed`(3)/`Rejected`(4)→hết, ẩn nút Duyệt/Từ chối.
+- `isEditable` = `status == Draft || status == PendingGroupHead || status == Pending` — điều kiện CẦN (chưa đủ) để hiện nút "Sửa", xem §1.2 và §4.1b.
 - **`employees[].monthToDate`/`yearToDate`** — lũy kế HIỆN TẠI (live, đọc thẳng từ `Employee` lúc gọi API, không phải giá trị đóng băng lúc tạo đơn) — dùng để người duyệt đối chiếu ngưỡng TH3 (>25h/tháng, >300h/năm) ngay trên màn chi tiết, không cần mở thêm màn Employee.
 - **`employees[].isEligibleForMeal`** — `true` khi `(endTime - startTime) > 2 giờ`. Tính sẵn ở BE, FE chỉ hiển thị (gợi ý tick `processPart.isEat`), không tự tính lại.
 
@@ -471,8 +529,9 @@ Ghi chú/Comment [___]
 
 ## 5. UserApprovalScope (`/api/UserApprovalScope`) — Admin gán phạm vi duyệt/tạo đơn
 
-Dùng để khai báo "user X là Trưởng Group/Trưởng phòng/Trưởng xưởng phụ trách Group/Department nào" — **bắt buộc có trước** khi:
+Dùng để khai báo "user X là Trưởng Group/Trưởng Bộ phận/Trưởng phòng/Trưởng xưởng phụ trách Group/Department nào" — **bắt buộc có trước** khi:
 - Trưởng Group tạo/ký được đơn (`approvalLevel=0 Submitter`) — **có thể gán nhiều `userName` cùng 1 `scopeId`** để nhiều người trong cùng Group đều tạo/ký đơn được, không giới hạn 1 tài khoản duy nhất.
+- **Trưởng Bộ phận duyệt được đơn cấp GroupHead** (`approvalLevel=4`, **mới 2026-07-17**) — bắt buộc cho MỌI Group, xem cảnh báo ở đầu file (đợt 6). Cũng cho phép gán nhiều `userName` cùng 1 `scopeId` giống Submitter.
 - Trưởng phòng/Trưởng xưởng duyệt được đơn (`approvalLevel=1/2`).
 
 Tổng Giám Đốc không cần dòng nào ở đây (bypass qua Role).
@@ -488,14 +547,16 @@ Tổng Giám Đốc không cần dòng nào ở đây (bypass qua Role).
 
 ```jsonc
 // UserApprovalScopeDto
-{ "id": 1, "userName": "YEV\\n.truong.b", "scopeType": 1, "scopeId": 1,
+{ "id": 1, "userName": "YEV\\n.truong.b", "userFullName": "Nguyễn Văn B", "scopeType": 1, "scopeId": 1,
   "scopeName": "Xưởng lắp ráp", "approvalLevel": 1 }
 // POST body — CreateUserApprovalScopeDto: { userName, scopeType, scopeId, approvalLevel } — tất cả [Required]
 ```
 - `scopeType`: `0=Group` (chọn `scopeId` từ `Group.id`), `1=Department` (chọn từ `Department.id`) — §2.
-- `approvalLevel`: `0=Submitter` (quyền tạo đơn, 2026-07-16), `1=DepartmentManager`, `2=WorkshopManager` (Tổng Giám Đốc không tạo dòng này, `3=GeneralDirector` không dùng ở đây).
+- `approvalLevel`: `0=Submitter` (quyền tạo đơn, 2026-07-16), `1=DepartmentManager`, `2=WorkshopManager`, `4=GroupHead` (Trưởng Bộ phận, **mới 2026-07-17** — khác `Submitter` dù cùng gán theo Group, đây là cấp *duyệt* sau khi Trưởng nhóm ký, không phải cấp tạo/ký ban đầu; **không** yêu cầu `userName` phải giữ Role nào cụ thể, khác với ràng buộc "Trưởng Group" ở `Submitter` bên dưới). Tổng Giám Đốc không tạo dòng này (`3=GeneralDirector` không dùng ở đây, bypass qua Role).
+- `userFullName` — **thêm 2026-07-17**, tra từ Identity (`IUserDirectoryService.GetContactInfoAsync`), để màn "Phân quyền duyệt" hiển thị **tên thật** thay vì tài khoản AD thô (`userName`) — trả lời đúng câu hỏi "biết account nào là Trưởng nhóm/Trưởng phòng của Group/Department nào". FE hiển thị `userFullName ?? userName`, cùng convention `createdByFullName`/`approverFullName` ở OtForm. Có thể `null` nếu tài khoản chưa có `FullName` trong Identity.
 - **Không có PUT** — sửa = `DELETE` dòng cũ + `POST` dòng mới.
 - Trùng scope (cùng `userName`+`scopeType`+`scopeId`+`approvalLevel`) → 400.
+- Muốn xem nhanh "Group X đang có ai làm Trưởng nhóm/duyệt" thì lọc `grid-list` theo `scopeName`/`userFullName` ở FE (client-side, vì `keyword` của BE hiện chỉ so khớp `userName` — xem dòng `GetPagedAsync` trong `UserApprovalScopeService.cs`), hoặc gọi `GET /by-user/{userName}` nếu đã biết trước tài khoản.
 
 ## 6. UserSignature (`/api/UserSignature`) — chữ ký cá nhân
 
@@ -557,7 +618,7 @@ Sau khi gọi `PUT /me`, BE gửi email tới **địa chỉ email của chính 
 | `/api/Employee` (`by-group/{id}`, `me`, `{id}/adjust-accumulation`) | CRUD + liệt kê theo Group + tự tra/tự chỉnh lũy kế (không cần permission) |
 | `/api/UserApprovalScope` | grid-list, `by-user/{userName}`, POST, DELETE (không PUT) |
 | `/api/UserSignature` | `me` (GET/PUT), `{userName}` (GET, admin), `confirm/{token}` (GET/POST, public — §6b) |
-| `/api/OtForm` | `my-forms`, `pending-submissions` (§4.2a), `pending-approvals`, `my-actions` (§4.2b), `{id}` (GET/PUT), POST, `{id}/submit` (§4.1a), `{id}/approve`, `{id}/reject`, `email-confirm/{token}` (GET), `email-confirm/{token}/approve`, `email-confirm/{token}/reject` (public — §4.6) |
+| `/api/OtForm` | `my-forms`, `pending-submissions` (§4.2a), `pending-approvals`, `my-actions` (§4.2b), `my-participations` (§4.2c), `{id}` (GET/PUT), POST, `{id}/submit` (§4.1a), `{id}/approve`, `{id}/reject`, `email-confirm/{token}` (GET), `email-confirm/{token}/approve`, `email-confirm/{token}/reject` (public — §4.6) |
 | `/api/EmployeeImport` | `preview`, `confirm` (Admin, §3.7) |
 
 ## 8. Checklist FE — màn hình chính
@@ -567,20 +628,26 @@ Sau khi gọi `PUT /me`, BE gửi email tới **địa chỉ email của chính 
 2. Bảng chọn nhân viên → `Employee/by-group/{groupId}`, tick nhiều dòng → build `employees[]`.
 3. Submit `POST /api/OtForm` → tạo `status=Draft`, **CHƯA ký** — điều hướng sang màn chi tiết (dùng `data` trả về, không cần gọi lại). Đơn cần Trưởng nhóm ký duyệt riêng qua "Chờ tôi ký duyệt" bên dưới (§4.1a) mới thật sự vào luồng.
 
-**"Đơn của tôi"** → `GET /my-forms`, click dòng → `GET /{id}` xem chi tiết + timeline `approvalHistories`. Dòng có `isEditable=true` (Draft hoặc Pending) hiện thêm nút "Sửa" → mở lại form Tạo đơn đổ sẵn dữ liệu → `PUT /{id}`.
+**Màn "Đơn tăng ca"** (1 màn, 5 tab — xem §1.1/§1.3.B, ẩn tab thiếu permission tương ứng)
 
-**"Chờ tôi ký duyệt" (Trưởng Group, mới đợt 4)**
+Tab **"Đơn của tôi"** → `GET /my-forms`, click dòng → `GET /{id}` xem chi tiết + timeline `approvalHistories`. Dòng có `isEditable=true` (Draft hoặc Pending) hiện thêm nút "Sửa" → mở lại form Tạo đơn đổ sẵn dữ liệu → `PUT /{id}`.
+
+Tab **"Chờ tôi ký duyệt"** (Trưởng Group, mới đợt 4)
 1. `GET /pending-submissions` (§4.2a) — danh sách đơn `Draft` thuộc scope của user (`UserApprovalScope(Submitter)`).
 2. Vào chi tiết `GET /{id}` → nút "Ký duyệt".
 3. "Ký duyệt": không có bước ký/upload ảnh nào ở màn này — BE tự lấy chữ ký từ ảnh đã đăng ký sẵn (`UserSignature`) của người ký. Chưa đăng ký → nhắc điều hướng sang "Cài đặt chữ ký" trước khi cho bấm → `POST /{id}/submit` (body chỉ còn `comment`, optional).
 4. Thành công → đơn chuyển `Pending`, biến mất khỏi `pending-submissions`, xuất hiện trong `pending-approvals` của Trưởng phòng phù hợp.
 
-**"Chờ tôi duyệt" (Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc)**
+Tab **"Chờ tôi duyệt"** (Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc)
 1. `GET /pending-approvals` — danh sách đã tự lọc đúng phạm vi/cấp của user đang đăng nhập.
 2. Vào chi tiết `GET /{id}` → nút "Duyệt"/"Từ chối".
 3. "Duyệt": không có bước ký/upload ảnh nào ở màn này — BE tự lấy chữ ký từ ảnh đã đăng ký sẵn (`UserSignature`) của người duyệt. Nếu `otCase.requireSignature` (tra thêm `OtCase/{id}`) mà user chưa đăng ký chữ ký → nhắc điều hướng sang "Cài đặt chữ ký" trước khi cho bấm Duyệt → `POST /{id}/approve` (body chỉ còn `comment`).
 4. "Từ chối": bắt buộc nhập `comment` → `POST /{id}/reject`.
 5. Sau khi duyệt/từ chối → gọi lại `GET /{id}` refresh timeline + trạng thái nút.
+
+Tab **"Đơn đã xử lý"** → `GET /my-actions` (§4.2b), click dòng → `GET /{id}` xem lại, chỉ xem (không có nút hành động vì đơn đã xử lý xong ở cấp của user đó).
+
+Tab **"Đơn tôi tham gia"** (**mới**, mọi role kể cả "Nhân viên") → `GET /my-participations` (§4.2c), click dòng → `GET /{id}` xem chi tiết, **chỉ xem** (không có nút Sửa/Ký/Duyệt nào — user chỉ là nhân viên được liệt kê tăng ca, không có quyền thao tác trên đơn trừ khi họ cũng đồng thời là người tạo/ký/duyệt). Nếu API trả rỗng và user thuộc Role "Nhân viên"/"Trưởng Group", kiểm tra account đã được Admin gán `Employee.userName` chưa (§4.2c).
 
 **"Cài đặt chữ ký"** → `GET /UserSignature/me` hiện preview (chữ ký đang có hiệu lực), chọn **file ảnh mới** qua `<input type="file">` (KHÔNG phải canvas) → convert base64 → `PUT /me` → **không** áp dụng ngay, hiện thông báo "đã gửi email xác nhận, kiểm tra hộp thư trong 30 phút" (không tự refresh preview vì chữ ký chưa đổi).
 
@@ -602,7 +669,7 @@ Sau khi gọi `PUT /me`, BE gửi email tới **địa chỉ email của chính 
 
 **"In đơn / Xuất PDF"** — BE không tạo PDF, FE tự dựng file từ JSON `GET /api/OtForm/{id}` (đã đủ dữ liệu để khớp layout giấy YEV-22-024: header đơn, danh sách nhân viên, ProcessPart, và từng dòng `approvalHistories` có sẵn `signatureImage`(base64)+`approverFullName` để in đúng chữ ký/tên từng cấp đã duyệt). Thường chỉ cho phép in khi `status = Completed`(3), nhưng API không chặn — FE tự quyết định khi nào hiện nút "In".
 
-**Admin — "Phân quyền duyệt"** → gán Role (Identity `update-user-roles`) trước, rồi `POST /api/UserApprovalScope` khai báo phạm vi cho từng Trưởng phòng/Trưởng xưởng (`approvalLevel=1/2`) **và cho từng người được phép tạo đơn** (`approvalLevel=0 Submitter`) — 1 Group có thể gán nhiều người ở `approvalLevel=Submitter`. Không có màn sửa — xóa + tạo lại.
+**Admin — "Phân quyền duyệt"** → gán Role (Identity `update-user-roles`) trước, rồi `POST /api/UserApprovalScope` khai báo phạm vi cho từng Trưởng phòng/Trưởng xưởng (`approvalLevel=1/2`), **Trưởng Bộ phận** (`approvalLevel=4 GroupHead`, **mới 2026-07-17 — BẮT BUỘC gán cho MỌI Group ngay**, không gán thì đơn của Group đó kẹt cứng sau khi Trưởng nhóm ký) **và cho từng người được phép tạo đơn** (`approvalLevel=0 Submitter`) — 1 Group có thể gán nhiều người ở cả `approvalLevel=Submitter` lẫn `GroupHead`. Không có màn sửa — xóa + tạo lại.
 
 **"Lũy kế của tôi"** (mọi user đăng nhập, không cần permission Attendance nào)
 1. `GET /api/Employee/me` — 404 thì ẩn hẳn màn, báo "chưa được gán nhân viên tương ứng".
@@ -615,6 +682,7 @@ Sau khi gọi `PUT /me`, BE gửi email tới **địa chỉ email của chính 
 |---|---|
 | `POST /OtForm` 400 "khác nhóm" | 1 `employeeId` trong `employees[]` không cùng `groupId` với đơn → chỉ cho tick nhân viên từ đúng `by-group/{groupId}` đang chọn |
 | `POST /{id}/approve` 400 dù đúng Role | Thiếu `UserApprovalScope` khớp `departmentId`/`groupId` của đơn + đúng cấp — báo Admin tạo qua `POST /UserApprovalScope` |
+| Đơn kẹt mãi ở `status=6 PendingGroupHead`, không ai thấy trong `pending-approvals` (**mới 2026-07-17**) | Group/Department của đơn **chưa được Admin gán ai làm Trưởng Bộ phận** (`UserApprovalScope(approvalLevel=4 GroupHead)`) — bắt buộc cho MỌI Group, không có cơ chế bỏ qua. Báo Admin gán qua `POST /UserApprovalScope` |
 | `POST /{id}/approve` 400 "chữ ký" | `otCase.requireSignature=true` nhưng người duyệt chưa đăng ký chữ ký qua `PUT /UserSignature/me` |
 | `POST /{id}/submit` 400 "chưa đăng ký chữ ký" | Trưởng nhóm ký duyệt nhưng chưa đăng ký chữ ký qua `PUT /UserSignature/me` — chữ ký "Người đề nghị" luôn bắt buộc |
 | `POST /OtForm` hoặc `POST /{id}/submit` 400 "không được phân quyền tạo đơn/ký duyệt" | Người gọi có Role Trưởng Group (permission `OTForm.Create`) nhưng chưa được Admin gán `UserApprovalScope(approvalLevel=Submitter)` khớp `groupId`/`departmentId` của đơn → báo Admin tạo qua `POST /UserApprovalScope` |

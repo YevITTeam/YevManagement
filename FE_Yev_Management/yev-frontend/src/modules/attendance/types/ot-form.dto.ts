@@ -54,6 +54,17 @@ export interface CreateOtFormDto {
 // Body PUT /api/OtForm/{id} — §4.1b, shape giống hệt CreateOtFormDto.
 export type UpdateOtFormDto = CreateOtFormDto;
 
+// Rút gọn của OtFormApprovalHistoryDto — có mặt trên cả 5 endpoint danh sách (my-forms/
+// pending-submissions/pending-approvals/my-actions/my-participations), bỏ comment/signatureImage/
+// hasSignature (không cần cho danh sách) — §4.2, mới 2026-07-17.
+export interface OtFormApprovalSummaryItemDto {
+    approvalLevel: number;
+    approverUserName: string;
+    approverFullName: string | null;
+    action: number;
+    actionAt: string;
+}
+
 // Item bảng my-forms / pending-approvals — §4.2.
 export interface OtFormListItemDto {
     id: number;
@@ -67,6 +78,7 @@ export interface OtFormListItemDto {
     createdByFullName: string | null;
     status: number;
     isEditable: boolean;
+    approvalSummary: OtFormApprovalSummaryItemDto[];
 }
 
 // ApprovalAction (docs §2): 0=Submitted, 1=Approved, 2=Rejected.

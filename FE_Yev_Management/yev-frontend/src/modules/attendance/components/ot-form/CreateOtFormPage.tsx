@@ -166,7 +166,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [isEditMode]);
 
     // Đổ sẵn dữ liệu đơn khi Sửa — set state trực tiếp (không qua handler) để KHÔNG bị 2 effect bên
-    // dưới tự xoá lựa chọn Nhóm/Nhân viên vừa đổ sẵn.
+    // dưới tự xoá lựa chọn Bộ phận/Nhân viên vừa đổ sẵn.
     useEffect(() => {
         if (!isEditMode || !otFormId) return;
         OtFormApi.getOtFormById(otFormId)
@@ -202,8 +202,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             .finally(() => setIsLoadingInitial(false));
     }, [isEditMode, otFormId]);
 
-    // Cascading Nhóm theo Bộ phận — chỉ TẢI danh sách, không tự xoá lựa chọn (việc xoá do handler
-    // người dùng chủ động đổi Bộ phận quyết định, xem handleDepartmentChange) để không phá dữ liệu
+    // Cascading Bộ phận theo Phòng ban — chỉ TẢI danh sách, không tự xoá lựa chọn (việc xoá do handler
+    // người dùng chủ động đổi Phòng ban quyết định, xem handleDepartmentChange) để không phá dữ liệu
     // vừa đổ sẵn lúc Sửa đơn (docs/attendance-api-fe.md §3.2/§8).
     const [prevDepartmentId, setPrevDepartmentId] = useState(departmentId);
     if (prevDepartmentId !== departmentId) {
@@ -218,7 +218,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             .catch((err) => console.error(err));
     }, [departmentId]);
 
-    // Tải nhân viên theo Nhóm — không tự xoá lựa chọn (lý do như trên).
+    // Tải nhân viên theo Bộ phận — không tự xoá lựa chọn (lý do như trên).
     const [prevGroupId, setPrevGroupId] = useState(groupId);
     if (prevGroupId !== groupId) {
         setPrevGroupId(groupId);
@@ -372,7 +372,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Thông tin đơn</h2>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Bộ phận</span>
+                            <span className={fieldLabelClassName}>Phòng ban</span>
                             <select
                                 value={departmentId ?? ""}
                                 onChange={(event) => handleDepartmentChange(event.target.value)}
@@ -381,7 +381,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 className={fieldClassName}
                             >
                                 <option value="" disabled>
-                                    Chọn bộ phận...
+                                    Chọn phòng ban...
                                 </option>
                                 {departments.map((department) => (
                                     <option key={department.id} value={department.id}>
@@ -392,7 +392,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Nhóm</span>
+                            <span className={fieldLabelClassName}>Bộ phận</span>
                             <select
                                 value={groupId ?? ""}
                                 onChange={(event) => handleGroupChange(event.target.value)}
@@ -401,7 +401,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 className={fieldClassName}
                             >
                                 <option value="" disabled>
-                                    {departmentId ? "Chọn nhóm..." : "Chọn Bộ phận trước..."}
+                                    {departmentId ? "Chọn bộ phận..." : "Chọn Phòng ban trước..."}
                                 </option>
                                 {groups.map((group) => (
                                     <option key={group.id} value={group.id}>
@@ -496,9 +496,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         Danh sách nhân viên làm ngoài giờ
                     </h2>
                     {!groupId ? (
-                        <p className="text-sm text-[#5e3f3a]">Chọn Nhóm để hiện danh sách nhân viên.</p>
+                        <p className="text-sm text-[#5e3f3a]">Chọn Bộ phận để hiện danh sách nhân viên.</p>
                     ) : groupEmployees.length === 0 ? (
-                        <p className="text-sm text-[#5e3f3a]">Nhóm này chưa có nhân viên.</p>
+                        <p className="text-sm text-[#5e3f3a]">Bộ phận này chưa có nhân viên.</p>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="min-w-full border-collapse text-left">

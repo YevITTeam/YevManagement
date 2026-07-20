@@ -131,7 +131,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                         </h3>
                         <p className="mt-1 text-xs text-[#5e3f3a]">
                             Chọn file .xlsx (cột: No./Employee code/Full name/Department/Department Name/Group/Group
-                            Name) — upsert theo mã nhân viên, tự tạo Bộ phận/Nhóm mới nếu chưa có.
+                            Name) — upsert theo mã nhân viên, tự tạo Phòng ban/Bộ phận mới nếu chưa có.
                         </p>
                     </div>
                     <button
@@ -150,8 +150,8 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                         <div className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm">
                             <span className="font-semibold text-[#16a34a]">Tạo mới {result.createdEmployeeCount} nhân viên</span>
                             <span className="text-[#5e3f3a]">Cập nhật: {result.updatedEmployeeCount}</span>
-                            <span className="text-[#5e3f3a]">Bộ phận mới: {result.createdDepartmentCount}</span>
-                            <span className="text-[#5e3f3a]">Nhóm mới: {result.createdGroupCount}</span>
+                            <span className="text-[#5e3f3a]">Phòng ban mới: {result.createdDepartmentCount}</span>
+                            <span className="text-[#5e3f3a]">Bộ phận mới: {result.createdGroupCount}</span>
                             <span className={result.skippedCount > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 Bỏ qua (lỗi): {result.skippedCount}
                             </span>
@@ -210,7 +210,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                                     Lỗi: {summary.invalidRows}
                                 </span>
                                 <span className="text-[#5e3f3a]">
-                                    Bộ phận mới: {summary.newDepartmentCount} · Nhóm mới: {summary.newGroupCount}
+                                    Phòng ban mới: {summary.newDepartmentCount} · Bộ phận mới: {summary.newGroupCount}
                                 </span>
                                 {summary.invalidRows > 0 && (
                                     <span className="text-[#930006]">— Các dòng lỗi sẽ tự bị bỏ qua khi xác nhận import.</span>
@@ -230,8 +230,8 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                                             <th className="whitespace-nowrap px-3 py-2">Dòng</th>
                                             <th className="whitespace-nowrap px-3 py-2">Mã NV</th>
                                             <th className="whitespace-nowrap px-3 py-2">Họ / Tên tách được</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Phòng ban</th>
                                             <th className="whitespace-nowrap px-3 py-2">Bộ phận</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Nhóm</th>
                                             <th className="whitespace-nowrap px-3 py-2">Mới?</th>
                                             <th className="min-w-[200px] px-3 py-2">Lỗi</th>
                                         </tr>
@@ -256,8 +256,8 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
                                                     {[
                                                         row.isNewEmployee && "NV",
-                                                        row.isNewDepartment && "BP",
-                                                        row.isNewGroup && "Nhóm",
+                                                        row.isNewDepartment && "PB",
+                                                        row.isNewGroup && "Bộ phận",
                                                     ]
                                                         .filter(Boolean)
                                                         .join(", ") || "-"}

@@ -1,26 +1,20 @@
 "use client";
 
-import { FilePlus2, ClipboardList, ClipboardCheck } from "lucide-react";
+import { FilePlus2, ClipboardList } from "lucide-react";
 import { Link } from "@/navigation";
 
 const tiles = [
     {
         title: "Tạo đơn tăng ca",
-        desc: "Lập đơn đề nghị làm ngoài giờ cho nhóm của bạn.",
+        desc: "Lập đơn đề nghị làm ngoài giờ cho nhân viên của bạn.",
         link: "/ot/create",
         icon: <FilePlus2 className="h-8 w-8" />,
     },
     {
-        title: "Đơn của tôi",
-        desc: "Theo dõi trạng thái các đơn tăng ca bạn đã tạo.",
-        link: "/ot/my-forms",
+        title: "Đơn tăng ca",
+        desc: "Đơn của tôi, chờ ký duyệt, chờ duyệt, đã xử lý và đơn bạn tham gia — theo tab.",
+        link: "/ot/forms",
         icon: <ClipboardList className="h-8 w-8" />,
-    },
-    {
-        title: "Chờ tôi duyệt",
-        desc: "Danh sách đơn đang chờ bạn duyệt ở cấp hiện tại.",
-        link: "/ot/pending-approvals",
-        icon: <ClipboardCheck className="h-8 w-8" />,
     },
 ];
 
@@ -32,7 +26,7 @@ export default function OtHomePage() {
                 <p className="mt-1 text-[15px] text-[#5e3f3a]">Lập và duyệt Giấy đề nghị làm ngoài giờ.</p>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {tiles.map((tile) => (
                     <Link
                         key={tile.link}
