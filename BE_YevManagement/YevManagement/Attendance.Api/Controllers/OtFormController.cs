@@ -19,7 +19,7 @@ namespace Attendance.Api.Controllers
             _otFormService = otFormService;
         }
 
-        // Đơn do CHÍNH mình tạo (Trưởng Group xem lại đơn của nhóm mình).
+        // Đơn do CHÍNH mình tạo (Trưởng nhóm xem lại đơn của nhóm mình).
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("my-forms")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyForms(
@@ -29,8 +29,8 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — dùng permission Create vì Trưởng
-        // Group role không có Attendance.OTForm.Approve.
+        // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — dùng permission Create vì Role
+        // Trưởng nhóm không có Attendance.OTForm.Approve.
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpGet("pending-submissions")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingSubmissions(
@@ -64,11 +64,34 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
+        // Đơn tôi CÓ TÊN trong danh sách nhân viên tăng ca (OtFormEmployee) — không nhất thiết là người
+        // tạo/ký/duyệt. Dành cho mọi user (kể cả Role "Nhân viên", chỉ cần OTForm.View).
+        [RequirePermission("Attendance.OTForm.View")]
+        [HttpGet("my-participations")]
+        public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyParticipations(
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
+        {
+            var result = await _otFormService.GetMyParticipationsAsync(CurrentUserName, pageIndex, pageSize);
+            return Success(result);
+        }
+
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> GetById(int id)
         {
             var result = await _otFormService.GetByIdAsync(id);
+            return Success(result);
+        }
+
+        // (Các) Group người gọi được phép tạo đơn — FE gọi trước khi mở màn "Tạo đơn tăng ca" để tự
+        // điền sẵn Bộ phận/Phòng ban thay vì bắt chọn tự do (Nhân viên/Trưởng nhóm vốn chỉ tạo được
+        // cho đúng phạm vi cố định). Mảng rỗng với Admin (không giới hạn) — FE giữ nguyên dropdown cũ.
+        [RequirePermission("Attendance.OTForm.Create")]
+        [HttpGet("my-create-scopes")]
+        public async Task<ActionResult<ApiResponse<List<MyCreateScopeItemDto>>>> GetMyCreateScopes()
+        {
+            var isAdmin = User.IsInRole(AdminRole);
+            var result = await _otFormService.GetMyCreateScopesAsync(CurrentUserName, isAdmin);
             return Success(result);
         }
 
@@ -86,7 +109,7 @@ namespace Attendance.Api.Controllers
 
         // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).
         // BE tự lấy chữ ký từ UserSignature đã đăng ký sẵn của người gọi. Người gọi phải được gán
-        // UserApprovalScope (ApprovalLevel=Submitter, chỉ Role "Trưởng Group" mới được gán) khớp
+        // UserApprovalScope (ApprovalLevel=Submitter, chỉ Role "Trưởng nhóm" mới được gán) khớp
         // group/department của đơn, trừ Admin bypass (xem docs/attendance-module.md).
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpPost("{id}/submit")]
@@ -103,7 +126,8 @@ namespace Attendance.Api.Controllers
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> Update(int id, [FromBody] UpdateOtFormDto request)
         {
-            var result = await _otFormService.UpdateAsync(id, CurrentUserName, request);
+            var isAdmin = User.IsInRole(AdminRole);
+            var result = await _otFormService.UpdateAsync(id, CurrentUserName, isAdmin, request);
             return Success(result, "Cập nhật đơn tăng ca thành công.");
         }
 

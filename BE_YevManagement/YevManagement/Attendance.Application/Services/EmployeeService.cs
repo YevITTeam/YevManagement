@@ -41,7 +41,7 @@ namespace Attendance.Application.Services
             );
         }
 
-        // Dùng cho Trưởng Group liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm.
+        // Dùng cho Trưởng nhóm liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm.
         public async Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId)
         {
             var items = await _unitOfWork.Employees.SelectAsync(

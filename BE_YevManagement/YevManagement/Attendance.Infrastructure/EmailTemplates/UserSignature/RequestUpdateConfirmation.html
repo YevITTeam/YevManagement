@@ -1,3 +1,69 @@
-<p>Bạn vừa yêu cầu cập nhật chữ ký lúc {{RequestedAt}} (UTC).</p>
-<p><a href="{{ConfirmLink}}">Nhấn vào đây để xác nhận cập nhật chữ ký</a> (link hết hạn sau {{ExpiryMinutes}} phút).</p>
-<p>Nếu không phải bạn thực hiện yêu cầu này, vui lòng bỏ qua email.</p>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Xác nhận cập nhật chữ ký</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f2f4f7; font-family:Segoe UI, Arial, Helvetica, sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2f4f7; padding:32px 16px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #e5e8ec;">
+        <!-- Header -->
+        <tr>
+          <td style="background-color:#1a56db; padding:24px 40px;">
+            <span style="font-size:20px; font-weight:700; color:#ffffff; letter-spacing:0.5px;">YevManagement</span>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:36px 40px 8px 40px;">
+            <p style="margin:0 0 4px 0; font-size:13px; font-weight:600; color:#1a56db; text-transform:uppercase; letter-spacing:0.5px;">Xác nhận cập nhật chữ ký</p>
+            <h1 style="margin:0 0 20px 0; font-size:20px; color:#1f2937;">Xin chào {{UserName}},</h1>
+            <p style="margin:0 0 16px 0; font-size:15px; line-height:24px; color:#374151;">
+              Hệ thống ghi nhận một yêu cầu cập nhật chữ ký điện tử trên tài khoản của bạn vào lúc
+              <strong>{{RequestedAt}}</strong>. Chữ ký mới sẽ chỉ có hiệu lực sau khi bạn xác nhận yêu cầu này.
+            </p>
+          </td>
+        </tr>
+        <!-- CTA button -->
+        <tr>
+          <td align="center" style="padding:8px 40px 28px 40px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:6px; background-color:#1a56db;">
+                  <a href="{{ConfirmLink}}" target="_blank" style="display:inline-block; padding:13px 32px; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:6px;">Xác nhận cập nhật chữ ký</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:14px 0 0 0; font-size:13px; color:#9ca3af;">Liên kết sẽ hết hạn sau {{ExpiryMinutes}} phút.</p>
+          </td>
+        </tr>
+        <!-- Notice -->
+        <tr>
+          <td style="padding:0 40px 32px 40px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff7ed; border-left:3px solid #f59e0b; border-radius:4px;">
+              <tr>
+                <td style="padding:14px 16px; font-size:13px; line-height:20px; color:#92400e;">
+                  Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email — chữ ký hiện tại của bạn sẽ
+                  không thay đổi cho đến khi có xác nhận.
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 40px; background-color:#f9fafb; border-top:1px solid #e5e8ec;">
+            <p style="margin:0; font-size:12px; line-height:18px; color:#9ca3af;">
+              Đây là email tự động từ hệ thống YevManagement, vui lòng không trả lời email này.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

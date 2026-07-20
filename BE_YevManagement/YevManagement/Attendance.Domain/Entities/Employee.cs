@@ -26,7 +26,7 @@ public partial class Employee
 
     public int AccumulationMonth { get; set; }
 
-    // Nhóm cố định của nhân viên — BẮT BUỘC, để Trưởng Group liệt kê/chọn hàng loạt nhân viên của
+    // Nhóm cố định của nhân viên — BẮT BUỘC, để Trưởng nhóm liệt kê/chọn hàng loạt nhân viên của
     // mình khi lập đơn OT. Department suy ra qua Group.DepartmentId, không cần lưu trùng trên Employee.
     public int GroupId { get; set; }
 

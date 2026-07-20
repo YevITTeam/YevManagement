@@ -59,7 +59,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.PendingSignatureConfirmations.AddAsync(pending);
             await _unitOfWork.SaveChangesAsync();
 
-            var (email, _) = await _userDirectoryService.GetContactInfoAsync(userName);
+            var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(userName);
             if (string.IsNullOrWhiteSpace(email)) return;
 
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
@@ -71,6 +71,7 @@ namespace Attendance.Application.Services
             {
                 var html = _emailTemplateRenderer.Render("UserSignature/RequestUpdateConfirmation.html", new Dictionary<string, string>
                 {
+                    ["UserName"] = fullName ?? userName,
                     ["RequestedAt"] = now.ToString("HH:mm dd/MM/yyyy"),
                     ["ConfirmLink"] = link,
                     ["ExpiryMinutes"] = ConfirmationExpiryMinutes.ToString()

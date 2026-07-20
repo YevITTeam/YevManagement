@@ -16,7 +16,7 @@ namespace Attendance.Api.Controllers
             _userSignatureService = userSignatureService;
         }
 
-        // Mỗi user (Trưởng Group/Trưởng phòng/Trưởng xưởng...) xem chữ ký đã đăng ký của CHÍNH mình.
+        // Mỗi user (Trưởng nhóm/Trưởng phòng/Trưởng xưởng...) xem chữ ký đã đăng ký của CHÍNH mình.
         [RequirePermission("Attendance.UserSignature.Update")]
         [HttpGet("me")]
         public async Task<ActionResult<ApiResponse<UserSignatureDto>>> GetMine()

@@ -16,17 +16,25 @@ namespace Attendance.Application.Interfaces.Service
             string approverUserName, bool isGeneralDirector, int pageIndex, int pageSize);
 
         // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 vai trò
-        // (Trưởng Group/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc), gate bằng Attendance.OTForm.View.
+        // (Trưởng nhóm/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc), gate bằng Attendance.OTForm.View.
         Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(string userName, int pageIndex, int pageSize);
 
+        // Đơn tôi CÓ TÊN trong danh sách nhân viên tăng ca (OtFormEmployee) — không nhất thiết là người
+        // tạo/ký/duyệt. Dành cho mọi user (kể cả Role "Nhân viên"), gate bằng Attendance.OTForm.View.
+        Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(string userName, int pageIndex, int pageSize);
+
         Task<OtFormDto> GetByIdAsync(int id);
+
+        // (Các) Group mà người gọi được phép tạo đơn — FE dùng để tự điền sẵn Bộ phận/Phòng ban trên
+        // màn "Tạo đơn tăng ca" thay vì bắt chọn từ toàn bộ danh sách. Admin trả về rỗng (không giới hạn).
+        Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin);
 
         Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request);
 
         // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).
         Task<OtFormDto> ApproveSubmitterAsync(int id, string approverUserName, string? approverFullName, bool isAdmin, ApproveOtFormDto request);
 
-        Task<OtFormDto> UpdateAsync(int id, string currentUserName, UpdateOtFormDto request);
+        Task<OtFormDto> UpdateAsync(int id, string currentUserName, bool isAdmin, UpdateOtFormDto request);
 
         Task ApproveAsync(int id, string approverUserName, string? approverFullName, bool isGeneralDirector, ApproveOtFormDto request);
 

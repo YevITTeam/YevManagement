@@ -19,5 +19,9 @@ namespace Attendance.Application.Dtos.OtForms
 
         // true khi Status == Pending (chưa cấp nào duyệt) — dùng để hiện/ẩn nút "Sửa" ngay trên danh sách.
         public bool IsEditable { get; set; }
+
+        // Tóm tắt lịch sử ký/duyệt (2026-07-17) — để FE hiện ngay "đã được ai duyệt, đang chờ ai" trên
+        // danh sách mà không cần bấm vào từng đơn xem chi tiết. Sắp theo ActionAt tăng dần.
+        public List<ApprovalSummaryItemDto> ApprovalSummary { get; set; } = new();
     }
 }

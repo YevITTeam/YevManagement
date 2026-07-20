@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Attendance.Application.Dtos.OtForms;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
@@ -21,6 +22,35 @@ namespace Attendance.Application.Services
         private const int EmailApprovalTokenExpiryDays = 3;
 
         private const string GeneralDirectorRoleName = "Tổng Giám Đốc";
+
+        // Dùng chung cho mọi endpoint danh sách (my-forms/pending-submissions/pending-approvals/
+        // my-actions/my-participations) — tránh lặp lại cùng 1 khối Select ở 5 nơi. EF Core tự dịch
+        // OtFormApprovalHistories (navigation collection, xem OtForm.cs) thành subquery, không cần
+        // .Include() riêng (xem docs/attendance-module.md).
+        private static readonly Expression<Func<OtForm, OtFormListItemDto>> ToListItemDto = x => new OtFormListItemDto
+        {
+            Id = x.Id,
+            GroupNameVn = x.Group.GroupNameVn,
+            DepartmentNameVn = x.Department.DepartmentNameVn,
+            OtCaseCode = x.OtCase.Code,
+            Date = x.Date,
+            TotalHour = x.TotalHour,
+            NumberOfEmployee = x.NumberOfEmployee,
+            CreatedByUserName = x.CreatedByUserName,
+            CreatedByFullName = x.CreatedByFullName,
+            Status = x.Status,
+            IsEditable = x.Status == (int)OtFormStatus.Draft || x.Status == (int)OtFormStatus.PendingGroupHead || x.Status == (int)OtFormStatus.Pending,
+            ApprovalSummary = x.OtFormApprovalHistories
+                .OrderBy(h => h.ActionAt)
+                .Select(h => new ApprovalSummaryItemDto
+                {
+                    ApprovalLevel = h.ApprovalLevel,
+                    ApproverUserName = h.ApproverUserName,
+                    ApproverFullName = h.ApproverFullName,
+                    Action = h.Action,
+                    ActionAt = h.ActionAt
+                }).ToList()
+        };
 
         private readonly IUserDirectoryService _userDirectoryService;
         private readonly IEmailService _emailService;
@@ -46,24 +76,11 @@ namespace Attendance.Application.Services
                 .Where(x => !x.IsDeleted && x.CreatedByUserName == userName)
                 .OrderByDescending(x => x.Id);
 
-            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, x => new OtFormListItemDto
-            {
-                Id = x.Id,
-                GroupNameVn = x.Group.GroupNameVn,
-                DepartmentNameVn = x.Department.DepartmentNameVn,
-                OtCaseCode = x.OtCase.Code,
-                Date = x.Date,
-                TotalHour = x.TotalHour,
-                NumberOfEmployee = x.NumberOfEmployee,
-                CreatedByUserName = x.CreatedByUserName,
-                CreatedByFullName = x.CreatedByFullName,
-                Status = x.Status,
-                IsEditable = IsEditableStatus(x.Status)
-            });
+            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
         }
 
         // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — endpoint riêng, gate bằng
-        // Attendance.OTForm.Create (không phải .Approve, vì Trưởng Group role không có permission
+        // Attendance.OTForm.Create (không phải .Approve, vì Trưởng nhóm role không có permission
         // Approve — xem docs/attendance-module.md §Người tạo đơn KHÁC Trưởng nhóm).
         public async Task<PagedResponse<OtFormListItemDto>> GetPendingSubmissionsAsync(
             string currentUserName, bool isAdmin, int pageIndex, int pageSize)
@@ -85,20 +102,7 @@ namespace Attendance.Application.Services
                     (isAdmin || submitterDepartmentIds.Contains(x.DepartmentId) || submitterGroupIds.Contains(x.GroupId)))
                 .OrderBy(x => x.Date);
 
-            return await _unitOfWork.OtForms.ToPagedResponseAsync(draftQuery, pageIndex, pageSize, x => new OtFormListItemDto
-            {
-                Id = x.Id,
-                GroupNameVn = x.Group.GroupNameVn,
-                DepartmentNameVn = x.Department.DepartmentNameVn,
-                OtCaseCode = x.OtCase.Code,
-                Date = x.Date,
-                TotalHour = x.TotalHour,
-                NumberOfEmployee = x.NumberOfEmployee,
-                CreatedByUserName = x.CreatedByUserName,
-                CreatedByFullName = x.CreatedByFullName,
-                Status = x.Status,
-                IsEditable = IsEditableStatus(x.Status)
-            });
+            return await _unitOfWork.OtForms.ToPagedResponseAsync(draftQuery, pageIndex, pageSize, ToListItemDto);
         }
 
         // Lịch sử đơn CHÍNH mình đã xử lý (Ký/Duyệt/Từ chối) ở BẤT KỲ cấp nào (Submitter/DepartmentManager/
@@ -116,26 +120,42 @@ namespace Attendance.Application.Services
                 .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id))
                 .OrderByDescending(x => x.Id);
 
-            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, x => new OtFormListItemDto
-            {
-                Id = x.Id,
-                GroupNameVn = x.Group.GroupNameVn,
-                DepartmentNameVn = x.Department.DepartmentNameVn,
-                OtCaseCode = x.OtCase.Code,
-                Date = x.Date,
-                TotalHour = x.TotalHour,
-                NumberOfEmployee = x.NumberOfEmployee,
-                CreatedByUserName = x.CreatedByUserName,
-                CreatedByFullName = x.CreatedByFullName,
-                Status = x.Status,
-                IsEditable = IsEditableStatus(x.Status)
-            });
+            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
+        }
+
+        // Đơn tôi CÓ TÊN trong danh sách nhân viên tăng ca (OtFormEmployee) — không nhất thiết là người
+        // tạo/ký/duyệt đơn đó. Dành cho mọi user Attendance (kể cả Role "Nhân viên", chỉ cần OTForm.View),
+        // suy ra qua Employee.UserName liên kết với account đang gọi (2026-07-17, xem docs/attendance-module.md).
+        public async Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(string userName, int pageIndex, int pageSize)
+        {
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted);
+            if (employee == null)
+                return new PagedResponse<OtFormListItemDto>(new List<OtFormListItemDto>(), 0, pageIndex, pageSize);
+
+            var participatedFormIds = await _unitOfWork.OtFormEmployees.SelectAsync(
+                x => x.EmployeeId == employee.Id, x => x.OtFormId);
+            var distinctFormIds = participatedFormIds.Distinct().ToList();
+
+            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
+                .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id))
+                .OrderByDescending(x => x.Id);
+
+            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
             string approverUserName, bool isGeneralDirector, int pageIndex, int pageSize)
         {
             var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x => !x.IsDeleted && x.UserName == approverUserName);
+
+            // GroupHead (Trưởng Bộ phận, mới 2026-07-17) — cấp trung gian giữa Trưởng nhóm và Trưởng
+            // phòng, cùng cơ chế scope Group/Department như DepartmentManager/WorkshopManager bên dưới.
+            var groupHeadDepartmentIds = scopes
+                .Where(s => s.ApprovalLevel == (int)ApprovalLevel.GroupHead && s.ScopeType == (int)ScopeType.Department)
+                .Select(s => s.ScopeId).ToList();
+            var groupHeadGroupIds = scopes
+                .Where(s => s.ApprovalLevel == (int)ApprovalLevel.GroupHead && s.ScopeType == (int)ScopeType.Group)
+                .Select(s => s.ScopeId).ToList();
 
             var deptManagerDepartmentIds = scopes
                 .Where(s => s.ApprovalLevel == (int)ApprovalLevel.DepartmentManager && s.ScopeType == (int)ScopeType.Department)
@@ -152,6 +172,8 @@ namespace Attendance.Application.Services
 
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && (
+                    (x.Status == (int)OtFormStatus.PendingGroupHead &&
+                        (groupHeadDepartmentIds.Contains(x.DepartmentId) || groupHeadGroupIds.Contains(x.GroupId))) ||
                     (x.Status == (int)OtFormStatus.Pending &&
                         (deptManagerDepartmentIds.Contains(x.DepartmentId) || deptManagerGroupIds.Contains(x.GroupId))) ||
                     (x.Status == (int)OtFormStatus.ApprovedByDepartment &&
@@ -160,20 +182,7 @@ namespace Attendance.Application.Services
                 ))
                 .OrderBy(x => x.Date);
 
-            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, x => new OtFormListItemDto
-            {
-                Id = x.Id,
-                GroupNameVn = x.Group.GroupNameVn,
-                DepartmentNameVn = x.Department.DepartmentNameVn,
-                OtCaseCode = x.OtCase.Code,
-                Date = x.Date,
-                TotalHour = x.TotalHour,
-                NumberOfEmployee = x.NumberOfEmployee,
-                CreatedByUserName = x.CreatedByUserName,
-                CreatedByFullName = x.CreatedByFullName,
-                Status = x.Status,
-                IsEditable = IsEditableStatus(x.Status)
-            });
+            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
         }
 
         public async Task<OtFormDto> GetByIdAsync(int id)
@@ -258,27 +267,25 @@ namespace Attendance.Application.Services
             var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == request.DepartmentId && !x.IsDeleted);
             department.OrThrowNotFound("Bộ phận", request.DepartmentId);
 
+            if (group!.DepartmentId != request.DepartmentId)
+                throw new DomainException($"Nhóm '{group.GroupNameVn}' không thuộc Bộ phận đã chọn.");
+
             var reason = await _unitOfWork.Reasons.FirstOrDefaultAsync(x => x.Id == request.ReasonId && !x.IsDeleted);
             reason.OrThrowNotFound("Lý do", request.ReasonId);
 
             var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == request.OtCaseId && !x.IsDeleted);
             otCase.OrThrowNotFound("Trường hợp OT", request.OtCaseId);
 
-            // Phạm vi tạo đơn: nhiều người trong cùng Group đều có thể tạo đơn (không chỉ 1 Trưởng Group
-            // duy nhất) — gán qua UserApprovalScope với ApprovalLevel=Submitter, cùng cơ chế Group/Department
-            // scope đang dùng cho cấp duyệt (xem docs/attendance-module.md). Admin bypass, giống GeneralDirector bypass lúc duyệt.
-            if (!isAdmin)
-            {
-                var creatorScopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
-                    !x.IsDeleted && x.UserName == createdByUserName && x.ApprovalLevel == (int)ApprovalLevel.Submitter);
-
-                var authorizedToCreate = creatorScopes.Any(s =>
-                    (s.ScopeType == (int)ScopeType.Department && s.ScopeId == request.DepartmentId) ||
-                    (s.ScopeType == (int)ScopeType.Group && s.ScopeId == request.GroupId));
-
-                if (!authorizedToCreate)
-                    throw new DomainException("Bạn không được phân quyền tạo đơn cho nhóm/bộ phận này. Liên hệ Admin để được gán qua UserApprovalScope (ApprovalLevel=Submitter).");
-            }
+            // Phạm vi tạo đơn — CHO PHÉP 2 nhánh độc lập (2026-07-17, tách "tạo đơn" khỏi "ký duyệt Trưởng
+            // nhóm" theo yêu cầu, xem docs/attendance-module.md):
+            //   1. Trưởng nhóm (hoặc bất kỳ ai được Admin gán UserApprovalScope(Submitter) khớp Group/Department) —
+            //      cơ chế cũ, không đổi. Nhóm này SAU ĐÓ cũng tự ký được "Người đề nghị" qua /submit.
+            //   2. Role "Nhân viên" (chỉ có OTForm.Create, KHÔNG có UserApprovalScope) — tạo được đơn cho
+            //      ĐÚNG Group của chính mình, suy ra từ Employee.GroupId qua Employee.UserName liên kết với
+            //      account đang gọi. Nhóm này KHÔNG ký được vì ApproveSubmitterAsync vẫn chỉ chấp nhận
+            //      UserApprovalScope(Submitter), không chấp nhận Employee.GroupId.
+            // Admin bypass cả 2 nhánh, giống GeneralDirector bypass lúc duyệt.
+            await EnsureCanCreateOrEditForScopeAsync(createdByUserName, isAdmin, request.GroupId, request.DepartmentId);
 
             await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
 
@@ -343,9 +350,84 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(newOtForm.Id);
         }
 
+        // Dùng chung cho CreateAsync và UpdateAsync — 1 user (không phải Admin) chỉ được tạo/sửa đơn cho
+        // đúng Group/Department mà họ có UserApprovalScope(Submitter) khớp, HOẶC đúng Group của chính họ
+        // qua Employee.GroupId (Role "Nhân viên"). UpdateAsync PHẢI gọi lại hàm này với GroupId/DepartmentId
+        // MỚI trong request — nếu không, 1 "Nhân viên" tạo đơn hợp lệ cho Group của mình rồi sau đó gọi PUT
+        // đổi sang Group/Department khác (không thuộc phạm vi được phép) sẽ lọt qua, vì UpdateAsync trước đây
+        // chỉ check `createdByUserName == currentUserName`, không re-check phạm vi Group/Department.
+        private async Task EnsureCanCreateOrEditForScopeAsync(string userName, bool isAdmin, int groupId, int departmentId)
+        {
+            if (isAdmin) return;
+
+            var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
+                !x.IsDeleted && x.UserName == userName && x.ApprovalLevel == (int)ApprovalLevel.Submitter);
+
+            var authorizedViaScope = scopes.Any(s =>
+                (s.ScopeType == (int)ScopeType.Department && s.ScopeId == departmentId) ||
+                (s.ScopeType == (int)ScopeType.Group && s.ScopeId == groupId));
+
+            var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x =>
+                x.UserName == userName && !x.IsDeleted);
+            var authorizedViaOwnGroup = callerEmployee != null && callerEmployee.GroupId == groupId;
+
+            if (!authorizedViaScope && !authorizedViaOwnGroup)
+                throw new DomainException("Bạn không được phân quyền tạo/sửa đơn cho nhóm/bộ phận này. Liên hệ Admin để được gán qua UserApprovalScope (ApprovalLevel=Submitter), hoặc kiểm tra tài khoản đã liên kết đúng nhân viên/nhóm chưa.");
+        }
+
+        // Trả về (các) Group mà người gọi được phép tạo đơn — để FE tự điền sẵn Bộ phận/Phòng ban
+        // trên màn "Tạo đơn tăng ca" thay vì bắt Nhân viên/Trưởng nhóm tự chọn từ toàn bộ danh sách
+        // (họ vốn chỉ tạo được cho đúng phạm vi này, xem EnsureCanCreateOrEditForScopeAsync — cùng
+        // 2 nguồn dữ liệu, chỉ đảo chiều truy vấn). Admin trả về rỗng — FE giữ nguyên dropdown chọn
+        // tự do như cũ vì Admin không bị giới hạn phạm vi nào (2026-07-17).
+        public async Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin)
+        {
+            if (isAdmin) return new List<MyCreateScopeItemDto>();
+
+            var groupIds = new HashSet<int>();
+
+            var submitterScopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
+                !x.IsDeleted && x.UserName == userName && x.ApprovalLevel == (int)ApprovalLevel.Submitter);
+
+            foreach (var s in submitterScopes.Where(s => s.ScopeType == (int)ScopeType.Group))
+                groupIds.Add(s.ScopeId);
+
+            // Dữ liệu cũ trước ràng buộc ScopeType=Group bắt buộc cho Submitter (2026-07-17) có thể còn
+            // scope kiểu Department — quy về toàn bộ Group thuộc Department đó để không bỏ sót.
+            var legacyDepartmentIds = submitterScopes
+                .Where(s => s.ScopeType == (int)ScopeType.Department)
+                .Select(s => s.ScopeId).ToList();
+            if (legacyDepartmentIds.Count > 0)
+            {
+                var groupsInDepartments = await _unitOfWork.Groups.FindAsync(
+                    x => !x.IsDeleted && legacyDepartmentIds.Contains(x.DepartmentId));
+                foreach (var g in groupsInDepartments) groupIds.Add(g.Id);
+            }
+
+            var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(
+                x => x.UserName == userName && !x.IsDeleted);
+            if (callerEmployee != null) groupIds.Add(callerEmployee.GroupId);
+
+            if (groupIds.Count == 0) return new List<MyCreateScopeItemDto>();
+
+            var groups = await _unitOfWork.Groups.SelectAsync(
+                x => groupIds.Contains(x.Id) && !x.IsDeleted,
+                x => new MyCreateScopeItemDto
+                {
+                    GroupId = x.Id,
+                    GroupNameVn = x.GroupNameVn,
+                    DepartmentId = x.DepartmentId,
+                    DepartmentNameVn = x.Department.DepartmentNameVn
+                });
+
+            return groups.OrderBy(x => x.GroupNameVn).ToList();
+        }
+
         // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).
-        // Tách riêng khỏi CreateAsync vì người tạo đơn (data entry) không nhất thiết là Trưởng nhóm;
-        // chữ ký "Người đề nghị" luôn phải là chữ ký thật của Trưởng nhóm (xem docs/attendance-module.md).
+        // Tách riêng khỏi CreateAsync vì người tạo đơn (data entry, có thể là Role "Nhân viên") không
+        // nhất thiết là Trưởng nhóm; chữ ký "Người đề nghị" luôn phải là chữ ký thật của Trưởng nhóm —
+        // CHỈ chấp nhận UserApprovalScope(Submitter), không chấp nhận Employee.GroupId như CreateAsync
+        // (xem docs/attendance-module.md).
         public async Task<OtFormDto> ApproveSubmitterAsync(int id, string approverUserName, string? approverFullName, bool isAdmin, ApproveOtFormDto request)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
@@ -387,20 +469,21 @@ namespace Attendance.Application.Services
                 ActionAt = DateTime.UtcNow
             });
 
-            otForm.Status = (int)OtFormStatus.Pending;
+            otForm.Status = (int)OtFormStatus.PendingGroupHead;
             _unitOfWork.OtForms.Update(otForm);
 
             await _unitOfWork.SaveChangesAsync();
 
-            // Đơn đã có chữ ký Trưởng nhóm, giờ cần Trưởng phòng (DepartmentManager) duyệt tiếp.
-            await NotifyEligibleApproversAsync(otForm, ApprovalLevel.DepartmentManager);
+            // Đơn đã có chữ ký Trưởng nhóm, giờ cần Trưởng Bộ phận (GroupHead, MỚI 2026-07-17) duyệt
+            // trước khi tới Trưởng phòng.
+            await NotifyEligibleApproversAsync(otForm, ApprovalLevel.GroupHead);
 
             return await GetByIdAsync(otForm.Id);
         }
 
         // Sửa toàn bộ đơn (danh mục + nhân viên + ProcessPart) — chỉ chính người tạo mới sửa được,
         // và chỉ khi đơn còn Pending (chưa cấp nào duyệt). Qua cấp nào rồi thì khóa cứng (xem docs).
-        public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, UpdateOtFormDto request)
+        public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, bool isAdmin, UpdateOtFormDto request)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted,
                 x => x.OtFormEmployees, x => x.ProcessPart);
@@ -418,11 +501,19 @@ namespace Attendance.Application.Services
             var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == request.DepartmentId && !x.IsDeleted);
             department.OrThrowNotFound("Bộ phận", request.DepartmentId);
 
+            if (group!.DepartmentId != request.DepartmentId)
+                throw new DomainException($"Nhóm '{group.GroupNameVn}' không thuộc Bộ phận đã chọn.");
+
             var reason = await _unitOfWork.Reasons.FirstOrDefaultAsync(x => x.Id == request.ReasonId && !x.IsDeleted);
             reason.OrThrowNotFound("Lý do", request.ReasonId);
 
             var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == request.OtCaseId && !x.IsDeleted);
             otCase.OrThrowNotFound("Trường hợp OT", request.OtCaseId);
+
+            // Re-check phạm vi Group/Department MỚI trong request (không chỉ dựa vào việc otForm đã được
+            // tạo hợp lệ trước đó) — ngăn 1 "Nhân viên"/Trưởng nhóm sửa đơn của mình sang Group/Department
+            // họ không có quyền, xem EnsureCanCreateOrEditForScopeAsync.
+            await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, request.GroupId, request.DepartmentId);
 
             await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
 
@@ -667,7 +758,12 @@ namespace Attendance.Application.Services
                 {
                     var html = _emailTemplateRenderer.Render("OtForm/ApprovalNotification.html", new Dictionary<string, string>
                     {
+                        ["ApproverFullName"] = fullName ?? approverUserName,
                         ["OtFormId"] = otForm.Id.ToString(),
+                        ["RequesterFullName"] = otForm.CreatedByFullName ?? otForm.CreatedByUserName,
+                        ["OtFormDate"] = otForm.Date.ToString("dd/MM/yyyy"),
+                        ["OtFormTime"] = $"{otForm.StartTime:HH\\:mm} - {otForm.EndTime:HH\\:mm}",
+                        ["TotalHour"] = otForm.TotalHour.ToString("0.##"),
                         ["ConfirmLink"] = link,
                         ["ExpiryDays"] = EmailApprovalTokenExpiryDays.ToString()
                     });
@@ -773,6 +869,7 @@ namespace Attendance.Application.Services
             var currentLevel = ((OtFormStatus)otForm!.Status) switch
             {
                 OtFormStatus.Draft => throw new DomainException("Đơn đang ở trạng thái nháp, cần Trưởng nhóm ký duyệt (POST /{id}/submit) trước khi duyệt/từ chối ở các cấp tiếp theo."),
+                OtFormStatus.PendingGroupHead => ApprovalLevel.GroupHead,
                 OtFormStatus.Pending => ApprovalLevel.DepartmentManager,
                 OtFormStatus.ApprovedByDepartment => ApprovalLevel.WorkshopManager,
                 OtFormStatus.ApprovedByWorkshop => ApprovalLevel.GeneralDirector,
@@ -800,13 +897,19 @@ namespace Attendance.Application.Services
             return (otForm, currentLevel);
         }
 
-        // Editable ở cả Draft (chưa ai ký) và Pending (đã có chữ ký Trưởng nhóm nhưng Trưởng phòng
-        // chưa duyệt) — chỉ khóa cứng khi qua tới cấp Trưởng phòng trở lên (xem docs/attendance-module.md).
+        // Editable ở Draft (chưa ai ký), PendingGroupHead (đã có chữ ký Trưởng nhóm, chờ Trưởng Bộ
+        // phận) và Pending (đã có chữ ký Trưởng Bộ phận, chờ Trưởng phòng) — chỉ khóa cứng khi qua tới
+        // cấp Trưởng phòng trở lên (xem docs/attendance-module.md).
         private static bool IsEditableStatus(int status) =>
-            status == (int)OtFormStatus.Draft || status == (int)OtFormStatus.Pending;
+            status == (int)OtFormStatus.Draft || status == (int)OtFormStatus.PendingGroupHead || status == (int)OtFormStatus.Pending;
 
         private static OtFormStatus DetermineNextStatus(ApprovalLevel justApprovedLevel, ApprovalLevel requiredApprovalLevel)
         {
+            // GroupHead (Trưởng Bộ phận) luôn là bước bắt buộc trung gian, KHÔNG phải điểm dừng theo
+            // OtCase.RequiredApprovalLevel (field này chỉ nhận DepartmentManager/WorkshopManager/
+            // GeneralDirector — xem ApprovalLevel.cs) — nên check trước, bỏ qua so sánh requiredApprovalLevel.
+            if (justApprovedLevel == ApprovalLevel.GroupHead) return OtFormStatus.Pending;
+
             if (justApprovedLevel == requiredApprovalLevel) return OtFormStatus.Completed;
 
             return justApprovedLevel switch
