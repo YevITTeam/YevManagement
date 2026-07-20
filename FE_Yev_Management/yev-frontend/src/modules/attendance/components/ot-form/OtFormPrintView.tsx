@@ -34,17 +34,22 @@ const labelCell = `${cell} bg-[#f2f2f2] font-semibold whitespace-nowrap`;
 const cellSm = "border border-black px-1 py-1 align-top text-[9px]";
 const labelCellSm = `${cellSm} bg-[#f2f2f2] font-semibold whitespace-nowrap`;
 
-// 5 ô ký theo mẫu giấy gốc YEV-22-024 (src/assets/file-samples/FormOT.xlsx, đối chiếu thêm bản PDF
-// mới hơn src/assets/file-ot-form/FormOT.pdf) — thứ tự trên giấy đi từ cấp cao nhất xuống thấp nhất, NGƯỢC
-// với thứ tự approvalLevel tăng dần dùng ở màn Chi tiết đơn. Bản Excel gốc (rev 3/2014) có thêm 1 cột ký
-// "Quản lý bộ phận" ở đầu — trước đây bỏ khi in vì hệ thống không có dữ liệu cho cấp này; nay đúng là ô
-// "Trưởng Bộ phận" (GroupHead, mới 2026-07-17, ký SAU Người đề nghị/TRƯỚC Trưởng phòng) nên thêm lại.
+// 4 cột ký đúng mẫu giấy gốc YEV-22-024 rev5 (docs/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO
+// (A4/A5).doc, đối chiếu antiword) — thứ tự trên giấy đi từ cấp cao nhất xuống thấp nhất, NGƯỢC với
+// thứ tự approvalLevel tăng dần dùng ở màn Chi tiết đơn. Mẫu giấy CHỈ có 4 cột, không có cột riêng cho
+// Trưởng Bộ phận — cột cuối "Người đề nghị" gộp chung 2 chữ ký (Trưởng nhóm ký + Trưởng Bộ phận duyệt
+// ngay sau), xem REQUESTER_SUB_COLUMNS bên dưới.
 const SIGNATURE_COLUMNS: { level: number; labelVn: string; labelJp: string }[] = [
     { level: 3, labelVn: "Tổng Giám Đốc", labelJp: "社長" },
     { level: 2, labelVn: "Trưởng xưởng", labelJp: "工場長" },
     { level: 1, labelVn: "Trưởng phòng", labelJp: "部長" },
-    { level: 4, labelVn: "Trưởng Bộ phận", labelJp: "課長" },
-    { level: 0, labelVn: "Trưởng nhóm", labelJp: "チームリーダー" },
+];
+
+// 2 chữ ký gộp trong cùng 1 ô "Người đề nghị" trên giấy: Trưởng nhóm (approvalLevel=0, người ký thật
+// với vai trò "Người đề nghị") và Trưởng Bộ phận (approvalLevel=4, GroupHead duyệt ngay sau).
+const REQUESTER_SUB_COLUMNS: { level: number; labelVn: string }[] = [
+    { level: 0, labelVn: "Trưởng nhóm" },
+    { level: 4, labelVn: "Trưởng Bộ phận" },
 ];
 
 function findHistory(histories: OtFormApprovalHistoryDto[], level: number) {
@@ -256,7 +261,13 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                 {/* Bảng ký duyệt */}
                 {/* border ngay trên <table> (không chỉ dựa vào border của các ô) — tránh bug Chrome/Edge
                     làm rớt mất viền phải khi in do làm tròn subpixel ở DPI in khác DPI màn hình. */}
-                <table className="w-full border-collapse border border-black">
+                <table className="w-full table-fixed border-collapse border border-black">
+                    <colgroup>
+                        {SIGNATURE_COLUMNS.map((col) => (
+                            <col key={col.level} className="w-[16%]" />
+                        ))}
+                        <col className="w-[52%]" />
+                    </colgroup>
                     <thead>
                         <tr>
                             {SIGNATURE_COLUMNS.map((col) => (
@@ -266,6 +277,11 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                                     <span className="font-normal">{col.labelJp}</span>
                                 </th>
                             ))}
+                            <th className={`${labelCell} text-center text-xs`}>
+                                Người đề nghị
+                                <br />
+                                <span className="font-normal">作成者</span>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -290,6 +306,36 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                                     </td>
                                 );
                             })}
+                            {/* Ô "Người đề nghị" trên giấy chỉ có 1 cột nhưng gộp 2 chữ ký — chia đôi bằng
+                                divide-x để phân biệt Trưởng nhóm (ký thật) và Trưởng Bộ phận (duyệt sau). */}
+                            <td className={`${cell} h-20 p-0 align-middle`}>
+                                <div className="flex h-full divide-x divide-black">
+                                    {REQUESTER_SUB_COLUMNS.map((sub) => {
+                                        const history = findHistory(form.approvalHistories, sub.level);
+                                        return (
+                                            <div
+                                                key={sub.level}
+                                                className="flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1 text-center"
+                                            >
+                                                <div className="text-[8px] uppercase tracking-wide text-[#5e3f3a]">{sub.labelVn}</div>
+                                                {history?.hasSignature && history.signatureImage ? (
+                                                    // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
+                                                    <img
+                                                        src={`data:image/png;base64,${history.signatureImage}`}
+                                                        alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}
+                                                        className="h-10 object-contain"
+                                                    />
+                                                ) : null}
+                                                {history && (
+                                                    <div className="text-[10px] text-[#333]">
+                                                        {history.approverFullName ?? history.approverUserName}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
