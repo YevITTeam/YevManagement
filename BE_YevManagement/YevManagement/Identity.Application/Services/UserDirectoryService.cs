@@ -4,9 +4,9 @@ using Shared.Application.Services;
 
 namespace Identity.Application.Services
 {
-    // Implement IUserDirectoryService (Shared.Application) — cầu nối để Attendance module tra cứu
-    // Email/FullName/Role của User mà không cần ProjectReference trực tiếp tới Identity.Application,
-    // Scrutor tự đăng ký lớp này theo interface lúc khởi động host (xem docs/architecture-core.md §DI).
+    // Implements IUserDirectoryService (Shared.Application) — a bridge that lets the Attendance module look up
+    // a User's Email/FullName/Role without needing a direct ProjectReference to Identity.Application.
+    // Scrutor auto-registers this class against the interface at host startup (see docs/architecture-core.md §DI).
     public class UserDirectoryService : BaseService<IIdentityUnitOfWork>, IUserDirectoryService
     {
         public UserDirectoryService(IIdentityUnitOfWork unitOfWork) : base(unitOfWork) { }

@@ -2,7 +2,7 @@ using System;
 
 namespace Attendance.Domain.Entities;
 
-// Danh sách nhân viên tham gia 1 OtForm kèm giờ OT thực tế của từng người — khóa kép (OtFormId, EmployeeId).
+// List of employees participating in an OtForm along with each person's actual OT hours — composite key (OtFormId, EmployeeId).
 public partial class OtFormEmployee
 {
     public int OtFormId { get; set; }

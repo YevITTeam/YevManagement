@@ -3,11 +3,11 @@ using Shared.Application.Interfaces;
 
 namespace Shared.Infrastructure.Services
 {
-    // Đọc file .html tĩnh từ thư mục "EmailTemplates" nằm cạnh DLL sau build (mỗi module tự copy file
-    // của mình vào đây qua <Content CopyToOutputDirectory>, xem Attendance.Infrastructure/EmailTemplates/)
-    // — tách nội dung/định dạng email khỏi code C#, sửa chữ không cần đụng Service. Thay placeholder
-    // dạng "{{Key}}" bằng giá trị thật, không dùng engine template ngoài vì nhu cầu hiện tại chỉ là
-    // ghép chuỗi đơn giản.
+    // Reads static .html files from the "EmailTemplates" folder next to the DLL after build (each module
+    // copies its own files here via <Content CopyToOutputDirectory>, see Attendance.Infrastructure/EmailTemplates/)
+    // — keeps email content/formatting out of C# code, so text changes don't require touching the Service.
+    // Replaces "{{Key}}" placeholders with real values; no external template engine is used since the current
+    // need is just simple string substitution.
     public class EmailTemplateService : IEmailTemplateRenderer
     {
         private static readonly string TemplatesRoot = Path.Combine(AppContext.BaseDirectory, "EmailTemplates");

@@ -11,9 +11,9 @@ namespace Identity.Application.Dtos.UserDto
         public string FullName { get; set; }
         public string? DeviceName { get; set; }
 
-        // Tự resolve từ AD lúc đăng nhập (MyClaimsTransformation.GetActualEmail) — dùng để gửi email
-        // xác nhận cập nhật chữ ký/duyệt đơn (Attendance module). Nullable vì không phải AD account
-        // nào cũng có sẵn mail.
+        // Automatically resolved from AD at login (MyClaimsTransformation.GetActualEmail) — used to
+        // send signature-update confirmation / form-approval emails (Attendance module). Nullable
+        // because not every AD account has a mail attribute available.
         public string? Email { get; set; }
 
         public List<string> Roles { get; set; } = new List<string>();

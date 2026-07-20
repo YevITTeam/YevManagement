@@ -40,7 +40,7 @@ namespace Identity.Infrastructure.Migrations
                 table: "UserPermissions",
                 column: "PermissionId");
 
-            // Seed permission mới cho tính năng gán/thu hồi permission riêng theo User.
+            // Seed a new permission for the feature that grants/revokes per-User permission overrides.
             migrationBuilder.Sql(@"
 INSERT INTO Permissions (Code, Module, Description) VALUES
 (N'Identity.User.UpdatePermissions', N'Identity', N'Cấp thêm / thu hồi riêng permission cho 1 người dùng cụ thể (ngoài permission theo Role)');

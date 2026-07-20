@@ -19,13 +19,13 @@ namespace Attendance.Application.Dtos.OtForms
         public int NumberOfEmployee { get; set; }
         public string CreatedByUserName { get; set; } = null!;
 
-        // Snapshot Họ tên người tạo — FE luôn ưu tiên hiển thị field này, fallback CreatedByUserName nếu null.
+        // Snapshot of the creator's full name — FE always prefers displaying this field, falling back to CreatedByUserName if null.
         public string? CreatedByFullName { get; set; }
 
         // Enum Attendance.Domain.Enums.OtFormStatus.
         public int Status { get; set; }
 
-        // true khi Status == Pending (chưa cấp nào duyệt) — chỉ lúc này mới gọi được PUT /api/OtForm/{id}.
+        // true when Status == Pending (no approval level has approved yet) — only then can PUT /api/OtForm/{id} be called.
         public bool IsEditable { get; set; }
 
         public List<OtFormEmployeeDto> Employees { get; set; } = new();

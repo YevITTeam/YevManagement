@@ -10,12 +10,12 @@ namespace Asset.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Xoá data cũ trước khi đổi DeviceGroup.DepartmentId sang NOT NULL (quyết định người
-            // dùng 2026-07-13): DeviceGroups chỉ có 1 dòng seed "MD", DeviceDepartments có "MD" +
-            // "IT" tự thêm tay — chưa Device nào tham chiếu (đã kiểm tra trên DB thật trước khi
-            // viết migration này) nên xoá cứng an toàn, tránh lẫn với bộ mã chính thức nhập bên
-            // dưới. Phải xoá DeviceGroups trước (con) rồi mới tới DeviceDepartments (cha, còn bị
-            // FK ràng buộc).
+            // Delete old data before changing DeviceGroup.DepartmentId to NOT NULL (user decision
+            // 2026-07-13): DeviceGroups only had 1 seeded "MD" row, DeviceDepartments had "MD" +
+            // "IT" added manually — no Device referenced them yet (verified against the real DB
+            // before writing this migration) so a hard delete is safe, avoiding conflicts with the
+            // official code set inserted below. DeviceGroups (child) must be deleted before
+            // DeviceDepartments (parent, still bound by an FK constraint).
             migrationBuilder.Sql("DELETE FROM DeviceGroups;");
             migrationBuilder.Sql("DELETE FROM DeviceDepartments;");
 
@@ -44,10 +44,10 @@ namespace Asset.Infrastructure.Migrations
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Cascade);
 
-            // Import bộ mã Bộ phận/Nhóm chính thức theo ảnh sơ đồ tổ chức (2026-07-13). 15 mã
-            // Nhóm chưa có tên đầy đủ trong chú thích ảnh (HZ/YT/PD/EC/JK/MA/IM/IT/PL/PR/WH/SH/
-            // KS/00/JP) tạm để GroupName = đúng mã Code — sửa lại tên thật qua API Update sau khi
-            // có thông tin đầy đủ.
+            // Import the official Department/Group code set based on the organization chart image
+            // (2026-07-13). 15 Group codes without a full name in the image's annotations
+            // (HZ/YT/PD/EC/JK/MA/IM/IT/PL/PR/WH/SH/KS/00/JP) temporarily use GroupName = the Code
+            // itself — update with the real name via the Update API once full information is available.
             migrationBuilder.Sql(@"
 INSERT INTO DeviceDepartments (DepartmentCode, DepartmentName, IsDeleted) VALUES
 (N'MAN', N'P Quản lý', 0),
@@ -99,8 +99,8 @@ JOIN DeviceDepartments d ON d.DepartmentCode = v.DepartmentCode;
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Xoá sạch data import ở Up() trước khi bỏ cột — không khôi phục lại "MD"/"IT" cũ vì
-            // dữ liệu đó vốn đã bị coi là rác cần dọn (xem lý do ở Up()).
+            // Delete all data imported in Up() before dropping the column — do not restore the old
+            // "MD"/"IT" rows since that data was already considered junk to clean up (see reasoning in Up()).
             migrationBuilder.Sql("DELETE FROM DeviceGroups;");
             migrationBuilder.Sql("DELETE FROM DeviceDepartments;");
 

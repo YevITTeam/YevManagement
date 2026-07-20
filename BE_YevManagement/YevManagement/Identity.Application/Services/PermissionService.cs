@@ -19,8 +19,8 @@ namespace Identity.Application.Services
         {
             var permissions = await _unitOfWork.Permissions.GetAllAsync();
 
-            // Code có dạng "Module.Entity.Action" -> tách đoạn giữa làm tên Entity
-            // để nhóm 2 cấp (Module > Entity) cho FE dễ hiển thị dạng cây/collapsible.
+            // Code has the format "Module.Entity.Action" -> extract the middle segment as the Entity name
+            // to group into 2 levels (Module > Entity) so FE can easily render it as a tree/collapsible view.
             return permissions
                 .OrderBy(p => p.Module)
                 .ThenBy(p => p.Code)
@@ -116,8 +116,8 @@ namespace Identity.Application.Services
             var user = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.Id == userId, x => x.Roles);
             user.OrThrowNotFound("Người dùng", userId);
 
-            // FirstOrDefaultAsync(includes: x => x.Roles) chỉ nạp 1 cấp Roles, chưa có
-            // Roles.Permissions -> nạp lại Role kèm Permissions theo đúng roleId của user.
+            // FirstOrDefaultAsync(includes: x => x.Roles) only loads 1 level of Roles, not
+            // Roles.Permissions -> reload the Roles including Permissions for the user's roleIds.
             var roleIds = user!.Roles.Select(r => r.Id).ToList();
             var rolePermissions = await _unitOfWork.Roles.FindWithIncludesAsync(
                 r => roleIds.Contains(r.Id),

@@ -4,10 +4,10 @@ using Shared.Application.Helper;
 
 namespace CompanySystem.HostApi.BackgroundServices
 {
-    // Rà soát mỗi ngày (mặc định 00:30 giờ hệ thống): Device đang Chờ sử dụng/Đang sử dụng
-    // mà đã hết hạn (ExpirationDate < hôm nay) → chuyển "Chờ thanh lý"; Device đang "Chờ
-    // thanh lý" mà ExpirationDate đã qua quá số tháng cấu hình (AssetSetting.LiquidationAfterMonths,
-    // xem docs/asset-module.md) → chuyển "Đã thanh lý". Không đụng tới Device đã IsDeleted.
+    // Runs a daily sweep (default 00:30 system time): Devices that are Pending Use/In Use
+    // and have expired (ExpirationDate < today) → move to "Pending Liquidation"; Devices in "Pending
+    // Liquidation" whose ExpirationDate has passed the configured number of months (AssetSetting.LiquidationAfterMonths,
+    // see docs/asset-module.md) → move to "Liquidated". Devices with IsDeleted are not touched.
     public class DeviceLiquidationBackgroundService : BackgroundService
     {
         private static readonly TimeSpan RunAtTimeOfDay = new(0, 30, 0);

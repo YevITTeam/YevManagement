@@ -24,8 +24,9 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
-        // departmentId: FE dùng để load danh sách Nhóm phụ thuộc Bộ phận đã chọn (dropdown Nhóm
-        // trên form Device chỉ hiện Nhóm thuộc đúng Bộ phận vừa chọn).
+        // departmentId: used by the FE to load the list of Groups dependent on the selected
+        // Department (the Group dropdown on the Device form only shows Groups belonging to
+        // the selected Department).
         [RequirePermission("Asset.DeviceGroup.View")]
         [HttpGet("all")]
         public async Task<ActionResult<ApiResponse<List<DeviceGroupDto>>>> GetAllActive([FromQuery] int? departmentId = null)

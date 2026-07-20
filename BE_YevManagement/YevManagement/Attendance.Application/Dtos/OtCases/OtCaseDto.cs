@@ -7,7 +7,7 @@ namespace Attendance.Application.Dtos.OtCases
         public string? Description { get; set; }
         public bool RequireSignature { get; set; }
 
-        // Enum Attendance.Domain.Enums.ApprovalLevel — cấp CUỐI mà OtForm dùng OtCase này phải đạt.
+        // Enum Attendance.Domain.Enums.ApprovalLevel — the FINAL level an OtForm using this OtCase must reach.
         public int RequiredApprovalLevel { get; set; }
     }
 }

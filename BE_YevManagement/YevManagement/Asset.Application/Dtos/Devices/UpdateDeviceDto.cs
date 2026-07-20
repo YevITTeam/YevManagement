@@ -55,8 +55,8 @@ namespace Asset.Application.Dtos.Devices
 
         public List<int> IpAddressIds { get; set; } = new();
 
-        // Gợi ý "máy MỚI nào sẽ thay thế cho chính thiết bị này" — set trên máy CŨ. Xem
-        // ghi chú đầy đủ ở CreateDeviceDto.SuggestedNewDeviceId.
+        // Suggests "which NEW device will replace this device" — set on the OLD device. See
+        // the full note on CreateDeviceDto.SuggestedNewDeviceId.
         public int? SuggestedNewDeviceId { get; set; }
     }
 }

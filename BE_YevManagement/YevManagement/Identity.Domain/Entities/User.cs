@@ -15,9 +15,9 @@ public class User
 
     public string? DeviceName { get; set; }
 
-    // Tự resolve từ thuộc tính AD "mail" lúc đăng nhập (MyClaimsTransformation.GetActualEmail) —
-    // dùng để gửi email xác nhận chữ ký/duyệt đơn (Attendance module). Nullable vì không phải AD
-    // account nào cũng có sẵn mail, và hệ thống chưa từng cần Email trước tính năng này.
+    // Automatically resolved from the AD "mail" attribute at login (MyClaimsTransformation.GetActualEmail) —
+    // used to send signature/form-approval confirmation emails (Attendance module). Nullable because
+    // not every AD account has mail available, and the system never needed Email before this feature.
     public string? Email { get; set; }
 
     public virtual ICollection<Role> Roles { get; set; } = new List<Role>();

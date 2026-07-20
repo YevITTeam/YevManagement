@@ -10,8 +10,8 @@ namespace Identity.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Asset.AuditTrail.View: xem lịch sử Create/Update/Delete (ai/khi nào/đổi gì) của
-            // module Asset — ghi tự động qua AssetDbContext.SaveChangesAsync (xem docs/asset-module.md).
+            // Asset.AuditTrail.View: view the Create/Update/Delete history (who/when/what changed) of
+            // the Asset module — recorded automatically via AssetDbContext.SaveChangesAsync (see docs/asset-module.md).
             migrationBuilder.Sql(@"
 INSERT INTO Permissions (Code, Module, Description) VALUES
 (N'Asset.AuditTrail.View', N'Asset', N'Xem lịch sử thay đổi (audit trail) dữ liệu Asset');

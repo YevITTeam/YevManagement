@@ -39,10 +39,10 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
-        // Không còn Create/Delete thủ công cho từng IpAddress (2026-07-11, quyết định người
-        // dùng) — IpAddress chỉ được sinh hàng loạt (255 địa chỉ/prefix) qua
-        // IpPrefixController.Create và dọn theo qua IpPrefixController.Delete. Update được giữ
-        // lại nhưng CHỈ đổi được Status + Note (không đổi IpAddress/DeviceId).
+        // No more manual Create/Delete for individual IpAddresses (2026-07-11, user decision)
+        // — IpAddresses are only bulk-generated (255 addresses/prefix) via IpPrefixController.Create
+        // and cleaned up accordingly via IpPrefixController.Delete. Update is kept but ONLY
+        // allows changing Status + Note (not IpAddress/DeviceId).
 
         [RequirePermission("Asset.IpAddress.Update")]
         [HttpPut("{id}")]

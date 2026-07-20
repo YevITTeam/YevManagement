@@ -19,13 +19,14 @@ namespace Asset.Infrastructure.Migrations
                 table: "Devices",
                 newName: "SuggestedNewDeviceId");
 
-            // Data fixup: RenameColumn chỉ đổi tên cột tại chỗ, KHÔNG di chuyển dữ liệu sang
-            // đúng dòng. Trước migration này, cột (khi còn tên ReplacesOldDeviceId) nằm trên
-            // dòng máy MỚI, trỏ về máy CŨ; sau khi đổi hướng tự tham chiếu, cột phải nằm trên
-            // dòng máy CŨ, trỏ về máy MỚI — nên cần chuyển giá trị hiện có sang đúng dòng đối
-            // diện. Nếu nhiều máy mới cùng khai "MQL Cũ" trỏ về 1 máy cũ (qua nhiều lần import
-            // khác nhau), chỉ giữ lại máy mới có Id lớn nhất (import gần nhất), khớp đúng logic
-            // "chọn gợi ý gần nhất" cũ ở DeviceService.GetReplacementSuggestionAsync trước đây.
+            // Data fixup: RenameColumn only renames the column in place, it does NOT move data to
+            // the correct row. Before this migration, the column (when it was still named ReplacesOldDeviceId)
+            // sat on the NEW device's row, pointing to the OLD device; after reversing the self-reference
+            // direction, the column must sit on the OLD device's row, pointing to the NEW device — so the
+            // existing values need to be moved to the opposite row. If multiple new devices declare the same
+            // "Old Device" pointing to one old device (through several separate imports), only keep the new
+            // device with the largest Id (most recent import), matching the old "pick the most recent suggestion"
+            // logic previously in DeviceService.GetReplacementSuggestionAsync.
             migrationBuilder.Sql(@"
 SELECT Id AS NewDeviceId, SuggestedNewDeviceId AS OldDeviceId
 INTO #ReplacementPairs
@@ -67,9 +68,9 @@ DROP TABLE #ReplacementPairs;
                 name: "FK_ThietBis_ThietBis_GoiYMayMoiId",
                 table: "Devices");
 
-            // Data fixup ngược (best-effort — nếu Up() từng gộp nhiều máy mới cùng trỏ 1 máy
-            // cũ thành 1 dòng duy nhất thì Down() không khôi phục lại được các dòng đã gộp,
-            // chỉ khôi phục đúng quan hệ 1-1 còn lại tại thời điểm rollback).
+            // Reverse data fixup (best-effort — if Up() ever merged multiple new devices pointing
+            // to the same old device into a single row, Down() cannot restore the merged rows,
+            // it only restores the remaining 1-1 relationships at the time of rollback).
             migrationBuilder.Sql(@"
 SELECT Id AS OldDeviceId, SuggestedNewDeviceId AS NewDeviceId
 INTO #ReplacementPairs

@@ -1,6 +1,6 @@
 namespace Attendance.Domain.Entities;
 
-// Chi tiết phát sinh riêng của 1 OtForm (ăn/xe đưa đón/phòng photocopy...) — quan hệ 1-1 với OtForm.
+// Extra expense details for a single OtForm (meal/shuttle/photocopy room...) — 1-1 relationship with OtForm.
 public partial class ProcessPart
 {
     public int Id { get; set; }
@@ -9,8 +9,8 @@ public partial class ProcessPart
 
     public bool IsEat { get; set; }
 
-    // Số lượng từng loại phiếu ăn khi IsEat = true — người lập đơn tự nhập tay (không tự tính từ
-    // danh sách nhân viên), xem docs/attendance-module.md.
+    // Count of each meal ticket type when IsEat = true — manually entered by the form creator
+    // (not auto-calculated from the employee list), see docs/attendance-module.md.
     public int MainTicketCount { get; set; }
 
     public int SecondaryTicketCount { get; set; }

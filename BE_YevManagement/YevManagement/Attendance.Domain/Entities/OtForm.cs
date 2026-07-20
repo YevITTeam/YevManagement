@@ -27,15 +27,18 @@ public partial class OtForm
 
     public int NumberOfEmployee { get; set; }
 
-    // Người tạo đơn — lưu UserName (Identity.User nằm ở DB khác, JWT không có claim UserId dạng số,
-    // chỉ có UserName), theo đúng convention Asset.Domain.Models.AuditTrail.ChangedBy.
+    // The form creator — stores UserName (Identity.User lives in a different DB, and the JWT has no
+    // numeric UserId claim, only UserName), following the same convention as
+    // Asset.Domain.Models.AuditTrail.ChangedBy.
     public string CreatedByUserName { get; set; } = null!;
 
-    // Snapshot claim "FullName" của JWT tại thời điểm tạo đơn — để mọi nơi hiển thị (list/detail)
-    // luôn ra được tên người dùng thay vì UserName thô, cùng lý do với OtFormApprovalHistory.ApproverFullName.
+    // Snapshot of the JWT's "FullName" claim at the time the form was created — so every display
+    // (list/detail) can always show the user's name instead of the raw UserName, same reasoning as
+    // OtFormApprovalHistory.ApproverFullName.
     public string? CreatedByFullName { get; set; }
 
-    // Lưu enum Attendance.Domain.Enums.OtFormStatus dưới dạng int (theo convention Asset.Domain.Entities.Device.Status).
+    // Stores the Attendance.Domain.Enums.OtFormStatus enum as an int (following the same convention as
+    // Asset.Domain.Entities.Device.Status).
     public int Status { get; set; }
 
     public bool IsDeleted { get; set; }

@@ -10,8 +10,8 @@ namespace Identity.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Seed permission mới cho tính năng Admin tạo thủ công 1 User (UserName +
-            // DeviceName + chọn Role) — pre-provision trước khi người dùng đăng nhập lần đầu.
+            // Seed a new permission for the Admin feature to manually create a User (UserName +
+            // DeviceName + choose Role) — pre-provisioned before the user's first login.
             migrationBuilder.Sql(@"
 INSERT INTO Permissions (Code, Module, Description) VALUES
 (N'Identity.User.Create', N'Identity', N'Tạo thủ công 1 người dùng (UserName + DeviceName + gán Role) trước khi người dùng đăng nhập Windows lần đầu');

@@ -8,9 +8,9 @@ public partial class UserPermission
 
     public int PermissionId { get; set; }
 
-    // true = cấp thêm permission này cho riêng User này dù Role không có.
-    // false = thu hồi permission này khỏi riêng User này dù Role có cấp.
-    // Deny (false) luôn thắng Grant khi tính permission hiệu lực (xem MyClaimsTransformation).
+    // true = grants this permission specifically to this User even if the Role doesn't have it.
+    // false = revokes this permission specifically from this User even if the Role grants it.
+    // Deny (false) always wins over Grant when computing the effective permission (see MyClaimsTransformation).
     public bool IsGranted { get; set; }
 
     public virtual User User { get; set; } = null!;

@@ -4,7 +4,7 @@ namespace Attendance.Application.Dtos.OtForms
     {
         public string ApproverUserName { get; set; } = null!;
 
-        // Snapshot Họ tên từ JWT lúc ký — null nếu tài khoản chưa có FullName trong Identity (FE fallback ApproverUserName).
+        // Snapshot of the full name from JWT at signing time — null if the account has no FullName in Identity (FE falls back to ApproverUserName).
         public string? ApproverFullName { get; set; }
 
         // Enum Attendance.Domain.Enums.ApprovalLevel.

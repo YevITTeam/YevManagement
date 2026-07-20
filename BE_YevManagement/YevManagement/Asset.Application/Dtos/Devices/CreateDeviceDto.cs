@@ -22,7 +22,7 @@ namespace Asset.Application.Dtos.Devices
         [Required(ErrorMessage = "Chi nhánh không được để trống")]
         public int BranchId { get; set; }
 
-        // Nhóm/Bộ phận: optional — xác định thiết bị đang ở chỗ nào bên cạnh Branch.
+        // Group/Department: optional — identifies where the device is located besides the Branch.
         public int? GroupId { get; set; }
 
         public int? DepartmentId { get; set; }
@@ -55,12 +55,13 @@ namespace Asset.Application.Dtos.Devices
 
         public List<int> IpAddressIds { get; set; } = new();
 
-        // Gợi ý "máy MỚI nào sẽ thay thế cho chính thiết bị này" (set tay khi hiếm khi cần
-        // tạo sẵn gợi ý cho 1 máy cũ đã tồn tại). Optional — trỏ tới Id 1 Device khác đã có
-        // sẵn trong hệ thống, chỉ dùng để FE điền sẵn NewDeviceId trên màn "Chuyển máy" mở
-        // trên chính thiết bị này sau này, không tự động chuyển máy. Luồng phổ biến (import
-        // Excel cột "MQL Cũ") set field này qua UpdateAsync trên máy CŨ sau khi máy MỚI được
-        // tạo xong, không set ở đây lúc Create — xem DeviceImportService.
+        // Suggests "which NEW device will replace this device" (set manually in the rare case
+        // a suggestion needs to be pre-created for an existing old device). Optional — points
+        // to the Id of another Device already existing in the system, only used so the FE can
+        // pre-fill NewDeviceId on the "Transfer Device" screen opened on this device later, it
+        // does not auto-transfer the device. The common flow (Excel import "Old MQL" column)
+        // sets this field via UpdateAsync on the OLD device after the NEW device has been
+        // created, it is not set here at Create time — see DeviceImportService.
         public int? SuggestedNewDeviceId { get; set; }
     }
 }

@@ -28,9 +28,9 @@ namespace Asset.Application.Services
             return new AssetSettingDto { LiquidationAfterMonths = setting.LiquidationAfterMonths };
         }
 
-        // Bảng chỉ có đúng 1 dòng (seed sẵn qua migration). Tự tạo dòng mặc định nếu vì lý
-        // do gì đó bị thiếu (VD chỉnh tay trực tiếp trên DB) — tránh cả API lẫn background
-        // service rớt lỗi vì thiếu cấu hình.
+        // The table should always have exactly 1 row (seeded via migration). Auto-create the
+        // default row if it is missing for some reason (e.g. manual edits directly on the DB)
+        // — this prevents both the API and background service from failing due to missing config.
         private async Task<AssetSetting> GetOrCreateSettingEntityAsync()
         {
             var settings = await _unitOfWork.AssetSettings.GetAllAsync();

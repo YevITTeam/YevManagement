@@ -22,8 +22,8 @@ namespace Asset.Application.Dtos.Devices
         public string? SerialNumber { get; set; }
         public bool? IsUseUsb { get; set; }
 
-        // 2026-07-10: sort theo DeviceCode, null = giữ mặc định OrderByDescending(PurchaseDate).
-        // true = tăng dần, false = giảm dần.
+        // 2026-07-10: sort by DeviceCode, null = keep the default OrderByDescending(PurchaseDate).
+        // true = ascending, false = descending.
         public bool? SortDeviceCodeAscending { get; set; }
     }
 }

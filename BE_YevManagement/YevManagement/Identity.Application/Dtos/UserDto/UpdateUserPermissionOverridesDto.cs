@@ -4,8 +4,8 @@ using System.Text;
 
 namespace Identity.Application.Dtos.UserDto
 {
-    // Body request cho PUT /api/Permission/user/{userId} — UserId lấy từ route,
-    // không cần lặp lại trong body (khác UpdateUserPermissionsDto dùng nội bộ Service).
+    // Request body for PUT /api/Permission/user/{userId} — UserId comes from the route,
+    // so it does not need to be repeated in the body (unlike UpdateUserPermissionsDto used internally by the Service).
     public class UpdateUserPermissionOverridesDto
     {
         public List<int> GrantPermissionIds { get; set; } = new List<int>();

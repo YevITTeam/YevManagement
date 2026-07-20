@@ -13,11 +13,11 @@ namespace Asset.Application.Services
 {
     public class DeviceImportService : BaseService<IAssetUnitOfWork>, IDeviceImportService
     {
-        // File Excel mẫu (xem docs/asset-module.md) không có DeviceName/Manager/Email/
-        // DepreciationMonths dù các trường này [Required] ở CreateDeviceDto — theo quyết
-        // định của người dùng (2026-07-10): DeviceName lấy theo MQL, Manager/Email để
-        // trống, DepreciationMonths mặc định 60 tháng, sửa lại sau qua màn hình Device
-        // nếu cần.
+        // The sample Excel file (see docs/asset-module.md) has no DeviceName/Manager/Email/
+        // DepreciationMonths even though these fields are [Required] on CreateDeviceDto — per user
+        // decision (2026-07-10): DeviceName is taken from the MQL (device code), Manager/Email are
+        // left blank, DepreciationMonths defaults to 60 months, edit later via the Device screen
+        // if needed.
         private const int DefaultDepreciationMonths = 60;
 
         private readonly IDeviceService _deviceService;
@@ -41,13 +41,13 @@ namespace Asset.Application.Services
 
         public async Task<DeviceImportConfirmResultDto> ConfirmAsync(ConfirmDeviceImportDto request)
         {
-            // Validate lại theo dữ liệu DB hiện tại (không tin Id do client gửi lên) —
-            // phòng trường hợp dữ liệu đã đổi kể từ lúc người dùng xem bản Preview.
+            // Re-validate against current DB data (don't trust the Id sent by the client) —
+            // in case data has changed since the user viewed the Preview.
             var validatedRows = await ValidateAndResolveRowsAsync(request.Rows);
 
-            // Dòng còn lỗi bị BỎ QUA, không chặn cả batch nữa (2026-07-11, đổi theo yêu cầu
-            // người dùng — trước đó có bất kỳ dòng lỗi nào thì ném DomainException, không ghi
-            // gì cả). Chỉ những dòng hợp lệ mới được tạo Device.
+            // Rows that still have errors are SKIPPED, no longer blocking the whole batch (2026-07-11,
+            // changed per user request — previously any error row would throw a DomainException and
+            // nothing would be saved). Only valid rows get a Device created.
             var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
             var validRows = validatedRows.Where(x => x.IsValid).ToList();
 
@@ -87,21 +87,23 @@ namespace Asset.Application.Services
                     result.CreatedDeviceIds.Add(created.Id);
                     result.CreatedCount++;
 
-                    // Lưu lại gợi ý "MQL Cũ" xuống DB (2026-07-11, thêm sau — trước đó chỉ trả
-                    // về PendingTransfers 1 lần trong response Confirm, không lưu; 2026-07-13,
-                    // đổi hướng — ghi thẳng Id máy mới vào SuggestedNewDeviceId của máy CŨ thay
-                    // vì set ReplacesOldDeviceId trên máy mới) để màn hình "Chuyển máy" mở trên
-                    // máy cũ sau này vẫn tự hiện được gợi ý máy này qua
-                    // GET /api/Device/{oldId}/replacement-suggestion, dù không xử lý ngay lúc import.
+                    // Persist the "Old MQL" suggestion to the DB (2026-07-11, added afterward —
+                    // previously it was only returned once in the Confirm response as PendingTransfers,
+                    // not saved; 2026-07-13, reversed direction — writes the new device's Id directly
+                    // into SuggestedNewDeviceId of the OLD device instead of setting ReplacesOldDeviceId
+                    // on the new device) so the "Transfer Device" screen opened on the old device later
+                    // can still automatically show this suggestion via
+                    // GET /api/Device/{oldId}/replacement-suggestion, even though it isn't handled at import time.
                     if (row.ResolvedOldDeviceId.HasValue)
                     {
                         await _deviceService.SetSuggestedNewDeviceAsync(row.ResolvedOldDeviceId.Value, created.Id);
                     }
 
-                    // Tạo DeviceConfiguration đi kèm nếu dòng Excel có ít nhất 1 trong 5 cột
-                    // cấu hình (Hãng/Model/CPU/RAM/Ổ Cứng, mẫu Excel mới 2026-07-11) — Device
-                    // vừa tạo chắc chắn chưa có config nên luôn CreateAsync, không cần check
-                    // tồn tại như DeviceConfigurationImportService (import cập nhật).
+                    // Create an accompanying DeviceConfiguration if the Excel row has at least 1 of the
+                    // 5 configuration columns (Maker/Model/CPU/RAM/HardDrive, new Excel template
+                    // 2026-07-11) — the just-created Device definitely has no config yet, so always
+                    // CreateAsync, no need to check existence like DeviceConfigurationImportService
+                    // (which imports updates).
                     if (!string.IsNullOrWhiteSpace(row.Maker) || !string.IsNullOrWhiteSpace(row.Model) ||
                         !string.IsNullOrWhiteSpace(row.Cpu) || !string.IsNullOrWhiteSpace(row.Ram) ||
                         !string.IsNullOrWhiteSpace(row.HardDrive))
@@ -118,10 +120,10 @@ namespace Asset.Application.Services
                         result.CreatedConfigCount++;
                     }
 
-                    // Không tự chuyển máy ở đây nữa (2026-07-11) — chỉ gợi ý, người dùng
-                    // tự bấm "Chuyển" trên màn hình riêng (gọi POST /api/TransferHistory)
-                    // vì lúc import chỉ là dự tính, có thể đổi ý máy cũ nào sẽ được thay khi
-                    // thật sự lắp đặt.
+                    // No longer transfers the device automatically here (2026-07-11) — it's only a
+                    // suggestion, the user manually clicks "Transfer" on a separate screen (calls
+                    // POST /api/TransferHistory) because at import time it's only tentative — which
+                    // old device gets replaced may still change once installation actually happens.
                     if (row.ResolvedOldDeviceId.HasValue)
                     {
                         result.PendingTransfers.Add(new DeviceImportPendingTransferDto
@@ -297,12 +299,12 @@ namespace Asset.Application.Services
             InvalidRows = rows.Count(r => !r.IsValid)
         };
 
-        // Cột cố định theo đúng thứ tự template Excel hiện có (2026-07-11, đổi — thêm 5 cột
-        // cấu hình): A=MQL, B=Xưởng, C=Loại Thiết Bị, D=Nhà Cung Cấp, E=Ngày Mua, F=Ghi
-        // Chú, G=Số SerialNumber, H=Hãng, I=Model, J=CPU, K=RAM, L=Ổ Cứng, M=MQL Cũ
-        // (trước đó MQL Cũ ở cột H — mẫu cũ không có 5 cột cấu hình). Dòng 1 là header.
-        // 2026-07-13: cột B (Xưởng)/D (Nhà Cung Cấp) đổi sang nhập MÃ (BranchCode/
-        // SupplierCode) thay vì Tên — Loại Thiết Bị (cột C) vẫn giữ nguyên khớp theo Tên.
+        // Fixed columns matching the order of the current Excel template (2026-07-11, changed —
+        // added 5 configuration columns): A=MQL, B=Branch, C=Device Type, D=Supplier, E=Purchase Date,
+        // F=Note, G=Serial Number, H=Maker, I=Model, J=CPU, K=RAM, L=Hard Drive, M=Old MQL
+        // (previously Old MQL was in column H — the old template had no configuration columns). Row 1 is the header.
+        // 2026-07-13: column B (Branch)/D (Supplier) changed to enter the CODE (BranchCode/
+        // SupplierCode) instead of the Name — Device Type (column C) still matches by Name.
         private static List<DeviceImportRowDto> ParseXlsx(Stream stream)
         {
             XLWorkbook workbook;
@@ -312,10 +314,10 @@ namespace Asset.Application.Services
             }
             catch (Exception ex) when (ex is not DomainException)
             {
-                // ClosedXML ném nhiều loại exception khác nhau (FileFormatException,
-                // InvalidOperationException...) khi file không phải .xlsx hợp lệ hoặc bị
-                // hỏng — quy về 1 DomainException (400, thông báo rõ ràng) thay vì để lọt
-                // ra ngoài thành lỗi 500 chung chung qua HandleExceptionMiddleware.
+                // ClosedXML throws various exception types (FileFormatException,
+                // InvalidOperationException...) when the file is not a valid .xlsx or is
+                // corrupted — normalize to a single DomainException (400, with a clear message)
+                // instead of letting it escape as a generic 500 error via HandleExceptionMiddleware.
                 throw new DomainException("File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx hoặc .csv).");
             }
 

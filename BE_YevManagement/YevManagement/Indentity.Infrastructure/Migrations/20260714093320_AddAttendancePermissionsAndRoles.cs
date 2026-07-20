@@ -10,8 +10,8 @@ namespace Identity.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Seed permission cho module Attendance: danh mục (Department/Group/Reason/OtCase/Employee),
-            // phân quyền duyệt (UserApprovalScope), chữ ký (UserSignature) và nghiệp vụ chính (OTForm).
+            // Seed permissions for the Attendance module: catalogs (Department/Group/Reason/OtCase/Employee),
+            // approval scope (UserApprovalScope), signature (UserSignature) and the main business flow (OTForm).
             migrationBuilder.Sql(@"
 INSERT INTO Permissions (Code, Module, Description) VALUES
 (N'Attendance.Department.View', N'Attendance', N'Xem danh sách / chi tiết bộ phận'),

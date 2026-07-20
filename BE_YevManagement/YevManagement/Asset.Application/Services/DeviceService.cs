@@ -48,9 +48,9 @@ namespace Asset.Application.Services
 
             if (!string.IsNullOrWhiteSpace(request.DeviceCode))
             {
-                // 2026-07-11: đổi từ StartsWith sang Contains — chỉ cần chứa từ khoá ở bất
-                // kỳ vị trí nào trong mã thiết bị là ra kết quả, không bắt buộc gõ đúng từ
-                // đầu (đồng nhất với Note/SerialNumber/IpAddress/Email đã Contains sẵn).
+                // 2026-07-11: changed from StartsWith to Contains — matching just requires the
+                // keyword to appear anywhere in the device code, not necessarily typed from the
+                // start (consistent with Note/SerialNumber/IpAddress/Email which already use Contains).
                 query = query.Where(d => d.DeviceCode.Contains(request.DeviceCode));
             }
 
@@ -129,8 +129,8 @@ namespace Asset.Application.Services
                     SerialNumber = d.SerialNumber,
                     IsUseUsb = d.IsUseUsb,
                     Status = d.Status,
-                    // Lặp lại logic của GetStatusText tại đây (không gọi method) vì đây là
-                    // Expression<Func<>> được EF dịch sang SQL, không hỗ trợ gọi method C# tuỳ ý.
+                    // Duplicate the logic of GetStatusText here (instead of calling the method) because
+                    // this is an Expression<Func<>> translated by EF into SQL, which doesn't support calling arbitrary C# methods.
                     StatusText = d.Status == (int)DeviceStatus.PendingUse ? "Chờ sử dụng"
                         : d.Status == (int)DeviceStatus.InUse ? "Đang sử dụng"
                         : d.Status == (int)DeviceStatus.PendingLiquidation ? "Chờ thanh lý"
@@ -227,8 +227,8 @@ namespace Asset.Application.Services
                 ExpirationDate = d.ExpirationDate,
                 Note = d.Note,
                 IsExpired = d.ExpirationDate.HasValue && d.ExpirationDate.Value < today,
-                // Kỳ tài chính Yazaki: năm tài chính chạy 1/7 - 30/6, đánh số liên tục từ
-                // năm thành lập Yazaki Corporation (1941) -> kỳ = năm bắt đầu FY - 1940.
+                // Yazaki financial period: fiscal year runs 7/1 - 6/30, numbered consecutively from
+                // the year Yazaki Corporation was founded (1941) -> period = FY start year - 1940.
                 FinancialPeriod = d.ExpirationDate.HasValue
                     ? (d.ExpirationDate.Value.Month >= 7 ? d.ExpirationDate.Value.Year : d.ExpirationDate.Value.Year - 1) - 1940
                     : (int?)null
@@ -410,12 +410,13 @@ namespace Asset.Application.Services
             var oldDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == oldDeviceId, x => x.SuggestedNewDevice!);
             oldDevice.OrThrowNotFound("Thiết bị", oldDeviceId);
 
-            // Gợi ý đọc thẳng từ cột SuggestedNewDeviceId lưu trên chính máy cũ (2026-07-13,
-            // đổi hướng tự tham chiếu — trước đó phải dò ngược mọi máy mới khai "MQL Cũ" =
-            // máy này rồi chọn máy import gần nhất). Máy import sau luôn ghi đè gợi ý của máy
-            // import trước nên không cần chọn "gần nhất" nữa — chỉ còn 1 gợi ý duy nhất/máy cũ.
-            // Chỉ còn hợp lệ nếu máy mới vẫn còn tồn tại, chưa xoá, và còn "Chờ sử dụng" (chưa
-            // bị dùng cho lần chuyển máy nào khác kể từ lúc được gợi ý).
+            // The suggestion is read directly from the SuggestedNewDeviceId column stored on the old
+            // device itself (2026-07-13, reversed the self-reference direction — previously had to search
+            // backward through every new device declaring "Old MQL" = this device, then pick the most
+            // recently imported one). A later import always overwrites the suggestion from an earlier
+            // import, so "most recent" no longer needs to be chosen — there is now only 1 suggestion per
+            // old device. It is only valid if the new device still exists, is not deleted, and is still
+            // "Pending Use" (has not been used for any other transfer since being suggested).
             var suggestion = oldDevice!.SuggestedNewDevice;
             if (suggestion == null || suggestion.IsDeleted || suggestion.Status != (int)DeviceStatus.PendingUse)
                 return null;
@@ -428,11 +429,12 @@ namespace Asset.Application.Services
             };
         }
 
-        // Dùng bởi DeviceImportService: sau khi tạo xong máy MỚI từ cột "MQL Cũ", ghi thẳng
-        // Id máy mới vào SuggestedNewDeviceId của máy CŨ tương ứng — không đi qua UpdateAsync
-        // đầy đủ (không cần re-validate toàn bộ Device, cả 2 Id đã được xác nhận tồn tại ở
-        // bước resolve của Import). Ghi đè gợi ý cũ nếu máy cũ này đã từng được gợi ý trước đó
-        // bởi 1 lần import khác — luôn lấy gợi ý mới nhất.
+        // Used by DeviceImportService: after creating the NEW device from the "Old MQL" column,
+        // writes the new device's Id directly into SuggestedNewDeviceId of the corresponding OLD
+        // device — without going through the full UpdateAsync (no need to re-validate the entire
+        // Device, both Ids were already confirmed to exist in the Import's resolve step). Overwrites
+        // the old suggestion if this old device was already suggested before by a different import —
+        // always keeps the most recent suggestion.
         public async Task SetSuggestedNewDeviceAsync(int oldDeviceId, int newDeviceId)
         {
             var oldDevice = await _unitOfWork.Devices.GetByIdAsync(oldDeviceId);
@@ -444,11 +446,11 @@ namespace Asset.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // Nhóm/Bộ phận đều optional — chỉ validate tồn tại (!IsDeleted) khi client có gửi Id. Từ
-        // khi DeviceGroup thuộc về đúng 1 DeviceDepartment (1 Bộ phận - N Nhóm), gửi kèm GroupId
-        // bắt buộc phải gửi kèm đúng DepartmentId cha của Nhóm đó — tránh lưu dữ liệu Device có
-        // Nhóm/Bộ phận không khớp nhau (VD FE gửi GroupId của Nhóm "OF" thuộc Quản lý chất lượng
-        // nhưng DepartmentId lại là Tổng vụ).
+        // Group/Department are both optional — only validate existence (!IsDeleted) when the client
+        // sends an Id. Since DeviceGroup belongs to exactly 1 DeviceDepartment (1 Department - N Groups),
+        // sending GroupId must be accompanied by the correct parent DepartmentId of that Group — to
+        // avoid saving Device data with mismatched Group/Department (e.g. FE sends the GroupId of Group
+        // "OF" belonging to Quality Management but DepartmentId is General Affairs).
         private async Task<(DeviceGroup? Group, DeviceDepartment? Department)> ValidateGroupAndDepartmentAsync(int? groupId, int? departmentId)
         {
             DeviceDepartment? department = null;
@@ -474,10 +476,10 @@ namespace Asset.Application.Services
             return (group, department);
         }
 
-        // Dùng chung cho Create/Update: nếu có SuggestedNewDeviceId, máy mới (được gợi ý) phải
-        // tồn tại (!IsDeleted) và không được trỏ vào chính nó (chỉ áp dụng khi Update,
-        // currentDeviceId != null). Trả về entity máy mới (hoặc null nếu không set) để gọi
-        // nơi cần gắn navigation ngay.
+        // Shared by Create/Update: if SuggestedNewDeviceId is provided, the new (suggested) device must
+        // exist (!IsDeleted) and must not point to itself (only applies during Update,
+        // currentDeviceId != null). Returns the new device entity (or null if not set) so the
+        // caller can attach the navigation property right away.
         private async Task<Device?> ValidateSuggestedNewDeviceIdAsync(int? suggestedNewDeviceId, int? currentDeviceId)
         {
             if (!suggestedNewDeviceId.HasValue) return null;
@@ -519,12 +521,13 @@ namespace Asset.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // Xóa MỀM hàng loạt Device (2026-07-13: đổi từ xóa cứng sang xóa mềm — cùng cơ chế
-        // với DeleteAsync ở trên, chỉ khác là nhận nhiều Id 1 lần; tránh vướng ràng buộc khóa
-        // ngoại của TransferHistory vì xóa mềm chỉ set IsDeleted=true, không đụng khóa chính).
-        // Chỉ cho xóa thiết bị đang ở trạng thái PendingLiquidation (Chờ thanh lý) — thiết bị
-        // chưa/đã qua trạng thái này xóa nhầm sẽ mất dữ liệu đang dùng thật. Không tìm thấy Id
-        // hoặc Id không ở trạng thái chờ thanh lý đều bị bỏ qua (SkippedDevices), không chặn cả batch.
+        // Bulk SOFT delete of Devices (2026-07-13: changed from hard delete to soft delete — same
+        // mechanism as DeleteAsync above, only difference is accepting multiple Ids at once; avoids
+        // hitting TransferHistory's foreign key constraint since soft delete only sets IsDeleted=true,
+        // without touching the primary key). Only allows deleting devices currently in the
+        // PendingLiquidation state — devices not yet in or already past this state would lose real
+        // in-use data if deleted by mistake. An Id not found or not in the pending-liquidation state is
+        // skipped (SkippedDevices), without blocking the whole batch.
         public async Task<BulkDeleteDeviceResultDto> BulkDeleteAsync(List<int> ids)
         {
             var requestedIds = ids.Distinct().ToList();

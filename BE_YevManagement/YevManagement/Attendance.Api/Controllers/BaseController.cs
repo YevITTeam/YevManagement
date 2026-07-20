@@ -45,13 +45,14 @@ namespace Attendance.Api.Controllers
             return NoContent();
         }
 
-        // Username hiện tại từ JWT claim (ClaimTypes.Name) — dùng làm CreatedByUserName/ApproverUserName/
-        // UserName trên các bảng Attendance vì Identity.User nằm ở DB khác, không có claim UserId dạng số.
+        // Current username from the JWT claim (ClaimTypes.Name) — used as CreatedByUserName/ApproverUserName/
+        // UserName on Attendance tables since Identity.User lives in a different DB with no numeric UserId claim.
         protected string CurrentUserName => User.Identity?.Name
             ?? throw new UnauthorizedAccessException("Không xác định được người dùng hiện tại.");
 
-        // Họ tên hiển thị từ JWT claim "FullName" (nạp bởi MyClaimsTransformation từ Identity.User.FullName).
-        // Null nếu tài khoản chưa được Admin nhập FullName — dùng snapshot để in PDF không cần gọi chéo Identity.
+        // Display full name from the JWT claim "FullName" (populated by MyClaimsTransformation from
+        // Identity.User.FullName). Null if the account hasn't had FullName entered by an Admin yet —
+        // used as a snapshot so PDF printing doesn't need to call across to Identity.
         protected string? CurrentFullName => User.FindFirst("FullName")?.Value;
     }
 }

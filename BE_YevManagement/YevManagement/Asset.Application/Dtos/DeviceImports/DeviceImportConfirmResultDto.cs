@@ -5,19 +5,21 @@ namespace Asset.Application.Dtos.DeviceImports
         public int CreatedCount { get; set; }
         public List<int> CreatedDeviceIds { get; set; } = new();
 
-        // Số Device vừa tạo có kèm DeviceConfiguration (dòng Excel có ít nhất 1 trong 5
-        // cột Hãng/Model/CPU/RAM/Ổ Cứng, 2026-07-11).
+        // Number of Devices just created that also got a DeviceConfiguration (Excel row had
+        // at least 1 of the 5 columns Maker/Model/CPU/RAM/Hard Drive, 2026-07-11).
         public int CreatedConfigCount { get; set; }
 
-        // Danh sách gợi ý "máy cũ sẽ chuyển sang máy mới vừa tạo" lấy từ cột MQL Cũ.
-        // Import KHÔNG tự chuyển máy nữa (2026-07-11) — chỉ tạo Device rồi trả gợi ý
-        // này để FE điền sẵn (nhưng cho sửa) trên màn hình "Chuyển máy", người dùng
-        // phải tự bấm "Chuyển" cho từng dòng thì mới thật sự gọi POST /api/TransferHistory.
+        // List of suggestions "old device will be transferred to the newly created device"
+        // taken from the Old MQL column. Import no longer auto-transfers devices (2026-07-11)
+        // — it only creates the Device and returns this suggestion so the FE can pre-fill
+        // (but still editable) on the "Transfer Device" screen; the user must click "Transfer"
+        // for each row for POST /api/TransferHistory to actually be called.
         public List<DeviceImportPendingTransferDto> PendingTransfers { get; set; } = new();
 
-        // Dòng còn lỗi validate ở thời điểm Confirm bị bỏ qua, KHÔNG chặn cả batch nữa
-        // (2026-07-11, đổi — trước đó có bất kỳ dòng lỗi nào thì không ghi gì cả). Dòng hợp
-        // lệ vẫn được tạo bình thường; dòng lỗi liệt kê ở đây kèm lý do để FE báo lại.
+        // Rows still having a validation error at Confirm time are skipped, no longer blocking
+        // the whole batch (2026-07-11, changed — previously any error row meant nothing was
+        // saved at all). Valid rows are still created normally; error rows are listed here
+        // with the reason for the FE to report back.
         public int SkippedCount { get; set; }
         public List<DeviceImportSkippedRowDto> SkippedRows { get; set; } = new();
     }

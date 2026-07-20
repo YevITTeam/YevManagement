@@ -2,8 +2,8 @@ using System;
 
 namespace Attendance.Domain.Entities;
 
-// Chữ ký đăng ký sẵn theo User — chỉ để auto-fill lúc duyệt, không phải nguồn sự thật cho audit
-// (giá trị thật lưu snapshot trong OtFormApprovalHistory.SignatureImage).
+// Signature pre-registered per User — only used to auto-fill during approval, not the source of truth for audit
+// (the actual value is stored as a snapshot in OtFormApprovalHistory.SignatureImage).
 public partial class UserSignature
 {
     public int Id { get; set; }

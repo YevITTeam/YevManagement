@@ -2,9 +2,10 @@ namespace Shared.Application.Interfaces
 {
     public interface IEmailService
     {
-        // Tự bắt lỗi SMTP bên trong implementation, KHÔNG throw — trả false + log nếu gửi thất bại.
-        // Gửi email chỉ là kênh bổ sung (thông báo/xác nhận), không được phép làm hỏng nghiệp vụ
-        // chính (tạo đơn/duyệt đơn/cập nhật chữ ký vẫn phải thành công dù SMTP đang lỗi).
+        // Catches SMTP errors internally within the implementation, does NOT throw — returns false + logs
+        // if sending fails. Sending email is only a supplementary channel (notification/confirmation)
+        // and must never break the main business logic (form creation/approval/signature update must
+        // still succeed even if SMTP is failing).
         Task<bool> SendAsync(string toEmail, string subject, string htmlBody);
     }
 }

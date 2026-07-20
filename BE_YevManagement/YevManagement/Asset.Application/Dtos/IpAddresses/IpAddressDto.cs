@@ -9,8 +9,8 @@ namespace Asset.Application.Dtos.IpAddresses
         public int Id { get; set; }
         public string IpAddress { get; set; } = null!;
         public int? DeviceId { get; set; }
-        // "Khác" khi Status = AssignedExternal (IP gán cho thiết bị ngoài hệ thống, không có
-        // DeviceId); mã thiết bị thật khi Status = Assigned; null khi Available.
+        // "Other" when Status = AssignedExternal (IP assigned to a device outside the system,
+        // no DeviceId); the actual device code when Status = Assigned; null when Available.
         public string? DeviceCode { get; set; }
         public int IpPrefixId { get; set; }
         public string Prefix { get; set; } = null!;

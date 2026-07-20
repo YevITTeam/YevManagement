@@ -10,9 +10,9 @@ namespace Identity.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Identity.User.Delete: xóa cứng User (xem docs/identity-module.md).
-            // Asset.Setting.View/Update: xem/sửa cấu hình số tháng "Chờ thanh lý → Đã thanh
-            // lý" dùng bởi DeviceLiquidationBackgroundService (xem docs/asset-module.md).
+            // Identity.User.Delete: hard-delete a User (see docs/identity-module.md).
+            // Asset.Setting.View/Update: view/edit the number-of-months configuration for "Pending Liquidation
+            // -> Liquidated" used by DeviceLiquidationBackgroundService (see docs/asset-module.md).
             migrationBuilder.Sql(@"
 INSERT INTO Permissions (Code, Module, Description) VALUES
 (N'Identity.User.Delete', N'Identity', N'Xóa cứng người dùng'),

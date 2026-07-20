@@ -1,7 +1,8 @@
 namespace Asset.Application.Dtos.DeviceImports
 {
-    // 1 gợi ý thay thế máy rút ra từ cột "MQL Cũ" của dòng import. Chỉ mang tính gợi
-    // ý/điền sẵn cho FE — không tự thực hiện chuyển máy (xem DeviceImportConfirmResultDto).
+    // 1 device replacement suggestion derived from the "Old MQL" column of the import row.
+    // This is only a suggestion/pre-fill for the FE — it does not perform the device
+    // transfer itself (see DeviceImportConfirmResultDto).
     public class DeviceImportPendingTransferDto
     {
         public int NewDeviceId { get; set; }

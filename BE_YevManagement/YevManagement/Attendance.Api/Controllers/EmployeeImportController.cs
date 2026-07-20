@@ -7,10 +7,11 @@ using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
 {
-    // Import hàng loạt Employee (upsert theo Code — tạo mới nếu chưa có, cập nhật lại nếu đã tồn
-    // tại) kèm tự tạo Department/Group nếu mã chưa có, từ file Excel nhân sự. Dùng lại permission
-    // của resource chính (Attendance.Employee.Create) thay vì tạo permission "import" riêng — cùng
-    // pattern DeviceImportController ở module Asset (2026-07-16, gắn permission theo yêu cầu).
+    // Bulk import Employees (upsert by Code — create new if not existing, update if already
+    // exists) with automatic creation of Department/Group if the code doesn't exist yet, from an
+    // HR Excel file. Reuses the permission of the main resource (Attendance.Employee.Create)
+    // instead of creating a separate "import" permission — same pattern as DeviceImportController
+    // in the Asset module (2026-07-16, permission attached per requirement).
     public class EmployeeImportController : BaseController
     {
         private readonly IEmployeeImportService _employeeImportService;

@@ -1,17 +1,17 @@
 namespace Asset.Domain.Enums;
 
-// Trạng thái gán của 1 IpAddress (2026-07-11, đổi lại — bỏ Reserved/Disabled cũ, gộp về
-// 3 trạng thái theo quyết định người dùng). Bất biến giữ được: Status == Assigned(2) ⟺
-// DeviceId != null; Status == Available(0)/AssignedExternal(1) ⟺ DeviceId == null.
+// Assignment status of an IpAddress (2026-07-11, changed back — removed the old Reserved/Disabled,
+// merged into 3 states per user decision). Invariant maintained: Status == Assigned(2) <=>
+// DeviceId != null; Status == Available(0)/AssignedExternal(1) <=> DeviceId == null.
 public enum IpAddressStatus
 {
-    // Chưa gán — IP còn trống, được phép chọn để gán cho thiết bị.
+    // Not assigned — IP is still free, can be selected to assign to a device.
     Available = 0,
 
-    // Đã gán nhưng KHÔNG có DeviceId trong hệ thống — IP đang được 1 thiết bị "ngoài"
-    // (không quản lý trong app) sử dụng; khi hiển thị, DeviceCode trả về "Khác".
+    // Assigned but has NO DeviceId in the system — the IP is being used by an "external"
+    // device (not managed in the app); when displayed, DeviceCode returns "Other".
     AssignedExternal = 1,
 
-    // Đã gán và CÓ DeviceId — IP đang gắn cho 1 thiết bị được quản lý trong hệ thống.
+    // Assigned and HAS a DeviceId — the IP is attached to a device managed in the system.
     Assigned = 2
 }

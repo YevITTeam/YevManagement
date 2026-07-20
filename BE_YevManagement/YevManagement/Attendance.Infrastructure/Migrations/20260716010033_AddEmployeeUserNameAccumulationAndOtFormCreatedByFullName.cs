@@ -38,9 +38,10 @@ namespace Attendance.Infrastructure.Migrations
                 maxLength: 100,
                 nullable: true);
 
-            // Dữ liệu MonthToDate/YearToDate đã có sẵn (nhập tay lúc khởi tạo) phải được coi là "as of
-            // ngay bây giờ" — nếu để mặc định 0/0 thì lần OtForm Completed đầu tiên trong tháng/năm
-            // hiện tại sẽ bị OtFormService.AccumulateEmployeeHoursAsync coi là rollover và xóa mất.
+            // Existing MonthToDate/YearToDate data (manually entered at setup time) must be treated as
+            // "as of right now" — if left at the default 0/0, the first OtForm Completed in the
+            // current month/year would be treated as a rollover by
+            // OtFormService.AccumulateEmployeeHoursAsync and wipe them out.
             migrationBuilder.Sql("UPDATE Employees SET AccumulationYear = YEAR(GETUTCDATE()), AccumulationMonth = MONTH(GETUTCDATE())");
 
             migrationBuilder.CreateIndex(

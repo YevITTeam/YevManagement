@@ -1,10 +1,10 @@
 namespace Asset.Application.Dtos.DeviceConfigurationImports
 {
     // Represents 1 row parsed from file inventory Tanium (Computer Name/Tanium Client IP
-    // Address/Manufacturer/Model/CPU/RAM/Size — cột "Last Logged In User" bị bỏ qua theo
-    // yêu cầu). Dùng cho cả response Preview (server điền ResolvedXxx/IsValid/Errors) và
-    // request Confirm (client gửi lại nguyên field thô, server tự resolve lại, không tin
-    // Id do client gửi).
+    // Address/Manufacturer/Model/CPU/RAM/Size — the "Last Logged In User" column is ignored
+    // per request). Used both for the Preview response (server fills in
+    // ResolvedXxx/IsValid/Errors) and the Confirm request (client resends the raw fields
+    // as-is, server re-resolves them itself, it never trusts the Id sent by the client).
     public class DeviceConfigurationImportRowDto
     {
         public int RowNumber { get; set; }
@@ -17,7 +17,7 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
         public string? Ram { get; set; }
         public string? Size { get; set; }
 
-        // Mã/Tên tách được từ ComputerName (xem thuật toán ở DeviceConfigurationImportService).
+        // Code/Name extracted from ComputerName (see the algorithm in DeviceConfigurationImportService).
         public string? ParsedDeviceCode { get; set; }
         public string? ParsedDeviceName { get; set; }
 
@@ -27,8 +27,8 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
         public bool IsValid { get; set; }
         public List<string> Errors { get; set; } = new();
 
-        // Cảnh báo không chặn dòng (VD: IP Tanium không tồn tại trong hệ thống nên bỏ
-        // qua việc cập nhật IP, nhưng cấu hình máy vẫn được tạo/cập nhật bình thường).
+        // Warnings that don't block the row (e.g. Tanium IP doesn't exist in the system so
+        // the IP update is skipped, but the device configuration is still created/updated normally).
         public List<string> Warnings { get; set; } = new();
     }
 }

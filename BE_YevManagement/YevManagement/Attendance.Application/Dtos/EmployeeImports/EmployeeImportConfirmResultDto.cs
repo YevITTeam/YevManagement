@@ -6,12 +6,13 @@ namespace Attendance.Application.Dtos.EmployeeImports
         public int CreatedGroupCount { get; set; }
         public int CreatedEmployeeCount { get; set; }
 
-        // Nhân viên đã tồn tại (khớp Code) được cập nhật lại FirstName/LastName/GroupId thay vì
-        // báo lỗi trùng mã — Code là unique nên dùng làm khóa xác định tạo mới hay cập nhật.
+        // Employees that already exist (matched by Code) get FirstName/LastName/GroupId updated
+        // instead of raising a duplicate-code error — Code is unique so it's used as the key to
+        // decide whether to create new or update.
         public int UpdatedEmployeeCount { get; set; }
 
-        // Dòng còn lỗi validate ở thời điểm Confirm bị bỏ qua, KHÔNG chặn cả batch — dòng hợp lệ
-        // vẫn được tạo bình thường, dòng lỗi liệt kê ở đây kèm lý do để FE báo lại.
+        // Rows that still fail validation at Confirm time are skipped, and do NOT block the whole
+        // batch — valid rows are still created normally; failing rows are listed here with reasons for the FE to report.
         public int SkippedCount { get; set; }
         public List<EmployeeImportSkippedRowDto> SkippedRows { get; set; } = new();
     }

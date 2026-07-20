@@ -102,11 +102,12 @@ namespace Asset.Application.Services
             var config = await _unitOfWork.DeviceConfigurations.GetByIdAsync(request.Id);
             config.OrThrowNotFound("Cấu hình thiết bị", request.Id);
 
-            // 2026-07-11 (chốt lại): bỏ check đối chiếu request.DeviceId với config.DeviceId —
-            // DeviceId chưa từng thực sự được ghi lại ở dưới (chỉ đổi 20 field cấu hình), nên
-            // check này chỉ để validate mà không có tác dụng thực tế, lại gây lỗi giả khi FE gửi
-            // deviceId không khớp cho 1 request sửa cấu hình bình thường. `id` trên route đã định
-            // danh đúng bản ghi cần sửa, không cần deviceId để xác thực thêm.
+            // 2026-07-11 (finalized): removed the check comparing request.DeviceId with config.DeviceId —
+            // DeviceId was never actually written below (only the 20 configuration fields change), so
+            // this check served only as validation without any real effect, and caused false errors when
+            // the FE sent a mismatched deviceId for an otherwise normal configuration update request. The
+            // `id` in the route already identifies the correct record to update; deviceId is not needed
+            // for extra verification.
 
             if (HasChanges(config, request))
             {

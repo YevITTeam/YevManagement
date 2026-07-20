@@ -1,8 +1,9 @@
 namespace Asset.Application.Dtos.DeviceImports
 {
-    // 1 dòng bị bỏ qua (không import) ở bước Confirm vì còn lỗi validate — khác hành vi cũ
-    // (chặn toàn bộ batch khi có bất kỳ dòng lỗi nào). Trả về để FE báo cho người dùng biết
-    // dòng nào không được tạo và lý do (2026-07-11, đổi theo yêu cầu người dùng).
+    // 1 row skipped (not imported) at the Confirm step due to a validation error — different
+    // from the old behavior (blocking the whole batch when any row had an error). Returned so
+    // the FE can tell the user which row was not created and why (2026-07-11, changed per
+    // user request).
     public class DeviceImportSkippedRowDto
     {
         public int RowNumber { get; set; }

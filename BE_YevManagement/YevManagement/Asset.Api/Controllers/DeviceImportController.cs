@@ -16,8 +16,8 @@ namespace Asset.Api.Controllers
             _deviceImportService = deviceImportService;
         }
 
-        // Dùng lại permission Asset.Device.Create — import Excel là 1 hình thức tạo
-        // hàng loạt Device, không phải resource riêng.
+        // Reuses the Asset.Device.Create permission — Excel import is a form of bulk Device
+        // creation, not a separate resource.
         [RequirePermission("Asset.Device.Create")]
         [HttpPost("preview")]
         public async Task<ActionResult<ApiResponse<DeviceImportPreviewResultDto>>> Preview(IFormFile file)

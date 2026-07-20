@@ -1,0 +1,103 @@
+# attendance-otform-pdf-mapping.md — Mapping ô trên phiếu giấy ↔ field dữ liệu (in PDF)
+
+> Tài liệu này TÁCH RIÊNG khỏi `attendance-api-fe.md` (hợp đồng API) và `attendance-module.md`
+> (thiết kế nghiệp vụ) — vì mục đích duy nhất của file này là ghi lại **mẫu phiếu giấy hiện hành
+> trông như thế nào** và **field nào trong `GET /api/OtForm/{id}` đổ vào ô nào khi FE dựng PDF để in**.
+> Khi mẫu phiếu giấy đổi (đổi layout, thêm/bớt ô, đổi lần ban hành...), chỉ cần sửa file này —
+> KHÔNG cần đụng BE trừ khi phiếu mới có ô dữ liệu hoàn toàn mới mà hệ thống chưa lưu (xem
+> §3 "Ô chưa có field trong DB" — quy trình xử lý khi gặp trường hợp này).
+
+## 0. Nguồn phiếu đang mapping (cập nhật mỗi khi đổi mẫu)
+
+| | |
+|---|---|
+| Mã phiếu | `YEV-22-024` |
+| Tên phiếu | GIẤY ĐỀ NGHỊ LÀM NGOÀI GIỜ (残業申請書) |
+| Lần ban hành | **Lần 5**, ngày cải chính **03/02/2024** (in ở footer mọi trang) |
+| File nguồn | `docs/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO (A4).doc` (khổ A4, tối đa 40 nhân viên/đơn, chia 2 trang) và bản `(A5).doc` (khổ A5, tối đa 12 nhân viên/đơn, 1 trang) |
+| Khác biệt A4 vs A5 | **Chỉ khác số dòng danh sách nhân viên** (A4: 10 dòng trang 1 + 30 dòng trang 2 = 40; A5: 12 dòng) và vài chữ Nhật phụ đề không ảnh hưởng field. **Cấu trúc field giữa 2 khổ giống hệt nhau** — bảng mapping bên dưới dùng chung cho cả 2, chỉ khác số dòng tối đa khi FE dựng bảng nhân viên. |
+
+**Quy trình khi có phiếu mới (đổi lần ban hành)**: mở file `.doc` mới bằng Word (hoặc `antiword` nếu chỉ cần đọc nhanh không dấu), so từng ô với bảng ở §1-§2 bên dưới — ô nào giữ nguyên ý nghĩa thì giữ mapping cũ, ô nào đổi vị trí/label thì sửa lại dòng tương ứng, ô nào **hoàn toàn mới** thì thêm vào §3. Đừng xoá bản ghi "Lần ban hành" cũ — đổi tên mục §0 thành lịch sử (VD "Lần 5 → 03/02/2024 (cũ)", "Lần 6 → dd/mm/yyyy (hiện hành)") để biết đơn in trước đó theo mẫu nào.
+
+## 1. Khối đầu phiếu — 4 ô chữ ký
+
+Phiếu giấy chỉ có đúng **4 ô chữ ký** (không có ô tên/ngày ký riêng, chữ ký đóng thẳng vào ô trống):
+
+| Ô trên phiếu (Vn / Jp) | Nguồn dữ liệu | Ghi chú |
+|---|---|---|
+| Tổng giám đốc / 社長 | `approvalHistories[]` lọc `approvalLevel == 3 (GeneralDirector)` → `.signatureImage` | Chỉ có nếu đơn đã đi tới cấp này (`otCaseCode` = TH3 hoặc đơn đã Completed qua đủ cấp) |
+| Trưởng xưởng / 工場長 | `approvalHistories[]` lọc `approvalLevel == 2 (WorkshopManager)` → `.signatureImage` | |
+| Trưởng phòng / 部長 | `approvalHistories[]` lọc `approvalLevel == 1 (DepartmentManager)` → `.signatureImage` | |
+| Người đề nghị / 申請者 | **CẢ 2** chữ ký cùng đổ vào chung 1 ô này: `approvalHistories[]` lọc `approvalLevel == 0 (Submitter)` **và** `approvalLevel == 4 (GroupHead)` → `.signatureImage` của từng dòng | **Đã chốt với nghiệp vụ (2026-07-20)**: Trưởng nhóm VÀ Trưởng Bộ phận đều ký chung vào ô "Người đề nghị" trên phiếu giấy — phiếu không có ô riêng cho GroupHead vì thực tế 2 người cùng ký chồng/cạnh nhau trong 1 ô. FE nên xếp 2 ảnh chữ ký cạnh nhau hoặc chồng theo đúng thứ tự ký thật (Submitter ký trước, GroupHead ký sau — xem `actionAt` để sắp thứ tự nếu cần). Chữ ký Submitter là Trưởng nhóm (`POST /{id}/submit`), KHÔNG phải người tạo đơn — xem `attendance-module.md §Người tạo đơn KHÁC Trưởng nhóm` |
+
+FE gợi ý: nếu muốn in kèm tên người ký/ngày ký dưới mỗi ô (phiếu gốc không có dòng này nhưng thường cần cho minh bạch) thì lấy thêm `.approverFullName` (fallback `.approverUserName`) và `.actionAt` cùng dòng lọc trên.
+
+## 2. Khối thông tin chính
+
+| Ô trên phiếu (Vn / Jp) | Nguồn dữ liệu | Ghi chú |
+|---|---|---|
+| Tên công đoạn / 工程名 | **⚠️ Chưa có field** | Xem §3 |
+| Số lượng nhân viên / 人数 | `numberOfEmployee` | |
+| Người chịu trách nhiệm / 責任者 | **Đã chốt (2026-07-20)**: `approvalHistories[]` lọc `approvalLevel == 0 (Submitter)` → `.approverFullName` (fallback `.approverUserName` nếu null) | Là Trưởng nhóm — cùng người ký ô "Người đề nghị" ở §1, chỉ khác là ở đây in **tên chữ** thay vì ảnh chữ ký. Không cần field DB riêng — tái dùng đúng dữ liệu approval history cấp Submitter |
+| Thời gian — Từ / から | `startTime` (format `HH:mm`) | |
+| Thời gian — Đến / まで | `endTime` (format `HH:mm`) | Đây là giờ kết thúc TỐI ĐA của đơn — từng nhân viên có thể kết thúc sớm hơn, xem bảng nhân viên §4 |
+| Ngày / 日付 | `date` (format `dd/MM/yyyy`) | |
+| Lý do / 理由 | `reasonNameVn` (+ nối thêm `subReason` nếu có, VD `"{reasonNameVn}: {subReason}"`) | Phiếu chỉ có 1 ô free-text, không tách 2 dòng — FE tự quyết cách nối |
+
+## 3. Ô CHƯA có field trong DB (gap — cần quyết định trước khi in đủ)
+
+| Ô trên phiếu | Hiện trạng | Đề xuất |
+|---|---|---|
+| **Tên công đoạn / 工程名** | Field cũ `AreaLine` đã bị xoá hẳn (migration `RemoveAreaLineFromOtFormAddGroupDepartment`, 2026-07-14) khi thay bằng `Group`/`Department`. Đã ghi nhận từ trước trong `attendance-module.md`, chưa quyết định thêm lại. | Nếu nghiệp vụ xác nhận vẫn cần in, phải thêm migration cột mới cho `OtForm` + cập nhật `OtFormDto`/`CreateOtFormDto`/`UpdateOtFormDto`. |
+
+> ~~Người chịu trách nhiệm / 責任者~~ — **đã chốt (2026-07-20)**, không phải gap: ô này = Trưởng nhóm, lấy chung từ `approvalHistories[approvalLevel=0].approverFullName` (xem §2). Không cần field DB riêng.
+
+**Quy trình chung khi gặp ô kiểu này ở phiếu mới**: KHÔNG tự ý nhét dữ liệu có sẵn khi chưa xác nhận — chỉ để trống/note "cần bổ sung" và hỏi người yêu cầu nghiệp vụ trước, giống cách `Tên công đoạn` đã được xử lý (đúng CLAUDE.md §4.2 — không tự bịa nghiệp vụ khi thiếu thông tin).
+
+## 4. Khối "Phần xử lý / 処理欄"
+
+Cấu trúc bảng thật trên phiếu (đã dump từng ô qua Word COM để chắc chắn không sót):
+
+| Cột trên phiếu | Lựa chọn in trên phiếu | Nguồn dữ liệu |
+|---|---|---|
+| Ăn uống / 軽食 | "Ăn / 食べる" hoặc "Không ăn / 食べない" | `processPart.isEat` (true→"Ăn", false→"Không ăn") |
+| Xe đưa đón / バス | "Có / 有" hoặc "Không / 無" | `processPart.isTransportation` |
+| Copy / コピー | "Có / 有" hoặc "Không / 無" | `processPart.isUseCopyRoom` |
+| Đề nghị khác / その他 | free text | `processPart.anotherSuggestionVn` (+ `anotherSuggestionJp` nếu cần song ngữ) |
+
+> ⚠️ **`processPart.mainTicketCount`/`secondaryTicketCount`/`milkCount` (phiếu chính/phiếu phụ/sữa) — 3 field này ĐÃ có trong DB (migration `AddMealTicketCountsToProcessPart`, 2026-07-16) nhưng KHÔNG tồn tại ô nào tương ứng trên mẫu phiếu `YEV-22-024 (Lần 5)` đã kiểm tra** (đã dump từng cell của bảng "Phần xử lý", chỉ có 4 cột Ăn uống/Xe/Copy/Đề nghị khác, không có ô đếm số phiếu). Khả năng: (a) 3 field này phục vụ 1 phiếu/quy trình khác chưa có trong `docs/`, hoặc (b) mẫu phiếu sẽ được cập nhật lần ban hành tiếp theo để thêm ô này, hoặc (c) 3 field bị thêm nhầm/thừa. **Cần xác nhận lại với người yêu cầu nghiệp vụ trước khi quyết định có in 3 số này ra PDF hay không, in ở đâu.**
+
+## 5. Khối "Danh sách nhân viên làm ngoài giờ / 社員の残業一覧"
+
+7 cột, lặp lại N dòng (A4 tối đa 40 dòng qua 2 trang, A5 tối đa 12 dòng 1 trang):
+
+| Cột trên phiếu | Nguồn dữ liệu | Ghi chú |
+|---|---|---|
+| Stt | Số thứ tự dòng (tự sinh khi in, 1..N) | Không lưu DB |
+| Họ và tên / 氏名 | `employees[i].fullName` | |
+| Mã NV / 社員コード | `employees[i].employeeCode` | |
+| Thời gian / 時間 | `employees[i].startTime` – `employees[i].endTime` (format `HH:mm - HH:mm`) | `startTime` luôn = giờ đầu đơn; `endTime` có thể sớm hơn giờ cuối đơn |
+| Lũy kế — Tháng / 月間 | `employees[i].monthToDate` | |
+| Lũy kế — Năm / 年間 | `employees[i].yearToDate` | |
+| Ghi chú / 備考 | `employees[i].noteVn` (+ `noteJp` nếu cần song ngữ) | |
+
+FE cần tự chia trang nếu số nhân viên vượt số dòng tối đa của khổ giấy đang in (40 với A4, 12 với A5) — BE không giới hạn số nhân viên/đơn.
+
+## 6. Khối chú thích TH1/TH2/TH3 (footer)
+
+Đây là text tĩnh in sẵn trên phiếu (không đổi theo dữ liệu), chỉ cần **đánh dấu đúng dòng TH nào khớp với đơn đang in**:
+
+```
+( TH1: Tăng ca ngày thường: Ký duyệt cấp Trưởng phòng
+( TH2: Tăng ca ngày nghỉ quy định/chủ nhật/Lễ: Ký duyệt cấp Trưởng xưởng
+( TH3: Trường hợp lũy kế tăng ca trên 25 giờ/tháng, 300h/năm: Ký duyệt cấp TGĐ
+```
+
+Đánh dấu (tô đậm/thêm dấu ✓ trước ký tự `(`) dòng có `otCaseCode` khớp với `otFormDto.otCaseCode` (`TH1`/`TH2`/`TH3` — đây là `OtCase.Code`, master data admin tự đặt tên, không hardcode).
+
+## 7. Nguyên tắc "tự chủ" khi phiếu đổi mẫu trong tương lai
+
+1. **Không hardcode toạ độ/pixel trong code BE hay FE** — BE chỉ trả JSON đầy đủ qua `GET /api/OtForm/{id}` (đã đủ dữ liệu cho mọi field ở bảng trên), việc "điền vào đúng ô nào" là trách nhiệm của FE dựa theo file mapping này, tách biệt hoàn toàn khỏi hợp đồng API.
+2. **Mỗi lần đổi mẫu phiếu**: cập nhật §0 (lần ban hành mới), rà lại từng bảng ở §1-§6 xem ô nào đổi vị trí/label, thêm ô mới vào §3 nếu chưa có field — **không suy đoán/tự chế field**, hỏi lại nghiệp vụ như quy trình đã áp dụng cho "Tên công đoạn"/"Người chịu trách nhiệm".
+3. **Giữ lại lịch sử các lần ban hành cũ** trong file này (không ghi đè) — đơn cũ đã in theo mẫu cũ vẫn cần biết tra cứu đúng layout nào nếu có tranh chấp/kiểm tra lại giấy tờ.
+4. **Field mới phát sinh từ mẫu mới → luôn cần migration thật** (thêm cột DB + cập nhật DTO liên quan) trước khi FE có thể in — không có cách nào "tự chủ" bỏ qua bước này, vì PDF chỉ có thể in dữ liệu mà hệ thống đã lưu.

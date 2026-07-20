@@ -10,10 +10,10 @@ namespace Identity.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Trưởng Group thiếu quyền xem 4 bảng danh mục (Department/Group/Reason/OtCase) cần cho
-            // dropdown lúc tạo đơn — GET .../all, .../by-department/{id} đều gate bằng {Entity}.View
-            // riêng, không nằm trong OTForm.View. Thiếu 4 quyền này thì màn "Tạo đơn tăng ca" không load
-            // được dropdown nào cả (xem docs/attendance-module.md).
+            // Truong Group role is missing view permissions for 4 category tables (Department/Group/Reason/OtCase)
+            // needed for dropdowns when creating a form — GET .../all, .../by-department/{id} are each gated by
+            // their own {Entity}.View, not by OTForm.View. Without these 4 permissions, the "Create OT Form" screen
+            // cannot load any dropdown at all (see docs/attendance-module.md).
             migrationBuilder.Sql(@"
 INSERT INTO RolePermissions (RoleId, PermissionId)
 SELECT r.Id, p.Id FROM Roles r CROSS JOIN Permissions p

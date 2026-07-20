@@ -41,8 +41,8 @@ namespace Asset.Application.Services
             );
         }
 
-        // departmentId: dùng cho dropdown "Nhóm" phụ thuộc "Bộ phận" đã chọn trên form Device
-        // (FE gọi GET /api/DeviceGroup/all?departmentId=X sau khi người dùng chọn Bộ phận).
+        // departmentId: used for the "Group" dropdown depending on the "Department" selected on the Device form
+        // (FE calls GET /api/DeviceGroup/all?departmentId=X after the user selects a Department).
         public async Task<List<DeviceGroupDto>> GetAllActiveAsync(int? departmentId = null)
         {
             var groups = await _unitOfWork.DeviceGroups.SelectAsync(
