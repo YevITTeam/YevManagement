@@ -13,7 +13,7 @@ const tiles = [
     {
         title: "Đơn tăng ca",
         desc: "Đơn của tôi, chờ ký duyệt, chờ duyệt, đã xử lý và đơn bạn tham gia — theo tab.",
-        link: "/ot/forms",
+        link: "/ot/list",
         icon: <ClipboardList className="h-8 w-8" />,
     },
 ];

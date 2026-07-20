@@ -21,8 +21,9 @@ const navItems: OtNavItem[] = [
     // Gộp 2026-07-17: "Đơn của tôi"/"Chờ tôi ký duyệt"/"Chờ tôi duyệt"/"Đơn đã xử lý"/"Đơn tôi tham
     // gia" giờ là 5 tab trong CÙNG 1 màn — permission gate ở đây chỉ cần OTForm.View (điều kiện chung
     // nhỏ nhất, đủ cho mọi Role nghiệp vụ); từng tab bên trong tự ẩn/hiện theo permission chi tiết hơn
-    // (xem OtFormTabsPage.tsx).
-    { key: "otForms", href: "/ot/forms", icon: ClipboardList, permission: "Attendance.OTForm.View" },
+    // (xem OtFormTabsPage.tsx). Route /ot/list (không phải /ot/forms) — /ot/forms đã đổi thành màn
+    // "Chi tiết đơn" qua query string ?id= (static export, xem ot/forms/page.tsx).
+    { key: "otForms", href: "/ot/list", icon: ClipboardList, permission: "Attendance.OTForm.View" },
     // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này —
     // dùng .Create (không phải .View) vì đợt 2026-07-17 đã cấp thêm Department.View/Group.View/... cho
     // Role Trưởng Group/Nhân viên (chỉ để load dropdown lúc tạo đơn), gate bằng .View sẽ lộ nhầm mục

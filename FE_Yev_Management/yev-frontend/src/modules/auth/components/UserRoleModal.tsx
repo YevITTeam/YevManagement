@@ -24,6 +24,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [selectedRolesMap, setSelectedRolesMap] = useState<Record<number, number[]>>({});
     const [isLoading, setIsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    const [roleFilter, setRoleFilter] = useState<number | "">("");
     const [openRoleModalUserId, setOpenRoleModalUserId] = useState<number | null>(null);
     const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
     const [savingUserId, setSavingUserId] = useState<number | null>(null);
@@ -34,7 +35,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
         setIsLoading(true);
         try {
             const [usersData, rolesData] = await Promise.all([
-                AuthApi.getAllUsersWithRoles(),
+                AuthApi.getAllUsersWithRoles(roleFilter === "" ? undefined : roleFilter),
                 AuthApi.getAllRoles(),
             ]);
             setUsers(usersData);
@@ -54,7 +55,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [roleFilter]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -181,14 +182,30 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                 <section className="overflow-hidden border border-[#e0e3e5] bg-white">
                     {/* Search / Filter Bar */}
                     <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="relative w-full sm:max-w-sm">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                            <input
-                                value={searchTerm}
-                                onChange={(event) => setSearchTerm(event.target.value)}
-                                placeholder="Tìm tài khoản hoặc tên..."
-                                className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white pl-9 pr-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                            />
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            <div className="relative w-full sm:max-w-sm">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <input
+                                    value={searchTerm}
+                                    onChange={(event) => setSearchTerm(event.target.value)}
+                                    placeholder="Tìm tài khoản hoặc tên..."
+                                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white pl-9 pr-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                />
+                            </div>
+                            <select
+                                value={roleFilter}
+                                onChange={(event) =>
+                                    setRoleFilter(event.target.value === "" ? "" : Number(event.target.value))
+                                }
+                                className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] sm:w-auto"
+                            >
+                                <option value="">Tất cả vai trò</option>
+                                {roles.map((role) => (
+                                    <option key={role.id} value={role.id}>
+                                        {role.roleName}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                         <div className="text-sm font-medium text-[#5e3f3a]">
                             Hiển thị {filteredUsers.length} bản ghi

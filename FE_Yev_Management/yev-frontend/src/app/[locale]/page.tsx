@@ -30,7 +30,9 @@ export default function Home() {
       desc: t("scheduleDesc"),
       link: "/schedule",
       icon: <CalendarClock className="w-8 h-8" />,
-      visible: true,
+      // Tạm ẩn: /api/schedule đọc/ghi file trên server, không tương thích `output: "export"`
+      // (static export không có server để phục vụ route này). Bật lại khi có hướng xử lý BE.
+      visible: false,
     },
     {
       title: t("contractsTitle"),

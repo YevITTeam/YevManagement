@@ -45,8 +45,10 @@ export const AuthApi = {
     return response.data;
   },
 
-  getAllUsersWithRoles: async () => {
-    const response = await api.get<ApiResponse<UserDto[]>>(ENDPOINTS.AUTH.getAllUsersWithRoles);
+  // roleId optional (docs/identity-api-fe.md §4.1) — lọc user thuộc Role đó; không truyền → trả toàn bộ.
+  getAllUsersWithRoles: async (roleId?: number) => {
+    const query = roleId !== undefined ? `?roleId=${roleId}` : "";
+    const response = await api.get<ApiResponse<UserDto[]>>(`${ENDPOINTS.AUTH.getAllUsersWithRoles}${query}`);
     return response.data;
   },
   updateUserRoles: async ({ userId, roleIds }: { userId: number; roleIds: number[] }) => {

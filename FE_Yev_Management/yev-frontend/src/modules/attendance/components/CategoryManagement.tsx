@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import DepartmentList from "./departments/DepartmentList";
 import GroupList from "./groups/GroupList";
@@ -53,6 +53,31 @@ export default function CategoryManagement() {
 
     const activeRef = refByTab[activeTab];
     const activeTabMeta = tabs.find((tab) => tab.key === activeTab)!;
+
+    // onLoadingChange phải giữ nguyên identity qua các lần render — nếu truyền inline
+    // arrow function, effect trong mỗi List (dep [isLoading, onLoadingChange]) sẽ nghĩ prop
+    // đổi mỗi lần CategoryManagement render lại, chạy lại effect, gọi setLoadingByTab, khiến
+    // CategoryManagement render lại... lặp vô hạn ("Maximum update depth exceeded").
+    const handleDepartmentLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, departments: value })),
+        []
+    );
+    const handleGroupLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, groups: value })),
+        []
+    );
+    const handleReasonLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, reasons: value })),
+        []
+    );
+    const handleOtCaseLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, "ot-cases": value })),
+        []
+    );
+    const handleEmployeeLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, employees: value })),
+        []
+    );
 
     return (
         <div className="space-y-6">
@@ -111,27 +136,27 @@ export default function CategoryManagement() {
             */}
             {visitedTabs.has("departments") && (
                 <div className={activeTab === "departments" ? "" : "hidden"}>
-                    <DepartmentList ref={departmentRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, departments: value }))} />
+                    <DepartmentList ref={departmentRef} onLoadingChange={handleDepartmentLoadingChange} />
                 </div>
             )}
             {visitedTabs.has("groups") && (
                 <div className={activeTab === "groups" ? "" : "hidden"}>
-                    <GroupList ref={groupRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, groups: value }))} />
+                    <GroupList ref={groupRef} onLoadingChange={handleGroupLoadingChange} />
                 </div>
             )}
             {visitedTabs.has("reasons") && (
                 <div className={activeTab === "reasons" ? "" : "hidden"}>
-                    <ReasonList ref={reasonRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, reasons: value }))} />
+                    <ReasonList ref={reasonRef} onLoadingChange={handleReasonLoadingChange} />
                 </div>
             )}
             {visitedTabs.has("ot-cases") && (
                 <div className={activeTab === "ot-cases" ? "" : "hidden"}>
-                    <OtCaseList ref={otCaseRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, "ot-cases": value }))} />
+                    <OtCaseList ref={otCaseRef} onLoadingChange={handleOtCaseLoadingChange} />
                 </div>
             )}
             {visitedTabs.has("employees") && (
                 <div className={activeTab === "employees" ? "" : "hidden"}>
-                    <EmployeeList ref={employeeRef} onLoadingChange={(value) => setLoadingByTab((current) => ({ ...current, employees: value }))} />
+                    <EmployeeList ref={employeeRef} onLoadingChange={handleEmployeeLoadingChange} />
                 </div>
             )}
         </div>
