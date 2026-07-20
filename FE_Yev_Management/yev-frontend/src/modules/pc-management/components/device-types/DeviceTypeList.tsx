@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
@@ -8,13 +8,12 @@ import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dt
 import DeviceTypeForm, { type DeviceTypeFormValues } from "./DeviceTypeForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 export default function DeviceTypeList() {
     const [deviceTypes, setDeviceTypes] = useState<DeviceTypeDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -33,34 +32,19 @@ export default function DeviceTypeList() {
     const [deletingDeviceType, setDeletingDeviceType] = useState<DeviceTypeDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchDeviceTypes = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await DeviceTypeApi.getDeviceTypePageNation({
-                pageIndex,
-                pageSize: PAGE_SIZE,
-                keyword: appliedKeyword || undefined,
-            });
+    const { isLoading, error, refetch: fetchDeviceTypes } = useFetchEffect(
+        () => DeviceTypeApi.getDeviceTypePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+        [pageIndex, appliedKeyword],
+        (result) => {
             setDeviceTypes(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách loại thiết bị.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchDeviceTypes();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+        },
+        "Không thể tải danh sách loại thiết bị.",
+        (message) => toast.error(message)
+    );
 
     const handleSearch = () => {
         setPageIndex(1);

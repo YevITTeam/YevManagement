@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface DeviceGroupFormValues {
     departmentId: number;
@@ -38,15 +39,13 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
             .catch((err) => console.error(err));
     }, [isOpen]);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? { departmentId: initial.departmentId, groupCode: initial.groupCode, groupName: initial.groupName }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(
+            current
+                ? { departmentId: current.departmentId, groupCode: current.groupCode, groupName: current.groupName }
+                : emptyValues
+        );
+    });
 
     if (!isOpen) return null;
 

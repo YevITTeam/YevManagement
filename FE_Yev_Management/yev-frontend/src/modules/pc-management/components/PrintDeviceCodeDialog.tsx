@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import type { DeviceDto } from "@/modules/pc-management/types/device.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 interface PrintDeviceCodeDialogProps {
     isOpen: boolean;
@@ -106,12 +107,10 @@ export default function PrintDeviceCodeDialog({ isOpen, devices, onClose }: Prin
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [search, setSearch] = useState("");
 
-    useEffect(() => {
-        if (isOpen) {
-            setSelectedIds(new Set());
-            setSearch("");
-        }
-    }, [isOpen]);
+    useDialogReset(isOpen, null, () => {
+        setSelectedIds(new Set());
+        setSearch("");
+    });
 
     const filteredDevices = useMemo(() => {
         const keyword = search.trim().toLowerCase();

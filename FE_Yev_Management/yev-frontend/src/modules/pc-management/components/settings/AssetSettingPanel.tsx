@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 import { Save } from "lucide-react";
 
 import { AssetSettingApi } from "@/modules/pc-management/api/asset-setting.api";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -14,26 +15,16 @@ const fieldClassName =
 // GET/PUT /api/AssetSetting — cấu hình chung module Asset: sau bao nhiêu tháng kể từ khi thiết bị
 // hết hạn sử dụng thì hệ thống tự động chuyển trạng thái sang "Chờ thanh lý".
 export default function AssetSettingPanel() {
-    const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [liquidationAfterMonths, setLiquidationAfterMonths] = useState<number>(1);
 
-    const fetchSetting = async () => {
-        setIsLoading(true);
-        try {
-            const data = await AssetSettingApi.getAssetSetting();
-            setLiquidationAfterMonths(data.liquidationAfterMonths);
-        } catch (err) {
-            console.error(err);
-            toast.error(getApiErrorMessage(err, "Không thể tải cấu hình."));
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchSetting();
-    }, []);
+    const { isLoading } = useFetchEffect(
+        () => AssetSettingApi.getAssetSetting(),
+        [],
+        (data) => setLiquidationAfterMonths(data.liquidationAfterMonths),
+        "Không thể tải cấu hình.",
+        (message) => toast.error(message)
+    );
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();

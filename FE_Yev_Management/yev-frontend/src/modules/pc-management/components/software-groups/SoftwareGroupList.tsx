@@ -8,13 +8,12 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import SoftwareGroupForm, { type SoftwareGroupFormValues } from "./SoftwareGroupForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 const SoftwareGroupList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareGroupList({ onLoadingChange }, ref) {
     const [groups, setGroups] = useState<SoftwareGroupDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -33,34 +32,19 @@ const SoftwareGroupList = forwardRef<ListHandle, ListToolbarProps>(function Soft
     const [deletingGroup, setDeletingGroup] = useState<SoftwareGroupDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchGroups = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await SoftwareGroupApi.getSoftwareGroupPageNation({
-                pageIndex,
-                pageSize: PAGE_SIZE,
-                keyword: appliedKeyword || undefined,
-            });
+    const { isLoading, error, refetch: fetchGroups } = useFetchEffect(
+        () => SoftwareGroupApi.getSoftwareGroupPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+        [pageIndex, appliedKeyword],
+        (result) => {
             setGroups(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách nhóm phần mềm.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchGroups();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+        },
+        "Không thể tải danh sách nhóm phần mềm.",
+        (message) => toast.error(message)
+    );
 
     useEffect(() => {
         onLoadingChange?.(isLoading);

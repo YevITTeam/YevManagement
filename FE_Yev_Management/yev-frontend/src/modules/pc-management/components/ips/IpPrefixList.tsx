@@ -8,13 +8,12 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import IpPrefixForm, { type IpPrefixFormValues } from "./IpPrefixForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixList({ onLoadingChange }, ref) {
     const [prefixes, setPrefixes] = useState<IpPrefixDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -33,34 +32,19 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
     const [deletingPrefix, setDeletingPrefix] = useState<IpPrefixDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchPrefixes = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await IpApi.getIpPrefixPageNation({
-                pageIndex,
-                pageSize: PAGE_SIZE,
-                keyword: appliedKeyword || undefined,
-            });
+    const { isLoading, error, refetch: fetchPrefixes } = useFetchEffect(
+        () => IpApi.getIpPrefixPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+        [pageIndex, appliedKeyword],
+        (result) => {
             setPrefixes(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách dải mạng.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchPrefixes();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+        },
+        "Không thể tải danh sách dải mạng.",
+        (message) => toast.error(message)
+    );
 
     useEffect(() => {
         onLoadingChange?.(isLoading);
@@ -185,7 +169,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                                 <th className="whitespace-nowrap px-6 py-3">Gateway</th>
                                 <th className="whitespace-nowrap px-6 py-3">DNS</th>
                                 <th className="whitespace-nowrap px-6 py-3">Mô tả</th>
-                                <th className="whitespace-nowrap px-6 py-3 text-right">IP đã dùng/ còn trống</th>
+                                <th className="whitespace-nowrap px-6 py-3 text-center">IP đã dùng/ còn trống</th>
                                 <th className="whitespace-nowrap px-6 py-3 text-right">Thao tác</th>
                             </tr>
                         </thead>
@@ -211,7 +195,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                                     <td className="max-w-[220px] truncate px-6 py-4 text-sm text-[#5e3f3a]" title={prefix.description ?? undefined}>
                                         {prefix.description ?? "—"}
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-[#5e3f3a]">
+                                    <td className="whitespace-nowrap px-6 py-4 text-center text-sm text-[#5e3f3a]">
                                         {prefix.usedIpCount} / {prefix.availableIpCount}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">

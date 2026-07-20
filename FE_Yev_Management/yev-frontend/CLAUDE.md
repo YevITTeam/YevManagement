@@ -73,12 +73,64 @@ Khi thêm/sửa API gọi BE, **đọc trước 2 tài liệu này** (đừng đ
 
 Mọi màn hình CRUD theo cùng khuôn (xem mẫu: `modules/pc-management/components/branches/`):
 - **Page** (`app/.../page.tsx`): wrapper mỏng `return <XxxList />`.
-- **`XxxList.tsx`** (`"use client"`): giữ state phân trang + search + form/delete; hàm `fetchXxx`
-  trong `useEffect` phụ thuộc `[pageIndex, appliedKeyword]`; mọi thao tác bọc `try/catch` →
-  `toast` + `getApiErrorMessage`; sau create/update/delete gọi lại `fetchXxx()`.
+- **`XxxList.tsx`** (`"use client"`): giữ state phân trang + search + form/delete; fetch qua
+  `useFetchEffect` (xem bên dưới) phụ thuộc `[pageIndex, appliedKeyword]`; sau create/update/delete
+  gọi lại hàm `refetch` mà `useFetchEffect` trả về.
 - **`XxxForm.tsx`** (`"use client"`): modal controlled, export `interface XxxFormValues`, prop
-  `mode: "create" | "edit"` + `initial` + `loading` + `onClose` + `onSubmit`.
+  `mode: "create" | "edit"` + `initial` + `loading` + `onClose` + `onSubmit`; reset field khi mở
+  lại/đổi bản ghi qua `useDialogReset` (xem bên dưới), **không** tự viết `useEffect` cho việc này.
 - Xác nhận xoá: dùng `components/common/ConfirmDialog`. Thông báo: `react-toastify` (đã mount ở root).
+
+### Pattern fetch dữ liệu — `useFetchEffect` (`modules/common/hooks/useFetchEffect.ts`)
+
+React Compiler lint rule `react-hooks/set-state-in-effect` **cấm gọi setState đồng bộ trong
+`useEffect`** (kể cả gọi 1 hàm `async` khác có setState bên trong, dù setState nằm sau `await`) —
+chỉ được phép setState bên trong callback `.then()/.catch()/.finally()`. Vì vậy **không** tự viết
+lại pattern cũ `fetchXxx` async/await + `useEffect(() => { fetchXxx() }, deps)` — luôn dùng hook
+`useFetchEffect`:
+
+```ts
+const { isLoading, error, refetch: fetchBranches } = useFetchEffect(
+    () => BranchApi.getBranchPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+    [pageIndex, appliedKeyword],           // deps — đổi thì tự fetch lại + tự bật lại isLoading
+    (result) => {                          // onSuccess — nơi DUY NHẤT set state khác ngoài isLoading/error
+        setBranches(result.data);
+        setTotalCount(result.totalCount);
+        // ...
+    },
+    "Không thể tải danh sách chi nhánh.",   // errorFallback
+    (message) => toast.error(message)       // onError (optional)
+);
+```
+`fetchBranches` (bí danh của `refetch`) dùng y hệt hàm `fetchXxx` cũ trước đây: gọi trong nút
+"Làm mới" (`onClick={() => fetchBranches()}`), và `await fetchBranches();` sau create/update/delete.
+`fetcher` được phép `async`/`await` bên trong (miễn không tự setState) — chỉ `onSuccess`/`onError`
+mới được setState.
+
+**Reset state khi 1 giá trị đổi (không phải fetch)** — vd `setPageIndex(1)` khi filter đổi, xoá
+`selectedIds` khi `devices` đổi — **không** dùng effect, so sánh snapshot ngay trong thân render
+(pattern chính thức của React, xem https://react.dev/learn/you-might-not-need-an-effect):
+```ts
+const [prevFilters, setPrevFilters] = useState(filtersKey);
+if (prevFilters !== filtersKey) {
+    setPrevFilters(filtersKey);
+    setPageIndex(1);
+}
+```
+
+### Pattern reset Form dialog — `useDialogReset` (`modules/common/hooks/useDialogReset.ts`)
+
+Thay cho `useEffect(() => { if (isOpen) setValues(...) }, [isOpen, initial])` (cũ, vi phạm rule
+trên), dùng:
+```ts
+useDialogReset(isOpen, initial, (current) => {
+    setValues(current ? { branchCode: current.branchCode, branchName: current.branchName } : emptyValues);
+});
+```
+Gọi `onReset` ngay trong render khi phát hiện `isOpen`/`initial` vừa đổi (không qua effect). Nếu
+Form không có prop `isOpen` (bị mount/gỡ có điều kiện bởi component cha, vd `RoleForm`), phải kết
+hợp thêm **lazy initializer** cho `useState(() => ...)` để đúng dữ liệu ngay lần mount đầu (xem
+`modules/auth/components/roles/RoleForm.tsx`), vì `useDialogReset` không tự chạy ở lần mount đầu.
 
 ## Style / thiết kế
 

@@ -13,6 +13,7 @@ import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 interface DeviceListReportPrintDialogProps {
     isOpen: boolean;
@@ -80,13 +81,15 @@ export default function DeviceListReportPrintDialog({ isOpen, onClose }: DeviceL
     const [isLoading, setIsLoading] = useState(false);
     const [rows, setRows] = useState<DeviceListReportItemDto[] | null>(null);
 
-    useEffect(() => {
-        if (!isOpen) return;
+    useDialogReset(isOpen, null, () => {
         setBranchId("");
         setDeviceTypeId("");
         setKeyword("");
         setRows(null);
+    });
 
+    useEffect(() => {
+        if (!isOpen) return;
         BranchApi.getAllBranches()
             .then(setBranches)
             .catch((err) => console.error(err));

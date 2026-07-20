@@ -35,18 +35,22 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
     // dialog KHÔNG được mở sẵn với 1 gợi ý cụ thể từ màn "Import Excel" (initialNewDeviceId).
     const [suggestion, setSuggestion] = useState<DeviceReplacementSuggestionDto | null>(null);
 
-    useEffect(() => {
-        if (!isOpen || !oldDevice) return;
-        setSearch("");
-        setNote("");
-        setSuggestion(null);
-
-        if (initialNewDeviceId != null) {
-            setSelectedDeviceId(initialNewDeviceId);
-            return;
+    // Reset field khi mở lại dialog (đổi máy cũ/gợi ý) — so sánh snapshot ngay trong render thay effect.
+    const resetKey = `${isOpen}|${oldDevice?.id ?? ""}|${initialNewDeviceId ?? ""}`;
+    const [prevResetKey, setPrevResetKey] = useState(resetKey);
+    if (prevResetKey !== resetKey) {
+        setPrevResetKey(resetKey);
+        if (isOpen && oldDevice) {
+            setSearch("");
+            setNote("");
+            setSuggestion(null);
+            setSelectedDeviceId(initialNewDeviceId ?? null);
         }
+    }
 
-        setSelectedDeviceId(null);
+    // Tự tra gợi ý máy mới (docs/asset-api-fe.md §5.9) — chỉ khi KHÔNG có initialNewDeviceId đã điền sẵn.
+    useEffect(() => {
+        if (!isOpen || !oldDevice || initialNewDeviceId != null) return;
         let isCancelled = false;
         DeviceApi.getReplacementSuggestion(oldDevice.id)
             .then((result) => {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, FormEvent, useEffect } from "react";
+import { useState, FormEvent } from "react";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 interface Props {
     initial?: { id?: number; roleName: string; description?: string };
@@ -8,20 +9,19 @@ interface Props {
     onSubmit: (data: { roleName: string; description?: string }, id?: number) => Promise<void> | void;
 }
 
+// Component này không có prop isOpen — RoleList mount/gỡ nó bằng render có điều kiện
+// ({showCreate && <RoleForm/>} / {editing && <RoleForm/>}), nên khởi tạo state ngay từ
+// `initial` lúc mount (lazy initializer) để đúng dữ liệu ngay lần render đầu; useDialogReset
+// chỉ còn lo trường hợp `initial` đổi trong khi component vẫn đang mounted (đổi bản ghi đang sửa).
 export default function RoleForm({ initial, onCancel, onSubmit }: Props) {
-    const [roleName, setRoleName] = useState("");
-    const [description, setDescription] = useState("");
+    const [roleName, setRoleName] = useState(() => initial?.roleName || "");
+    const [description, setDescription] = useState(() => initial?.description || "");
     const [submitting, setSubmitting] = useState(false);
 
-    useEffect(() => {
-        if (initial) {
-            setRoleName(initial.roleName || "");
-            setDescription(initial.description || "");
-        } else {
-            setRoleName("");
-            setDescription("");
-        }
-    }, [initial]);
+    useDialogReset(true, initial, (current) => {
+        setRoleName(current?.roleName || "");
+        setDescription(current?.description || "");
+    });
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();

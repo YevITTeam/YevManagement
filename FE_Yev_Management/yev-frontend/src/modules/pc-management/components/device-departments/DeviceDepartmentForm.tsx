@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface DeviceDepartmentFormValues {
     departmentCode: string;
@@ -26,15 +27,9 @@ const fieldClassName =
 export default function DeviceDepartmentForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: DeviceDepartmentFormProps) {
     const [values, setValues] = useState<DeviceDepartmentFormValues>(emptyValues);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? { departmentCode: initial.departmentCode, departmentName: initial.departmentName }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(current ? { departmentCode: current.departmentCode, departmentName: current.departmentName } : emptyValues);
+    });
 
     if (!isOpen) return null;
 

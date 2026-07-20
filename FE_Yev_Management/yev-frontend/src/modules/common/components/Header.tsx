@@ -21,7 +21,7 @@ const IDENTITY_ADMIN_PERMISSIONS = [
 export default function Header() {
   const t = useTranslations("Header");
   const pathname = usePathname() || "";
-  const hasSidebar = pathname.startsWith("/pc");
+  const hasSidebar = pathname.startsWith("/pc") || pathname.startsWith("/ot");
   const { user, isLoading, refreshUser } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -43,7 +43,7 @@ export default function Header() {
 
   return (
     <header
-      className={`sticky top-0 z-30 border-b border-[#e0e3e5] bg-[#f7f9fb]/95 backdrop-blur transition-all duration-300 ${hasSidebar ? "w-[calc(100%-13.75rem)] ml-auto" : "w-full"
+      className={`print:hidden sticky top-0 z-30 border-b border-[#e0e3e5] bg-[#f7f9fb]/95 backdrop-blur transition-all duration-300 ${hasSidebar ? "w-[calc(100%-13.75rem)] ml-auto" : "w-full"
         }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">

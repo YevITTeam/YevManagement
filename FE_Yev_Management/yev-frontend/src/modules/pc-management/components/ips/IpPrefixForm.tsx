@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import type { IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface IpPrefixFormValues {
     prefix: string;
@@ -124,24 +125,22 @@ export default function IpPrefixForm({ isOpen, mode, initial, loading = false, o
         BranchApi.getAllBranches().then((data) => setBranches(data)).catch((err) => console.error(err));
     }, [isOpen]);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? {
-                          prefix: initial.prefix,
-                          branchId: initial.branchId ?? 0,
-                          subnetMask: initial.subnetMask ?? "",
-                          gateway: initial.gateway ?? "",
-                          preferredDns: initial.preferredDns ?? "",
-                          alternateDns: initial.alternateDns ?? "",
-                          description: initial.description ?? "",
-                      }
-                    : emptyValues
-            );
-            setFormError(null);
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(
+            current
+                ? {
+                      prefix: current.prefix,
+                      branchId: current.branchId ?? 0,
+                      subnetMask: current.subnetMask ?? "",
+                      gateway: current.gateway ?? "",
+                      preferredDns: current.preferredDns ?? "",
+                      alternateDns: current.alternateDns ?? "",
+                      description: current.description ?? "",
+                  }
+                : emptyValues
+        );
+        setFormError(null);
+    });
 
     if (!isOpen) return null;
 

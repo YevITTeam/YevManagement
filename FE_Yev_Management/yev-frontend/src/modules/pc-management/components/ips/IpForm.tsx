@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
 import { ipStatusLabels } from "./ip-status";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 // docs/asset-api-fe.md §4.2 (2026-07-11) — PUT /api/IpAddress/{id} chỉ đổi được
 // status + note. IP đang gắn thiết bị (deviceId != null) chỉ đổi được note;
@@ -31,14 +32,13 @@ export default function IpForm({ isOpen, initial, loading = false, onClose, onSu
     const isAssignedToDevice = initial?.deviceId != null;
     const statusOptions = isAssignedToDevice ? [2] : [0, 1];
 
-    useEffect(() => {
-        if (isOpen && initial) {
-            setValues({
-                status: String(initial.status ?? 0),
-                note: initial.note ?? "",
-            });
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        if (!current) return;
+        setValues({
+            status: String(current.status ?? 0),
+            note: current.note ?? "",
+        });
+    });
 
     if (!isOpen || !initial) return null;
 

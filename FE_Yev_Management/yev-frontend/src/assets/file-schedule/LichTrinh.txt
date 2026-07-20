@@ -1,0 +1,122 @@
+{
+  "members": [
+    {
+      "id": "fd4cac24-ac35-4766-ac60-bdc75a20a8ae",
+      "name": "Nguyễn Nhật Trường"
+    },
+    {
+      "id": "4f64bbc3-c819-4551-a05f-f4e1f9c3b1b7",
+      "name": "Phan Nguyễn Mạnh Cường"
+    },
+    {
+      "id": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+      "name": "Tất cả thành viên"
+    }
+  ],
+  "plans": [
+    {
+      "id": "p1",
+      "name": "Phát triển PC",
+      "startDate": "2026-06-29",
+      "endDate": "2026-07-20",
+      "tasks": [
+        {
+          "id": "s1",
+          "content": "Phân tích yêu cầu",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "done",
+          "dueDate": "2026-07-03",
+          "completedDate": "2026-07-02"
+        },
+        {
+          "id": "s2",
+          "content": "Liệt kê yêu cầu",
+          "assigneeId": "4f64bbc3-c819-4551-a05f-f4e1f9c3b1b7",
+          "status": "done",
+          "dueDate": "2026-07-07",
+          "completedDate": "2026-07-07"
+        },
+        {
+          "id": "4f568780-b3fb-41e8-9cf7-ddb561c583ba",
+          "content": "Thiết kế database",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "done",
+          "dueDate": "2026-07-09",
+          "completedDate": "2026-07-09"
+        },
+        {
+          "id": "ad371b3e-960e-495a-938c-60cf4e71e51c",
+          "content": "Thiết kế kiến trúc",
+          "assigneeId": "fd4cac24-ac35-4766-ac60-bdc75a20a8ae",
+          "status": "done",
+          "dueDate": "2026-07-09",
+          "completedDate": "2026-07-08"
+        },
+        {
+          "id": "6706e629-06c4-4e33-a9ac-a6cd129a94c4",
+          "content": "Phát triển phần mềm",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "done",
+          "dueDate": "2026-07-20",
+          "completedDate": "2026-07-20"
+        }
+      ]
+    },
+    {
+      "id": "8b78989f-5f52-4f77-8c94-e2fa8224e0ce",
+      "name": "Phát triển OT",
+      "startDate": "2026-07-10",
+      "endDate": "2026-07-20",
+      "tasks": [
+        {
+          "id": "11bb325a-7f4f-4277-8cc7-b5903b0c7bf8",
+          "content": "Thu thập yêu cầu",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "done",
+          "dueDate": "2026-07-15",
+          "completedDate": "2026-07-17"
+        },
+        {
+          "id": "d9bac34d-81c9-449b-8b2d-dbcc90bac3af",
+          "content": "Thiết kế database",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "done",
+          "dueDate": "2026-07-15",
+          "completedDate": "2026-07-17"
+        },
+        {
+          "id": "1784177098270-ts934noljgm",
+          "content": "Tạo module",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "done",
+          "dueDate": "2026-07-15",
+          "completedDate": "2026-07-17"
+        },
+        {
+          "id": "1784177112223-ooyem6sxo4",
+          "content": "Hình thành chức năng cơ bản",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "in_progress",
+          "dueDate": "",
+          "completedDate": ""
+        },
+        {
+          "id": "1784177123176-gzu5aq159o",
+          "content": "Import dữ liệu",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "in_progress",
+          "dueDate": "",
+          "completedDate": ""
+        },
+        {
+          "id": "1784177135145-32f3mfuwcwv",
+          "content": "Phát triền tính năng",
+          "assigneeId": "dbf45db7-0a0b-4b4c-916e-024b0945365d",
+          "status": "in_progress",
+          "dueDate": "",
+          "completedDate": ""
+        }
+      ]
+    }
+  ]
+}

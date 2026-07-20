@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Save, Search } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthApi } from "@/modules/auth/api/auth.api";
@@ -10,6 +10,7 @@ import type { PermissionModuleGroupDto } from "@/modules/auth/types/permission.d
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 // Override giá trị đang chọn cho 1 permission trên UI (chưa lưu).
 // "inherit": không override, theo Role. "grant": cấp thêm riêng. "deny": thu hồi riêng.
@@ -31,29 +32,18 @@ export default function UserPermissionOverrideManager() {
     // Lựa chọn override đang chỉnh trên UI (chưa lưu).
     const [choices, setChoices] = useState<Map<number, OverrideChoice>>(new Map());
 
-    const [isLoadingBase, setIsLoadingBase] = useState(true);
-    const [isLoadingUserPermissions, setIsLoadingUserPermissions] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
-    useEffect(() => {
-        const loadBase = async () => {
-            setIsLoadingBase(true);
-            try {
-                const [usersData, permissionsData] = await Promise.all([
-                    AuthApi.getAllUsersWithRoles(),
-                    PermissionApi.getAll(),
-                ]);
-                setUsers(usersData);
-                setModuleGroups(permissionsData);
-                if (usersData.length > 0) setSelectedUserId(usersData[0].id);
-            } catch (err) {
-                toast.error(getApiErrorMessage(err, "Không thể tải danh sách người dùng / quyền."));
-            } finally {
-                setIsLoadingBase(false);
-            }
-        };
-        loadBase();
-    }, []);
+    const { isLoading: isLoadingBase } = useFetchEffect(
+        () => Promise.all([AuthApi.getAllUsersWithRoles(), PermissionApi.getAll()]),
+        [],
+        ([usersData, permissionsData]) => {
+            setUsers(usersData);
+            setModuleGroups(permissionsData);
+            if (usersData.length > 0) setSelectedUserId(usersData[0].id);
+        },
+        "Không thể tải danh sách người dùng / quyền."
+    );
 
     // Danh sách phẳng tất cả permission, suy ra từ cây Module > Entity — dùng để tính baseline theo Role.
     const flatPermissions = useMemo(
@@ -61,12 +51,12 @@ export default function UserPermissionOverrideManager() {
         [moduleGroups]
     );
 
-    const loadUserPermissions = useCallback(async (userId: number) => {
-        setIsLoadingUserPermissions(true);
-        try {
+    const { isLoading: isLoadingUserPermissions, refetch: reloadUserPermissions } = useFetchEffect(
+        async () => {
+            if (selectedUserId === null || flatPermissions.length === 0) return null;
             const [overrides, effective] = await Promise.all([
-                PermissionApi.getUserOverrides(userId),
-                PermissionApi.getUserEffective(userId),
+                PermissionApi.getUserOverrides(selectedUserId),
+                PermissionApi.getUserEffective(selectedUserId),
             ]);
 
             const effectiveIds = new Set(effective.map((p) => p.id));
@@ -79,24 +69,22 @@ export default function UserPermissionOverrideManager() {
                 const roleHasAccess = override !== undefined ? !override : effectiveIds.has(permission.id);
                 if (roleHasAccess) baseline.add(permission.id);
             }
-            setRoleBaselineIds(baseline);
 
             const nextChoices = new Map<number, OverrideChoice>();
             overrideByPermissionId.forEach((isGranted, permissionId) => {
                 nextChoices.set(permissionId, isGranted ? "grant" : "deny");
             });
-            setChoices(nextChoices);
-        } catch (err) {
-            toast.error(getApiErrorMessage(err, "Không thể tải quyền của người dùng này."));
-        } finally {
-            setIsLoadingUserPermissions(false);
-        }
-    }, [flatPermissions]);
 
-    useEffect(() => {
-        if (selectedUserId === null || flatPermissions.length === 0) return;
-        loadUserPermissions(selectedUserId);
-    }, [selectedUserId, flatPermissions, loadUserPermissions]);
+            return { baseline, nextChoices };
+        },
+        [selectedUserId, flatPermissions],
+        (result) => {
+            if (!result) return;
+            setRoleBaselineIds(result.baseline);
+            setChoices(result.nextChoices);
+        },
+        "Không thể tải quyền của người dùng này."
+    );
 
     const filteredUsers = useMemo(() => {
         const term = userSearchTerm.trim().toLowerCase();
@@ -128,7 +116,7 @@ export default function UserPermissionOverrideManager() {
         try {
             await PermissionApi.updateUserOverrides(selectedUserId, { grantPermissionIds, denyPermissionIds });
             toast.success("Cập nhật phân quyền riêng thành công!");
-            await loadUserPermissions(selectedUserId);
+            await reloadUserPermissions();
         } catch (err) {
             toast.error(getApiErrorMessage(err, "Cập nhật phân quyền riêng thất bại"));
         } finally {

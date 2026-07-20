@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
@@ -8,13 +8,12 @@ import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-d
 import DeviceDepartmentForm, { type DeviceDepartmentFormValues } from "./DeviceDepartmentForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 10;
 
 export default function DeviceDepartmentList() {
     const [deviceDepartments, setDeviceDepartments] = useState<DeviceDepartmentDto[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -33,34 +32,24 @@ export default function DeviceDepartmentList() {
     const [deletingDeviceDepartment, setDeletingDeviceDepartment] = useState<DeviceDepartmentDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const fetchDeviceDepartments = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await DeviceDepartmentApi.getDeviceDepartmentPageNation({
+    const { isLoading, error, refetch: fetchDeviceDepartments } = useFetchEffect(
+        () =>
+            DeviceDepartmentApi.getDeviceDepartmentPageNation({
                 pageIndex,
                 pageSize: PAGE_SIZE,
                 keyword: appliedKeyword || undefined,
-            });
+            }),
+        [pageIndex, appliedKeyword],
+        (result) => {
             setDeviceDepartments(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
-        } catch (err) {
-            console.error(err);
-            const message = getApiErrorMessage(err, "Không thể tải danh sách bộ phận.");
-            setError(message);
-            toast.error(message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchDeviceDepartments();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pageIndex, appliedKeyword]);
+        },
+        "Không thể tải danh sách bộ phận.",
+        (message) => toast.error(message)
+    );
 
     const handleSearch = () => {
         setPageIndex(1);

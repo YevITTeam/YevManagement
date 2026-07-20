@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
 
 import { DeviceSoftwareApi } from "@/modules/pc-management/api/device-software.api";
 import { SoftwareApi } from "@/modules/pc-management/api/software.api";
 import type { DeviceSoftwarePickerDto, DeviceSoftwareSyncItemDto } from "@/modules/pc-management/types/device-software.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 interface DeviceSoftwarePickerDialogProps {
     isOpen: boolean;
@@ -30,7 +32,6 @@ type PrioritySort = "none" | "asc" | "desc";
 
 export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, onSynced }: DeviceSoftwarePickerDialogProps) {
     const [items, setItems] = useState<PickerItemWithPriority[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
     const [search, setSearch] = useState("");
     const [prioritySort, setPrioritySort] = useState<PrioritySort>("none");
 
@@ -39,27 +40,34 @@ export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, 
     const [newItemDetails, setNewItemDetails] = useState<Record<number, NewItemDetails>>({});
     const [isSaving, setIsSaving] = useState(false);
 
-    useEffect(() => {
-        if (!isOpen) return;
+    useDialogReset(isOpen, deviceId, () => {
         setSearch("");
         setPrioritySort("none");
-        setIsLoading(true);
-        Promise.all([DeviceSoftwareApi.getDeviceSoftwarePicker(deviceId), SoftwareApi.getAllSoftware()])
-            .then(([pickerResult, allSoftware]) => {
-                const priorityBySoftwareId = new Map(allSoftware.map((software) => [software.id, software.softwarePriority]));
-                const result: PickerItemWithPriority[] = pickerResult.map((item) => ({
-                    ...item,
-                    softwarePriority: priorityBySoftwareId.get(item.softwareId) ?? null,
-                }));
-                setItems(result);
-                const selected = new Set(result.filter((item) => item.isSelected).map((item) => item.softwareId));
-                setOriginalSelectedIds(selected);
-                setSelectedIds(new Set(selected));
-                setNewItemDetails({});
-            })
-            .catch((err) => toast.error(getApiErrorMessage(err, "Không thể tải danh sách phần mềm.")))
-            .finally(() => setIsLoading(false));
-    }, [isOpen, deviceId]);
+    });
+
+    const { isLoading } = useFetchEffect(
+        () =>
+            !isOpen
+                ? Promise.resolve(null)
+                : Promise.all([DeviceSoftwareApi.getDeviceSoftwarePicker(deviceId), SoftwareApi.getAllSoftware()]),
+        [isOpen, deviceId],
+        (result) => {
+            if (!result) return;
+            const [pickerResult, allSoftware] = result;
+            const priorityBySoftwareId = new Map(allSoftware.map((software) => [software.id, software.softwarePriority]));
+            const enriched: PickerItemWithPriority[] = pickerResult.map((item) => ({
+                ...item,
+                softwarePriority: priorityBySoftwareId.get(item.softwareId) ?? null,
+            }));
+            setItems(enriched);
+            const selected = new Set(enriched.filter((item) => item.isSelected).map((item) => item.softwareId));
+            setOriginalSelectedIds(selected);
+            setSelectedIds(new Set(selected));
+            setNewItemDetails({});
+        },
+        "Không thể tải danh sách phần mềm.",
+        (message) => toast.error(message)
+    );
 
     const togglePrioritySort = () => {
         setPrioritySort((current) => (current === "none" ? "asc" : current === "asc" ? "desc" : "none"));

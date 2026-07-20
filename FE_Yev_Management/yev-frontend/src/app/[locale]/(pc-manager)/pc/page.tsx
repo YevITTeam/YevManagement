@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from "lucide-react";
 import DeviceFilterBar, { type DeviceFilters } from "@/modules/pc-management/components/DeviceFilterBar";
@@ -15,6 +15,7 @@ import { DeviceApi } from "@/modules/pc-management/api/device.api";
 import type { DeviceDto, DeviceGetDto, SkippedDeviceDto } from "@/modules/pc-management/types/device.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useRouter } from '@/navigation';
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 const statusLabels: Record<number, string> = {
   0: "Chưa sử dụng",
   1: "Đang sử dụng",
@@ -85,8 +86,6 @@ export default function PcDashboardPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isTaniumImportOpen, setIsTaniumImportOpen] = useState(false);
   const router = useRouter();
@@ -141,10 +140,9 @@ export default function PcDashboardPage() {
 
   const handleDragEnd = () => setIsDragScrolling(false);
 
-  // Reset về trang 1 mỗi khi điều kiện lọc thay đổi, để phân trang khớp với tập kết quả mới.
-  useEffect(() => {
-    setPageIndex(1);
-  }, [
+  // Reset về trang 1 mỗi khi điều kiện lọc thay đổi, để phân trang khớp với tập kết quả mới — so sánh
+  // snapshot ngay trong render thay effect (đây là "adjust state when a prop/state khác changes").
+  const filtersKey = JSON.stringify([
     filters.deviceCode,
     filters.manager,
     filters.ipAddress,
@@ -161,27 +159,38 @@ export default function PcDashboardPage() {
     filters.departmentId,
     sortDeviceCodeAscending,
   ]);
+  const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
+  if (prevFiltersKey !== filtersKey) {
+    setPrevFiltersKey(filtersKey);
+    setPageIndex(1);
+  }
 
-  const fetchDevices = async (targetPageIndex: number) => {
-    setIsLoading(true);
-    setError(null);
+  interface DevicePageResult {
+    data: DeviceDto[];
+    totalCount: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+    safePageIndex: number;
+  }
 
-    const serverFilterParams = {
-      deviceCode: filters.deviceCode || undefined,
-      manager: filters.manager || undefined,
-      ipAddress: filters.ipAddress || undefined,
-      email: filters.email || undefined,
-      supplierName: filters.supplierName || undefined,
-      purchaseDate: filters.purchaseDate || undefined,
-      serialNumber: filters.serialNumber || undefined,
-      isUseUsb: filters.isUseUsb === "" ? undefined : filters.isUseUsb === "true",
-      groupId: filters.groupId === "" ? undefined : Number(filters.groupId),
-      departmentId: filters.departmentId === "" ? undefined : Number(filters.departmentId),
-      sortDeviceCodeAscending,
-    };
-    const hasClientOnlyFilters = Boolean(filters.branch || filters.deviceType || filters.status || filters.expiryDate);
+  const { isLoading, error, refetch: refetchDevices } = useFetchEffect<DevicePageResult>(
+    async () => {
+      const serverFilterParams = {
+        deviceCode: filters.deviceCode || undefined,
+        manager: filters.manager || undefined,
+        ipAddress: filters.ipAddress || undefined,
+        email: filters.email || undefined,
+        supplierName: filters.supplierName || undefined,
+        purchaseDate: filters.purchaseDate || undefined,
+        serialNumber: filters.serialNumber || undefined,
+        isUseUsb: filters.isUseUsb === "" ? undefined : filters.isUseUsb === "true",
+        groupId: filters.groupId === "" ? undefined : Number(filters.groupId),
+        departmentId: filters.departmentId === "" ? undefined : Number(filters.departmentId),
+        sortDeviceCodeAscending,
+      };
+      const hasClientOnlyFilters = Boolean(filters.branch || filters.deviceType || filters.status || filters.expiryDate);
 
-    try {
       if (hasClientOnlyFilters) {
         const result = await DeviceApi.getDevicePageNation({
           pageIndex: 1,
@@ -190,63 +199,44 @@ export default function PcDashboardPage() {
         });
         const matched = result.data.filter((device) => matchesClientOnlyFilters(device, filters));
         const computedTotalPages = Math.max(1, Math.ceil(matched.length / pageSize));
-        const safePageIndex = Math.min(targetPageIndex, computedTotalPages);
+        const safePageIndex = Math.min(pageIndex, computedTotalPages);
         const start = (safePageIndex - 1) * pageSize;
 
-        setDevices(matched.slice(start, start + pageSize));
-        setTotalCount(matched.length);
-        setTotalPages(computedTotalPages);
-        setHasPreviousPage(safePageIndex > 1);
-        setHasNextPage(safePageIndex < computedTotalPages);
-        if (safePageIndex !== targetPageIndex) setPageIndex(safePageIndex);
-      } else {
-        const result = await DeviceApi.getDevicePageNation({
-          pageIndex: targetPageIndex,
-          pageSize,
-          ...serverFilterParams,
-        });
-        setDevices(result.data);
-        setTotalCount(result.totalCount);
-        setTotalPages(result.totalPages);
-        setHasNextPage(result.hasNextPage);
-        setHasPreviousPage(result.hasPreviousPage);
+        return {
+          data: matched.slice(start, start + pageSize),
+          totalCount: matched.length,
+          totalPages: computedTotalPages,
+          hasPreviousPage: safePageIndex > 1,
+          hasNextPage: safePageIndex < computedTotalPages,
+          safePageIndex,
+        };
       }
-    } catch (err) {
-      setError(getApiErrorMessage(err, "Không thể tải danh sách thiết bị."));
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    fetchDevices(pageIndex);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    pageIndex,
-    pageSize,
-    filters.deviceCode,
-    filters.manager,
-    filters.ipAddress,
-    filters.email,
-    filters.supplierName,
-    filters.purchaseDate,
-    filters.branch,
-    filters.deviceType,
-    filters.status,
-    filters.expiryDate,
-    filters.serialNumber,
-    filters.isUseUsb,
-    filters.groupId,
-    filters.departmentId,
-    sortDeviceCodeAscending,
-  ]);
-
-  const refetchDevices = () => fetchDevices(pageIndex);
+      const result = await DeviceApi.getDevicePageNation({
+        pageIndex,
+        pageSize,
+        ...serverFilterParams,
+      });
+      return { ...result, safePageIndex: pageIndex };
+    },
+    [pageIndex, pageSize, filtersKey],
+    (result) => {
+      setDevices(result.data);
+      setTotalCount(result.totalCount);
+      setTotalPages(result.totalPages);
+      setHasNextPage(result.hasNextPage);
+      setHasPreviousPage(result.hasPreviousPage);
+      if (result.safePageIndex !== pageIndex) setPageIndex(result.safePageIndex);
+    },
+    "Không thể tải danh sách thiết bị."
+  );
 
   // Danh sách hiển thị đổi trang/lọc thì bỏ chọn để tránh giữ id không còn hiển thị.
-  useEffect(() => {
+  const [prevDevices, setPrevDevices] = useState(devices);
+  if (prevDevices !== devices) {
+    setPrevDevices(devices);
     setSelectedIds([]);
-  }, [devices]);
+  }
 
   const toggleSelectDevice = (id: number) => {
     setSelectedIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
@@ -568,7 +558,7 @@ export default function PcDashboardPage() {
                     <div className="inline-flex justify-end">
                       <RowActionsMenu
                         actions={[
-                          { label: "Chi tiết", onClick: () => router.push(`/pc/devices/${device.id}`) },
+                          { label: "Chi tiết", onClick: () => router.push({ pathname: "/pc/devices", query: { id: String(device.id) } }) },
                           { label: "Sửa", onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
                           {
                             label: "Chuyển máy",

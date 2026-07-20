@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { SupplierDto } from "@/modules/pc-management/types/supplier.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface SupplierFormValues {
     supplierCode: string;
@@ -26,15 +27,9 @@ const fieldClassName =
 export default function SupplierForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: SupplierFormProps) {
     const [values, setValues] = useState<SupplierFormValues>(emptyValues);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? { supplierCode: initial.supplierCode, supplierName: initial.supplierName }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(current ? { supplierCode: current.supplierCode, supplierName: current.supplierName } : emptyValues);
+    });
 
     if (!isOpen) return null;
 

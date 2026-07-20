@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { SoftwareDto } from "@/modules/pc-management/types/software.dto";
 import type { SoftwareGroupDto } from "@/modules/pc-management/types/software-group.dto";
+import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface SoftwareFormValues {
     softwareCode: string;
@@ -41,23 +42,21 @@ const fieldClassName =
 export default function SoftwareForm({ isOpen, mode, initial, groups, loading = false, onClose, onSubmit }: SoftwareFormProps) {
     const [values, setValues] = useState<SoftwareFormValues>(emptyValues);
 
-    useEffect(() => {
-        if (isOpen) {
-            setValues(
-                initial
-                    ? {
-                          softwareCode: initial.softwareCode,
-                          softwareName: initial.softwareName,
-                          softwareType: initial.softwareType ?? "",
-                          publisher: initial.publisher ?? "",
-                          softwareQuantity: initial.softwareQuantity != null ? String(initial.softwareQuantity) : "",
-                          softwarePriority: initial.softwarePriority != null ? String(initial.softwarePriority) : "",
-                          softwareGroupId: initial.softwareGroupId != null ? String(initial.softwareGroupId) : "",
-                      }
-                    : emptyValues
-            );
-        }
-    }, [isOpen, initial]);
+    useDialogReset(isOpen, initial, (current) => {
+        setValues(
+            current
+                ? {
+                      softwareCode: current.softwareCode,
+                      softwareName: current.softwareName,
+                      softwareType: current.softwareType ?? "",
+                      publisher: current.publisher ?? "",
+                      softwareQuantity: current.softwareQuantity != null ? String(current.softwareQuantity) : "",
+                      softwarePriority: current.softwarePriority != null ? String(current.softwarePriority) : "",
+                      softwareGroupId: current.softwareGroupId != null ? String(current.softwareGroupId) : "",
+                  }
+                : emptyValues
+        );
+    });
 
     if (!isOpen) return null;
 
