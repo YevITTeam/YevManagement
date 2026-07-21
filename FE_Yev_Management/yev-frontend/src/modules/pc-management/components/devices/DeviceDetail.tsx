@@ -69,7 +69,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
     if (error && !detail) {
         return (
             <div className="space-y-4">
-                <Link href="/pc" className="inline-flex items-center text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
+                <Link href="/pc" prefetch={false} className="inline-flex items-center text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
                     ← Quay lại danh sách
                 </Link>
                 <div className="rounded-xl border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
@@ -85,7 +85,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                    <Link href="/pc" className="inline-flex items-center text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
+                    <Link href="/pc" prefetch={false} className="inline-flex items-center text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
                         ← Quay lại danh sách
                     </Link>
                     <h1 className="mt-2 text-2xl font-semibold text-[#191c1e]">{device.deviceCode}</h1>

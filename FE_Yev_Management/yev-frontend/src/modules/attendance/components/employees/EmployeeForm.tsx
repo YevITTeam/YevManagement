@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import { AuthApi } from "@/modules/auth/api/auth.api";
+import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface EmployeeFormValues {
@@ -42,11 +44,16 @@ const fieldClassName =
 export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: EmployeeFormProps) {
     const [values, setValues] = useState<EmployeeFormValues>(emptyValues);
     const [groups, setGroups] = useState<GroupDto[]>([]);
+    const [usersWithRoles, setUsersWithRoles] = useState<UserDto[]>([]);
+    const [showUserSuggestions, setShowUserSuggestions] = useState(false);
 
     useEffect(() => {
         if (!isOpen) return;
         GroupApi.getAllGroups()
             .then((data) => setGroups(data))
+            .catch((err) => console.error(err));
+        AuthApi.getAllUsersWithRoles()
+            .then((data) => setUsersWithRoles(data))
             .catch((err) => console.error(err));
     }, [isOpen]);
 
@@ -73,6 +80,15 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         if (!values.code.trim() || !values.firstName.trim() || !values.lastName.trim() || !values.groupId) return;
         onSubmit(values);
     };
+
+    const userNameFilter = (values.userName ?? "").trim().toLowerCase();
+    const filteredUserSuggestions = (
+        userNameFilter
+            ? usersWithRoles.filter(
+                  (u) => u.userName.toLowerCase().includes(userNameFilter) || u.fullName.toLowerCase().includes(userNameFilter)
+              )
+            : usersWithRoles
+    ).slice(0, 8);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -137,17 +153,40 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                         </label>
                     </div>
 
-                    <label className="block">
+                    <label className="relative block">
                         <span className={fieldLabelClassName}>Tài khoản AD (userName, tuỳ chọn)</span>
                         <input
                             value={values.userName ?? ""}
                             onChange={(event) =>
                                 setValues((current) => ({ ...current, userName: event.target.value.trim() ? event.target.value : null }))
                             }
+                            onFocus={() => setShowUserSuggestions(true)}
+                            onBlur={() => setShowUserSuggestions(false)}
                             placeholder="VD: YEV\n.van.a — dùng cho Lũy kế của tôi"
                             disabled={loading}
+                            autoComplete="off"
                             className={fieldClassName}
                         />
+                        {showUserSuggestions && filteredUserSuggestions.length > 0 && (
+                            <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#e0e3e5] bg-white shadow-lg">
+                                {filteredUserSuggestions.map((u) => (
+                                    <li key={u.id}>
+                                        <button
+                                            type="button"
+                                            onMouseDown={(event) => event.preventDefault()}
+                                            onClick={() => {
+                                                setValues((current) => ({ ...current, userName: u.userName }));
+                                                setShowUserSuggestions(false);
+                                            }}
+                                            className="block w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[#f8fafc]"
+                                        >
+                                            <div className="font-semibold text-[#191c1e]">{u.fullName || u.userName}</div>
+                                            <div className="text-xs text-[#5e3f3a]">{u.userName}</div>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                     </label>
 
                     <label className="block">

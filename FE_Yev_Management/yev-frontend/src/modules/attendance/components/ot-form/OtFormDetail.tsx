@@ -270,17 +270,22 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã NV</th>
-                                <th className="px-6 py-3">Họ và tên</th>
-                                <th className="px-6 py-3">Thời gian</th>
-                                <th className="px-6 py-3">Lũy kế tháng/năm</th>
-                                <th className="px-6 py-3">Phiếu ăn</th>
-                                <th className="px-6 py-3">Ghi chú</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Mã NV</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Họ và tên</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Thời gian</th>
+                                <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">Lũy kế</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Phiếu ăn</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Ghi chú</th>
+                            </tr>
+                            <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                <th className="px-6 py-2 text-center">Tháng</th>
+                                <th className="px-6 py-2 text-center">Năm</th>
                             </tr>
                         </thead>
                         <tbody>
                             {form.employees.map((employee) => {
-                                const isOverLimit = employee.monthToDate > 25 || employee.yearToDate > 300;
+                                const isMonthOverLimit = employee.monthToDate > 25;
+                                const isYearOverLimit = employee.yearToDate > 300;
                                 return (
                                     <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
                                         <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{employee.employeeCode}</td>
@@ -288,8 +293,11 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">
                                             {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
                                         </td>
-                                        <td className={`px-6 py-3 text-sm ${isOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
-                                            {employee.monthToDate}h / {employee.yearToDate}h
+                                        <td className={`px-6 py-3 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                            {employee.monthToDate}h
+                                        </td>
+                                        <td className={`px-6 py-3 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                            {employee.yearToDate}h
                                         </td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.isEligibleForMeal ? "✅" : "-"}</td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.noteVn || "-"}</td>

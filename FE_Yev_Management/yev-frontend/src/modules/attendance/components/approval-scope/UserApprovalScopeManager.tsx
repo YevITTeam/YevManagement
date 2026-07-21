@@ -64,6 +64,9 @@ export default function UserApprovalScopeManager() {
     const [deletingScope, setDeletingScope] = useState<UserApprovalScopeDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
+    const [scopeSearch, setScopeSearch] = useState("");
+    const [showUserSuggestions, setShowUserSuggestions] = useState(false);
+
     const { isLoading, error, refetch: fetchScopes } = useFetchEffect(
         () => UserApprovalScopeApi.getScopePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
         [pageIndex, appliedKeyword],
@@ -122,6 +125,8 @@ export default function UserApprovalScopeManager() {
 
     const openCreateForm = () => {
         setForm(emptyForm);
+        setScopeSearch("");
+        setShowUserSuggestions(false);
         setFormOpen(true);
     };
 
@@ -174,6 +179,18 @@ export default function UserApprovalScopeManager() {
     };
 
     const scopeOptions = form.scopeType === 0 ? groups.map((g) => ({ id: g.id, label: g.groupNameVn })) : departments.map((d) => ({ id: d.id, label: d.departmentNameVn }));
+    const filteredScopeOptions = scopeSearch.trim()
+        ? scopeOptions.filter((option) => option.label.toLowerCase().includes(scopeSearch.trim().toLowerCase()))
+        : scopeOptions;
+
+    const userNameFilter = form.userName.trim().toLowerCase();
+    const filteredUserSuggestions = (
+        userNameFilter
+            ? usersWithRoles.filter(
+                  (u) => u.userName.toLowerCase().includes(userNameFilter) || u.fullName.toLowerCase().includes(userNameFilter)
+              )
+            : usersWithRoles
+    ).slice(0, 8);
 
     return (
         <div className="space-y-8">
@@ -314,17 +331,40 @@ export default function UserApprovalScopeManager() {
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            <label className="block">
+                            <label className="relative block">
                                 <span className={fieldLabelClassName}>Tài khoản (userName)</span>
                                 <input
                                     value={form.userName}
                                     onChange={(event) => setForm((current) => ({ ...current, userName: event.target.value }))}
+                                    onFocus={() => setShowUserSuggestions(true)}
+                                    onBlur={() => setShowUserSuggestions(false)}
                                     placeholder="VD: YEV\\n.truong.b"
                                     disabled={isSaving}
                                     autoFocus
                                     required
+                                    autoComplete="off"
                                     className={fieldClassName}
                                 />
+                                {showUserSuggestions && filteredUserSuggestions.length > 0 && (
+                                    <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#e0e3e5] bg-white shadow-lg">
+                                        {filteredUserSuggestions.map((u) => (
+                                            <li key={u.id}>
+                                                <button
+                                                    type="button"
+                                                    onMouseDown={(event) => event.preventDefault()}
+                                                    onClick={() => {
+                                                        setForm((current) => ({ ...current, userName: u.userName }));
+                                                        setShowUserSuggestions(false);
+                                                    }}
+                                                    className="block w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[#f8fafc]"
+                                                >
+                                                    <div className="font-semibold text-[#191c1e]">{u.fullName || u.userName}</div>
+                                                    <div className="text-xs text-[#5e3f3a]">{u.userName}</div>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
                             </label>
 
                             {suggestedGroup && (form.approvalLevel === 0 || form.approvalLevel === 4) && (
@@ -357,6 +397,7 @@ export default function UserApprovalScopeManager() {
                                             scopeType: APPROVAL_LEVEL_SCOPE_TYPE[level] ?? current.scopeType,
                                             scopeId: 0,
                                         }));
+                                        setScopeSearch("");
                                     }}
                                     disabled={isSaving}
                                     className={fieldClassName}
@@ -378,21 +419,34 @@ export default function UserApprovalScopeManager() {
 
                             <label className="block">
                                 <span className={fieldLabelClassName}>{form.scopeType === 0 ? "Bộ phận" : "Phòng ban"}</span>
+                                <input
+                                    value={scopeSearch}
+                                    onChange={(event) => setScopeSearch(event.target.value)}
+                                    placeholder={`Tìm ${form.scopeType === 0 ? "bộ phận" : "phòng ban"}...`}
+                                    disabled={isSaving}
+                                    className={`${fieldClassName} mb-2`}
+                                />
                                 <select
                                     value={form.scopeId || ""}
                                     onChange={(event) => setForm((current) => ({ ...current, scopeId: Number(event.target.value) }))}
                                     disabled={isSaving}
                                     required
-                                    className={fieldClassName}
+                                    size={Math.min(6, Math.max(3, filteredScopeOptions.length + 1))}
+                                    className={`${fieldClassName} h-auto py-1`}
                                 >
                                     <option value="" disabled>
                                         Chọn {form.scopeType === 0 ? "bộ phận" : "phòng ban"}...
                                     </option>
-                                    {scopeOptions.map((option) => (
+                                    {filteredScopeOptions.map((option) => (
                                         <option key={option.id} value={option.id}>
                                             {option.label}
                                         </option>
                                     ))}
+                                    {filteredScopeOptions.length === 0 && (
+                                        <option value="" disabled>
+                                            Không tìm thấy kết quả phù hợp
+                                        </option>
+                                    )}
                                 </select>
                             </label>
 
