@@ -12,12 +12,6 @@ interface OtFormPrintViewProps {
 
 type PaperSize = "a4" | "a5";
 
-// A5 nhỏ hơn A4 nhiều — không đủ chỗ in cả phần đầu (chữ ký/thông tin) lẫn danh sách nhân viên trên
-// cùng 1 mặt như A4, nên tách: mặt trước = phần đầu, mặt sau (in 2 mặt trên cùng 1 tờ) = danh sách,
-// giới hạn 12 người khớp form giấy. A4 không giới hạn — nếu đơn có nhiều nhân viên hơn thì tự tràn
-// trang tiếp theo (trình duyệt tự ngắt trang).
-const A5_EMPLOYEE_CAPACITY = 12;
-
 function formatDate(value: string) {
     if (!value) return "……………………";
     return new Date(value).toLocaleDateString("vi-VN");
@@ -27,146 +21,401 @@ function formatTime(value: string) {
     return value?.slice(0, 5) ?? "-";
 }
 
-const cell = "border border-black px-2 py-1 align-top";
-const labelCell = `${cell} bg-[#f2f2f2] font-semibold whitespace-nowrap`;
-// Ô lũy kế (Tháng/Năm) chỉ chứa 1 số ngắn — thu nhỏ chữ + padding để nhường không gian cho cột
-// "Thời gian" và "Họ và tên" (theo yêu cầu người dùng, 2 cột này cần hiển thị rộng hơn).
-const cellSm = "border border-black px-1 py-1 align-top text-[9px]";
-const labelCellSm = `${cellSm} bg-[#f2f2f2] font-semibold whitespace-nowrap`;
-
-// 4 cột ký đúng mẫu giấy gốc YEV-22-024 rev5 (docs/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO
-// (A4/A5).doc, đối chiếu antiword) — thứ tự trên giấy đi từ cấp cao nhất xuống thấp nhất, NGƯỢC với
-// thứ tự approvalLevel tăng dần dùng ở màn Chi tiết đơn. Mẫu giấy CHỈ có 4 cột, không có cột riêng cho
-// Trưởng Bộ phận — cột cuối "Người đề nghị" gộp chung 2 chữ ký (Trưởng nhóm ký + Trưởng Bộ phận duyệt
-// ngay sau), xem REQUESTER_SUB_COLUMNS bên dưới.
-const SIGNATURE_COLUMNS: { level: number; labelVn: string; labelJp: string }[] = [
-    { level: 3, labelVn: "Tổng Giám Đốc", labelJp: "社長" },
-    { level: 2, labelVn: "Trưởng xưởng", labelJp: "工場長" },
-    { level: 1, labelVn: "Trưởng phòng", labelJp: "部長" },
-];
-
-// 2 chữ ký gộp trong cùng 1 ô "Người đề nghị" trên giấy: Trưởng nhóm (approvalLevel=0, người ký thật
-// với vai trò "Người đề nghị") và Trưởng Bộ phận (approvalLevel=4, GroupHead duyệt ngay sau).
-const REQUESTER_SUB_COLUMNS: { level: number; labelVn: string }[] = [
-    { level: 0, labelVn: "Trưởng nhóm" },
-    { level: 4, labelVn: "Trưởng Bộ phận" },
-];
-
 function findHistory(histories: OtFormApprovalHistoryDto[], level: number) {
     return histories.find((item) => item.approvalLevel === level && item.action !== 2) ?? null;
 }
 
-// Ghi chú TH1/TH2/TH3 + dòng ban hành — nguyên văn từ mẫu giấy gốc (src/assets/file-ot-form/FormOT.pdf),
-// là thông tin tĩnh của BẢN THÂN FORM (không đổi theo từng đơn) nên hard-code, không lấy từ OtCaseDto.
-function FormFooterNotes() {
+// Toạ độ (% theo chiều rộng/cao TỪNG TRANG ảnh nền) của mọi ô cần điền — đo trực tiếp từ file gốc
+// src/assets/file-ot-form/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO (A4/A5).doc/.pdf qua Word COM
+// (Range.Information + Cell.Width/Height), KHÔNG áng chừng bằng mắt. Toàn bộ nội dung form (kể cả
+// bảng "Danh sách nhân viên" và phần ghi chú TH1/TH2/TH3 ở cuối trang) đã nằm sẵn trong ảnh nền —
+// component này CHỈ đè chữ đúng vị trí ô trống, không tự vẽ thêm đường kẻ/border/tiêu đề nào khác.
+//
+// Cấu trúc trang in (khớp đúng số trang thật của file gốc):
+// - A4: trang 1 = tiêu đề + ký duyệt + thông tin + lý do/xử lý + DS nhân viên dòng 1-10 (in sẵn).
+//        trang 2 = DS nhân viên dòng 11-40 (in sẵn, dùng khi đơn có > 10 người — lặp lại ảnh trang 2
+//        cho mỗi 30 người tiếp theo nếu > 40 người, dù thực tế hiếm gặp).
+// - A5 (ngang): trang 1 = tiêu đề + ký duyệt + thông tin + lý do/xử lý (KHÔNG có bảng nhân viên).
+//        trang 2 = DS nhân viên dòng 1-12 (lặp lại ảnh trang 2 cho mỗi 12 người tiếp theo nếu > 12).
+interface FieldBox {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+}
+
+interface HeaderLayout {
+    image: string;
+    aspect: string;
+    signature: { level: number; box: FieldBox }[];
+    requester: { level: number; box: FieldBox }[];
+    tenCongDoan: FieldBox;
+    soLuongNhanVien: FieldBox;
+    nguoiChiuTrachNhiem: FieldBox;
+    tuGio: FieldBox;
+    denGio: FieldBox;
+    ngay: FieldBox;
+    lyDo: FieldBox;
+    checkbox: { an: FieldBox; khongAn: FieldBox; coXe: FieldBox; khongXe: FieldBox; coCopy: FieldBox; khongCopy: FieldBox; deNghiKhac: FieldBox };
+}
+
+const HEADER_LAYOUTS: Record<PaperSize, HeaderLayout> = {
+    a4: {
+        image: "/ot-form/a4-page1.png",
+        aspect: "612 / 792",
+        signature: [
+            { level: 3, box: { left: 7.353, top: 17.614, width: 21.471, height: 5.221 } }, // Tổng Giám Đốc
+            { level: 2, box: { left: 28.824, top: 17.614, width: 22.794, height: 5.221 } }, // Trưởng xưởng
+            { level: 1, box: { left: 51.618, top: 17.614, width: 23.529, height: 5.221 } }, // Trưởng phòng
+        ],
+        requester: [
+            { level: 0, box: { left: 75.147, top: 17.614, width: 9.926, height: 5.221 } }, // Trưởng nhóm
+            { level: 4, box: { left: 85.074, top: 17.614, width: 9.926, height: 5.221 } }, // Trưởng Bộ phận
+        ],
+        tenCongDoan: { left: 34.706, top: 26.61, width: 60.294, height: 2.727 },
+        soLuongNhanVien: { left: 34.706, top: 29.545, width: 15, height: 2.727 },
+        nguoiChiuTrachNhiem: { left: 34.706, top: 32.576, width: 60.294, height: 2.727 },
+        tuGio: { left: 40.85, top: 34.701, width: 13.889, height: 1.673 },
+        denGio: { left: 68.3, top: 34.701, width: 26.144, height: 1.673 },
+        ngay: { left: 44.444, top: 36.374, width: 50, height: 1.673 },
+        lyDo: { left: 12.647, top: 40.057, width: 82.353, height: 2.21 },
+        checkbox: {
+            an: { left: 12.655, top: 48.264, width: 13.962, height: 6.111 },
+            khongAn: { left: 26.618, top: 48.264, width: 13.971, height: 6.111 },
+            coXe: { left: 40.588, top: 48.264, width: 9.641, height: 6.111 },
+            khongXe: { left: 50.229, top: 48.264, width: 10.776, height: 6.111 },
+            coCopy: { left: 61.005, top: 48.264, width: 8.995, height: 6.111 },
+            khongCopy: { left: 70, top: 48.264, width: 9.134, height: 6.111 },
+            deNghiKhac: { left: 79.134, top: 48.264, width: 15.866, height: 6.111 },
+        },
+    },
+    a5: {
+        image: "/ot-form/a5-page1.png",
+        aspect: "595.3 / 419.55",
+        signature: [
+            { level: 3, box: { left: 5.165, top: 27.887, width: 21.804, height: 7.401 } },
+            { level: 2, box: { left: 26.97, top: 27.887, width: 25.701, height: 7.401 } },
+            { level: 1, box: { left: 52.671, top: 27.887, width: 22.678, height: 7.401 } },
+        ],
+        requester: [
+            { level: 0, box: { left: 75.349, top: 27.887, width: 10.747, height: 7.401 } },
+            { level: 4, box: { left: 86.095, top: 27.887, width: 10.747, height: 7.401 } },
+        ],
+        tenCongDoan: { left: 33.286, top: 41.831, width: 63.556, height: 4.374 },
+        soLuongNhanVien: { left: 33.286, top: 46.657, width: 15, height: 5.148 },
+        nguoiChiuTrachNhiem: { left: 33.286, top: 52.02, width: 63.556, height: 5.148 },
+        tuGio: { left: 39.762, top: 55.852, width: 14.64, height: 3.158 },
+        denGio: { left: 68.71, top: 55.852, width: 27.56, height: 3.158 },
+        ngay: { left: 43.551, top: 59.011, width: 52.705, height: 3.158 },
+        lyDo: { left: 11.834, top: 65.606, width: 84.663, height: 8.342 },
+        checkbox: {
+            an: { left: 11.843, top: 80.002, width: 14.354, height: 8.426 },
+            khongAn: { left: 26.197, top: 80.002, width: 14.363, height: 8.426 },
+            coXe: { left: 40.559, top: 80.002, width: 9.911, height: 8.426 },
+            khongXe: { left: 50.47, top: 80.002, width: 11.078, height: 8.426 },
+            coCopy: { left: 61.549, top: 80.002, width: 9.247, height: 8.426 },
+            khongCopy: { left: 70.796, top: 80.002, width: 9.39, height: 8.426 },
+            deNghiKhac: { left: 80.186, top: 80.002, width: 16.311, height: 8.426 },
+        },
+    },
+};
+
+interface EmployeeColumns {
+    hoTen: FieldBox;
+    maNV: FieldBox;
+    thoiGian: FieldBox;
+    thang: FieldBox;
+    nam: FieldBox;
+    ghiChu: FieldBox;
+}
+
+interface RowSlot {
+    top: number;
+    height: number;
+}
+
+interface EmployeePageLayout {
+    image: string;
+    aspect: string;
+    columns: EmployeeColumns;
+    rows: RowSlot[];
+}
+
+// Cột dùng chung 1 hàng (top/height lấy từ rows[i]) — Stt đã in sẵn trong ảnh nên không cần đè.
+function columnBox(col: FieldBox, row: RowSlot): FieldBox {
+    return { left: col.left, width: col.width, top: row.top, height: row.height };
+}
+
+const A4_PAGE1_EMPLOYEE: EmployeePageLayout = {
+    image: "/ot-form/a4-page1.png",
+    aspect: "612 / 792",
+    columns: {
+        hoTen: { left: 11.176, top: 0, width: 25, height: 0 },
+        maNV: { left: 36.176, top: 0, width: 11.765, height: 0 },
+        thoiGian: { left: 47.941, top: 0, width: 13.235, height: 0 },
+        thang: { left: 61.176, top: 0, width: 8.824, height: 0 },
+        nam: { left: 70, top: 0, width: 8.824, height: 0 },
+        ghiChu: { left: 78.824, top: 0, width: 16.176, height: 0 },
+    },
+    rows: [
+        { top: 67.614, height: 2.001 },
+        { top: 69.602, height: 2.001 },
+        { top: 71.686, height: 2.001 },
+        { top: 73.674, height: 2.001 },
+        { top: 75.758, height: 2.001 },
+        { top: 77.746, height: 2.001 },
+        { top: 79.83, height: 2.001 },
+        { top: 81.913, height: 2.001 },
+        { top: 83.902, height: 2.001 },
+        { top: 85.985, height: 2.001 },
+    ],
+};
+
+const A4_PAGE2_EMPLOYEE: EmployeePageLayout = {
+    image: "/ot-form/a4-page2.png",
+    aspect: "612 / 792",
+    columns: {
+        hoTen: { left: 11.176, top: 0, width: 25, height: 0 },
+        maNV: { left: 36.176, top: 0, width: 8.824, height: 0 },
+        thoiGian: { left: 45, top: 0, width: 16.176, height: 0 },
+        thang: { left: 61.176, top: 0, width: 8.824, height: 0 },
+        nam: { left: 70, top: 0, width: 8.824, height: 0 },
+        ghiChu: { left: 78.824, top: 0, width: 16.176, height: 0 },
+    },
+    rows: [
+        { top: 16.572, height: 2.557 },
+        { top: 19.129, height: 2.557 },
+        { top: 21.686, height: 2.557 },
+        { top: 24.242, height: 2.557 },
+        { top: 26.799, height: 2.557 },
+        { top: 29.356, height: 2.557 },
+        { top: 31.913, height: 2.557 },
+        { top: 34.47, height: 2.557 },
+        { top: 37.027, height: 2.557 },
+        { top: 39.583, height: 2.557 },
+        { top: 42.14, height: 2.557 },
+        { top: 44.792, height: 2.557 },
+        { top: 47.348, height: 2.557 },
+        { top: 49.905, height: 2.557 },
+        { top: 52.462, height: 2.557 },
+        { top: 55.019, height: 2.557 },
+        { top: 57.576, height: 2.557 },
+        { top: 60.133, height: 2.557 },
+        { top: 62.689, height: 2.557 },
+        { top: 65.246, height: 2.557 },
+        { top: 67.803, height: 2.557 },
+        { top: 70.36, height: 2.557 },
+        { top: 72.917, height: 2.557 },
+        { top: 75.473, height: 2.557 },
+        { top: 78.03, height: 2.557 },
+        { top: 80.587, height: 2.557 },
+        { top: 83.239, height: 2.557 },
+        { top: 85.795, height: 2.557 },
+        { top: 88.352, height: 2.557 },
+        { top: 90.909, height: 2.557 },
+    ],
+};
+
+const A5_PAGE2_EMPLOYEE: EmployeePageLayout = {
+    image: "/ot-form/a5-page2.png",
+    aspect: "595.3 / 419.55",
+    columns: {
+        hoTen: { left: 9.928, top: 0, width: 22.762, height: 0 },
+        maNV: { left: 32.689, top: 0, width: 11.876, height: 0 },
+        thoiGian: { left: 44.566, top: 0, width: 13.371, height: 0 },
+        thang: { left: 57.937, top: 0, width: 8.962, height: 0 },
+        nam: { left: 66.899, top: 0, width: 8.937, height: 0 },
+        ghiChu: { left: 75.836, top: 0, width: 21.006, height: 0 },
+    },
+    rows: [
+        { top: 25.206, height: 4.147 },
+        { top: 29.317, height: 4.147 },
+        { top: 33.429, height: 4.147 },
+        { top: 37.54, height: 4.147 },
+        { top: 41.652, height: 4.147 },
+        { top: 45.763, height: 4.147 },
+        { top: 49.875, height: 4.147 },
+        { top: 53.986, height: 4.147 },
+        { top: 58.098, height: 4.147 },
+        { top: 62.21, height: 4.147 },
+        { top: 66.321, height: 4.147 },
+        { top: 70.611, height: 4.147 },
+    ],
+};
+
+const EMPLOYEE_PAGE_CAPACITY: Record<PaperSize, { first: number; rest: number }> = {
+    a4: { first: 10, rest: 30 },
+    a5: { first: 0, rest: 12 },
+};
+
+function boxStyle(box: FieldBox): React.CSSProperties {
+    return {
+        position: "absolute",
+        left: `${box.left}%`,
+        top: `${box.top}%`,
+        width: `${box.width}%`,
+        height: `${box.height}%`,
+    };
+}
+
+function SignatureCell({ box, history }: { box: FieldBox; history: OtFormApprovalHistoryDto | null }) {
     return (
-        <div className="mt-3 space-y-1 text-[8px] leading-tight text-black">
-            <p>① TH1: Tăng ca ngày thường: Ký duyệt cấp Trưởng phòng　場合１：平日残業：部長以上がサイン</p>
-            <p>② TH2: Tăng ca ngày nghỉ quy định/chủ nhật/Lễ: Ký duyệt cấp Trưởng xưởng　場合２：法定休日/日曜/祝日の残業：工場長がサイン</p>
-            <p>③ TH3: Trường hợp lũy kế tăng ca trên 25 giờ/tháng, 300h/năm: Ký duyệt cấp TGĐ　場合３：月間の累計残業が月25時間、年間300時間を超える場合：社長の承認が必要</p>
-            <p>※ TH2 và TH3: Các trưởng phòng chuẩn bị tài liệu giải trình trực tiếp cho TX, TGĐ　上記2と3の場合には各部長が資料を作成し社長・工場長に直接説明</p>
-            <div className="mt-2 flex items-center justify-between border-t border-black pt-1 font-semibold">
-                <span>YEV-22-024</span>
-                <span>YEV</span>
-                <span>Ban hành lần 5 改正日: 03/02/2024</span>
+        <div style={boxStyle(box)} className="flex flex-col items-center justify-center gap-0.5 overflow-hidden text-center">
+            {history?.hasSignature && history.signatureImage ? (
+                // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với overlay fluid ở đây
+                <img
+                    src={`data:image/png;base64,${history.signatureImage}`}
+                    alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}
+                    className="max-h-[60%] object-contain"
+                />
+            ) : null}
+            {history && <div className="text-[8pt] leading-tight whitespace-nowrap text-black">{history.approverFullName ?? history.approverUserName}</div>}
+        </div>
+    );
+}
+
+// Khung 1 trang in — 1 <img> nền + children là các ô đè dữ liệu. TÁCH RIÊNG khỏi phần điền dữ liệu
+// (FormHeaderFields/EmployeeRowFields bên dưới) vì trang 1 khổ A4 dùng CHUNG 1 ảnh nền cho cả phần
+// đầu (ký duyệt/thông tin) lẫn 10 dòng nhân viên đầu tiên — không được vẽ ảnh nền 2 lần cho 2 trang
+// riêng biệt.
+function PageFrame({ image, aspect, alt, children }: { image: string; aspect: string; alt: string; children: React.ReactNode }) {
+    return (
+        <div className="relative w-full text-black" style={{ aspectRatio: aspect }}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- ảnh nền tĩnh từ public/, next/image không cần thiết cho asset in ấn cố định này */}
+            <img src={image} alt={alt} className="absolute inset-0 h-full w-full" />
+            {children}
+        </div>
+    );
+}
+
+// Đè dữ liệu thật lên đúng ô trống của ảnh nền (xuất trực tiếp từ file .doc/.pdf gốc) — không vẽ thêm
+// đường kẻ/border/ô nào ngoài ảnh. Chỉ có phần "Người đề nghị" thêm 1 đường kẻ dọc mảnh để phân tách
+// rõ 2 chữ ký (Trưởng nhóm | Trưởng Bộ phận) cùng chia sẻ 1 ô trên giấy gốc. KHÔNG tự vẽ <img> — dùng
+// bên trong PageFrame vì trang 1 khổ A4 chia sẻ ảnh nền chung với EmployeeRowFields.
+function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: PaperSize }) {
+    const layout = HEADER_LAYOUTS[paperSize];
+    const processPart = form.processPart;
+    const nowrap = "overflow-hidden whitespace-nowrap";
+
+    return (
+        <div className="text-[9pt]">
+            {layout.signature.map(({ level, box }) => (
+                <SignatureCell key={level} box={box} history={findHistory(form.approvalHistories, level)} />
+            ))}
+            {/* Ô "Người đề nghị" gộp chung 2 chữ ký trên giấy gốc: Trưởng nhóm (approvalLevel=0) và
+                Trưởng Bộ phận (approvalLevel=4) — thêm đường kẻ dọc mảnh để phân tách, tiêu đề ô giữ
+                nguyên "Người đề nghị" như bản in gốc. */}
+            {layout.requester.map(({ level, box }, index) => (
+                <div key={level} style={{ ...boxStyle(box), borderRight: index === 0 ? "1px solid #000" : undefined }}>
+                    <SignatureCell box={{ left: 0, top: 0, width: 100, height: 100 }} history={findHistory(form.approvalHistories, level)} />
+                </div>
+            ))}
+
+            <div style={boxStyle(layout.tenCongDoan)} className={`flex items-center pl-1 ${nowrap}`}>
+                {form.departmentNameVn} — {form.groupNameVn}
+            </div>
+            <div style={boxStyle(layout.soLuongNhanVien)} className={`flex items-center pl-1 ${nowrap}`}>
+                {form.numberOfEmployee}
+            </div>
+            <div style={boxStyle(layout.nguoiChiuTrachNhiem)} className={`flex items-center pl-1 ${nowrap}`}>
+                {form.createdByFullName ?? form.createdByUserName}
+            </div>
+            <div style={boxStyle(layout.tuGio)} className={`flex items-center pl-1 ${nowrap}`}>
+                {formatTime(form.startTime)}
+            </div>
+            <div style={boxStyle(layout.denGio)} className={`flex items-center pl-1 ${nowrap}`}>
+                {formatTime(form.endTime)} ({form.totalHour}h)
+            </div>
+            <div style={boxStyle(layout.ngay)} className={`flex items-center pl-1 ${nowrap}`}>
+                {formatDate(form.date)}
+            </div>
+
+            <div style={boxStyle(layout.lyDo)} className={`flex items-center pl-1 ${nowrap}`}>
+                {form.reasonNameVn}
+                {form.subReason ? ` — ${form.subReason}` : ""}
+            </div>
+
+            {/* "Không"/mặc định luôn được tick khi mục tương ứng chưa bật (kể cả khi cả đơn không có
+                processPart) — chỉ ô "Có"/"Ăn" mới cần đúng true mới tick, tránh để trống gây hiểu nhầm
+                là "chưa xử lý" (yêu cầu người dùng). */}
+            <div style={boxStyle(layout.checkbox.an)} className="flex items-center justify-center text-[13pt]">
+                {processPart?.isEat ? "✓" : ""}
+            </div>
+            <div style={boxStyle(layout.checkbox.khongAn)} className="flex items-center justify-center text-[13pt]">
+                {!processPart?.isEat ? "✓" : ""}
+            </div>
+            <div style={boxStyle(layout.checkbox.coXe)} className="flex items-center justify-center text-[13pt]">
+                {processPart?.isTransportation ? "✓" : ""}
+            </div>
+            <div style={boxStyle(layout.checkbox.khongXe)} className="flex items-center justify-center text-[13pt]">
+                {!processPart?.isTransportation ? "✓" : ""}
+            </div>
+            <div style={boxStyle(layout.checkbox.coCopy)} className="flex items-center justify-center text-[13pt]">
+                {processPart?.isUseCopyRoom ? "✓" : ""}
+            </div>
+            <div style={boxStyle(layout.checkbox.khongCopy)} className="flex items-center justify-center text-[13pt]">
+                {!processPart?.isUseCopyRoom ? "✓" : ""}
+            </div>
+            <div style={boxStyle(layout.checkbox.deNghiKhac)} className={`flex items-center pl-1 text-[8pt] ${nowrap}`}>
+                {processPart?.anotherSuggestionVn || ""}
             </div>
         </div>
     );
 }
 
-// Danh sách nhân viên — dùng chung cho cả 2 khổ giấy. A5 pad thêm dòng trống cho đủ 12 dòng (giống
-// bảng 10 dòng in sẵn trên form giấy gốc), A4 chỉ in đúng số nhân viên thật (rowCount = null).
-function EmployeeTable({ employees, rowCount }: { employees: OtFormEmployeeDto[]; rowCount: number | null }) {
-    const blankRows = rowCount !== null ? Math.max(0, rowCount - employees.length) : 0;
+// Đè danh sách nhân viên lên đúng dòng in sẵn (Stt đã in sẵn trong ảnh nên không đè). KHÔNG tự vẽ
+// <img> — dùng bên trong PageFrame để tận dụng chung ảnh nền với FormHeaderFields khi cùng 1 trang
+// (trang 1 khổ A4) hoặc dùng ảnh nền riêng của trang tiếp theo.
+function EmployeeRowFields({ layout, employees }: { layout: EmployeePageLayout; employees: OtFormEmployeeDto[] }) {
+    const nowrap = "overflow-hidden whitespace-nowrap";
     return (
-        <>
-            <div className="mt-4 mb-2 text-center">
-                <div className="text-base font-bold uppercase">Danh sách nhân viên làm ngoài giờ</div>
-                <div className="text-sm">社員の残業一覧</div>
-            </div>
-            {/* border ngay trên <table> — tránh bug Chrome/Edge làm rớt viền phải khi in (đặc biệt dễ
-                gặp với table-fixed + width %, làm tròn subpixel ở DPI in khác DPI màn hình). */}
-            <table className="w-full table-fixed border-collapse border border-black">
-                {/* Cố định tỉ lệ cột — nới rộng "Họ và tên"/"Thời gian", thu hẹp 2 ô lũy kế
-                    (Tháng/Năm) vì mỗi ô chỉ chứa 1 số ngắn. */}
-                <colgroup>
-                    <col className="w-[5%]" />
-                    <col className="w-[24%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[19%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[24%]" />
-                </colgroup>
-                <thead>
-                    <tr>
-                        <th rowSpan={2} className={`${labelCell} text-center`}>
-                            Stt
-                        </th>
-                        <th rowSpan={2} className={labelCell}>
-                            Họ và tên
-                            <br />
-                            名前
-                        </th>
-                        <th rowSpan={2} className={labelCell}>
-                            Mã NV
-                            <br />
-                            社員コード
-                        </th>
-                        <th rowSpan={2} className={labelCell}>
-                            Thời gian
-                            <br />
-                            時間
-                        </th>
-                        {/* Tháng/Năm nằm CHUNG dòng "Lũy kế" (2 dòng header dùng rowSpan/colSpan), khớp
-                            đúng bản PDF đính kèm — không tách thành 1 dòng header trống riêng như trước. */}
-                        <th className={`${labelCellSm} text-center`} colSpan={2}>
-                            Lũy kế (Tổng số giờ tăng
-                            <br/>
-                             ca trong năm)
-                            <br />
-                            残業累計
-                        </th>
-                        <th rowSpan={2} className={labelCell}>
-                            Ghi chú
-                            <br />
-                            備考
-                        </th>
-                    </tr>
-                    <tr>
-                        <th className={`${labelCellSm} text-center`}>Tháng 月</th>
-                        <th className={`${labelCellSm} text-center`}>Năm 年間</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {employees.map((employee, index) => (
-                        <tr key={employee.employeeId}>
-                            <td className={`${cell} text-center`}>{index + 1}</td>
-                            <td className={cell}>{employee.fullName}</td>
-                            <td className={cell}>{employee.employeeCode}</td>
-                            <td className={cell}>
-                                {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
-                            </td>
-                            <td className={`${cellSm} text-center`}>{employee.monthToDate}</td>
-                            <td className={`${cellSm} text-center`}>{employee.yearToDate}</td>
-                            <td className={cell}>{employee.noteVn || ""}</td>
-                        </tr>
-                    ))}
-                    {Array.from({ length: blankRows }, (_, i) => (
-                        <tr key={`blank-${i}`}>
-                            <td className={`${cell} text-center`}>{employees.length + i + 1}</td>
-                            <td className={cell}>&nbsp;</td>
-                            <td className={cell}></td>
-                            <td className={cell}></td>
-                            <td className={cellSm}></td>
-                            <td className={cellSm}></td>
-                            <td className={cell}></td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </>
+        <div className="text-[8pt]">
+            {layout.rows.map((row, index) => {
+                const employee = employees[index];
+                if (!employee) return null;
+                return (
+                    <div key={employee.employeeId}>
+                        <div style={boxStyle(columnBox(layout.columns.hoTen, row))} className={`flex items-center pl-1 ${nowrap}`}>
+                            {employee.fullName}
+                        </div>
+                        <div style={boxStyle(columnBox(layout.columns.maNV, row))} className={`flex items-center pl-1 ${nowrap}`}>
+                            {employee.employeeCode}
+                        </div>
+                        <div style={boxStyle(columnBox(layout.columns.thoiGian, row))} className={`flex items-center pl-1 ${nowrap}`}>
+                            {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
+                        </div>
+                        <div style={boxStyle(columnBox(layout.columns.thang, row))} className={`flex items-center justify-center ${nowrap}`}>
+                            {employee.monthToDate}
+                        </div>
+                        <div style={boxStyle(columnBox(layout.columns.nam, row))} className={`flex items-center justify-center ${nowrap}`}>
+                            {employee.yearToDate}
+                        </div>
+                        <div style={boxStyle(columnBox(layout.columns.ghiChu, row))} className={`flex items-center pl-1 ${nowrap}`}>
+                            {employee.noteVn || ""}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
     );
+}
+
+// Chia nhân viên vào từng trang khớp đúng sức chứa in sẵn trên giấy: A4 trang 1 chứa tối đa 10 người,
+// các trang sau (dùng lại ảnh trang 2) mỗi trang tối đa 30 người. A5 trang 1 không có bảng nhân viên,
+// trang 2 (lặp lại nếu cần) mỗi trang tối đa 12 người. Không đủ người thì chỉ in đúng số trang cần thiết.
+function buildEmployeePages(employees: OtFormEmployeeDto[], paperSize: PaperSize): OtFormEmployeeDto[][] {
+    const { first, rest } = EMPLOYEE_PAGE_CAPACITY[paperSize];
+    const pages: OtFormEmployeeDto[][] = [];
+    let remaining = employees;
+    if (first > 0) {
+        pages.push(remaining.slice(0, first));
+        remaining = remaining.slice(first);
+    }
+    while (remaining.length > 0) {
+        pages.push(remaining.slice(0, rest));
+        remaining = remaining.slice(rest);
+    }
+    return pages;
 }
 
 export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
@@ -186,10 +435,10 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
             });
     }, [id]);
 
-    // Đơn có số nhân viên vừa đủ trong 1 mặt A5 (<= A5_EMPLOYEE_CAPACITY) thì tự động chọn A5 để tiết
-    // kiệm giấy — đơn nhiều người hơn sức chứa 1 mặt A5 thì giữ mặc định A4. Tính trực tiếp trong
-    // render (không qua effect+state riêng) — chỉ dùng state cho lựa chọn THỦ CÔNG của người dùng.
-    const autoPaperSize: PaperSize = form && form.employees.length <= A5_EMPLOYEE_CAPACITY ? "a5" : "a4";
+    // Đơn có số nhân viên vừa đủ trong 1 mặt A5 (<= sức chứa trang 2 A5) thì tự động chọn A5 để tiết
+    // kiệm giấy — đơn nhiều người hơn thì giữ mặc định A4. Tính trực tiếp trong render (không qua
+    // effect+state riêng) — chỉ dùng state cho lựa chọn THỦ CÔNG của người dùng.
+    const autoPaperSize: PaperSize = form && form.employees.length <= EMPLOYEE_PAGE_CAPACITY.a5.rest ? "a5" : "a4";
     const paperSize = paperSizeTouched ? manualPaperSize : autoPaperSize;
 
     function selectPaperSize(size: PaperSize) {
@@ -205,16 +454,53 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
         return <div className="p-8 text-sm text-[#5e3f3a]">Đang tải dữ liệu để in...</div>;
     }
 
-    const processPart = form.processPart;
     const rejectHistory = form.approvalHistories.find((item) => item.action === 2) ?? null;
     const isA5 = paperSize === "a5";
+    const employeePages = buildEmployeePages(form.employees, paperSize);
+
+    // Danh sách trang in thật (mỗi phần tử = đúng 1 ảnh nền = đúng 1 trang giấy). Khổ A4: trang 1 dùng
+    // CHUNG ảnh nền cho cả phần đầu (ký duyệt/thông tin) lẫn 10 nhân viên đầu — không tách 2 <img>
+    // riêng cho cùng 1 trang giấy. Khổ A5: trang 1 (mặt trước, chỉ phần đầu) luôn có, trang 2 (mặt
+    // sau, danh sách nhân viên) chỉ thêm khi có nhân viên.
+    const headerLayout = HEADER_LAYOUTS[paperSize];
+    const printPages: { key: string; image: string; aspect: string; content: React.ReactNode }[] = isA5
+        ? [
+              { key: "header", image: headerLayout.image, aspect: headerLayout.aspect, content: <FormHeaderFields form={form} paperSize={paperSize} /> },
+              ...employeePages.map((chunk, index) => ({
+                  key: `emp-${index}`,
+                  image: A5_PAGE2_EMPLOYEE.image,
+                  aspect: A5_PAGE2_EMPLOYEE.aspect,
+                  content: <EmployeeRowFields layout={A5_PAGE2_EMPLOYEE} employees={chunk} />,
+              })),
+          ]
+        : [
+              {
+                  key: "page1",
+                  image: headerLayout.image,
+                  aspect: headerLayout.aspect,
+                  content: (
+                      <>
+                          <FormHeaderFields form={form} paperSize={paperSize} />
+                          <EmployeeRowFields layout={A4_PAGE1_EMPLOYEE} employees={employeePages[0] ?? []} />
+                      </>
+                  ),
+              },
+              ...employeePages.slice(1).map((chunk, index) => ({
+                  key: `emp-${index}`,
+                  image: A4_PAGE2_EMPLOYEE.image,
+                  aspect: A4_PAGE2_EMPLOYEE.aspect,
+                  content: <EmployeeRowFields layout={A4_PAGE2_EMPLOYEE} employees={chunk} />,
+              })),
+          ];
 
     return (
         <div className="bg-[#f2f4f6] py-6 print:bg-white print:py-0">
-            {/* @page phải set động theo khổ đang chọn — style thuần, không qua Tailwind (không có utility
-                cho @page). A5 xoay ngang (landscape) — bề rộng khi đó ~210mm, gần bằng bề rộng A4 dọc, đủ
-                chỗ hiển thị bảng ký duyệt/thông tin mà không phải thu nhỏ chữ. */}
-            <style>{`@page { size: ${isA5 ? "A5 landscape" : "A4"}; margin: ${isA5 ? "8mm" : "12mm"}; }`}</style>
+            {/* @page phải khớp CHÍNH XÁC kích thước thật của ảnh nền (612x792pt ~ 8.5x11in cho file A4 —
+                bản thân file .doc gốc dùng khổ Letter chứ không phải ISO A4 dù tên file ghi "A4"; A5
+                landscape đúng khổ ISO 210x148mm) và margin = 0 — ảnh nền đã có sẵn lề riêng của nó (từ
+                chính file .doc/.pdf gốc), cộng thêm margin ở @page sẽ làm ảnh bị co lại lệch tỉ lệ so với
+                khung trang thật, gây tràn/mất phần cuối trang (footer) hoặc sinh trang trắng thừa khi in. */}
+            <style>{`@page { size: ${isA5 ? "210mm 148mm" : "8.5in 11in"}; margin: 0; }`}</style>
 
             <div className="no-print print:hidden mx-auto mb-4 flex max-w-4xl items-center justify-between rounded-lg border border-[#e0e3e5] bg-white px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-2 text-sm text-[#5e3f3a]">
@@ -227,7 +513,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                                 : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
                         }`}
                     >
-                        A4 (1 mặt, không giới hạn số người)
+                        A4 (tối đa 10 người/trang đầu, 30 người/trang sau)
                     </button>
                     <button
                         onClick={() => selectPaperSize("a5")}
@@ -237,7 +523,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                                 : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
                         }`}
                     >
-                        A5 ngang (2 mặt — mặt sau tối đa {A5_EMPLOYEE_CAPACITY} người)
+                        A5 ngang (2 mặt — mặt sau tối đa 12 người/trang)
                     </button>
                 </div>
                 <button
@@ -248,200 +534,14 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                 </button>
             </div>
 
-            <div className="mx-auto max-w-4xl bg-white p-6 text-[13px] text-black shadow-sm print:p-0 print:shadow-none">
-                <div className="mb-2 flex items-center justify-between text-xs font-semibold">
-                    <span>YAZAKI EDS VIETNAM,LTD.</span>
-                </div>
-                <div className="mb-4 text-center">
-                    <div className="text-xl font-bold italic">GIẤY ĐỀ NGHỊ LÀM NGOÀI GIỜ</div>
-                    <div className="text-lg font-bold tracking-[0.3em]">残業許可お願い</div>
-                    
-                </div>
-
-                {/* Bảng ký duyệt */}
-                {/* border ngay trên <table> (không chỉ dựa vào border của các ô) — tránh bug Chrome/Edge
-                    làm rớt mất viền phải khi in do làm tròn subpixel ở DPI in khác DPI màn hình. */}
-                <table className="w-full table-fixed border-collapse border border-black">
-                    <colgroup>
-                        {SIGNATURE_COLUMNS.map((col) => (
-                            <col key={col.level} className="w-[16%]" />
-                        ))}
-                        <col className="w-[52%]" />
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            {SIGNATURE_COLUMNS.map((col) => (
-                                <th key={col.level} className={`${labelCell} text-center text-xs`}>
-                                    {col.labelVn}
-                                    <br />
-                                    <span className="font-normal">{col.labelJp}</span>
-                                </th>
-                            ))}
-                            <th className={`${labelCell} text-center text-xs`}>
-                                Người đề nghị
-                                <br />
-                                <span className="font-normal">作成者</span>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            {SIGNATURE_COLUMNS.map((col) => {
-                                const history = findHistory(form.approvalHistories, col.level);
-                                return (
-                                    <td key={col.level} className={`${cell} h-20 text-center align-middle`}>
-                                        {history?.hasSignature && history.signatureImage ? (
-                                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
-                                            <img
-                                                src={`data:image/png;base64,${history.signatureImage}`}
-                                                alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}
-                                                className="mx-auto h-14 object-contain"
-                                            />
-                                        ) : null}
-                                        {history && (
-                                            <div className="text-[11px] text-[#333]">
-                                                {history.approverFullName ?? history.approverUserName}
-                                            </div>
-                                        )}
-                                    </td>
-                                );
-                            })}
-                            {/* Ô "Người đề nghị" trên giấy chỉ có 1 cột nhưng gộp 2 chữ ký — chia đôi bằng
-                                divide-x để phân biệt Trưởng nhóm (ký thật) và Trưởng Bộ phận (duyệt sau). */}
-                            <td className={`${cell} h-20 p-0 align-middle`}>
-                                <div className="flex h-full divide-x divide-black">
-                                    {REQUESTER_SUB_COLUMNS.map((sub) => {
-                                        const history = findHistory(form.approvalHistories, sub.level);
-                                        return (
-                                            <div
-                                                key={sub.level}
-                                                className="flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1 text-center"
-                                            >
-                                                <div className="text-[8px] uppercase tracking-wide text-[#5e3f3a]">{sub.labelVn}</div>
-                                                {history?.hasSignature && history.signatureImage ? (
-                                                    // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
-                                                    <img
-                                                        src={`data:image/png;base64,${history.signatureImage}`}
-                                                        alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}
-                                                        className="h-10 object-contain"
-                                                    />
-                                                ) : null}
-                                                {history && (
-                                                    <div className="text-[10px] text-[#333]">
-                                                        {history.approverFullName ?? history.approverUserName}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                {/* Thông tin đơn */}
-                <table className="mt-[-1px] w-full border-collapse border border-black">
-                    <tbody>
-                        <tr>
-                            <td className={`${labelCell} w-1/4`}>工程名 (Tên công đoạn)</td>
-                            <td className={cell} colSpan={3}>
-                                {form.departmentNameVn} — {form.groupNameVn}
-                            </td>
-                        </tr>
-                        <tr>
-                            <td className={labelCell}>人員數 (Số lượng nhân viên)</td>
-                            <td className={cell} colSpan={3}>
-                                {form.numberOfEmployee} (kèm theo danh sách bên dưới)
-                            </td>
-                        </tr>
-                        <tr>
-                            <td className={labelCell}>責任者 (Người chịu trách nhiệm)</td>
-                            <td className={cell} colSpan={3}>
-                                {form.createdByFullName ?? form.createdByUserName}
-                            </td>
-                        </tr>
-                        <tr>
-                            <td className={labelCell}>時間 (Thời gian)</td>
-                            <td className={cell}>
-                                Từ {formatTime(form.startTime)} đến {formatTime(form.endTime)} ({form.totalHour}h)
-                            </td>
-                            <td className={`${labelCell} w-20`}>Ngày</td>
-                            <td className={cell}>{formatDate(form.date)}</td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                {/* Lý do + Phần xử lý */}
-                <table className="mt-[-1px] w-full border-collapse border border-black">
-                    <tbody>
-                        <tr>
-                            <td className={`${labelCell} w-20 text-center`}>
-                                理由
-                                <br />
-                                Lý do
-                            </td>
-                            <td className={cell} colSpan={7}>
-                                {form.reasonNameVn}
-                                {form.subReason ? ` — ${form.subReason}` : ""}
-                            </td>
-                        </tr>
-                        <tr>
-                            <td rowSpan={3} className={`${labelCell} text-center`}>
-                                処理欄
-                                <br />
-                                Phần xử lý
-                            </td>
-                            <td className={`${labelCell} text-center`} colSpan={2}>
-                                軽食 (Ăn uống)
-                            </td>
-                            <td className={`${labelCell} text-center`} colSpan={2}>
-                                バス (Xe đưa đón)
-                            </td>
-                            <td className={`${labelCell} text-center`} colSpan={2}>
-                                Copy
-                            </td>
-                            <td className={`${labelCell} text-center`}>他 (Đề nghị khác)</td>
-                        </tr>
-                        <tr>
-                            <td className={`${cell} text-center`}>食べる (Ăn)</td>
-                            <td className={`${cell} text-center`}>食べない (Không ăn)</td>
-                            <td className={`${cell} text-center`}>Có</td>
-                            <td className={`${cell} text-center`}>Không</td>
-                            <td className={`${cell} text-center`}>Có</td>
-                            <td className={`${cell} text-center`}>Không</td>
-                            <td rowSpan={2} className={cell}>
-                                {processPart?.anotherSuggestionVn || ""}
-                            </td>
-                        </tr>
-                        <tr>
-                            {/* "Không"/mặc định luôn được tick khi mục tương ứng chưa bật (kể cả khi cả đơn
-                                không có processPart) — chỉ ô "Có"/"Ăn" mới cần đúng true mới tick, tránh để
-                                trống gây hiểu nhầm là "chưa xử lý" (yêu cầu người dùng). */}
-                            <td className={`${cell} text-center text-base`}>{processPart?.isEat ? "✓" : ""}</td>
-                            <td className={`${cell} text-center text-base`}>{!processPart?.isEat ? "✓" : ""}</td>
-                            <td className={`${cell} text-center text-base`}>{processPart?.isTransportation ? "✓" : ""}</td>
-                            <td className={`${cell} text-center text-base`}>{!processPart?.isTransportation ? "✓" : ""}</td>
-                            <td className={`${cell} text-center text-base`}>{processPart?.isUseCopyRoom ? "✓" : ""}</td>
-                            <td className={`${cell} text-center text-base`}>{!processPart?.isUseCopyRoom ? "✓" : ""}</td>
-                        </tr>
-                        {processPart?.isEat && (
-                            <tr>
-                                <td className={labelCell}>Phiếu ăn</td>
-                                <td className={cell} colSpan={7}>
-                                    Phiếu chính: {processPart.mainTicketCount} — Phiếu phụ: {processPart.secondaryTicketCount} — Sữa:{" "}
-                                    {processPart.milkCount}
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-
-                {/* A5: danh sách nhân viên bắt buộc sang mặt sau (trang in thứ 2 của cùng 1 tờ khi in 2
-                    mặt) — A4: chỉ cần 1 mặt, danh sách nối tiếp ngay bên dưới, không giới hạn số dòng. */}
-                <div className={isA5 ? "break-before-page" : ""}>
-                    <EmployeeTable employees={form.employees} rowCount={isA5 ? A5_EMPLOYEE_CAPACITY : null} />
-                </div>
+            <div className="mx-auto max-w-4xl bg-white p-6 print:p-0 print:shadow-none shadow-sm">
+                {printPages.map((page, index) => (
+                    <div key={page.key} className={index > 0 ? "break-before-page" : undefined}>
+                        <PageFrame image={page.image} aspect={page.aspect} alt="Giấy đề nghị làm ngoài giờ">
+                            {page.content}
+                        </PageFrame>
+                    </div>
+                ))}
 
                 {rejectHistory && (
                     <p className="mt-3 text-sm text-[#930006]">
@@ -449,8 +549,6 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                         &quot;
                     </p>
                 )}
-
-                <FormFooterNotes />
             </div>
         </div>
     );
