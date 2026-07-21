@@ -25,6 +25,14 @@ function findHistory(histories: OtFormApprovalHistoryDto[], level: number) {
     return histories.find((item) => item.approvalLevel === level && item.action !== 2) ?? null;
 }
 
+// Ô "Người đề nghị" quá hẹp (chia đôi cho 2 chữ ký) nên chỉ in "tên" (từ cuối) thay vì đầy đủ họ tên,
+// tránh tràn/đè chữ giữa 2 ô (yêu cầu người dùng).
+function getGivenName(fullName: string | null | undefined) {
+    if (!fullName) return fullName;
+    const parts = fullName.trim().split(/\s+/);
+    return parts[parts.length - 1];
+}
+
 // Toạ độ (% theo chiều rộng/cao TỪNG TRANG ảnh nền) của mọi ô cần điền — đo trực tiếp từ file gốc
 // src/assets/file-ot-form/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO (A4/A5).doc/.pdf qua Word COM
 // (Range.Information + Cell.Width/Height), KHÔNG áng chừng bằng mắt. Toàn bộ nội dung form (kể cả
@@ -258,18 +266,21 @@ function boxStyle(box: FieldBox): React.CSSProperties {
     };
 }
 
-function SignatureCell({ box, history }: { box: FieldBox; history: OtFormApprovalHistoryDto | null }) {
+function SignatureCell({ box, history, nameOnly }: { box: FieldBox; history: OtFormApprovalHistoryDto | null; nameOnly?: boolean }) {
+    const displayName = history && (history.approverFullName ?? history.approverUserName);
     return (
         <div style={boxStyle(box)} className="flex flex-col items-center justify-center gap-0.5 overflow-hidden text-center">
             {history?.hasSignature && history.signatureImage ? (
                 // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với overlay fluid ở đây
                 <img
                     src={`data:image/png;base64,${history.signatureImage}`}
-                    alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}
+                    alt={`Chữ ký ${displayName}`}
                     className="max-h-[60%] object-contain"
                 />
             ) : null}
-            {history && <div className="text-[8pt] leading-tight whitespace-nowrap text-black">{history.approverFullName ?? history.approverUserName}</div>}
+            {history && (
+                <div className="text-[8pt] leading-tight whitespace-nowrap text-black">{nameOnly ? getGivenName(displayName) : displayName}</div>
+            )}
         </div>
     );
 }
@@ -314,7 +325,7 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
                 nguyên "Người đề nghị" như bản in gốc. */}
             {layout.requester.map(({ level, box }, index) => (
                 <div key={level} style={{ ...boxStyle(box), borderRight: index === 0 ? "1px solid #000" : undefined }}>
-                    <SignatureCell box={{ left: 0, top: 0, width: 100, height: 100 }} history={findHistory(form.approvalHistories, level)} />
+                    <SignatureCell box={{ left: 0, top: 0, width: 100, height: 100 }} history={findHistory(form.approvalHistories, level)} nameOnly />
                 </div>
             ))}
 
@@ -380,6 +391,8 @@ function EmployeeRowFields({ layout, employees }: { layout: EmployeePageLayout; 
             {layout.rows.map((row, index) => {
                 const employee = employees[index];
                 if (!employee) return null;
+                const isMonthOverLimit = employee.monthToDate > 25;
+                const isYearOverLimit = employee.yearToDate > 300;
                 return (
                     <div key={employee.employeeId}>
                         <div style={boxStyle(columnBox(layout.columns.hoTen, row))} className={`flex items-center pl-1 ${nowrap}`}>
@@ -391,10 +404,16 @@ function EmployeeRowFields({ layout, employees }: { layout: EmployeePageLayout; 
                         <div style={boxStyle(columnBox(layout.columns.thoiGian, row))} className={`flex items-center pl-1 ${nowrap}`}>
                             {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
                         </div>
-                        <div style={boxStyle(columnBox(layout.columns.thang, row))} className={`flex items-center justify-center ${nowrap}`}>
+                        <div
+                            style={boxStyle(columnBox(layout.columns.thang, row))}
+                            className={`flex items-center justify-center ${nowrap} ${isMonthOverLimit ? "font-bold text-[#930006]" : ""}`}
+                        >
                             {employee.monthToDate}
                         </div>
-                        <div style={boxStyle(columnBox(layout.columns.nam, row))} className={`flex items-center justify-center ${nowrap}`}>
+                        <div
+                            style={boxStyle(columnBox(layout.columns.nam, row))}
+                            className={`flex items-center justify-center ${nowrap} ${isYearOverLimit ? "font-bold text-[#930006]" : ""}`}
+                        >
                             {employee.yearToDate}
                         </div>
                         <div style={boxStyle(columnBox(layout.columns.ghiChu, row))} className={`flex items-center pl-1 ${nowrap}`}>

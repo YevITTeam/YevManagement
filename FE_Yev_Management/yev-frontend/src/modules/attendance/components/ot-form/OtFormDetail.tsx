@@ -403,8 +403,12 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                             {form.employees.map((employee) => {
                                 const isMonthOverLimit = employee.monthToDate > 25;
                                 const isYearOverLimit = employee.yearToDate > 300;
+                                const isOverLimit = isMonthOverLimit || isYearOverLimit;
                                 return (
-                                    <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
+                                    <tr
+                                        key={employee.employeeId}
+                                        className={`border-b border-[#f1f5f9] ${isOverLimit ? "bg-[#fdecea]" : ""}`}
+                                    >
                                         <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{employee.employeeCode}</td>
                                         <td className="px-6 py-3 text-sm text-[#191c1e]">{employee.fullName}</td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">
@@ -416,7 +420,9 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                         <td className={`px-6 py-3 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                             {employee.yearToDate}h
                                         </td>
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.isEligibleForMeal ? "✅" : "-"}</td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">
+                                            {employee.isEligibleForMeal ? <Check size={16} className="text-emerald-600" /> : "-"}
+                                        </td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.noteVn || "-"}</td>
                                     </tr>
                                 );
