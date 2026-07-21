@@ -296,6 +296,13 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
     const layout = HEADER_LAYOUTS[paperSize];
     const processPart = form.processPart;
     const nowrap = "overflow-hidden whitespace-nowrap";
+    // "Người chịu trách nhiệm" = Trưởng nhóm đã ký duyệt "Người đề nghị" (approvalLevel=0, POST
+    // /{id}/submit) — KHÔNG phải người nhập liệu tạo đơn (createdBy), vì 2 bước này có thể khác người
+    // (docs §1: "Người tạo đơn nhập liệu" rồi mới tới "Trưởng nhóm ký duyệt Người đề nghị"). Fallback
+    // về createdBy khi đơn còn Draft, chưa ai ký ở cấp này.
+    const requesterHistory = findHistory(form.approvalHistories, 0);
+    const nguoiChiuTrachNhiemName =
+        requesterHistory?.approverFullName ?? requesterHistory?.approverUserName ?? form.createdByFullName ?? form.createdByUserName;
 
     return (
         <div className="text-[9pt]">
@@ -318,7 +325,7 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
                 {form.numberOfEmployee}
             </div>
             <div style={boxStyle(layout.nguoiChiuTrachNhiem)} className={`flex items-center pl-1 ${nowrap}`}>
-                {form.createdByFullName ?? form.createdByUserName}
+                {nguoiChiuTrachNhiemName}
             </div>
             <div style={boxStyle(layout.tuGio)} className={`flex items-center pl-1 ${nowrap}`}>
                 {formatTime(form.startTime)}
