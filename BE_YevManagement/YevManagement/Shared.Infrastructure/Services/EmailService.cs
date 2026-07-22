@@ -1,6 +1,7 @@
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using MimeKit;
 using Shared.Application.Interfaces;
 
@@ -14,10 +15,12 @@ namespace Shared.Infrastructure.Services
     public class EmailService : IEmailService
     {
         private readonly IConfiguration _configuration;
+        private readonly ILogger<EmailService> _logger;
 
-        public EmailService(IConfiguration configuration)
+        public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
         {
             _configuration = configuration;
+            _logger = logger;
         }
 
         public async Task<bool> SendAsync(string toEmail, string subject, string htmlBody)
@@ -26,9 +29,10 @@ namespace Shared.Infrastructure.Services
             if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(toEmail))
                 return false;
 
+            var port = int.Parse(_configuration["EmailSettings:SmtpPort"] ?? "587");
+
             try
             {
-                var port = int.Parse(_configuration["EmailSettings:SmtpPort"] ?? "587");
                 var enableSsl = bool.Parse(_configuration["EmailSettings:EnableSsl"] ?? "true");
                 var username = _configuration["EmailSettings:Username"];
                 var password = _configuration["EmailSettings:Password"];
@@ -53,11 +57,13 @@ namespace Shared.Infrastructure.Services
 
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
                 // SMTP errors (misconfiguration, network loss, server rejection...) must not break the
                 // main business logic calling SendAsync — just return false, and let the caller decide
-                // whether to treat it as an error.
+                // whether to treat it as an error. Still log the real exception, otherwise a failure in
+                // a deployed environment (e.g. IIS blocked from reaching the SMTP host) is undiagnosable.
+                _logger.LogError(ex, "Gửi email thất bại. Host={Host}, Port={Port}, To={ToEmail}", host, port, toEmail);
                 return false;
             }
         }

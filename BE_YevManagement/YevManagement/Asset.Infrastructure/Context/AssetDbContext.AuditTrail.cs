@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Logging;
+using Shared.Application.Helper;
 
 namespace Asset.Infrastructure.Context;
 
@@ -145,7 +146,7 @@ public partial class AssetDbContext
             OldValues = oldValues is { Count: > 0 } ? JsonSerializer.Serialize(oldValues) : null,
             NewValues = newValues is { Count: > 0 } ? JsonSerializer.Serialize(newValues) : null,
             ChangedBy = _auditHttpContextAccessor?.HttpContext?.User?.Identity?.Name ?? "System",
-            ChangedAt = DateTime.UtcNow.AddHours(7)
+            ChangedAt = TimeHelper.GetCurrentUtcTime()
         };
     }
 }

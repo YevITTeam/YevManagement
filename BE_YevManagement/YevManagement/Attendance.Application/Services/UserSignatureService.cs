@@ -46,7 +46,7 @@ namespace Attendance.Application.Services
         // bấm xác nhận (ConfirmAsync), chống trường hợp ai đó chiếm phiên đăng nhập đổi chữ ký người khác.
         public async Task RequestUpdateAsync(string userName, UpsertUserSignatureDto request)
         {
-            var now = DateTime.UtcNow;
+            var now = TimeHelper.GetCurrentUtcTime();
             var pending = new PendingSignatureConfirmation
             {
                 UserName = userName,
@@ -104,7 +104,7 @@ namespace Attendance.Application.Services
 
             var result = await UpsertAsync(pending.UserName, pending.SignatureImage);
 
-            pending.ConfirmedAt = DateTime.UtcNow;
+            pending.ConfirmedAt = TimeHelper.GetCurrentUtcTime();
             _unitOfWork.PendingSignatureConfirmations.Update(pending);
             await _unitOfWork.SaveChangesAsync();
 
@@ -119,7 +119,7 @@ namespace Attendance.Application.Services
             if (pending!.ConfirmedAt != null)
                 throw new DomainException("Link xác nhận này đã được sử dụng.");
 
-            if (pending.ExpiresAt < DateTime.UtcNow)
+            if (pending.ExpiresAt < TimeHelper.GetCurrentUtcTime())
                 throw new DomainException("Link xác nhận đã hết hạn, vui lòng yêu cầu cập nhật chữ ký lại.");
 
             return pending;
@@ -137,14 +137,14 @@ namespace Attendance.Application.Services
                 {
                     UserName = userName,
                     SignatureImage = signatureImage,
-                    UpdatedAt = DateTime.UtcNow
+                    UpdatedAt = TimeHelper.GetCurrentUtcTime()
                 };
                 await _unitOfWork.UserSignatures.AddAsync(signature);
             }
             else
             {
                 signature.SignatureImage = signatureImage;
-                signature.UpdatedAt = DateTime.UtcNow;
+                signature.UpdatedAt = TimeHelper.GetCurrentUtcTime();
                 _unitOfWork.UserSignatures.Update(signature);
             }
 

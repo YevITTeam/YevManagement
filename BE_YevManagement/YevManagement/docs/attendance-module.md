@@ -117,6 +117,14 @@ Phần dưới đây (duyệt cấp Trưởng phòng → Trưởng xưởng → 
   - Mỗi lần chỉnh đều stamp `AccumulationYear`/`AccumulationMonth` = năm/tháng hiện tại (coi giá trị mới là "đúng tại thời điểm chỉnh"), để lần cộng lũy kế tiếp theo trong cùng tháng không bị rollover đè mất.
   - Nhân viên chưa được gán `UserName` (đa số dữ liệu hiện có) thì chưa tự chỉnh được — cần Admin gán qua `PUT /api/Employee/{id}` trước.
 
+### §Lũy kế hiển thị trên đơn — snapshot đóng băng, KHÔNG join sống (2026-07-21)
+- **Bug đã sửa**: `OtFormService.GetByIdAsync` trước đây map `OtFormEmployeeDto.MonthToDate/YearToDate` trực tiếp từ `x.Employee.MonthToDate/YearToDate` (join sống tới `Employee` hiện tại) — nên xem lại đơn cũ luôn ra lũy kế **hiện tại**, không phải lũy kế **tại thời điểm lập đơn** (đơn càng cũ, giá trị hiển thị càng sai vì `Employee.MonthToDate/YearToDate` đã bị cộng dồn thêm bởi các đơn khác kể từ đó).
+- **Cách sửa**: thêm cột `OtFormEmployee.MonthToDate`/`YearToDate` (decimal(10,2), migration `AddAccumulationSnapshotToOtFormEmployee`, đã apply DB) — snapshot đóng băng giá trị `Employee.MonthToDate/YearToDate` **tại đúng thời điểm dòng `OtFormEmployee` được thêm vào đơn**, cùng nguyên tắc snapshot đã dùng cho `OtFormApprovalHistory.SignatureImage`/`ApproverFullName`.
+  - `CreateAsync`: snapshot lúc tạo đơn (dùng lại `List<Employee>` mà `ValidateEmployeesAsync` đã trả về, không query thêm).
+  - `UpdateAsync` (diff nhân viên): nhân viên **mới thêm** vào đơn khi sửa → snapshot tại thời điểm sửa đó; nhân viên **giữ nguyên** từ trước → KHÔNG ghi đè, giữ nguyên snapshot gốc lúc mới thêm vào (đúng tinh thần "lũy kế tại thời điểm lập đơn", không phải "lúc sửa gần nhất").
+  - `GetByIdAsync` giờ đọc `x.MonthToDate`/`x.YearToDate` từ chính `OtFormEmployee`, không còn `x.Employee.MonthToDate/YearToDate`.
+- **Giới hạn dữ liệu cũ**: các `OtFormEmployee` đã tồn tại từ trước migration này có `MonthToDate`/`YearToDate` = `0` (default cột mới, không có cách khôi phục lại giá trị lịch sử vì trước đây chưa từng lưu) — chỉ đơn tạo/sửa **sau** khi apply migration mới có snapshot đúng.
+
 ### §Phiếu ăn — ngưỡng giờ OT (2026-07-16)
 - Nhân viên đủ điều kiện phiếu ăn khi giờ OT thực tế **lớn hơn 2 giờ** (`(EndTime - StartTime) > 2h`, không tính bằng). Đây là field **tính toán khi đọc** (`OtFormEmployeeDto.IsEligibleForMeal`), KHÔNG lưu DB — không nhầm với `ProcessPart.IsEat` (cờ "có phục vụ ăn" ở cấp cả đơn, do người lập đơn tick tay). FE tick chọn `ProcessPart.IsEat` dựa gợi ý từ `IsEligibleForMeal` của từng người, BE không tự set.
 - **Số lượng phiếu ăn theo loại** (2026-07-16, migration `AddMealTicketCountsToProcessPart`): khi `IsEat = true`, người lập đơn nhập thêm 3 số lượng — `MainTicketCount` (phiếu chính), `SecondaryTicketCount` (phiếu phụ), `MilkCount` (sữa). Cả 3 đều **chung cho cả đơn** (không phải per-employee), nhập tay tự do — BE không validate tổng 3 số này phải khớp `NumberOfEmployee` hay `IsEligibleForMeal`, không tự tính.

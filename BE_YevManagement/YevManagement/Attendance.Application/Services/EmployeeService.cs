@@ -1,6 +1,7 @@
 using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
@@ -14,14 +15,25 @@ namespace Attendance.Application.Services
         public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword)
         {
             var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group).Where(x => !x.IsDeleted);
+            var orderedQuery = query.OrderBy(x => x.Code);
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {
-                query = query.Where(x => x.Code.Contains(keyword) || x.FirstName.Contains(keyword) || x.LastName.Contains(keyword));
+                // "Họ và tên" hiển thị theo quy ước "{LastName} {FirstName}" (giống OtFormService) —
+                // so khớp cả chuỗi ghép để tìm được khi người dùng gõ đủ họ tên, không chỉ từng phần riêng lẻ.
+                query = query.Where(x =>
+                    x.Code.Contains(keyword) ||
+                    x.FirstName.Contains(keyword) ||
+                    x.LastName.Contains(keyword) ||
+                    (x.LastName + " " + x.FirstName).Contains(keyword));
+
+                // Khớp đúng tuyệt đối Code (vd tìm "50" ra ngay mã "50") được ưu tiên lên đầu,
+                // thay vì lẫn giữa các mã chỉ chứa keyword (vd "150", "250", "500").
+                orderedQuery = query.OrderBy(x => x.Code == keyword ? 0 : 1).ThenBy(x => x.Code);
             }
 
             return await _unitOfWork.Employees.ToPagedResponseAsync(
-                query.OrderBy(x => x.Code),
+                orderedQuery,
                 pageIndex,
                 pageSize,
                 x => new EmployeeDto
@@ -121,7 +133,7 @@ namespace Attendance.Application.Services
                 if (existsUserName != null) throw new DomainException($"Tài khoản '{request.UserName}' đã được gán cho nhân viên khác.");
             }
 
-            var now = DateTime.UtcNow;
+            var now = TimeHelper.GetCurrentUtcTime();
             var newEmployee = new Employee
             {
                 Code = request.Code,
@@ -178,7 +190,7 @@ namespace Attendance.Application.Services
                 group.OrThrowNotFound("Nhóm", request.GroupId);
             }
 
-            var now = DateTime.UtcNow;
+            var now = TimeHelper.GetCurrentUtcTime();
             employee.Code = request.Code;
             employee.FirstName = request.FirstName;
             employee.LastName = request.LastName;
@@ -214,7 +226,7 @@ namespace Attendance.Application.Services
             if (!canAdjustAny && employee!.UserName != currentUserName)
                 throw new DomainException("Bạn không có quyền chỉnh lũy kế của nhân viên này.");
 
-            var now = DateTime.UtcNow;
+            var now = TimeHelper.GetCurrentUtcTime();
             employee!.MonthToDate = request.MonthToDate;
             employee.YearToDate = request.YearToDate;
             employee.AccumulationYear = now.Year;

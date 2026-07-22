@@ -363,6 +363,10 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time");
 
+                    b.Property<decimal>("MonthToDate")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
                     b.Property<string>("NoteJp")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -373,6 +377,10 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time");
+
+                    b.Property<decimal>("YearToDate")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
 
                     b.HasKey("OtFormId", "EmployeeId")
                         .HasName("PK_OtFormEmployees");

@@ -17,6 +17,15 @@ public partial class OtFormEmployee
 
     public string? NoteJp { get; set; }
 
+    // Snapshot of Employee.MonthToDate/YearToDate at the moment this row was added to the form
+    // (CreateAsync, or UpdateAsync when a new employee is added to an existing form) — frozen so
+    // viewing an old form always shows the accumulation AS OF form-creation time, not whatever the
+    // Employee's accumulation happens to be right now (same principle as
+    // OtFormApprovalHistory.SignatureImage/ApproverFullName being snapshots, not live joins).
+    public decimal MonthToDate { get; set; }
+
+    public decimal YearToDate { get; set; }
+
     public virtual OtForm OtForm { get; set; } = null!;
 
     public virtual Employee Employee { get; set; } = null!;

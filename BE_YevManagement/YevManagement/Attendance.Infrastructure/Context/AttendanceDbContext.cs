@@ -128,6 +128,8 @@ public partial class AttendanceDbContext : DbContext
 
             entity.Property(e => e.NoteVn).HasMaxLength(500);
             entity.Property(e => e.NoteJp).HasMaxLength(500);
+            entity.Property(e => e.MonthToDate).HasPrecision(10, 2);
+            entity.Property(e => e.YearToDate).HasPrecision(10, 2);
 
             entity.HasOne(d => d.OtForm).WithMany(p => p.OtFormEmployees)
                 .HasForeignKey(d => d.OtFormId)

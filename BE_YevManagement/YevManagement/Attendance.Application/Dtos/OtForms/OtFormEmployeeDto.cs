@@ -10,9 +10,10 @@ namespace Attendance.Application.Dtos.OtForms
         public string? NoteVn { get; set; }
         public string? NoteJp { get; set; }
 
-        // The employee's CURRENT accumulation (live, not a snapshot) — so the approver can check it
-        // against the TH3 thresholds (>25h/month, >300h/year) directly on the form detail screen,
-        // without calling the Employee API separately.
+        // Snapshot of the employee's accumulation AS OF when this row was added to the form (frozen,
+        // NOT the employee's current live accumulation — see OtFormEmployee.MonthToDate/YearToDate,
+        // fixed 2026-07-21: was a live join before, which made old/completed forms show today's
+        // accumulation instead of what justified this form's approval level at the time).
         public decimal MonthToDate { get; set; }
         public decimal YearToDate { get; set; }
 

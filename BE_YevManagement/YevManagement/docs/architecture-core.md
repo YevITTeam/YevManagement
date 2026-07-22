@@ -109,6 +109,6 @@ HandleExceptionMiddleware → (Dev) MapOpenApi + MapScalarApiReference
 ## 9. Bẫy cần nhớ
 - **Namespace**: Domain mới file-scoped; Application/Infrastructure phần lớn block-scoped. Theo file lân cận.
 - **Entity là `partial class`** (scaffold từ DB).
-- **`TimeHelper.GetCurrentUtcTime()`** = `DateTime.UtcNow.AddHours(7)` (giờ VN). Nhiều chỗ vẫn dùng `DateTime.UtcNow` trực tiếp — không nhất quán.
+- **`TimeHelper.GetCurrentUtcTime()`** = `DateTime.UtcNow.AddHours(7)` (giờ VN). Toàn bộ logic nghiệp vụ (timestamp entity, hạn dùng token nội bộ, `ApiResponse.Timestamp`...) PHẢI dùng hàm này, KHÔNG dùng `DateTime.UtcNow` trực tiếp. Ngoại lệ duy nhất: `TokenService.GenerateJwtToken` (`Expires`) phải giữ UTC thật vì middleware xác thực JWT so sánh với `DateTime.UtcNow` chuẩn của hệ thống.
 - **Mapping thủ công** khắp nơi (KHÔNG AutoMapper).
 - **EF Fluent map tên Anh → bảng/cột tiếng Việt** (DB legacy): `Branch` → PK `PK_ChiNhanhs`, cột `MaChiNhanh`. Giữ quy ước đặt tên constraint/index đang dùng.

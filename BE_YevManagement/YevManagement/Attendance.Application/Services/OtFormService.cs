@@ -232,8 +232,8 @@ namespace Attendance.Application.Services
                     EndTime = x.EndTime,
                     NoteVn = x.NoteVn,
                     NoteJp = x.NoteJp,
-                    MonthToDate = x.Employee.MonthToDate,
-                    YearToDate = x.Employee.YearToDate,
+                    MonthToDate = x.MonthToDate,
+                    YearToDate = x.YearToDate,
                     IsEligibleForMeal = (decimal)(x.EndTime - x.StartTime).TotalHours > MinHoursForMealTicket
                 }).ToList(),
                 ProcessPart = processPart == null ? null : new ProcessPartDto
@@ -292,7 +292,8 @@ namespace Attendance.Application.Services
             // Admin bypasses both paths, same as GeneralDirector bypassing during approval.
             await EnsureCanCreateOrEditForScopeAsync(createdByUserName, isAdmin, request.GroupId, request.DepartmentId);
 
-            await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
+            var validatedEmployees = await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
+            var employeeById = validatedEmployees.ToDictionary(x => x.Id);
 
             var newOtForm = new OtForm
             {
@@ -319,6 +320,7 @@ namespace Attendance.Application.Services
 
             foreach (var item in request.Employees)
             {
+                var employee = employeeById[item.EmployeeId];
                 await _unitOfWork.OtFormEmployees.AddAsync(new OtFormEmployee
                 {
                     OtForm = newOtForm,
@@ -326,7 +328,10 @@ namespace Attendance.Application.Services
                     StartTime = request.StartTime,
                     EndTime = item.EndTime,
                     NoteVn = item.NoteVn,
-                    NoteJp = item.NoteJp
+                    NoteJp = item.NoteJp,
+                    // Snapshot accumulation AS OF form creation — see OtFormEmployee.MonthToDate/YearToDate.
+                    MonthToDate = employee.MonthToDate,
+                    YearToDate = employee.YearToDate
                 });
             }
 
@@ -477,7 +482,7 @@ namespace Attendance.Application.Services
                 Action = (int)ApprovalAction.Submitted,
                 Comment = request.Comment,
                 SignatureImage = submitterSignature.SignatureImage,
-                ActionAt = DateTime.UtcNow
+                ActionAt = TimeHelper.GetCurrentUtcTime()
             });
 
             otForm.Status = (int)OtFormStatus.PendingGroupHead;
@@ -528,7 +533,8 @@ namespace Attendance.Application.Services
             // EnsureCanCreateOrEditForScopeAsync.
             await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, request.GroupId, request.DepartmentId);
 
-            await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
+            var validatedEmployees = await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
+            var employeeById = validatedEmployees.ToDictionary(x => x.Id);
 
             otForm.GroupId = request.GroupId;
             otForm.DepartmentId = request.DepartmentId;
@@ -562,6 +568,7 @@ namespace Attendance.Application.Services
                 }
                 else
                 {
+                    var employee = employeeById[item.EmployeeId];
                     await _unitOfWork.OtFormEmployees.AddAsync(new OtFormEmployee
                     {
                         OtFormId = otForm.Id,
@@ -569,7 +576,12 @@ namespace Attendance.Application.Services
                         StartTime = request.StartTime,
                         EndTime = item.EndTime,
                         NoteVn = item.NoteVn,
-                        NoteJp = item.NoteJp
+                        NoteJp = item.NoteJp,
+                        // Snapshot accumulation AS OF the moment this employee is added to the form
+                        // (see OtFormEmployee.MonthToDate/YearToDate) — employees kept from before (the
+                        // `if` branch above) intentionally keep their ORIGINAL snapshot, not refreshed here.
+                        MonthToDate = employee.MonthToDate,
+                        YearToDate = employee.YearToDate
                     });
                 }
             }
@@ -634,7 +646,7 @@ namespace Attendance.Application.Services
                 Action = (int)ApprovalAction.Approved,
                 Comment = request.Comment,
                 SignatureImage = approverSignature?.SignatureImage,
-                ActionAt = DateTime.UtcNow
+                ActionAt = TimeHelper.GetCurrentUtcTime()
             });
 
             var nextStatus = DetermineNextStatus(currentLevel, (ApprovalLevel)otForm.OtCase.RequiredApprovalLevel);
@@ -673,7 +685,7 @@ namespace Attendance.Application.Services
                 ApprovalLevel = (int)currentLevel,
                 Action = (int)ApprovalAction.Rejected,
                 Comment = request.Comment,
-                ActionAt = DateTime.UtcNow
+                ActionAt = TimeHelper.GetCurrentUtcTime()
             });
 
             otForm.Status = (int)OtFormStatus.Rejected;
@@ -706,7 +718,7 @@ namespace Attendance.Application.Services
                 await ApproveAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, isGeneralDirector, request);
             }
 
-            emailToken.UsedAt = DateTime.UtcNow;
+            emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
             _unitOfWork.OtFormApprovalEmailTokens.Update(emailToken);
             await _unitOfWork.SaveChangesAsync();
         }
@@ -718,7 +730,7 @@ namespace Attendance.Application.Services
 
             await RejectAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, isGeneralDirector, request);
 
-            emailToken.UsedAt = DateTime.UtcNow;
+            emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
             _unitOfWork.OtFormApprovalEmailTokens.Update(emailToken);
             await _unitOfWork.SaveChangesAsync();
         }
@@ -728,7 +740,7 @@ namespace Attendance.Application.Services
             var emailToken = await _unitOfWork.OtFormApprovalEmailTokens.FirstOrDefaultAsync(x => x.Token == token);
             emailToken.OrThrowNotFound("Link duyệt đơn qua email", token);
 
-            if (emailToken!.ExpiresAt < DateTime.UtcNow)
+            if (emailToken!.ExpiresAt < TimeHelper.GetCurrentUtcTime())
                 throw new DomainException("Link duyệt đơn qua email đã hết hạn.");
 
             if (requireUnused && emailToken.UsedAt != null)
@@ -747,7 +759,7 @@ namespace Attendance.Application.Services
             if (approverUserNames.Count == 0) return;
 
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
-            var now = DateTime.UtcNow;
+            var now = TimeHelper.GetCurrentUtcTime();
             var hasNewToken = false;
 
             foreach (var approverUserName in approverUserNames)

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using Shared.Application.Helper;
 
 namespace Shared.Application.Wrapper
 {
@@ -14,7 +15,7 @@ namespace Shared.Application.Wrapper
 
         public ApiResponse()
         {
-            Timestamp = DateTime.UtcNow;
+            Timestamp = TimeHelper.GetCurrentUtcTime();
         }
 
         public static ApiResponse<T> Success(T data, string message = "Action Success")

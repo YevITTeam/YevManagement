@@ -2,6 +2,7 @@ using Attendance.Application.Dtos.EmployeeImports;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
 using ClosedXML.Excel;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 
@@ -112,7 +113,7 @@ namespace Attendance.Application.Services
                     : (await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && employeeCodesToUpdate.Contains(x.Code)))
                         .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
 
-                var now = DateTime.UtcNow;
+                var now = TimeHelper.GetCurrentUtcTime();
                 foreach (var row in validRows)
                 {
                     int? resolvedGroupId = newGroupsByCode.TryGetValue(row.GroupCode!, out var newGroupEntity)
