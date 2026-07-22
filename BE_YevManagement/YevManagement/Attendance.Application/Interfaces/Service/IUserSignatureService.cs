@@ -6,12 +6,13 @@ namespace Attendance.Application.Interfaces.Service
     {
         Task<UserSignatureDto> GetByUserNameAsync(string userName);
 
-        // Không upsert ngay — tạo PendingSignatureConfirmation + gửi email xác nhận cho chính
-        // người gọi (xem docs/attendance-module.md — xác thực qua email).
+        // Does not upsert immediately — creates a PendingSignatureConfirmation + sends a confirmation
+        // email to the caller themself (see docs/attendance-module.md — email-based verification).
         Task RequestUpdateAsync(string userName, UpsertUserSignatureDto request);
 
-        // 2 hàm dưới phục vụ trang xác nhận nhỏ (public, [AllowAnonymous] ở Controller) mà FE mở
-        // khi người dùng bấm link trong email — token tự nó là thông tin xác thực duy nhất.
+        // The 2 functions below serve a small confirmation page (public, [AllowAnonymous] on the
+        // Controller) that the FE opens when the user clicks the link in the email — the token itself
+        // is the sole piece of verification.
         Task<SignatureConfirmationPreviewDto> GetPendingConfirmationAsync(string token);
         Task<UserSignatureDto> ConfirmAsync(string token);
     }

@@ -84,13 +84,16 @@ public partial class AssetDbContext : DbContext
                 .HasForeignKey(d => d.SupplierId)
                 .HasConstraintName("FK_ThietBis_NhaCungCaps_NhaCungCapId");
 
-            // Self-reference: gợi ý "máy MỚI nào sẽ thay thế cho máy này" — lưu trên chính máy
-            // CŨ (điền từ cột "MQL Cũ" khi import Excel: sau khi tạo máy mới, server ghi Id máy
-            // mới vào SuggestedNewDeviceId của máy cũ tương ứng, xem docs/asset-module.md).
-            // 2026-07-13: đổi hướng tự tham chiếu — trước đó lưu trên máy MỚI (ReplacesOldDeviceId
-            // trỏ về máy cũ), nay lưu trên máy CŨ (trỏ tới máy mới) để màn "Chuyển máy" mở trên
-            // máy cũ đọc thẳng 1 cột, không cần dò ngược nhiều máy mới cùng khai là thay thế cho
-            // nó. Chỉ mang tính gợi ý cho màn hình "Chuyển máy" — không tự động thực hiện TransferHistory.
+            // Self-reference: suggestion for "which NEW device will replace this device" — stored on the
+            // OLD device itself (populated from the "Old MQL" column when importing Excel: after creating
+            // the new device, the server writes the new device's Id into SuggestedNewDeviceId of the
+            // corresponding old device, see docs/asset-module.md).
+            // 2026-07-13: reversed the self-reference direction — previously stored on the NEW device
+            // (ReplacesOldDeviceId pointing to the old device), now stored on the OLD device (pointing to
+            // the new device) so the "Transfer Device" screen opened on the old device can read a single
+            // column directly, without having to search backward through multiple new devices claiming to
+            // replace it. This is only a suggestion for the "Transfer Device" screen — it does not
+            // automatically create a TransferHistory record.
             entity.HasIndex(e => e.SuggestedNewDeviceId, "IX_ThietBis_GoiYMayMoiId");
 
             entity.HasOne(d => d.SuggestedNewDevice).WithMany()
@@ -98,8 +101,8 @@ public partial class AssetDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_ThietBis_ThietBis_GoiYMayMoiId");
 
-            // Nhóm/Bộ phận: phân loại "thiết bị đang ở chỗ nào" bên cạnh Branch (chi nhánh).
-            // Nullable — dữ liệu thiết bị cũ chưa gán, chỉ bắt buộc dần qua Create/Update mới.
+            // Group/Department: classifies "where the device is located" alongside Branch.
+            // Nullable — existing devices are not yet assigned; it is only gradually enforced via new Create/Update.
             entity.HasIndex(e => e.GroupId, "IX_ThietBis_NhomId");
             entity.HasIndex(e => e.DepartmentId, "IX_ThietBis_BoPhanId");
 
@@ -117,9 +120,9 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<DeviceGroup>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_Nhoms");
-            // 1 Bộ phận - N Nhóm (2026-07-13): mã Nhóm không còn unique toàn cục, chỉ unique
-            // trong phạm vi 1 Bộ phận (VD "OF" có thể vừa thuộc Tổng vụ vừa thuộc Quản lý chất
-            // lượng, là 2 Nhóm khác nhau).
+            // 1 Department - N Groups (2026-07-13): Group code is no longer globally unique, only unique
+            // within 1 Department (e.g. "OF" can belong to both General Affairs and Quality Management,
+            // as 2 distinct Groups).
             entity.HasIndex(e => new { e.DepartmentId, e.GroupCode }, "IX_Nhoms_BoPhanId_MaNhom").IsUnique();
             entity.Property(e => e.GroupCode).HasMaxLength(50);
             entity.Property(e => e.GroupName).HasMaxLength(255);

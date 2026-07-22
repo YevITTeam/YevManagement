@@ -10,8 +10,8 @@ namespace Identity.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Seed permission cho 2 bảng master data mới của Asset: DeviceGroup (Nhóm) và
-            // DeviceDepartment (Bộ phận) — dùng để phân loại "thiết bị đang ở chỗ nào".
+            // Seed permissions for 2 new Asset master data tables: DeviceGroup (Group) and
+            // DeviceDepartment (Department) — used to classify "where a device is currently located".
             migrationBuilder.Sql(@"
 INSERT INTO Permissions (Code, Module, Description) VALUES
 (N'Asset.DeviceGroup.View', N'Asset', N'Xem danh sách / chi tiết nhóm'),

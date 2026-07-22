@@ -8,10 +8,10 @@ namespace Identity.Application.Dtos.UserDto
     {
         public int UserId { get; set; }
 
-        // Permission cấp thêm riêng cho user này (dù Role không có).
+        // Permissions granted specifically to this user (even if the Role doesn't have them).
         public List<int> GrantPermissionIds { get; set; } = new List<int>();
 
-        // Permission thu hồi riêng khỏi user này (dù Role có cấp).
+        // Permissions revoked specifically from this user (even if the Role grants them).
         public List<int> DenyPermissionIds { get; set; } = new List<int>();
     }
 }

@@ -16,9 +16,10 @@ namespace Asset.Application.Dtos.IpPrefixes
         public string? AlternateDns { get; set; }
         public string? Description { get; set; }
 
-        // Bỏ tổng "Số IP" (luôn = 255 cho mọi prefix vì mỗi dải sinh cố định 1..255). Thay bằng
-        // số IP đang sử dụng (Status != Available) và số IP chưa sử dụng (Status == Available)
-        // trong dải, giúp FE hiển thị/lọc dải theo mức độ đã dùng.
+        // Removed the total "IP count" (always = 255 for every prefix since each range
+        // generates a fixed 1..255). Replaced with the number of IPs in use (Status != Available)
+        // and the number of unused IPs (Status == Available) in the range, so the FE can
+        // display/filter ranges by usage level.
         public int UsedIpCount { get; set; }
         public int AvailableIpCount { get; set; }
     }

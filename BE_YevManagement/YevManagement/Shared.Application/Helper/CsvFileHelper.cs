@@ -2,20 +2,20 @@ using System.Text;
 
 namespace Shared.Application.Helper
 {
-    // Đọc file CSV thô thành các dòng/cột dạng string, dùng chung cho các chức năng
-    // import (Asset.DeviceImport/DeviceConfigurationImport) — CSV thường là định dạng
-    // xuất mặc định của các công cụ kiểm kê (VD Tanium), thay vì bắt người dùng phải tự
-    // convert sang .xlsx trước khi import.
+    // Reads a raw CSV file into rows/columns of strings, shared by the import features
+    // (Asset.DeviceImport/DeviceConfigurationImport) — CSV is usually the default export
+    // format of inventory tools (e.g. Tanium), instead of forcing users to manually
+    // convert to .xlsx before importing.
     public static class CsvFileHelper
     {
         public static bool HasCsvExtension(string? fileName) =>
             !string.IsNullOrWhiteSpace(fileName) && fileName.Trim().EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
 
-        // Trả về từng dòng là 1 mảng cell đã trim (dòng đầu tiên là header, gọi tự chịu
-        // trách nhiệm Skip(1) giống ClosedXML). Tự nhận diện dấu phân cách (',' hoặc ';')
-        // dựa trên dòng header — Excel locale Việt Nam thường xuất CSV bằng ';' (vì ','
-        // là dấu thập phân), trong khi công cụ US/Tanium thường dùng ','. Hỗ trợ field có
-        // dấu ngoặc kép bao quanh (chứa dấu phân cách/xuống dòng bên trong, escape "" → ").
+        // Returns each row as an array of trimmed cells (the first row is the header; the caller is
+        // responsible for Skip(1), same as ClosedXML). Auto-detects the delimiter (',' or ';')
+        // based on the header row — Vietnamese-locale Excel usually exports CSV with ';' (since ','
+        // is the decimal separator), while US/Tanium tools usually use ','. Supports fields
+        // wrapped in double quotes (containing delimiters/newlines inside, escaped "" → ").
         public static List<string[]> ReadRows(Stream stream)
         {
             using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
@@ -52,7 +52,7 @@ namespace Shared.Application.Helper
             void EndRow()
             {
                 EndField();
-                // Bỏ qua dòng hoàn toàn rỗng (VD dòng trắng cuối file).
+                // Skip completely empty rows (e.g. a blank line at the end of the file).
                 if (!(fields.Count == 1 && fields[0].Length == 0))
                     rows.Add(fields.ToArray());
                 fields = new List<string>();

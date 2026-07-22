@@ -32,7 +32,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // FE dùng cho dropdown "Nhóm" phụ thuộc "Bộ phận" đã chọn.
+        // Used by FE for the "Group" dropdown depending on the selected "Department".
         [RequirePermission("Attendance.Group.View")]
         [HttpGet("by-department/{departmentId}")]
         public async Task<ActionResult<ApiResponse<List<GroupDto>>>> GetByDepartment(int departmentId)

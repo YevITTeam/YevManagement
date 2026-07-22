@@ -4,8 +4,8 @@ namespace Attendance.Application.Dtos.OtForms
     {
         public bool IsEat { get; set; }
 
-        // Số lượng từng loại phiếu ăn — người lập đơn tự nhập tay (không tự tính từ danh sách nhân
-        // viên), chỉ có ý nghĩa khi IsEat = true (2026-07-16, xem docs/attendance-module.md).
+        // Count of each meal ticket type — manually entered by the form creator (not auto-calculated
+        // from the employee list), only meaningful when IsEat = true (2026-07-16, see docs/attendance-module.md).
         public int MainTicketCount { get; set; }
         public int SecondaryTicketCount { get; set; }
         public int MilkCount { get; set; }

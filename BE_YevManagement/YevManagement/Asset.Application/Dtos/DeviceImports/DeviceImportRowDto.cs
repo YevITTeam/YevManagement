@@ -1,10 +1,11 @@
 namespace Asset.Application.Dtos.DeviceImports
 {
-    // Represents 1 row parsed from the import Excel template (MQL/Xưởng/Loại Thiết Bị/
-    // Nhà Cung Cấp/Ngày Mua/Ghi Chú/Số SerialNumber/Hãng/Model/CPU/RAM/Ổ Cứng/MQL Cũ,
-    // 2026-07-11: thêm 5 cột cấu hình Hãng/Model/CPU/RAM/Ổ Cứng theo mẫu Excel mới;
-    // 2026-07-13: cột Xưởng/Nhà Cung Cấp đổi sang đối chiếu theo Mã (Code) thay vì Tên,
-    // vì Tên dễ trùng/đổi diễn giải còn Mã là duy nhất — xem DeviceImportService).
+    // Represents 1 row parsed from the import Excel template (MQL/Branch/Device Type/
+    // Supplier/Purchase Date/Note/Serial Number/Maker/Model/CPU/RAM/Hard Drive/Old MQL,
+    // 2026-07-11: added 5 hardware config columns Maker/Model/CPU/RAM/Hard Drive per the
+    // new Excel template; 2026-07-13: the Branch/Supplier columns changed to match by
+    // Code instead of Name, since Name can be duplicated/reworded while Code is unique
+    // — see DeviceImportService).
     // Used both as the preview response (server fills ResolvedXxxId/IsValid/Errors) and
     // as the confirm request input (client resends the raw fields as-is; server
     // re-resolves Ids itself, it never trusts client-supplied Ids).
@@ -20,8 +21,8 @@ namespace Asset.Application.Dtos.DeviceImports
         public string? Note { get; set; }
         public string? SerialNumber { get; set; }
 
-        // 5 cột cấu hình phần cứng tuỳ chọn (mẫu Excel mới, 2026-07-11) — không [Required],
-        // dùng để tạo DeviceConfiguration đi kèm Device mới nếu có ít nhất 1 giá trị.
+        // 5 optional hardware config columns (new Excel template, 2026-07-11) — not [Required],
+        // used to create a DeviceConfiguration alongside the new Device if at least 1 value is present.
         public string? Maker { get; set; }
         public string? Model { get; set; }
         public string? Cpu { get; set; }

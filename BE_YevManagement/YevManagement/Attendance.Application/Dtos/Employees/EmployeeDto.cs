@@ -7,13 +7,13 @@ namespace Attendance.Application.Dtos.Employees
         public string FirstName { get; set; } = null!;
         public string LastName { get; set; } = null!;
 
-        // Tài khoản AD của chính nhân viên (nullable) — dùng để tự chỉnh lũy kế của chính mình.
+        // The employee's own AD account (nullable) — used to adjust their own accumulation.
         public string? UserName { get; set; }
 
         public decimal MonthToDate { get; set; }
         public decimal YearToDate { get; set; }
 
-        // Tháng/năm mà MonthToDate/YearToDate đang phản ánh (xem Employee.AccumulationYear/Month).
+        // Month/year that MonthToDate/YearToDate currently reflect (see Employee.AccumulationYear/Month).
         public int AccumulationYear { get; set; }
         public int AccumulationMonth { get; set; }
 

@@ -2,9 +2,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Attendance.Application.Dtos.OtForms
 {
-    // Sửa toàn bộ đơn (danh mục + danh sách nhân viên + ProcessPart) — chỉ cho phép khi
-    // OtForm.Status == Pending (chưa cấp nào duyệt), xem OtFormService.UpdateAsync. Không có field
-    // chữ ký vì chữ ký "Người đề nghị" đã ký xong lúc tạo (tự lấy từ UserSignature), không ký lại khi sửa.
+    // Edit the entire form (categories + employee list + ProcessPart) — only allowed when
+    // OtForm.Status == Pending (no approval level has approved yet), see OtFormService.UpdateAsync.
+    // No signature field since the "Requester" signature was already signed at creation time
+    // (taken automatically from UserSignature), and is not re-signed on edit.
     public class UpdateOtFormDto
     {
         [Required(ErrorMessage = "Nhóm không được để trống")]

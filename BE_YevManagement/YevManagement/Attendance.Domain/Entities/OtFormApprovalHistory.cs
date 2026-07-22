@@ -2,30 +2,31 @@ using System;
 
 namespace Attendance.Domain.Entities;
 
-// Lịch sử duyệt từng cấp của 1 OtForm — mỗi dòng là 1 lần Submit/Approve/Reject, kèm chữ ký (nếu OtCase.RequireSignature).
+// Per-level approval history of an OtForm — each row is one Submit/Approve/Reject action, with a signature (if OtCase.RequireSignature).
 public partial class OtFormApprovalHistory
 {
     public int Id { get; set; }
 
     public int OtFormId { get; set; }
 
-    // Người tạo/duyệt — lưu UserName, cùng lý do với OtForm.CreatedByUserName.
+    // Creator/approver — stores the UserName, for the same reason as OtForm.CreatedByUserName.
     public string ApproverUserName { get; set; } = null!;
 
-    // Snapshot claim "FullName" của JWT tại thời điểm ký — để in PDF không cần FE gọi chéo API Identity.
-    // Null nếu tài khoản đó chưa từng được Admin nhập FullName lúc create-user.
+    // Snapshot of the JWT "FullName" claim at signing time — so PDF printing doesn't need the FE to
+    // call across to the Identity API. Null if the account has never had FullName entered by an
+    // Admin at create-user time.
     public string? ApproverFullName { get; set; }
 
-    // Lưu enum Attendance.Domain.Enums.ApprovalLevel dưới dạng int.
+    // Stores the Attendance.Domain.Enums.ApprovalLevel enum as an int.
     public int ApprovalLevel { get; set; }
 
-    // Lưu enum Attendance.Domain.Enums.ApprovalAction dưới dạng int.
+    // Stores the Attendance.Domain.Enums.ApprovalAction enum as an int.
     public int Action { get; set; }
 
     public string? Comment { get; set; }
 
-    // Snapshot ảnh chữ ký tại thời điểm ký — không tham chiếu ngược UserSignature để tránh chữ ký cũ
-    // bị đổi theo khi user cập nhật chữ ký mới (xem docs/attendance-module.md).
+    // Snapshot of the signature image at signing time — does not reference UserSignature back, to
+    // avoid the old signature changing retroactively when the user updates their signature (see docs/attendance-module.md).
     public byte[]? SignatureImage { get; set; }
 
     public DateTime ActionAt { get; set; }

@@ -2,10 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Asset.Application.Dtos.IpPrefixes
 {
-    // Không gồm Prefix — 3 octet định danh dải đã sinh sẵn 255 IpAddress con theo giá trị này,
-    // đổi Prefix vẫn phải xoá + tạo lại dải mới (giữ nguyên quyết định cũ). Update chỉ cho sửa
-    // Chi nhánh + cấu hình mạng (SubnetMask/Gateway/DNS/Description) khi có thay đổi thực tế,
-    // thay vì phải xoá dải cũ rồi tạo lại (mất hết IpAddress con đã gán cho thiết bị).
+    // Does not include Prefix — the 3-octet identifier already has its 255 child IpAddresses
+    // generated based on this value, so changing the Prefix still requires deleting and
+    // recreating the range (keeping the previous decision). Update only allows editing the
+    // Branch + network config (SubnetMask/Gateway/DNS/Description) when there's an actual
+    // change, instead of having to delete and recreate the whole range (which would lose all
+    // child IpAddresses already assigned to devices).
     public class UpdateIpPrefixDto
     {
         public int Id { get; set; }

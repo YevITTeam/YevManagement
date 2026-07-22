@@ -2,8 +2,9 @@ using System;
 
 namespace Attendance.Domain.Entities;
 
-// Chữ ký mới chờ chính chủ tự xác nhận qua email trước khi có hiệu lực (UserSignature chỉ được
-// upsert SAU KHI xác nhận) — chống trường hợp ai đó chiếm phiên đăng nhập rồi đổi chữ ký người khác.
+// A new signature waiting for the owner to confirm via email before it takes effect (UserSignature is
+// only upserted AFTER confirmation) — guards against someone hijacking a login session and changing
+// another person's signature.
 public partial class PendingSignatureConfirmation
 {
     public int Id { get; set; }
@@ -12,13 +13,13 @@ public partial class PendingSignatureConfirmation
 
     public byte[] SignatureImage { get; set; } = null!;
 
-    // Token ngẫu nhiên dùng trong link email — tự nó là thông tin xác thực duy nhất (endpoint xác
-    // nhận là [AllowAnonymous]), xem Shared.Application.Helper.TokenHelper.
+    // Random token used in the email link — it is itself the sole piece of verification (the
+    // confirmation endpoint is [AllowAnonymous]), see Shared.Application.Helper.TokenHelper.
     public string Token { get; set; } = null!;
 
     public DateTime ExpiresAt { get; set; }
 
-    // Null = chưa xác nhận. Có giá trị = đã áp dụng vào UserSignature lúc nào.
+    // Null = not confirmed yet. A value = the timestamp when it was applied to UserSignature.
     public DateTime? ConfirmedAt { get; set; }
 
     public DateTime CreatedAt { get; set; }

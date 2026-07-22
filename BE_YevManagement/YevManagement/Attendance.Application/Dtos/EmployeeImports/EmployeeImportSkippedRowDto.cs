@@ -1,7 +1,8 @@
 namespace Attendance.Application.Dtos.EmployeeImports
 {
-    // 1 dòng bị bỏ qua (không import) ở bước Confirm vì còn lỗi validate — dòng còn lại vẫn được
-    // tạo bình thường, không chặn cả batch (cùng hành vi DeviceImportService ở module Asset).
+    // 1 row skipped (not imported) at the Confirm step due to remaining validation errors — the
+    // rest of the rows are still created normally, not blocking the whole batch (same behavior as
+    // DeviceImportService in the Asset module).
     public class EmployeeImportSkippedRowDto
     {
         public int RowNumber { get; set; }

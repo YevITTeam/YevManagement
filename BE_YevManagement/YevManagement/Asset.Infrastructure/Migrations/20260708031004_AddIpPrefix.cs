@@ -10,9 +10,9 @@ namespace Asset.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // 1) Tạo bảng IpPrefixes TRƯỚC khi đụng tới cột cũ trên IpAddresses,
-            // để có thể backfill dữ liệu từ SubnetMask/Gateway/PreferredDNS/AlternateDNS
-            // hiện có (chưa bị xoá) sang bảng mới trước khi DROP COLUMN.
+            // 1) Create the IpPrefixes table BEFORE touching the old columns on IpAddresses,
+            // so the existing data from SubnetMask/Gateway/PreferredDNS/AlternateDNS
+            // (not yet deleted) can be backfilled into the new table before DROP COLUMN.
             migrationBuilder.CreateTable(
                 name: "IpPrefixes",
                 columns: table => new
@@ -32,18 +32,18 @@ namespace Asset.Infrastructure.Migrations
                     table.PrimaryKey("PK_TienToIPs", x => x.Id);
                 });
 
-            // 2) Thêm cột IpPrefixId dạng NULLABLE trước, để không vỡ 6885 dòng hiện có.
+            // 2) Add the IpPrefixId column as NULLABLE first, so the existing 6885 rows aren't broken.
             migrationBuilder.AddColumn<int>(
                 name: "IpPrefixId",
                 table: "IpAddresses",
                 type: "int",
                 nullable: true);
 
-            // 3) Backfill: 1 dòng IpPrefixes cho mỗi prefix (3 octet đầu) đang tồn tại
-            // trong IpAddresses, rồi gán IpPrefixId tương ứng cho từng dòng IpAddresses.
-            // Đã kiểm chứng read-only trước khi viết migration: 27 nhóm, mỗi nhóm chỉ có
-            // đúng 1 giá trị SubnetMask/Gateway/PreferredDNS/AlternateDNS, không NULL,
-            // không xung đột -> backfill này an toàn, không mất dữ liệu.
+            // 3) Backfill: 1 IpPrefixes row for each prefix (first 3 octets) existing
+            // in IpAddresses, then assign the corresponding IpPrefixId to each IpAddresses row.
+            // Verified read-only before writing this migration: 27 groups, each group has
+            // exactly 1 value for SubnetMask/Gateway/PreferredDNS/AlternateDNS, no NULLs,
+            // no conflicts -> this backfill is safe, no data loss.
             migrationBuilder.Sql(@"
 INSERT INTO IpPrefixes (Prefix, SubnetMask, Gateway, PreferredDNS, AlternateDNS, Description, IsDeleted)
 SELECT DISTINCT
@@ -58,7 +58,7 @@ INNER JOIN IpPrefixes ip
     ON ip.Prefix = LEFT(ia.IpAddress, LEN(ia.IpAddress) - CHARINDEX('.', REVERSE(ia.IpAddress)));
 ");
 
-            // 4) Giờ mọi dòng đã có IpPrefixId -> siết NOT NULL.
+            // 4) Now every row has IpPrefixId -> tighten to NOT NULL.
             migrationBuilder.AlterColumn<int>(
                 name: "IpPrefixId",
                 table: "IpAddresses",
@@ -87,7 +87,7 @@ INNER JOIN IpPrefixes ip
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Restrict);
 
-            // 5) Dữ liệu đã nằm an toàn ở IpPrefixes -> xoá 4 cột trùng lặp cũ.
+            // 5) Data is now safely in IpPrefixes -> drop the 4 old duplicate columns.
             migrationBuilder.DropColumn(
                 name: "AlternateDNS",
                 table: "IpAddresses");
@@ -136,7 +136,7 @@ INNER JOIN IpPrefixes ip
                 maxLength: 15,
                 nullable: true);
 
-            // Backfill ngược từ IpPrefixes trước khi xoá bảng/cột liên kết.
+            // Reverse backfill from IpPrefixes before dropping the related table/column.
             migrationBuilder.Sql(@"
 UPDATE ia
 SET ia.SubnetMask = ip.SubnetMask,

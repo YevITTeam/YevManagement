@@ -1,7 +1,7 @@
 namespace Attendance.Domain.Enums;
 
-// Loại phạm vi mà 1 UserApprovalScope trỏ tới (ScopeId tương ứng là Id của bảng nào).
-// OtForm chỉ còn GroupId/DepartmentId (đã bỏ AreaId/LineId) nên ScopeType cũng chỉ còn 2 giá trị này.
+// The type of scope a UserApprovalScope points to (which table ScopeId corresponds to).
+// OtForm only keeps GroupId/DepartmentId (AreaId/LineId removed), so ScopeType only has these 2 values.
 public enum ScopeType
 {
     Group = 0,

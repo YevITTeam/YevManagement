@@ -6,8 +6,8 @@ using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
 {
-    // Admin dùng để khai báo Trưởng phòng/Trưởng xưởng phụ trách duyệt Group/Department nào
-    // (xem docs/attendance-module.md — cơ chế phân quyền Trưởng phòng).
+    // Used by Admin to declare which Trưởng phòng/Trưởng xưởng is responsible for approving which Group/Department
+    // (see docs/attendance-module.md — Trưởng phòng authorization mechanism).
     public class UserApprovalScopeController : BaseController
     {
         private readonly IUserApprovalScopeService _userApprovalScopeService;

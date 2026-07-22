@@ -35,22 +35,22 @@ namespace Identity.Infrastructure.Authentication
             var dbIdentity = new ClaimsIdentity("DbRoles", ClaimTypes.Name, ClaimTypes.Role);
 
             string? ipAddress = GetClientIp();
-            // DeviceName chỉ còn mang tính tham khảo/hiển thị (2026-07-11, đổi lại —
-            // xem ghi chú dưới), không dùng để khớp User nữa nên resolve sau cũng được,
-            // nhưng vẫn resolve ở đây để set/refresh cho User tìm được bên dưới.
+            // DeviceName is now only for reference/display purposes (2026-07-11, changed back —
+            // see the note below), no longer used to match a User, so it could be resolved later,
+            // but it's still resolved here to set/refresh it on the User found below.
             string? deviceName = GetClientDeviceName(ipAddress);
 
             using (var scope = _serviceProvider.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
 
-                // Khớp User theo UserName suông (2026-07-11, đổi lại từ cặp (UserName,
-                // DeviceName) áp dụng 2026-07-10). Lý do đổi: DeviceName resolve qua
-                // reverse-DNS trên IP client không ổn định (NAT, nhiều PTR record...) —
-                // cùng 1 người có thể bị resolve ra 2 hostname khác nhau chỉ trong vài giây,
-                // khiến hệ thống hiểu nhầm là "máy lạ" và tự tạo thêm 1 User trùng mỗi lần
-                // đăng nhập. Đánh đổi: mất tính năng "Role riêng theo từng máy" của
-                // UserService.CreateUserAsync — giờ 1 UserName chỉ còn đúng 1 dòng User.
+                // Matches User by plain UserName (2026-07-11, changed back from the (UserName,
+                // DeviceName) pair applied on 2026-07-10). Reason for the change: DeviceName resolved
+                // via reverse-DNS on the client IP is unstable (NAT, multiple PTR records...) —
+                // the same person could get resolved to 2 different hostnames within a few seconds,
+                // making the system think it's an "unknown machine" and auto-create a duplicate User
+                // on every login. Trade-off: lost the "per-machine Role" feature of
+                // UserService.CreateUserAsync — now one UserName maps to exactly one User row.
                 var user = await dbContext.Users
                     .Include(x => x.Roles).ThenInclude(r => r.Permissions)
                     .Include(x => x.LoginUserIPs)
@@ -68,7 +68,7 @@ namespace Identity.Infrastructure.Authentication
                         DeviceName = deviceName,
                         CreatedAt = TimeHelper.GetCurrentUtcTime(),
                         Roles = new List<Role>(),
-                        LoginUserIPs = new List<LoginUserIP>() // Khởi tạo list IP cho user mới
+                        LoginUserIPs = new List<LoginUserIP>() // Initialize the IP list for the new user
                     };
 
                     var basicRole = await dbContext.Roles.FirstOrDefaultAsync(r => r.RoleName == "Basic");
@@ -82,18 +82,19 @@ namespace Identity.Infrastructure.Authentication
 
                 bool isUpdated = false;
 
-                // Refresh DeviceName hiển thị theo lần đăng nhập gần nhất (không đụng tới
-                // nếu resolve thất bại/null — tránh xoá mất giá trị Admin đã pre-provision).
+                // Refresh the displayed DeviceName based on the most recent login (don't touch it
+                // if resolution failed/null — avoid wiping out a value pre-provisioned by an Admin).
                 if (!string.IsNullOrEmpty(deviceName) && user.DeviceName != deviceName)
                 {
                     user.DeviceName = deviceName;
                     isUpdated = true;
                 }
 
-                // Email: chỉ tự resolve khi ĐANG TRỐNG (khác DeviceName vốn refresh mỗi lần đổi) —
-                // Email dùng để gửi mail xác nhận chữ ký/duyệt đơn (Attendance module) nên không nên
-                // tự đổi âm thầm nếu đã có sẵn; nhưng vẫn tự "chữa lành" cho user cũ chưa có Email
-                // (tạo trước khi tính năng này tồn tại) ở lần đăng nhập kế tiếp mà không cần Admin gán tay.
+                // Email: only auto-resolved when it's CURRENTLY EMPTY (unlike DeviceName, which refreshes
+                // on every change) — Email is used to send signature/form-approval confirmation emails
+                // (Attendance module), so it shouldn't silently change if already set; but it still
+                // "self-heals" for old users without an Email (created before this feature existed) on
+                // their next login, without needing an Admin to set it manually.
                 if (string.IsNullOrEmpty(user.Email))
                 {
                     var resolvedEmail = GetActualEmail(windowsUsername);
@@ -159,9 +160,9 @@ namespace Identity.Infrastructure.Authentication
 
                 if (user.Roles != null)
                 {
-                    // Permission hiệu lực = permission theo Role, cộng permission được cấp
-                    // riêng (UserPermission.IsGranted=true), trừ permission bị thu hồi riêng
-                    // (IsGranted=false) — deny override luôn thắng grant từ Role.
+                    // Effective permission = Role-based permissions, plus individually granted
+                    // permissions (UserPermission.IsGranted=true), minus individually revoked
+                    // permissions (IsGranted=false) — a deny override always wins over a Role grant.
                     var basePermissionCodes = user.Roles.SelectMany(r => r.Permissions).Select(p => p.Code);
 
                     var userPermissions = user.UserPermissions ?? new List<UserPermission>();
@@ -219,15 +220,15 @@ namespace Identity.Infrastructure.Authentication
                         return up.DisplayName;
                     }
                 }
-                catch { /* Bỏ qua nếu lỗi kết nối AD */ }
+                catch { /* Ignore if AD connection fails */ }
             }
             return windowsUsername;
         }
 
-        // Resolve email từ thuộc tính AD "mail" qua UserPrincipal.EmailAddress — cùng cơ chế
-        // System.DirectoryServices.AccountManagement như GetActualFullName ở trên (PrincipalContext
-        // + UserPrincipal.FindByIdentity theo SamAccountName), tách hàm riêng thay vì gộp chung để
-        // không đụng vào logic GetActualFullName đang chạy ổn định.
+        // Resolves email from the AD "mail" attribute via UserPrincipal.EmailAddress — the same
+        // System.DirectoryServices.AccountManagement mechanism as GetActualFullName above (PrincipalContext
+        // + UserPrincipal.FindByIdentity by SamAccountName), kept as a separate function instead of
+        // merging them, to avoid touching the already-stable GetActualFullName logic.
         private string? GetActualEmail(string windowsUsername)
         {
             var parts = windowsUsername.Split('\\');
@@ -289,7 +290,7 @@ namespace Identity.Infrastructure.Authentication
                 var entry = Dns.GetHostEntry(ipAddress);
                 if (entry != null && !string.IsNullOrEmpty(entry.HostName)) return entry.HostName;
             }
-            catch { /* Lỗi Reverse DNS */ }
+            catch { /* Reverse DNS error */ }
             return null;
         }
 

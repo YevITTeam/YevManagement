@@ -1,7 +1,8 @@
 namespace Asset.Application.Dtos.Devices
 {
-    // Gợi ý "máy nào sẽ nhận chuyển tới" cho màn hình "Chuyển máy" mở trên 1 máy cũ —
-    // xem GET /api/Device/{id}/replacement-suggestion, docs/asset-module.md.
+    // Suggests "which device will receive the transfer" for the "Transfer Device" screen
+    // opened on an old device — see GET /api/Device/{id}/replacement-suggestion,
+    // docs/asset-module.md.
     public class DeviceReplacementSuggestionDto
     {
         public int Id { get; set; }

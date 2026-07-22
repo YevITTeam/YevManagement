@@ -8,15 +8,15 @@ using Microsoft.Extensions.Logging;
 
 namespace Asset.Infrastructure.Context;
 
-// Tự động ghi AuditTrail cho mọi Create/Update/Delete đi qua AssetDbContext, chặn tại 1 điểm
-// duy nhất (SaveChangesAsync) thay vì sửa tay từng Service — entity mới thêm sau này tự động
-// được audit, không cần nhớ gọi thêm gì (2026-07-16).
+// Automatically records an AuditTrail for every Create/Update/Delete that goes through AssetDbContext,
+// intercepted at a single point (SaveChangesAsync) instead of manually editing each Service — any new
+// entity added later is audited automatically, no need to remember to call anything extra (2026-07-16).
 public partial class AssetDbContext
 {
     private readonly IHttpContextAccessor? _auditHttpContextAccessor;
     private readonly ILogger<AssetDbContext>? _auditLogger;
 
-    // Bảng tự thân là log/snapshot rồi (đã có audit riêng) — không audit lồng audit.
+    // These tables are themselves logs/snapshots (already their own audit) — avoid nesting audit inside audit.
     private static readonly HashSet<Type> AuditExcludedTypes = new()
     {
         typeof(AuditTrail),
@@ -53,7 +53,7 @@ public partial class AssetDbContext
 
                 case EntityState.Modified:
                     var (oldValues, newValues) = DiffModifiedProperties(entry);
-                    if (oldValues.Count == 0) break; // Update() gọi nhưng không đổi field nào thật
+                    if (oldValues.Count == 0) break; // Update() was called but no field actually changed
                     readyAudits.Add(BuildAuditTrail(entry, DetectModifiedAction(entry), oldValues, newValues, useOriginalForRecordId: false));
                     break;
 
@@ -64,7 +64,7 @@ public partial class AssetDbContext
             }
         }
 
-        // Save nghiệp vụ chính trước — Added entries mới có Id (identity) sau bước này.
+        // Save the main business data first — Added entries only get their Id (identity) after this step.
         var result = await base.SaveChangesAsync(cancellationToken);
 
         foreach (var entry in pendingCreates)
@@ -82,8 +82,8 @@ public partial class AssetDbContext
             }
             catch (Exception ex)
             {
-                // Audit log là best-effort: lỗi ghi log không được làm mất dữ liệu nghiệp vụ
-                // chính đã lưu thành công ở bước base.SaveChangesAsync phía trên.
+                // Audit logging is best-effort: a logging failure must not lose the main business data
+                // that was already saved successfully in the base.SaveChangesAsync step above.
                 _auditLogger?.LogError(ex, "Ghi AuditTrail thất bại sau khi lưu dữ liệu chính.");
             }
         }
@@ -106,8 +106,9 @@ public partial class AssetDbContext
         return (oldValues, newValues);
     }
 
-    // Xoá mềm (IsDeleted false->true) và khôi phục (true->false) đi qua state Modified giống
-    // Update thường — phải tự suy Action đúng dựa trên field IsDeleted thay vì gọi chung "Update".
+    // Soft delete (IsDeleted false->true) and restore (true->false) both go through the Modified state
+    // just like a regular Update — the correct Action must be inferred from the IsDeleted field
+    // instead of just calling it "Update".
     private static string DetectModifiedAction(EntityEntry entry)
     {
         var isDeletedProperty = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "IsDeleted");
@@ -128,9 +129,9 @@ public partial class AssetDbContext
         Dictionary<string, object?>? newValues,
         bool useOriginalForRecordId)
     {
-        // Entity khoá kép (vd DeviceSoftware: DeviceId+SoftwareId) chỉ có 1 cột int đại diện
-        // trong AuditTrail.RecordId -> lấy cột khoá đầu tiên, phần còn lại vẫn nằm trong
-        // Old/NewValues nên không mất thông tin.
+        // Entities with a composite key (e.g. DeviceSoftware: DeviceId+SoftwareId) only get 1 int
+        // column represented in AuditTrail.RecordId -> take the first key column; the rest still
+        // remains in Old/NewValues so no information is lost.
         var pkProperty = entry.Metadata.FindPrimaryKey()!.Properties[0];
         var pkValue = useOriginalForRecordId
             ? entry.Property(pkProperty.Name).OriginalValue

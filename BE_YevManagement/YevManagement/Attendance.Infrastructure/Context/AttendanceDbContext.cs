@@ -69,8 +69,8 @@ public partial class AttendanceDbContext : DbContext
         {
             entity.HasIndex(e => e.Code, "IX_Employees_Code").IsUnique();
             entity.HasIndex(e => e.GroupId, "IX_Employees_GroupId");
-            // Filtered unique index: SQL Server chỉ cho phép 1 NULL trong unique index thường,
-            // filter IS NOT NULL để nhiều nhân viên cùng chưa gán UserName vẫn insert được.
+            // Filtered unique index: SQL Server only allows 1 NULL in a regular unique index,
+            // so filter IS NOT NULL to let multiple employees without an assigned UserName still be insertable.
             entity.HasIndex(e => e.UserName, "IX_Employees_UserName").IsUnique().HasFilter("[UserName] IS NOT NULL");
 
             entity.Property(e => e.Code).HasMaxLength(50);

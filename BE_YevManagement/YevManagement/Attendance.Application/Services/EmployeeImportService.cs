@@ -7,10 +7,10 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Import hàng loạt Employee (upsert theo Code — Code là unique: mã đã tồn tại thì cập nhật lại
-    // FirstName/LastName/GroupId, mã chưa có thì tạo mới) kèm tự tạo Department/Group nếu mã chưa
-    // tồn tại (dữ liệu nhân sự thật thường liệt kê Department/Group ngay trên cùng dòng nhân viên,
-    // không có file riêng).
+    // Bulk import Employees (upsert by Code — Code is unique: if the code already exists, update
+    // FirstName/LastName/GroupId; otherwise create new) with automatic creation of Department/Group
+    // if the code doesn't exist yet (real HR data usually lists Department/Group directly on the
+    // same row as the employee, with no separate file).
     public class EmployeeImportService : BaseService<IAttendanceUnitOfWork>, IEmployeeImportService
     {
         public EmployeeImportService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
@@ -33,8 +33,8 @@ namespace Attendance.Application.Services
 
         public async Task<EmployeeImportConfirmResultDto> ConfirmAsync(ConfirmEmployeeImportDto request)
         {
-            // Validate lại từ đầu theo dữ liệu DB hiện tại (không tin Resolved*/IsNew* do client
-            // gửi lên) — phòng trường hợp dữ liệu đã đổi kể từ lúc người dùng xem bản Preview.
+            // Re-validate from scratch against the current DB data (don't trust the Resolved*/IsNew*
+            // fields sent by the client) — in case the data has changed since the user viewed the Preview.
             var (validatedRows, departmentPlans, groupPlans) = await ValidateAndResolveRowsAsync(request.Rows);
 
             var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
@@ -50,17 +50,19 @@ namespace Attendance.Application.Services
 
             if (validRows.Count == 0) return result;
 
-            // Chỉ tạo Department/Group thực sự được dùng bởi ít nhất 1 dòng nhân viên HỢP LỆ —
-            // tránh tạo rác nếu toàn bộ nhân viên dùng mã đó đều bị skip vì lỗi khác.
+            // Only create Department/Group entries that are actually used by at least 1 VALID
+            // employee row — avoid creating orphan records if all employees using that code get
+            // skipped due to other errors.
             var usedDepartmentCodes = validRows.Select(r => r.DepartmentCode!).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var usedGroupCodes = validRows.Select(r => r.GroupCode!).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             await _unitOfWork.BeginTransactionAsync();
             try
             {
-                // Department/Group mới được gán qua navigation property (chưa có Id thật) thay vì
-                // Id trực tiếp — EF Core tự fix-up khóa ngoại đúng lúc SaveChangesAsync ở cuối,
-                // giống cách OtFormService.CreateAsync gán OtFormEmployee.OtForm = newOtForm.
+                // New Department/Group entities are assigned via navigation property (they don't have
+                // a real Id yet) instead of a direct Id — EF Core automatically fixes up the foreign
+                // key at SaveChangesAsync time, the same way OtFormService.CreateAsync assigns
+                // OtFormEmployee.OtForm = newOtForm.
                 var newDepartmentsByCode = new Dictionary<string, Department>(StringComparer.OrdinalIgnoreCase);
                 foreach (var code in usedDepartmentCodes)
                 {
@@ -101,8 +103,9 @@ namespace Attendance.Application.Services
                     result.CreatedGroupCount++;
                 }
 
-                // Nhân viên đã tồn tại (Code unique, khớp DB) được UPDATE tại chỗ thay vì tạo mới —
-                // chỉ nạp đúng những Employee cần update (không load toàn bộ bảng).
+                // Employees that already exist (Code unique, matched in DB) are UPDATED in place
+                // instead of being created anew — only load the Employees that actually need
+                // updating (not the entire table).
                 var employeeCodesToUpdate = validRows.Where(r => !r.IsNewEmployee).Select(r => r.EmployeeCode!).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var employeesToUpdateByCode = employeeCodesToUpdate.Count == 0
                     ? new Dictionary<string, Employee>(StringComparer.OrdinalIgnoreCase)
@@ -138,9 +141,9 @@ namespace Attendance.Application.Services
                     }
                     else
                     {
-                        // Chỉ cập nhật họ tên + nhóm — KHÔNG đụng MonthToDate/YearToDate/AccumulationYear/
-                        // AccumulationMonth/UserName vì file Excel không có các cột này, re-import không
-                        // được phép xóa mất lũy kế OT hay tài khoản AD đã gán cho nhân viên trước đó.
+                        // Only update the name + group — DO NOT touch MonthToDate/YearToDate/AccumulationYear/
+                        // AccumulationMonth/UserName since the Excel file has no such columns; re-importing
+                        // must not wipe out OT accumulation or the AD account already assigned to the employee.
                         var existingEmployee = employeesToUpdateByCode[row.EmployeeCode!];
                         existingEmployee.FirstName = row.ResolvedFirstName!;
                         existingEmployee.LastName = row.ResolvedLastName!;
@@ -165,8 +168,8 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // Kết quả resolve 1 mã Department/Group: đã tồn tại (ExistingId có giá trị) hay sẽ tạo mới,
-        // và có xung đột tên/phòng ban giữa các dòng trong file hay không (HasConflict).
+        // Result of resolving 1 Department/Group code: already exists (ExistingId has a value) or will
+        // be created new, and whether there's a name/department conflict between rows in the file (HasConflict).
         private sealed class DepartmentResolution
         {
             public int? ExistingId { get; set; }
@@ -194,8 +197,9 @@ namespace Attendance.Application.Services
 
             var duplicatedEmployeeCodesInFile = FindDuplicates(rawRows, r => r.EmployeeCode);
 
-            // Phase 1: gom định nghĩa Department/Group duy nhất theo mã trong file, phát hiện xung
-            // đột (tên khác nhau cho cùng mã mới, hoặc mã Group đã thuộc Department khác trong DB).
+            // Phase 1: collect unique Department/Group definitions by code across the file, detect
+            // conflicts (different names for the same new code, or a Group code that already belongs
+            // to a different Department in the DB).
             var departmentPlans = new Dictionary<string, DepartmentResolution>(StringComparer.OrdinalIgnoreCase);
             var groupPlans = new Dictionary<string, GroupResolution>(StringComparer.OrdinalIgnoreCase);
 
@@ -245,7 +249,7 @@ namespace Attendance.Application.Services
                 }
             }
 
-            // Phase 2: validate từng dòng nhân viên, tham chiếu lại các plan Department/Group ở trên.
+            // Phase 2: validate each employee row, referencing the Department/Group plans built above.
             var result = new List<EmployeeImportRowDto>();
             foreach (var row in rawRows)
             {
@@ -264,9 +268,10 @@ namespace Attendance.Application.Services
                 }
                 else
                 {
-                    // Trùng mã NGAY TRONG FILE vẫn là lỗi (không biết dòng nào đúng) — nhưng trùng
-                    // với mã ĐÃ CÓ SẴN TRONG DB thì không còn là lỗi nữa, Confirm sẽ cập nhật lại
-                    // thông tin nhân viên đó (upsert theo Code, xem EmployeeImportRowDto.IsNewEmployee).
+                    // A code duplicated WITHIN THE FILE is still an error (can't tell which row is
+                    // correct) — but a code that ALREADY EXISTS IN THE DB is no longer an error;
+                    // Confirm will update that employee's info instead (upsert by Code, see
+                    // EmployeeImportRowDto.IsNewEmployee).
                     if (duplicatedEmployeeCodesInFile.Contains(employeeCode))
                         errors.Add($"Mã nhân viên '{employeeCode}' bị lặp lại nhiều dòng trong file.");
                     isNewEmployee = !existingEmployeeCodes.Contains(employeeCode);
@@ -280,8 +285,8 @@ namespace Attendance.Application.Services
                 }
                 else
                 {
-                    // Từ cuối cùng = tên riêng (FirstName), phần còn lại = họ + tên đệm (LastName) —
-                    // khớp convention hiển thị "{LastName} {FirstName}" đang dùng ở OtFormService.
+                    // Last word = given name (FirstName), the rest = family + middle name (LastName) —
+                    // matches the "{LastName} {FirstName}" display convention used in OtFormService.
                     var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     resolvedFirstName = parts[^1];
                     resolvedLastName = parts.Length > 1 ? string.Join(' ', parts[..^1]) : string.Empty;
@@ -345,11 +350,11 @@ namespace Attendance.Application.Services
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
-        // Cột theo mẫu Excel nhân sự thật: A=No. (bỏ qua, không dùng), B=Employee code, C=Full name,
-        // D=Department (mã), E=Department Name, F=Group (mã), G=Group Name.
-        // Dòng header KHÔNG cố định ở dòng 1 — file thật có thể có tiêu đề/dòng trống phía trên
-        // (2026-07-16, phát hiện khi test file thật: header nằm ở dòng 13) — nên tự dò dòng header
-        // bằng cách tìm dòng có cột B = "Employee code" thay vì giả định luôn là dòng đầu tiên.
+        // Columns per the real HR Excel template: A=No. (ignored, unused), B=Employee code, C=Full name,
+        // D=Department (code), E=Department Name, F=Group (code), G=Group Name.
+        // The header row is NOT fixed at row 1 — real files may have a title/blank rows above it
+        // (2026-07-16, discovered while testing a real file: the header was on row 13) — so we detect
+        // the header row by finding the row where column B = "Employee code" instead of assuming it's always the first row.
         private const string HeaderMarkerCellB = "Employee code";
 
         private static List<EmployeeImportRowDto> ParseXlsx(Stream stream)
@@ -361,9 +366,9 @@ namespace Attendance.Application.Services
             }
             catch (Exception ex) when (ex is not DomainException)
             {
-                // Kèm loại + message của exception gốc vào Errors (trả về trong ApiResponse.errors) —
-                // "File Excel không hợp lệ" là message chung chung, không đủ để tự chẩn đoán nguyên
-                // nhân thật (VD file .xls cũ ClosedXML không đọc được, file bị mã hoá mật khẩu...).
+                // Include the underlying exception's type + message in Errors (returned in
+                // ApiResponse.errors) — "Invalid Excel file" is too generic on its own to diagnose the
+                // real cause (e.g. an old .xls file ClosedXML can't read, a password-protected file...).
                 throw new DomainException(
                     "File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx).",
                     new List<string> { $"{ex.GetType().Name}: {ex.Message}" });

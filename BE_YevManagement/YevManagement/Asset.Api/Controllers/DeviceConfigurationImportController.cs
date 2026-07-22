@@ -16,8 +16,8 @@ namespace Asset.Api.Controllers
             _deviceConfigurationImportService = deviceConfigurationImportService;
         }
 
-        // Dùng lại permission Asset.DeviceConfiguration.Update — import chỉ cập nhật cấu
-        // hình thiết bị đã tồn tại, không tự tạo Device mới.
+        // Reuses the Asset.DeviceConfiguration.Update permission — import only updates the
+        // configuration of existing devices, it does not create new Devices.
         [RequirePermission("Asset.DeviceConfiguration.Update")]
         [HttpPost("preview")]
         public async Task<ActionResult<ApiResponse<DeviceConfigurationImportPreviewResultDto>>> Preview(IFormFile file)

@@ -17,16 +17,16 @@ namespace Asset.Infrastructure.Migrations
                 nullable: false,
                 defaultValue: false);
 
-            // Thêm NULLABLE trước để không vỡ 5202 dòng hiện có, backfill xong mới siết NOT NULL.
+            // Add as NULLABLE first so the existing 5202 rows aren't broken, tighten to NOT NULL after backfilling.
             migrationBuilder.AddColumn<int>(
                 name: "DepreciationMonths",
                 table: "Devices",
                 type: "int",
                 nullable: true);
 
-            // Đã kiểm chứng read-only trước khi viết migration: DATEDIFF(MONTH, PurchaseDate,
-            // ExpirationDate) khớp chính xác 100% trên toàn bộ 5202 thiết bị (chỉ 2 giá trị
-            // 60/48 tháng, không NULL, không xung đột) -> backfill này an toàn.
+            // Verified read-only before writing this migration: DATEDIFF(MONTH, PurchaseDate,
+            // ExpirationDate) matches exactly 100% across all 5202 devices (only 2 values,
+            // 60/48 months, no NULLs, no conflicts) -> this backfill is safe.
             migrationBuilder.Sql(@"
 UPDATE Devices
 SET DepreciationMonths = DATEDIFF(MONTH, PurchaseDate, ExpirationDate);

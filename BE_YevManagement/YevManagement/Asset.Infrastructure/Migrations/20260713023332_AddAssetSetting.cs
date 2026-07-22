@@ -23,7 +23,7 @@ namespace Asset.Infrastructure.Migrations
                     table.PrimaryKey("PK_AssetSettings", x => x.Id);
                 });
 
-            // Seed đúng 1 dòng cấu hình mặc định (2 tháng) — Admin tự đổi sau qua PUT /api/AssetSetting.
+            // Seed exactly 1 default configuration row (2 months) — Admin can change it later via PUT /api/AssetSetting.
             migrationBuilder.Sql(@"
 INSERT INTO AssetSettings (LiquidationAfterMonths) VALUES (2);
 ");

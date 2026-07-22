@@ -2,13 +2,13 @@ using System.Net;
 
 namespace Shared.Application.Helper
 {
-    // Kiểm tra hợp lệ IPv4 + quan hệ subnet, port từ logic của công cụ ChangeIP nội bộ
-    // (SetIP.cs: IsValidIP/IsSameSubnet/GetNetworkClass). Dùng chung khi tạo dải mạng
-    // (IpPrefix) để đảm bảo Gateway/DNS/SubnetMask nhập vào là IP hợp lệ và Gateway thực sự
-    // nằm cùng subnet với dải IP sẽ sinh ra.
+    // Validates IPv4 addresses + subnet relationships, ported from the internal ChangeIP tool's logic
+    // (SetIP.cs: IsValidIP/IsSameSubnet/GetNetworkClass). Shared when creating network ranges
+    // (IpPrefix) to ensure the entered Gateway/DNS/SubnetMask are valid IPs and the Gateway actually
+    // lies in the same subnet as the IP range being generated.
     public static class NetworkHelper
     {
-        // Đúng 4 octet, mỗi octet 0..255 (không chấp nhận khoảng trắng/ký tự thừa).
+        // Exactly 4 octets, each 0..255 (no whitespace/extra characters allowed).
         public static bool IsValidIpv4(string? value)
         {
             if (string.IsNullOrWhiteSpace(value)) return false;
@@ -20,13 +20,13 @@ namespace Shared.Application.Helper
             {
                 if (!int.TryParse(part, out var number)) return false;
                 if (number < 0 || number > 255) return false;
-                // Chặn "01"/" 1"/"+1"... — chỉ nhận đúng dạng số nguyên chuẩn của octet.
+                // Rejects "01"/" 1"/"+1"... — only accepts the canonical integer format for an octet.
                 if (part != number.ToString()) return false;
             }
             return true;
         }
 
-        // 3 octet đầu của 1 IPv4 (VD "10.45.1.20" → "10.45.1"). Trả về null nếu IP không hợp lệ.
+        // The first 3 octets of an IPv4 address (e.g. "10.45.1.20" → "10.45.1"). Returns null if the IP is invalid.
         public static string? GetNetworkClass(string? ip)
         {
             if (!IsValidIpv4(ip)) return null;
@@ -59,8 +59,8 @@ namespace Shared.Application.Helper
             return key;
         }
 
-        // ip và gateway có cùng subnet theo subnetMask hay không (bitwise AND từng octet).
-        // Trả về false nếu bất kỳ tham số nào không phải IPv4 hợp lệ.
+        // Whether ip and gateway are in the same subnet according to subnetMask (bitwise AND per octet).
+        // Returns false if any parameter is not a valid IPv4 address.
         public static bool IsSameSubnet(string? ip, string? gateway, string? subnetMask)
         {
             if (!IsValidIpv4(ip) || !IsValidIpv4(gateway) || !IsValidIpv4(subnetMask)) return false;

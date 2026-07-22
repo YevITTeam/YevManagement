@@ -2,10 +2,11 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Asset.Application.Dtos.IpAddresses
 {
-    // Cập nhật IpAddress — CHỈ cho đổi Status + Note (2026-07-11, quyết định người dùng).
-    // Không cho đổi IpAddress/IpPrefix/DeviceId (IP sinh cố định theo prefix; gán/gỡ thiết
-    // bị đi qua action assign/unassign riêng). Status hợp lệ: 0=Chưa gán, 1=Đã gán (khác);
-    // 2=Đã gán chỉ do hệ thống tự set khi có DeviceId, không đặt tay được ở đây.
+    // Update IpAddress — ONLY allows changing Status + Note (2026-07-11, user decision).
+    // Does not allow changing IpAddress/IpPrefix/DeviceId (the IP is fixed based on the prefix;
+    // assigning/unassigning a device goes through separate assign/unassign actions). Valid
+    // Status values: 0=Unassigned, 1=Assigned (external); 2=Assigned is only set automatically
+    // by the system when there is a DeviceId, it cannot be set manually here.
     public class UpdateIpAddressDto
     {
         [Required(ErrorMessage = "Id không được để trống")]

@@ -60,7 +60,7 @@ namespace Identity.Infrastructure.Migrations
                 table: "RolePermissions",
                 column: "PermissionId");
 
-            // Seed danh sách permission cố định, suy ra từ controller/action hiện có.
+            // Seed the fixed permission list, derived from existing controllers/actions.
             migrationBuilder.Sql(@"
 INSERT INTO Permissions (Code, Module, Description) VALUES
 (N'Asset.Branch.View', N'Asset', N'Xem danh sách / chi tiết chi nhánh'),

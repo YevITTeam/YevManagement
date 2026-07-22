@@ -2,32 +2,35 @@ using System;
 
 namespace Attendance.Domain.Entities;
 
-// Token gửi kèm link email cho 1 người duyệt (Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc) — kênh BỔ
-// SUNG cho nút Duyệt/Từ chối có sẵn trong app, vì cấp quản lý ít khi mở app. Khi xác nhận, token
-// này chỉ dùng để resolve ApproverUserName/ApprovalLevel rồi gọi thẳng OtFormService.ApproveAsync/
-// RejectAsync đã có sẵn — không viết lại logic duyệt.
+// Token sent with an email link to a specific approver (Department Manager/Workshop Manager/General
+// Director) — an ADDITIONAL channel alongside the existing Approve/Reject buttons in the app, since
+// managers rarely open the app. On confirmation, this token is only used to resolve
+// ApproverUserName/ApprovalLevel and then directly calls the existing
+// OtFormService.ApproveAsync/RejectAsync — no approval logic is duplicated.
 public partial class OtFormApprovalEmailToken
 {
     public int Id { get; set; }
 
     public int OtFormId { get; set; }
 
-    // Người duyệt cụ thể mà email này được gửi tới — snapshot tại lúc gửi mail, không tự đổi theo
-    // UserApprovalScope hiện tại (đơn có thể có nhiều người cùng phạm vi, mỗi người có token riêng).
+    // The specific approver this email was sent to — a snapshot at the time the mail was sent, does
+    // not change with the current UserApprovalScope (a form can have multiple people in the same
+    // scope, each with their own token).
     public string ApproverUserName { get; set; } = null!;
 
     public string? ApproverFullName { get; set; }
 
-    // Lưu enum Attendance.Domain.Enums.ApprovalLevel dưới dạng int — cấp duyệt tại thời điểm gửi
-    // mail (DepartmentManager/WorkshopManager/GeneralDirector). ApproveAsync/RejectAsync vẫn tự
-    // re-check theo Status hiện tại của đơn nên token cũ (đơn đã qua cấp) tự nhiên vô hiệu.
+    // Stores the Attendance.Domain.Enums.ApprovalLevel enum as an int — the approval level at the
+    // time the mail was sent (DepartmentManager/WorkshopManager/GeneralDirector). ApproveAsync/RejectAsync
+    // still re-check against the form's current Status, so an old token (form already past that
+    // level) naturally becomes invalid.
     public int ApprovalLevel { get; set; }
 
     public string Token { get; set; } = null!;
 
     public DateTime ExpiresAt { get; set; }
 
-    // Null = chưa dùng. Có giá trị = đã bấm Duyệt hoặc Từ chối qua link này lúc nào.
+    // Null = not used yet. A value = the timestamp when Approve or Reject was clicked via this link.
     public DateTime? UsedAt { get; set; }
 
     public DateTime CreatedAt { get; set; }

@@ -19,7 +19,7 @@ namespace Attendance.Api.Controllers
             _otFormService = otFormService;
         }
 
-        // Đơn do CHÍNH mình tạo (Trưởng nhóm xem lại đơn của nhóm mình).
+        // Forms created by the CURRENT user (Team Leader reviewing their own team's forms).
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("my-forms")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyForms(
@@ -29,8 +29,8 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — dùng permission Create vì Role
-        // Trưởng nhóm không có Attendance.OTForm.Approve.
+        // Draft forms awaiting sign-off from the CURRENT user (Team Leader) — uses the Create
+        // permission since the Team Leader role does not have Attendance.OTForm.Approve.
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpGet("pending-submissions")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingSubmissions(
@@ -41,7 +41,8 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Đơn đang chờ CHÍNH mình duyệt (Trưởng phòng/Trưởng xưởng theo UserApprovalScope, hoặc TGĐ bypass scope).
+        // Forms awaiting approval from the CURRENT user (Department Manager/Workshop Manager via
+        // UserApprovalScope, or General Director bypassing the scope check).
         [RequirePermission("Attendance.OTForm.Approve")]
         [HttpGet("pending-approvals")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingApprovals(
@@ -52,9 +53,10 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối (bất kỳ cấp nào) — dùng chung cho cả 4 vai trò vì
-        // tất cả đều có sẵn Attendance.OTForm.View. Khác my-forms (chỉ hiện đơn TỰ TẠO) và pending-*
-        // (chỉ hiện đơn CHƯA xử lý) — đây là nơi xem lại đơn ĐÃ xử lý xong.
+        // History of forms the CURRENT user has Signed/Approved/Rejected (any level) — shared by all 4
+        // roles since they all already have Attendance.OTForm.View. Different from my-forms (only
+        // shows SELF-CREATED forms) and pending-* (only shows forms NOT YET processed) — this is where
+        // you review forms that have ALREADY been processed.
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("my-actions")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyActions(
@@ -64,8 +66,9 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Đơn tôi CÓ TÊN trong danh sách nhân viên tăng ca (OtFormEmployee) — không nhất thiết là người
-        // tạo/ký/duyệt. Dành cho mọi user (kể cả Role "Nhân viên", chỉ cần OTForm.View).
+        // Forms I am LISTED on in the OT employee list (OtFormEmployee) — not necessarily the person
+        // who created/signed/approved it. Available to every user (including Role "Nhân viên", only
+        // needs OTForm.View).
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("my-participations")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyParticipations(
@@ -83,9 +86,10 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // (Các) Group người gọi được phép tạo đơn — FE gọi trước khi mở màn "Tạo đơn tăng ca" để tự
-        // điền sẵn Bộ phận/Phòng ban thay vì bắt chọn tự do (Nhân viên/Trưởng nhóm vốn chỉ tạo được
-        // cho đúng phạm vi cố định). Mảng rỗng với Admin (không giới hạn) — FE giữ nguyên dropdown cũ.
+        // The Group(s) the caller is allowed to create forms for — FE calls this before opening the
+        // "Create OT form" screen to pre-fill the Group/Department instead of forcing a free choice
+        // (Employee/Team Leader can only create for their own fixed scope anyway). Empty array for
+        // Admin (no restriction) — FE keeps the old dropdown as-is.
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpGet("my-create-scopes")]
         public async Task<ActionResult<ApiResponse<List<MyCreateScopeItemDto>>>> GetMyCreateScopes()
@@ -95,9 +99,9 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Tạo đơn — chỉ tạo bản nháp (Draft), CHƯA ký "Người đề nghị". Người tạo đơn chỉ chịu trách
-        // nhiệm nhập liệu; Trưởng nhóm phải tự gọi POST /{id}/submit để ký duyệt thì đơn mới thật sự
-        // vào luồng (xem docs/attendance-module.md).
+        // Create a form — only creates a draft (Draft), NOT YET signed as "Requester". The form
+        // creator is only responsible for data entry; the Team Leader must call POST /{id}/submit
+        // themselves to sign before the form actually enters the flow (see docs/attendance-module.md).
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateOtFormDto request)
@@ -107,10 +111,11 @@ namespace Attendance.Api.Controllers
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công (đang ở trạng thái nháp, chờ Trưởng nhóm ký duyệt).");
         }
 
-        // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).
-        // BE tự lấy chữ ký từ UserSignature đã đăng ký sẵn của người gọi. Người gọi phải được gán
-        // UserApprovalScope (ApprovalLevel=Submitter, chỉ Role "Trưởng nhóm" mới được gán) khớp
-        // group/department của đơn, trừ Admin bypass (xem docs/attendance-module.md).
+        // Team Leader signs as "Requester" — moves the form from Draft to Pending (awaiting Department
+        // Manager). BE automatically takes the signature from the caller's already-registered
+        // UserSignature. The caller must be assigned a UserApprovalScope (ApprovalLevel=Submitter,
+        // only Role "Trưởng nhóm" can be assigned this) matching the form's group/department, except
+        // Admin bypasses this (see docs/attendance-module.md).
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpPost("{id}/submit")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> Submit(int id, [FromBody] ApproveOtFormDto request)
@@ -120,8 +125,9 @@ namespace Attendance.Api.Controllers
             return Success(result, "Trưởng nhóm ký duyệt thành công, đơn đã chuyển lên chờ Trưởng phòng.");
         }
 
-        // Sửa toàn bộ đơn — chỉ chính người tạo và chỉ khi đơn còn Draft hoặc Pending (Service validate
-        // cả 2 điều kiện). Qua cấp Trưởng phòng trở lên là khóa cứng, không sửa được nữa (xem docs/attendance-module.md).
+        // Edit the entire form — only the creator, and only while the form is still Draft or Pending
+        // (Service validates both conditions). Once past the Department Manager level it becomes
+        // locked and can no longer be edited (see docs/attendance-module.md).
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> Update(int id, [FromBody] UpdateOtFormDto request)
@@ -149,10 +155,11 @@ namespace Attendance.Api.Controllers
             return Success(true, "Từ chối đơn thành công.");
         }
 
-        // 3 action công khai bên dưới phục vụ trang xác nhận nhỏ mà FE mở khi người duyệt (Trưởng
-        // phòng/Trưởng xưởng/Tổng Giám Đốc) bấm link Duyệt/Từ chối trong email — KÊNH BỔ SUNG cho
-        // 2 nút Approve/Reject trong app ở trên, không thay thế. Token tự nó là thông tin xác thực
-        // duy nhất (xem docs/attendance-module.md) — đây là bề mặt [AllowAnonymous] thứ 2 của hệ thống.
+        // The 3 public actions below serve the small confirmation page the FE opens when an approver
+        // (Department Manager/Workshop Manager/General Director) clicks the Approve/Reject link in the
+        // email — a SUPPLEMENTARY CHANNEL to the 2 Approve/Reject buttons in the app above, not a
+        // replacement. The token itself is the sole authentication credential (see
+        // docs/attendance-module.md) — this is the 2nd [AllowAnonymous] surface in the system.
         [AllowAnonymous]
         [HttpGet("email-confirm/{token}")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> GetByEmailToken(string token)

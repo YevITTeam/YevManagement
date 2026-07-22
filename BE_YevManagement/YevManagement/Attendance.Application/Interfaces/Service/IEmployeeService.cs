@@ -13,7 +13,7 @@ namespace Attendance.Application.Interfaces.Service
         Task UpdateAsync(UpdateEmployeeDto request);
         Task DeleteAsync(int id);
 
-        // canAdjustAny=true (permission Attendance.Employee.Update) bỏ qua check UserName == currentUserName.
+        // canAdjustAny=true (permission Attendance.Employee.Update) skips the UserName == currentUserName check.
         Task AdjustAccumulationAsync(int employeeId, string currentUserName, bool canAdjustAny, AdjustEmployeeAccumulationDto request);
     }
 }

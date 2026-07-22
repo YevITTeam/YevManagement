@@ -88,8 +88,8 @@ namespace Asset.Infrastructure.Migrations
                 principalTable: "DeviceGroups",
                 principalColumn: "Id");
 
-            // Seed 1 dòng mặc định mỗi bảng để FE có sẵn lựa chọn ngay — chưa biết danh sách
-            // Nhóm/Bộ phận thực tế của công ty, quản lý (Admin) tự thêm/sửa qua CRUD API sau.
+            // Seed 1 default row per table so the FE has an option available right away — the
+            // company's actual Group/Department list is not known yet, Admin can add/edit via the CRUD API later.
             migrationBuilder.Sql(@"
 INSERT INTO DeviceGroups (GroupCode, GroupName, IsDeleted) VALUES (N'MD', N'Mặc định', 0);
 INSERT INTO DeviceDepartments (DepartmentCode, DepartmentName, IsDeleted) VALUES (N'MD', N'Mặc định', 0);

@@ -6,8 +6,8 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
         public int TotalRows { get; set; }
         public int ValidRows { get; set; }
         public int InvalidRows { get; set; }
-        // Số dòng có Computer Name không khớp 6 họ mã cần import (YDC/YLC/YDF/AC/DA/TYC)
-        // — bị loại khỏi Rows, không tính là lỗi.
+        // Number of rows whose Computer Name doesn't match any of the 6 code families to
+        // import (YDC/YLC/YDF/AC/DA/TYC) — excluded from Rows, not counted as an error.
         public int OutOfScopeSkippedCount { get; set; }
     }
 }

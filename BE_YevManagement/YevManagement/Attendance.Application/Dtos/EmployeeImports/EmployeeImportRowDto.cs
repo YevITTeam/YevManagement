@@ -1,9 +1,10 @@
 namespace Attendance.Application.Dtos.EmployeeImports
 {
-    // 1 dòng nhân sự parse từ Excel: Employee code, Full name, Department (mã+tên), Group (mã+tên).
-    // Dùng chung cho response Preview (server điền Resolved*/IsNew*/IsValid/Errors) và request
-    // Confirm (client gửi lại y hệt field gốc, server tự re-resolve từ đầu, không tin field
-    // Resolved*/IsNew* do client gửi lên — cùng nguyên tắc với DeviceImportRowDto ở module Asset).
+    // 1 HR row parsed from Excel: Employee code, Full name, Department (code+name), Group (code+name).
+    // Shared by the Preview response (server fills in Resolved*/IsNew*/IsValid/Errors) and the
+    // Confirm request (client sends back the exact same original fields, server re-resolves from
+    // scratch, not trusting the Resolved*/IsNew* fields sent by the client — same principle as
+    // DeviceImportRowDto in the Asset module).
     public class EmployeeImportRowDto
     {
         public int RowNumber { get; set; }
@@ -15,14 +16,15 @@ namespace Attendance.Application.Dtos.EmployeeImports
         public string? GroupCode { get; set; }
         public string? GroupNameVn { get; set; }
 
-        // Tách từ FullName — từ cuối cùng = FirstName (tên riêng), phần còn lại = LastName (họ +
-        // tên đệm), khớp đúng convention hiển thị "{LastName} {FirstName}" đang dùng ở OtFormService.
+        // Split from FullName — last word = FirstName (given name), the rest = LastName (family +
+        // middle name), matching the "{LastName} {FirstName}" display convention used in OtFormService.
         public string? ResolvedFirstName { get; set; }
         public string? ResolvedLastName { get; set; }
 
-        // Cờ thông tin — phòng ban/nhóm/nhân viên này chưa tồn tại trong hệ thống, sẽ được tạo mới
-        // lúc Confirm. Mã nhân viên là duy nhất (unique) — nếu đã tồn tại thì Confirm sẽ CẬP NHẬT
-        // (FirstName/LastName/GroupId) thay vì báo lỗi trùng (2026-07-16, đổi từ chỉ-tạo-mới sang upsert).
+        // Informational flags — this department/group/employee doesn't exist in the system yet and
+        // will be created at Confirm time. The employee code is unique — if it already exists,
+        // Confirm will UPDATE (FirstName/LastName/GroupId) instead of raising a duplicate error
+        // (2026-07-16, changed from create-only to upsert).
         public bool IsNewDepartment { get; set; }
         public bool IsNewGroup { get; set; }
         public bool IsNewEmployee { get; set; }

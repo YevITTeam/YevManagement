@@ -109,9 +109,9 @@ namespace Identity.Application.Services
             var userName = request.UserName.Trim();
             var deviceName = string.IsNullOrWhiteSpace(request.DeviceName) ? null : request.DeviceName.Trim();
 
-            // Định danh đăng nhập là UserName suông (2026-07-11, đổi lại — xem
-            // MyClaimsTransformation). Không cho tạo trùng UserName để tránh 2 dòng User
-            // cùng khớp 1 lần đăng nhập thật.
+            // Login identity is the plain UserName (2026-07-11, changed back — see
+            // MyClaimsTransformation). Duplicate UserName creation is not allowed, to avoid
+            // 2 User rows matching the same real login.
             var existingUser = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == userName);
             if (existingUser != null)
                 throw new DomainException($"Người dùng '{userName}' đã tồn tại.");
@@ -146,9 +146,10 @@ namespace Identity.Application.Services
             };
         }
 
-        // Hard delete: xoá hẳn User khỏi DB (không có IsDeleted trên entity này).
-        // UserRoles/LoginUserIPs/UserPermissions cascade tự động ở DB. Nếu UserName này
-        // đăng nhập Windows lại, MyClaimsTransformation sẽ tạo mới User với role mặc định "Basic".
+        // Hard delete: permanently removes the User from the DB (this entity has no IsDeleted).
+        // UserRoles/LoginUserIPs/UserPermissions cascade automatically at the DB level. If this
+        // UserName logs in via Windows again, MyClaimsTransformation will create a new User with
+        // the default "Basic" role.
         public async Task DeleteUserAsync(int userId)
         {
             var user = await _unitOfWork.Users.GetByIdAsync(userId);

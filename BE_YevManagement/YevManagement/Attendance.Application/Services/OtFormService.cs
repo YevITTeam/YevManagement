@@ -14,19 +14,20 @@ namespace Attendance.Application.Services
 {
     public class OtFormService : BaseService<IAttendanceUnitOfWork>, IOtFormService
     {
-        // Số giờ OT tối thiểu (không tính bằng) để nhân viên đủ điều kiện phiếu ăn (xem docs/attendance-module.md).
+        // Minimum OT hours (not equal to) for an employee to be eligible for a meal ticket (see docs/attendance-module.md).
         private const decimal MinHoursForMealTicket = 2m;
 
-        // Dài hơn hẳn hạn PendingSignatureConfirmation — cấp trên (Trưởng phòng/Trưởng xưởng/TGĐ)
-        // ít khi mở app/hộp thư ngay, cần đủ thời gian để họ xử lý (xem docs/attendance-module.md).
+        // Much longer than the PendingSignatureConfirmation expiry — superiors (Department Manager/
+        // Workshop Manager/General Director) rarely open the app/mailbox right away, so they need
+        // enough time to process it (see docs/attendance-module.md).
         private const int EmailApprovalTokenExpiryDays = 3;
 
         private const string GeneralDirectorRoleName = "Tổng Giám Đốc";
 
-        // Dùng chung cho mọi endpoint danh sách (my-forms/pending-submissions/pending-approvals/
-        // my-actions/my-participations) — tránh lặp lại cùng 1 khối Select ở 5 nơi. EF Core tự dịch
-        // OtFormApprovalHistories (navigation collection, xem OtForm.cs) thành subquery, không cần
-        // .Include() riêng (xem docs/attendance-module.md).
+        // Shared by all list endpoints (my-forms/pending-submissions/pending-approvals/
+        // my-actions/my-participations) — avoids repeating the same Select block in 5 places. EF Core
+        // automatically translates OtFormApprovalHistories (navigation collection, see OtForm.cs) into
+        // a subquery, no separate .Include() needed (see docs/attendance-module.md).
         private static readonly Expression<Func<OtForm, OtFormListItemDto>> ToListItemDto = x => new OtFormListItemDto
         {
             Id = x.Id,
@@ -79,9 +80,9 @@ namespace Attendance.Application.Services
             return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
         }
 
-        // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — endpoint riêng, gate bằng
-        // Attendance.OTForm.Create (không phải .Approve, vì Trưởng nhóm role không có permission
-        // Approve — xem docs/attendance-module.md §Người tạo đơn KHÁC Trưởng nhóm).
+        // Draft forms awaiting sign-off from the CURRENT user (Team Leader) — a separate endpoint,
+        // gated by Attendance.OTForm.Create (not .Approve, since the Team Leader role does not have
+        // the Approve permission — see docs/attendance-module.md §Form creator DIFFERENT from Team Leader).
         public async Task<PagedResponse<OtFormListItemDto>> GetPendingSubmissionsAsync(
             string currentUserName, bool isAdmin, int pageIndex, int pageSize)
         {
@@ -105,11 +106,12 @@ namespace Attendance.Application.Services
             return await _unitOfWork.OtForms.ToPagedResponseAsync(draftQuery, pageIndex, pageSize, ToListItemDto);
         }
 
-        // Lịch sử đơn CHÍNH mình đã xử lý (Ký/Duyệt/Từ chối) ở BẤT KỲ cấp nào (Submitter/DepartmentManager/
-        // WorkshopManager/GeneralDirector) — dùng chung cho cả 4 vai trò vì tất cả đều có sẵn permission
-        // Attendance.OTForm.View. Trước đây không có cách nào xem lại: `my-forms` chỉ lọc theo người TẠO
-        // đơn (không phải người ký/duyệt), còn `pending-submissions`/`pending-approvals` chỉ hiện đơn
-        // CHƯA xử lý — đơn vừa xử lý xong lập tức biến mất khỏi 2 danh sách đó (xem docs/attendance-module.md).
+        // History of forms the CURRENT user has processed (Signed/Approved/Rejected) at ANY level
+        // (Submitter/DepartmentManager/WorkshopManager/GeneralDirector) — shared by all 4 roles since
+        // they all already have the Attendance.OTForm.View permission. Previously there was no way to
+        // look this up: `my-forms` only filters by the form CREATOR (not the signer/approver), while
+        // `pending-submissions`/`pending-approvals` only show forms NOT YET processed — a form that was
+        // just processed instantly disappears from those 2 lists (see docs/attendance-module.md).
         public async Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(string userName, int pageIndex, int pageSize)
         {
             var actedFormIds = await _unitOfWork.OtFormApprovalHistories.SelectAsync(
@@ -123,9 +125,10 @@ namespace Attendance.Application.Services
             return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
         }
 
-        // Đơn tôi CÓ TÊN trong danh sách nhân viên tăng ca (OtFormEmployee) — không nhất thiết là người
-        // tạo/ký/duyệt đơn đó. Dành cho mọi user Attendance (kể cả Role "Nhân viên", chỉ cần OTForm.View),
-        // suy ra qua Employee.UserName liên kết với account đang gọi (2026-07-17, xem docs/attendance-module.md).
+        // Forms I am LISTED on in the OT employee list (OtFormEmployee) — not necessarily the person
+        // who created/signed/approved that form. Available to every Attendance user (including Role
+        // "Nhân viên", only needs OTForm.View), derived via Employee.UserName linked to the calling
+        // account (2026-07-17, see docs/attendance-module.md).
         public async Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(string userName, int pageIndex, int pageSize)
         {
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted);
@@ -148,8 +151,9 @@ namespace Attendance.Application.Services
         {
             var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x => !x.IsDeleted && x.UserName == approverUserName);
 
-            // GroupHead (Trưởng Bộ phận, mới 2026-07-17) — cấp trung gian giữa Trưởng nhóm và Trưởng
-            // phòng, cùng cơ chế scope Group/Department như DepartmentManager/WorkshopManager bên dưới.
+            // GroupHead (Trưởng Bộ phận, new as of 2026-07-17) — an intermediate level between Team
+            // Leader and Department Manager, using the same Group/Department scope mechanism as
+            // DepartmentManager/WorkshopManager below.
             var groupHeadDepartmentIds = scopes
                 .Where(s => s.ApprovalLevel == (int)ApprovalLevel.GroupHead && s.ScopeType == (int)ScopeType.Department)
                 .Select(s => s.ScopeId).ToList();
@@ -276,15 +280,16 @@ namespace Attendance.Application.Services
             var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == request.OtCaseId && !x.IsDeleted);
             otCase.OrThrowNotFound("Trường hợp OT", request.OtCaseId);
 
-            // Phạm vi tạo đơn — CHO PHÉP 2 nhánh độc lập (2026-07-17, tách "tạo đơn" khỏi "ký duyệt Trưởng
-            // nhóm" theo yêu cầu, xem docs/attendance-module.md):
-            //   1. Trưởng nhóm (hoặc bất kỳ ai được Admin gán UserApprovalScope(Submitter) khớp Group/Department) —
-            //      cơ chế cũ, không đổi. Nhóm này SAU ĐÓ cũng tự ký được "Người đề nghị" qua /submit.
-            //   2. Role "Nhân viên" (chỉ có OTForm.Create, KHÔNG có UserApprovalScope) — tạo được đơn cho
-            //      ĐÚNG Group của chính mình, suy ra từ Employee.GroupId qua Employee.UserName liên kết với
-            //      account đang gọi. Nhóm này KHÔNG ký được vì ApproveSubmitterAsync vẫn chỉ chấp nhận
-            //      UserApprovalScope(Submitter), không chấp nhận Employee.GroupId.
-            // Admin bypass cả 2 nhánh, giống GeneralDirector bypass lúc duyệt.
+            // Form-creation scope — ALLOWS 2 independent paths (2026-07-17, separating "create form" from
+            // "Team Leader sign-off" per requirement, see docs/attendance-module.md):
+            //   1. Team Leader (or anyone the Admin assigned a UserApprovalScope(Submitter) matching
+            //      Group/Department) — the old mechanism, unchanged. This group can ALSO later sign as
+            //      "Requester" via /submit.
+            //   2. Role "Nhân viên" (only has OTForm.Create, has NO UserApprovalScope) — can create a
+            //      form for THEIR OWN Group only, derived from Employee.GroupId via Employee.UserName
+            //      linked to the calling account. This group CANNOT sign, because ApproveSubmitterAsync
+            //      still only accepts UserApprovalScope(Submitter), not Employee.GroupId.
+            // Admin bypasses both paths, same as GeneralDirector bypassing during approval.
             await EnsureCanCreateOrEditForScopeAsync(createdByUserName, isAdmin, request.GroupId, request.DepartmentId);
 
             await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
@@ -303,9 +308,9 @@ namespace Attendance.Application.Services
                 NumberOfEmployee = request.Employees.Count,
                 CreatedByUserName = createdByUserName,
                 CreatedByFullName = createdByFullName,
-                // Chỉ là Draft — CHƯA có chữ ký "Người đề nghị". Trưởng nhóm phải tự gọi
-                // POST /{id}/submit để ký duyệt thì đơn mới chuyển sang Pending (chờ Trưởng phòng)
-                // (xem docs/attendance-module.md — người tạo đơn khác với người chịu trách nhiệm ký).
+                // Just a Draft — DOES NOT YET have the "Requester" signature. The Team Leader must call
+                // POST /{id}/submit to sign it before the form moves to Pending (awaiting Department
+                // Manager) (see docs/attendance-module.md — the form creator differs from the signer).
                 Status = (int)OtFormStatus.Draft,
                 IsDeleted = false
             };
@@ -343,19 +348,21 @@ namespace Attendance.Application.Services
 
             await _unitOfWork.SaveChangesAsync();
 
-            // Đơn mới ở trạng thái Draft, cần Trưởng nhóm ký duyệt trước tiên (POST /{id}/submit) —
-            // gửi email kèm link Duyệt/Từ chối cho mọi người đủ quyền (kênh bổ sung, không thay thế nút trong app).
+            // New form is in Draft status, needs Team Leader sign-off first (POST /{id}/submit) —
+            // send an email with an Approve/Reject link to everyone eligible (a supplementary channel,
+            // not a replacement for the button in the app).
             await NotifyEligibleApproversAsync(newOtForm, ApprovalLevel.Submitter);
 
             return await GetByIdAsync(newOtForm.Id);
         }
 
-        // Dùng chung cho CreateAsync và UpdateAsync — 1 user (không phải Admin) chỉ được tạo/sửa đơn cho
-        // đúng Group/Department mà họ có UserApprovalScope(Submitter) khớp, HOẶC đúng Group của chính họ
-        // qua Employee.GroupId (Role "Nhân viên"). UpdateAsync PHẢI gọi lại hàm này với GroupId/DepartmentId
-        // MỚI trong request — nếu không, 1 "Nhân viên" tạo đơn hợp lệ cho Group của mình rồi sau đó gọi PUT
-        // đổi sang Group/Department khác (không thuộc phạm vi được phép) sẽ lọt qua, vì UpdateAsync trước đây
-        // chỉ check `createdByUserName == currentUserName`, không re-check phạm vi Group/Department.
+        // Shared by CreateAsync and UpdateAsync — a non-Admin user may only create/edit a form for the
+        // exact Group/Department they have a matching UserApprovalScope(Submitter) for, OR their own
+        // Group via Employee.GroupId (Role "Nhân viên"). UpdateAsync MUST call this again with the NEW
+        // GroupId/DepartmentId from the request — otherwise a "Nhân viên" who validly created a form for
+        // their own Group could then call PUT to change it to a different Group/Department (outside
+        // their allowed scope) and slip through, because UpdateAsync previously only checked
+        // `createdByUserName == currentUserName` without re-checking the Group/Department scope.
         private async Task EnsureCanCreateOrEditForScopeAsync(string userName, bool isAdmin, int groupId, int departmentId)
         {
             if (isAdmin) return;
@@ -375,11 +382,12 @@ namespace Attendance.Application.Services
                 throw new DomainException("Bạn không được phân quyền tạo/sửa đơn cho nhóm/bộ phận này. Liên hệ Admin để được gán qua UserApprovalScope (ApprovalLevel=Submitter), hoặc kiểm tra tài khoản đã liên kết đúng nhân viên/nhóm chưa.");
         }
 
-        // Trả về (các) Group mà người gọi được phép tạo đơn — để FE tự điền sẵn Bộ phận/Phòng ban
-        // trên màn "Tạo đơn tăng ca" thay vì bắt Nhân viên/Trưởng nhóm tự chọn từ toàn bộ danh sách
-        // (họ vốn chỉ tạo được cho đúng phạm vi này, xem EnsureCanCreateOrEditForScopeAsync — cùng
-        // 2 nguồn dữ liệu, chỉ đảo chiều truy vấn). Admin trả về rỗng — FE giữ nguyên dropdown chọn
-        // tự do như cũ vì Admin không bị giới hạn phạm vi nào (2026-07-17).
+        // Returns the Group(s) the caller is allowed to create forms for — so the FE can pre-fill the
+        // Group/Department on the "Create OT form" screen instead of forcing Employee/Team Leader to
+        // pick from the full list (they can only create for this exact scope anyway, see
+        // EnsureCanCreateOrEditForScopeAsync — same 2 data sources, just querying in the opposite
+        // direction). Returns empty for Admin — FE keeps the old free-choice dropdown since Admin isn't
+        // restricted to any scope (2026-07-17).
         public async Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin)
         {
             if (isAdmin) return new List<MyCreateScopeItemDto>();
@@ -392,8 +400,9 @@ namespace Attendance.Application.Services
             foreach (var s in submitterScopes.Where(s => s.ScopeType == (int)ScopeType.Group))
                 groupIds.Add(s.ScopeId);
 
-            // Dữ liệu cũ trước ràng buộc ScopeType=Group bắt buộc cho Submitter (2026-07-17) có thể còn
-            // scope kiểu Department — quy về toàn bộ Group thuộc Department đó để không bỏ sót.
+            // Legacy data from before the ScopeType=Group constraint became mandatory for Submitter
+            // (2026-07-17) may still have Department-type scopes — expand these to all Groups under
+            // that Department so nothing is missed.
             var legacyDepartmentIds = submitterScopes
                 .Where(s => s.ScopeType == (int)ScopeType.Department)
                 .Select(s => s.ScopeId).ToList();
@@ -423,11 +432,11 @@ namespace Attendance.Application.Services
             return groups.OrderBy(x => x.GroupNameVn).ToList();
         }
 
-        // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).
-        // Tách riêng khỏi CreateAsync vì người tạo đơn (data entry, có thể là Role "Nhân viên") không
-        // nhất thiết là Trưởng nhóm; chữ ký "Người đề nghị" luôn phải là chữ ký thật của Trưởng nhóm —
-        // CHỈ chấp nhận UserApprovalScope(Submitter), không chấp nhận Employee.GroupId như CreateAsync
-        // (xem docs/attendance-module.md).
+        // Team Leader signs as "Requester" — moves the form from Draft to Pending (awaiting Department
+        // Manager). Separated from CreateAsync because the form creator (data entry, possibly Role
+        // "Nhân viên") is not necessarily the Team Leader; the "Requester" signature must always be the
+        // real Team Leader's signature — ONLY accepts UserApprovalScope(Submitter), does not accept
+        // Employee.GroupId like CreateAsync does (see docs/attendance-module.md).
         public async Task<OtFormDto> ApproveSubmitterAsync(int id, string approverUserName, string? approverFullName, bool isAdmin, ApproveOtFormDto request)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
@@ -436,8 +445,9 @@ namespace Attendance.Application.Services
             if (otForm!.Status != (int)OtFormStatus.Draft)
                 throw new DomainException("Đơn không ở trạng thái nháp (Draft), không thể ký duyệt cấp Trưởng nhóm nữa.");
 
-            // Cùng cơ chế Scope với CreateAsync — chỉ Trưởng nhóm được gán UserApprovalScope(Submitter)
-            // khớp đúng Group/Department của đơn mới được ký duyệt. Admin bypass.
+            // Same Scope mechanism as CreateAsync — only a Team Leader assigned a matching
+            // UserApprovalScope(Submitter) for the form's exact Group/Department can sign it. Admin
+            // bypasses this check.
             if (!isAdmin)
             {
                 var approverScopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
@@ -451,8 +461,9 @@ namespace Attendance.Application.Services
                     throw new DomainException("Bạn không được phân quyền ký duyệt (cấp Trưởng nhóm) cho nhóm/bộ phận của đơn này.");
             }
 
-            // Chữ ký "Người đề nghị" luôn bắt buộc, lấy từ chữ ký đã đăng ký sẵn (UserSignature) của
-            // chính Trưởng nhóm đang ký — không nhận ảnh chữ ký từ request (xem docs/attendance-module.md).
+            // The "Requester" signature is always required, taken from the already-registered
+            // signature (UserSignature) of the Team Leader who is signing — not accepted from the
+            // request's image (see docs/attendance-module.md).
             var submitterSignature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == approverUserName);
             if (submitterSignature == null)
                 throw new DomainException("Bạn chưa đăng ký chữ ký. Vui lòng đăng ký chữ ký (PUT /api/UserSignature/me) trước khi ký duyệt.");
@@ -474,15 +485,16 @@ namespace Attendance.Application.Services
 
             await _unitOfWork.SaveChangesAsync();
 
-            // Đơn đã có chữ ký Trưởng nhóm, giờ cần Trưởng Bộ phận (GroupHead, MỚI 2026-07-17) duyệt
-            // trước khi tới Trưởng phòng.
+            // Form now has the Team Leader's signature, next needs Trưởng Bộ phận (GroupHead, NEW as
+            // of 2026-07-17) to approve before it reaches the Department Manager.
             await NotifyEligibleApproversAsync(otForm, ApprovalLevel.GroupHead);
 
             return await GetByIdAsync(otForm.Id);
         }
 
-        // Sửa toàn bộ đơn (danh mục + nhân viên + ProcessPart) — chỉ chính người tạo mới sửa được,
-        // và chỉ khi đơn còn Pending (chưa cấp nào duyệt). Qua cấp nào rồi thì khóa cứng (xem docs).
+        // Edit the entire form (fields + employees + ProcessPart) — only the creator can edit it, and
+        // only while the form is still Pending (not yet approved at any level). Once past any level it
+        // becomes locked (see docs).
         public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, bool isAdmin, UpdateOtFormDto request)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted,
@@ -510,9 +522,10 @@ namespace Attendance.Application.Services
             var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == request.OtCaseId && !x.IsDeleted);
             otCase.OrThrowNotFound("Trường hợp OT", request.OtCaseId);
 
-            // Re-check phạm vi Group/Department MỚI trong request (không chỉ dựa vào việc otForm đã được
-            // tạo hợp lệ trước đó) — ngăn 1 "Nhân viên"/Trưởng nhóm sửa đơn của mình sang Group/Department
-            // họ không có quyền, xem EnsureCanCreateOrEditForScopeAsync.
+            // Re-check the NEW Group/Department scope from the request (not just relying on the fact
+            // that otForm was validly created before) — prevents a "Nhân viên"/Team Leader from editing
+            // their form into a Group/Department they don't have permission for, see
+            // EnsureCanCreateOrEditForScopeAsync.
             await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, request.GroupId, request.DepartmentId);
 
             await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
@@ -528,8 +541,9 @@ namespace Attendance.Application.Services
             otForm.Date = request.Date;
             otForm.NumberOfEmployee = request.Employees.Count;
 
-            // Diff thay vì xóa hết rồi thêm lại: xóa/thêm cùng EmployeeId trong 1 SaveChanges sẽ đụng
-            // trùng khóa kép (OtFormId, EmployeeId) đang được track — nhân viên còn giữ lại thì UPDATE tại chỗ.
+            // Diff instead of delete-all-then-add: removing/adding the same EmployeeId within a single
+            // SaveChanges would collide on the tracked composite key (OtFormId, EmployeeId) — employees
+            // that are kept are UPDATEd in place instead.
             var existingByEmployeeId = otForm.OtFormEmployees.ToDictionary(x => x.EmployeeId);
             var requestedEmployeeIds = request.Employees.Select(x => x.EmployeeId).ToHashSet();
 
@@ -605,8 +619,8 @@ namespace Attendance.Application.Services
         {
             var (otForm, currentLevel) = await LoadFormAndValidateAuthorityAsync(id, approverUserName, isGeneralDirector);
 
-            // Chữ ký cấp duyệt lấy từ chữ ký đã đăng ký sẵn (UserSignature) của người duyệt — không nhận
-            // ảnh chữ ký từ request nữa (xem docs/attendance-module.md).
+            // The approval-level signature is taken from the approver's already-registered signature
+            // (UserSignature) — no longer accepted from the request's image (see docs/attendance-module.md).
             var approverSignature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == approverUserName);
             if (otForm.OtCase.RequireSignature && approverSignature == null)
                 throw new DomainException("Trường hợp OT này bắt buộc phải ký khi duyệt. Vui lòng đăng ký chữ ký (PUT /api/UserSignature/me) trước.");
@@ -627,8 +641,9 @@ namespace Attendance.Application.Services
             otForm.Status = (int)nextStatus;
             _unitOfWork.OtForms.Update(otForm);
 
-            // Chỉ cộng lũy kế 1 lần duy nhất khi đơn đi hết luồng duyệt (Completed) — tránh cộng
-            // trùng qua các cấp trung gian và tránh phải rollback lũy kế nếu đơn bị Reject giữa chừng.
+            // Only accumulate hours once, when the form finishes the entire approval flow (Completed) —
+            // avoids double-counting across intermediate levels and avoids having to roll back the
+            // accumulation if the form gets Rejected midway.
             if (nextStatus == OtFormStatus.Completed)
             {
                 await AccumulateEmployeeHoursAsync(otForm);
@@ -636,9 +651,11 @@ namespace Attendance.Application.Services
 
             await _unitOfWork.SaveChangesAsync();
 
-            // Còn cấp tiếp theo cần duyệt (chưa Completed) thì gửi email cho cấp đó — Completed/
-            // Rejected thì thôi, không còn ai cần duyệt tiếp nữa.
-            if (nextStatus == OtFormStatus.ApprovedByDepartment)
+            // If there's a next level still needing approval (not yet Completed), send an email to
+            // that level — for Completed/Rejected, stop, since no one needs to approve further.
+            if (nextStatus == OtFormStatus.Pending)
+                await NotifyEligibleApproversAsync(otForm, ApprovalLevel.DepartmentManager);
+            else if (nextStatus == OtFormStatus.ApprovedByDepartment)
                 await NotifyEligibleApproversAsync(otForm, ApprovalLevel.WorkshopManager);
             else if (nextStatus == OtFormStatus.ApprovedByWorkshop)
                 await NotifyEligibleApproversAsync(otForm, ApprovalLevel.GeneralDirector);
@@ -665,7 +682,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // === Xác thực qua email (kênh bổ sung cho Duyệt/Từ chối trong app) ===
+        // === Email-based verification (a supplementary channel to Approve/Reject in the app) ===
 
         public async Task<OtFormDto> GetByEmailTokenAsync(string token)
         {
@@ -677,8 +694,8 @@ namespace Attendance.Application.Services
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: true);
 
-            // Cấp Submitter (Trưởng nhóm ký duyệt Draft) đi qua nhánh xử lý riêng — không có khái
-            // niệm isGeneralDirector/isAdmin qua kênh email (xem docs/attendance-module.md).
+            // The Submitter level (Team Leader signing a Draft) goes through a separate handling branch —
+            // there's no concept of isGeneralDirector/isAdmin over the email channel (see docs/attendance-module.md).
             if ((ApprovalLevel)emailToken.ApprovalLevel == ApprovalLevel.Submitter)
             {
                 await ApproveSubmitterAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, isAdmin: false, request);
@@ -720,9 +737,10 @@ namespace Attendance.Application.Services
             return emailToken;
         }
 
-        // Gửi email kèm link Duyệt/Từ chối cho mọi người đủ quyền duyệt ở đúng cấp `level` của đơn
-        // `otForm` — gọi sau CreateAsync (luôn cần DepartmentManager) và sau ApproveAsync (còn cấp
-        // tiếp theo). Không throw nếu thiếu Email/SMTP lỗi — thông báo chỉ là kênh bổ sung.
+        // Sends an email with an Approve/Reject link to everyone eligible to approve at the exact
+        // `level` of the `otForm` form — called after CreateAsync (always needs DepartmentManager) and
+        // after ApproveAsync (when there's a next level). Does not throw if Email is missing/SMTP
+        // fails — notification is just a supplementary channel.
         private async Task NotifyEligibleApproversAsync(OtForm otForm, ApprovalLevel level)
         {
             var approverUserNames = await ResolveEligibleApproverUserNamesAsync(level, otForm.DepartmentId, otForm.GroupId);
@@ -752,8 +770,9 @@ namespace Attendance.Application.Services
 
                 var link = $"{baseUrl}/xac-nhan-don?token={emailToken.Token}";
 
-                // Render template lỗi không được làm hỏng nghiệp vụ chính (tạo/duyệt đơn vẫn phải
-                // thành công) — cùng nguyên tắc với EmailService.SendAsync nuốt lỗi SMTP.
+                // A template rendering error must not break the main business flow (creating/approving
+                // the form still has to succeed) — same principle as EmailService.SendAsync swallowing
+                // SMTP errors.
                 try
                 {
                     var html = _emailTemplateRenderer.Render("OtForm/ApprovalNotification.html", new Dictionary<string, string>
@@ -772,8 +791,9 @@ namespace Attendance.Application.Services
                 }
                 catch (FileNotFoundException)
                 {
-                    // Thiếu file template là lỗi triển khai (deploy quên copy EmailTemplates/), bỏ qua
-                    // gửi mail cho người này chứ không chặn cả luồng thông báo.
+                    // A missing template file is a deployment error (deploy forgot to copy
+                    // EmailTemplates/) — skip sending the email to this person rather than blocking
+                    // the whole notification flow.
                 }
             }
 
@@ -781,10 +801,11 @@ namespace Attendance.Application.Services
                 await _unitOfWork.SaveChangesAsync();
         }
 
-        // DepartmentManager/WorkshopManager: tra theo UserApprovalScope khớp Department/Group của
-        // đơn (tái dùng cùng logic khớp scope với LoadFormAndValidateAuthorityAsync, chỉ đổi chiều
-        // truy vấn — ở đây tìm TẤT CẢ user khớp thay vì kiểm tra 1 user cụ thể).
-        // GeneralDirector: không có UserApprovalScope, lấy toàn bộ user đang giữ Role tương ứng.
+        // DepartmentManager/WorkshopManager: looked up via UserApprovalScope matching the form's
+        // Department/Group (reuses the same scope-matching logic as
+        // LoadFormAndValidateAuthorityAsync, just querying in the opposite direction — here we find
+        // ALL matching users instead of checking one specific user).
+        // GeneralDirector: has no UserApprovalScope, gets all users holding the corresponding Role.
         private async Task<List<string>> ResolveEligibleApproverUserNamesAsync(ApprovalLevel level, int departmentId, int groupId)
         {
             if (level == ApprovalLevel.GeneralDirector)
@@ -798,9 +819,10 @@ namespace Attendance.Application.Services
             return scopes.Select(s => s.UserName).Distinct().ToList();
         }
 
-        // Load nhân viên theo Id, chặn nhân viên không tồn tại/khác nhóm, và validate giờ kết thúc
-        // từng người: StartTime luôn = giờ bắt đầu của đơn (không nhận từ FE), EndTime phải sau
-        // StartTime và không được vượt quá EndTime của đơn (giờ khai báo ở đầu form là TỐI ĐA).
+        // Load employees by Id, reject employees that don't exist/belong to a different group, and
+        // validate each person's end time: StartTime always equals the form's start time (not accepted
+        // from the FE), EndTime must be after StartTime and must not exceed the form's EndTime (the
+        // time declared at the top of the form is the MAXIMUM).
         private async Task<List<Employee>> ValidateEmployeesAsync(
             int groupId, TimeOnly formStartTime, TimeOnly formEndTime, List<CreateOtFormEmployeeItemDto> items)
         {
@@ -828,8 +850,9 @@ namespace Attendance.Application.Services
             return employees.ToList();
         }
 
-        // Cộng giờ OT thực tế của từng nhân viên (EndTime - StartTime) vào lũy kế tháng/năm, tự động
-        // rollover về 0 khi Date của đơn rơi sang tháng/năm mới so với Employee.AccumulationYear/Month.
+        // Adds each employee's actual OT hours (EndTime - StartTime) to their monthly/yearly
+        // accumulation, automatically rolling over to 0 when the form's Date falls into a new
+        // month/year compared to Employee.AccumulationYear/Month.
         private async Task AccumulateEmployeeHoursAsync(OtForm otForm)
         {
             var otFormEmployees = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
@@ -897,17 +920,19 @@ namespace Attendance.Application.Services
             return (otForm, currentLevel);
         }
 
-        // Editable ở Draft (chưa ai ký), PendingGroupHead (đã có chữ ký Trưởng nhóm, chờ Trưởng Bộ
-        // phận) và Pending (đã có chữ ký Trưởng Bộ phận, chờ Trưởng phòng) — chỉ khóa cứng khi qua tới
-        // cấp Trưởng phòng trở lên (xem docs/attendance-module.md).
+        // Editable while Draft (no one has signed yet), PendingGroupHead (already has the Team
+        // Leader's signature, awaiting Trưởng Bộ phận) and Pending (already has Trưởng Bộ phận's
+        // signature, awaiting Department Manager) — only locked once it passes the Department Manager
+        // level or beyond (see docs/attendance-module.md).
         private static bool IsEditableStatus(int status) =>
             status == (int)OtFormStatus.Draft || status == (int)OtFormStatus.PendingGroupHead || status == (int)OtFormStatus.Pending;
 
         private static OtFormStatus DetermineNextStatus(ApprovalLevel justApprovedLevel, ApprovalLevel requiredApprovalLevel)
         {
-            // GroupHead (Trưởng Bộ phận) luôn là bước bắt buộc trung gian, KHÔNG phải điểm dừng theo
-            // OtCase.RequiredApprovalLevel (field này chỉ nhận DepartmentManager/WorkshopManager/
-            // GeneralDirector — xem ApprovalLevel.cs) — nên check trước, bỏ qua so sánh requiredApprovalLevel.
+            // GroupHead (Trưởng Bộ phận) is always a mandatory intermediate step, NOT a stopping point
+            // according to OtCase.RequiredApprovalLevel (this field only accepts DepartmentManager/
+            // WorkshopManager/GeneralDirector — see ApprovalLevel.cs) — so check this first, skipping
+            // the requiredApprovalLevel comparison.
             if (justApprovedLevel == ApprovalLevel.GroupHead) return OtFormStatus.Pending;
 
             if (justApprovedLevel == requiredApprovalLevel) return OtFormStatus.Completed;

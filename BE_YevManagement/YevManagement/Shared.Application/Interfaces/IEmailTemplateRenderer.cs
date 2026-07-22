@@ -1,12 +1,12 @@
 namespace Shared.Application.Interfaces
 {
-    // Đọc file .html tĩnh (mỗi module tự chứa template của mình dưới thư mục EmailTemplates/, copy ra
-    // build output qua <Content CopyToOutputDirectory>) rồi thay các placeholder dạng {{Key}} bằng giá
-    // trị thật — tách nội dung email ra khỏi code C#, không còn ghép chuỗi HTML thủ công trong Service.
+    // Reads static .html files (each module keeps its own templates under an EmailTemplates/ folder,
+    // copied to the build output via <Content CopyToOutputDirectory>) then replaces {{Key}} placeholders
+    // with real values — keeps email content out of C# code, no more manual HTML string concatenation in the Service.
     public interface IEmailTemplateRenderer
     {
-        // relativeTemplatePath dạng "OtForm/ApprovalNotification.html" (tính từ thư mục EmailTemplates
-        // trong build output) — mỗi module tự đặt file dưới thư mục con tên tính năng của mình.
+        // relativeTemplatePath looks like "OtForm/ApprovalNotification.html" (relative to the EmailTemplates
+        // folder in the build output) — each module places its files under a subfolder named after its feature.
         string Render(string relativeTemplatePath, IDictionary<string, string> placeholders);
     }
 }

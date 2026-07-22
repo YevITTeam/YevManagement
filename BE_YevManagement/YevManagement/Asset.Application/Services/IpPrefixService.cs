@@ -104,9 +104,9 @@ namespace Asset.Application.Services
 
         public async Task<IpPrefixDto> CreateAsync(CreateIpPrefixDto request)
         {
-            // IX_TienToIPs_TienTo là unique index toàn cục trên DB (không lọc IsDeleted).
-            // (Đây cũng chính là quy tắc "không cho 2 dải mạng trùng network 3-octet" trong
-            //  công cụ ChangeIP — GetNetworkClass duplicate check — đã được unique index lo.)
+            // IX_TienToIPs_TienTo is a global unique index on the DB (not filtered by IsDeleted).
+            // (This is also exactly the "don't allow 2 network ranges with the same 3-octet network"
+            //  rule from the ChangeIP tool — GetNetworkClass duplicate check — already handled by the unique index.)
             var exists = await _unitOfWork.IpPrefixes.FirstOrDefaultAsync(x => x.Prefix == request.Prefix);
             if (exists != null) throw new DomainException($"Prefix '{request.Prefix}' đã tồn tại.");
 
@@ -153,7 +153,7 @@ namespace Asset.Application.Services
                 PreferredDns = newPrefix.PreferredDns,
                 AlternateDns = newPrefix.AlternateDns,
                 Description = newPrefix.Description,
-                // Vừa sinh xong nên toàn bộ IP con đều Available (chưa sử dụng).
+                // Just generated, so all child IPs are Available (not used yet).
                 UsedIpCount = 0,
                 AvailableIpCount = childAddresses.Count
             };
@@ -166,12 +166,13 @@ namespace Asset.Application.Services
             return branch!;
         }
 
-        // Validate cấu hình mạng khi tạo dải (2026-07-11) — áp dụng logic từ công cụ ChangeIP
-        // nội bộ (SetIP.cs), dùng NetworkHelper: mọi field IP nhập vào (SubnetMask/Gateway/
-        // PreferredDns/AlternateDns) nếu có phải là IPv4 hợp lệ; Gateway phải nằm cùng subnet
-        // với dải IP sẽ sinh (prefix.1..prefix.255) và không được trùng địa chỉ network/broadcast.
-        // Dùng chung cho Create/Update — nhận trực tiếp các giá trị nguyên thuỷ vì Update không có
-        // field Prefix riêng (lấy prefix bất biến từ entity hiện có, xem UpdateAsync bên dưới).
+        // Validate the network configuration when creating a range (2026-07-11) — applies the
+        // logic from the internal ChangeIP tool (SetIP.cs), using NetworkHelper: every IP field
+        // entered (SubnetMask/Gateway/PreferredDns/AlternateDns), if provided, must be a valid IPv4;
+        // Gateway must be in the same subnet as the IP range that will be generated (prefix.1..prefix.255)
+        // and must not match the network/broadcast address. Shared by Create/Update — takes the raw
+        // values directly since Update has no separate Prefix field (the immutable prefix is taken
+        // from the existing entity, see UpdateAsync below).
         private static void ValidateNetworkSettings(string prefix, string? subnetMask, string? gateway, string? preferredDns, string? alternateDns)
         {
             if (!string.IsNullOrWhiteSpace(subnetMask) && !NetworkHelper.IsValidIpv4(subnetMask))
@@ -188,24 +189,25 @@ namespace Asset.Application.Services
                 if (!NetworkHelper.IsValidIpv4(gateway))
                     throw new DomainException($"Gateway '{gateway}' không hợp lệ.");
 
-                // Gateway phải thuộc đúng network 3-octet của prefix (dải IP con là prefix.1..255).
+                // Gateway must belong to the exact 3-octet network of the prefix (the child IP range is prefix.1..255).
                 if (!string.Equals(NetworkHelper.GetNetworkClass(gateway), prefix, StringComparison.OrdinalIgnoreCase))
                     throw new DomainException($"Gateway '{gateway}' không nằm trong dải mạng '{prefix}'.");
 
-                // Nếu có SubnetMask, kiểm tra chặt hơn bằng bitwise AND (Gateway cùng subnet với dải).
+                // If SubnetMask is provided, apply a stricter check via bitwise AND (Gateway is in the same subnet as the range).
                 if (!string.IsNullOrWhiteSpace(subnetMask) &&
                     !NetworkHelper.IsSameSubnet($"{prefix}.1", gateway, subnetMask))
                     throw new DomainException($"Gateway '{gateway}' không cùng subnet với dải mạng '{prefix}' theo Subnet Mask '{subnetMask}'.");
 
-                // Gateway không được trùng địa chỉ network (.0) hay broadcast (.255) của dải.
+                // Gateway must not match the range's network address (.0) or broadcast address (.255).
                 if (gateway.Trim() == $"{prefix}.0" || gateway.Trim() == $"{prefix}.255")
                     throw new DomainException($"Gateway '{gateway}' không được trùng địa chỉ network/broadcast của dải mạng.");
             }
         }
 
-        // Update: chỉ cho sửa Chi nhánh + cấu hình mạng (SubnetMask/Gateway/DNS/Description) khi có
-        // thay đổi thực tế (VD đổi DNS/Gateway), thay vì phải xoá dải cũ rồi tạo lại. Prefix (3 octet
-        // định danh, đã sinh sẵn 255 IpAddress con) vẫn bất biến — không nằm trong UpdateIpPrefixDto.
+        // Update: only allows editing Branch + network configuration (SubnetMask/Gateway/DNS/Description)
+        // when there is an actual change (e.g. changing DNS/Gateway), instead of having to delete the old
+        // range and recreate it. Prefix (the 3-octet identifier, with 255 child IpAddress rows already
+        // generated) remains immutable — it is not part of UpdateIpPrefixDto.
         public async Task UpdateAsync(UpdateIpPrefixDto request)
         {
             var prefix = await _unitOfWork.IpPrefixes.GetByIdAsync(request.Id);
@@ -233,10 +235,11 @@ namespace Asset.Application.Services
 
             var childAddresses = await _unitOfWork.IpAddresses.FindAsync(x => x.IpPrefixId == id && !x.IsDeleted);
 
-            // 2026-07-11 (quyết định người dùng): không còn API xoá tay từng IpAddress, nên
-            // chỉ chặn xoá Prefix nếu còn IP con ĐANG GẮN cho Device (khác quy tắc cũ — chặn
-            // hễ còn bất kỳ IP con nào chưa xoá, điều này giờ luôn đúng vì IP không tự xoá
-            // được nữa). IP con chưa dùng (DeviceId null) tự cascade soft-delete theo Prefix.
+            // 2026-07-11 (user decision): there is no longer an API to manually delete individual
+            // IpAddresses, so Prefix deletion is only blocked if there are child IPs CURRENTLY ASSIGNED
+            // to a Device (different from the old rule — blocking whenever any child IP was not yet
+            // deleted, which is now always true since IPs can no longer be deleted on their own).
+            // Unused child IPs (DeviceId null) are automatically cascade soft-deleted along with the Prefix.
             var inUseAddresses = childAddresses.Where(x => x.DeviceId.HasValue).ToList();
             if (inUseAddresses.Count > 0)
                 throw new DomainException($"Còn {inUseAddresses.Count} địa chỉ IP thuộc prefix này đang được gán cho thiết bị, vui lòng gỡ gán trước khi xoá.");

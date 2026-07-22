@@ -9,7 +9,7 @@ namespace Identity.Infrastructure.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // CHỈ GIỮ LẠI ĐOẠN TẠO BẢNG LoginUserIPs
+            // ONLY KEEP THE LoginUserIPs TABLE CREATION SECTION
             migrationBuilder.CreateTable(
                 name: "LoginUserIPs",
                 columns: table => new
@@ -27,7 +27,7 @@ namespace Identity.Infrastructure.Migrations
                     table.ForeignKey(
                         name: "FK_LoginUserIPs_Users_UserId",
                         column: x => x.UserId,
-                        principalTable: "Users", // Bảng Users đã có sẵn trong DB
+                        principalTable: "Users", // Users table already exists in the DB
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });

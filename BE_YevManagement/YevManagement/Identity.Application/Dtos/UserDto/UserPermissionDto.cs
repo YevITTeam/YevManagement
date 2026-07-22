@@ -11,8 +11,8 @@ namespace Identity.Application.Dtos.UserDto
         public string Module { get; set; }
         public string? Description { get; set; }
 
-        // true = được cấp thêm riêng cho user này; false = bị thu hồi riêng khỏi user này
-        // (đè lên permission mà Role của user đang cấp).
+        // true = specifically granted to this user; false = specifically revoked from this user
+        // (overrides the permission granted by the user's Role).
         public bool IsGranted { get; set; }
     }
 }

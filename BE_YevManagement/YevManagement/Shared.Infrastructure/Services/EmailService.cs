@@ -6,10 +6,11 @@ using Shared.Application.Interfaces;
 
 namespace Shared.Infrastructure.Services
 {
-    // Gửi email qua SMTP nội bộ công ty (Exchange/O365) bằng MailKit — đọc cấu hình trực tiếp qua
-    // IConfiguration (cùng cách TokenService đọc JwtSettings), không dùng IOptions<T> vì codebase
-    // chưa có tiền lệ nào dùng pattern đó. Bắt mọi lỗi SMTP bên trong, không throw ra ngoài (xem
-    // IEmailService) — thiếu cấu hình SmtpHost thì coi như chưa sẵn sàng gửi, trả false luôn.
+    // Sends email via the company's internal SMTP (Exchange/O365) using MailKit — reads configuration
+    // directly via IConfiguration (same way TokenService reads JwtSettings), not IOptions<T> since the
+    // codebase has no precedent for that pattern. Catches all SMTP errors internally, never throws out
+    // (see IEmailService) — if SmtpHost is not configured, it's treated as not ready to send and
+    // returns false right away.
     public class EmailService : IEmailService
     {
         private readonly IConfiguration _configuration;
@@ -54,8 +55,9 @@ namespace Shared.Infrastructure.Services
             }
             catch
             {
-                // Lỗi SMTP (sai cấu hình, mất mạng, server từ chối...) không được làm hỏng nghiệp vụ
-                // chính đang gọi SendAsync — chỉ trả false, caller tự quyết định có coi là lỗi hay không.
+                // SMTP errors (misconfiguration, network loss, server rejection...) must not break the
+                // main business logic calling SendAsync — just return false, and let the caller decide
+                // whether to treat it as an error.
                 return false;
             }
         }
