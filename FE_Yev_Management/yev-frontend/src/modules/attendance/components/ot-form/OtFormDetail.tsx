@@ -146,7 +146,6 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         Boolean(form?.isEditable) &&
         form?.createdByUserName === user?.userName &&
         hasPermission(user, "Attendance.OTForm.Create");
-    const canPrint = form?.status === 3;
 
     const openAction = (type: "submit" | "approve" | "reject") => {
         setComment("");
@@ -254,20 +253,18 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                             Sửa đơn
                         </button>
                     )}
-                    {canPrint && (
-                        <button
-                            onClick={() =>
-                                window.open(
-                                    getPathname({ href: { pathname: "/ot-print", query: { id: String(form.id) } }, locale }),
-                                    "_blank",
-                                    "noopener,noreferrer"
-                                )
-                            }
-                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                        >
-                            In đơn
-                        </button>
-                    )}
+                    <button
+                        onClick={() =>
+                            window.open(
+                                getPathname({ href: { pathname: "/ot-print", query: { id: String(form.id) } }, locale }),
+                                "_blank",
+                                "noopener,noreferrer"
+                            )
+                        }
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                    >
+                        In đơn
+                    </button>
                 </div>
             </div>
 
