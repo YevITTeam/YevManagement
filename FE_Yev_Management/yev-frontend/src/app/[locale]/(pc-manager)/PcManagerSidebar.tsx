@@ -96,6 +96,7 @@ export default function PcManagerSidebar() {
             <Link
               key={item.key}
               href={item.href}
+              prefetch={false}
               title={collapsed ? t(item.key) : undefined}
               className={`flex items-center gap-3 border-l-4 py-3 text-sm font-medium transition ${collapsed ? "justify-center px-0" : "px-5"
                 } ${isActive

@@ -43,7 +43,7 @@ export default function OtManagerSidebar() {
 
     return (
         <aside
-            className={`fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
+            className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
                 }`}
         >
             <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>
@@ -90,6 +90,7 @@ export default function OtManagerSidebar() {
                             <Link
                                 key={item.key}
                                 href={item.href}
+                                prefetch={false}
                                 title={collapsed ? t(item.key) : undefined}
                                 className={`flex items-center gap-3 border-l-4 py-3 text-sm font-medium transition ${collapsed ? "justify-center px-0" : "px-5"
                                     } ${isActive

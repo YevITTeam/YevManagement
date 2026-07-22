@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { useLocale } from "next-intl";
+import { Check, Clock, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import type { OtFormDto } from "@/modules/attendance/types/ot-form.dto";
+import type { OtFormApprovalHistoryDto, OtFormDto } from "@/modules/attendance/types/ot-form.dto";
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import {
@@ -44,12 +45,66 @@ function formatTime(value: string) {
 // vào timeline này — xem docs §Đợt 6.
 const TIMELINE_LEVELS = [0, 4, 1, 2, 3];
 
+// Class Tailwind tĩnh theo số cấp thật sự áp dụng (3=TH1, 4=TH2, 5=TH3) — phải viết literal để Tailwind
+// JIT quét được, không thể build chuỗi "lg:grid-cols-" + n động.
+const APPROVAL_GRID_LG_COLS: Record<number, string> = {
+    3: "lg:grid-cols-3",
+    4: "lg:grid-cols-4",
+    5: "lg:grid-cols-5",
+};
+
+type ApprovalStepState = "done" | "current" | "rejected" | "upcoming";
+
+interface ApprovalStep {
+    level: number;
+    state: ApprovalStepState;
+    history: OtFormApprovalHistoryDto | null;
+}
+
+// Danh sách cấp THẬT SỰ áp dụng cho 1 đơn — cắt bớt TIMELINE_LEVELS theo otCase.requiredApprovalLevel
+// (docs §3.4/§1: TH1=1 dừng ở Trưởng phòng, TH2=2 dừng ở Trưởng xưởng, TH3=3 mới tới Tổng Giám Đốc).
+// Trưởng nhóm(0)/Trưởng Bộ phận(4) luôn có mặt (bắt buộc cho mọi Group) nên luôn nằm trong kết quả.
+function applicableApprovalLevels(requiredApprovalLevel: number): number[] {
+    const finalIndex = TIMELINE_LEVELS.indexOf(requiredApprovalLevel);
+    return finalIndex === -1 ? TIMELINE_LEVELS : TIMELINE_LEVELS.slice(0, finalIndex + 1);
+}
+
+// Suy trạng thái từng cấp TRỰC TIẾP từ approvalHistories (không dựa vào form.status) — chỉ có tối đa 1
+// cấp "rejected" (BE dừng luồng ngay khi bị từ chối), cấp đầu tiên chưa có lịch sử (và chưa có ai bị
+// từ chối trước đó) là cấp "current" đang chờ xử lý; các cấp sau vẫn coi là "upcoming" dù luồng đã
+// dừng vì bị từ chối (đơn giản hoá — không cần phân biệt riêng "cancelled" cho mục đích hiển thị).
+function buildApprovalSteps(form: OtFormDto, levels: number[]): ApprovalStep[] {
+    let rejectedIndex = -1;
+    const steps = levels.map((level, index): ApprovalStep => {
+        const history = form.approvalHistories.find((item) => item.approvalLevel === level) ?? null;
+        if (history?.action === 2) {
+            rejectedIndex = index;
+            return { level, history, state: "rejected" };
+        }
+        if (history) {
+            return { level, history, state: "done" };
+        }
+        return { level, history: null, state: "upcoming" };
+    });
+
+    const firstUpcomingIndex = steps.findIndex((step) => step.state === "upcoming");
+    return steps.map((step, index) => {
+        if (step.state === "upcoming" && rejectedIndex === -1 && index === firstUpcomingIndex) {
+            return { ...step, state: "current" };
+        }
+        return step;
+    });
+}
+
 export default function OtFormDetail({ id }: OtFormDetailProps) {
     const { user } = useAuth();
     const router = useRouter();
     const locale = useLocale();
     const [form, setForm] = useState<OtFormDto | null>(null);
     const [requireSignatureToApprove, setRequireSignatureToApprove] = useState(false);
+    // Mặc định 3 (TGĐ — hiện đủ 5 cấp) khi chưa tải xong/lỗi tải OtCase, để KHÔNG lỡ ẩn mất 1 cấp thật
+    // sự cần thiết (an toàn hơn là lỡ hiện dư 1 cấp không cần).
+    const [requiredApprovalLevel, setRequiredApprovalLevel] = useState(3);
     const [hasMySignature, setHasMySignature] = useState<boolean | null>(null);
 
     const [actionOpen, setActionOpen] = useState<"submit" | "approve" | "reject" | null>(null);
@@ -60,17 +115,20 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         async () => {
             const data = await OtFormApi.getOtFormById(id);
             let requireSignature = false;
+            let approvalLevel = 3;
             try {
                 const otCase = await OtCaseApi.getOtCaseById(data.otCaseId);
                 requireSignature = otCase.requireSignature;
+                approvalLevel = otCase.requiredApprovalLevel;
             } catch (err) {
                 console.error(err);
             }
-            return { data, requireSignature };
+            return { data, requireSignature, approvalLevel };
         },
         [id],
         (result) => {
             setForm(result.data);
+            setRequiredApprovalLevel(result.approvalLevel);
             setRequireSignatureToApprove(result.requireSignature);
         },
         "Không thể tải chi tiết đơn tăng ca."
@@ -88,7 +146,6 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         Boolean(form?.isEditable) &&
         form?.createdByUserName === user?.userName &&
         hasPermission(user, "Attendance.OTForm.Create");
-    const canPrint = form?.status === 3;
 
     const openAction = (type: "submit" | "approve" | "reject") => {
         setComment("");
@@ -170,6 +227,9 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         return <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>;
     }
 
+    const applicableLevels = applicableApprovalLevels(requiredApprovalLevel);
+    const approvalSteps = buildApprovalSteps(form, applicableLevels);
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -193,22 +253,76 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                             Sửa đơn
                         </button>
                     )}
-                    {canPrint && (
-                        <button
-                            onClick={() =>
-                                window.open(
-                                    getPathname({ href: { pathname: "/ot-print", query: { id: String(form.id) } }, locale }),
-                                    "_blank",
-                                    "noopener,noreferrer"
-                                )
-                            }
-                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                        >
-                            In đơn
-                        </button>
-                    )}
+                    <button
+                        onClick={() =>
+                            window.open(
+                                getPathname({ href: { pathname: "/ot-print", query: { id: String(form.id) } }, locale }),
+                                "_blank",
+                                "noopener,noreferrer"
+                            )
+                        }
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                    >
+                        In đơn
+                    </button>
                 </div>
             </div>
+
+            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Tiến độ duyệt</h2>
+                <div className="flex overflow-x-auto pb-1">
+                    {approvalSteps.map((step, index) => (
+                        <div key={step.level} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
+                            {index > 0 && (
+                                <div
+                                    className={`absolute left-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
+                                        approvalSteps[index - 1].state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
+                                    }`}
+                                />
+                            )}
+                            {index < approvalSteps.length - 1 && (
+                                <div
+                                    className={`absolute right-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
+                                        step.state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
+                                    }`}
+                                />
+                            )}
+                            <div
+                                className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
+                                    step.state === "done"
+                                        ? "border-emerald-500 bg-emerald-500 text-white"
+                                        : step.state === "rejected"
+                                        ? "border-[#930006] bg-[#930006] text-white"
+                                        : step.state === "current"
+                                        ? "border-[#9a5b00] bg-[#fff4e5] text-[#9a5b00]"
+                                        : "border-[#e0e3e5] bg-white text-[#9aa0a6]"
+                                }`}
+                            >
+                                {step.state === "done" && <Check size={16} />}
+                                {step.state === "rejected" && <X size={16} />}
+                                {step.state === "current" && <Clock size={16} />}
+                                {step.state === "upcoming" && index + 1}
+                            </div>
+                            <div
+                                className={`mt-2 text-center text-xs font-semibold ${
+                                    step.state === "upcoming" ? "text-[#9aa0a6]" : "text-[#191c1e]"
+                                }`}
+                            >
+                                {approvalLevelLabels[step.level]}
+                            </div>
+                            {step.history ? (
+                                <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
+                                    {step.history.approverFullName ?? step.history.approverUserName}
+                                    <br />
+                                    {formatDateTime(step.history.actionAt)}
+                                </div>
+                            ) : step.state === "current" ? (
+                                <div className="mt-0.5 text-center text-[11px] text-[#9a5b00]">Đang chờ</div>
+                            ) : null}
+                        </div>
+                    ))}
+                </div>
+            </section>
 
             <section className="grid gap-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm md:grid-cols-2 lg:grid-cols-3">
                 <div>
@@ -270,28 +384,42 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã NV</th>
-                                <th className="px-6 py-3">Họ và tên</th>
-                                <th className="px-6 py-3">Thời gian</th>
-                                <th className="px-6 py-3">Lũy kế tháng/năm</th>
-                                <th className="px-6 py-3">Phiếu ăn</th>
-                                <th className="px-6 py-3">Ghi chú</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Mã NV</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Họ và tên</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Thời gian</th>
+                                <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">Lũy kế</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Phiếu ăn</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Ghi chú</th>
+                            </tr>
+                            <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                <th className="px-6 py-2 text-center">Tháng</th>
+                                <th className="px-6 py-2 text-center">Năm</th>
                             </tr>
                         </thead>
                         <tbody>
                             {form.employees.map((employee) => {
-                                const isOverLimit = employee.monthToDate > 25 || employee.yearToDate > 300;
+                                const isMonthOverLimit = employee.monthToDate > 25;
+                                const isYearOverLimit = employee.yearToDate > 300;
+                                const isOverLimit = isMonthOverLimit || isYearOverLimit;
                                 return (
-                                    <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
+                                    <tr
+                                        key={employee.employeeId}
+                                        className={`border-b border-[#f1f5f9] ${isOverLimit ? "bg-[#fdecea]" : ""}`}
+                                    >
                                         <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{employee.employeeCode}</td>
                                         <td className="px-6 py-3 text-sm text-[#191c1e]">{employee.fullName}</td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">
                                             {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
                                         </td>
-                                        <td className={`px-6 py-3 text-sm ${isOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
-                                            {employee.monthToDate}h / {employee.yearToDate}h
+                                        <td className={`px-6 py-3 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                            {employee.monthToDate}h
                                         </td>
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.isEligibleForMeal ? "✅" : "-"}</td>
+                                        <td className={`px-6 py-3 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                            {employee.yearToDate}h
+                                        </td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">
+                                            {employee.isEligibleForMeal ? <Check size={16} className="text-emerald-600" /> : "-"}
+                                        </td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.noteVn || "-"}</td>
                                     </tr>
                                 );
@@ -303,8 +431,8 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lịch sử ký duyệt</h2>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-                    {TIMELINE_LEVELS.map((level) => {
+                <div className={`grid gap-4 md:grid-cols-2 ${APPROVAL_GRID_LG_COLS[applicableLevels.length] ?? "lg:grid-cols-5"}`}>
+                    {applicableLevels.map((level) => {
                         const history = form.approvalHistories.find((item) => item.approvalLevel === level);
                         return (
                             <div key={level} className="rounded-lg border border-[#e0e3e5] p-4">

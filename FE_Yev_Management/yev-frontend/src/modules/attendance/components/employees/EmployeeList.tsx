@@ -175,7 +175,10 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     </td>
                                 </tr>
                             )}
-                            {employees.map((employee) => (
+                            {employees.map((employee) => {
+                                const isMonthOverLimit = employee.monthToDate > 25;
+                                const isYearOverLimit = employee.yearToDate > 300;
+                                return (
                                 <tr key={employee.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">
@@ -183,8 +186,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     </td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.groupNameVn}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.monthToDate}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.yearToDate}</td>
+                                    <td className={`px-6 py-4 text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>{employee.monthToDate}</td>
+                                    <td className={`px-6 py-4 text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>{employee.yearToDate}</td>
                                     <td className="px-6 py-4 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button
@@ -204,7 +207,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

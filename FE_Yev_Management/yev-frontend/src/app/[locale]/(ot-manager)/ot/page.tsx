@@ -31,6 +31,7 @@ export default function OtHomePage() {
                     <Link
                         key={tile.link}
                         href={tile.link}
+                        prefetch={false}
                         className="group rounded-2xl border border-[#e0e3e5] bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#e3000f] hover:shadow-md"
                     >
                         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#fff4f2] text-[#e3000f] transition-colors group-hover:bg-[#ffe0e3]">

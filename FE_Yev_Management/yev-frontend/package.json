@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev -p 3000 --turbopack",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "eslint"
   },
   "dependencies": {
+    "html2canvas": "1.4.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.21.0",

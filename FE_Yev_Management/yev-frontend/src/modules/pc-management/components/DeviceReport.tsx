@@ -203,6 +203,7 @@ export default function DeviceReport() {
                     </button>
                     <Link
                         href="/pc"
+                        prefetch={false}
                         className="inline-flex items-center rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                     >
                         ← Quay lại danh sách

@@ -49,7 +49,7 @@ export default function UserSignaturePanel() {
             <div>
                 <h1 className="text-2xl font-semibold text-[#191c1e]">Chữ ký của tôi</h1>
                 <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                    Đăng ký chữ ký cá nhân — BE tự dùng chữ ký này khi bạn tạo đơn (Người đề nghị) hoặc duyệt đơn tăng ca.
+                    Đăng ký chữ ký cá nhân — Hệ thống tự dùng chữ ký này khi bạn tạo đơn (Trường nhóm) hoặc duyệt đơn tăng ca.
                 </p>
             </div>
 

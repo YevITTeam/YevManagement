@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Check, Clock, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import type { OtFormDto } from "@/modules/attendance/types/ot-form.dto";
+import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
+import type { OtFormApprovalHistoryDto, OtFormDto } from "@/modules/attendance/types/ot-form.dto";
 import {
     approvalActionLabels,
     approvalLevelLabels,
@@ -28,7 +30,55 @@ function formatTime(value: string) {
     return value?.slice(0, 5) ?? "-";
 }
 
-const TIMELINE_LEVELS = [0, 1, 2, 3];
+// Thứ tự ký THẬT (không phải thứ tự số enum) — đồng bộ với OtFormDetail.tsx: Người đề nghị(0) →
+// Trưởng Bộ phận(4) → Trưởng phòng(1) → Trưởng xưởng(2) → Tổng Giám Đốc(3).
+const TIMELINE_LEVELS = [0, 4, 1, 2, 3];
+
+// Class Tailwind tĩnh theo số cấp thật sự áp dụng (3=TH1, 4=TH2, 5=TH3) — phải viết literal để Tailwind
+// JIT quét được, không thể build chuỗi "lg:grid-cols-" + n động.
+const APPROVAL_GRID_LG_COLS: Record<number, string> = {
+    3: "lg:grid-cols-3",
+    4: "lg:grid-cols-4",
+    5: "lg:grid-cols-5",
+};
+
+type ApprovalStepState = "done" | "current" | "rejected" | "upcoming";
+
+interface ApprovalStep {
+    level: number;
+    state: ApprovalStepState;
+    history: OtFormApprovalHistoryDto | null;
+}
+
+// Danh sách cấp THẬT SỰ áp dụng cho 1 đơn — cắt bớt TIMELINE_LEVELS theo otCase.requiredApprovalLevel.
+function applicableApprovalLevels(requiredApprovalLevel: number): number[] {
+    const finalIndex = TIMELINE_LEVELS.indexOf(requiredApprovalLevel);
+    return finalIndex === -1 ? TIMELINE_LEVELS : TIMELINE_LEVELS.slice(0, finalIndex + 1);
+}
+
+// Suy trạng thái từng cấp trực tiếp từ approvalHistories — xem OtFormDetail.tsx.
+function buildApprovalSteps(form: OtFormDto, levels: number[]): ApprovalStep[] {
+    let rejectedIndex = -1;
+    const steps = levels.map((level, index): ApprovalStep => {
+        const history = form.approvalHistories.find((item) => item.approvalLevel === level) ?? null;
+        if (history?.action === 2) {
+            rejectedIndex = index;
+            return { level, history, state: "rejected" };
+        }
+        if (history) {
+            return { level, history, state: "done" };
+        }
+        return { level, history: null, state: "upcoming" };
+    });
+
+    const firstUpcomingIndex = steps.findIndex((step) => step.state === "upcoming");
+    return steps.map((step, index) => {
+        if (step.state === "upcoming" && rejectedIndex === -1 && index === firstUpcomingIndex) {
+            return { ...step, state: "current" };
+        }
+        return step;
+    });
+}
 
 // Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-api-fe.md §4.6.
 // Mở qua link email "Duyệt/Từ chối đơn tăng ca" gửi cho Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc.
@@ -37,6 +87,9 @@ export default function OtFormEmailConfirmPage() {
     const token = searchParams.get("token") ?? "";
 
     const [form, setForm] = useState<OtFormDto | null>(null);
+    // Mặc định 3 (TGĐ — hiện đủ 5 cấp) khi chưa tải xong/lỗi tải OtCase (vd OtCase yêu cầu đăng nhập
+    // trong khi trang này public) — an toàn hơn là lỡ ẩn mất 1 cấp thật sự cần, xem OtFormDetail.tsx.
+    const [requiredApprovalLevel, setRequiredApprovalLevel] = useState(3);
 
     const [comment, setComment] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,12 +99,25 @@ export default function OtFormEmailConfirmPage() {
     // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
     // đúng câu thông báo riêng này thay vì rơi về fallback chung.
     const { isLoading, error: loadError } = useFetchEffect(
-        () =>
-            token
-                ? OtFormApi.getOtFormByEmailToken(token)
-                : Promise.reject(new Error(JSON.stringify({ message: "Thiếu token trong đường link." }))),
+        async () => {
+            if (!token) {
+                throw new Error(JSON.stringify({ message: "Thiếu token trong đường link." }));
+            }
+            const data = await OtFormApi.getOtFormByEmailToken(token);
+            let approvalLevel = 3;
+            try {
+                const otCase = await OtCaseApi.getOtCaseById(data.otCaseId);
+                approvalLevel = otCase.requiredApprovalLevel;
+            } catch (err) {
+                console.error(err);
+            }
+            return { data, approvalLevel };
+        },
         [token],
-        (data) => setForm(data),
+        (result) => {
+            setForm(result.data);
+            setRequiredApprovalLevel(result.approvalLevel);
+        },
         "Không thể tải đơn tăng ca — link có thể đã hết hạn hoặc đã được xử lý."
     );
 
@@ -99,6 +165,9 @@ export default function OtFormEmailConfirmPage() {
         );
     }
 
+    const applicableLevels = applicableApprovalLevels(requiredApprovalLevel);
+    const approvalSteps = buildApprovalSteps(form, applicableLevels);
+
     return (
         <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -114,6 +183,62 @@ export default function OtFormEmailConfirmPage() {
                     {otFormStatusLabels[form.status] ?? "Không xác định"}
                 </span>
             </div>
+
+            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Tiến độ duyệt</h2>
+                <div className="flex overflow-x-auto pb-1">
+                    {approvalSteps.map((step, index) => (
+                        <div key={step.level} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
+                            {index > 0 && (
+                                <div
+                                    className={`absolute left-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
+                                        approvalSteps[index - 1].state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
+                                    }`}
+                                />
+                            )}
+                            {index < approvalSteps.length - 1 && (
+                                <div
+                                    className={`absolute right-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
+                                        step.state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
+                                    }`}
+                                />
+                            )}
+                            <div
+                                className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
+                                    step.state === "done"
+                                        ? "border-emerald-500 bg-emerald-500 text-white"
+                                        : step.state === "rejected"
+                                        ? "border-[#930006] bg-[#930006] text-white"
+                                        : step.state === "current"
+                                        ? "border-[#9a5b00] bg-[#fff4e5] text-[#9a5b00]"
+                                        : "border-[#e0e3e5] bg-white text-[#9aa0a6]"
+                                }`}
+                            >
+                                {step.state === "done" && <Check size={16} />}
+                                {step.state === "rejected" && <X size={16} />}
+                                {step.state === "current" && <Clock size={16} />}
+                                {step.state === "upcoming" && index + 1}
+                            </div>
+                            <div
+                                className={`mt-2 text-center text-xs font-semibold ${
+                                    step.state === "upcoming" ? "text-[#9aa0a6]" : "text-[#191c1e]"
+                                }`}
+                            >
+                                {approvalLevelLabels[step.level]}
+                            </div>
+                            {step.history ? (
+                                <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
+                                    {step.history.approverFullName ?? step.history.approverUserName}
+                                    <br />
+                                    {formatDateTime(step.history.actionAt)}
+                                </div>
+                            ) : step.state === "current" ? (
+                                <div className="mt-0.5 text-center text-[11px] text-[#9a5b00]">Đang chờ</div>
+                            ) : null}
+                        </div>
+                    ))}
+                </div>
+            </section>
 
             <section className="grid gap-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm md:grid-cols-2 lg:grid-cols-3">
                 <div>
@@ -138,7 +263,34 @@ export default function OtFormEmailConfirmPage() {
                     <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Người tạo</div>
                     <div className="mt-1 text-sm text-[#191c1e]">{form.createdByFullName ?? form.createdByUserName}</div>
                 </div>
+                {form.subReason && (
+                    <div>
+                        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lý do chi tiết</div>
+                        <div className="mt-1 text-sm text-[#191c1e]">{form.subReason}</div>
+                    </div>
+                )}
             </section>
+
+            {form.processPart && (
+                <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Phần xử lý</h2>
+                    <div className="flex flex-wrap gap-4 text-sm text-[#191c1e]">
+                        <span>Ăn uống: {form.processPart.isEat ? "Có" : "Không"}</span>
+                        <span>Xe đưa đón: {form.processPart.isTransportation ? "Có" : "Không"}</span>
+                        <span>Phòng copy: {form.processPart.isUseCopyRoom ? "Có" : "Không"}</span>
+                    </div>
+                    {form.processPart.isEat && (
+                        <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
+                            <span>Phiếu chính: {form.processPart.mainTicketCount}</span>
+                            <span>Phiếu phụ: {form.processPart.secondaryTicketCount}</span>
+                            <span>Sữa: {form.processPart.milkCount}</span>
+                        </div>
+                    )}
+                    {form.processPart.anotherSuggestionVn && (
+                        <p className="mt-2 text-sm text-[#5e3f3a]">Đề nghị khác: {form.processPart.anotherSuggestionVn}</p>
+                    )}
+                </section>
+            )}
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <h2 className="border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
@@ -148,25 +300,46 @@ export default function OtFormEmailConfirmPage() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã NV</th>
-                                <th className="px-6 py-3">Họ và tên</th>
-                                <th className="px-6 py-3">Thời gian</th>
-                                <th className="px-6 py-3">Lũy kế tháng/năm</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Mã NV</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Họ và tên</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Thời gian</th>
+                                <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">Lũy kế</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Phiếu ăn</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">Ghi chú</th>
+                            </tr>
+                            <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                <th className="px-6 py-2 text-center">Tháng</th>
+                                <th className="px-6 py-2 text-center">Năm</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {form.employees.map((employee) => (
-                                <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
-                                    <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{employee.employeeCode}</td>
-                                    <td className="px-6 py-3 text-sm text-[#191c1e]">{employee.fullName}</td>
-                                    <td className="px-6 py-3 text-sm text-[#5e3f3a]">
-                                        {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
-                                    </td>
-                                    <td className="px-6 py-3 text-sm text-[#5e3f3a]">
-                                        {employee.monthToDate}h / {employee.yearToDate}h
-                                    </td>
-                                </tr>
-                            ))}
+                            {form.employees.map((employee) => {
+                                const isMonthOverLimit = employee.monthToDate > 25;
+                                const isYearOverLimit = employee.yearToDate > 300;
+                                const isOverLimit = isMonthOverLimit || isYearOverLimit;
+                                return (
+                                    <tr
+                                        key={employee.employeeId}
+                                        className={`border-b border-[#f1f5f9] ${isOverLimit ? "bg-[#fdecea]" : ""}`}
+                                    >
+                                        <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{employee.employeeCode}</td>
+                                        <td className="px-6 py-3 text-sm text-[#191c1e]">{employee.fullName}</td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">
+                                            {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
+                                        </td>
+                                        <td className={`px-6 py-3 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                            {employee.monthToDate}h
+                                        </td>
+                                        <td className={`px-6 py-3 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                            {employee.yearToDate}h
+                                        </td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">
+                                            {employee.isEligibleForMeal ? <Check size={16} className="text-emerald-600" /> : "-"}
+                                        </td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.noteVn || "-"}</td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -174,8 +347,8 @@ export default function OtFormEmailConfirmPage() {
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lịch sử ký duyệt</h2>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {TIMELINE_LEVELS.map((level) => {
+                <div className={`grid gap-4 md:grid-cols-2 ${APPROVAL_GRID_LG_COLS[applicableLevels.length] ?? "lg:grid-cols-5"}`}>
+                    {applicableLevels.map((level) => {
                         const history = form.approvalHistories.find((item) => item.approvalLevel === level);
                         return (
                             <div key={level} className="rounded-lg border border-[#e0e3e5] p-4">
@@ -190,6 +363,14 @@ export default function OtFormEmailConfirmPage() {
                                         <div className="text-xs text-[#5e3f3a]">{approvalActionLabels[history.action]}</div>
                                         <div className="text-xs text-[#5e3f3a]">{formatDateTime(history.actionAt)}</div>
                                         {history.comment && <div className="text-xs text-[#191c1e]">&quot;{history.comment}&quot;</div>}
+                                        {history.hasSignature && history.signatureImage && (
+                                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
+                                            <img
+                                                src={`data:image/png;base64,${history.signatureImage}`}
+                                                alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}
+                                                className="h-16 w-full rounded border border-[#e0e3e5] object-contain"
+                                            />
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="mt-2 text-xs text-[#9aa0a6]">Chưa xử lý</div>
