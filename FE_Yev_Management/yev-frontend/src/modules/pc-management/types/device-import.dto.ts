@@ -3,11 +3,12 @@
 // Dữ liệu thô đọc được từ 1 dòng Excel — dùng chung cho response preview và request confirm.
 // 2026-07-11: thêm 5 cột cấu hình (Hãng/Model/CPU/RAM/Ổ Cứng) giữa "Số SerialNumber" và "MQL Cũ".
 // 2026-07-13: cột "Xưởng"/"Nhà Cung Cấp" đổi khớp theo Mã (branchCode/supplierCode) thay vì Tên.
+// 2026-07-23: cột "Loại Thiết Bị" đổi khớp theo Mã (deviceTypeCode) thay vì Tên (deviceTypeName).
 export interface DeviceImportRowDto {
     rowNumber: number;
     deviceCode: string;
     branchCode: string;
-    deviceTypeName: string;
+    deviceTypeCode: string;
     supplierCode: string;
     purchaseDate: string;
     note: string | null;
@@ -21,11 +22,15 @@ export interface DeviceImportRowDto {
 }
 
 // Item trả về từ bước preview — thêm các Id đã tra sẵn + kết quả validate.
+// 2026-07-23: MQL đã tồn tại không còn là lỗi — resolvedExistingDeviceId/isUpdate cho biết
+// dòng này sẽ CẬP NHẬT máy có sẵn (đang "Chờ sử dụng") thay vì tạo mới.
 export interface DeviceImportPreviewRowDto extends DeviceImportRowDto {
     resolvedBranchId: number | null;
     resolvedDeviceTypeId: number | null;
     resolvedSupplierId: number | null;
     resolvedOldDeviceId: number | null;
+    resolvedExistingDeviceId: number | null;
+    isUpdate: boolean;
     isValid: boolean;
     errors: string[];
 }
@@ -58,7 +63,10 @@ export interface DeviceImportSkippedRowDto {
 export interface DeviceImportConfirmResultDto {
     createdCount: number;
     createdDeviceIds: number[];
+    updatedCount: number;
+    updatedDeviceIds: number[];
     createdConfigCount: number;
+    updatedConfigCount: number;
     pendingTransfers: DeviceImportPendingTransferDto[];
     skippedCount: number;
     skippedRows: DeviceImportSkippedRowDto[];

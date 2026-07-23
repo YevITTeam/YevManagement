@@ -103,7 +103,7 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                 rowNumber: row.rowNumber,
                 deviceCode: row.deviceCode,
                 branchCode: row.branchCode,
-                deviceTypeName: row.deviceTypeName,
+                deviceTypeCode: row.deviceTypeCode,
                 supplierCode: row.supplierCode,
                 purchaseDate: row.purchaseDate,
                 note: row.note,
@@ -118,7 +118,7 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
             const confirmResult = await DeviceImportApi.confirmImport(rawRows);
             setResult(confirmResult);
             toast.success(
-                `Đã tạo ${confirmResult.createdCount} thiết bị` +
+                `Đã tạo ${confirmResult.createdCount}, cập nhật ${confirmResult.updatedCount} thiết bị` +
                     (confirmResult.skippedCount > 0 ? `, bỏ qua ${confirmResult.skippedCount} dòng lỗi.` : ".")
             );
             if (confirmResult.createdCount > 0) {
@@ -133,10 +133,13 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
 
     const canConfirm = summary !== null && rows.length > 0 && result === null;
 
-    // Các dòng đã tạo thành công = preview rows trừ đi các dòng bị bỏ qua ở bước Confirm.
-    const createdRows = result
+    // Các dòng đã xử lý thành công = preview rows trừ đi các dòng bị bỏ qua ở bước Confirm,
+    // tách theo isUpdate (2026-07-23: MQL trùng máy "Chờ sử dụng" → cập nhật thay vì tạo mới).
+    const processedRows = result
         ? rows.filter((row) => !result.skippedRows.some((skipped) => skipped.rowNumber === row.rowNumber))
         : [];
+    const createdRows = processedRows.filter((row) => !row.isUpdate);
+    const updatedRows = processedRows.filter((row) => row.isUpdate);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -154,7 +157,8 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                             Nhập thiết bị từ Excel
                         </h3>
                         <p className="mt-1 text-xs text-[#5e3f3a]">
-                            Chọn file theo mẫu công ty, xem trước để kiểm tra lỗi trước khi xác nhận import.
+                            Chọn file theo mẫu công ty, xem trước để kiểm tra lỗi trước khi xác nhận import. MQL đã
+                            tồn tại và đang &quot;Chờ sử dụng&quot; sẽ được cập nhật thay vì báo lỗi trùng.
                         </p>
                     </div>
                     <button
@@ -172,7 +176,10 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                     <div className="flex-1 overflow-auto p-6">
                         <div className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm">
                             <span className="font-semibold text-[#16a34a]">Đã tạo {result.createdCount} thiết bị</span>
-                            <span className="text-[#5e3f3a]">Kèm cấu hình: {result.createdConfigCount}</span>
+                            <span className="font-semibold text-[#2563eb]">Đã cập nhật {result.updatedCount} thiết bị</span>
+                            <span className="text-[#5e3f3a]">
+                                Cấu hình: tạo mới {result.createdConfigCount} / cập nhật {result.updatedConfigCount}
+                            </span>
                             <span className={result.skippedCount > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 Bỏ qua (lỗi): {result.skippedCount}
                             </span>
@@ -242,6 +249,36 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                                                         In nhãn
                                                     </button>
                                                 </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {updatedRows.length > 0 && (
+                            <div className="mb-6">
+                                <h4 className="mb-2 text-sm font-semibold text-[#191c1e]">
+                                    Thiết bị đã cập nhật (MQL đã tồn tại, đang &quot;Chờ sử dụng&quot;)
+                                </h4>
+                                <table className="min-w-full border-collapse text-left text-xs">
+                                    <thead>
+                                        <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                            <th className="whitespace-nowrap px-3 py-2">MQL</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Mã Xưởng</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Mã Loại TB</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Mã NCC</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Ngày mua</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {updatedRows.map((row) => (
+                                            <tr key={row.rowNumber} className="border-b border-[#f1f5f9]">
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#191c1e]">{row.deviceCode}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.branchCode}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.deviceTypeCode}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.supplierCode}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{formatDate(row.purchaseDate)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -324,6 +361,9 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                                 <span className={summary.invalidRows > 0 ? "text-[#930006]" : "text-[#5e3f3a]"}>
                                     Lỗi: {summary.invalidRows}
                                 </span>
+                                <span className="text-[#2563eb]">
+                                    Sẽ cập nhật: {rows.filter((row) => row.isUpdate).length} (MQL đã tồn tại, &quot;Chờ sử dụng&quot;)
+                                </span>
                                 {summary.invalidRows > 0 && (
                                     <span className="text-[#930006]">— Các dòng lỗi sẽ tự bị bỏ qua khi xác nhận import.</span>
                                 )}
@@ -340,9 +380,10 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                                     <thead>
                                         <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                             <th className="whitespace-nowrap px-3 py-2">Dòng</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Loại dòng</th>
                                             <th className="whitespace-nowrap px-3 py-2">MQL</th>
                                             <th className="whitespace-nowrap px-3 py-2">Mã Xưởng</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Loại thiết bị</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Mã Loại TB</th>
                                             <th className="whitespace-nowrap px-3 py-2">Mã NCC</th>
                                             <th className="whitespace-nowrap px-3 py-2">Ngày mua</th>
                                             <th className="whitespace-nowrap px-3 py-2">Serial</th>
@@ -363,9 +404,18 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                                                 className={`border-b border-[#f1f5f9] ${row.isValid ? "" : "bg-[#fff4f2]"}`}
                                             >
                                                 <td className="whitespace-nowrap px-3 py-2 font-semibold text-[#191c1e]">{row.rowNumber}</td>
+                                                <td className="whitespace-nowrap px-3 py-2">
+                                                    <span
+                                                        className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+                                                            row.isUpdate ? "bg-[#dbeafe] text-[#2563eb]" : "bg-[#dcfce7] text-[#16a34a]"
+                                                        }`}
+                                                    >
+                                                        {row.isUpdate ? "Cập nhật" : "Tạo mới"}
+                                                    </span>
+                                                </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#191c1e]">{row.deviceCode}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.branchCode}</td>
-                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.deviceTypeName}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.deviceTypeCode}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.supplierCode}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{formatDate(row.purchaseDate)}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.serialNumber ?? "-"}</td>

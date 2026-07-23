@@ -23,6 +23,32 @@ export function parseAuditValues(json: string | null): Record<string, unknown> |
     }
 }
 
+// Shape gộp hàng loạt (docs §7b.1). BE có thể serialize key theo PascalCase (RecordNames,
+// AffectedCount...) hoặc camelCase → đọc gần đúng theo cả 2 kiểu, chỉ nhận khi có mảng recordNames.
+export interface NormalizedBulkValues {
+    affectedCount: number;
+    recordNames: string[];
+    truncated: boolean;
+}
+
+function pick<T>(source: Record<string, unknown>, ...keys: string[]): T | undefined {
+    for (const key of keys) {
+        if (source[key] !== undefined) return source[key] as T;
+    }
+    return undefined;
+}
+
+export function parseBulkAuditValues(json: string | null): NormalizedBulkValues | null {
+    const parsed = parseAuditValues(json);
+    if (!parsed) return null;
+    const recordNames = pick<unknown>(parsed, "recordNames", "RecordNames");
+    if (!Array.isArray(recordNames)) return null;
+    const names = recordNames.map((name) => String(name));
+    const affectedCount = pick<number>(parsed, "affectedCount", "AffectedCount") ?? names.length;
+    const truncated = pick<boolean>(parsed, "truncated", "Truncated") ?? false;
+    return { affectedCount, recordNames: names, truncated };
+}
+
 function formatAuditValue(value: unknown): string {
     if (value === null || value === undefined) return "-";
     if (typeof value === "object") return JSON.stringify(value);

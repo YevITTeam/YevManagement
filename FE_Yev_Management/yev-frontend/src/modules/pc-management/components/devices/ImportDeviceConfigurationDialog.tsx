@@ -111,6 +111,7 @@ export default function ImportDeviceConfigurationDialog({
                 taniumIpAddress: row.taniumIpAddress,
                 manufacturer: row.manufacturer,
                 model: row.model,
+                serialNumber: row.serialNumber,
                 cpu: row.cpu,
                 ram: row.ram,
                 size: row.size,
@@ -124,7 +125,7 @@ export default function ImportDeviceConfigurationDialog({
             );
             toast.success(
                 `Đồng bộ thành công — tạo mới ${confirmResult.createdConfigCount} cấu hình, ` +
-                    `cập nhật ${confirmResult.updatedConfigCount} cấu hình` +
+                    `cập nhật ${confirmResult.updatedConfigCount} cấu hình, ghi Serial cho ${confirmResult.serialUpdatedCount} thiết bị` +
                     (confirmResult.ipReassignedCount > 0 ? `, gán lại IP cho ${confirmResult.ipReassignedCount} thiết bị.` : ".")
             );
         } catch (err) {
@@ -155,6 +156,10 @@ export default function ImportDeviceConfigurationDialog({
                             Chọn file kiểm kê xuất từ Tanium — chỉ cập nhật cấu hình phần cứng cho thiết bị đã có sẵn
                             trong hệ thống (mã YDC/YLC/YDF/AC/TYC), không tạo thiết bị mới.
                         </p>
+                        <p className="mt-1 text-xs font-semibold text-[#b45309]">
+                            Lưu ý: dùng file mẫu xuất theo format mới 9 cột (có thêm cột &quot;Computer Serial
+                            Number&quot;) — file xuất theo format cũ 8 cột sẽ đọc lệch cột.
+                        </p>
                     </div>
                     <button
                         type="button"
@@ -173,6 +178,7 @@ export default function ImportDeviceConfigurationDialog({
                             <span className="font-semibold text-[#16a34a]">Tạo mới {result.createdConfigCount} cấu hình</span>
                             <span className="text-[#5e3f3a]">Cập nhật: {result.updatedConfigCount}</span>
                             <span className="text-[#5e3f3a]">Gán lại IP: {result.ipReassignedCount}</span>
+                            <span className="text-[#5e3f3a]">Ghi Serial: {result.serialUpdatedCount}</span>
                             <span className={localSkippedRows.length > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 Bỏ qua (lỗi): {localSkippedRows.length}
                             </span>
@@ -262,6 +268,7 @@ export default function ImportDeviceConfigurationDialog({
                                             <th className="whitespace-nowrap px-3 py-2">Computer Name</th>
                                             <th className="whitespace-nowrap px-3 py-2">Mã / Tên tách được</th>
                                             <th className="whitespace-nowrap px-3 py-2">Hãng / Model</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Serial</th>
                                             <th className="whitespace-nowrap px-3 py-2">CPU</th>
                                             <th className="whitespace-nowrap px-3 py-2">RAM</th>
                                             <th className="whitespace-nowrap px-3 py-2">Ổ cứng</th>
@@ -286,6 +293,17 @@ export default function ImportDeviceConfigurationDialog({
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
                                                     {row.manufacturer ?? "-"} / {row.model ?? "-"}
+                                                </td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
+                                                    {row.resolvedSerialNumber ? (
+                                                        row.resolvedSerialNumber
+                                                    ) : row.serialNumber ? (
+                                                        <span className="text-[#b45309]" title="Sẽ không ghi Serial — xem cảnh báo">
+                                                            {row.serialNumber} (bỏ qua)
+                                                        </span>
+                                                    ) : (
+                                                        "-"
+                                                    )}
                                                 </td>
                                                 <td className="max-w-[160px] truncate px-3 py-2 text-[#5e3f3a]" title={row.cpu ?? undefined}>
                                                     {row.cpu ?? "-"}

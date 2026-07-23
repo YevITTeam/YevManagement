@@ -185,16 +185,23 @@ Server tự: **IP** cũ→mới (IP mới đang giữ không thuộc cũ → g�
 Mẫu **13 cột đúng thứ tự, dòng 1 header**:
 | Cột | Excel | → field | Bắt buộc |
 |---|---|---|---|
-| A | MQL | `deviceCode` (chưa tồn tại) | ✅ |
+| A | MQL | `deviceCode` (mới → tạo; đã có + đang "Chờ sử dụng" → **cập nhật**) | ✅ |
 | B | Xưởng | **Mã** Chi nhánh (`branchCode`) | ✅ |
-| C | Loại Thiết Bị | Tên (`typeName`) | ✅ |
+| C | Loại Thiết Bị | **Mã** Loại (`deviceTypeCode`) | ✅ |
 | D | Nhà Cung Cấp | **Mã** NCC (`supplierCode`) | ✅ |
 | E | Ngày Mua | `purchaseDate` | ✅ |
 | F | Ghi Chú | `note` | ✗ |
 | G | Số SerialNumber | `serialNumber` (unique nếu có) | ✗ |
 | H–L | Hãng/Model/CPU/RAM/Ổ Cứng | `DeviceConfiguration.Maker/Model/Cpu/Ram/HardDrive` | ✗ |
 | M | MQL Cũ | máy bị thay | ✗ |
-> Cột B/D nhập **MÃ** (không phân biệt hoa/thường), C nhập **Tên**. Không khớp → lỗi preview (server không tự tạo mới).
+> ⚠️ **Đổi 2026-07-23**: cột C nhập **MÃ Loại Thiết Bị** (`typeCode`) thay vì Tên — cả B/C/D giờ đều là MÃ (không phân biệt hoa/thường). Field trong JSON đổi tên `deviceTypeName` → **`deviceTypeCode`**. Không khớp → lỗi preview (server không tự tạo mới).
+
+**Upsert theo MQL (2026-07-23)**: MQL đã tồn tại **không còn là lỗi** —
+> - máy đó đang **"Chờ sử dụng" (status 0)** → dòng đó **cập nhật** máy cũ (`isUpdate=true`, `resolvedExistingDeviceId` = Id máy);
+> - máy đó ở trạng thái khác (Đang sử dụng/Chờ thanh lý/Đã thanh lý) → **lỗi dòng**, không ghi đè;
+> - máy đó đã bị xóa mềm → lỗi dòng.
+>
+> Khi cập nhật: **ghi đè** Xưởng/Loại/NCC/Ngày Mua (+ tính lại `expirationDate` theo `depreciationMonths` sẵn có); **chỉ ghi đè khi ô không rỗng** với Ghi Chú/Serial; **không đụng** `deviceName`, `manager`, emails, IP, `depreciationMonths`, `status`, nhóm/bộ phận. Cấu hình H–L: đã có config → chỉ đè 5 field đó khi ô không rỗng; chưa có → tạo mới.
 > H–L: dòng có ≥1 cột khác rỗng → Confirm tạo kèm `DeviceConfiguration` (chỉ 5 field, còn lại trống).
 > "Ngày Mua": ô Date thật → đọc trực tiếp; ô text → chỉ nhận `dd/MM/yyyy` (VD `01/07/2026`). Khác/trống → lỗi.
 
@@ -206,10 +213,11 @@ Field `[Required]` Excel không có → mặc định: `deviceName`=`deviceCode`
 ```jsonc
 // data
 { "rows":[
-    { "rowNumber":2, "deviceCode":"...", "branchCode":"TAM", "deviceTypeName":"...", "supplierCode":"DTH",
+    { "rowNumber":2, "deviceCode":"...", "branchCode":"TAM", "deviceTypeCode":"PC", "supplierCode":"DTH",
       "purchaseDate":"...", "note":"...", "serialNumber":null, "maker":"Dell", "model":"...", "cpu":"...",
       "ram":"...", "hardDrive":"...", "oldDeviceCode":null,
       "resolvedBranchId":8, "resolvedDeviceTypeId":11, "resolvedSupplierId":2, "resolvedOldDeviceId":null,
+      "resolvedExistingDeviceId":null, "isUpdate":false,   // true = dòng này sẽ CẬP NHẬT máy có sẵn
       "isValid":true, "errors":[] },
     { "rowNumber":3, ..., "isValid":false, "errors":["Không tìm thấy Xưởng có mã 'ZZZ'."] }
   ], "totalRows":2, "validRows":1, "invalidRows":1 }
@@ -219,11 +227,12 @@ FE render `rows`, tô đỏ `isValid=false`. Nút Confirm **không cần disable
 **Confirm** — `POST /confirm` (JSON, gửi lại `rows` field thô, server tự tra lại). **Validate lại từ đầu, dòng lỗi BỎ QUA không chặn batch**:
 ```jsonc
 // data
-{ "createdCount":1, "createdDeviceIds":[17996], "createdConfigCount":1,
+{ "createdCount":1, "createdDeviceIds":[17996], "updatedCount":2, "updatedDeviceIds":[17800,17801],
+  "createdConfigCount":1, "updatedConfigCount":1,
   "pendingTransfers":[{ "newDeviceId":17996, "newDeviceCode":"...", "oldDeviceId":17500, "oldDeviceCode":"..." }],
   "skippedCount":1, "skippedRows":[{ "rowNumber":3, "deviceCode":"...", "errors":["..."] }] }
 ```
-FE hiện "Đã tạo N, bỏ qua M dòng lỗi". Response 400 chỉ khi lỗi hệ thống. Permission chung `Asset.Device.Create`. Chỉ tạo mới (trùng `MQL` → lỗi); chưa có file mẫu tải.
+FE hiện "Đã tạo N, cập nhật K, bỏ qua M dòng lỗi". Response 400 chỉ khi lỗi hệ thống. Permission chung `Asset.Device.Create`. Chưa có file mẫu tải.
 
 ## 6. DeviceConfiguration — `/api/DeviceConfiguration` (không grid-list/all, tra theo deviceId)
 ```jsonc
@@ -239,7 +248,19 @@ FE hiện "Đã tạo N, bỏ qua M dòng lỗi". Response 400 chỉ khi lỗi h
 - **6.2 Lịch sử sửa chữa**: `GET /{configId}/history` → `Dto[]` (mới nhất trước, 18 field + `editedAt`/`editedBy`). Chỉ sinh dòng nếu thực sự đổi field. Tự động 100%.
 
 ### 6.3 Import cấu hình Tanium — `/api/DeviceConfigurationImport` (preview/confirm)
-**CHỈ cập nhật** Device đã có (không tạo mới). Mẫu **8 cột**: `Computer Name`, `Tanium Client IP Address`, `Last Logged In User`(bỏ qua), `Manufacturer`→maker, `Model`, `CPU`→cpu, `RAM`→ram, `Size`→hardDrive.
+**CHỈ cập nhật** Device đã có (không tạo mới). Mẫu **9 cột — format mới 2026-07-23**, đúng thứ tự:
+| Cột | Tanium | → field |
+|---|---|---|
+| A | Computer Name | tách ra mã/tên máy |
+| B | Tanium Client IP Address | gán IP |
+| C | Last Logged In User | **bỏ qua** |
+| D | Manufacturer | `maker` |
+| E | Model | `model` |
+| F | **Computer Serial Number** | **`Device.SerialNumber`** (mới) |
+| G | CPU | `cpu` |
+| H | **Total Memory** (tên cũ "RAM") | `ram` |
+| I | Size | `hardDrive` |
+> ⚠️ File xuất theo **format cũ 8 cột** (không có Computer Serial Number) sẽ đọc **lệch cột** — phải xuất lại theo format mới.
 > **Chỉ import 5 họ**: `YDC`/`YLC`/`YDF`/`AC`/`TYC`. Không khớp (gồm **họ `DA`**, `DESKTOP-*`, `ACLF/ACELF/ALF`...) → **loại thầm lặng** (`outOfScopeSkippedCount`).
 
 **Tách Computer Name → Mã/Tên** (server tự): (1) bỏ hậu tố `.yev.vn`, tách `-`. (2) `YDC/YLC/YDF/TYC`+số → Mã chèn `-` (`YDC1877`→`YDC-1877`), Tên=phần còn lại. (3) `AC`+số+≤1 chữ (`AC90B`) → Mã=nối 2 đoạn (`AC90B-2446`), Tên=Mã, phần còn lại bỏ. (4) còn lại (gồm `DA-*`) → loại.
@@ -251,9 +272,10 @@ Mã không khớp Device → lỗi preview. Trùng mã trong file → lỗi cả
 // data
 { "rows":[
     { "rowNumber":2, "computerName":"YDC9999-TESTCFG.yev.vn", "taniumIpAddress":"1.1.1.168",
-      "manufacturer":"Dell", "model":"...", "cpu":"...", "ram":"...", "size":"...",
+      "manufacturer":"Dell", "model":"...", "serialNumber":"5CD5354PGJ", "cpu":"...", "ram":"16384 MB", "size":"477 GB",
       "parsedDeviceCode":"YDC-9999", "parsedDeviceName":"TESTCFG",  // hiển thị để user kiểm tra tách đúng
-      "resolvedDeviceId":18001, "resolvedIpAddressId":7053, "isValid":true, "errors":[], "warnings":[] },
+      "resolvedDeviceId":18001, "resolvedIpAddressId":7053, "resolvedSerialNumber":"5CD5354PGJ",  // null = sẽ KHÔNG ghi serial
+      "isValid":true, "errors":[], "warnings":[] },
     { "rowNumber":4, ..., "resolvedIpAddressId":null, "isValid":true, "errors":[],
       "warnings":["Không tìm thấy địa chỉ IP '...' — sẽ không cập nhật IP..."] }
   ], "totalRows":3, "validRows":2, "invalidRows":1, "outOfScopeSkippedCount":137 }
@@ -263,9 +285,11 @@ Mã không khớp Device → lỗi preview. Trùng mã trong file → lỗi cả
 **Confirm** `POST /confirm` (gửi lại `rows` field thô). **Atomic — còn lỗi thì không ghi gì**, 400 `"Dòng {n}: {lý do}"`:
 ```jsonc
 // data
-{ "createdConfigCount":1, "updatedConfigCount":0, "ipReassignedCount":1, "updatedDeviceIds":[18001] }
+{ "createdConfigCount":1, "updatedConfigCount":0, "ipReassignedCount":1, "serialUpdatedCount":1,
+  "updatedDeviceIds":[18001] }
 ```
-**Luật gán IP** (`taniumIpAddress`): trống→bỏ qua; khớp IP nào→**luôn** gán (cướp từ Device khác), IP khác của Device đang import **không** bị gỡ; không khớp→**không chặn**, +`warnings`. **Update không đè field khác**: Device có config → chỉ đè 5 field Tanium (chỉ khi ô không rỗng), field khác giữ nguyên; chưa có → tạo mới (kèm Initial 6.1). Permission chung `Asset.DeviceConfiguration.Update`.
+**Luật gán IP** (`taniumIpAddress`): trống→bỏ qua; khớp IP nào→**luôn** gán (cướp từ Device khác), IP khác của Device đang import **không** bị gỡ; không khớp→**không chặn**, +`warnings`.
+**Luật ghi Serial** (`serialNumber`, 2026-07-23): trống→bỏ qua; serial đang thuộc **Device khác** hoặc **lặp nhiều dòng trong file** → **không chặn dòng**, chỉ +`warnings` và bỏ ghi serial (`resolvedSerialNumber=null`); còn lại → ghi đè `Device.SerialNumber` (Tanium đọc thẳng từ máy nên tin hơn giá trị nhập tay). Cột serial chứa `"TSE-Error"` cũng làm hỏng dòng như các cột khác. **Update không đè field khác**: Device có config → chỉ đè 5 field Tanium (chỉ khi ô không rỗng), field khác giữ nguyên; chưa có → tạo mới (kèm Initial 6.1). Permission chung `Asset.DeviceConfiguration.Update`.
 
 ## 7. DeviceSoftware — `/api/DeviceSoftware` (khoá `(deviceId, softwareId)`, không Id riêng)
 - **7.1 `GET /device/{deviceId}`** → `[{ deviceId, softwareId, softwareName, installDate, licenseKey }]`.

@@ -1,5 +1,4 @@
-import type { AuditTrailBulkValuesDto } from "@/modules/pc-management/types/audit-trail.dto";
-import { formatAuditValue, parseAuditValues } from "./audit-trail-format";
+import { formatAuditValue, parseAuditValues, parseBulkAuditValues } from "./audit-trail-format";
 
 interface AuditTrailDiffViewProps {
     oldValues: string | null;
@@ -9,41 +8,62 @@ interface AuditTrailDiffViewProps {
     affectedCount?: number;
 }
 
+// recordName BE dựng dạng "Nhãn (MÃ)" — vd "YEV.QA38@YEV.VN (YDC-1426)", "192.168.1.5 (PC-001)".
+// Tách mã ra để hiện thành badge canh cột, phần còn lại là nhãn; không khớp thì để label = cả chuỗi.
+function splitRecordName(name: string): { label: string; code: string | null } {
+    const match = name.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
+    if (match) return { label: match[1].trim(), code: match[2].trim() };
+    return { label: name, code: null };
+}
+
 // oldValues/newValues chỉ chứa field THỰC SỰ đổi (docs §7b.1) — gộp theo tên field để hiện dạng
 // "trước → sau" thay vì 2 khối JSON thô rời nhau.
 export default function AuditTrailDiffView({ oldValues, newValues, affectedCount = 1 }: AuditTrailDiffViewProps) {
     if (affectedCount > 1) {
-        const bulk = parseAuditValues(newValues) as unknown as AuditTrailBulkValuesDto | null;
-        // Chỉ Create/Update hàng loạt mới gộp dạng AuditTrailBulkValuesDto (có recordNames).
+        // Chỉ Create/Update hàng loạt mới gộp dạng bulk (có recordNames — key có thể Pascal/camelCase).
         // Delete hàng loạt vẫn ghi newValues theo dạng diff field thường → rơi xuống bảng diff bên dưới.
-        if (bulk && Array.isArray(bulk.recordNames)) {
-            if (bulk.recordNames.length === 0) {
-                return <p className="text-xs text-[#5e3f3a]">Không có dữ liệu thay đổi chi tiết.</p>;
-            }
+        const bulk = parseBulkAuditValues(newValues);
+        if (bulk && bulk.recordNames.length > 0) {
             const hiddenCount = bulk.affectedCount - bulk.recordNames.length;
             return (
-                <div className="rounded-lg border border-[#e0e3e5] bg-white p-3 text-xs text-[#191c1e]">
-                    <div className="mb-2 flex items-center gap-2">
-                        <p className="font-semibold">Thao tác hàng loạt trên {bulk.affectedCount} bản ghi</p>
+                <div className="rounded-lg border border-[#e0e3e5] bg-white text-xs text-[#191c1e]">
+                    <div className="flex flex-wrap items-center gap-2 border-b border-[#f1f5f9] px-4 py-2.5">
+                        <span className="font-semibold text-[#191c1e]">Thao tác hàng loạt</span>
                         <span className="shrink-0 rounded-full border border-[#cfe0fb] bg-[#eef4ff] px-2 py-0.5 text-[10px] font-semibold text-[#1d4ed8]">
-                            hiển thị {bulk.recordNames.length}
+                            {bulk.affectedCount} bản ghi
                         </span>
+                        {hiddenCount > 0 && (
+                            <span className="text-[10px] text-[#8a8f94]">(hiển thị {bulk.recordNames.length} đầu tiên)</span>
+                        )}
                     </div>
-                    <div className="max-h-56 overflow-y-auto rounded-md border border-[#f1f5f9] bg-[#f8fafc] p-2">
-                        <div className="flex flex-wrap gap-1.5">
-                            {bulk.recordNames.map((name, index) => (
-                                <span
-                                    key={index}
-                                    className="inline-flex items-center gap-1 rounded-md border border-[#e0e3e5] bg-white px-2 py-1"
-                                >
-                                    <span className="text-[#8a8f94]">{index + 1}.</span>
-                                    {name}
-                                </span>
-                            ))}
+                    <div className="max-h-64 overflow-y-auto p-2">
+                        <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                            {bulk.recordNames.map((name, index) => {
+                                const { label, code } = splitRecordName(name);
+                                return (
+                                    <div
+                                        key={index}
+                                        className="flex items-center gap-2 rounded-md border border-[#f1f5f9] bg-[#f8fafc] px-2 py-1.5"
+                                        title={name}
+                                    >
+                                        <span className="w-6 shrink-0 text-right text-[10px] tabular-nums text-[#8a8f94]">
+                                            {index + 1}
+                                        </span>
+                                        {code && (
+                                            <span className="shrink-0 rounded border border-[#e0e3e5] bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[#191c1e]">
+                                                {code}
+                                            </span>
+                                        )}
+                                        <span className="truncate text-[#5e3f3a]">{label}</span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                     {bulk.truncated && hiddenCount > 0 && (
-                        <p className="mt-2 text-[#5e3f3a]">... và {hiddenCount} bản ghi khác không hiển thị.</p>
+                        <p className="border-t border-[#f1f5f9] px-4 py-2 text-[#5e3f3a]">
+                            ... và {hiddenCount} bản ghi khác không hiển thị.
+                        </p>
                     )}
                 </div>
             );

@@ -2,11 +2,14 @@
 // Khác device-import: CHỈ cập nhật Device đã có sẵn, không tự tạo Device mới.
 
 // Dữ liệu thô đọc được từ 1 dòng file Tanium — dùng chung cho response preview và request confirm.
+// 2026-07-23: format mới 9 cột — thêm cột F "Computer Serial Number" (serialNumber) ghi vào
+// Device.SerialNumber. File xuất theo format cũ 8 cột (không có cột này) sẽ đọc lệch cột.
 export interface DeviceConfigurationImportRowDto {
     computerName: string;
     taniumIpAddress: string | null;
     manufacturer: string | null;
     model: string | null;
+    serialNumber: string | null;
     cpu: string | null;
     ram: string | null;
     size: string | null;
@@ -19,6 +22,8 @@ export interface DeviceConfigurationImportPreviewRowDto extends DeviceConfigurat
     parsedDeviceName: string;
     resolvedDeviceId: number | null;
     resolvedIpAddressId: number | null;
+    // null = serial sẽ KHÔNG được ghi (trống, đang thuộc Device khác, hoặc lặp nhiều dòng trong file).
+    resolvedSerialNumber: string | null;
     isValid: boolean;
     errors: string[];
     warnings: string[];
@@ -41,5 +46,6 @@ export interface DeviceConfigurationImportConfirmResultDto {
     createdConfigCount: number;
     updatedConfigCount: number;
     ipReassignedCount: number;
+    serialUpdatedCount: number;
     updatedDeviceIds: number[];
 }
