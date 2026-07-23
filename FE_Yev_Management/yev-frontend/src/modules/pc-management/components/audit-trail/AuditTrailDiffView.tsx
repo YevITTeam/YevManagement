@@ -14,25 +14,40 @@ interface AuditTrailDiffViewProps {
 export default function AuditTrailDiffView({ oldValues, newValues, affectedCount = 1 }: AuditTrailDiffViewProps) {
     if (affectedCount > 1) {
         const bulk = parseAuditValues(newValues) as unknown as AuditTrailBulkValuesDto | null;
-        if (!bulk || bulk.recordNames.length === 0) {
-            return <p className="text-xs text-[#5e3f3a]">Không có dữ liệu thay đổi chi tiết.</p>;
-        }
-        const hiddenCount = bulk.affectedCount - bulk.recordNames.length;
-        return (
-            <div className="text-xs text-[#191c1e]">
-                <p className="mb-2 font-semibold">Thao tác hàng loạt trên {bulk.affectedCount} bản ghi:</p>
-                <div className="flex flex-wrap gap-1.5">
-                    {bulk.recordNames.map((name, index) => (
-                        <span key={index} className="rounded-md border border-[#e0e3e5] bg-white px-2 py-1">
-                            {name}
+        // Chỉ Create/Update hàng loạt mới gộp dạng AuditTrailBulkValuesDto (có recordNames).
+        // Delete hàng loạt vẫn ghi newValues theo dạng diff field thường → rơi xuống bảng diff bên dưới.
+        if (bulk && Array.isArray(bulk.recordNames)) {
+            if (bulk.recordNames.length === 0) {
+                return <p className="text-xs text-[#5e3f3a]">Không có dữ liệu thay đổi chi tiết.</p>;
+            }
+            const hiddenCount = bulk.affectedCount - bulk.recordNames.length;
+            return (
+                <div className="rounded-lg border border-[#e0e3e5] bg-white p-3 text-xs text-[#191c1e]">
+                    <div className="mb-2 flex items-center gap-2">
+                        <p className="font-semibold">Thao tác hàng loạt trên {bulk.affectedCount} bản ghi</p>
+                        <span className="shrink-0 rounded-full border border-[#cfe0fb] bg-[#eef4ff] px-2 py-0.5 text-[10px] font-semibold text-[#1d4ed8]">
+                            hiển thị {bulk.recordNames.length}
                         </span>
-                    ))}
+                    </div>
+                    <div className="max-h-56 overflow-y-auto rounded-md border border-[#f1f5f9] bg-[#f8fafc] p-2">
+                        <div className="flex flex-wrap gap-1.5">
+                            {bulk.recordNames.map((name, index) => (
+                                <span
+                                    key={index}
+                                    className="inline-flex items-center gap-1 rounded-md border border-[#e0e3e5] bg-white px-2 py-1"
+                                >
+                                    <span className="text-[#8a8f94]">{index + 1}.</span>
+                                    {name}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                    {bulk.truncated && hiddenCount > 0 && (
+                        <p className="mt-2 text-[#5e3f3a]">... và {hiddenCount} bản ghi khác không hiển thị.</p>
+                    )}
                 </div>
-                {bulk.truncated && hiddenCount > 0 && (
-                    <p className="mt-2 text-[#5e3f3a]">... và {hiddenCount} bản ghi khác.</p>
-                )}
-            </div>
-        );
+            );
+        }
     }
 
     const oldData = parseAuditValues(oldValues);
