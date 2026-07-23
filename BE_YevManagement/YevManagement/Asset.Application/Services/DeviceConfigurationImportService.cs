@@ -12,7 +12,8 @@ using Shared.Core.Exceptions;
 namespace Asset.Application.Services
 {
     // Import cấu hình phần cứng hàng loạt từ file kiểm kê Tanium (Computer Name/Tanium
-    // Client IP Address/Last Logged In User/Manufacturer/Model/CPU/RAM/Size). Khác với
+    // Client IP Address/Last Logged In User/Manufacturer/Model/Computer Serial Number/CPU/
+    // Total Memory/Size — format 9 cột từ 2026-07-23). Khác với
     // DeviceImportService (tạo Device mới) — service này CHỈ cập nhật Device đã có sẵn,
     // không tự tạo Device mới (2026-07-10, theo quyết định người dùng: file Tanium không
     // có Xưởng/Loại thiết bị/Nhà cung cấp/Ngày mua nên không đủ dữ liệu để tạo Device hợp lệ).
@@ -70,6 +71,12 @@ namespace Asset.Application.Services
                     {
                         var reassigned = await ReassignDeviceIpAsync(deviceId, row.ResolvedIpAddressId.Value);
                         if (reassigned) result.IpReassignedCount++;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(row.ResolvedSerialNumber))
+                    {
+                        var serialUpdated = await UpdateDeviceSerialNumberAsync(deviceId, row.ResolvedSerialNumber!);
+                        if (serialUpdated) result.SerialUpdatedCount++;
                     }
 
                     var existingConfig = await _deviceConfigurationService.GetByDeviceIdAsync(deviceId);
@@ -148,12 +155,36 @@ namespace Asset.Application.Services
             return true;
         }
 
+        // Ghi số serial Tanium báo cáo được vào Device (2026-07-23). Đã kiểm tra ở bước validate là
+        // serial này chưa thuộc device khác, nên ở đây chỉ ghi đè giá trị cũ (Tanium đọc trực tiếp
+        // từ máy nên coi là nguồn đáng tin hơn giá trị nhập tay). Trả về true khi có thay đổi thật.
+        private async Task<bool> UpdateDeviceSerialNumberAsync(int deviceId, string serialNumber)
+        {
+            var device = await _unitOfWork.Devices.GetByIdAsync(deviceId);
+            if (device == null || device.SerialNumber == serialNumber) return false;
+
+            device.SerialNumber = serialNumber;
+            _unitOfWork.Devices.Update(device);
+
+            return true;
+        }
+
         private async Task<(List<DeviceConfigurationImportRowDto> Rows, int OutOfScopeSkippedCount)> ValidateAndResolveRowsAsync(List<DeviceConfigurationImportRowDto> rawRows)
         {
             var duplicatedCodesInFile = rawRows
                 .Select(r => ParseComputerName(r.ComputerName ?? string.Empty).Code)
                 .Where(c => c != null)
                 .GroupBy(c => c!, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // Cùng 1 serial xuất hiện ở nhiều dòng → không dòng nào được ghi serial (unique index sẽ
+            // làm hỏng cả transaction ở bước Confirm). Chỉ Warning, không chặn dòng.
+            var duplicatedSerialsInFile = rawRows
+                .Select(r => r.SerialNumber?.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .GroupBy(s => s!, StringComparer.OrdinalIgnoreCase)
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -210,6 +241,29 @@ namespace Asset.Application.Services
                     }
                 }
 
+                // Serial number (cột "Computer Serial Number", format mới 2026-07-23): ghi vào
+                // Device.SerialNumber. SerialNumber là unique-khi-có trong DB nên nếu số này đang
+                // thuộc về 1 Device KHÁC thì chỉ Warning + bỏ qua việc ghi serial (không chặn
+                // dòng — cấu hình vẫn cập nhật bình thường), cùng triết lý với quy tắc IP ở trên.
+                string? resolvedSerialNumber = null;
+                var serialNumber = row.SerialNumber?.Trim();
+                if (!string.IsNullOrWhiteSpace(serialNumber) && !errors.Any(e => e.StartsWith("Dòng bị lỗi Tanium")))
+                {
+                    var deviceOwningSerial = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.SerialNumber == serialNumber);
+                    if (duplicatedSerialsInFile.Contains(serialNumber))
+                    {
+                        warnings.Add($"Số Serial '{serialNumber}' bị lặp lại nhiều dòng trong file — sẽ không cập nhật serial cho thiết bị này.");
+                    }
+                    else if (deviceOwningSerial != null && deviceOwningSerial.Id != resolvedDeviceId)
+                    {
+                        warnings.Add($"Số Serial '{serialNumber}' đang thuộc thiết bị '{deviceOwningSerial.DeviceCode}' — sẽ không cập nhật serial cho thiết bị này.");
+                    }
+                    else
+                    {
+                        resolvedSerialNumber = serialNumber;
+                    }
+                }
+
                 result.Add(new DeviceConfigurationImportRowDto
                 {
                     RowNumber = row.RowNumber,
@@ -217,6 +271,7 @@ namespace Asset.Application.Services
                     TaniumIpAddress = taniumIp,
                     Manufacturer = row.Manufacturer,
                     Model = row.Model,
+                    SerialNumber = serialNumber,
                     Cpu = row.Cpu,
                     Ram = row.Ram,
                     Size = row.Size,
@@ -224,6 +279,7 @@ namespace Asset.Application.Services
                     ParsedDeviceName = parsedName,
                     ResolvedDeviceId = resolvedDeviceId,
                     ResolvedIpAddressId = resolvedIpAddressId,
+                    ResolvedSerialNumber = resolvedSerialNumber,
                     IsValid = errors.Count == 0,
                     Errors = errors,
                     Warnings = warnings
@@ -236,8 +292,8 @@ namespace Asset.Application.Services
         private static bool IsTaniumErrorRow(DeviceConfigurationImportRowDto row)
         {
             return HasTaniumErrorPrefix(row.TaniumIpAddress) || HasTaniumErrorPrefix(row.Manufacturer) ||
-                HasTaniumErrorPrefix(row.Model) || HasTaniumErrorPrefix(row.Cpu) ||
-                HasTaniumErrorPrefix(row.Ram) || HasTaniumErrorPrefix(row.Size);
+                HasTaniumErrorPrefix(row.Model) || HasTaniumErrorPrefix(row.SerialNumber) ||
+                HasTaniumErrorPrefix(row.Cpu) || HasTaniumErrorPrefix(row.Ram) || HasTaniumErrorPrefix(row.Size);
         }
 
         private static bool HasTaniumErrorPrefix(string? value) =>
@@ -302,9 +358,12 @@ namespace Asset.Application.Services
             return (null, null);
         }
 
-        // Cột cố định theo đúng thứ tự file kiểm kê Tanium: A=Computer Name, B=Tanium
-        // Client IP Address, C=Last Logged In User (bỏ qua), D=Manufacturer, E=Model,
-        // F=CPU, G=RAM, H=Size. Dòng 1 là header.
+        // Cột cố định theo đúng thứ tự file kiểm kê Tanium — format mới 2026-07-23 (9 cột):
+        // A=Computer Name, B=Tanium Client IP Address, C=Last Logged In User (bỏ qua),
+        // D=Manufacturer, E=Model, F=Computer Serial Number, G=CPU, H=Total Memory (trước
+        // đây tên cột là "RAM", vẫn map vào Ram), I=Size. Dòng 1 là header.
+        // Format cũ 8 cột (không có Computer Serial Number, F=CPU/G=RAM/H=Size) KHÔNG còn
+        // đọc được — file cũ sẽ lệch cột, phải xuất lại theo format mới.
         private static List<DeviceConfigurationImportRowDto> ParseXlsx(Stream stream)
         {
             XLWorkbook workbook;
@@ -336,12 +395,14 @@ namespace Asset.Application.Services
                 var taniumIp = xlRow.Cell(2).GetString().Trim();
                 var manufacturer = xlRow.Cell(4).GetString().Trim();
                 var model = xlRow.Cell(5).GetString().Trim();
-                var cpu = xlRow.Cell(6).GetString().Trim();
-                var ram = xlRow.Cell(7).GetString().Trim();
-                var size = xlRow.Cell(8).GetString().Trim();
+                var serialNumber = xlRow.Cell(6).GetString().Trim();
+                var cpu = xlRow.Cell(7).GetString().Trim();
+                var ram = xlRow.Cell(8).GetString().Trim();
+                var size = xlRow.Cell(9).GetString().Trim();
 
                 var isRowEmpty = string.IsNullOrWhiteSpace(computerName) && string.IsNullOrWhiteSpace(taniumIp) &&
                     string.IsNullOrWhiteSpace(manufacturer) && string.IsNullOrWhiteSpace(model) &&
+                    string.IsNullOrWhiteSpace(serialNumber) &&
                     string.IsNullOrWhiteSpace(cpu) && string.IsNullOrWhiteSpace(ram) && string.IsNullOrWhiteSpace(size);
                 if (isRowEmpty) continue;
 
@@ -352,6 +413,7 @@ namespace Asset.Application.Services
                     TaniumIpAddress = string.IsNullOrWhiteSpace(taniumIp) ? null : taniumIp,
                     Manufacturer = string.IsNullOrWhiteSpace(manufacturer) ? null : manufacturer,
                     Model = string.IsNullOrWhiteSpace(model) ? null : model,
+                    SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
                     Cpu = string.IsNullOrWhiteSpace(cpu) ? null : cpu,
                     Ram = string.IsNullOrWhiteSpace(ram) ? null : ram,
                     Size = string.IsNullOrWhiteSpace(size) ? null : size
@@ -361,7 +423,7 @@ namespace Asset.Application.Services
             return rows;
         }
 
-        // Cùng 8 cột/thứ tự như ParseXlsx nhưng đọc từ file .csv (2026-07-11, thêm sau —
+        // Cùng 9 cột/thứ tự như ParseXlsx nhưng đọc từ file .csv (2026-07-11, thêm sau —
         // dùng CsvFileHelper chung, tự nhận diện dấu phẩy/chấm phẩy). File kiểm kê Tanium
         // thực tế thường xuất mặc định ở dạng CSV — đây là lý do chính thêm nhánh này.
         private static List<DeviceConfigurationImportRowDto> ParseCsv(Stream stream)
@@ -376,12 +438,14 @@ namespace Asset.Application.Services
                 var taniumIp = GetCsvCell(cells, 1);
                 var manufacturer = GetCsvCell(cells, 3);
                 var model = GetCsvCell(cells, 4);
-                var cpu = GetCsvCell(cells, 5);
-                var ram = GetCsvCell(cells, 6);
-                var size = GetCsvCell(cells, 7);
+                var serialNumber = GetCsvCell(cells, 5);
+                var cpu = GetCsvCell(cells, 6);
+                var ram = GetCsvCell(cells, 7);
+                var size = GetCsvCell(cells, 8);
 
                 var isRowEmpty = string.IsNullOrWhiteSpace(computerName) && string.IsNullOrWhiteSpace(taniumIp) &&
                     string.IsNullOrWhiteSpace(manufacturer) && string.IsNullOrWhiteSpace(model) &&
+                    string.IsNullOrWhiteSpace(serialNumber) &&
                     string.IsNullOrWhiteSpace(cpu) && string.IsNullOrWhiteSpace(ram) && string.IsNullOrWhiteSpace(size);
                 if (isRowEmpty) continue;
 
@@ -392,6 +456,7 @@ namespace Asset.Application.Services
                     TaniumIpAddress = string.IsNullOrWhiteSpace(taniumIp) ? null : taniumIp,
                     Manufacturer = string.IsNullOrWhiteSpace(manufacturer) ? null : manufacturer,
                     Model = string.IsNullOrWhiteSpace(model) ? null : model,
+                    SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
                     Cpu = string.IsNullOrWhiteSpace(cpu) ? null : cpu,
                     Ram = string.IsNullOrWhiteSpace(ram) ? null : ram,
                     Size = string.IsNullOrWhiteSpace(size) ? null : size

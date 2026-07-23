@@ -718,13 +718,9 @@ namespace Asset.Application.Services
             Emails = emails.Select(e => new DeviceEmailDto { Id = e.Id, Email = e.Email, Note = e.Note }).ToList()
         };
 
-        private static string GetStatusText(int status) => status switch
-        {
-            (int)DeviceStatus.PendingUse => "Chờ sử dụng",
-            (int)DeviceStatus.InUse => "Đang sử dụng",
-            (int)DeviceStatus.PendingLiquidation => "Chờ thanh lý",
-            (int)DeviceStatus.Liquidated => "Đã thanh lý",
-            _ => "Không xác định"
-        };
+        // Delegates to the shared helper so the wording lives in exactly one place (2026-07-23).
+        // The two grid projections above still repeat the ternary inline because EF translates them
+        // to SQL and cannot call a C# method.
+        private static string GetStatusText(int status) => status.GetDeviceStatusText();
     }
 }

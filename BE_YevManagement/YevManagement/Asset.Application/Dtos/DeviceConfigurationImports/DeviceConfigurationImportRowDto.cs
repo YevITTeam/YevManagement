@@ -13,7 +13,11 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
         public string? TaniumIpAddress { get; set; }
         public string? Manufacturer { get; set; }
         public string? Model { get; set; }
+        // "Computer Serial Number" column, added in the 2026-07-23 Tanium export format. Written back
+        // to Device.SerialNumber (not to the configuration) — that is where the serial lives.
+        public string? SerialNumber { get; set; }
         public string? Cpu { get; set; }
+        // "Total Memory" column in the new format (was "RAM") — same target field.
         public string? Ram { get; set; }
         public string? Size { get; set; }
 
@@ -23,6 +27,10 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
 
         public int? ResolvedDeviceId { get; set; }
         public int? ResolvedIpAddressId { get; set; }
+
+        // Serial that will actually be written on Confirm — null when there is nothing to write or
+        // when another device already owns it (that case is a Warning, not a blocking error).
+        public string? ResolvedSerialNumber { get; set; }
 
         public bool IsValid { get; set; }
         public List<string> Errors { get; set; } = new();

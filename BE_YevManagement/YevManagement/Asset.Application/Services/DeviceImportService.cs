@@ -1,4 +1,4 @@
-using Asset.Application.Dtos.DeviceConfigurations;
+﻿using Asset.Application.Dtos.DeviceConfigurations;
 using Asset.Application.Dtos.DeviceImports;
 using Asset.Application.Dtos.Devices;
 using Asset.Application.Interfaces.Service;
@@ -66,6 +66,16 @@ namespace Asset.Application.Services
             {
                 foreach (var row in validRows)
                 {
+                    // The MQL already exists and is still PendingUse -> update it instead of creating
+                    // a duplicate (2026-07-23). Handled in a dedicated method because DeviceService.
+                    // UpdateAsync would sync Emails/IpAddresses from the request and the Excel file
+                    // carries neither — going through it would wipe them.
+                    if (row.ResolvedExistingDeviceId.HasValue)
+                    {
+                        await UpdateExistingDeviceFromRowAsync(row, result);
+                        continue;
+                    }
+
                     var createDto = new CreateDeviceDto
                     {
                         DeviceCode = row.DeviceCode!,
@@ -104,9 +114,7 @@ namespace Asset.Application.Services
                     // 2026-07-11) — the just-created Device definitely has no config yet, so always
                     // CreateAsync, no need to check existence like DeviceConfigurationImportService
                     // (which imports updates).
-                    if (!string.IsNullOrWhiteSpace(row.Maker) || !string.IsNullOrWhiteSpace(row.Model) ||
-                        !string.IsNullOrWhiteSpace(row.Cpu) || !string.IsNullOrWhiteSpace(row.Ram) ||
-                        !string.IsNullOrWhiteSpace(row.HardDrive))
+                    if (HasAnyConfigurationValue(row))
                     {
                         await _deviceConfigurationService.CreateAsync(new CreateDeviceConfigurationDto
                         {
@@ -147,10 +155,113 @@ namespace Asset.Application.Services
             return result;
         }
 
+        // Updates a device that already exists with this MQL (validated as still PendingUse and not
+        // deleted). Only the columns the Excel template actually carries are touched:
+        //   overwritten always : Branch / DeviceType / Supplier / PurchaseDate (+ recomputed ExpirationDate)
+        //   overwritten if the cell is not empty : Note / SerialNumber
+        //   never touched : DeviceName, Manager, Emails, IpAddresses, DepreciationMonths, Status,
+        //                   GroupId, DepartmentId, IsOutsourced, IsUseUsb
+        // An empty cell must not erase data that was entered by hand on the Device screen.
+        private async Task UpdateExistingDeviceFromRowAsync(DeviceImportRowDto row, DeviceImportConfirmResultDto result)
+        {
+            var deviceId = row.ResolvedExistingDeviceId!.Value;
+
+            var device = await _unitOfWork.Devices.GetByIdAsync(deviceId);
+            device.OrThrowNotFound("Thiết bị", deviceId);
+
+            device!.BranchId = row.ResolvedBranchId!.Value;
+            device.DeviceTypeId = row.ResolvedDeviceTypeId!.Value;
+            device.SupplierId = row.ResolvedSupplierId!.Value;
+            device.PurchaseDate = row.PurchaseDate!.Value;
+            // DepreciationMonths is kept as-is (not in the file), so the expiry date follows the new
+            // purchase date using the device's own depreciation period.
+            device.ExpirationDate = row.PurchaseDate!.Value.AddMonths(device.DepreciationMonths);
+
+            if (!string.IsNullOrWhiteSpace(row.Note)) device.Note = row.Note;
+            if (!string.IsNullOrWhiteSpace(row.SerialNumber)) device.SerialNumber = row.SerialNumber;
+
+            _unitOfWork.Devices.Update(device);
+            await _unitOfWork.SaveChangesAsync();
+
+            result.UpdatedCount++;
+            result.UpdatedDeviceIds.Add(deviceId);
+
+            await UpsertConfigurationFromRowAsync(deviceId, row, result);
+
+            if (row.ResolvedOldDeviceId.HasValue)
+            {
+                await _deviceService.SetSuggestedNewDeviceAsync(row.ResolvedOldDeviceId.Value, deviceId);
+
+                result.PendingTransfers.Add(new DeviceImportPendingTransferDto
+                {
+                    NewDeviceId = deviceId,
+                    NewDeviceCode = row.DeviceCode!,
+                    OldDeviceId = row.ResolvedOldDeviceId.Value,
+                    OldDeviceCode = row.OldDeviceCode!
+                });
+            }
+        }
+
+        // Config for an update row: the device may already have a DeviceConfiguration, so only the 5
+        // columns of the template are overwritten (and only when not empty), every other field of the
+        // existing configuration is carried over untouched — same rule as the Tanium import.
+        private async Task UpsertConfigurationFromRowAsync(int deviceId, DeviceImportRowDto row, DeviceImportConfirmResultDto result)
+        {
+            if (!HasAnyConfigurationValue(row)) return;
+
+            var existingConfig = await _deviceConfigurationService.GetByDeviceIdAsync(deviceId);
+            if (existingConfig == null)
+            {
+                await _deviceConfigurationService.CreateAsync(new CreateDeviceConfigurationDto
+                {
+                    DeviceId = deviceId,
+                    Maker = row.Maker,
+                    Model = row.Model,
+                    Cpu = row.Cpu,
+                    Ram = row.Ram,
+                    HardDrive = row.HardDrive
+                });
+                result.CreatedConfigCount++;
+                return;
+            }
+
+            await _deviceConfigurationService.UpdateAsync(new UpdateDeviceConfigurationDto
+            {
+                Id = existingConfig.Id,
+                DeviceId = deviceId,
+                Maker = string.IsNullOrWhiteSpace(row.Maker) ? existingConfig.Maker : row.Maker,
+                Model = string.IsNullOrWhiteSpace(row.Model) ? existingConfig.Model : row.Model,
+                Cpu = string.IsNullOrWhiteSpace(row.Cpu) ? existingConfig.Cpu : row.Cpu,
+                Ram = string.IsNullOrWhiteSpace(row.Ram) ? existingConfig.Ram : row.Ram,
+                HardDrive = string.IsNullOrWhiteSpace(row.HardDrive) ? existingConfig.HardDrive : row.HardDrive,
+                Mainboard = existingConfig.Mainboard,
+                Monitor = existingConfig.Monitor,
+                Mouse = existingConfig.Mouse,
+                Keyboard = existingConfig.Keyboard,
+                Headphone = existingConfig.Headphone,
+                Speaker = existingConfig.Speaker,
+                Ups = existingConfig.Ups,
+                Psu = existingConfig.Psu,
+                Os = existingConfig.Os,
+                Vga = existingConfig.Vga,
+                PowerAdapter = existingConfig.PowerAdapter,
+                WirelessCard = existingConfig.WirelessCard,
+                Nic = existingConfig.Nic,
+                Other = existingConfig.Other,
+                Note = existingConfig.Note
+            });
+            result.UpdatedConfigCount++;
+        }
+
+        private static bool HasAnyConfigurationValue(DeviceImportRowDto row) =>
+            !string.IsNullOrWhiteSpace(row.Maker) || !string.IsNullOrWhiteSpace(row.Model) ||
+            !string.IsNullOrWhiteSpace(row.Cpu) || !string.IsNullOrWhiteSpace(row.Ram) ||
+            !string.IsNullOrWhiteSpace(row.HardDrive);
+
         private async Task<List<DeviceImportRowDto>> ValidateAndResolveRowsAsync(List<DeviceImportRowDto> rawRows)
         {
             var branches = await _unitOfWork.Branches.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.BranchCode });
-            var deviceTypes = await _unitOfWork.DeviceTypes.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.TypeName });
+            var deviceTypes = await _unitOfWork.DeviceTypes.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.TypeCode });
             var suppliers = await _unitOfWork.Suppliers.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.SupplierCode });
 
             var duplicatedCodesInFile = FindDuplicates(rawRows, r => r.DeviceCode);
@@ -164,6 +275,10 @@ namespace Asset.Application.Services
                 var errors = new List<string>();
                 var deviceCode = row.DeviceCode?.Trim();
 
+                // Id of the device this row will UPDATE (null = create a new one). See the upsert
+                // rule on DeviceImportRowDto.ResolvedExistingDeviceId.
+                int? existingDeviceId = null;
+
                 if (string.IsNullOrWhiteSpace(deviceCode))
                 {
                     errors.Add("Thiếu MQL (mã thiết bị).");
@@ -173,9 +288,24 @@ namespace Asset.Application.Services
                     if (duplicatedCodesInFile.Contains(deviceCode))
                         errors.Add($"MQL '{deviceCode}' bị lặp lại nhiều dòng trong file.");
 
+                    // Not filtered by IsDeleted on purpose: the unique index on DeviceCode is global,
+                    // so a soft-deleted device still owns the code and blocks the row.
                     var existingDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == deviceCode);
                     if (existingDevice != null)
-                        errors.Add($"Mã thiết bị '{deviceCode}' đã tồn tại trong hệ thống.");
+                    {
+                        if (existingDevice.IsDeleted)
+                        {
+                            errors.Add($"Mã thiết bị '{deviceCode}' đã tồn tại nhưng đã bị xóa, không thể import lại.");
+                        }
+                        else if (existingDevice.Status != (int)DeviceStatus.PendingUse)
+                        {
+                            errors.Add($"Thiết bị '{deviceCode}' đang ở trạng thái '{existingDevice.Status.GetDeviceStatusText()}', chỉ cập nhật được thiết bị đang '{DeviceStatus.PendingUse.GetDisplayText()}'.");
+                        }
+                        else
+                        {
+                            existingDeviceId = existingDevice.Id;
+                        }
+                    }
                 }
 
                 int? branchId = null;
@@ -192,15 +322,15 @@ namespace Asset.Application.Services
                 }
 
                 int? deviceTypeId = null;
-                var deviceTypeName = row.DeviceTypeName?.Trim();
-                if (string.IsNullOrWhiteSpace(deviceTypeName))
+                var deviceTypeCode = row.DeviceTypeCode?.Trim();
+                if (string.IsNullOrWhiteSpace(deviceTypeCode))
                 {
-                    errors.Add("Thiếu Loại Thiết Bị.");
+                    errors.Add("Thiếu Mã Loại Thiết Bị.");
                 }
                 else
                 {
-                    var deviceType = deviceTypes.FirstOrDefault(d => string.Equals(d.TypeName, deviceTypeName, StringComparison.OrdinalIgnoreCase));
-                    if (deviceType == null) errors.Add($"Không tìm thấy Loại Thiết Bị '{deviceTypeName}'.");
+                    var deviceType = deviceTypes.FirstOrDefault(d => string.Equals(d.TypeCode, deviceTypeCode, StringComparison.OrdinalIgnoreCase));
+                    if (deviceType == null) errors.Add($"Không tìm thấy Loại Thiết Bị có mã '{deviceTypeCode}'.");
                     else deviceTypeId = deviceType.Id;
                 }
 
@@ -226,8 +356,10 @@ namespace Asset.Application.Services
                     if (duplicatedSerialsInFile.Contains(serialNumber))
                         errors.Add($"Số Serial '{serialNumber}' bị lặp lại nhiều dòng trong file.");
 
+                    // On an update row the device may already own this serial — only a DIFFERENT
+                    // device holding it is a conflict.
                     var existingSerial = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.SerialNumber == serialNumber);
-                    if (existingSerial != null)
+                    if (existingSerial != null && existingSerial.Id != existingDeviceId)
                         errors.Add($"Số Serial '{serialNumber}' đã tồn tại trong hệ thống.");
                 }
 
@@ -256,7 +388,7 @@ namespace Asset.Application.Services
                     RowNumber = row.RowNumber,
                     DeviceCode = deviceCode,
                     BranchCode = branchCode,
-                    DeviceTypeName = deviceTypeName,
+                    DeviceTypeCode = deviceTypeCode,
                     SupplierCode = supplierCode,
                     PurchaseDate = row.PurchaseDate,
                     Note = row.Note,
@@ -271,6 +403,7 @@ namespace Asset.Application.Services
                     ResolvedDeviceTypeId = deviceTypeId,
                     ResolvedSupplierId = supplierId,
                     ResolvedOldDeviceId = oldDeviceId,
+                    ResolvedExistingDeviceId = existingDeviceId,
                     IsValid = errors.Count == 0,
                     Errors = errors
                 });
@@ -304,7 +437,8 @@ namespace Asset.Application.Services
         // F=Note, G=Serial Number, H=Maker, I=Model, J=CPU, K=RAM, L=Hard Drive, M=Old MQL
         // (previously Old MQL was in column H — the old template had no configuration columns). Row 1 is the header.
         // 2026-07-13: column B (Branch)/D (Supplier) changed to enter the CODE (BranchCode/
-        // SupplierCode) instead of the Name — Device Type (column C) still matches by Name.
+        // SupplierCode) instead of the Name. 2026-07-23: column C (Device Type) followed suit —
+        // it is now the TypeCode, so all 3 lookup columns are code-based.
         private static List<DeviceImportRowDto> ParseXlsx(Stream stream)
         {
             XLWorkbook workbook;
@@ -332,7 +466,7 @@ namespace Asset.Application.Services
             {
                 var deviceCode = xlRow.Cell(1).GetString().Trim();
                 var branchCode = xlRow.Cell(2).GetString().Trim();
-                var deviceTypeName = xlRow.Cell(3).GetString().Trim();
+                var deviceTypeCode = xlRow.Cell(3).GetString().Trim();
                 var supplierCode = xlRow.Cell(4).GetString().Trim();
                 var dateCell = xlRow.Cell(5);
                 var note = xlRow.Cell(6).GetString().Trim();
@@ -345,7 +479,7 @@ namespace Asset.Application.Services
                 var oldDeviceCode = xlRow.Cell(13).GetString().Trim();
 
                 var isRowEmpty = string.IsNullOrWhiteSpace(deviceCode) && string.IsNullOrWhiteSpace(branchCode) &&
-                    string.IsNullOrWhiteSpace(deviceTypeName) && string.IsNullOrWhiteSpace(supplierCode) &&
+                    string.IsNullOrWhiteSpace(deviceTypeCode) && string.IsNullOrWhiteSpace(supplierCode) &&
                     string.IsNullOrWhiteSpace(note) && string.IsNullOrWhiteSpace(serialNumber) &&
                     string.IsNullOrWhiteSpace(maker) && string.IsNullOrWhiteSpace(model) &&
                     string.IsNullOrWhiteSpace(cpu) && string.IsNullOrWhiteSpace(ram) &&
@@ -371,7 +505,7 @@ namespace Asset.Application.Services
                     RowNumber = xlRow.RowNumber(),
                     DeviceCode = string.IsNullOrWhiteSpace(deviceCode) ? null : deviceCode,
                     BranchCode = string.IsNullOrWhiteSpace(branchCode) ? null : branchCode,
-                    DeviceTypeName = string.IsNullOrWhiteSpace(deviceTypeName) ? null : deviceTypeName,
+                    DeviceTypeCode = string.IsNullOrWhiteSpace(deviceTypeCode) ? null : deviceTypeCode,
                     SupplierCode = string.IsNullOrWhiteSpace(supplierCode) ? null : supplierCode,
                     PurchaseDate = purchaseDate,
                     Note = string.IsNullOrWhiteSpace(note) ? null : note,
@@ -402,7 +536,7 @@ namespace Asset.Application.Services
                 var cells = csvRows[i];
                 var deviceCode = GetCsvCell(cells, 0);
                 var branchCode = GetCsvCell(cells, 1);
-                var deviceTypeName = GetCsvCell(cells, 2);
+                var deviceTypeCode = GetCsvCell(cells, 2);
                 var supplierCode = GetCsvCell(cells, 3);
                 var dateText = GetCsvCell(cells, 4);
                 var note = GetCsvCell(cells, 5);
@@ -415,7 +549,7 @@ namespace Asset.Application.Services
                 var oldDeviceCode = GetCsvCell(cells, 12);
 
                 var isRowEmpty = string.IsNullOrWhiteSpace(deviceCode) && string.IsNullOrWhiteSpace(branchCode) &&
-                    string.IsNullOrWhiteSpace(deviceTypeName) && string.IsNullOrWhiteSpace(supplierCode) &&
+                    string.IsNullOrWhiteSpace(deviceTypeCode) && string.IsNullOrWhiteSpace(supplierCode) &&
                     string.IsNullOrWhiteSpace(note) && string.IsNullOrWhiteSpace(serialNumber) &&
                     string.IsNullOrWhiteSpace(maker) && string.IsNullOrWhiteSpace(model) &&
                     string.IsNullOrWhiteSpace(cpu) && string.IsNullOrWhiteSpace(ram) &&
@@ -432,7 +566,7 @@ namespace Asset.Application.Services
                     RowNumber = i + 1,
                     DeviceCode = string.IsNullOrWhiteSpace(deviceCode) ? null : deviceCode,
                     BranchCode = string.IsNullOrWhiteSpace(branchCode) ? null : branchCode,
-                    DeviceTypeName = string.IsNullOrWhiteSpace(deviceTypeName) ? null : deviceTypeName,
+                    DeviceTypeCode = string.IsNullOrWhiteSpace(deviceTypeCode) ? null : deviceTypeCode,
                     SupplierCode = string.IsNullOrWhiteSpace(supplierCode) ? null : supplierCode,
                     PurchaseDate = purchaseDate,
                     Note = string.IsNullOrWhiteSpace(note) ? null : note,

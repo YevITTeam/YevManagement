@@ -15,7 +15,9 @@ namespace Asset.Application.Dtos.DeviceImports
 
         public string? DeviceCode { get; set; }
         public string? BranchCode { get; set; }
-        public string? DeviceTypeName { get; set; }
+        // 2026-07-23: matches DeviceType.TypeCode now (was TypeName) — same reasoning as
+        // Branch/Supplier: the code is unique and stable while the name can be reworded.
+        public string? DeviceTypeCode { get; set; }
         public string? SupplierCode { get; set; }
         public DateTime? PurchaseDate { get; set; }
         public string? Note { get; set; }
@@ -35,6 +37,13 @@ namespace Asset.Application.Dtos.DeviceImports
         public int? ResolvedDeviceTypeId { get; set; }
         public int? ResolvedSupplierId { get; set; }
         public int? ResolvedOldDeviceId { get; set; }
+
+        // Upsert (2026-07-23): a MQL that already exists is no longer an error — the row updates that
+        // device instead, but ONLY while it is still PendingUse. Any other status makes the row invalid
+        // (a device already in use / liquidated must not be silently rewritten by an import file).
+        // Filled by the server: Id of the device this row will update, null when it creates a new one.
+        public int? ResolvedExistingDeviceId { get; set; }
+        public bool IsUpdate => ResolvedExistingDeviceId.HasValue;
 
         public bool IsValid { get; set; }
         public List<string> Errors { get; set; } = new();
