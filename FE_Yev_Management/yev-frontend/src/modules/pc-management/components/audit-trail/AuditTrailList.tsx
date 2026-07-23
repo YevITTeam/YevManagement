@@ -7,7 +7,6 @@ import { AuditTrailApi } from "@/modules/pc-management/api/audit-trail.api";
 import type { AuditTrailDto } from "@/modules/pc-management/types/audit-trail.dto";
 import { auditActionClasses, auditActionLabels } from "./audit-trail-format";
 import AuditTrailDiffView from "./AuditTrailDiffView";
-import AuditRecordLabel from "./AuditRecordLabel";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 20;
@@ -29,6 +28,7 @@ export default function AuditTrailList() {
 
     const [tableName, setTableName] = useState("");
     const [recordId, setRecordId] = useState("");
+    const [recordName, setRecordName] = useState("");
     const [action, setAction] = useState("");
     const [changedBy, setChangedBy] = useState("");
     const [fromDate, setFromDate] = useState("");
@@ -37,6 +37,7 @@ export default function AuditTrailList() {
     const [appliedFilters, setAppliedFilters] = useState({
         tableName: "",
         recordId: "",
+        recordName: "",
         action: "",
         changedBy: "",
         fromDate: "",
@@ -56,6 +57,7 @@ export default function AuditTrailList() {
                 pageSize: PAGE_SIZE,
                 tableName: appliedFilters.tableName || undefined,
                 recordId: appliedFilters.recordId ? Number(appliedFilters.recordId) : undefined,
+                recordName: appliedFilters.recordName || undefined,
                 action: appliedFilters.action || undefined,
                 changedBy: appliedFilters.changedBy || undefined,
                 fromDate: appliedFilters.fromDate || undefined,
@@ -78,6 +80,7 @@ export default function AuditTrailList() {
         setAppliedFilters({
             tableName: tableName.trim(),
             recordId: recordId.trim(),
+            recordName: recordName.trim(),
             action,
             changedBy: changedBy.trim(),
             fromDate,
@@ -88,12 +91,13 @@ export default function AuditTrailList() {
     const handleReset = () => {
         setTableName("");
         setRecordId("");
+        setRecordName("");
         setAction("");
         setChangedBy("");
         setFromDate("");
         setToDate("");
         setPageIndex(1);
-        setAppliedFilters({ tableName: "", recordId: "", action: "", changedBy: "", fromDate: "", toDate: "" });
+        setAppliedFilters({ tableName: "", recordId: "", recordName: "", action: "", changedBy: "", fromDate: "", toDate: "" });
     };
 
     return (
@@ -115,14 +119,24 @@ export default function AuditTrailList() {
             </div>
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-                <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+                <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Đối tượng</span>
+                        <span className={fieldLabelClassName}>Bảng dữ liệu</span>
                         <input
                             value={tableName}
                             onChange={(event) => setTableName(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder="Device, Branch..."
+                            className={fieldClassName}
+                        />
+                    </label>
+                    <label className="block">
+                        <span className={fieldLabelClassName}>Đối tượng</span>
+                        <input
+                            value={recordName}
+                            onChange={(event) => setRecordName(event.target.value)}
+                            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
+                            placeholder="Mã máy, IP..."
                             className={fieldClassName}
                         />
                     </label>
@@ -195,8 +209,8 @@ export default function AuditTrailList() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                                <th className="px-6 py-3">Bảng</th>
                                 <th className="px-6 py-3">Đối tượng</th>
-                                <th className="px-6 py-3">Id</th>
                                 <th className="px-6 py-3">Hành động</th>
                                 <th className="px-6 py-3">Người thao tác</th>
                                 <th className="px-6 py-3">Thời gian</th>
@@ -216,8 +230,15 @@ export default function AuditTrailList() {
                                     <tr className="border-b border-[#f1f5f9]">
                                         <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{row.tableName}</td>
                                         <td className="px-6 py-3 text-sm text-[#191c1e]">
-                                            {row.recordId}
-                                            <AuditRecordLabel tableName={row.tableName} recordId={row.recordId} />
+                                            <div className="flex items-center gap-2">
+                                                <span>{row.recordName || "-"}</span>
+                                                {row.affectedCount > 1 && (
+                                                    <span className="shrink-0 rounded-full border border-[#cfe0fb] bg-[#eef4ff] px-2 py-0.5 text-[10px] font-semibold text-[#1d4ed8]">
+                                                        ×{row.affectedCount}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-[#5e3f3a]">#{row.recordId}</div>
                                         </td>
                                         <td className="px-6 py-3">
                                             <span
@@ -240,7 +261,11 @@ export default function AuditTrailList() {
                                     {expandedId === row.id && (
                                         <tr className="border-b border-[#f1f5f9] bg-[#f8fafc]">
                                             <td colSpan={6} className="px-6 py-4">
-                                                <AuditTrailDiffView oldValues={row.oldValues} newValues={row.newValues} />
+                                                <AuditTrailDiffView
+                                                    oldValues={row.oldValues}
+                                                    newValues={row.newValues}
+                                                    affectedCount={row.affectedCount}
+                                                />
                                             </td>
                                         </tr>
                                     )}

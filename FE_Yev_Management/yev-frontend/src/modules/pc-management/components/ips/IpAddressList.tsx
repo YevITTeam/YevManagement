@@ -3,9 +3,10 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 
 import { IpApi } from "@/modules/pc-management/api/ip-api";
-import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
+import type { IpAddressDto, IpAddressSkippedDto } from "@/modules/pc-management/types/ip.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import IpForm, { type IpFormValues } from "./IpForm";
+import IpBulkStatusForm, { type IpBulkStatusFormValues } from "./IpBulkStatusForm";
 import { ipStatusClasses, ipStatusLabels, ipStatusOptions } from "./ip-status";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -37,6 +38,11 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
     const [editingIp, setEditingIp] = useState<IpAddressDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [bulkFormOpen, setBulkFormOpen] = useState(false);
+    const [isBulkSaving, setIsBulkSaving] = useState(false);
+    const [skippedResult, setSkippedResult] = useState<IpAddressSkippedDto[] | null>(null);
+
     const { isLoading, error, refetch: fetchIpAddresses } = useFetchEffect(
         () =>
             IpApi.getIpAddressPageNation({
@@ -66,6 +72,43 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
         // Không còn "tạo mới" thủ công cho IpAddress — no-op để khớp ListHandle.
         openCreate: () => {},
     }));
+
+    // Đổi trạng thái hàng loạt chỉ nhận status 0/1 (docs/asset-api-fe.md §4.2) — IP "Đã sử dụng"
+    // (status=2, đang gắn thiết bị) sẽ luôn bị server bỏ qua, nên chỉ cho chọn khi filter đang
+    // khoanh đúng 1 trạng thái 0 hoặc 1 (không cho chọn khi "Tất cả trạng thái" hoặc "Đã sử dụng").
+    const canBulkSelect = statusFilter === "0" || statusFilter === "1";
+
+    // Đổi trang/lọc → bỏ chọn hết (dữ liệu hiển thị đã khác), theo pattern "adjusting state
+    // when a prop changes" ở CLAUDE.md thay vì dùng effect.
+    const filtersKey = `${pageIndex}|${appliedKeyword}|${statusFilter}`;
+    const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
+    if (prevFiltersKey !== filtersKey) {
+        setPrevFiltersKey(filtersKey);
+        setSelectedIds(new Set());
+    }
+
+    const toggleSelected = (id: number) => {
+        setSelectedIds((current) => {
+            const next = new Set(current);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const allOnPageSelected = ipAddresses.length > 0 && ipAddresses.every((ip) => selectedIds.has(ip.id));
+
+    const toggleSelectAllOnPage = () => {
+        setSelectedIds((current) => {
+            const next = new Set(current);
+            if (allOnPageSelected) {
+                ipAddresses.forEach((ip) => next.delete(ip.id));
+            } else {
+                ipAddresses.forEach((ip) => next.add(ip.id));
+            }
+            return next;
+        });
+    };
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -103,11 +146,38 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
         }
     };
 
+    const closeBulkForm = () => {
+        if (isBulkSaving) return;
+        setBulkFormOpen(false);
+    };
+
+    const handleSubmitBulkForm = async (values: IpBulkStatusFormValues) => {
+        setIsBulkSaving(true);
+        try {
+            const response = await IpApi.updateIpAddressBulkStatus({
+                ids: Array.from(selectedIds),
+                status: Number(values.status),
+                updateNote: values.updateNote,
+                note: values.updateNote ? values.note.trim() || null : null,
+            });
+            toast.success(response.message || "Cập nhật trạng thái hàng loạt thành công");
+            setBulkFormOpen(false);
+            setSelectedIds(new Set());
+            setSkippedResult(response.data.skippedIpAddresses.length > 0 ? response.data.skippedIpAddresses : null);
+            await fetchIpAddresses();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, "Đổi trạng thái hàng loạt thất bại"));
+        } finally {
+            setIsBulkSaving(false);
+        }
+    };
+
     return (
         <div className="space-y-4">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
@@ -137,6 +207,14 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                 </option>
                             ))}
                         </select>
+                        {canBulkSelect && selectedIds.size > 0 && (
+                            <button
+                                onClick={() => setBulkFormOpen(true)}
+                                className="cursor-pointer h-10 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                            >
+                                Đổi trạng thái hàng loạt ({selectedIds.size})
+                            </button>
+                        )}
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
                         {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${ipAddresses.length} / ${totalCount} bản ghi`}
@@ -147,10 +225,43 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
+                {skippedResult && (
+                    <div className="border-b border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-sm text-[#92400e]">
+                        <div className="mb-2 flex items-center justify-between">
+                            <span className="font-semibold">Đã bỏ qua {skippedResult.length} địa chỉ IP:</span>
+                            <button
+                                onClick={() => setSkippedResult(null)}
+                                className="cursor-pointer font-semibold text-[#92400e] transition hover:text-[#78350f]"
+                                aria-label="Đóng"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <ul className="list-inside list-disc space-y-1">
+                            {skippedResult.map((item) => (
+                                <li key={item.id}>
+                                    <strong>{item.ipAddress}</strong> — {item.reason}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
                 <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: VISIBLE_ROWS * ROW_HEIGHT_PX }}>
                     <table className="min-w-full border-collapse text-left">
                         <thead className="sticky top-0 z-10">
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                {canBulkSelect && (
+                                    <th className="whitespace-nowrap px-4 py-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={allOnPageSelected}
+                                            onChange={toggleSelectAllOnPage}
+                                            aria-label="Chọn tất cả"
+                                            className="cursor-pointer h-4 w-4 rounded border-[#e0e3e5]"
+                                        />
+                                    </th>
+                                )}
                                 <th className="whitespace-nowrap px-6 py-3">Địa chỉ IP</th>
                                 <th className="whitespace-nowrap px-6 py-3">Dải mạng</th>
                                 <th className="whitespace-nowrap px-6 py-3">Thiết bị</th>
@@ -162,13 +273,24 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                         <tbody>
                             {!isLoading && ipAddresses.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                    <td colSpan={canBulkSelect ? 7 : 6} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có dữ liệu địa chỉ IP.
                                     </td>
                                 </tr>
                             )}
                             {ipAddresses.map((ip) => (
                                 <tr key={ip.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                    {canBulkSelect && (
+                                        <td className="whitespace-nowrap px-4 py-4">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.has(ip.id)}
+                                                onChange={() => toggleSelected(ip.id)}
+                                                aria-label={`Chọn ${ip.ipAddress}`}
+                                                className="cursor-pointer h-4 w-4 rounded border-[#e0e3e5]"
+                                            />
+                                        </td>
+                                    )}
                                     <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-[#191c1e]">{ip.ipAddress}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{ip.prefix ?? "—"}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{ip.deviceCode ?? "—"}</td>
@@ -227,6 +349,14 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                 loading={isSaving}
                 onClose={closeForm}
                 onSubmit={handleSubmitForm}
+            />
+
+            <IpBulkStatusForm
+                isOpen={bulkFormOpen}
+                selectedCount={selectedIds.size}
+                loading={isBulkSaving}
+                onClose={closeBulkForm}
+                onSubmit={handleSubmitBulkForm}
             />
         </div>
     );

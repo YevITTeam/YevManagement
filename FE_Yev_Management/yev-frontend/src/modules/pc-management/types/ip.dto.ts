@@ -21,6 +21,28 @@ export interface IpAddressUpdateDto {
   note: string | null
 }
 
+// docs/asset-api-fe.md §4.2 — PUT /api/IpAddress/bulk-status. status chỉ nhận 0/1
+// (2 chỉ đến từ assign/unassign). updateNote=false giữ nguyên note riêng từng IP.
+export interface IpAddressBulkStatusDto {
+  ids: number[],
+  status: number,
+  updateNote: boolean,
+  note: string | null
+}
+
+export interface IpAddressSkippedDto {
+  id: number,
+  ipAddress: string,
+  reason: string
+}
+
+export interface IpAddressBulkStatusResultDto {
+  updatedCount: number,
+  status: number,
+  statusText: string,
+  skippedIpAddresses: IpAddressSkippedDto[]
+}
+
 export interface IpPrefixDto {
     id: number,
     prefix: string,

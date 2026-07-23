@@ -16,6 +16,9 @@ export interface GetAuditTrailPageNationParams {
     pageSize?: number;
     tableName?: string;
     recordId?: number;
+    // Tìm gần đúng (contains) theo tên đối tượng bị tác động (docs §7b.1) — ô search "tìm theo
+    // mã máy / IP".
+    recordName?: string;
     action?: string;
     changedBy?: string;
     fromDate?: string;
@@ -29,6 +32,7 @@ export const AuditTrailApi = {
         if (params?.pageSize) query.set("pageSize", String(params.pageSize));
         if (params?.tableName) query.set("tableName", params.tableName);
         if (params?.recordId !== undefined) query.set("recordId", String(params.recordId));
+        if (params?.recordName) query.set("recordName", params.recordName);
         if (params?.action) query.set("action", params.action);
         if (params?.changedBy) query.set("changedBy", params.changedBy);
         if (params?.fromDate) query.set("fromDate", params.fromDate);

@@ -1,5 +1,13 @@
 import { api } from "@/lib/client";
-import type { IpAddressUpdateDto, IpAddressDto, IpPrefixCreateDto, IpPrefixDto, IpPrefixUpdateDto } from "@/modules/pc-management/types/ip.dto";
+import type {
+    IpAddressBulkStatusDto,
+    IpAddressBulkStatusResultDto,
+    IpAddressUpdateDto,
+    IpAddressDto,
+    IpPrefixCreateDto,
+    IpPrefixDto,
+    IpPrefixUpdateDto,
+} from "@/modules/pc-management/types/ip.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -8,6 +16,7 @@ const ENDPOINTS = {
         getAvailableIpAddress: "/IpAddress/available",
         getIpAddressById: (id: number) => `/IpAddress/${id}`,
         updateIpAddress: (id: number) => `/IpAddress/${id}`,
+        updateIpAddressBulkStatus: "/IpAddress/bulk-status",
         assignIpAddress: (id: number) => `/IpAddress/${id}/assign`,
         unassignIpAddress: (id: number) => `/IpAddress/${id}/unassign`,
     },
@@ -26,6 +35,7 @@ export interface GetIpAddressPageNationParams {
     pageSize?: number;
     keyword?: string;
     status?: number;
+    isInUse?: boolean;
     deviceId?: number;
 }
 
@@ -44,6 +54,7 @@ export const IpApi = {
         if (params?.pageSize) query.set("PageSize", String(params.pageSize));
         if (params?.keyword) query.set("Keyword", params.keyword);
         if (params?.status !== undefined) query.set("Status", String(params.status));
+        if (params?.isInUse !== undefined) query.set("IsInUse", String(params.isInUse));
         if (params?.deviceId !== undefined) query.set("DeviceId", String(params.deviceId));
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.IP_ADDRESS.getIpAddressPageNation}?${queryString}` : ENDPOINTS.IP_ADDRESS.getIpAddressPageNation;
@@ -69,6 +80,14 @@ export const IpApi = {
             ...data
         });
         return response.data;
+    },
+    // docs/asset-api-fe.md §4.2 — đổi status (chỉ 0/1) cho nhiều IP cùng lúc, không fail cả lô.
+    // Trả nguyên envelope (không bóc `.data`) vì FE cần dùng `message` server dịch sẵn cho toast.
+    updateIpAddressBulkStatus: async (data: IpAddressBulkStatusDto) => {
+        return api.put<ApiResponse<IpAddressBulkStatusResultDto>>(
+            ENDPOINTS.IP_ADDRESS.updateIpAddressBulkStatus,
+            data
+        );
     },
     assignIpAddress: async (id: number, deviceId: number) => {
         const response = await api.put<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.assignIpAddress(id), { deviceId });

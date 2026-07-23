@@ -1,10 +1,11 @@
-// Trạng thái địa chỉ IP (docs/asset-api-fe.md §4.2, 2026-07-11 — còn 3 trạng thái).
-// statusText luôn được ưu tiên hiển thị từ server; bảng nhãn/màu dưới đây dùng
-// cho dropdown trong form và tô màu badge theo status.
+// Trạng thái địa chỉ IP (docs/asset-api-fe.md §4.2). statusText luôn được ưu tiên
+// hiển thị từ server (đã thống nhất "Chưa sử dụng"/"Đã sử dụng (khác)"/"Đã sử dụng"
+// ở mọi endpoint); bảng nhãn/màu dưới đây dùng cho dropdown trong form và tô màu
+// badge theo status, giữ đồng bộ chữ với statusText.
 export const ipStatusLabels: Record<number, string> = {
-    0: "Chưa gán",
-    1: "Đã gán (khác)",
-    2: "Đã gán",
+    0: "Chưa sử dụng",
+    1: "Đã sử dụng (khác)",
+    2: "Đã sử dụng",
 };
 
 // Đồng bộ tông màu badge trạng thái với bảng Thiết bị (statusClasses ở

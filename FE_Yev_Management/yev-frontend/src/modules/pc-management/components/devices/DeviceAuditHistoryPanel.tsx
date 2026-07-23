@@ -52,12 +52,18 @@ export default function DeviceAuditHistoryPanel({ deviceId }: DeviceAuditHistory
                             >
                                 {auditActionLabels[row.action] ?? row.action}
                             </span>
+                            <span className="text-sm font-semibold text-[#191c1e]">{row.recordName}</span>
+                            {row.affectedCount > 1 && (
+                                <span className="rounded-full border border-[#cfe0fb] bg-[#eef4ff] px-2 py-0.5 text-[10px] font-semibold text-[#1d4ed8]">
+                                    ×{row.affectedCount}
+                                </span>
+                            )}
                             <span className="text-sm text-[#5e3f3a]">{row.changedBy}</span>
                         </div>
                         <span className="text-xs text-[#5e3f3a]">{formatDateTime(row.changedAt)}</span>
                     </div>
                     <div className="mt-3">
-                        <AuditTrailDiffView oldValues={row.oldValues} newValues={row.newValues} />
+                        <AuditTrailDiffView oldValues={row.oldValues} newValues={row.newValues} affectedCount={row.affectedCount} />
                     </div>
                 </section>
             ))}
