@@ -7,6 +7,7 @@ import { AuditTrailApi } from "@/modules/pc-management/api/audit-trail.api";
 import type { AuditTrailDto } from "@/modules/pc-management/types/audit-trail.dto";
 import { auditActionClasses, auditActionLabels } from "./audit-trail-format";
 import AuditTrailDiffView from "./AuditTrailDiffView";
+import AuditRecordLabel from "./AuditRecordLabel";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 20;
@@ -214,7 +215,10 @@ export default function AuditTrailList() {
                                 <Fragment key={row.id}>
                                     <tr className="border-b border-[#f1f5f9]">
                                         <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{row.tableName}</td>
-                                        <td className="px-6 py-3 text-sm text-[#191c1e]">{row.recordId}</td>
+                                        <td className="px-6 py-3 text-sm text-[#191c1e]">
+                                            {row.recordId}
+                                            <AuditRecordLabel tableName={row.tableName} recordId={row.recordId} />
+                                        </td>
                                         <td className="px-6 py-3">
                                             <span
                                                 className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${auditActionClasses[row.action] ?? "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"}`}
