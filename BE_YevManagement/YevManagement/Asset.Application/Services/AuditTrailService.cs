@@ -23,6 +23,11 @@ namespace Asset.Application.Services
                 query = query.Where(x => x.RecordId == request.RecordId.Value);
             }
 
+            if (!string.IsNullOrWhiteSpace(request.RecordName))
+            {
+                query = query.Where(x => x.RecordName != null && x.RecordName.Contains(request.RecordName));
+            }
+
             if (!string.IsNullOrWhiteSpace(request.Action))
             {
                 query = query.Where(x => x.Action == request.Action);
@@ -54,6 +59,8 @@ namespace Asset.Application.Services
                     Id = x.Id,
                     TableName = x.TableName,
                     RecordId = x.RecordId,
+                    RecordName = x.RecordName,
+                    AffectedCount = x.AffectedCount,
                     Action = x.Action,
                     OldValues = x.OldValues,
                     NewValues = x.NewValues,
@@ -75,6 +82,8 @@ namespace Asset.Application.Services
                     Id = x.Id,
                     TableName = x.TableName,
                     RecordId = x.RecordId,
+                    RecordName = x.RecordName,
+                    AffectedCount = x.AffectedCount,
                     Action = x.Action,
                     OldValues = x.OldValues,
                     NewValues = x.NewValues,

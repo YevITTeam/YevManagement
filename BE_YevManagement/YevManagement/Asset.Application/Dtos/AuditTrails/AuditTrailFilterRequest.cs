@@ -7,6 +7,8 @@ namespace Asset.Application.Dtos.AuditTrails
 
         public string? TableName { get; set; }
         public int? RecordId { get; set; }
+        /// <summary>Partial match on the readable name of the affected object (device code, IP...).</summary>
+        public string? RecordName { get; set; }
         public string? Action { get; set; }
         public string? ChangedBy { get; set; }
         public DateTime? FromDate { get; set; }

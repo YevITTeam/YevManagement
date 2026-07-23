@@ -892,6 +892,11 @@ namespace Asset.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int>("AffectedCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<DateTime>("ChangedAt")
                         .HasColumnType("datetime2");
 
@@ -909,12 +914,20 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<int>("RecordId")
                         .HasColumnType("int");
 
+                    b.Property<string>("RecordName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<string>("TableName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex(new[] { "ChangedAt" }, "IX_AuditTrails_ChangedAt");
+
+                    b.HasIndex(new[] { "TableName", "RecordId" }, "IX_AuditTrails_TableName_RecordId");
 
                     b.ToTable("AuditTrails");
                 });

@@ -41,6 +41,10 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.Action).HasMaxLength(50);
             entity.Property(e => e.ChangedBy).HasMaxLength(150);
             entity.Property(e => e.TableName).HasMaxLength(100);
+            entity.Property(e => e.RecordName).HasMaxLength(255);
+            entity.Property(e => e.AffectedCount).HasDefaultValue(1);
+            entity.HasIndex(e => new { e.TableName, e.RecordId }, "IX_AuditTrails_TableName_RecordId");
+            entity.HasIndex(e => e.ChangedAt, "IX_AuditTrails_ChangedAt");
         });
 
         modelBuilder.Entity<AssetSetting>(entity =>
