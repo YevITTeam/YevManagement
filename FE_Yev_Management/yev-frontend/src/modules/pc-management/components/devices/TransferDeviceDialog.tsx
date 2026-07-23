@@ -34,6 +34,9 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
     // Gợi ý máy mới suy ra từ cột "MQL Cũ" lúc import Excel (docs/asset-api-fe.md §5.9) — chỉ tự tra khi
     // dialog KHÔNG được mở sẵn với 1 gợi ý cụ thể từ màn "Import Excel" (initialNewDeviceId).
     const [suggestion, setSuggestion] = useState<DeviceReplacementSuggestionDto | null>(null);
+    // Thông tin máy đang được chọn nhưng chưa/không nằm trong danh sách candidates hiện tại (vd máy được
+    // điền sẵn từ initialNewDeviceId) — tra riêng để luôn hiển thị được máy đã chọn mà không cần tìm kiếm.
+    const [fetchedSelectedDevice, setFetchedSelectedDevice] = useState<TransferableDevice | null>(null);
 
     // Reset field khi mở lại dialog (đổi máy cũ/gợi ý) — so sánh snapshot ngay trong render thay effect.
     const resetKey = `${isOpen}|${oldDevice?.id ?? ""}|${initialNewDeviceId ?? ""}`;
@@ -44,6 +47,7 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
             setSearch("");
             setNote("");
             setSuggestion(null);
+            setFetchedSelectedDevice(null);
             setSelectedDeviceId(initialNewDeviceId ?? null);
         }
     }
@@ -90,6 +94,31 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
             clearTimeout(timeoutId);
         };
     }, [isOpen, oldDevice, search]);
+
+    // Máy đã chọn (selectedDeviceId) có thể không nằm trong candidates hiện tại (vd đã bị lọc bởi ô tìm kiếm,
+    // hoặc điền sẵn từ initialNewDeviceId nhưng không nằm trong danh sách "available") — tra riêng theo id để
+    // vẫn hiển thị được tên/mã máy đã chọn thay vì để trống, bắt người dùng phải tự tìm lại mới thấy.
+    const knownSelectedDevice =
+        candidates.find((device) => device.id === selectedDeviceId) ??
+        (suggestion?.id === selectedDeviceId ? suggestion : null) ??
+        (fetchedSelectedDevice?.id === selectedDeviceId ? fetchedSelectedDevice : null);
+
+    useEffect(() => {
+        if (!isOpen || !selectedDeviceId || knownSelectedDevice) return;
+        let isCancelled = false;
+        DeviceApi.getDeviceById(selectedDeviceId)
+            .then((result) => {
+                if (isCancelled) return;
+                setFetchedSelectedDevice({ id: result.id, deviceCode: result.deviceCode, deviceName: result.deviceName });
+            })
+            .catch(() => {
+                // Không tra được thông tin máy đã chọn — vẫn giữ nguyên lựa chọn, chỉ là không hiển thị được tên/mã.
+            });
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [isOpen, selectedDeviceId, knownSelectedDevice]);
 
     if (!isOpen || !oldDevice) return null;
 
@@ -163,6 +192,32 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                         Máy mới
                     </span>
+
+                    {selectedDeviceId !== null && (
+                        <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-[#bbf0cf] bg-[#f0fdf4] px-3 py-2">
+                            <div className="min-w-0">
+                                <span className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-[#16a34a]">
+                                    Đã chọn
+                                </span>
+                                {knownSelectedDevice ? (
+                                    <div className="truncate text-sm">
+                                        <span className="font-semibold text-[#191c1e]">{knownSelectedDevice.deviceCode}</span>
+                                        <span className="text-[#5e3f3a]"> — {knownSelectedDevice.deviceName}</span>
+                                    </div>
+                                ) : (
+                                    <div className="text-sm text-[#5e3f3a]">Đang tải thông tin máy #{selectedDeviceId}...</div>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedDeviceId(null)}
+                                className="shrink-0 cursor-pointer text-xs font-semibold text-[#5e3f3a] transition hover:text-[#930006]"
+                            >
+                                Bỏ chọn
+                            </button>
+                        </div>
+                    )}
+
                     <input
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}

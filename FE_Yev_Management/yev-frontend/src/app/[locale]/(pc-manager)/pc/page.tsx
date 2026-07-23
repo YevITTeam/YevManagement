@@ -108,6 +108,8 @@ export default function PcDashboardPage() {
   const [transferringDevice, setTransferringDevice] = useState<{ id: number; deviceCode: string; deviceName: string } | null>(null);
   // docs/asset-api-fe.md §5.10 — điền sẵn máy mới khi mở "Chuyển máy" từ gợi ý pendingTransfers của Import Excel.
   const [transferPresetNewDeviceId, setTransferPresetNewDeviceId] = useState<number | null>(null);
+  // Hỏi in nhãn ngay sau khi tạo thiết bị thủ công thành công, giống luồng "Nhập từ Excel".
+  const [printPromptDevice, setPrintPromptDevice] = useState<{ deviceCode: string; serialNumber: string | null } | null>(null);
 
   const toggleSortDeviceCode = () => {
     setSortDeviceCodeAscending((current) => (current === undefined ? true : current === true ? false : undefined));
@@ -302,8 +304,9 @@ export default function PcDashboardPage() {
     setIsSaving(true);
     try {
       if (formMode === "create") {
-        await DeviceApi.createDevice({ id: 0, ...values });
+        const created = await DeviceApi.createDevice({ id: 0, ...values });
         toast.success("Tạo thiết bị thành công");
+        setPrintPromptDevice({ deviceCode: created.deviceCode, serialNumber: created.serialNumber });
       } else if (editingDevice) {
         await DeviceApi.updateDevice(editingDevice.id, { id: editingDevice.id, ...values });
         toast.success("Cập nhật thiết bị thành công");
@@ -646,6 +649,19 @@ export default function PcDashboardPage() {
         loading={isSaving}
         onClose={closeForm}
         onSubmit={handleSubmitForm}
+      />
+
+      <ConfirmDialog
+        isOpen={printPromptDevice !== null}
+        title="In mã thiết bị"
+        message={`Đã tạo thiết bị ${printPromptDevice?.deviceCode ?? ""} thành công. Bạn có muốn in mã thiết bị vừa tạo không?`}
+        approveLabel="In mã"
+        deniedLabel="Để sau"
+        onApprove={() => {
+          if (printPromptDevice) printDeviceLabels([printPromptDevice]);
+          setPrintPromptDevice(null);
+        }}
+        onDenied={() => setPrintPromptDevice(null)}
       />
 
       <ConfirmDialog

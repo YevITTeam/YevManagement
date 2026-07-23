@@ -202,6 +202,53 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                             </div>
                         )}
 
+                        {createdRows.length > 0 && (
+                            <div className="mb-6">
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <h4 className="text-sm font-semibold text-[#191c1e]">Thiết bị đã tạo</h4>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            printDeviceLabels(
+                                                createdRows.map((row) => ({ deviceCode: row.deviceCode, serialNumber: row.serialNumber }))
+                                            )
+                                        }
+                                        className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                    >
+                                         In tất cả nhãn
+                                    </button>
+                                </div>
+                                <table className="min-w-full border-collapse text-left text-xs">
+                                    <thead>
+                                        <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                            <th className="whitespace-nowrap px-3 py-2">MQL</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Serial</th>
+                                            <th className="whitespace-nowrap px-3 py-2 text-right">Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {createdRows.map((row) => (
+                                            <tr key={row.rowNumber} className="border-b border-[#f1f5f9]">
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#191c1e]">{row.deviceCode}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.serialNumber ?? "-"}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-right">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            printDeviceLabels([{ deviceCode: row.deviceCode, serialNumber: row.serialNumber }])
+                                                        }
+                                                        className="cursor-pointer font-semibold text-[#e3000f] transition hover:text-[#b40009]"
+                                                    >
+                                                        In nhãn
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
                         {result.pendingTransfers.length > 0 && (
                             <div>
                                 <h4 className="mb-2 text-sm font-semibold text-[#191c1e]">
