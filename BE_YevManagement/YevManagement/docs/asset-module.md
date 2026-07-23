@@ -33,12 +33,21 @@
 `0=Available` (chưa gán), `1=AssignedExternal` (gán nhưng không có DeviceId, thiết bị ngoài — `DeviceCode`="Khác"), `2=Assigned` (có DeviceId thật).
 **Bất biến**: `Assigned(2)` ⟺ `DeviceId != null`; `Available(0)/AssignedExternal(1)` ⟺ `DeviceId == null`.
 Server tự derive: gán→`2`+DeviceId; gỡ→`0`+null. `IpAddressService.UpdateAsync` (chỉ `Status`+`Note`) chỉ cho `0↔1` khi IP chưa gắn; IP đang gắn chỉ đổi `Note`.
+**`StatusText` chỉ có MỘT nguồn duy nhất** (2026-07-23): `IpAddressStatusExtensions` (`Asset.Domain/Enums`) — `"Chưa sử dụng"` / `"Đã sử dụng (khác)"` / `"Đã sử dụng"` / fallback `"Không xác định"` (bộ chữ do người dùng chốt). Trước đó text bị lặp 3 chỗ trong `IpAddressService` với 2 cách gọi khác nhau (grid ghi "Chưa gán", màn chi tiết ghi "Chưa sử dụng"). Vì projection EF (`Expression<Func<>>`) không gọi được method C#, **các API list gán `StatusText` SAU khi materialize** (vòng `foreach` ngay trước `OrderBy`), không viết ternary trong `Select`. Message của `DomainException` trong `UpdateAsync` cũng nội suy từ helper này để text lỗi luôn khớp với text trên UI.
 > Unique index `IX_DiaChiIPs_DiaChi` (`IpAddress1`) và `IX_TienToIPs_TienTo` (`Prefix`) **không lọc `IsDeleted`** → mọi check trùng phải so trên **toàn bộ** bản ghi kể cả đã soft-delete.
 
 ### 1.2. IpPrefix ↔ IpAddress
 `SubnetMask/Gateway/PreferredDns/AlternateDns` sống ở `IpPrefix` (mỗi dòng = 1 subnet 3-octet). `IpAddress.IpPrefixId` bắt buộc → sửa field mạng ở Prefix hiển thị cho toàn bộ IP con qua JOIN.
 - **Create Prefix tự sinh 255 IpAddress con** (`n=1..255`, `Available`) trong `IpPrefixService.CreateAsync` (không có `generate-range`).
-- **Không Create/Delete thủ công từng IpAddress**: controller còn `grid-list`/`available`/`{id}`/`PUT{id}`(Status+Note)/`assign`/`unassign`. `CreateAsync/DeleteAsync` không tồn tại.
+- **Không Create/Delete thủ công từng IpAddress**: controller còn `grid-list`/`available`/`{id}`/`PUT{id}`(Status+Note)/`PUT bulk-status`/`assign`/`unassign`. `CreateAsync/DeleteAsync` không tồn tại.
+
+### 1.2b. `PUT /api/IpAddress/bulk-status` — đổi trạng thái nhiều IP (2026-07-23)
+`BulkUpdateStatusAsync(BulkUpdateIpAddressStatusRequestDto{Ids, Status, UpdateNote, Note?})` — tick nhiều IP trên grid rồi đổi trạng thái 1 lần. Permission dùng lại `Asset.IpAddress.Update` (không thêm permission mới).
+- **Giữ nguyên bất biến §1.1**: chỉ nhận `Status` = `0`/`1`; gửi `2` → `DomainException` (Assigned do hệ thống tự đặt qua assign/unassign).
+- **Skip-and-report** (giống `Device bulk-delete`, không fail cả lô): Id không tồn tại/đã soft-delete → skip; IP đang gắn thiết bị (`DeviceId != null`) → skip kèm mã máy. Kết quả `BulkUpdateIpAddressStatusResultDto{UpdatedCount, Status, StatusText, SkippedIpAddresses:[{Id, IpAddress?, Reason}]}`.
+- **`Note` chỉ bị đụng khi `UpdateNote = true`** (đổi trạng thái hàng loạt không được âm thầm xoá note riêng của từng IP); khi `true` thì `Note` (kể cả null) áp cho toàn bộ IP cập nhật được.
+- **1 `SaveChangesAsync` duy nhất** cho cả lô → audit trail chỉ sinh **1 dòng gộp** (§1.17) thay vì N dòng.
+- ⚠️ **Không** `Include(x => x.Device)`: `FindWithIncludesAsync` là tracking, mà `GenericRepository.Update()` → `DbSet.Update()` đánh dấu Modified **cả graph** ⇒ Device bị ghi đè + lọt vào audit. Mã máy cho message skip được query riêng bằng `SelectAsync`, chỉ khi thực sự có dòng bị skip.
 - **Prefix có Update**: `UpdateIpPrefixDto` (`Id`/`BranchId[Required]`/`SubnetMask?`/`Gateway?`/DNS/`Description?`) — **không có `Prefix`** (3-octet bất biến sau tạo, đổi phải xóa+tạo lại). `UpdateAsync` chạy lại `ValidateNetworkSettings` + validate `BranchId` tồn tại.
 - **`IpPrefix.BranchId`**: mỗi dải gán 1 Chi nhánh. Cột DB **nullable** (dải cũ để `null`) nhưng `CreateIpPrefixDto.BranchId` **`[Required]`**. Validate qua `ValidateBranchIdAsync`.
 - **`ValidateNetworkSettings`** (`Shared.Application/Helper/NetworkHelper.cs`: `IsValidIpv4`/`GetNetworkClass`/`IsSameSubnet`): field mạng nếu có phải IPv4 hợp lệ; `Gateway` thuộc network 3-octet của Prefix, cùng subnet theo mask, không trùng `.0`/`.255`.
@@ -169,7 +178,7 @@ Bảng `AssetSettings` (seed 1 dòng `Id=1, LiquidationAfterMonths=2`) — cấu
   - Bulk: `BulkDeleteDeviceRequestDto{Ids[Required][MinLength(1)]}`, `BulkDeleteSkippedDeviceDto`, `BulkDeleteDeviceResultDto`.
 - **DeviceSoftwares**: `DeviceSoftwareDto`, `Create...`(+`[Required]`), `Update...`.
 - **Softwares**: `SoftwareDto`(+`SoftwareGroupName`), `Create...`(+`[Required]` Code/Name/GroupId), `Update...`.
-- **IpAddresses**: `IpAddressDto`(+`DeviceCode`="Khác" khi Status=1, `StatusText`, `Prefix*`, không `ServerIp`), `UpdateIpAddressDto`(`Id`/`Status`/`Note`), `IpAddressFilterRequest`(`Keyword/Status/IsInUse/DeviceId`, không `all`), `AssignIpAddressDto`(`DeviceId[Required]`). **Không** `CreateIpAddressDto`.
+- **IpAddresses**: `IpAddressDto`(+`DeviceCode`="Khác" khi Status=1, `StatusText`, `Prefix*`, không `ServerIp`), `UpdateIpAddressDto`(`Id`/`Status`/`Note`), `BulkUpdateIpAddressStatusRequestDto`(`Ids[MinLength(1)]`/`Status[Range(0,2)]`/`UpdateNote`/`Note?`) + `BulkUpdateIpAddressStatusResultDto`/`...SkippedDto` (§1.2b), `IpAddressFilterRequest`(`Keyword/Status/IsInUse/DeviceId`, không `all`), `AssignIpAddressDto`(`DeviceId[Required]`). **Không** `CreateIpAddressDto`.
 - **IpPrefixes**: `IpPrefixDto`(`UsedIpCount`/`AvailableIpCount`, `BranchId?`/`BranchName?`), `CreateIpPrefixDto`(`Prefix[Required][RegularExpression 3 octet]`, `BranchId[Required]`, +mạng), `UpdateIpPrefixDto`(không `Prefix`).
 - **DeviceConfigurations**: `DeviceConfigurationDto`(+`DeviceCode`, 20 field), `Create...`(`DeviceId[Required]`, còn lại optional), `Update...`(+`Id`; `DeviceId` không dùng trong `UpdateAsync`), `DeviceConfigurationInitialDto`(+`CreatedAt`), `DeviceConfigurationHistoryDto`(+`EditedAt`/`EditedBy`) — 2 cuối tự sinh.
 - **TransferHistories**: `TransferHistoryDto`(+Old/New Code/Name), `CreateTransferHistoryDto` — không Update/Delete.
@@ -194,7 +203,7 @@ Bảng `AssetSettings` (seed 1 dòng `Id=1, LiquidationAfterMonths=2`) — cấu
 | DeviceSoftware | `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE, `picker/{deviceId}`, `sync`(PUT) | `Asset.DeviceSoftware.*` (picker→View, sync→Update) |
 | Software | `/api/Software` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.Software.*` |
 | SoftwareGroup | `/api/SoftwareGroup` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.SoftwareGroup.*` |
-| IpAddress | `/api/IpAddress` | grid-list, `available`, {id}, PUT{id}(Status+Note), `{id}/assign`, `{id}/unassign`. **Không** POST/DELETE/all/generate-range | `Asset.IpAddress.View/.Update/.Assign` |
+| IpAddress | `/api/IpAddress` | grid-list, `available`, {id}, PUT{id}(Status+Note), `bulk-status`(§1.2b), `{id}/assign`, `{id}/unassign`. **Không** POST/DELETE/all/generate-range | `Asset.IpAddress.View/.Update/.Assign` |
 | IpPrefix | `/api/IpPrefix` | grid-list, all, {id}, POST(255 IP), PUT(BranchId+mạng), DELETE(cascade) | `Asset.IpPrefix.View/.Create/.Update/.Delete` |
 | DeviceConfiguration | `/api/DeviceConfiguration` | `by-device/{deviceId}`(null nếu chưa có), POST, PUT, DELETE(cứng), `{configId}/initial`, `initial/{id}`(DELETE), `{configId}/history`. **Không** grid-list/all | `Asset.DeviceConfiguration.*` |
 | TransferHistory | `/api/TransferHistory` | POST(chuyển máy), `device/{deviceId}`. **Không** PUT/DELETE | `Asset.TransferHistory.Create/.View` |

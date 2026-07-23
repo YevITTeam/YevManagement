@@ -12,6 +12,7 @@ namespace Asset.Application.Interfaces.Service
         Task<List<IpAddressDto>> GetAvailableAsync(string? keyword);
         Task<IpAddressDto> GetByIdAsync(int id);
         Task UpdateAsync(UpdateIpAddressDto request);
+        Task<BulkUpdateIpAddressStatusResultDto> BulkUpdateStatusAsync(BulkUpdateIpAddressStatusRequestDto request);
         Task AssignToDeviceAsync(int id, AssignIpAddressDto request);
         Task UnassignAsync(int id);
     }

@@ -54,6 +54,18 @@ namespace Asset.Api.Controllers
             return Success(true, "Cập nhật địa chỉ IP thành công.");
         }
 
+        // Bulk status update for the IPs ticked on the grid. Invalid rows (not found / still assigned
+        // to a device) are skipped and reported in the result instead of failing the whole batch.
+        [RequirePermission("Asset.IpAddress.Update")]
+        [HttpPut("bulk-status")]
+        public async Task<ActionResult<ApiResponse<BulkUpdateIpAddressStatusResultDto>>> BulkUpdateStatus([FromBody] BulkUpdateIpAddressStatusRequestDto request)
+        {
+            var result = await _ipAddressService.BulkUpdateStatusAsync(request);
+            return Success(result, result.SkippedIpAddresses.Count == 0
+                ? $"Đã cập nhật {result.UpdatedCount} địa chỉ IP sang '{result.StatusText}'."
+                : $"Đã cập nhật {result.UpdatedCount} địa chỉ IP sang '{result.StatusText}', bỏ qua {result.SkippedIpAddresses.Count} địa chỉ IP.");
+        }
+
         [RequirePermission("Asset.IpAddress.Assign")]
         [HttpPut("{id}/assign")]
         public async Task<ActionResult<ApiResponse<bool>>> Assign(int id, [FromBody] AssignIpAddressDto request)

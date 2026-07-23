@@ -76,13 +76,27 @@ DTO: `{id, code, name}`. POST/PUT body có Code+Name (`[Required]`), PUT thêm `
 
 ### 4.2 IpAddress — `/api/IpAddress`
 **Enum `status`**: `0` Available (`deviceCode`=null) · `1` AssignedExternal (không DeviceId, `deviceCode`="Khác") · `2` Assigned (có DeviceId, mã thật).
+`statusText` server tự dịch, **thống nhất mọi endpoint**: `0`→`"Chưa sử dụng"`, `1`→`"Đã sử dụng (khác)"`, `2`→`"Đã sử dụng"` (grid-list, available, `/{id}` giờ trả cùng một text — trước đây grid trả "Chưa gán/Đã gán"). FE hiển thị thẳng `statusText`, chỉ dùng số `status` khi gửi lên hoặc style badge.
 > Bất biến: `status=2` ⟺ có `deviceId`; `0/1` ⟺ không.
 ```jsonc
 // GET grid-list?...&status=0&isInUse=&deviceId= → data.data[] (sort theo GIÁ TRỊ IP)
 { "id":6989, "ipAddress":"1.1.1.104", "deviceId":null, "deviceCode":null, "ipPrefixId":28,
   "prefix":"1.1.1", "prefixSubnetMask":"...", "prefixGateway":"...", "prefixPreferredDns":"...",
-  "prefixAlternateDns":"...", "status":0, "statusText":"Chưa gán", "note":null }
+  "prefixAlternateDns":"...", "status":0, "statusText":"Chưa sử dụng", "note":null }
 ```
+- **PUT `/bulk-status` — đổi trạng thái NHIỀU IP cùng lúc** (tick chọn trên grid). Body:
+```jsonc
+{ "ids":[6989,6990,6991], "status":1, "updateNote":false, "note":null }
+```
+  - `status` chỉ nhận `0` hoặc `1`; gửi `2` → **400** (status 2 chỉ đến từ assign/unassign).
+  - `updateNote`: `false` (mặc định) → **giữ nguyên note riêng của từng IP**; `true` → ghi đè `note` cho toàn bộ IP cập nhật được (gửi `null` để xoá trắng).
+  - **Không fail cả lô**: IP không tồn tại / đang gắn thiết bị sẽ bị **bỏ qua** và liệt kê lại. Response `data`:
+```jsonc
+{ "updatedCount":2, "status":1, "statusText":"Đã sử dụng (khác)",
+  "skippedIpAddresses":[ { "id":6991, "ipAddress":"1.1.1.106",
+    "reason":"Đang gán cho thiết bị PC-001, vui lòng gỡ gán trước khi đổi trạng thái." } ] }
+```
+  - `message` đã sẵn câu tiếng Việt để toast; FE nên hiện thêm bảng `skippedIpAddresses` khi mảng này khác rỗng. Nhớ refresh grid sau khi gọi.
 - **PUT `/{id}` — CHỈ đổi `status`+`note`. Không có POST/DELETE thủ công** (IP sinh/dọn qua IpPrefix). Body `{id, status, note}`. Luật: IP đang gắn (`status=2`) chỉ đổi `note` (gửi status khác → 400 "gỡ gán trước"); IP chưa gắn chỉ đặt `status`=`0`/`1` (gửi `2` → 400).
 - **Query grid-list** (không có `all`): `pageIndex/pageSize/keyword/status/isInUse/deviceId`. `isInUse` bool: `true`→`status!=0`, `false`→`status=0`, kết hợp AND với `status`.
 - **IP còn trống** (picker chọn IP cho Device): `GET /grid-list?status=0` (phân trang) hoặc `GET /available?keyword=` (không phân trang, `data:IpAddressDto[]` thẳng, sort `ipAddress` A-Z).
@@ -278,7 +292,7 @@ Ai sửa/xóa gì, lúc nào — ghi tự động ở BE mỗi lần Create/Upda
 | `/api/Branch`, `/api/Supplier`, `/api/DeviceType`, `/api/SoftwareGroup`, `/api/Software` | CRUD chuẩn (grid-list, all, {id}, POST, PUT, DELETE) |
 | `/api/DeviceGroup` (`?departmentId=`), `/api/DeviceDepartment` | CRUD (Nhóm thuộc 1 Bộ phận) |
 | `/api/IpPrefix` | CRUD; POST sinh 255 IP (`branchId` bắt buộc), PUT không sửa prefix, DELETE cascade |
-| `/api/IpAddress` | grid-list, `available`, {id}, PUT{id}(status+note), `{id}/assign`, `{id}/unassign` (không POST/DELETE/all) |
+| `/api/IpAddress` | grid-list, `available`, {id}, PUT{id}(status+note), PUT `bulk-status`(đổi status nhiều IP), `{id}/assign`, `{id}/unassign` (không POST/DELETE/all) |
 | `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, POST, PUT, DELETE, `bulk-delete`. Không `all` |
 | `/api/Report/device-list` | Báo cáo in ấn (không phân trang) |
 | `/api/TransferHistory` | POST(chuyển máy), `device/{deviceId}` |
