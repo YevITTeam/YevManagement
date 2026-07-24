@@ -158,6 +158,14 @@ Bảng `AssetSettings` (seed 1 dòng `Id=1, LiquidationAfterMonths=2`) — cấu
   2. Device `PendingLiquidation(2)`, `ExpirationDate.AddMonths(LiquidationAfterMonths) < hôm nay` → `Liquidated(3)`. **Mốc tính từ `ExpirationDate`** (không phải lúc vào trạng thái chờ).
   3. 1 Save cho cả 2 bước. Lỗi log qua `ILogger`, không crash, thử lại hôm sau.
 
+### 1.10b. Import thanh lý hàng loạt — `/api/DeviceLiquidationImport` (`preview`/`confirm`, 2026-07-23)
+Import file **1 cột `Mã máy` (MQL)**, dòng 1 header (`.xlsx`/`.csv`, dùng chung `CsvFileHelper`/ClosedXML) để chuyển hàng loạt Device sang `Liquidated(3)`. Service/Controller riêng, 2 bước như các import khác. `DeviceLiquidationImportService : BaseService` (không cần `DeviceService`, thao tác thẳng qua `_unitOfWork`).
+- **Luật trạng thái nguồn** (quyết định người dùng): **CHỈ** máy đang `PendingLiquidation(2)` mới thanh lý được. Máy đã `Liquidated(3)` → lỗi "đã được thanh lý trước đó"; trạng thái khác (`PendingUse`/`InUse`) → lỗi "...đang ở trạng thái 'X', chỉ thanh lý được thiết bị đang 'Chờ thanh lý'." (text từ `DeviceStatusExtensions`). Không tìm thấy mã / đã soft-delete / trùng mã trong file → lỗi dòng.
+- **Kèm dọn dẹp giống `DeviceService.DeleteAsync`**: máy thanh lý coi như không còn dùng → **gỡ hết IP** (`DeviceId=null`, `Status=Available`, đếm `ReleasedIpCount`) + **soft-delete `DeviceEmail`**. (Khác `DeleteAsync`: KHÔNG set `IsDeleted` — máy vẫn còn để tra cứu, chỉ đổi `Status`.)
+- **Preview** (chỉ đọc): trả `DeviceLiquidationImportPreviewResultDto{Rows, TotalRows, ValidRows, InvalidRows}`, mỗi row có `ResolvedDeviceId?`/`CurrentStatus?`/`CurrentStatusText?`/`IsValid`/`Errors`.
+- **Confirm** (`ConfirmDeviceLiquidationImportDto{Rows}` field thô): **validate lại từ đầu**, dòng lỗi **BỎ QUA không chặn batch** (`SkippedRows`), dòng hợp lệ thanh lý trong 1 transaction. Có **re-check trong vòng lặp** (`device.Status != PendingLiquidation` sau khi load lại) phòng đổi trạng thái đồng thời. Kết quả `DeviceLiquidationImportConfirmResultDto{LiquidatedCount, LiquidatedDeviceIds, ReleasedIpCount, SkippedCount, SkippedRows}`.
+- **Permission**: dùng lại `Asset.Device.Update` (đổi trạng thái, không phải tạo/xóa → không seed permission mới).
+
 ### 1.17. `AuditTrail` — ghi log Create/Update/Delete tự động (2026-07-16)
 **Tự động, không cần sửa Service nào.** Chặn tại 1 điểm duy nhất: `AssetDbContext.SaveChangesAsync` override (`Asset.Infrastructure/Context/AssetDbContext.AuditTrail.cs`, partial class riêng — không đụng file scaffold `AssetDbContext.cs`) đọc `ChangeTracker.Entries()` trước/sau khi save để tự sinh `AuditTrail`. Entity mới thêm sau này **tự động được audit**, không cần nhớ gọi gì thêm.
 - **Phạm vi**: toàn bộ entity qua `AssetDbContext` (Device, DeviceGroup, DeviceDepartment, Branch, Supplier, DeviceType, Software, SoftwareGroup, IpAddress, IpPrefix, DeviceConfiguration, DeviceEmail, DeviceSoftware, TransferHistory, AssetSetting...). **Loại trừ** 3 bảng tự thân đã là log/snapshot: `AuditTrail`, `DeviceConfigurationHistory`, `DeviceConfigurationInitial` (audit lồng audit vô nghĩa).
@@ -217,6 +225,7 @@ Bảng `AssetSettings` (seed 1 dòng `Id=1, LiquidationAfterMonths=2`) — cấu
 | TransferHistory | `/api/TransferHistory` | POST(chuyển máy), `device/{deviceId}`. **Không** PUT/DELETE | `Asset.TransferHistory.Create/.View` |
 | DeviceImport | `/api/DeviceImport` | `preview`, `confirm` | `Asset.Device.Create` |
 | DeviceConfigurationImport | `/api/DeviceConfigurationImport` | `preview`, `confirm` | `Asset.DeviceConfiguration.Update` |
+| DeviceLiquidationImport | `/api/DeviceLiquidationImport` | `preview`, `confirm` (§1.10b, thanh lý hàng loạt theo mã máy) | `Asset.Device.Update` |
 | AuditTrail | `/api/AuditTrail` | `grid-list`(phân trang+filter), `record?tableName=&recordId=`. **Không** POST/PUT/DELETE (ghi tự động qua `SaveChangesAsync`, §1.17) | `Asset.AuditTrail.View` |
 
 **Pattern service mẫu để nhân bản:**
