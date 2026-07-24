@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -110,7 +111,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label="Đóng"
                     >
-                        ✕
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { X } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { DeviceImportApi } from "@/modules/pc-management/api/device-import.api";
@@ -175,7 +176,7 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label="Đóng"
                     >
-                        ✕
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 

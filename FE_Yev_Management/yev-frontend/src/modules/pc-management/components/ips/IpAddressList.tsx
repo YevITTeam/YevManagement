@@ -1,5 +1,6 @@
 "use client";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { X } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { IpApi } from "@/modules/pc-management/api/ip-api";
@@ -234,7 +235,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                 className="cursor-pointer font-semibold text-[#92400e] transition hover:text-[#78350f]"
                                 aria-label="Đóng"
                             >
-                                ✕
+                                <X className="h-4 w-4" />
                             </button>
                         </div>
                         <ul className="list-inside list-disc space-y-1">

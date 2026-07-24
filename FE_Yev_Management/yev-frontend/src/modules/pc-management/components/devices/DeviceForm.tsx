@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Search, Trash2, X } from "lucide-react";
 import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import { SupplierApi } from "@/modules/pc-management/api/supplier.api";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
@@ -263,7 +263,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label="Đóng"
                     >
-                        ✕
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
@@ -499,7 +499,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                             className="text-[#5e3f3a] transition hover:text-[#e3000f] disabled:cursor-not-allowed"
                                             aria-label={`Gỡ IP ${ip.ipAddress}`}
                                         >
-                                            ✕
+                                            <X size={12} />
                                         </button>
                                     </span>
                                 ))}

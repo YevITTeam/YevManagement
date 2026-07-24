@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown, ChevronDown } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown, ChevronDown, Printer, RefreshCw, Trash2, Upload } from "lucide-react";
 import DeviceFilterBar, { type DeviceFilters } from "@/modules/pc-management/components/DeviceFilterBar";
 import PrintDeviceQrLabelsDialog from "@/modules/pc-management/components/PrintDeviceQrLabelsDialog";
 import RowActionsMenu from "@/modules/pc-management/components/RowActionsMenu";
@@ -416,9 +416,9 @@ export default function PcDashboardPage() {
                     setIsActionsMenuOpen(false);
                     setIsTaniumImportOpen(true);
                   }}
-                  className="block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
                 >
-                  ↻ Đồng bộ từ Tanium
+                  <RefreshCw className="h-3.5 w-3.5" /> Đồng bộ từ Tanium
                 </button>
                 <button
                   role="menuitem"
@@ -426,9 +426,9 @@ export default function PcDashboardPage() {
                     setIsActionsMenuOpen(false);
                     setIsImportOpen(true);
                   }}
-                  className="block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
                 >
-                  ⤴ Nhập từ Excel
+                  <Upload className="h-3.5 w-3.5" /> Nhập từ Excel
                 </button>
                 <button
                   role="menuitem"
@@ -436,9 +436,9 @@ export default function PcDashboardPage() {
                     setIsActionsMenuOpen(false);
                     setIsLiquidationImportOpen(true);
                   }}
-                  className="block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
                 >
-                  🗑 Nhập thanh lý hàng loạt
+                  <Trash2 className="h-3.5 w-3.5" /> Nhập thanh lý hàng loạt
                 </button>
               </div>
             )}
@@ -469,9 +469,9 @@ export default function PcDashboardPage() {
               <span className="text-sm font-medium text-[#5e3f3a]">Đã chọn {selectedIds.length} thiết bị</span>
               <button
                 onClick={handlePrintSelectedDevices}
-                className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                className="flex cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
               >
-                🖨 In tem QR
+                <Printer className="h-3.5 w-3.5" /> In tem QR
               </button>
               <button
                 onClick={() => setIsBulkDeleteOpen(true)}

@@ -510,7 +510,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                                 aria-label="Đóng"
                             >
-                                ✕
+                                <X className="h-5 w-5" />
                             </button>
                         </div>
 

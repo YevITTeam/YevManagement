@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { X } from "lucide-react";
 import type { SupplierDto } from "@/modules/pc-management/types/supplier.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
@@ -63,7 +64,7 @@ export default function SupplierForm({ isOpen, mode, initial, loading = false, o
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label="Đóng"
                     >
-                        ✕
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 

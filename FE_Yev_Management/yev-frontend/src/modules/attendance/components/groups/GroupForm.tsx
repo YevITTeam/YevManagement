@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
@@ -81,7 +82,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label="Đóng"
                     >
-                        ✕
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 

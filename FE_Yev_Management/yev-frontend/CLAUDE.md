@@ -142,6 +142,15 @@ Bảng màu thương hiệu đang dùng nhất quán trong code (giữ nguyên k
 `#e3000f` / hover `#b40009`; chữ đậm `#191c1e`; chữ phụ `#5e3f3a`; viền `#e0e3e5`; nền phụ
 `#f8fafc`; lỗi `#930006`. Text hiển thị cho người dùng viết tiếng Việt.
 
+**Icon:** luôn dùng component từ `lucide-react` (`import { X } from "lucide-react"`), **không**
+gõ thẳng ký tự emoji/unicode làm icon (vd `✕`, `🗑`, `🖨`, `↻`, `⬇`, `←`, `⚙`, `✓`, `⚠`...) dù là
+nút đóng modal, nút "Làm mới", nút in/xuất PDF, hay icon sắp xếp tăng/giảm. Kích cỡ quy ước: nút
+đóng modal `className="h-5 w-5"`, icon trong nút hành động nhỏ `className="h-3.5 w-3.5"` kèm
+`flex items-center gap-1.5` trên chính button/link đó, icon inline cạnh text ngắn dùng prop
+`size={12}`–`size={16}`. Ngoại lệ: nội dung mô phỏng ô tick trên biểu mẫu giấy in sẵn (in ra
+PDF/print, không phải icon điều hướng UI, vd `OtFormPrintView.tsx`) vẫn được giữ ký tự `✓` thuần vì
+đó là nội dung tài liệu, không phải icon.
+
 ## Lưu ý môi trường
 
 - Auth: BE module Asset đang `[AllowAnonymous]` nhưng `client.ts` đã có sẵn cơ chế Bearer token

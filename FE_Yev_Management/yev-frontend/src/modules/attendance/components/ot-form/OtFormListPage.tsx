@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Check, RefreshCw, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useRouter } from "@/navigation";
 
@@ -46,9 +47,9 @@ function ApprovalSummaryCell({ summary, status }: { summary: OtFormApprovalSumma
                 return (
                     <div
                         key={index}
-                        className={`text-xs ${isRejected ? "text-[#930006]" : "text-emerald-700"}`}
+                        className={`flex items-center gap-1 text-xs ${isRejected ? "text-[#930006]" : "text-emerald-700"}`}
                     >
-                        {isRejected ? "✗" : "✓"} {item.approverFullName ?? item.approverUserName} (
+                        {isRejected ? <X size={12} /> : <Check size={12} />} {item.approverFullName ?? item.approverUserName} (
                         {approvalLevelLabels[item.approvalLevel] ?? "?"})
                     </div>
                 );
@@ -144,9 +145,9 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     <button
                         onClick={() => fetchForms()}
                         disabled={isLoading}
-                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
-                        ↻ Làm mới
+                        <RefreshCw className="h-3.5 w-3.5" /> Làm mới
                     </button>
                 </div>
 

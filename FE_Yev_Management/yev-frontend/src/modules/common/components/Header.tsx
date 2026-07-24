@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Settings } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission } from "@/modules/auth/lib/permissions";
@@ -83,7 +83,7 @@ export default function Header() {
                   prefetch={false}
                   className="hidden items-center gap-2 rounded-lg border border-[#e3000f]/15 bg-[#fff5f5] px-3 py-2 text-sm font-semibold text-[#e3000f] transition hover:border-[#e3000f]/30 hover:bg-[#ffe8e8] sm:flex"
                 >
-                  <span className="text-base">⚙</span>
+                  <Settings className="h-4 w-4" />
                   <span>{t("admin")}</span>
                 </Link>
               )}

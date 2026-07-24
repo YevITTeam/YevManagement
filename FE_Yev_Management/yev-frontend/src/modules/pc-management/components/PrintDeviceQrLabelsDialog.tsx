@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Printer, X } from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "react-toastify";
 import { DeviceApi } from "@/modules/pc-management/api/device.api";
@@ -249,7 +250,7 @@ export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label="Đóng"
                     >
-                        ✕
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
@@ -303,9 +304,15 @@ export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }
                         type="button"
                         onClick={handlePrint}
                         disabled={isLoading || !!error || labels.length === 0 || isPrinting}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {isPrinting ? "Đang tạo mã QR..." : `🖨 In (${labels.length})`}
+                        {isPrinting ? (
+                            "Đang tạo mã QR..."
+                        ) : (
+                            <>
+                                <Printer className="h-4 w-4" /> In ({labels.length})
+                            </>
+                        )}
                     </button>
                 </div>
             </div>

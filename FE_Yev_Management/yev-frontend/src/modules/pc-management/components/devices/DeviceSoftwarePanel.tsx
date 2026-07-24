@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { DeviceSoftwareApi } from "@/modules/pc-management/api/device-software.api";
@@ -202,8 +203,8 @@ export default function DeviceSoftwarePanel({ deviceId, softwares, onChanged }: 
                                         title="Sắp xếp theo ưu tiên"
                                     >
                                         Ưu tiên
-                                        {prioritySort === "asc" && <span>↑</span>}
-                                        {prioritySort === "desc" && <span>↓</span>}
+                                        {prioritySort === "asc" && <ArrowUp size={14} />}
+                                        {prioritySort === "desc" && <ArrowDown size={14} />}
                                     </button>
                                 </th>
                                 <th className="whitespace-nowrap px-4 py-3 text-right">Thao tác</th>

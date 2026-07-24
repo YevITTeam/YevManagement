@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Link } from "@/navigation";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { DeviceApi } from "@/modules/pc-management/api/device.api";
@@ -69,9 +70,9 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
     if (error && !detail) {
         return (
             <div className="space-y-4">
-                <Link href="/pc" prefetch={false} className="inline-flex items-center text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
-                    ← Quay lại danh sách
-                </Link>
+                <Link href="/pc" prefetch={false} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
+                    <ArrowLeft className="h-4 w-4" /> Quay lại danh sách
+</Link>
                 <div className="rounded-xl border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
             </div>
         );
@@ -85,8 +86,8 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                    <Link href="/pc" prefetch={false} className="inline-flex items-center text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
-                        ← Quay lại danh sách
+                    <Link href="/pc" prefetch={false} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
+                        <ArrowLeft className="h-4 w-4" /> Quay lại danh sách
                     </Link>
                     <h1 className="mt-2 text-2xl font-semibold text-[#191c1e]">{device.deviceCode}</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">{device.deviceName}</p>
@@ -96,9 +97,9 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                     <button
                         onClick={() => fetchDetail()}
                         disabled={isLoading}
-                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
-                        ↻ Làm mới
+                        <RefreshCw className="h-3.5 w-3.5" /> Làm mới
                     </button>
                     <button
                         onClick={() => setTransferOpen(true)}

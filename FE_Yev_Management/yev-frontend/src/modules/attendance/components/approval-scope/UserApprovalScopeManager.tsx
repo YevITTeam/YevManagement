@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Check, RefreshCw, X } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { UserApprovalScopeApi } from "@/modules/attendance/api/user-approval-scope.api";
@@ -207,9 +208,9 @@ export default function UserApprovalScopeManager() {
                     <button
                         onClick={() => fetchScopes()}
                         disabled={isLoading}
-                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
-                        ↻ Làm mới
+                        <RefreshCw className="h-3.5 w-3.5" /> Làm mới
                     </button>
                     <button
                         onClick={openCreateForm}
@@ -326,7 +327,7 @@ export default function UserApprovalScopeManager() {
                                 className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                                 aria-label="Đóng"
                             >
-                                ✕
+                                <X className="h-5 w-5" />
                             </button>
                         </div>
 
@@ -463,7 +464,11 @@ export default function UserApprovalScopeManager() {
                                     {requiredRoleMissing
                                         ? `Tài khoản "${form.userName.trim()}" chưa giữ Role "${requiredRoleName}" — BE sẽ từ chối. Gán Role này qua Quản lý người dùng trước.`
                                         : matchedUser
-                                        ? `Tài khoản đã giữ Role "${requiredRoleName}" ✓`
+                                        ? (
+                                            <span className="inline-flex items-center gap-1">
+                                                {`Tài khoản đã giữ Role "${requiredRoleName}"`} <Check size={14} />
+                                            </span>
+                                        )
                                         : `Không tìm thấy tài khoản này trong danh sách người dùng — kiểm tra lại chính tả trước khi gửi.`}
                                 </div>
                             )}

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { SupplierApi } from "@/modules/pc-management/api/supplier.api";
@@ -117,9 +118,9 @@ export default function SupplierList() {
                     <button
                         onClick={() => fetchSuppliers()}
                         disabled={isLoading}
-                        className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        className="flex cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
-                        ↻ Làm mới
+                        <RefreshCw className="h-3.5 w-3.5" /> Làm mới
                     </button>
                     <button
                         onClick={openCreateForm}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { X } from "lucide-react";
 import type { SoftwareDto } from "@/modules/pc-management/types/software.dto";
 import type { SoftwareGroupDto } from "@/modules/pc-management/types/software-group.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
@@ -90,7 +91,7 @@ export default function SoftwareForm({ isOpen, mode, initial, groups, loading = 
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label="Đóng"
                     >
-                        ✕
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 

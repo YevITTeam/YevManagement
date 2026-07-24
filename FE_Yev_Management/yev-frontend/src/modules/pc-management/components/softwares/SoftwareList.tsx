@@ -1,5 +1,6 @@
 "use client";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { SoftwareApi } from "@/modules/pc-management/api/software.api";
@@ -263,8 +264,8 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                                         title="Sắp xếp theo ưu tiên"
                                     >
                                         Ưu tiên
-                                        {prioritySort === "asc" && <span>↑</span>}
-                                        {prioritySort === "desc" && <span>↓</span>}
+                                        {prioritySort === "asc" && <ArrowUp size={14} />}
+                                        {prioritySort === "desc" && <ArrowDown size={14} />}
                                     </button>
                                 </th>
                                 <th className="px-6 py-3 text-right">Thao tác</th>

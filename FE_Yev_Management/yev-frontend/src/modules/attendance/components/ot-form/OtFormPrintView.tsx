@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { Download } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
@@ -648,9 +649,15 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                     <button
                         onClick={handleExportPdf}
                         disabled={isExportingPdf}
-                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {isExportingPdf ? "Đang xuất..." : "⬇ Xuất PDF"}
+                        {isExportingPdf ? (
+                            "Đang xuất..."
+                        ) : (
+                            <>
+                                <Download className="h-4 w-4" /> Xuất PDF
+                            </>
+                        )}
                     </button>
                     <button
                         onClick={() => window.print()}

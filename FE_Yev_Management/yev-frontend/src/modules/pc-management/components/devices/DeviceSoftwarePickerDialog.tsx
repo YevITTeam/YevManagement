@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { DeviceSoftwareApi } from "@/modules/pc-management/api/device-software.api";
@@ -159,7 +160,7 @@ export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, 
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label="Đóng"
                     >
-                        ✕
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
@@ -179,8 +180,8 @@ export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, 
                             title="Sắp xếp theo mức độ ưu tiên"
                         >
                             Ưu tiên
-                            {prioritySort === "asc" && <span>↑</span>}
-                            {prioritySort === "desc" && <span>↓</span>}
+                            {prioritySort === "asc" && <ArrowUp size={14} />}
+                            {prioritySort === "desc" && <ArrowDown size={14} />}
                         </button>
                     </div>
                 </div>

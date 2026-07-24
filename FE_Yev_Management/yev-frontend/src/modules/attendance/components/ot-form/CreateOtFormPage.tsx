@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { toast } from "react-toastify";
 import { useRouter } from "@/navigation";
 
@@ -624,7 +625,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 </td>
                                                 <td className={`px-3 py-2 align-top text-sm ${isOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                     {employee.monthToDate}h / {employee.yearToDate}h
-                                                    {isOverLimit && " ⚠"}
+                                                    {isOverLimit && <AlertTriangle className="ml-1 inline h-3.5 w-3.5 text-[#930006]" />}
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
                                                     <TimePicker24h

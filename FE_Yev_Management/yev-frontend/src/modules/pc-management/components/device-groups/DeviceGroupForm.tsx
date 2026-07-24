@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
@@ -79,7 +80,7 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label="Đóng"
                     >
-                        ✕
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
