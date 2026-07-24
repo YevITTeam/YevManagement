@@ -140,6 +140,21 @@ Không phân trang, `data:DeviceGridDto[]`, lọc `status=0`+`!IsDeleted`, `keyw
 ```
 `configuration:null` **không phải lỗi** → FE dựa vào để POST(tạo)/PUT(sửa) config.
 
+### 5.4b In mã QR hàng loạt — `POST /api/Device/qr-labels`
+Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ liệu, FE tự vẽ QR** (dùng thư viện JS như `qrcode`/`qrcode.react`...) và **tự dàn layout in** (khổ tem tuỳ FE). In 1 máy = gửi list 1 phần tử.
+```jsonc
+// body
+{ "ids":[17982, 17983, 17984] }
+// data — GIỮ ĐÚNG thứ tự ids gửi lên; máy không tồn tại/đã xóa bị bỏ qua
+[ { "deviceId":17982, "deviceCode":"YDC-1877", "deviceName":"Máy kế toán",
+    "deviceTypeName":"PC", "branchName":"TAM", "supplierName":"...", "manager":"...",
+    "serialNumber":"5CD5354PGJ", "statusText":"Đang sử dụng", "purchaseDate":"...",
+    "qrPayload":"YDC-1877\nMáy kế toán\nSN: 5CD5354PGJ\nXưởng: TAM" } ]
+```
+- **`qrPayload`** = chuỗi cần mã hoá vào QR (BE dựng sẵn). **Dòng 1 luôn là mã máy** (`deviceCode`) — camera điện thoại quét ra cả khối đọc được, còn app nội bộ (nếu có sau này) tách dòng 1 để tra cứu. Vì là web **nội bộ** nên KHÔNG dùng deep-link URL (điện thoại không mở được).
+- **User chọn field in**: response trả **đủ field** (mã/tên/loại/xưởng/NCC/người dùng/serial/trạng thái/ngày mua) → FE cho user tick field nào in ra chữ trên tem. Nếu user cũng muốn đổi field **trong QR**, FE tự dựng lại `qrPayload` từ các field này **nhưng phải giữ dòng 1 = `deviceCode`** (để app nội bộ còn tách được).
+- Permission: `Asset.Device.View`.
+
 ### 5.5 `POST /api/Device`
 ```jsonc
 { "deviceCode":"...[Required]unique", "deviceName":"[Required]", "deviceTypeId":11[Required],
@@ -291,6 +306,32 @@ Mã không khớp Device → lỗi preview. Trùng mã trong file → lỗi cả
 **Luật gán IP** (`taniumIpAddress`): trống→bỏ qua; khớp IP nào→**luôn** gán (cướp từ Device khác), IP khác của Device đang import **không** bị gỡ; không khớp→**không chặn**, +`warnings`.
 **Luật ghi Serial** (`serialNumber`, 2026-07-23): trống→bỏ qua; serial đang thuộc **Device khác** hoặc **lặp nhiều dòng trong file** → **không chặn dòng**, chỉ +`warnings` và bỏ ghi serial (`resolvedSerialNumber=null`); còn lại → ghi đè `Device.SerialNumber` (Tanium đọc thẳng từ máy nên tin hơn giá trị nhập tay). Cột serial chứa `"TSE-Error"` cũng làm hỏng dòng như các cột khác. **Update không đè field khác**: Device có config → chỉ đè 5 field Tanium (chỉ khi ô không rỗng), field khác giữ nguyên; chưa có → tạo mới (kèm Initial 6.1). Permission chung `Asset.DeviceConfiguration.Update`.
 
+### 6.4 Import thanh lý hàng loạt — `/api/DeviceLiquidationImport` (preview/confirm, 2026-07-23)
+Upload file **1 cột `Mã máy`** (dòng 1 header, `.xlsx`/`.csv`) để chuyển hàng loạt thiết bị sang **"Đã thanh lý"**.
+> **Chỉ thanh lý được máy đang "Chờ thanh lý" (status 2)**. Máy đã thanh lý → lỗi "đã được thanh lý trước đó"; trạng thái khác → lỗi kèm tên trạng thái hiện tại; không tìm thấy mã / trùng mã trong file → lỗi dòng.
+> Thanh lý xong máy **bị gỡ hết IP** (IP về "Chưa sử dụng") và **ẩn email** — nhưng máy **vẫn còn** để tra cứu (chỉ đổi status, không xóa).
+
+**Preview** `POST /preview` (`multipart/form-data`, field `file`):
+```jsonc
+// data
+{ "rows":[
+    { "rowNumber":2, "deviceCode":"YDC-1877", "resolvedDeviceId":18001,
+      "currentStatus":2, "currentStatusText":"Chờ thanh lý", "isValid":true, "errors":[] },
+    { "rowNumber":3, "deviceCode":"YDC-9999", "resolvedDeviceId":18010,
+      "currentStatus":1, "currentStatusText":"Đang sử dụng", "isValid":false,
+      "errors":["Thiết bị 'YDC-9999' đang ở trạng thái 'Đang sử dụng', chỉ thanh lý được thiết bị đang 'Chờ thanh lý'."] }
+  ], "totalRows":2, "validRows":1, "invalidRows":1 }
+```
+FE render `rows`, tô đỏ `isValid=false` (hiện `currentStatusText` để user biết vì sao). Nút Confirm **không cần disable** (dòng lỗi tự bỏ qua).
+
+**Confirm** `POST /confirm` (JSON gửi lại `rows` field thô, server tra lại). **Validate lại, dòng lỗi BỎ QUA**:
+```jsonc
+// data
+{ "liquidatedCount":1, "liquidatedDeviceIds":[18001], "releasedIpCount":2,
+  "skippedCount":1, "skippedRows":[{ "rowNumber":3, "deviceCode":"YDC-9999", "errors":["..."] }] }
+```
+FE hiện "Đã thanh lý N, bỏ qua M dòng". Permission chung `Asset.Device.Update`. Chưa có file mẫu tải.
+
 ## 7. DeviceSoftware — `/api/DeviceSoftware` (khoá `(deviceId, softwareId)`, không Id riêng)
 - **7.1 `GET /device/{deviceId}`** → `[{ deviceId, softwareId, softwareName, installDate, licenseKey }]`.
 - **7.2 Đơn lẻ**: `POST` (`{deviceId, softwareId, installDate?, licenseKey?}`, 400 nếu đã cài), `PUT` (`{deviceId, softwareId, installDate, licenseKey}`), `DELETE /device/{deviceId}/software/{softwareId}`.
@@ -317,10 +358,11 @@ Ai sửa/xóa gì, lúc nào — ghi tự động ở BE mỗi lần Create/Upda
 | `/api/DeviceGroup` (`?departmentId=`), `/api/DeviceDepartment` | CRUD (Nhóm thuộc 1 Bộ phận) |
 | `/api/IpPrefix` | CRUD; POST sinh 255 IP (`branchId` bắt buộc), PUT không sửa prefix, DELETE cascade |
 | `/api/IpAddress` | grid-list, `available`, {id}, PUT{id}(status+note), PUT `bulk-status`(đổi status nhiều IP), `{id}/assign`, `{id}/unassign` (không POST/DELETE/all) |
-| `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, POST, PUT, DELETE, `bulk-delete`. Không `all` |
+| `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, `qr-labels`(POST, in QR hàng loạt 5.4b), POST, PUT, DELETE, `bulk-delete`. Không `all` |
 | `/api/Report/device-list` | Báo cáo in ấn (không phân trang) |
 | `/api/TransferHistory` | POST(chuyển máy), `device/{deviceId}` |
 | `/api/DeviceImport` | `preview`/`confirm` (Excel/CSV) |
+| `/api/DeviceLiquidationImport` | `preview`/`confirm` — import 1 cột mã máy để thanh lý hàng loạt (6.4) |
 | `/api/DeviceConfiguration` | `by-device/{deviceId}`, POST, PUT{id}, DELETE{id}, `{configId}/initial`, `initial/{id}`, `{configId}/history` |
 | `/api/DeviceConfigurationImport` | `preview`/`confirm` (Tanium, chỉ update) |
 | `/api/DeviceSoftware` | `device/{deviceId}`, POST, PUT, DELETE `device/{deviceId}/software/{softwareId}`, `picker/{deviceId}`, `sync` |

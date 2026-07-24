@@ -1,5 +1,6 @@
 import { api } from "@/lib/client";
 import type { DeviceDto,CreateUpdateDeviceDto,DeviceDetailDto,DeviceGetDto,DeviceReplacementSuggestionDto,BulkDeleteResultDto } from "@/modules/pc-management/types/device.dto";
+import type { DeviceQrLabelDto } from "@/modules/pc-management/types/device-qr-label.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -13,6 +14,7 @@ const ENDPOINTS = {
         updateDevice: (id: number) => `/Device/${id}`,
         deleteDevice: (id: number) => `/Device/${id}`,
         bulkDeleteDevices: "/Device/bulk-delete",
+        getQrLabels: "/Device/qr-labels",
     }
 } as const;
 
@@ -99,6 +101,12 @@ export const DeviceApi = {
     },
     bulkDeleteDevices: async (ids: number[]) => {
         const response = await api.post<ApiResponse<BulkDeleteResultDto>>(ENDPOINTS.DEVICE.bulkDeleteDevices, { ids });
+        return response.data;
+    },
+    // In tem QR hàng loạt (docs/asset-api-fe.md §5.4b) — giữ đúng thứ tự ids gửi lên,
+    // máy không tồn tại/đã xoá bị BE bỏ qua khỏi kết quả.
+    getQrLabels: async (ids: number[]) => {
+        const response = await api.post<ApiResponse<DeviceQrLabelDto[]>>(ENDPOINTS.DEVICE.getQrLabels, { ids });
         return response.data;
     },
 };

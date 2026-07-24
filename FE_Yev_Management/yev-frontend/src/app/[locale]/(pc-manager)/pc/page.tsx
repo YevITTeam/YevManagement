@@ -1,15 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown, ChevronDown } from "lucide-react";
 import DeviceFilterBar, { type DeviceFilters } from "@/modules/pc-management/components/DeviceFilterBar";
-import { printDeviceLabels } from "@/modules/pc-management/components/PrintDeviceCodeDialog";
+import PrintDeviceQrLabelsDialog from "@/modules/pc-management/components/PrintDeviceQrLabelsDialog";
 import RowActionsMenu from "@/modules/pc-management/components/RowActionsMenu";
 import DeviceForm, { type DeviceFormValues } from "@/modules/pc-management/components/devices/DeviceForm";
 import TransferDeviceDialog from "@/modules/pc-management/components/devices/TransferDeviceDialog";
 import ImportDeviceDialog from "@/modules/pc-management/components/devices/ImportDeviceDialog";
 import ImportDeviceConfigurationDialog from "@/modules/pc-management/components/devices/ImportDeviceConfigurationDialog";
+import ImportDeviceLiquidationDialog from "@/modules/pc-management/components/devices/ImportDeviceLiquidationDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { DeviceApi } from "@/modules/pc-management/api/device.api";
 import type { DeviceDto, DeviceGetDto, SkippedDeviceDto } from "@/modules/pc-management/types/device.dto";
@@ -62,6 +63,11 @@ function formatDate(value: string | null) {
 // để giữ đúng điều kiện tìm kiếm khi chuyển trang, thay vì chỉ lọc trên dữ liệu của từng trang.
 const CLIENT_FILTER_FETCH_SIZE = 5000;
 
+// Bảng thiết bị có nhiều dòng cao thấp khác nhau (IP/email nhiều dòng) nên không dùng
+// công thức "số dòng x chiều cao 1 dòng" như bảng IP; cố định chiều cao khung cuộn để
+// danh sách gọn trong màn hình, giống cách IpAddressList giới hạn maxHeight cho khung bảng.
+const TABLE_MAX_HEIGHT_PX = 640;
+
 function matchesClientOnlyFilters(device: DeviceDto, filters: DeviceFilters) {
   const matchesBranch = !filters.branch || device.branchName.toLowerCase().includes(filters.branch.toLowerCase());
   const matchesDeviceType = !filters.deviceType || device.deviceTypeName === filters.deviceType;
@@ -88,7 +94,28 @@ export default function PcDashboardPage() {
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isTaniumImportOpen, setIsTaniumImportOpen] = useState(false);
+  const [isLiquidationImportOpen, setIsLiquidationImportOpen] = useState(false);
   const router = useRouter();
+
+  // Gom các thao tác phụ (báo cáo, đồng bộ, nhập Excel...) vào 1 nút "Thao tác" để đỡ chiếm
+  // diện tích thanh công cụ; "+ Thêm mới" vẫn tách riêng vì là hành động chính.
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isActionsMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (actionsMenuRef.current?.contains(event.target as Node)) return;
+      setIsActionsMenuOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => event.key === "Escape" && setIsActionsMenuOpen(false);
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [isActionsMenuOpen]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -109,7 +136,10 @@ export default function PcDashboardPage() {
   // docs/asset-api-fe.md §5.10 — điền sẵn máy mới khi mở "Chuyển máy" từ gợi ý pendingTransfers của Import Excel.
   const [transferPresetNewDeviceId, setTransferPresetNewDeviceId] = useState<number | null>(null);
   // Hỏi in nhãn ngay sau khi tạo thiết bị thủ công thành công, giống luồng "Nhập từ Excel".
-  const [printPromptDevice, setPrintPromptDevice] = useState<{ deviceCode: string; serialNumber: string | null } | null>(null);
+  const [printPromptDevice, setPrintPromptDevice] = useState<{ id: number; deviceCode: string } | null>(null);
+  // In tem QR (docs/asset-api-fe.md §5.4b) — dùng chung cho cả in hàng loạt (chọn trên grid) lẫn in
+  // ngay sau khi tạo 1 thiết bị thủ công; null = đóng dialog.
+  const [qrPrintDeviceIds, setQrPrintDeviceIds] = useState<number[] | null>(null);
 
   const toggleSortDeviceCode = () => {
     setSortDeviceCodeAscending((current) => (current === undefined ? true : current === true ? false : undefined));
@@ -306,7 +336,7 @@ export default function PcDashboardPage() {
       if (formMode === "create") {
         const created = await DeviceApi.createDevice({ id: 0, ...values });
         toast.success("Tạo thiết bị thành công");
-        setPrintPromptDevice({ deviceCode: created.deviceCode, serialNumber: created.serialNumber });
+        setPrintPromptDevice({ id: created.id, deviceCode: created.deviceCode });
       } else if (editingDevice) {
         await DeviceApi.updateDevice(editingDevice.id, { id: editingDevice.id, ...values });
         toast.success("Cập nhật thiết bị thành công");
@@ -342,13 +372,7 @@ export default function PcDashboardPage() {
       return;
     }
 
-    const selectedDevices = devices.filter((device) => selectedIds.includes(device.id));
-    if (selectedDevices.length === 0) {
-      toast.error("Không tìm thấy thiết bị đã chọn để in.");
-      return;
-    }
-
-    printDeviceLabels(selectedDevices);
+    setQrPrintDeviceIds(selectedIds);
   };
 
   return (
@@ -360,24 +384,65 @@ export default function PcDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => router.push("/pc/reports")}
-            className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-          >
-             Xem báo cáo
-          </button>
-          <button
-            onClick={() => setIsTaniumImportOpen(true)}
-            className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-          >
-            ↻ Đồng bộ từ Tanium
-          </button>
-          <button
-            onClick={() => setIsImportOpen(true)}
-            className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-          >
-            ⤴ Nhập từ Excel
-          </button>
+          <div ref={actionsMenuRef} className="relative">
+            <button
+              onClick={() => setIsActionsMenuOpen((current) => !current)}
+              className="cursor-pointer flex items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+              aria-haspopup="menu"
+              aria-expanded={isActionsMenuOpen}
+            >
+              Thao tác
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+
+            {isActionsMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-20 mt-1 w-max min-w-[200px] overflow-hidden rounded-lg border border-[#e0e3e5] bg-white py-1 shadow-lg"
+              >
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setIsActionsMenuOpen(false);
+                    router.push("/pc/reports");
+                  }}
+                  className="block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                >
+                   Xem báo cáo
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setIsActionsMenuOpen(false);
+                    setIsTaniumImportOpen(true);
+                  }}
+                  className="block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                >
+                  ↻ Đồng bộ từ Tanium
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setIsActionsMenuOpen(false);
+                    setIsImportOpen(true);
+                  }}
+                  className="block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                >
+                  ⤴ Nhập từ Excel
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setIsActionsMenuOpen(false);
+                    setIsLiquidationImportOpen(true);
+                  }}
+                  className="block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                >
+                  🗑 Nhập thanh lý hàng loạt
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onClick={openCreateForm}
             className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
@@ -406,7 +471,7 @@ export default function PcDashboardPage() {
                 onClick={handlePrintSelectedDevices}
                 className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
               >
-                🖨 In đã chọn
+                🖨 In tem QR
               </button>
               <button
                 onClick={() => setIsBulkDeleteOpen(true)}
@@ -428,10 +493,11 @@ export default function PcDashboardPage() {
           onMouseMove={handleDragMove}
           onMouseUp={handleDragEnd}
           onMouseLeave={handleDragEnd}
-          className={`overflow-x-auto ${isDragScrolling ? "cursor-grabbing select-none" : "cursor-grab"}`}
+          className={`overflow-x-auto overflow-y-auto ${isDragScrolling ? "cursor-grabbing select-none" : "cursor-grab"}`}
+          style={{ maxHeight: TABLE_MAX_HEIGHT_PX }}
         >
           <table className="min-w-full border-collapse text-left">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                 <th className="w-10 whitespace-nowrap px-4 py-3">
                   <input
@@ -627,6 +693,15 @@ export default function PcDashboardPage() {
         }}
       />
 
+      <ImportDeviceLiquidationDialog
+        isOpen={isLiquidationImportOpen}
+        onClose={() => setIsLiquidationImportOpen(false)}
+        onImported={() => {
+          setIsLiquidationImportOpen(false);
+          refetchDevices();
+        }}
+      />
+
       <TransferDeviceDialog
         isOpen={transferringDevice !== null}
         oldDevice={transferringDevice}
@@ -651,6 +726,12 @@ export default function PcDashboardPage() {
         onSubmit={handleSubmitForm}
       />
 
+      <PrintDeviceQrLabelsDialog
+        isOpen={qrPrintDeviceIds !== null}
+        deviceIds={qrPrintDeviceIds ?? []}
+        onClose={() => setQrPrintDeviceIds(null)}
+      />
+
       <ConfirmDialog
         isOpen={printPromptDevice !== null}
         title="In mã thiết bị"
@@ -658,7 +739,7 @@ export default function PcDashboardPage() {
         approveLabel="In mã"
         deniedLabel="Để sau"
         onApprove={() => {
-          if (printPromptDevice) printDeviceLabels([printPromptDevice]);
+          if (printPromptDevice) setQrPrintDeviceIds([printPromptDevice.id]);
           setPrintPromptDevice(null);
         }}
         onDenied={() => setPrintPromptDevice(null)}

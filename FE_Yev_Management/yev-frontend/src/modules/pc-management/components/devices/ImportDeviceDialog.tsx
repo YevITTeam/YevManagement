@@ -9,7 +9,7 @@ import type {
     DeviceImportPreviewRowDto,
 } from "@/modules/pc-management/types/device-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
-import { printDeviceLabels } from "@/modules/pc-management/components/PrintDeviceCodeDialog";
+import PrintDeviceQrLabelsDialog from "@/modules/pc-management/components/PrintDeviceQrLabelsDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 
 interface ImportDeviceDialogProps {
@@ -43,6 +43,8 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
     const [summary, setSummary] = useState<{ totalRows: number; validRows: number; invalidRows: number } | null>(null);
     const [result, setResult] = useState<DeviceImportConfirmResultDto | null>(null);
     const [showPrintPrompt, setShowPrintPrompt] = useState(false);
+    // In tem QR cho thiết bị vừa import (docs/asset-api-fe.md §5.4b) — null = đóng dialog.
+    const [qrPrintDeviceIds, setQrPrintDeviceIds] = useState<number[] | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     if (!isOpen) return null;
@@ -140,8 +142,13 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
         : [];
     const createdRows = processedRows.filter((row) => !row.isUpdate);
     const updatedRows = processedRows.filter((row) => row.isUpdate);
+    // BE không trả kèm deviceId ngay trong preview row — giả định `createdDeviceIds` (docs/asset-api-fe.md
+    // §5.10) được trả ĐÚNG THỨ TỰ các dòng "tạo mới" đã xử lý, khớp vị trí với `createdRows` để in tem QR
+    // cho từng dòng cụ thể; in "tất cả"/prompt sau import thì dùng thẳng result.createdDeviceIds, không cần map.
+    const createdRowDeviceIds = result ? createdRows.map((_, index) => result.createdDeviceIds[index]) : [];
 
     return (
+        <>
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="fixed inset-0 bg-black/40" onClick={handleClose} />
 
@@ -215,11 +222,7 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                                     <h4 className="text-sm font-semibold text-[#191c1e]">Thiết bị đã tạo</h4>
                                     <button
                                         type="button"
-                                        onClick={() =>
-                                            printDeviceLabels(
-                                                createdRows.map((row) => ({ deviceCode: row.deviceCode, serialNumber: row.serialNumber }))
-                                            )
-                                        }
+                                        onClick={() => setQrPrintDeviceIds(result?.createdDeviceIds ?? [])}
                                         className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                                     >
                                          In tất cả nhãn
@@ -234,16 +237,14 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {createdRows.map((row) => (
+                                        {createdRows.map((row, index) => (
                                             <tr key={row.rowNumber} className="border-b border-[#f1f5f9]">
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#191c1e]">{row.deviceCode}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.serialNumber ?? "-"}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-right">
                                                     <button
                                                         type="button"
-                                                        onClick={() =>
-                                                            printDeviceLabels([{ deviceCode: row.deviceCode, serialNumber: row.serialNumber }])
-                                                        }
+                                                        onClick={() => setQrPrintDeviceIds([createdRowDeviceIds[index]])}
                                                         className="cursor-pointer font-semibold text-[#e3000f] transition hover:text-[#b40009]"
                                                     >
                                                         In nhãn
@@ -461,21 +462,26 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
                     )}
                 </div>
             </div>
-
-            <ConfirmDialog
-                isOpen={showPrintPrompt}
-                title="In mã thiết bị"
-                message={`Đã import thành công ${result?.createdCount ?? 0} thiết bị. Bạn có muốn in mã thiết bị vừa import không?`}
-                approveLabel="In mã"
-                deniedLabel="Để sau"
-                onApprove={() => {
-                    printDeviceLabels(
-                        createdRows.map((row) => ({ deviceCode: row.deviceCode, serialNumber: row.serialNumber }))
-                    );
-                    setShowPrintPrompt(false);
-                }}
-                onDenied={() => setShowPrintPrompt(false)}
-            />
         </div>
+
+        <ConfirmDialog
+            isOpen={showPrintPrompt}
+            title="In mã thiết bị"
+            message={`Đã import thành công ${result?.createdCount ?? 0} thiết bị. Bạn có muốn in mã thiết bị vừa import không?`}
+            approveLabel="In mã"
+            deniedLabel="Để sau"
+            onApprove={() => {
+                setQrPrintDeviceIds(result?.createdDeviceIds ?? []);
+                setShowPrintPrompt(false);
+            }}
+            onDenied={() => setShowPrintPrompt(false)}
+        />
+
+        <PrintDeviceQrLabelsDialog
+            isOpen={qrPrintDeviceIds !== null}
+            deviceIds={qrPrintDeviceIds ?? []}
+            onClose={() => setQrPrintDeviceIds(null)}
+        />
+        </>
     );
 }
