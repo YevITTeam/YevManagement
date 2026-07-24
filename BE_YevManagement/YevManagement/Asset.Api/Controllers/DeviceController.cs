@@ -59,6 +59,17 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        // QR-label data for the devices ticked on the grid. Read-only (View permission): returns the
+        // printable fields + a ready-to-encode QrPayload per device; the FE draws the QR and lays out
+        // the print sheet. POST because the selection can be a long list of Ids.
+        [RequirePermission("Asset.Device.View")]
+        [HttpPost("qr-labels")]
+        public async Task<ActionResult<ApiResponse<List<DeviceQrLabelDto>>>> GetQrLabels([FromBody] DeviceQrLabelRequestDto request)
+        {
+            var result = await _deviceService.GetQrLabelsAsync(request);
+            return Success(result);
+        }
+
         [RequirePermission("Asset.Device.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateDeviceDto request)

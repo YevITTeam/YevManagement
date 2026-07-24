@@ -267,6 +267,69 @@ namespace Asset.Application.Services
             };
         }
 
+        // Builds QR-label data for the devices ticked on the grid (2026-07-23). The BE only returns
+        // the fields + a ready QrPayload; the FE draws the QR and lays out the print sheet. Preserves
+        // the order of the requested Ids so the printed sheet matches the user's selection order; Ids
+        // not found (or soft-deleted) are silently skipped (nothing to print for them).
+        public async Task<List<DeviceQrLabelDto>> GetQrLabelsAsync(DeviceQrLabelRequestDto request)
+        {
+            var ids = request.Ids.Distinct().ToList();
+
+            var query = _unitOfWork.Devices
+                .GetQueryable(false, d => d.Branch, d => d.Supplier, d => d.DeviceType)
+                .Where(d => ids.Contains(d.Id) && !d.IsDeleted);
+
+            var rows = await _unitOfWork.Devices.ToListAsync(query, d => new
+            {
+                d.Id,
+                d.DeviceCode,
+                d.DeviceName,
+                DeviceTypeName = d.DeviceType.TypeName,
+                BranchName = d.Branch.BranchName,
+                SupplierName = d.Supplier.SupplierName,
+                d.Manager,
+                d.SerialNumber,
+                d.Status,
+                d.PurchaseDate
+            });
+
+            var byId = rows.ToDictionary(r => r.Id);
+
+            // Reorder to match the request (SQL IN does not preserve order).
+            return ids
+                .Where(byId.ContainsKey)
+                .Select(id => byId[id])
+                .Select(r => new DeviceQrLabelDto
+                {
+                    DeviceId = r.Id,
+                    DeviceCode = r.DeviceCode,
+                    DeviceName = r.DeviceName,
+                    DeviceTypeName = r.DeviceTypeName,
+                    BranchName = r.BranchName,
+                    SupplierName = r.SupplierName,
+                    Manager = r.Manager,
+                    SerialNumber = r.SerialNumber,
+                    StatusText = r.Status.GetDeviceStatusText(),
+                    PurchaseDate = r.PurchaseDate,
+                    QrPayload = BuildQrPayload(r.DeviceCode, r.DeviceName, r.SerialNumber, r.BranchName)
+                })
+                .ToList();
+        }
+
+        // Default QR content: line 1 is the bare DeviceCode (the stable key an internal scanner app
+        // splits off to look the device up); the remaining, labelled lines make a phone camera scan
+        // human-readable offline. Empty fields are dropped so the QR stays compact.
+        private static string BuildQrPayload(string deviceCode, string deviceName, string? serialNumber, string? branchName)
+        {
+            var lines = new List<string> { deviceCode };
+
+            if (!string.IsNullOrWhiteSpace(deviceName)) lines.Add(deviceName);
+            if (!string.IsNullOrWhiteSpace(serialNumber)) lines.Add($"SN: {serialNumber}");
+            if (!string.IsNullOrWhiteSpace(branchName)) lines.Add($"Xưởng: {branchName}");
+
+            return string.Join("\n", lines);
+        }
+
         public async Task<DeviceDto> CreateAsync(CreateDeviceDto request)
         {
             var codeExists = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == request.DeviceCode);

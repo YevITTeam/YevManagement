@@ -12,6 +12,7 @@ namespace Asset.Application.Interfaces.Service
         Task<List<DeviceReportItemDto>> GetReportListAsync(DeviceReportFilterRequest request);
         Task<DeviceDto> GetByIdAsync(int id);
         Task<DeviceDetailDto> GetDetailAsync(int id);
+        Task<List<DeviceQrLabelDto>> GetQrLabelsAsync(DeviceQrLabelRequestDto request);
         Task<DeviceDto> CreateAsync(CreateDeviceDto request);
         Task UpdateAsync(UpdateDeviceDto request);
         Task DeleteAsync(int id);

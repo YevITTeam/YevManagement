@@ -166,6 +166,13 @@ Import file **1 cột `Mã máy` (MQL)**, dòng 1 header (`.xlsx`/`.csv`, dùng 
 - **Confirm** (`ConfirmDeviceLiquidationImportDto{Rows}` field thô): **validate lại từ đầu**, dòng lỗi **BỎ QUA không chặn batch** (`SkippedRows`), dòng hợp lệ thanh lý trong 1 transaction. Có **re-check trong vòng lặp** (`device.Status != PendingLiquidation` sau khi load lại) phòng đổi trạng thái đồng thời. Kết quả `DeviceLiquidationImportConfirmResultDto{LiquidatedCount, LiquidatedDeviceIds, ReleasedIpCount, SkippedCount, SkippedRows}`.
 - **Permission**: dùng lại `Asset.Device.Update` (đổi trạng thái, không phải tạo/xóa → không seed permission mới).
 
+### 1.16. In mã QR thiết bị — `POST /api/Device/qr-labels` (2026-07-23)
+In tem QR hàng loạt cho các Device tick trên grid. **BE chỉ trả dữ liệu, FE tự vẽ QR + dàn layout in** (không thêm NuGet QR/PDF nào). `DeviceService.GetQrLabelsAsync`.
+- **Request** `DeviceQrLabelRequestDto{Ids:List<int>}` — bulk-only (in 1 máy = gửi list 1 phần tử). Không có biến thể theo bộ lọc (chỉ theo lựa chọn, quyết định người dùng).
+- **Response** `List<DeviceQrLabelDto>`: `DeviceId/DeviceCode/DeviceName/DeviceTypeName?/BranchName?/SupplierName?/Manager?/SerialNumber?/StatusText/PurchaseDate` + `QrPayload`. Trả **đầy đủ field** để user chọn in field nào; giữ **đúng thứ tự Ids** yêu cầu (SQL `IN` không giữ thứ tự → reorder trong bộ nhớ). Id không tồn tại/đã soft-delete → bỏ qua thầm lặng.
+- **`QrPayload`** (nội dung mã hoá QR, do BE dựng sẵn — `BuildQrPayload`): text nhiều dòng, **dòng 1 LUÔN là `DeviceCode` trần** (app quét nội bộ tách dòng 1 để tra cứu; camera điện thoại thường quét ra cả khối đọc được, không cần mạng — hệ nội bộ nên deep-link web không mở được). Các dòng sau: `DeviceName`, `SN: {SerialNumber}`, `Xưởng: {BranchName}` (bỏ dòng nếu field rỗng). FE có thể dựng lại payload theo field user chọn **nhưng phải giữ dòng 1 = DeviceCode**.
+- **Permission**: `Asset.Device.View` (chỉ đọc dữ liệu để in).
+
 ### 1.17. `AuditTrail` — ghi log Create/Update/Delete tự động (2026-07-16)
 **Tự động, không cần sửa Service nào.** Chặn tại 1 điểm duy nhất: `AssetDbContext.SaveChangesAsync` override (`Asset.Infrastructure/Context/AssetDbContext.AuditTrail.cs`, partial class riêng — không đụng file scaffold `AssetDbContext.cs`) đọc `ChangeTracker.Entries()` trước/sau khi save để tự sinh `AuditTrail`. Entity mới thêm sau này **tự động được audit**, không cần nhớ gọi gì thêm.
 - **Phạm vi**: toàn bộ entity qua `AssetDbContext` (Device, DeviceGroup, DeviceDepartment, Branch, Supplier, DeviceType, Software, SoftwareGroup, IpAddress, IpPrefix, DeviceConfiguration, DeviceEmail, DeviceSoftware, TransferHistory, AssetSetting...). **Loại trừ** 3 bảng tự thân đã là log/snapshot: `AuditTrail`, `DeviceConfigurationHistory`, `DeviceConfigurationInitial` (audit lồng audit vô nghĩa).
@@ -211,7 +218,7 @@ Import file **1 cột `Mã máy` (MQL)**, dòng 1 header (`.xlsx`/`.csv`, dùng 
 | Branch | `/api/Branch` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.Branch.*` |
 | DeviceGroup | `/api/DeviceGroup` | grid-list?departmentId=, all?departmentId=, {id}, POST, PUT, DELETE | `Asset.DeviceGroup.*` |
 | DeviceDepartment | `/api/DeviceDepartment` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.DeviceDepartment.*` |
-| Device | `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, POST, PUT, DELETE(mềm), `bulk-delete`(§1.15). **Không** `all` | `Asset.Device.*` |
+| Device | `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, `qr-labels`(§1.16, POST), POST, PUT, DELETE(mềm), `bulk-delete`(§1.15). **Không** `all` | `Asset.Device.*` |
 | AssetSetting | `/api/AssetSetting` | GET, PUT (1 dòng) | `Asset.Setting.View/.Update` |
 | Report | `/api/Report` | `device-list` | `Asset.Report.View` |
 | DeviceType | `/api/DeviceType` | CRUD | `Asset.DeviceType.*` |

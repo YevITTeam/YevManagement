@@ -140,6 +140,21 @@ Không phân trang, `data:DeviceGridDto[]`, lọc `status=0`+`!IsDeleted`, `keyw
 ```
 `configuration:null` **không phải lỗi** → FE dựa vào để POST(tạo)/PUT(sửa) config.
 
+### 5.4b In mã QR hàng loạt — `POST /api/Device/qr-labels`
+Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ liệu, FE tự vẽ QR** (dùng thư viện JS như `qrcode`/`qrcode.react`...) và **tự dàn layout in** (khổ tem tuỳ FE). In 1 máy = gửi list 1 phần tử.
+```jsonc
+// body
+{ "ids":[17982, 17983, 17984] }
+// data — GIỮ ĐÚNG thứ tự ids gửi lên; máy không tồn tại/đã xóa bị bỏ qua
+[ { "deviceId":17982, "deviceCode":"YDC-1877", "deviceName":"Máy kế toán",
+    "deviceTypeName":"PC", "branchName":"TAM", "supplierName":"...", "manager":"...",
+    "serialNumber":"5CD5354PGJ", "statusText":"Đang sử dụng", "purchaseDate":"...",
+    "qrPayload":"YDC-1877\nMáy kế toán\nSN: 5CD5354PGJ\nXưởng: TAM" } ]
+```
+- **`qrPayload`** = chuỗi cần mã hoá vào QR (BE dựng sẵn). **Dòng 1 luôn là mã máy** (`deviceCode`) — camera điện thoại quét ra cả khối đọc được, còn app nội bộ (nếu có sau này) tách dòng 1 để tra cứu. Vì là web **nội bộ** nên KHÔNG dùng deep-link URL (điện thoại không mở được).
+- **User chọn field in**: response trả **đủ field** (mã/tên/loại/xưởng/NCC/người dùng/serial/trạng thái/ngày mua) → FE cho user tick field nào in ra chữ trên tem. Nếu user cũng muốn đổi field **trong QR**, FE tự dựng lại `qrPayload` từ các field này **nhưng phải giữ dòng 1 = `deviceCode`** (để app nội bộ còn tách được).
+- Permission: `Asset.Device.View`.
+
 ### 5.5 `POST /api/Device`
 ```jsonc
 { "deviceCode":"...[Required]unique", "deviceName":"[Required]", "deviceTypeId":11[Required],
@@ -343,7 +358,7 @@ Ai sửa/xóa gì, lúc nào — ghi tự động ở BE mỗi lần Create/Upda
 | `/api/DeviceGroup` (`?departmentId=`), `/api/DeviceDepartment` | CRUD (Nhóm thuộc 1 Bộ phận) |
 | `/api/IpPrefix` | CRUD; POST sinh 255 IP (`branchId` bắt buộc), PUT không sửa prefix, DELETE cascade |
 | `/api/IpAddress` | grid-list, `available`, {id}, PUT{id}(status+note), PUT `bulk-status`(đổi status nhiều IP), `{id}/assign`, `{id}/unassign` (không POST/DELETE/all) |
-| `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, POST, PUT, DELETE, `bulk-delete`. Không `all` |
+| `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, `qr-labels`(POST, in QR hàng loạt 5.4b), POST, PUT, DELETE, `bulk-delete`. Không `all` |
 | `/api/Report/device-list` | Báo cáo in ấn (không phân trang) |
 | `/api/TransferHistory` | POST(chuyển máy), `device/{deviceId}` |
 | `/api/DeviceImport` | `preview`/`confirm` (Excel/CSV) |
