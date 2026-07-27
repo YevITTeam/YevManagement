@@ -1,0 +1,39 @@
+@echo off
+setlocal
+
+rem Build & publish CompanySystem.HostApi (Release), roi thay web.config bang
+rem ban deploy dung o docs/deploy-config/config-be/web.config.
+
+cd /d "%~dp0"
+
+set "OUT_DIR=publish_backend"
+set "CONFIG_SRC=..\docs\deploy-config\config-be\web.config"
+
+echo ============================================
+echo   BUILD BACKEND - CompanySystem.HostApi
+echo ============================================
+
+echo.
+echo [1/2] Dang publish (Release) vao %OUT_DIR% ...
+dotnet publish "CompanySystem.HostApi\CompanySystem.HostApi.csproj" -c Release -o "%OUT_DIR%"
+if errorlevel 1 (
+    echo.
+    echo [LOI] Publish that bai. Dung script.
+    exit /b 1
+)
+
+echo.
+echo [2/2] Dang thay the web.config bang ban deploy...
+if not exist "%CONFIG_SRC%" (
+    echo [LOI] Khong tim thay file "%CONFIG_SRC%"
+    exit /b 1
+)
+copy /y "%CONFIG_SRC%" "%OUT_DIR%\web.config" >nul
+if errorlevel 1 (
+    echo [LOI] Copy web.config that bai.
+    exit /b 1
+)
+
+echo.
+echo Hoan tat. Ket qua publish nam tai: %OUT_DIR%
+endlocal
