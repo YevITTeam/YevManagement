@@ -74,6 +74,10 @@ AttendanceAiChatService (Attendance.Application) — vòng lặp tool-calling, y
             kiểu Asset — ở đây không cần thêm hàm nào cả, dùng nguyên interface hiện có)
 ```
 
+> **Quan trọng (từ 2026-07-30)**: 6 tool tra cứu KHÔNG còn là đường chính để lấy dữ liệu danh mục
+> nữa — dữ liệu được **nạp sẵn vào context mỗi lượt** qua `BuildReferenceContextAsync` (§16). Tool tra
+> cứu chỉ còn là đường dự phòng cho trường hợp Admin (không giới hạn Nhóm) hoặc cần Nhóm khác.
+
 ## 3. Danh mục 7 tool
 
 Định nghĩa đầy đủ ở `Attendance.Application/Dtos/AiChat/AttendanceAiChatToolDefinitions.cs`
@@ -167,16 +171,21 @@ search_employees_by_group/get_my_create_scopes) để lấy id THẬT, TUYỆT �
 Nếu người dùng đã cung cấp đủ tên Nhóm/Bộ phận/Lý do/Trường hợp OT, PHẢI gọi ngay tool tra cứu
 tương ứng thay vì hỏi lại; được phép gọi nhiều tool tra cứu cùng lúc trong 1 lượt.
 
-QUY TẮC KHÔNG BẮT NGƯỜI DÙNG NHỚ MÃ/ID: người dùng KHÔNG biết và KHÔNG được yêu cầu phải biết
-id hay mã số của Nhóm, Bộ phận, Lý do, hay Trường hợp OT. TUYỆT ĐỐI không hỏi người dùng cung
-cấp mã/id (vd không được hỏi 'mã Bộ phận của bạn là gì') — chỉ được hỏi bằng tên/mô tả tự nhiên
-(vd 'bạn thuộc Nhóm nào', 'lý do tăng ca là gì'), rồi TỰ gọi tool tra cứu để tìm id thật khớp
-với tên đó. Ngay khi cuộc trò chuyện chuyển sang ý định lập đơn (dù người dùng chưa nói chi
-tiết gì), PHẢI gọi get_my_create_scopes NGAY LẬP TỨC — TRƯỚC cả khi hỏi bất kỳ câu nào khác —
-để biết trước Nhóm/Bộ phận người này được phép tạo đơn. Nếu kết quả chỉ có đúng 1 Nhóm/Bộ phận,
-PHẢI dùng luôn Nhóm/Bộ phận đó, TUYỆT ĐỐI không hỏi lại người dùng chọn Nhóm/Bộ phận (vì họ chỉ
-có duy nhất 1 lựa chọn hợp lệ). Nếu có nhiều lựa chọn, liệt kê TÊN các lựa chọn đó (không phải
-id) để người dùng chọn bằng tên.
+QUY TẮC KHÔNG BẮT NGƯỜI DÙNG TỰ NHỚ: người dùng KHÔNG nhớ hết id/mã số của Nhóm, Bộ phận, Lý
+do, Trường hợp OT, cũng KHÔNG nhớ hết tên đầy đủ của mọi đồng nghiệp trong Nhóm — TUYỆT ĐỐI
+không hỏi mở kiểu 'mã Bộ phận của bạn là gì', 'lý do tăng ca của bạn là gì', 'ai tham gia tăng
+ca' mà không kèm gợi ý cụ thể, vì người dùng có thể không trả lời được. Quy trình bắt buộc:
+(1) Ngay khi cuộc trò chuyện chuyển sang ý định lập đơn (dù người dùng chưa nói chi tiết gì),
+PHẢI gọi get_my_create_scopes NGAY LẬP TỨC — TRƯỚC cả khi hỏi bất kỳ câu nào khác — để biết
+trước Nhóm/Bộ phận người này được phép tạo đơn; nếu chỉ có đúng 1 lựa chọn thì PHẢI dùng luôn,
+không hỏi lại; nếu nhiều lựa chọn thì liệt kê TÊN (không phải id) để người dùng chọn. (2) Khi
+cần biết Lý do tăng ca hoặc Trường hợp OT, PHẢI gọi search_reasons/search_ot_cases TRƯỚC rồi
+trình bày danh sách tên/mô tả ngắn gọn lấy được để người dùng chọn bằng cách nói lại tên hoặc
+số thứ tự — không hỏi trước khi có danh sách trong tay. (3) Ngay khi đã biết groupId, PHẢI gọi
+search_employees_by_group và liệt kê TOÀN BỘ tên nhân viên trong Nhóm đó để người dùng chọn ai
+tham gia tăng ca (được chọn nhiều người) — không hỏi 'ai tham gia' khi chưa có danh sách để
+gợi ý. Nguyên tắc chung: mọi lựa chọn thuộc danh mục có sẵn trong hệ thống PHẢI được tra cứu và
+trình bày dưới dạng gợi ý cụ thể trước khi hỏi, không bao giờ hỏi mở và chờ người dùng tự nhớ.
 
 QUY TẮC KHÔNG BỊA KẾT QUẢ: TUYỆT ĐỐI không được nói 'tôi đã gọi tool', 'kết quả tra cứu là...',
 'đã tạo đơn thành công' hay đưa ra bất kỳ số liệu/id cụ thể nào nếu KHÔNG có tin nhắn kết quả
@@ -243,3 +252,77 @@ Attendance và Asset AI Chat vì cùng chung 1 lỗi cấu trúc trong orchestra
    người dùng chỉ có 1 lựa chọn hợp lệ. Đã thêm quy tắc mới "QUY TẮC KHÔNG BẮT NGƯỜI DÙNG NHỚ MÃ/ID"
    (§6) + sửa mô tả tool `get_my_create_scopes` (§3) yêu cầu gọi tool này ĐẦU TIÊN ngay khi người
    dùng ngỏ ý lập đơn, dùng luôn nếu chỉ có 1 lựa chọn, chỉ hỏi lại bằng TÊN nếu có nhiều lựa chọn.
+
+**Cập nhật 2026-07-29 (2)**: người dùng tiếp tục phản hồi là toàn bộ luồng chat vẫn đang bắt họ
+"nhớ" thông tin để cung cấp cho AI — không chỉ mã Nhóm/Bộ phận (đã sửa ở trên) mà cả Lý do tăng
+ca, Trường hợp OT, và tên đầy đủ của đồng nghiệp trong Nhóm để điền vào danh sách nhân viên tham
+gia — những thứ người dùng thường không nhớ chính xác. Nguyên nhân: quy tắc §6 (bản trước) chỉ nói
+"khi cần biết X thì gọi tool tra cứu để lấy id thật", tức là hướng dẫn AI tự tra để đừng BỊA id,
+chứ không bắt buộc AI phải TRÌNH BÀY kết quả tra cứu đó dưới dạng danh sách gợi ý cho người dùng
+CHỌN trước khi hỏi — nên model vẫn hỏi mở ("lý do tăng ca của bạn là gì?") và chờ người dùng tự
+gõ đúng tên hợp lệ. Đã đổi quy tắc "QUY TẮC KHÔNG BẮT NGƯỜI DÙNG NHỚ MÃ/ID" (§6) thành "QUY TẮC
+KHÔNG BẮT NGƯỜI DÙNG TỰ NHỚ" — mở rộng phạm vi + thêm quy trình 3 bước bắt buộc: (1) gọi
+`get_my_create_scopes` trước tiên cho Nhóm/Bộ phận (như cũ); (2) gọi `search_reasons`/
+`search_ot_cases` TRƯỚC khi hỏi Lý do/Trường hợp OT, trình bày danh sách cho người dùng chọn;
+(3) ngay khi biết `groupId`, gọi `search_employees_by_group` và liệt kê TOÀN BỘ tên nhân viên
+trong Nhóm để người dùng chọn ai tham gia — không hỏi trước khi có danh sách. Đồng thời sửa mô tả
+3 tool `search_reasons`/`search_ot_cases`/`search_employees_by_group` (§3) nhấn mạnh "gọi tool này
+NGAY, trước khi hỏi người dùng" để củng cố hành vi ở tầng tool-description, không chỉ system prompt.
+
+## 16. Cập nhật 2026-07-30: nạp sẵn dữ liệu tham chiếu vào context (bỏ phụ thuộc tool tra cứu)
+
+Đây là thay đổi kiến trúc **quan trọng nhất** của tính năng này. Nguồn: transcript thật của người dùng
+cho thấy 3 lỗi cùng lúc, tất cả đều là hệ quả của việc **bắt model tự gọi tool để lấy dữ liệu danh mục**:
+
+1. **Bịa nguyên danh sách kèm id SAI.** Model tự đưa ra danh sách Trường hợp OT hoàn toàn không tồn tại
+   ("TH1: Tăng ca theo lịch làm việc", "TH2: Tăng ca đột xuất", "TH3: Tăng ca dự án đặc biệt"). Sau khi
+   bị người dùng vặn, nó "tra lại" và ra danh sách đúng tên nhưng vẫn **gán sai id**: nói `TH1 (ID: 2)`
+   trong khi DB thật `TH1 = id 1`, `id 2 = TH2 (Nghỉ ngày lễ/Chủ nhật)`. **Nếu lượt đó tạo đơn thật, đơn
+   sẽ ghi sai Trường hợp OT mà không ai phát hiện** — nguy hiểm hơn mọi bug trước đó vì kết quả trông
+   hợp lệ hoàn toàn. Model cũng bịa danh sách nhân viên bằng tên placeholder ("Nguyễn Văn A (ID: 101)").
+2. **Đốt hết ngân sách tool round.** Luồng lập đơn cần ít nhất 4 lần tra cứu (scopes → reasons →
+   ot_cases → employees) rồi mới tới `create_ot_form_draft`, trong khi `MaxToolRounds = 3` (dùng chung
+   với Asset) → người dùng gặp "Đã đạt giới hạn số lần gọi công cụ" giữa lúc đang khai form.
+3. **Mất trắng kết quả tra cứu giữa các lượt.** `AttendanceAiChatMessageDto` chỉ có role
+   `user`/`assistant` — FE **không bao giờ** gửi lại message `role:"tool"`. Nên sang lượt sau, model
+   không còn bằng chứng nào về dữ liệu đã tra, chỉ còn thấy chính câu văn nó từng viết → nó "nhớ" là đã
+   có danh sách rồi và **tái tạo lại bằng cách bịa** thay vì tra lại. Đây là lý do gốc khiến 2 vòng sửa
+   trước (chỉ siết system prompt + tool description) không thể khỏi hẳn: prompt không tạo ra được dữ liệu.
+
+**Cách sửa (đúng gốc, không phải siết prompt thêm)**: dữ liệu danh mục ở đây **nhỏ, tĩnh, và luôn cần** —
+kiểm chứng bằng dữ liệu thật: phạm vi tạo đơn của 1 người thường **1** lựa chọn, Trường hợp OT **3**,
+nhân viên 1 Nhóm **7**, Lý do **72** (chỉ tên). Tổng cộng ~83 dòng text ngắn. Loại dữ liệu như vậy phải
+được **nạp thẳng vào context một cách tất định**, không đặt sau 1 tool call mà model có thể bỏ qua hoặc
+nói dối về kết quả.
+
+- Thêm `IAttendanceAiChatToolExecutorService.BuildReferenceContextAsync(caller, ct)` → trả về 1 block
+  **plain text** (không phải JSON — model tái tạo "id 1 = TH1" chính xác hơn nhiều từ dòng phẳng có nhãn,
+  lại tốn ít token hơn) gồm: ngày hôm nay (để quy đổi "ngày mai"), phạm vi tạo đơn (kèm `groupId`/
+  `departmentId` thật), nhân viên của Nhóm (chỉ nạp khi có **đúng 1** phạm vi — nhiều phạm vi thì chưa
+  biết Nhóm nào, nạp hết sẽ phình vô ích), toàn bộ Trường hợp OT, toàn bộ Lý do.
+- `AttendanceAiChatService.StreamChatAsync` chèn block này thành 1 message `system` thứ hai, **mỗi lượt**
+  (không dựa vào history vì history không mang theo dữ liệu tool — xem lỗi 3 ở trên).
+- System prompt (§6) đổi trọng tâm: thêm "QUY TẮC DÙNG DỮ LIỆU CÓ SẴN" (lấy id từ đúng block dữ liệu,
+  cấm suy đoán id theo thứ tự xuất hiện — chính là lỗi `TH1 → id 2`) và "QUY TẮC BẮT BUỘC LIỆT KÊ LỰA
+  CHỌN" (không được hỏi suông "ai tham gia tăng ca" mà phải liệt kê sẵn danh sách đánh số). 6 tool tra
+  cứu bị hạ xuống thành đường dự phòng (§3).
+- Tách ngân sách round riêng: `AiChatSettings:AttendanceMaxToolRounds = 5` (mặc định code cũng 5), **không**
+  nâng `MaxToolRounds` dùng chung — mỗi round là 1 lần gọi model đầy đủ (~20-30s trên Ollama chạy CPU),
+  luồng read-only của Asset không cần headroom này.
+- `BuildReferenceContextAsync` không bao giờ throw: lỗi tra cứu → giữ phần đã lấy được + chèn dòng CẢNH
+  BÁO yêu cầu dùng tool cho phần thiếu (danh sách bị cắt dở chính là thứ model hay "hoàn thiện" bằng cách
+  bịa thêm).
+
+**Kết quả đo thật** (cùng câu hỏi "Tạo đơn tăng ca cho nhóm của tôi ngày 31/07/2026 từ 18:00 đến 20:00",
+tài khoản có đúng 1 phạm vi = Công vụ - IT):
+
+| | Trước | Sau |
+|---|---|---|
+| Số tool call để hỏi xong thông tin | 4+ (thường hết ngân sách) | **0** |
+| Trường hợp OT | bịa danh sách, `TH1 → id 2` (SAI) | `otCaseId=1` TH1, `2` TH2, `3` TH3 — đúng DB |
+| Nhân viên | bịa "Nguyễn Văn A (ID: 101)" | 7/7 người thật, đúng id, đúng thứ tự DB |
+| Nhóm/Bộ phận | hỏi lại người dùng | tự nhận đúng `groupId=6`/`departmentId=6` |
+
+Hạn chế còn lại: danh sách Lý do (72 mục) vẫn nạp full vào context nhưng model được yêu cầu hỏi mô tả
+công việc rồi tự lọc 5-10 mục — nếu sau này số Lý do tăng nhiều (hàng trăm) nên cân nhắc lọc sẵn phía
+server thay vì nạp hết. Việc tạo đơn thật vẫn giữ nguyên cổng xác nhận cấu trúc (§4), không nới lỏng.

@@ -390,6 +390,48 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("OtFormEmployees");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.PendingSecondaryPasswordConfirmation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "Token" }, "IX_PendingSecondaryPasswordConfirmations_Token")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "UserName" }, "IX_PendingSecondaryPasswordConfirmations_UserName");
+
+                    b.ToTable("PendingSecondaryPasswordConfirmations");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.PendingSignatureConfirmation", b =>
                 {
                     b.Property<int>("Id")
@@ -499,6 +541,35 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Reasons");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.SecondaryPassword", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "UserName" }, "IX_SecondaryPasswords_UserName")
+                        .IsUnique();
+
+                    b.ToTable("SecondaryPasswords");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.UserApprovalScope", b =>

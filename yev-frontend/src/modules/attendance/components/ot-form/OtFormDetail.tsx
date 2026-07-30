@@ -9,6 +9,7 @@ import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalHistoryDto, OtFormDto } from "@/modules/attendance/types/ot-form.dto";
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
+import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
 import {
     approvalActionLabels,
     approvalLevelLabels,
@@ -109,9 +110,11 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // sự cần thiết (an toàn hơn là lỡ hiện dư 1 cấp không cần).
     const [requiredApprovalLevel, setRequiredApprovalLevel] = useState(3);
     const [hasMySignature, setHasMySignature] = useState<boolean | null>(null);
+    const [hasSecondaryPassword, setHasSecondaryPassword] = useState<boolean | null>(null);
 
     const [actionOpen, setActionOpen] = useState<"submit" | "approve" | "reject" | null>(null);
     const [comment, setComment] = useState("");
+    const [secondaryPassword, setSecondaryPassword] = useState("");
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
     const { isLoading, error, refetch: fetchForm } = useFetchEffect(
@@ -152,12 +155,18 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     const openAction = (type: "submit" | "approve" | "reject") => {
         setComment("");
+        setSecondaryPassword("");
         setActionOpen(type);
         if (type === "approve" || type === "submit") {
             UserSignatureApi.getMySignature()
                 .then((data) => setHasMySignature(Boolean(data)))
                 .catch(() => setHasMySignature(false));
         }
+        // Mật khẩu cấp 2 áp dụng cho CẢ 3 hành động (submit/approve/reject) — xem
+        // docs/docs-be/attendance-module.md — Mật khẩu cấp 2.
+        SecondaryPasswordApi.getMyStatus()
+            .then((data) => setHasSecondaryPassword(data.isRegistered))
+            .catch(() => setHasSecondaryPassword(false));
     };
 
     const closeAction = () => {
@@ -170,9 +179,17 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
             toast.error(t("submitSignatureMissingError"));
             return;
         }
+        if (hasSecondaryPassword === false) {
+            toast.error(t("secondaryPasswordMissingError"));
+            return;
+        }
+        if (!secondaryPassword) {
+            toast.error(t("secondaryPasswordRequiredError"));
+            return;
+        }
         setIsSubmittingAction(true);
         try {
-            await OtFormApi.submitOtForm(id, { comment: comment.trim() || null });
+            await OtFormApi.submitOtForm(id, { comment: comment.trim() || null, secondaryPassword });
             toast.success(t("submitSuccess"));
             setActionOpen(null);
             await fetchForm();
@@ -189,9 +206,17 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
             toast.error(t("approveSignatureMissingError"));
             return;
         }
+        if (hasSecondaryPassword === false) {
+            toast.error(t("secondaryPasswordMissingError"));
+            return;
+        }
+        if (!secondaryPassword) {
+            toast.error(t("secondaryPasswordRequiredError"));
+            return;
+        }
         setIsSubmittingAction(true);
         try {
-            await OtFormApi.approveOtForm(id, { comment: comment.trim() || null });
+            await OtFormApi.approveOtForm(id, { comment: comment.trim() || null, secondaryPassword });
             toast.success(t("approveSuccess"));
             setActionOpen(null);
             await fetchForm();
@@ -208,9 +233,17 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
             toast.error(t("rejectCommentRequiredError"));
             return;
         }
+        if (hasSecondaryPassword === false) {
+            toast.error(t("secondaryPasswordMissingError"));
+            return;
+        }
+        if (!secondaryPassword) {
+            toast.error(t("secondaryPasswordRequiredError"));
+            return;
+        }
         setIsSubmittingAction(true);
         try {
-            await OtFormApi.rejectOtForm(id, { comment: comment.trim() });
+            await OtFormApi.rejectOtForm(id, { comment: comment.trim(), secondaryPassword });
             toast.success(t("rejectSuccess"));
             setActionOpen(null);
             await fetchForm();
@@ -535,6 +568,30 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                 />
                             </label>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <input
+                                    type="password"
+                                    value={secondaryPassword}
+                                    onChange={(event) => setSecondaryPassword(event.target.value)}
+                                    disabled={isSubmittingAction}
+                                    autoComplete="off"
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <div
+                                className={`rounded-lg border px-3 py-2 text-xs ${
+                                    hasSecondaryPassword === false
+                                        ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                        : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                }`}
+                            >
+                                {hasSecondaryPassword === false ? t("secondaryPasswordMissingHint") : t("secondaryPasswordOkHint")}
+                            </div>
 
                             {actionOpen === "submit" && (
                                 <div

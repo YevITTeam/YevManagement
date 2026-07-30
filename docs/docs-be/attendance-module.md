@@ -41,6 +41,8 @@ Nghiệp vụ OT Form:
 | `UserApprovalScope` | `UserName:string`, `ScopeType:int` (enum, `Group/Department`), `ScopeId:int`, `ApprovalLevel:int` (enum `DepartmentManager/WorkshopManager`), `IsDeleted` | Không FK thật (ScopeId đa hình theo ScopeType) | Ánh xạ 1 User (Trưởng phòng/Trưởng xưởng) phụ trách duyệt phạm vi nào. Tổng Giám Đốc KHÔNG cần dòng ở đây — bypass scope (check Role claim). |
 | `OtFormApprovalHistory` | `OtFormId`(FK, Cascade), `ApproverUserName:string`, `ApproverFullName:string?`, `ApprovalLevel:int`, `Action:int` (enum `Submitted/Approved/Rejected`), `Comment?`, `SignatureImage:byte[]?`, `ActionAt:DateTime` | N-1 OtForm | Audit trail từng cấp duyệt; `SignatureImage`/`ApproverFullName` là snapshot tại thời điểm ký (không tham chiếu ngược Identity). |
 | `UserSignature` | `UserName:string`(unique), `SignatureImage:byte[]`, `UpdatedAt` | Không FK thật | Chữ ký đăng ký sẵn để auto-fill lúc duyệt — không phải nguồn sự thật cho audit (nguồn thật = `OtFormApprovalHistory.SignatureImage`). |
+| `SecondaryPassword` | `UserName:string`(unique), `PasswordHash:string`, `UpdatedAt` | Không FK thật | Mật khẩu cấp 2 (2026-07-30) — bắt buộc nhập lại ở MỌI hành động ký/duyệt OtForm (submit/approve/reject, kể cả kênh email), xem §Business Logic — Mật khẩu cấp 2. `PasswordHash` dùng `Microsoft.AspNetCore.Identity.PasswordHasher<object>`, không lưu plaintext. |
+| `PendingSecondaryPasswordConfirmation` | `UserName:string`, `PasswordHash:string`, `Token:string`(unique), `ExpiresAt`, `ConfirmedAt:DateTime?`, `CreatedAt` | Không FK thật | Y hệt `PendingSignatureConfirmation` — mật khẩu cấp 2 mới KHÔNG áp dụng ngay, chờ xác nhận qua email. |
 
 Enum (`Attendance.Domain/Enums/`): `OtFormStatus` (Pending=0/ApprovedByDepartment=1/ApprovedByWorkshop=2/Completed=3/Rejected=4/**Draft=5**, giá trị `Draft` cố tình gán số 5 — thêm cuối cùng thay vì chèn lên đầu để không đổi int của các trạng thái cũ đã lưu DB), `ApprovalLevel` (Submitter/DepartmentManager/WorkshopManager/GeneralDirector), `ApprovalAction` (Submitted/Approved/Rejected), `ScopeType` (Group/Department). Lưu dưới dạng `int` trên entity, không dùng `HasConversion`.
 
@@ -163,10 +165,48 @@ Bổ sung 1 kênh xác nhận qua email (nút bấm mở trang xác nhận nhỏ
 - `AppSettings:FrontendBaseUrl` — domain FE dùng để build link trong email (`{FrontendBaseUrl}/xac-nhan-chu-ky?token=...`, `{FrontendBaseUrl}/xac-nhan-don?token=...`); **trang xác nhận do FE tự xây** (2 route public, gọi 2 cặp API preview+action ở trên), BE không server-render HTML.
 - Đã verify qua HTTP thật (2026-07-16): `PUT /me` tạo pending đúng, không áp dụng ngay; `GET/POST /confirm/{token}` preview + áp dụng đúng; gọi lại token đã dùng bị chặn (chống replay). Luồng `OtFormApprovalEmailToken` dùng lại nguyên `ApproveAsync`/`RejectAsync` đã test kỹ ở các tính năng trước nên chưa test riêng end-to-end. Riêng việc SMTP gửi được thật (kết nối + auth + send) đã verify độc lập qua console test (2026-07-17) — chưa verify lại trọn vẹn 2 luồng trên với mail thật gửi đi thành công (mới verify tới bước tạo token + gọi `SendAsync`, chưa xác nhận hộp thư nhận được đúng nội dung từ 2 luồng nghiệp vụ này).
 
+### §Mật khẩu cấp 2 khi ký/duyệt OtForm (2026-07-30)
+**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): thêm 1 lớp xác
+thực bổ sung (giống PIN giao dịch ngân hàng) cho hành vi có tính pháp lý — ký/duyệt phiếu tăng ca.
+Mỗi user tự đăng ký 1 **mật khẩu cấp 2** riêng (khác hẳn mật khẩu đăng nhập AD), và phải nhập lại
+đúng mật khẩu này ở **MỌI** bước ký/duyệt: `POST /{id}/submit` (Trưởng nhóm ký "Người đề nghị"),
+`POST /{id}/approve`, `POST /{id}/reject` (mọi cấp Trưởng Bộ phận/Trưởng phòng/Trưởng xưởng/TGĐ),
+**kể cả kênh email** `email-confirm/{token}/approve|reject` — không có ngoại lệ, không có logic
+bỏ qua cho user chưa thiết lập (chặn cứng, bắt thiết lập trước).
+
+- **Entity**: `SecondaryPassword` (giá trị đang có hiệu lực) + `PendingSecondaryPasswordConfirmation`
+  (chờ xác nhận email) — bản sao 1-1 của `UserSignature`/`PendingSignatureConfirmation` cả về cấu
+  trúc lẫn luồng nghiệp vụ (`SecondaryPasswordService` mirror `UserSignatureService`: `PUT /me` chỉ
+  tạo pending + gửi email, `ConfirmAsync` mới thật sự upsert).
+- **Hash**: `Microsoft.AspNetCore.Identity.PasswordHasher<object>` (cần `FrameworkReference
+  Microsoft.AspNetCore.App` trong `Attendance.Application.csproj`, trước đó project này chưa có) —
+  không dùng thư viện hash ngoài, không lưu plaintext.
+- **Gate ở tầng Service, không phải Controller**: `OtFormService` inject thêm `ISecondaryPasswordService`,
+  gọi `VerifyAsync(callerUserName, request.SecondaryPassword)` **ngay đầu** `ApproveSubmitterAsync`/
+  `ApproveAsync`/`RejectAsync` (trước bất kỳ ghi nào) — ném `DomainException` nếu chưa thiết lập
+  ("Bạn chưa thiết lập mật khẩu cấp 2...") hoặc sai mật khẩu ("Mật khẩu cấp 2 không đúng."). 2 hàm
+  `ApproveByEmailTokenAsync`/`RejectByEmailTokenAsync` **không cần sửa gì** — tự động thừa hưởng vì
+  gọi thẳng 3 hàm trên với cùng `request` đã có field `SecondaryPassword`.
+- **DTO**: thêm `[Required] string SecondaryPassword` vào `ApproveOtFormDto`/`RejectOtFormDto` — vì
+  `submit`/`approve`/2 action email-confirm đều tái dùng đúng 2 DTO này, sửa 1 chỗ phủ đủ cả 5 entry
+  point (submit, approve, reject, email-confirm/approve, email-confirm/reject).
+- **Permission `Attendance.SecondaryPassword.Update`** (migration Identity `AddSecondaryPasswordPermission`)
+  — gán qua subquery cho **đúng các Role đang giữ `Attendance.UserSignature.Update`** (Admin, Trưởng
+  nhóm, Trưởng Bộ phận, Trưởng phòng, Trưởng xưởng, Tổng Giám Đốc) thay vì hardcode tên Role, tự động
+  khớp nếu danh sách Role đó đổi sau này. Đã verify qua SQL thật (2026-07-30): đúng 6 Role, khớp
+  UserSignature.Update 100%.
+- **FE**: `modules/attendance/{api,types}/secondary-password.{api,dto}.ts` mirror `user-signature.*`;
+  trang tự thiết lập `SecondaryPasswordPanel.tsx` (route `/ot/secondary-password`, nav sidebar); trang
+  public xác nhận email `SecondaryPasswordConfirmPage.tsx` (route `/xac-nhan-mat-khau-cap-2`, mirror
+  `SignatureConfirmPage.tsx`). `OtFormDetail.tsx` (modal ký/duyệt trong app) và
+  `OtFormEmailConfirmPage.tsx` (trang public qua link email) đều thêm ô nhập mật khẩu cấp 2 và gửi
+  kèm `secondaryPassword` trong mọi request submit/approve/reject.
+- Hợp đồng FE đầy đủ ở [attendance-api-fe.md §6c](attendance-api-fe.md).
+
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.
-- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables`. Tất cả đã `database update` vào `YevOTManagement`.
-- Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), và `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
+- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`). Tất cả đã `database update` vào `YevOTManagement`.
+- Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed), và `AddSecondaryPasswordPermission` (2026-07-30, seed `Attendance.SecondaryPassword.Update`) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
 
 ## 1. Cấu trúc code đã có
 
@@ -182,6 +222,13 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `GET /me`, `PUT /me` (yêu cầu cập nhật chữ ký **của chính mình** — không áp dụng ngay, gửi email xác nhận, `[RequirePermission("Attendance.UserSignature.Update")]`).
 - `GET /{userName}` (admin xem chữ ký người khác, `Attendance.UserSignature.View`).
 - `GET/POST /confirm/{token}` (`[AllowAnonymous]`) — xác nhận qua email, xem §Xác thực qua email.
+
+### SecondaryPassword (`SecondaryPasswordController`) — mật khẩu cấp 2 (2026-07-30)
+- `GET /me`, `PUT /me` (yêu cầu thiết lập/cập nhật mật khẩu cấp 2 **của chính mình** — không áp dụng
+  ngay, gửi email xác nhận, `[RequirePermission("Attendance.SecondaryPassword.Update")]`).
+- `GET/POST /confirm/{token}` (`[AllowAnonymous]`) — xác nhận qua email, mirror `UserSignatureController`.
+- Không có `GET /{userName}` (khác `UserSignature`) — không có nhu cầu Admin xem hộ mật khẩu người khác.
+- Xem §Mật khẩu cấp 2 khi ký/duyệt OtForm.
 
 ### OtForm (`OtFormController`) — nghiệp vụ chính
 - `POST /api/OtForm` — tạo đơn ở trạng thái **Draft** (`Attendance.OTForm.Create`), CHƯA ký "Người đề nghị" (xem §Người tạo đơn KHÁC Trưởng nhóm).
@@ -219,7 +266,7 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `PATCH /api/Employee/{id}/adjust-accumulation` (`AdjustEmployeeAccumulationDto`) — không gắn `[RequirePermission]`, chỉ cần đăng nhập; phân quyền tự trong Service (chính chủ `UserName` hoặc quyền `Attendance.Employee.Update`). Xem §Lũy kế tháng/năm.
 
 ### Permission & Role đã seed (Identity migration `AddAttendancePermissionsAndRoles`)
-- 28 permission `Attendance.*`: CRUD 5 danh mục + `UserApprovalScope.{View,Create,Delete}` + `UserSignature.{View,Update}` + `OTForm.{View,Create,Approve}`. **+1** (2026-07-29, migration riêng `AddAttendanceAiChatPermission`): `Attendance.AiChat.Use`, hiện chỉ gán Admin — xem mục `AttendanceAiChatController` ở trên.
+- 28 permission `Attendance.*`: CRUD 5 danh mục + `UserApprovalScope.{View,Create,Delete}` + `UserSignature.{View,Update}` + `OTForm.{View,Create,Approve}`. **+1** (2026-07-29, migration riêng `AddAttendanceAiChatPermission`): `Attendance.AiChat.Use`, hiện chỉ gán Admin — xem mục `AttendanceAiChatController` ở trên. **+1** (2026-07-30, migration `AddSecondaryPasswordPermission`): `Attendance.SecondaryPassword.Update`, gán qua subquery cho đúng các Role đang giữ `UserSignature.Update` (Admin + 5 Role nghiệp vụ) — xem §Mật khẩu cấp 2 khi ký/duyệt OtForm.
 - 4 Role mới: `Trưởng nhóm` (Create+View OTForm, View Employee, Update UserSignature, **+ View Department/Group/Reason/OtCase** — xem ngay dưới), `Trưởng phòng`/`Trưởng xưởng`/`Tổng Giám Đốc` (View+Approve OTForm, Update UserSignature). `Admin` được gán full toàn bộ permission `Attendance.*`.
 - **Lỗ hổng đã vá (2026-07-17, migration `AddCategoryViewPermissionsToTruongGroup`)**: seed ban đầu (`AddAttendancePermissionsAndRoles`) chỉ gán `Trưởng nhóm` 4 permission (`OTForm.Create/View`, `Employee.View`, `UserSignature.Update`) — THIẾU `Department.View`/`Group.View`/`Reason.View`/`OtCase.View` (permission riêng biệt cho từng danh mục, không nằm trong `OTForm.View`). Hậu quả: Trưởng nhóm gọi `GET /api/Department/all`, `GET /api/Group/by-department/{id}`, `GET /api/Reason/all`, `GET /api/OtCase/all` (4 API load dropdown cho màn "Tạo đơn tăng ca") đều bị 403 — màn Tạo đơn không dùng được trên thực tế dù mọi API OtForm đã sẵn sàng. Đã bổ sung 4 permission này cho Role `Trưởng nhóm`, verify lại qua SQL trực tiếp trên DB thật (2026-07-17) — Role này hiện có đủ 8 permission `Attendance.*`.
 - **Chưa làm**: gán Role cho user thật (`update-user-roles`/`create-user` — API Identity có sẵn) và tạo dòng `UserApprovalScope` cho từng Trưởng phòng/Trưởng xưởng **và mỗi người được phép tạo đơn** (`ApprovalLevel=Submitter`, xem §Business Logic — Phân quyền tạo đơn) thật (`POST /api/UserApprovalScope` — API đã có). Nhớ: từ 2026-07-16, chỉ gán được `ApprovalLevel=Submitter` cho `UserName` đã có Role `Trưởng nhóm` từ trước.

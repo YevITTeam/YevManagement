@@ -43,7 +43,7 @@ namespace Attendance.Application.Dtos.AiChat
             "type": "function",
             "function": {
               "name": "search_reasons",
-              "description": "Tra cứu danh sách Lý do tăng ca đang hoạt động. Dùng để tìm reasonId theo tên lý do.",
+              "description": "Tra cứu danh sách Lý do tăng ca đang hoạt động. Gọi tool này NGAY khi cần hỏi Lý do — trước khi hỏi người dùng — rồi trình bày danh sách tên lấy được để người dùng chọn, vì người dùng thường không nhớ hết các Lý do hợp lệ trong hệ thống.",
               "parameters": {
                 "type": "object",
                 "properties": {
@@ -57,7 +57,7 @@ namespace Attendance.Application.Dtos.AiChat
             "type": "function",
             "function": {
               "name": "search_ot_cases",
-              "description": "Tra cứu danh sách Trường hợp OT (OtCase, vd TH1/TH2/TH3) đang hoạt động, kèm thông tin có bắt buộc chữ ký hay không và cấp duyệt cuối cùng cần đạt. Dùng để tìm otCaseId theo mã/mô tả.",
+              "description": "Tra cứu danh sách Trường hợp OT (OtCase, vd TH1/TH2/TH3) đang hoạt động, kèm thông tin có bắt buộc chữ ký hay không và cấp duyệt cuối cùng cần đạt. Gọi tool này NGAY khi cần hỏi Trường hợp OT — trước khi hỏi người dùng — rồi trình bày danh sách các lựa chọn lấy được (mã + mô tả ngắn) để người dùng chọn, vì người dùng thường không nhớ hết các mã Trường hợp OT hợp lệ.",
               "parameters": {
                 "type": "object",
                 "properties": {
@@ -71,7 +71,7 @@ namespace Attendance.Application.Dtos.AiChat
             "type": "function",
             "function": {
               "name": "search_employees_by_group",
-              "description": "Tra cứu danh sách Nhân viên thuộc 1 Nhóm (Group) cụ thể — BẮT BUỘC phải biết groupId trước (gọi search_groups nếu chưa có). Dùng để tìm employeeId cho danh sách nhân viên tham gia tăng ca — nhân viên PHẢI thuộc đúng Nhóm của đơn đang lập.",
+              "description": "Tra cứu danh sách Nhân viên thuộc 1 Nhóm (Group) cụ thể — BẮT BUỘC phải biết groupId trước (gọi search_groups hoặc get_my_create_scopes nếu chưa có). Gọi tool này NGAY khi đã biết groupId, TRƯỚC khi hỏi ai tham gia tăng ca, rồi liệt kê TOÀN BỘ tên nhân viên lấy được để người dùng chọn (được chọn nhiều người) — không hỏi trước rồi mới tra, vì người dùng thường không nhớ hết tên đầy đủ của mọi đồng nghiệp trong Nhóm. Nhân viên được chọn PHẢI thuộc đúng Nhóm của đơn đang lập.",
               "parameters": {
                 "type": "object",
                 "properties": {

@@ -21,7 +21,9 @@ namespace Attendance.Infrastructure.Repositories
             IOtFormApprovalHistoryRepository otFormApprovalHistories,
             IUserSignatureRepository userSignatures,
             IPendingSignatureConfirmationRepository pendingSignatureConfirmations,
-            IOtFormApprovalEmailTokenRepository otFormApprovalEmailTokens) : base(dbContext)
+            IOtFormApprovalEmailTokenRepository otFormApprovalEmailTokens,
+            ISecondaryPasswordRepository secondaryPasswords,
+            IPendingSecondaryPasswordConfirmationRepository pendingSecondaryPasswordConfirmations) : base(dbContext)
         {
             Departments = departments;
             Groups = groups;
@@ -36,6 +38,8 @@ namespace Attendance.Infrastructure.Repositories
             UserSignatures = userSignatures;
             PendingSignatureConfirmations = pendingSignatureConfirmations;
             OtFormApprovalEmailTokens = otFormApprovalEmailTokens;
+            SecondaryPasswords = secondaryPasswords;
+            PendingSecondaryPasswordConfirmations = pendingSecondaryPasswordConfirmations;
         }
 
         public IDepartmentRepository Departments { get; }
@@ -51,5 +55,7 @@ namespace Attendance.Infrastructure.Repositories
         public IUserSignatureRepository UserSignatures { get; }
         public IPendingSignatureConfirmationRepository PendingSignatureConfirmations { get; }
         public IOtFormApprovalEmailTokenRepository OtFormApprovalEmailTokens { get; }
+        public ISecondaryPasswordRepository SecondaryPasswords { get; }
+        public IPendingSecondaryPasswordConfirmationRepository PendingSecondaryPasswordConfirmations { get; }
     }
 }

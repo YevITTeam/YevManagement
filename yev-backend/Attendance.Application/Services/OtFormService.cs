@@ -59,18 +59,21 @@ namespace Attendance.Application.Services
         private readonly IEmailService _emailService;
         private readonly IEmailTemplateRenderer _emailTemplateRenderer;
         private readonly IConfiguration _configuration;
+        private readonly ISecondaryPasswordService _secondaryPasswordService;
 
         public OtFormService(
             IAttendanceUnitOfWork unitOfWork,
             IUserDirectoryService userDirectoryService,
             IEmailService emailService,
             IEmailTemplateRenderer emailTemplateRenderer,
-            IConfiguration configuration) : base(unitOfWork)
+            IConfiguration configuration,
+            ISecondaryPasswordService secondaryPasswordService) : base(unitOfWork)
         {
             _userDirectoryService = userDirectoryService;
             _emailService = emailService;
             _emailTemplateRenderer = emailTemplateRenderer;
             _configuration = configuration;
+            _secondaryPasswordService = secondaryPasswordService;
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(string userName, int pageIndex, int pageSize)
@@ -471,6 +474,10 @@ namespace Attendance.Application.Services
                     throw new DomainException("Bạn không được phân quyền ký duyệt (cấp Trưởng nhóm) cho nhóm/bộ phận của đơn này.");
             }
 
+            // Second-factor password gate — applies to EVERY sign/approve/reject action, including this
+            // Submitter step (see docs/attendance-module.md — Mật khẩu cấp 2). Verified before any write.
+            await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
+
             // The "Requester" signature is always required, taken from the already-registered
             // signature (UserSignature) of the Team Leader who is signing — not accepted from the
             // request's image (see docs/attendance-module.md).
@@ -636,6 +643,9 @@ namespace Attendance.Application.Services
         {
             var (otForm, currentLevel) = await LoadFormAndValidateAuthorityAsync(id, approverUserName, isGeneralDirector);
 
+            // Second-factor password gate — see docs/attendance-module.md — Mật khẩu cấp 2.
+            await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
+
             // The approval-level signature is taken from the approver's already-registered signature
             // (UserSignature) — no longer accepted from the request's image (see docs/attendance-module.md).
             var approverSignature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == approverUserName);
@@ -681,6 +691,9 @@ namespace Attendance.Application.Services
         public async Task RejectAsync(int id, string approverUserName, string? approverFullName, bool isGeneralDirector, RejectOtFormDto request)
         {
             var (otForm, currentLevel) = await LoadFormAndValidateAuthorityAsync(id, approverUserName, isGeneralDirector);
+
+            // Second-factor password gate — see docs/attendance-module.md — Mật khẩu cấp 2.
+            await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
 
             await _unitOfWork.OtFormApprovalHistories.AddAsync(new OtFormApprovalHistory
             {

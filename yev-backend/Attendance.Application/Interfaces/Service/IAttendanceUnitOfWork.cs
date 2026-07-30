@@ -18,5 +18,7 @@ namespace Attendance.Application.Interfaces.Service
         IUserSignatureRepository UserSignatures { get; }
         IPendingSignatureConfirmationRepository PendingSignatureConfirmations { get; }
         IOtFormApprovalEmailTokenRepository OtFormApprovalEmailTokens { get; }
+        ISecondaryPasswordRepository SecondaryPasswords { get; }
+        IPendingSecondaryPasswordConfirmationRepository PendingSecondaryPasswordConfirmations { get; }
     }
 }

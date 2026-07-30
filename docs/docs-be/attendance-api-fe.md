@@ -443,11 +443,12 @@ Pattern **Preview → Confirm** (giống hệt import Device bên module Asset �
 ### 4.1a `POST /api/OtForm/{id}/submit` — Trưởng nhóm ký duyệt "Người đề nghị" (mới, đợt 4 — 2026-07-16)
 ```jsonc
 // body — ApproveOtFormDto
-{ "comment": null }   // optional
+{ "comment": null, "secondaryPassword": "..." }   // comment optional, secondaryPassword [Required]
 ```
 - Chỉ gọi được khi đơn đang `status = 5 (Draft)` — gọi trên đơn đã `Pending` trở lên → 400. Đây là bước **bắt buộc** để đơn thật sự vào luồng, khác với `POST /api/OtForm` (chỉ nhập liệu).
 - Điều kiện y hệt lúc tạo đơn: user gọi phải có `UserApprovalScope(approvalLevel=Submitter)` khớp `groupId`/`departmentId` của đơn (trừ Admin) — **không nhất thiết phải là chính người đã gọi `POST /api/OtForm`**, miễn cùng được cấp quyền cho Group đó.
 - **Bắt buộc đã đăng ký chữ ký** (`GET/PUT /api/UserSignature/me`, mục 6) — chưa đăng ký → 400 ("Bạn chưa đăng ký chữ ký..."). Không nhận `signatureImage` qua body, BE tự lấy từ `UserSignature` đã đăng ký của người gọi, snapshot vào `approvalHistories[0].signatureImage`.
+- **Bắt buộc `secondaryPassword` khớp mật khẩu cấp 2 đã đăng ký** (2026-07-30, xem §6c) — verify TRƯỚC khi ghi bất kỳ thay đổi nào. Chưa thiết lập → 400 "Bạn chưa thiết lập mật khẩu cấp 2..."; sai mật khẩu → 400 "Mật khẩu cấp 2 không đúng."
 - Thành công → `status → 6 (PendingGroupHead)` (**đổi 2026-07-17**, trước là `0 Pending` — giờ chèn thêm bước Trưởng Bộ phận), đơn xuất hiện trong `pending-approvals` của **Trưởng Bộ phận** (không phải Trưởng phòng nữa) — xem §Đợt 6 ở đầu file. Response `data` = `OtFormDto` (§4.3) đầy đủ sau khi ký — không cần gọi lại `GetById`.
 - Permission: `Attendance.OTForm.Create` (dùng chung với quyền tạo đơn, không có permission riêng).
 
@@ -546,19 +547,20 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 ### 4.4 `POST /api/OtForm/{id}/approve`
 ```jsonc
 // body — ApproveOtFormDto
-{ "comment": null }   // chỉ còn comment, optional
+{ "comment": null, "secondaryPassword": "..." }   // comment optional, secondaryPassword [Required]
 ```
 - **`signatureImage` KHÔNG còn tồn tại trong body** (bỏ từ 2026-07-16) — chữ ký cấp duyệt BE tự lấy từ `UserSignature` đã đăng ký sẵn của chính người duyệt (`GET/PUT /api/UserSignature/me`, mục 6), snapshot vào `OtFormApprovalHistory.signatureImage` tại đúng thời điểm duyệt.
 - **Bắt buộc phải đã đăng ký chữ ký thực tế nếu `otCase.requireSignature = true`** — chưa đăng ký (`GET /UserSignature/me` 404) → duyệt trả 400 ("...bắt buộc phải ký khi duyệt. Vui lòng đăng ký chữ ký..."). FE nên đọc `otCase.requireSignature` (gọi thêm `GET /api/OtCase/{otCaseId}` hoặc cache list `OtCase` đã load) để chủ động nhắc user đăng ký chữ ký trước khi vào màn Duyệt.
+- **Bắt buộc `secondaryPassword` khớp mật khẩu cấp 2 đã đăng ký** (2026-07-30, mọi cấp duyệt, xem §6c) — chưa thiết lập/sai mật khẩu → 400, xem §9.
 - 400 nếu: đơn đang `Draft` (chưa có ai ký "Người đề nghị" — dùng `POST /{id}/submit` thay thế, xem §4.1a), đã `Completed`/`Rejected`; user không đúng cấp đang chờ; user không có `UserApprovalScope` khớp `departmentId`/`groupId` của đơn (trừ Tổng Giám Đốc).
 - Thành công → đơn tự chuyển `status` kế tiếp hoặc `Completed` nếu vừa đạt `otCase.requiredApprovalLevel`. Response `data: true` — FE tự gọi lại `GET /{id}` để refresh chi tiết.
 
 ### 4.5 `POST /api/OtForm/{id}/reject`
 ```jsonc
 // body — RejectOtFormDto
-{ "comment": "Thiếu chứng từ, cần xác nhận lại." }   // [Required]
+{ "comment": "Thiếu chứng từ, cần xác nhận lại.", "secondaryPassword": "..." }   // cả 2 field [Required]
 ```
-`status → Rejected`, dừng hẳn luồng ở bất kỳ cấp Trưởng phòng/Trưởng xưởng/TGĐ nào. Cũng như `/approve`, gọi trên đơn `status=Draft` → 400 (không có Reject ở bước Trưởng nhóm ký, xem §1).
+`status → Rejected`, dừng hẳn luồng ở bất kỳ cấp Trưởng phòng/Trưởng xưởng/TGĐ nào. Cũng như `/approve`, gọi trên đơn `status=Draft` → 400 (không có Reject ở bước Trưởng nhóm ký, xem §1). `secondaryPassword` cũng bắt buộc, cùng luật với §4.4.
 
 ### 4.6 Duyệt/Từ chối qua email (2026-07-16) — kênh BỔ SUNG, không thay thế §4.4/§4.5
 
@@ -569,8 +571,8 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 | Method | Route | Việc gì |
 |---|---|---|
 | GET | `/api/OtForm/email-confirm/{token}` | Trả `OtFormDto` đầy đủ (giống hệt §4.3) để hiện chi tiết đơn trên trang xác nhận |
-| POST | `/api/OtForm/email-confirm/{token}/approve` | Body `ApproveOtFormDto` (`{ "comment": null }`, giống §4.4) — duyệt |
-| POST | `/api/OtForm/email-confirm/{token}/reject` | Body `RejectOtFormDto` (`{ "comment": "..." }` [Required], giống §4.5) — từ chối |
+| POST | `/api/OtForm/email-confirm/{token}/approve` | Body `ApproveOtFormDto` (`{ "comment": null, "secondaryPassword": "..." }`, giống §4.4) — duyệt |
+| POST | `/api/OtForm/email-confirm/{token}/reject` | Body `RejectOtFormDto` (`{ "comment": "...", "secondaryPassword": "..." }` cả 2 [Required], giống §4.5) — từ chối |
 
 **Trang xác nhận gợi ý** (route public, không nằm trong menu điều hướng — chỉ mở qua link email):
 ```
@@ -580,6 +582,7 @@ Ghi chú/Comment [___]  (chỉ dùng khi bấm Duyệt, không bắt buộc)
 ```
 - **Từ chối mở popup riêng để nhập lý do (2026-07-29, yêu cầu người dùng)** — bấm "Từ chối" không gửi ngay, mà mở modal xác nhận với ô "Lý do từ chối" **bắt buộc** + 2 nút "Huỷ"/"Xác nhận từ chối", cùng UX với modal Ký duyệt/Duyệt/Từ chối ở màn "Chi tiết đơn" trong app (§1.3.C) — tránh bấm nhầm từ chối đơn khi chưa kịp gõ lý do. "Duyệt" giữ nguyên hành vi cũ (gửi thẳng kèm ô Ghi chú tuỳ chọn ở ngoài, không qua popup).
 - Cả 2 nút gọi thẳng đúng logic `approve`/`reject`/`submit` hiện có tùy cấp của token (§4.1a/§4.4/§4.5) — **không cần canvas ký**, chữ ký tự lấy từ `UserSignature` đã đăng ký của người đó y hệt ký/duyệt trong app. Với token cấp Submitter (Trưởng nhóm), FE nên **ẩn nút "Từ chối"** trên trang xác nhận (backend chặn, trả lỗi nếu vẫn bấm) — chỉ hiện "Ký duyệt".
+- **Bắt buộc thêm ô "Mật khẩu cấp 2" trên trang này (2026-07-30, xem §6c)** — cả nút Duyệt lẫn popup Từ chối đều cần `secondaryPassword` trong body, **kể cả** ở kênh email này (đã chốt với người dùng: mật khẩu cấp 2 áp dụng cho MỌI hành động ký/duyệt, không riêng gì trong app). Trang public này không có JWT nên không gọi được `GET /SecondaryPassword/me` để kiểm tra trước — lỗi "chưa thiết lập"/"sai mật khẩu" chỉ hiện ra sau khi bấm Duyệt/Xác nhận từ chối, qua message BE trả về.
 - Token gắn với **đúng 1 người + đúng 1 cấp duyệt** tại thời điểm gửi mail — nếu đơn đã được người khác duyệt/từ chối trước (hoặc đã đổi cấp) từ lúc gửi mail, bấm link cũ sẽ nhận lỗi rõ ràng (400 "Đơn đã xử lý xong...") thay vì duyệt nhầm — không cần FE tự kiểm tra trạng thái trước.
 - Token hết hạn sau **3 ngày** hoặc đã dùng 1 lần (Duyệt hoặc Từ chối, cái nào bấm trước) → gọi lại bất kỳ API nào trong 3 API trên đều trả 400/404 (xem §9).
 - Sau khi Duyệt/Từ chối thành công qua trang này, nếu còn cấp tiếp theo cần duyệt, BE **tự động** gửi tiếp email cho cấp đó — FE trang xác nhận không cần tự gọi thêm gì.
@@ -689,6 +692,47 @@ Sau khi gọi `PUT /me`, BE gửi email tới **địa chỉ email của chính 
 - KHÔNG có nút "Từ chối" ở trang này — không xác nhận thì đơn giản là bỏ qua email, chữ ký cũ vẫn giữ nguyên hiệu lực, không cần gọi API nào để "hủy".
 - Sau khi xác nhận thành công, gợi ý điều hướng user quay lại app (không tự động đăng nhập — vẫn cần JWT bình thường để dùng tiếp).
 
+## 6c. SecondaryPassword (`/api/SecondaryPassword`) — mật khẩu cấp 2 khi ký/duyệt (mới, 2026-07-30)
+
+**Lý do**: thêm 1 lớp xác thực bổ sung (giống PIN giao dịch ngân hàng) cho hành vi có tính pháp lý là
+ký/duyệt đơn tăng ca — mỗi user tự đăng ký 1 mật khẩu cấp 2 riêng (khác mật khẩu đăng nhập AD), và
+phải nhập lại đúng mật khẩu này ở **MỌI** hành động ký/duyệt: `POST /{id}/submit` (Trưởng nhóm ký),
+`POST /{id}/approve`, `POST /{id}/reject` (mọi cấp), **kể cả kênh email** `email-confirm/{token}/approve|reject`
+(§4.6) — không có ngoại lệ nào. BE verify qua field `secondaryPassword` đã thêm vào `ApproveOtFormDto`/
+`RejectOtFormDto` (xem §4.1a/§4.4/§4.5/§4.6), verify TRƯỚC khi ghi bất kỳ thay đổi nào lên đơn.
+
+Cùng pattern tự đăng ký + xác nhận qua email như `UserSignature` (§6/§6b) — **KHÔNG** áp dụng ngay,
+chỉ gửi email xác nhận, giá trị cũ (nếu có) vẫn còn hiệu lực cho tới khi user tự bấm xác nhận.
+
+| Method | Route | Permission | Việc gì |
+|---|---|---|---|
+| GET | `/me` | `Attendance.SecondaryPassword.Update` | Xem trạng thái mật khẩu cấp 2 của chính mình — **KHÔNG** bao giờ trả hash/plaintext, chỉ `isRegistered`/`updatedAt` |
+| PUT | `/me` | `Attendance.SecondaryPassword.Update` | **Yêu cầu** thiết lập/cập nhật mật khẩu cấp 2 — gửi email xác nhận, KHÔNG áp dụng ngay |
+| GET | `/confirm/{token}` | Không cần (`[AllowAnonymous]`) | Xem trước — trả `userName`, `expiresAt` (KHÔNG trả lại mật khẩu) |
+| POST | `/confirm/{token}` | Không cần (`[AllowAnonymous]`) | Xác nhận thật — áp dụng mật khẩu cấp 2 |
+
+```jsonc
+// GET /me — SecondaryPasswordStatusDto
+{ "isRegistered": true, "updatedAt": "2026-07-30T02:00:00Z" }   // updatedAt: null nếu chưa đăng ký
+
+// PUT /me body — UpsertSecondaryPasswordDto: { "password": "..." }  // [Required][MinLength(6)]
+// response: { "isSuccess": true, "data": true,
+//   "message": "Đã gửi email xác nhận thiết lập mật khẩu cấp 2 — vui lòng kiểm tra hộp thư trong 30 phút." }
+
+// GET /confirm/{token} — SecondaryPasswordConfirmationPreviewDto
+{ "userName": "YEV\\n.van.a", "expiresAt": "2026-07-30T02:30:00Z" }
+// POST /confirm/{token} — { "isSuccess": true, "data": true, "message": "Xác nhận thiết lập mật khẩu cấp 2 thành công." }
+```
+
+- Link email tới `{FrontendBaseUrl}/xac-nhan-mat-khau-cap-2?token=xxx` (route public riêng, mirror
+  `/xac-nhan-chu-ky` ở §6b) — hết hạn sau **30 phút** hoặc đã dùng 1 lần, cùng luật lỗi như §6b.
+- **Chưa thiết lập mà vào ký/duyệt** → 400 "Bạn chưa thiết lập mật khẩu cấp 2. Vui lòng thiết lập
+  trước khi ký duyệt đơn." — FE nên chủ động gọi `GET /me` khi mở modal Ký/Duyệt/Từ chối trong app
+  (như đã làm với `UserSignatureApi.getMySignature()`) để cảnh báo sớm, link sang `/ot/secondary-password`.
+- **Permission `Attendance.SecondaryPassword.Update`** được seed cho đúng các Role đang giữ
+  `Attendance.UserSignature.Update` (Admin, Trưởng nhóm, Trưởng Bộ phận, Trưởng phòng, Trưởng xưởng,
+  Tổng Giám Đốc) — không có permission `.View` riêng (không có nhu cầu Admin xem hộ mật khẩu người khác).
+
 ## 7. Tổng hợp endpoint
 
 | Route | Ghi chú |
@@ -698,6 +742,7 @@ Sau khi gọi `PUT /me`, BE gửi email tới **địa chỉ email của chính 
 | `/api/Employee` (`by-group/{id}`, `me`, `{id}/adjust-accumulation`) | CRUD + liệt kê theo Group + tự tra/tự chỉnh lũy kế (không cần permission) |
 | `/api/UserApprovalScope` | grid-list, `by-user/{userName}`, POST, DELETE (không PUT) |
 | `/api/UserSignature` | `me` (GET/PUT), `{userName}` (GET, admin), `confirm/{token}` (GET/POST, public — §6b) |
+| `/api/SecondaryPassword` | `me` (GET/PUT), `confirm/{token}` (GET/POST, public — §6c) |
 | `/api/OtForm` | `my-forms`, `pending-submissions` (§4.2a), `pending-approvals`, `my-actions` (§4.2b), `my-participations` (§4.2c), `{id}` (GET/PUT), POST, `{id}/submit` (§4.1a), `{id}/approve`, `{id}/reject`, `email-confirm/{token}` (GET), `email-confirm/{token}/approve`, `email-confirm/{token}/reject` (public — §4.6) |
 | `/api/EmployeeImport` | `preview`, `confirm` (Admin, §3.7) |
 
@@ -767,6 +812,9 @@ Tab **"Đơn tôi tham gia"** (**mới**, mọi role kể cả "Nhân viên") �
 | Đơn kẹt mãi ở `status=6 PendingGroupHead`, không ai thấy trong `pending-approvals` (**mới 2026-07-17**) | Group/Department của đơn **chưa được Admin gán ai làm Trưởng Bộ phận** (`UserApprovalScope(approvalLevel=4 GroupHead)`) — bắt buộc cho MỌI Group, không có cơ chế bỏ qua. Báo Admin gán qua `POST /UserApprovalScope` |
 | `POST /{id}/approve` 400 "chữ ký" | `otCase.requireSignature=true` nhưng người duyệt chưa đăng ký chữ ký qua `PUT /UserSignature/me` |
 | `POST /{id}/submit` 400 "chưa đăng ký chữ ký" | Trưởng nhóm ký duyệt nhưng chưa đăng ký chữ ký qua `PUT /UserSignature/me` — chữ ký "Người đề nghị" luôn bắt buộc |
+| `POST /{id}/submit\|approve\|reject` 400 "Bạn chưa thiết lập mật khẩu cấp 2..." (**mới 2026-07-30**) | Chưa từng đăng ký mật khẩu cấp 2 qua `PUT /SecondaryPassword/me` + xác nhận email — bắt buộc cho MỌI hành động ký/duyệt kể cả kênh email (§6c) |
+| `POST /{id}/submit\|approve\|reject` 400 "Mật khẩu cấp 2 không đúng" (**mới 2026-07-30**) | `secondaryPassword` gửi lên không khớp mật khẩu cấp 2 đã đăng ký — nhập lại, không liên quan tới mật khẩu đăng nhập AD |
+| `GET/POST /SecondaryPassword/confirm/{token}` 404/400 | Cùng luật lỗi hệt `UserSignature/confirm/{token}` ở 3 dòng dưới đây, đổi "chữ ký" thành "mật khẩu cấp 2" |
 | `POST /OtForm` hoặc `POST /{id}/submit` 400 "không được phân quyền tạo đơn/ký duyệt" | Người gọi có Role Trưởng nhóm (permission `OTForm.Create`) nhưng chưa được Admin gán `UserApprovalScope(approvalLevel=Submitter)` khớp `groupId`/`departmentId` của đơn → báo Admin tạo qua `POST /UserApprovalScope` |
 | `POST /{id}/submit` 400 "Đơn không ở trạng thái nháp" | Đơn đã được ký duyệt cấp Submitter trước đó (`status != Draft`) — ẩn nút "Ký duyệt" khi đơn không còn `status=Draft` |
 | `POST /{id}/approve\|reject` 400 "Đơn đang ở trạng thái nháp..." | Gọi nhầm API duyệt cấp Trưởng phòng trở lên trên đơn còn `status=Draft` — dùng `POST /{id}/submit` (§4.1a) thay thế |

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Attendance.Application.Dtos.AiChat;
@@ -97,6 +98,81 @@ namespace Attendance.Application.Services
                 Json = JsonSerializer.Serialize(result, JsonOptions),
                 CreatedOtFormId = createdOtFormId
             };
+        }
+
+        // See IAttendanceAiChatToolExecutorService.BuildReferenceContextAsync for WHY this exists
+        // (production failure modes) — docs §16. Plain text, not JSON: the model reproduces "id 1 = TH1"
+        // far more reliably from a flat labelled line than from nested JSON, and it costs fewer tokens.
+        public async Task<string> BuildReferenceContextAsync(AttendanceAiChatCallerContext caller, CancellationToken cancellationToken)
+        {
+            var builder = new StringBuilder();
+            builder.Append("DỮ LIỆU THẬT CỦA HỆ THỐNG (đã tra cứu sẵn cho lượt này — dùng TRỰC TIẾP, ")
+                   .Append("KHÔNG cần gọi tool tra cứu, KHÔNG được bịa thêm lựa chọn nào ngoài danh sách dưới đây):\n");
+            builder.Append($"- Hôm nay là {DateTime.Today:yyyy-MM-dd} (dùng để quy đổi 'hôm nay'/'ngày mai'/'thứ X').\n");
+
+            try
+            {
+                var scopes = await _otFormService.GetMyCreateScopesAsync(caller.UserName, caller.IsAdmin);
+
+                if (scopes.Count == 0)
+                {
+                    // Admin: unrestricted, so there is no bounded group list to pre-fetch. Lookup tools
+                    // stay available for exactly this case.
+                    builder.Append(caller.IsAdmin
+                        ? "- Phạm vi tạo đơn: bạn là Admin nên KHÔNG bị giới hạn Nhóm/Bộ phận. Vì vậy PHẢI dùng tool search_departments/search_groups để tìm Nhóm/Bộ phận người dùng nêu, rồi search_employees_by_group để lấy nhân viên.\n"
+                        : "- Phạm vi tạo đơn: KHÔNG có Nhóm/Bộ phận nào. Người dùng này không được phép tạo đơn tăng ca — hãy nói rõ điều đó và không tạo đơn.\n");
+                }
+                else
+                {
+                    builder.Append("- Nhóm/Bộ phận người dùng được phép tạo đơn");
+                    builder.Append(scopes.Count == 1
+                        ? " (chỉ có DUY NHẤT 1 lựa chọn — dùng luôn, KHÔNG hỏi lại người dùng):\n"
+                        : $" ({scopes.Count} lựa chọn — hỏi người dùng chọn bằng TÊN):\n");
+                    foreach (var scope in scopes)
+                    {
+                        builder.Append($"  · groupId={scope.GroupId} \"{scope.GroupNameVn}\" ")
+                               .Append($"thuộc departmentId={scope.DepartmentId} \"{scope.DepartmentNameVn}\"\n");
+                    }
+
+                    // Only pre-fetch employees when the group is unambiguous — with several scopes we
+                    // don't know which one the form will use, and dumping every group's roster would
+                    // bloat the prompt for no gain.
+                    if (scopes.Count == 1)
+                    {
+                        var employees = await _employeeService.GetByGroupIdAsync(scopes[0].GroupId);
+                        builder.Append($"- Nhân viên thuộc Nhóm \"{scopes[0].GroupNameVn}\" ")
+                               .Append($"({employees.Count} người — chỉ được chọn trong danh sách này):\n");
+                        foreach (var employee in employees)
+                        {
+                            builder.Append($"  · employeeId={employee.Id} \"{employee.LastName} {employee.FirstName}\" ")
+                                   .Append($"(mã NV {employee.Code}, đã tăng ca tháng này {employee.MonthToDate}h, năm nay {employee.YearToDate}h)\n");
+                        }
+                    }
+                }
+
+                var otCases = await _otCaseService.GetAllActiveAsync();
+                builder.Append($"- Trường hợp OT ({otCases.Count} lựa chọn, KHÔNG có lựa chọn nào khác):\n");
+                foreach (var otCase in otCases)
+                {
+                    builder.Append($"  · otCaseId={otCase.Id} \"{otCase.Code}\" = {otCase.Description} ")
+                           .Append($"(cần chữ ký: {(otCase.RequireSignature ? "có" : "không")}, cấp duyệt cuối: {otCase.RequiredApprovalLevel})\n");
+                }
+
+                var reasons = await _reasonService.GetAllActiveAsync();
+                builder.Append($"- Lý do tăng ca ({reasons.Count} lựa chọn, KHÔNG có lựa chọn nào khác):\n");
+                foreach (var reason in reasons)
+                    builder.Append($"  · reasonId={reason.Id} \"{reason.ReasonNameVn}\"\n");
+            }
+            catch (Exception ex)
+            {
+                // Degraded mode: keep whatever was gathered and tell the model to fall back to tools
+                // rather than trusting a half-built list (a truncated list is exactly what it would
+                // otherwise "helpfully" complete by inventing entries).
+                builder.Append($"- CẢNH BÁO: không tra cứu được đầy đủ dữ liệu tham chiếu ({ex.Message}). ")
+                       .Append("Danh sách phía trên có thể THIẾU — với những mục còn thiếu PHẢI gọi tool tra cứu tương ứng, TUYỆT ĐỐI không tự bịa.\n");
+            }
+
+            return builder.ToString();
         }
 
         private async Task<object> SearchDepartmentsAsync(JsonElement args)

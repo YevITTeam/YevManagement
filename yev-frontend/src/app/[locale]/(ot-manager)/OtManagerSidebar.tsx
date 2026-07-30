@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { Bot, FilePlus2, ClipboardList, FolderCog, ShieldCheck, PenTool, PanelLeftClose, CalendarClock } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList, FolderCog, ShieldCheck, PenTool, KeyRound, PanelLeftClose, CalendarClock } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -37,6 +37,12 @@ const navItems: OtNavItem[] = [
     // Chỉ Admin/người có quyền quản trị phạm vi duyệt mới thấy mục này (docs/attendance-api-fe.md §5).
     { key: "otApprovalScopes", href: "/ot/approval-scopes", icon: ShieldCheck, permission: "Attendance.UserApprovalScope.View" },
     { key: "otSignature", href: "/ot/signature", icon: PenTool, permission: "Attendance.UserSignature.Update" },
+    {
+        key: "otSecondaryPassword",
+        href: "/ot/secondary-password",
+        icon: KeyRound,
+        permission: "Attendance.SecondaryPassword.Update",
+    },
     { key: "otAccumulation", href: "/ot/accumulation", icon: CalendarClock },
 ];
 

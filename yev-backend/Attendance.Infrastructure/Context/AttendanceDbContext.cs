@@ -27,6 +27,8 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<UserSignature> UserSignatures { get; set; }
     public virtual DbSet<PendingSignatureConfirmation> PendingSignatureConfirmations { get; set; }
     public virtual DbSet<OtFormApprovalEmailToken> OtFormApprovalEmailTokens { get; set; }
+    public virtual DbSet<SecondaryPassword> SecondaryPasswords { get; set; }
+    public virtual DbSet<PendingSecondaryPasswordConfirmation> PendingSecondaryPasswordConfirmations { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -199,6 +201,22 @@ public partial class AttendanceDbContext : DbContext
             entity.HasOne(d => d.OtForm).WithMany(p => p.OtFormApprovalEmailTokens)
                 .HasForeignKey(d => d.OtFormId)
                 .HasConstraintName("FK_OtFormApprovalEmailTokens_OtForms_OtFormId");
+        });
+
+        modelBuilder.Entity<SecondaryPassword>(entity =>
+        {
+            entity.HasIndex(e => e.UserName, "IX_SecondaryPasswords_UserName").IsUnique();
+            entity.Property(e => e.UserName).HasMaxLength(100);
+            entity.Property(e => e.PasswordHash).HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<PendingSecondaryPasswordConfirmation>(entity =>
+        {
+            entity.HasIndex(e => e.Token, "IX_PendingSecondaryPasswordConfirmations_Token").IsUnique();
+            entity.HasIndex(e => e.UserName, "IX_PendingSecondaryPasswordConfirmations_UserName");
+            entity.Property(e => e.UserName).HasMaxLength(100);
+            entity.Property(e => e.PasswordHash).HasMaxLength(200);
+            entity.Property(e => e.Token).HasMaxLength(64);
         });
 
         OnModelCreatingPartial(modelBuilder);

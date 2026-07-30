@@ -135,11 +135,15 @@ export interface OtFormDto {
 }
 
 // Body POST /api/OtForm/{id}/approve — §4.4. Không còn signatureImage (BE tự lấy từ UserSignature/me).
+// secondaryPassword: mật khẩu cấp 2 của người gọi, BE re-verify trước khi ghi (áp dụng cho CẢ
+// submit/approve, xem SecondaryPasswordApi + docs/attendance-module.md — Mật khẩu cấp 2).
 export interface ApproveOtFormDto {
     comment: string | null;
+    secondaryPassword: string;
 }
 
 // Body POST /api/OtForm/{id}/reject — §4.5.
 export interface RejectOtFormDto {
     comment: string;
+    secondaryPassword: string;
 }

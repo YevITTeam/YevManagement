@@ -17,29 +17,44 @@ namespace Attendance.Application.Services
     // the reason this orchestrator cannot just be a copy-paste of Asset's.
     public class AttendanceAiChatService : IAttendanceAiChatService
     {
-        // Same knob as Asset's AiChatService — shared config key, tuned once for both features.
-        private const int DefaultMaxToolRounds = 3;
+        // Own key (`AiChatSettings:AttendanceMaxToolRounds`), NOT Asset's shared `MaxToolRounds`: this
+        // flow needs a round to call create_ot_form_draft plus a round to report the result, and the
+        // same-turn promise retry can eat one too, so Asset's budget of 3 left users hitting "đã đạt
+        // giới hạn số lần gọi công cụ" mid-form. Kept separate rather than raising the shared value
+        // because each extra round is a full model call (~20-30s on the CPU-only Ollama box) and Asset's
+        // read-only flow does not need the headroom.
+        private const int DefaultMaxToolRounds = 5;
 
         public const string DefaultSystemPrompt =
             "Bạn là trợ lý AI nội bộ hỗ trợ lập đơn tăng ca (OT Form) cho công ty. QUY TẮC NGÔN NGỮ (quan " +
             "trọng nhất, luôn tuân theo): LUÔN LUÔN trả lời bằng tiếng Việt, kể cả khi người dùng hỏi bằng " +
             "ngôn ngữ khác hoặc dữ liệu tool trả về có chứa ngôn ngữ khác — tuyệt đối không chêm ngôn ngữ " +
             "khác vào câu trả lời.\n\n" +
-            "QUY TẮC TRA CỨU: khi cần biết Nhóm/Bộ phận/Lý do/Trường hợp OT/Nhân viên nào, PHẢI dùng tool " +
-            "tra cứu phù hợp (search_departments/search_groups/search_reasons/search_ot_cases/" +
-            "search_employees_by_group/get_my_create_scopes) để lấy id THẬT, TUYỆT ĐỐI không tự bịa số id. " +
-            "Nếu người dùng đã cung cấp đủ tên Nhóm/Bộ phận/Lý do/Trường hợp OT, PHẢI gọi ngay tool tra cứu " +
-            "tương ứng thay vì hỏi lại; được phép gọi nhiều tool tra cứu cùng lúc trong 1 lượt.\n\n" +
-            "QUY TẮC KHÔNG BẮT NGƯỜI DÙNG NHỚ MÃ/ID: người dùng KHÔNG biết và KHÔNG được yêu cầu phải biết " +
-            "id hay mã số của Nhóm, Bộ phận, Lý do, hay Trường hợp OT. TUYỆT ĐỐI không hỏi người dùng cung " +
-            "cấp mã/id (vd không được hỏi 'mã Bộ phận của bạn là gì') — chỉ được hỏi bằng tên/mô tả tự nhiên " +
-            "(vd 'bạn thuộc Nhóm nào', 'lý do tăng ca là gì'), rồi TỰ gọi tool tra cứu để tìm id thật khớp " +
-            "với tên đó. Ngay khi cuộc trò chuyện chuyển sang ý định lập đơn (dù người dùng chưa nói chi " +
-            "tiết gì), PHẢI gọi get_my_create_scopes NGAY LẬP TỨC — TRƯỚC cả khi hỏi bất kỳ câu nào khác — " +
-            "để biết trước Nhóm/Bộ phận người này được phép tạo đơn. Nếu kết quả chỉ có đúng 1 Nhóm/Bộ phận, " +
-            "PHẢI dùng luôn Nhóm/Bộ phận đó, TUYỆT ĐỐI không hỏi lại người dùng chọn Nhóm/Bộ phận (vì họ chỉ " +
-            "có duy nhất 1 lựa chọn hợp lệ). Nếu có nhiều lựa chọn, liệt kê TÊN các lựa chọn đó (không phải " +
-            "id) để người dùng chọn bằng tên.\n\n" +
+            "QUY TẮC DÙNG DỮ LIỆU CÓ SẴN (quan trọng nhất): ngay dưới system prompt này có 1 tin nhắn " +
+            "'DỮ LIỆU THẬT CỦA HỆ THỐNG' chứa SẴN toàn bộ danh sách cần thiết đã tra cứu từ cơ sở dữ liệu: " +
+            "Nhóm/Bộ phận người dùng được phép tạo đơn, danh sách nhân viên trong Nhóm, toàn bộ Trường hợp " +
+            "OT, toàn bộ Lý do tăng ca — mỗi dòng đều kèm id THẬT. PHẢI lấy mọi id và mọi lựa chọn TỪ ĐÚNG " +
+            "danh sách đó. TUYỆT ĐỐI KHÔNG được: bịa thêm lựa chọn không có trong danh sách; bịa hoặc suy " +
+            "đoán id; đoán id theo thứ tự xuất hiện (vd không được cho rằng 'TH1' có id 1 — phải đọc đúng " +
+            "số ghi ở dòng tương ứng). Vì dữ liệu đã có sẵn, KHÔNG cần gọi tool tra cứu cho những mục này " +
+            "nữa. Nếu người dùng nói 1 tên KHÔNG có trong danh sách, phải nói thẳng là không tìm thấy và " +
+            "đưa ra các lựa chọn gần đúng CÓ THẬT trong danh sách, không tự tạo mục mới.\n\n" +
+            "QUY TẮC BẮT BUỘC LIỆT KÊ LỰA CHỌN (không được bỏ qua): TUYỆT ĐỐI không bao giờ hỏi 1 câu " +
+            "kiểu 'bạn chọn Trường hợp OT nào', 'ai tham gia tăng ca', 'nhân viên nào' rồi để trống chờ " +
+            "người dùng tự nhớ — mỗi câu hỏi như vậy PHẢI đi kèm ngay danh sách lựa chọn CÓ THẬT lấy từ " +
+            "'DỮ LIỆU THẬT CỦA HỆ THỐNG'. Cụ thể: (a) khi hỏi Trường hợp OT, PHẢI liệt kê ĐẦY ĐỦ tất cả " +
+            "các Trường hợp OT trong dữ liệu, mỗi dòng ghi mã + mô tả thật (vd 'TH1 — Tăng ca ngày " +
+            "thường'), không được viết 'ví dụ:...' rồi bỏ lửng. (b) khi hỏi nhân viên tham gia, PHẢI liệt " +
+            "kê ĐẦY ĐỦ tên từng nhân viên trong Nhóm theo dạng danh sách có đánh số thứ tự, để người dùng " +
+            "chỉ cần trả lời bằng số hoặc tên; TUYỆT ĐỐI không hỏi 'nhân viên nào' khi chưa liệt kê. " +
+            "(c) khi hỏi Lý do tăng ca (danh sách rất dài), hỏi người dùng mô tả ngắn công việc rồi tự lọc " +
+            "và liệt kê 5-10 Lý do phù hợp nhất CÓ THẬT trong dữ liệu kèm số thứ tự để họ chọn — không " +
+            "liệt kê toàn bộ, cũng không bỏ trống. Nguyên tắc: người dùng chỉ cần CHỌN, không bao giờ phải " +
+            "tự nhớ hay tự gõ đúng tên. Riêng Nhóm/Bộ phận nếu chỉ có 1 lựa chọn thì dùng luôn, không hỏi.\n\n" +
+            "QUY TẮC TRA CỨU BỔ SUNG: chỉ dùng tool tra cứu (search_departments/search_groups/" +
+            "search_reasons/search_ot_cases/search_employees_by_group/get_my_create_scopes) khi cần thứ " +
+            "KHÔNG có trong dữ liệu sẵn ở trên — điển hình là khi bạn là Admin không bị giới hạn Nhóm, " +
+            "hoặc cần nhân viên của 1 Nhóm khác. Khi đó vẫn TUYỆT ĐỐI không được bịa id.\n\n" +
             "QUY TẮC KHÔNG BỊA KẾT QUẢ: TUYỆT ĐỐI không được nói 'tôi đã gọi tool', 'kết quả tra cứu là...', " +
             "'đã tạo đơn thành công' hay đưa ra bất kỳ số liệu/id cụ thể nào nếu KHÔNG có tin nhắn kết quả " +
             "tool thật sự nằm ngay phía trên trong lượt trả lời hiện tại. Một tin nhắn trợ lý TRƯỚC ĐÓ (ở " +
@@ -99,7 +114,7 @@ namespace Attendance.Application.Services
             AttendanceAiChatCallerContext caller,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            var maxRounds = _configuration.GetValue<int?>("AiChatSettings:MaxToolRounds") ?? DefaultMaxToolRounds;
+            var maxRounds = _configuration.GetValue<int?>("AiChatSettings:AttendanceMaxToolRounds") ?? DefaultMaxToolRounds;
             var think = request.Think ?? false;
 
             // At most 1 OT form is ever created per conversation turn (the confirmation gate only lets
@@ -121,6 +136,14 @@ namespace Attendance.Application.Services
                     Content = string.IsNullOrWhiteSpace(request.SystemPrompt) ? DefaultSystemPrompt : request.SystemPrompt
                 }
             };
+
+            // Deterministic reference data, re-injected EVERY turn (docs §16). This is what stops the
+            // model inventing option lists and wrong ids, and it frees the whole MaxToolRounds budget
+            // for the one tool that actually has to be a tool (create_ot_form_draft). Re-injecting
+            // rather than relying on history is deliberate: the FE only resends user/assistant
+            // messages, so nothing else carries earlier lookups into this turn.
+            var referenceContext = await _toolExecutor.BuildReferenceContextAsync(caller, cancellationToken);
+            messages.Add(new OllamaMessageWire { Role = "system", Content = referenceContext });
             foreach (var historyMessage in request.History)
                 messages.Add(new OllamaMessageWire { Role = historyMessage.Role, Content = historyMessage.Content });
 

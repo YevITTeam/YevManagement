@@ -98,16 +98,24 @@ export default function OtFormEmailConfirmPage() {
     // trong khi trang này public) — an toàn hơn là lỡ ẩn mất 1 cấp thật sự cần, xem OtFormDetail.tsx.
     const [requiredApprovalLevel, setRequiredApprovalLevel] = useState(3);
 
-    const [comment, setComment] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [actionResult, setActionResult] = useState<"approved" | "rejected" | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
-    // Popup riêng cho "Từ chối" (2026-07-29, yêu cầu người dùng) — thay vì ô ghi chú luôn hiện sẵn
-    // dùng chung cho cả Duyệt/Từ chối, giờ bấm "Từ chối" mới mở popup để nhập lý do, đồng bộ UX với
-    // modal Ký duyệt/Duyệt/Từ chối ở OtFormDetail.tsx (màn trong app).
+    // Popup riêng cho cả "Duyệt" lẫn "Từ chối" (2026-07-29, mở rộng 2026-07-30 để thêm mật khẩu cấp 2
+    // cho cả 2 popup thay vì để ô Duyệt hiện sẵn ngoài trang) — bấm nút nào mới mở popup nhập
+    // comment/lý do + mật khẩu cấp 2 tương ứng, đồng bộ UX với modal Ký duyệt/Duyệt/Từ chối ở
+    // OtFormDetail.tsx (màn trong app).
+    const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+    const [comment, setComment] = useState("");
+    const [secondaryPassword, setSecondaryPassword] = useState("");
+
     const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
     const [rejectComment, setRejectComment] = useState("");
+    // Mật khẩu cấp 2 riêng cho từng popup — trang này không có JWT nên không thể kiểm tra trước
+    // "đã thiết lập chưa" như OtFormDetail.tsx (SecondaryPasswordApi.getMyStatus() cần đăng nhập);
+    // lỗi "chưa thiết lập"/"sai mật khẩu" hiện ra qua actionError trả về từ BE.
+    const [rejectSecondaryPassword, setRejectSecondaryPassword] = useState("");
 
     // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
     // đúng câu thông báo riêng này thay vì rơi về fallback chung.
@@ -134,11 +142,28 @@ export default function OtFormEmailConfirmPage() {
         tConfirm("loadError")
     );
 
+    const openApproveModal = () => {
+        setComment("");
+        setSecondaryPassword("");
+        setActionError(null);
+        setIsApproveModalOpen(true);
+    };
+
+    const closeApproveModal = () => {
+        if (isSubmitting) return;
+        setIsApproveModalOpen(false);
+    };
+
     const handleApprove = async () => {
+        if (!secondaryPassword) {
+            setActionError(tConfirm("secondaryPasswordRequiredError"));
+            return;
+        }
         setIsSubmitting(true);
         setActionError(null);
         try {
-            await OtFormApi.approveOtFormByEmailToken(token, { comment: comment.trim() || null });
+            await OtFormApi.approveOtFormByEmailToken(token, { comment: comment.trim() || null, secondaryPassword });
+            setIsApproveModalOpen(false);
             setActionResult("approved");
         } catch (err) {
             console.error(err);
@@ -150,6 +175,7 @@ export default function OtFormEmailConfirmPage() {
 
     const openRejectModal = () => {
         setRejectComment("");
+        setRejectSecondaryPassword("");
         setActionError(null);
         setIsRejectModalOpen(true);
     };
@@ -164,10 +190,17 @@ export default function OtFormEmailConfirmPage() {
             setActionError(tConfirm("rejectCommentRequiredError"));
             return;
         }
+        if (!rejectSecondaryPassword) {
+            setActionError(tConfirm("secondaryPasswordRequiredError"));
+            return;
+        }
         setIsSubmitting(true);
         setActionError(null);
         try {
-            await OtFormApi.rejectOtFormByEmailToken(token, { comment: rejectComment.trim() });
+            await OtFormApi.rejectOtFormByEmailToken(token, {
+                comment: rejectComment.trim(),
+                secondaryPassword: rejectSecondaryPassword,
+            });
             setIsRejectModalOpen(false);
             setActionResult("rejected");
         } catch (err) {
@@ -415,24 +448,7 @@ export default function OtFormEmailConfirmPage() {
                     {actionResult === "approved" ? tConfirm("approvedResultMessage") : tConfirm("rejectedResultMessage")}
                 </div>
             ) : (
-                <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            {tConfirm("commentOptionalLabel")}
-                        </span>
-                        <textarea
-                            value={comment}
-                            onChange={(event) => setComment(event.target.value)}
-                            disabled={isSubmitting}
-                            rows={3}
-                            className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                        />
-                    </label>
-
-                    {actionError && !isRejectModalOpen && (
-                        <p className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{actionError}</p>
-                    )}
-
+                <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                     <div className="flex justify-end gap-3">
                         <button
                             onClick={openRejectModal}
@@ -442,14 +458,88 @@ export default function OtFormEmailConfirmPage() {
                             {t("rejectButton")}
                         </button>
                         <button
-                            onClick={handleApprove}
+                            onClick={openApproveModal}
                             disabled={isSubmitting}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isSubmitting ? tCommon("processing") : t("approveButton")}
+                            {t("approveButton")}
                         </button>
                     </div>
                 </section>
+            )}
+
+            {isApproveModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+                    <div className="fixed inset-0 bg-black/40" onClick={closeApproveModal} />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                    >
+                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                            <h3 className="text-lg font-semibold text-[#191c1e]">{t("modalTitleApprove")}</h3>
+                            <button
+                                onClick={closeApproveModal}
+                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                aria-label={tCommon("close")}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {tConfirm("commentOptionalLabel")}
+                                </span>
+                                <textarea
+                                    value={comment}
+                                    onChange={(event) => setComment(event.target.value)}
+                                    disabled={isSubmitting}
+                                    rows={3}
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {tConfirm("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <input
+                                    type="password"
+                                    value={secondaryPassword}
+                                    onChange={(event) => setSecondaryPassword(event.target.value)}
+                                    disabled={isSubmitting}
+                                    autoComplete="off"
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            {actionError && (
+                                <p className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{actionError}</p>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={closeApproveModal}
+                                    disabled={isSubmitting}
+                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {tCommon("cancel")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleApprove}
+                                    disabled={isSubmitting}
+                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isSubmitting ? tCommon("processing") : t("confirmApprove")}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {isRejectModalOpen && (
@@ -482,6 +572,20 @@ export default function OtFormEmailConfirmPage() {
                                     disabled={isSubmitting}
                                     rows={3}
                                     required
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {tConfirm("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <input
+                                    type="password"
+                                    value={rejectSecondaryPassword}
+                                    onChange={(event) => setRejectSecondaryPassword(event.target.value)}
+                                    disabled={isSubmitting}
+                                    autoComplete="off"
                                     className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                 />
                             </label>

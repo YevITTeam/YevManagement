@@ -42,6 +42,7 @@
     "otCategories": "マスタ管理",
     "otApprovalScopes": "承認権限設定",
     "otSignature": "自分の署名",
+    "otSecondaryPassword": "第2パスワード",
     "otAccumulation": "自分の累計",
     "collapseSidebar": "サイドバーを折りたたむ",
     "expandSidebar": "サイドバーを展開する"
@@ -327,6 +328,25 @@
       "newImageAlt": "選択した署名画像",
       "noImageSelected": "署名画像が選択されていません"
     },
+    "SecondaryPassword": {
+      "title": "第2パスワード",
+      "description": "第2パスワードを設定してください — 残業申請書に署名・承認するたびに、このパスワードの再入力が必要になります。",
+      "currentStatusLabel": "現在の状態",
+      "registered": "第2パスワードは設定済みです。",
+      "registeredWithDate": "第2パスワードは設定済みです — 最終更新：{date}。",
+      "notRegistered": "第2パスワードはまだ設定されていません。",
+      "confirmationSentMessage": "第2パスワード設定の確認メールを送信しました — 30分以内にメールを確認して承認してください。確認が完了するまで、以前のパスワード（設定済みの場合）が引き続き有効です。",
+      "newPasswordLabel": "新しい第2パスワード",
+      "confirmPasswordLabel": "新しいパスワード（確認用）",
+      "passwordHint": "第2パスワードは6文字以上— ログインパスワードとは別で、残業申請の署名・承認確認専用です。",
+      "sendConfirmButton": "設定確認メールを送信",
+      "sending": "送信中...",
+      "passwordTooShortError": "第2パスワードは6文字以上で入力してください。",
+      "passwordMismatchError": "確認用パスワードが一致しません。",
+      "confirmationSentToast": "第2パスワード設定の確認メールを送信しました — 30分以内にメールをご確認ください。",
+      "saveError": "第2パスワード設定リクエストの送信に失敗しました",
+      "loadError": "第2パスワードの状態を読み込めませんでした。"
+    },
     "OtFormTabs": {
       "title": "残業申請",
       "description": "あなたの役割に応じた残業申請の一覧です。",
@@ -406,6 +426,9 @@
       "submitSignatureMissingHint": "署名がまだ登録されていません — 署名する前に「自分の署名」で登録してください。",
       "approveSignatureOkHint": "承認の署名は、登録済みの署名（「自分の署名」）から自動的に使用されます。",
       "approveSignatureMissingHint": "このケースは署名が必須ですが、まだ登録されていません — 承認する前に「自分の署名」で登録してください。",
+      "secondaryPasswordLabel": "第2パスワード",
+      "secondaryPasswordOkHint": "この操作を確認するため、第2パスワードを入力してください。",
+      "secondaryPasswordMissingHint": "第2パスワードがまだ設定されていません — 署名・承認する前に「第2パスワード」で設定してください。",
       "confirmSubmit": "署名を確定",
       "confirmApprove": "承認を確定",
       "confirmReject": "却下を確定",
@@ -418,6 +441,8 @@
       "rejectCommentRequiredError": "却下理由を入力してください。",
       "rejectSuccess": "申請を却下しました",
       "rejectError": "申請の却下に失敗しました",
+      "secondaryPasswordMissingError": "第2パスワードがまだ設定されていません — 署名・承認する前に「第2パスワード」で設定してください。",
+      "secondaryPasswordRequiredError": "第2パスワードを入力してください。",
       "loadError": "残業申請の詳細を読み込めませんでした。"
     },
     "CreateOtForm": {
@@ -496,6 +521,8 @@
       "approveError": "申請の承認に失敗しました。",
       "rejectCommentRequiredError": "「却下」を押す前に却下理由を入力してください。",
       "rejectError": "申請の却下に失敗しました。",
+      "secondaryPasswordLabel": "第2パスワード",
+      "secondaryPasswordRequiredError": "第2パスワードを入力してください。",
       "approvedResultMessage": "この申請を承認しました。",
       "rejectedResultMessage": "この申請を却下しました。",
       "commentOptionalLabel": "備考（承認時、任意）",
@@ -514,6 +541,18 @@
       "confirming": "確認中...",
       "confirmError": "署名更新の確認に失敗しました。",
       "successMessage": "署名を更新しました。アプリに戻って通常どおりご利用いただけます。"
+    },
+    "SecondaryPasswordConfirm": {
+      "title": "第2パスワード設定の確認",
+      "loading": "読み込んでいます...",
+      "missingTokenError": "リンクに確認用トークンがありません。",
+      "loadError": "第2パスワード確認リクエストを読み込めませんでした。",
+      "accountLabel": "アカウント：{userName}",
+      "confirmQuestion": "この第2パスワードの設定を確認しますか？リンクの有効期限は{expiresAt}です。",
+      "confirmButton": "設定を確認",
+      "confirming": "確認中...",
+      "confirmError": "第2パスワード設定の確認に失敗しました。",
+      "successMessage": "第2パスワードを設定しました。アプリに戻って通常どおりご利用いただけます。"
     }
   },
   "Home": {

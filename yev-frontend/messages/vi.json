@@ -42,6 +42,7 @@
     "otCategories": "Danh mục",
     "otApprovalScopes": "Phân quyền duyệt",
     "otSignature": "Chữ ký của tôi",
+    "otSecondaryPassword": "Mật khẩu cấp 2",
     "otAccumulation": "Lũy kế của tôi",
     "collapseSidebar": "Thu gọn menu",
     "expandSidebar": "Mở rộng menu"
@@ -327,6 +328,25 @@
       "newImageAlt": "Ảnh chữ ký vừa chọn",
       "noImageSelected": "Chưa chọn ảnh chữ ký"
     },
+    "SecondaryPassword": {
+      "title": "Mật khẩu cấp 2",
+      "description": "Thiết lập mật khẩu cấp 2 — hệ thống sẽ yêu cầu nhập lại mật khẩu này mỗi khi bạn ký/duyệt đơn tăng ca.",
+      "currentStatusLabel": "Trạng thái hiện tại",
+      "registered": "Đã thiết lập mật khẩu cấp 2.",
+      "registeredWithDate": "Đã thiết lập mật khẩu cấp 2 — cập nhật lần cuối: {date}.",
+      "notRegistered": "Chưa thiết lập mật khẩu cấp 2.",
+      "confirmationSentMessage": "Đã gửi email xác nhận thiết lập mật khẩu cấp 2 — vui lòng kiểm tra hộp thư và bấm xác nhận trong vòng 30 phút. Mật khẩu cũ (nếu có) vẫn có hiệu lực cho tới khi bạn xác nhận xong.",
+      "newPasswordLabel": "Mật khẩu cấp 2 mới",
+      "confirmPasswordLabel": "Nhập lại mật khẩu mới",
+      "passwordHint": "Mật khẩu cấp 2 tối thiểu 6 ký tự — khác với mật khẩu đăng nhập, dùng riêng để xác nhận ký/duyệt đơn tăng ca.",
+      "sendConfirmButton": "Gửi email xác nhận thiết lập",
+      "sending": "Đang gửi...",
+      "passwordTooShortError": "Mật khẩu cấp 2 phải có ít nhất 6 ký tự.",
+      "passwordMismatchError": "Mật khẩu nhập lại không khớp.",
+      "confirmationSentToast": "Đã gửi email xác nhận thiết lập mật khẩu cấp 2 — vui lòng kiểm tra hộp thư trong 30 phút.",
+      "saveError": "Gửi yêu cầu thiết lập mật khẩu cấp 2 thất bại",
+      "loadError": "Không thể tải trạng thái mật khẩu cấp 2."
+    },
     "OtFormTabs": {
       "title": "Đơn tăng ca",
       "description": "Danh sách đơn tăng ca theo từng vai trò của bạn.",
@@ -406,6 +426,9 @@
       "submitSignatureMissingHint": "Bạn chưa đăng ký chữ ký — vào \"Chữ ký của tôi\" để đăng ký trước khi ký duyệt.",
       "approveSignatureOkHint": "Chữ ký duyệt sẽ tự lấy từ chữ ký đã đăng ký của bạn (\"Chữ ký của tôi\").",
       "approveSignatureMissingHint": "Trường hợp này yêu cầu chữ ký nhưng bạn chưa đăng ký — vào \"Chữ ký của tôi\" để đăng ký trước khi duyệt.",
+      "secondaryPasswordLabel": "Mật khẩu cấp 2",
+      "secondaryPasswordOkHint": "Nhập mật khẩu cấp 2 của bạn để xác nhận hành động này.",
+      "secondaryPasswordMissingHint": "Bạn chưa thiết lập mật khẩu cấp 2 — vào \"Mật khẩu cấp 2\" để thiết lập trước khi ký/duyệt.",
       "confirmSubmit": "Xác nhận ký duyệt",
       "confirmApprove": "Xác nhận duyệt",
       "confirmReject": "Xác nhận từ chối",
@@ -418,6 +441,8 @@
       "rejectCommentRequiredError": "Vui lòng nhập lý do từ chối.",
       "rejectSuccess": "Đã từ chối đơn",
       "rejectError": "Từ chối đơn thất bại",
+      "secondaryPasswordMissingError": "Bạn chưa thiết lập mật khẩu cấp 2 — vào \"Mật khẩu cấp 2\" để thiết lập trước khi ký/duyệt.",
+      "secondaryPasswordRequiredError": "Vui lòng nhập mật khẩu cấp 2.",
       "loadError": "Không thể tải chi tiết đơn tăng ca."
     },
     "CreateOtForm": {
@@ -496,6 +521,8 @@
       "approveError": "Duyệt đơn thất bại.",
       "rejectCommentRequiredError": "Vui lòng nhập lý do từ chối trước khi bấm Từ chối.",
       "rejectError": "Từ chối đơn thất bại.",
+      "secondaryPasswordLabel": "Mật khẩu cấp 2",
+      "secondaryPasswordRequiredError": "Vui lòng nhập mật khẩu cấp 2.",
       "approvedResultMessage": "Bạn đã duyệt đơn này thành công.",
       "rejectedResultMessage": "Bạn đã từ chối đơn này.",
       "commentOptionalLabel": "Ghi chú (khi Duyệt, không bắt buộc)",
@@ -514,6 +541,18 @@
       "confirming": "Đang xác nhận...",
       "confirmError": "Xác nhận cập nhật chữ ký thất bại.",
       "successMessage": "Cập nhật chữ ký thành công. Bạn có thể quay lại ứng dụng và tiếp tục sử dụng bình thường."
+    },
+    "SecondaryPasswordConfirm": {
+      "title": "Xác nhận thiết lập mật khẩu cấp 2",
+      "loading": "Đang tải...",
+      "missingTokenError": "Thiếu token xác nhận trong đường link.",
+      "loadError": "Không thể tải yêu cầu xác nhận mật khẩu cấp 2.",
+      "accountLabel": "Tài khoản: {userName}",
+      "confirmQuestion": "Bạn có xác nhận thiết lập mật khẩu cấp 2 này không? Link hết hạn lúc {expiresAt}.",
+      "confirmButton": "Xác nhận thiết lập",
+      "confirming": "Đang xác nhận...",
+      "confirmError": "Xác nhận thiết lập mật khẩu cấp 2 thất bại.",
+      "successMessage": "Thiết lập mật khẩu cấp 2 thành công. Bạn có thể quay lại ứng dụng và tiếp tục sử dụng bình thường."
     }
   },
   "Home": {
