@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
@@ -25,6 +26,8 @@ interface GroupPageResult {
 }
 
 const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ onLoadingChange }, ref) {
+    const t = useTranslations("Attendance.Group");
+    const tCommon = useTranslations("Common");
     const [groups, setGroups] = useState<GroupDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -88,7 +91,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
             setHasPreviousPage(result.hasPreviousPage);
             if (result.safePageIndex !== pageIndex) setPageIndex(result.safePageIndex);
         },
-        "Không thể tải danh sách bộ phận.",
+        t("loadError"),
         (message) => toast.error(message)
     );
 
@@ -135,17 +138,17 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
         try {
             if (formMode === "create") {
                 await GroupApi.createGroup(values);
-                toast.success("Tạo bộ phận thành công");
+                toast.success(t("createSuccess"));
             } else if (editingGroup) {
                 await GroupApi.updateGroup(editingGroup.id, values);
-                toast.success("Cập nhật bộ phận thành công");
+                toast.success(t("updateSuccess"));
             }
             setFormOpen(false);
             setEditingGroup(null);
             await fetchGroups();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo bộ phận thất bại" : "Cập nhật bộ phận thất bại"));
+            toast.error(getApiErrorMessage(err, formMode === "create" ? t("createError") : t("updateError")));
         } finally {
             setIsSaving(false);
         }
@@ -156,12 +159,12 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
         setIsDeleting(true);
         try {
             await GroupApi.deleteGroup(deletingGroup.id);
-            toast.success("Xoá bộ phận thành công");
+            toast.success(t("deleteSuccess"));
             setDeletingGroup(null);
             await fetchGroups();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá bộ phận thất bại"));
+            toast.error(getApiErrorMessage(err, t("deleteError")));
         } finally {
             setIsDeleting(false);
         }
@@ -176,7 +179,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Tìm theo mã hoặc tên bộ phận..."
+                            placeholder={t("searchPlaceholder")}
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <select
@@ -187,7 +190,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             }}
                             className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         >
-                            <option value="">Tất cả phòng ban</option>
+                            <option value="">{t("allDepartments")}</option>
                             {departments.map((department) => (
                                 <option key={department.id} value={department.id}>
                                     {department.departmentNameVn}
@@ -199,11 +202,11 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             disabled={isLoading}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
-                            Tìm kiếm
+                            {tCommon("search")}
                         </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${groups.length} / ${totalCount} bản ghi`}
+                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: groups.length, total: totalCount })}
                     </div>
                 </div>
 
@@ -215,17 +218,17 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã bộ phận</th>
-                                <th className="px-6 py-3">Tên bộ phận</th>
-                                <th className="px-6 py-3">Phòng ban</th>
-                                <th className="px-6 py-3 text-right">Thao tác</th>
+                                <th className="px-6 py-3">{t("colCode")}</th>
+                                <th className="px-6 py-3">{t("colNameVn")}</th>
+                                <th className="px-6 py-3">{t("colDepartment")}</th>
+                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && groups.length === 0 && (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu bộ phận.
+                                        {t("noData")}
                                     </td>
                                 </tr>
                             )}
@@ -239,16 +242,16 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                                             <button
                                                 onClick={() => openEditForm(group)}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                title="Sửa"
+                                                title={tCommon("edit")}
                                             >
-                                                Sửa
+                                                {tCommon("edit")}
                                             </button>
                                             <button
                                                 onClick={() => setDeletingGroup(group)}
                                                 className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                                title="Xoá"
+                                                title={tCommon("delete")}
                                             >
-                                                Xoá
+                                                {tCommon("delete")}
                                             </button>
                                         </div>
                                     </td>
@@ -264,17 +267,17 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                         disabled={!hasPreviousPage || isLoading}
                         onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
                     >
-                        Trang trước
+                        {tCommon("prevPage")}
                     </button>
                     <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
+                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
                     </div>
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasNextPage || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        Trang sau
+                        {tCommon("nextPage")}
                     </button>
                 </div>
             </section>
@@ -290,15 +293,13 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
 
             <ConfirmDialog
                 isOpen={deletingGroup !== null}
-                title="Xoá bộ phận"
-                message={
-                    <>
-                        Bạn có chắc muốn xoá bộ phận <strong>{deletingGroup?.groupNameVn}</strong> không? Hành động này không
-                        thể hoàn tác.
-                    </>
-                }
-                approveLabel="Xoá"
-                deniedLabel="Huỷ"
+                title={t("deleteTitle")}
+                message={t.rich("deleteMessage", {
+                    name: deletingGroup?.groupNameVn ?? "",
+                    b: (chunks) => <strong>{chunks}</strong>,
+                })}
+                approveLabel={tCommon("confirmDeleteApprove")}
+                deniedLabel={tCommon("confirmDeleteDenied")}
                 loading={isDeleting}
                 onApprove={handleDelete}
                 onDenied={() => {

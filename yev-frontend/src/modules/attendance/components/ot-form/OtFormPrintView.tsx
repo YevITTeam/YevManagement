@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Download } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalHistoryDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
@@ -485,6 +486,7 @@ function buildEmployeePages(employees: OtFormEmployeeDto[], paperSize: PaperSize
 }
 
 export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
+    const t = useTranslations("Attendance.OtFormPrint");
     const [form, setForm] = useState<OtFormDto | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [manualPaperSize, setManualPaperSize] = useState<PaperSize>("a4");
@@ -502,7 +504,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
             .then(setForm)
             .catch((err) => {
                 console.error(err);
-                setError(getApiErrorMessage(err, "Không thể tải đơn tăng ca để in."));
+                setError(getApiErrorMessage(err, t("loadError")));
             });
     }, [id]);
 
@@ -522,7 +524,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
     }
 
     if (!form) {
-        return <div className="p-8 text-sm text-[#5e3f3a]">Đang tải dữ liệu để in...</div>;
+        return <div className="p-8 text-sm text-[#5e3f3a]">{t("loading")}</div>;
     }
 
     const formId = form.id;
@@ -569,7 +571,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
         if (isExportingPdf) return;
         const nodes = pageNodesRef.current.filter((el): el is HTMLDivElement => el !== null);
         if (nodes.length === 0) {
-            toast.error("Không có nội dung để xuất PDF.");
+            toast.error(t("noContentError"));
             return;
         }
         setIsExportingPdf(true);
@@ -606,7 +608,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
             doc.save(`don-tang-ca-${formId}.pdf`);
         } catch (err) {
             console.error("Export PDF failed:", err);
-            toast.error(getApiErrorMessage(err, "Xuất file PDF thất bại. Vui lòng thử lại."));
+            toast.error(getApiErrorMessage(err, t("exportError")));
         } finally {
             setIsExportingPdf(false);
         }
@@ -623,7 +625,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
 
             <div className="no-print print:hidden mx-auto mb-4 flex max-w-4xl items-center justify-between rounded-lg border border-[#e0e3e5] bg-white px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-2 text-sm text-[#5e3f3a]">
-                    <span className="font-semibold text-[#191c1e]">Khổ giấy:</span>
+                    <span className="font-semibold text-[#191c1e]">{t("paperSizeLabel")}</span>
                     <button
                         onClick={() => selectPaperSize("a4")}
                         className={`cursor-pointer rounded-lg border px-3 py-1.5 font-semibold transition ${
@@ -632,7 +634,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                                 : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
                         }`}
                     >
-                        A4 (tối đa 10 người/trang đầu, 30 người/trang sau)
+                        {t("paperSizeA4")}
                     </button>
                     <button
                         onClick={() => selectPaperSize("a5")}
@@ -642,7 +644,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                                 : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
                         }`}
                     >
-                        A5 ngang (2 mặt — mặt sau tối đa 12 người/trang)
+                        {t("paperSizeA5")}
                     </button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -652,10 +654,10 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                         className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {isExportingPdf ? (
-                            "Đang xuất..."
+                            t("exporting")
                         ) : (
                             <>
-                                <Download className="h-4 w-4" /> Xuất PDF
+                                <Download className="h-4 w-4" /> {t("exportPdfButton")}
                             </>
                         )}
                     </button>
@@ -663,7 +665,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                         onClick={() => window.print()}
                         className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                     >
-                        In
+                        {t("printButton")}
                     </button>
                 </div>
             </div>

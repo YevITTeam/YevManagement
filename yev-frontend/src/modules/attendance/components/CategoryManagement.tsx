@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import DepartmentList from "./departments/DepartmentList";
 import GroupList from "./groups/GroupList";
@@ -11,15 +12,16 @@ import type { ListHandle } from "./list-toolbar";
 
 type CategoryTab = "departments" | "groups" | "reasons" | "ot-cases" | "employees";
 
-const tabs: { key: CategoryTab; label: string; addLabel: string }[] = [
-    { key: "departments", label: "Phòng ban", addLabel: "+ Thêm phòng ban" },
-    { key: "groups", label: "Bộ phận", addLabel: "+ Thêm bộ phận" },
-    { key: "reasons", label: "Lý do", addLabel: "+ Thêm lý do" },
-    { key: "ot-cases", label: "Trường hợp OT", addLabel: "+ Thêm trường hợp OT" },
-    { key: "employees", label: "Nhân viên", addLabel: "+ Thêm nhân viên" },
-];
-
 export default function CategoryManagement() {
+    const t = useTranslations("Attendance.CategoryManagement");
+    const tCommon = useTranslations("Common");
+    const tabs: { key: CategoryTab; label: string; addLabel: string }[] = [
+        { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments") },
+        { key: "groups", label: t("tabGroups"), addLabel: t("addGroups") },
+        { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons") },
+        { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases") },
+        { key: "employees", label: t("tabEmployees"), addLabel: t("addEmployees") },
+    ];
     const [activeTab, setActiveTab] = useState<CategoryTab>("departments");
     // Tab nào đã từng được xem thì mới mount (và giữ mounted luôn sau đó) — chỉ tab "departments"
     // (mặc định) mount ngay từ đầu. Tránh gọi song song cả 5 API mỗi lần vào màn "Danh mục" trong khi
@@ -84,10 +86,8 @@ export default function CategoryManagement() {
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Danh mục tăng ca</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Quản lý Phòng ban, Bộ phận, Lý do, Trường hợp OT và Nhân viên dùng khi lập đơn tăng ca.
-                    </p>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -96,7 +96,7 @@ export default function CategoryManagement() {
                         disabled={loading}
                         className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
-                        <RefreshCw className="h-3.5 w-3.5" /> Làm mới
+                        <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
                     </button>
                     <button
                         onClick={() => activeRef.current?.openCreate()}

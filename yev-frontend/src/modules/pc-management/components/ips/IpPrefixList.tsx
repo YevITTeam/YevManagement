@@ -82,7 +82,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
         setIsSaving(true);
         try {
             if (formMode === "create") {
-                await IpApi.createIpPrefix({
+                const created = await IpApi.createIpPrefix({
                     prefix: values.prefix.trim(),
                     branchId: values.branchId,
                     subnetMask: values.subnetMask.trim() || null,
@@ -91,7 +91,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                     alternateDns: values.alternateDns.trim() || null,
                     description: values.description.trim() || null,
                 });
-                toast.success("Tạo dải mạng thành công, đã sinh 255 địa chỉ IP.");
+                toast.success(`Tạo dải mạng thành công, đã sinh ${created.availableIpCount} địa chỉ IP.`);
             } else if (editingPrefix) {
                 await IpApi.updateIpPrefix(editingPrefix.id, {
                     branchId: values.branchId,

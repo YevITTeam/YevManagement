@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace Asset.Application.Dtos.AiChat
 {
-    // The 16-tool catalogue sent as Ollama's `tools` field (docs/ai-chat-be-huong-dan.md §5) — copied
+    // The 17-tool catalogue sent as Ollama's `tools` field (docs/ai-chat-be-huong-dan.md §5) — copied
     // verbatim from deviceTools.ts so the schema the model sees is identical to what it was tested
     // against on the FE. Keep this in sync with AiChatToolExecutorService.ExecuteAsync (1 case per
     // tool name here) and with the "Tool" enum-like set of names — adding a tool means updating both.
@@ -172,6 +172,18 @@ namespace Asset.Application.Dtos.AiChat
                 "type": "object",
                 "properties": { "keyword": { "type": "string", "description": "Từ khoá dải mạng hoặc mô tả" } },
                 "required": []
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "get_ip_prefix_usage",
+              "description": "Lấy tình trạng sử dụng của 1 dải mạng (IP prefix, dạng 3 octet vd \"10.45.1\"): IP nào đang được gán cho thiết bị nào, và IP nào còn trống chưa sử dụng, kèm tổng số IP đã dùng/còn trống. Dùng khi hỏi kiểu \"dải 10.45.1 còn IP nào trống\", \"IP nào trong dải 10.45.1 đang được dùng\". Muốn tra 1 địa chỉ IP cụ thể hoặc theo mã thiết bị thì dùng search_ip_addresses thay vì tool này.",
+              "parameters": {
+                "type": "object",
+                "properties": { "prefix": { "type": "string", "description": "Dải mạng 3 octet cần tra cứu, vd \"10.45.1\"" } },
+                "required": ["prefix"]
               }
             }
           },

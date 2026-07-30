@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
 
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
@@ -83,6 +84,7 @@ function TimePicker24h({
     onChange: (value: string) => void;
     disabled?: boolean;
 }) {
+    const t = useTranslations("Attendance.CreateOtForm");
     const [hour, minute] = value ? value.split(":") : ["", ""];
 
     return (
@@ -95,7 +97,7 @@ function TimePicker24h({
                 className={timeSelectClassName}
             >
                 <option value="" disabled>
-                    Giờ
+                    {t("hourPlaceholder")}
                 </option>
                 {HOUR_OPTIONS.map((h) => (
                     <option key={h} value={h}>
@@ -112,7 +114,7 @@ function TimePicker24h({
                 className={timeSelectClassName}
             >
                 <option value="" disabled>
-                    Phút
+                    {t("minutePlaceholder")}
                 </option>
                 {MINUTE_OPTIONS.map((m) => (
                     <option key={m} value={m}>
@@ -130,6 +132,8 @@ interface CreateOtFormPageProps {
 }
 
 export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
+    const t = useTranslations("Attendance.CreateOtForm");
+    const tCommon = useTranslations("Common");
     const router = useRouter();
     const { user } = useAuth();
     const isEditMode = otFormId !== undefined;
@@ -239,7 +243,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         OtFormApi.getOtFormById(otFormId)
             .then((data) => {
                 if (!data.isEditable) {
-                    setLoadError("Đơn đã qua ít nhất 1 cấp duyệt, không thể sửa nữa.");
+                    setLoadError(t("notEditableError"));
                     return;
                 }
                 setDepartmentId(data.departmentId);
@@ -264,7 +268,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             })
             .catch((err) => {
                 console.error(err);
-                setLoadError(getApiErrorMessage(err, "Không thể tải đơn tăng ca để sửa."));
+                setLoadError(getApiErrorMessage(err, t("loadEditError")));
             })
             .finally(() => setIsLoadingInitial(false));
     }, [isEditMode, otFormId]);
@@ -348,7 +352,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             !endTime ||
             selectedEmployeeIds.length === 0
         ) {
-            toast.error("Vui lòng điền đầy đủ thông tin bắt buộc và chọn ít nhất 1 nhân viên.");
+            toast.error(t("requiredFieldsError"));
             return;
         }
 
@@ -361,9 +365,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             if (employeeEndMinutes < orderStartMinutes) employeeEndMinutes += 24 * 60; // qua ngày hôm sau
             if (employeeEndMinutes <= orderStartMinutes || employeeEndMinutes > orderEndMinutes) {
                 const employee = groupEmployees.find((e) => e.id === employeeId);
-                toast.error(
-                    `Giờ kết thúc của nhân viên ${employee?.code ?? employeeId} phải sau giờ bắt đầu và không vượt quá giờ kết thúc của đơn.`
-                );
+                toast.error(t("employeeEndTimeError", { code: employee?.code ?? String(employeeId) }));
                 return;
             }
         }
@@ -394,18 +396,18 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             const result = isEditMode && otFormId
                 ? await OtFormApi.updateOtForm(otFormId, payload)
                 : await OtFormApi.createOtForm(payload);
-            toast.success(isEditMode ? "Cập nhật đơn tăng ca thành công" : "Tạo đơn tăng ca thành công");
+            toast.success(isEditMode ? t("updateSuccess") : t("createSuccess"));
             router.push({ pathname: "/ot/forms", query: { id: String(result.id) } });
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, isEditMode ? "Cập nhật đơn tăng ca thất bại" : "Tạo đơn tăng ca thất bại"));
+            toast.error(getApiErrorMessage(err, isEditMode ? t("updateError") : t("createError")));
         } finally {
             setIsSubmitting(false);
         }
     };
 
     if (isLoadingInitial) {
-        return <div className="py-16 text-center text-sm text-[#5e3f3a]">Đang tải dữ liệu...</div>;
+        return <div className="py-16 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>;
     }
 
     if (loadError) {
@@ -415,8 +417,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     if (isBlockedNoScope) {
         return (
             <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">
-                Tài khoản chưa được cấp quyền tạo đơn cho Bộ phận nào — liên hệ Admin để được gán phân quyền
-                (&quot;Phân quyền duyệt&quot;) hoặc liên kết hồ sơ nhân viên tương ứng.
+                {t("blockedNoScopeMessage")}
             </div>
         );
     }
@@ -424,46 +425,45 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{isEditMode ? `Sửa đơn tăng ca #${otFormId}` : "Tạo đơn tăng ca"}</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                    {isEditMode
-                        ? "Chỉ có thể sửa khi đơn đang Nháp hoặc chờ Trưởng phòng duyệt."
-                        : "Điền thông tin đơn, chọn nhân viên làm ngoài giờ. Đơn tạo ra ở trạng thái Nháp — cần Trưởng nhóm ký duyệt riêng (\"Chờ tôi ký duyệt\") mới vào luồng duyệt."}
-                </p>
+                <h1 className="text-2xl font-semibold text-[#191c1e]">{isEditMode ? t("titleEdit", { id: otFormId }) : t("titleCreate")}</h1>
+                <p className="mt-1 text-[15px] text-[#5e3f3a]">{isEditMode ? t("descEdit") : t("descCreate")}</p>
             </div>
 
             {!isEditMode && isScopeLocked && (
                 <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
-                    Tài khoản chỉ được tạo đơn cho <strong>{createScopes![0].groupNameVn}</strong> (
-                    {createScopes![0].departmentNameVn}) — đã tự điền sẵn.
+                    {t.rich("scopeLockedMessage", {
+                        groupName: createScopes![0].groupNameVn,
+                        departmentName: createScopes![0].departmentNameVn,
+                        b: (chunks) => <strong>{chunks}</strong>,
+                    })}
                 </div>
             )}
 
             {!isEditMode && isScopeRestricted && !isScopeLocked && (
                 <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
-                    Tài khoản chỉ được tạo đơn cho các Bộ phận sau: {createScopes!.map((s) => s.groupNameVn).join(", ")}.
+                    {t("scopeRestrictedMessage", { groupNames: createScopes!.map((s) => s.groupNameVn).join(", ") })}
                 </div>
             )}
 
             {!isEditMode && hasSignature === false && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
-                    <span>Bạn chưa đăng ký chữ ký cá nhân — cần đăng ký trước khi ký duyệt &quot;Người đề nghị&quot; ở bước sau.</span>
+                    <span>{t("noSignatureMessage")}</span>
                     <button
                         type="button"
                         onClick={() => router.push("/ot/signature")}
                         className="cursor-pointer rounded-lg border border-[#9a5b00] px-3 py-1.5 text-xs font-semibold text-[#9a5b00] transition hover:bg-[#fff0d8]"
                     >
-                        Đăng ký chữ ký
+                        {t("registerSignatureButton")}
                     </button>
                 </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Thông tin đơn</h2>
+                    <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("formInfoTitle")}</h2>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Phòng ban</span>
+                            <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
                             <select
                                 value={departmentId ?? ""}
                                 onChange={(event) => handleDepartmentChange(event.target.value)}
@@ -472,7 +472,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 className={fieldClassName}
                             >
                                 <option value="" disabled>
-                                    Chọn phòng ban...
+                                    {t("fieldDepartmentPlaceholder")}
                                 </option>
                                 {visibleDepartments.map((department) => (
                                     <option key={department.id} value={department.id}>
@@ -483,7 +483,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Bộ phận</span>
+                            <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
                             <select
                                 value={groupId ?? ""}
                                 onChange={(event) => handleGroupChange(event.target.value)}
@@ -492,7 +492,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 className={fieldClassName}
                             >
                                 <option value="" disabled>
-                                    {departmentId ? "Chọn bộ phận..." : "Chọn Phòng ban trước..."}
+                                    {departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
                                 </option>
                                 {visibleGroups.map((group) => (
                                     <option key={group.id} value={group.id}>
@@ -503,7 +503,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Lý do</span>
+                            <span className={fieldLabelClassName}>{t("fieldReason")}</span>
                             <select
                                 value={reasonId ?? ""}
                                 onChange={(event) => setReasonId(event.target.value ? Number(event.target.value) : null)}
@@ -512,7 +512,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 className={fieldClassName}
                             >
                                 <option value="" disabled>
-                                    Chọn lý do...
+                                    {t("fieldReasonPlaceholder")}
                                 </option>
                                 {reasons.map((reason) => (
                                     <option key={reason.id} value={reason.id}>
@@ -523,7 +523,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Trường hợp OT</span>
+                            <span className={fieldLabelClassName}>{t("fieldOtCase")}</span>
                             <select
                                 value={otCaseId ?? ""}
                                 onChange={(event) => setOtCaseId(event.target.value ? Number(event.target.value) : null)}
@@ -532,7 +532,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 className={fieldClassName}
                             >
                                 <option value="" disabled>
-                                    Chọn trường hợp...
+                                    {t("fieldOtCasePlaceholder")}
                                 </option>
                                 {otCases.map((otCase) => (
                                     <option key={otCase.id} value={otCase.id}>
@@ -543,7 +543,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Ngày</span>
+                            <span className={fieldLabelClassName}>{t("fieldDate")}</span>
                             <input
                                 type="date"
                                 value={date}
@@ -556,23 +556,23 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Giờ bắt đầu</span>
+                            <span className={fieldLabelClassName}>{t("fieldStartTime")}</span>
                             <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting} />
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Giờ kết thúc</span>
+                            <span className={fieldLabelClassName}>{t("fieldEndTime")}</span>
                             <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting} />
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Tổng số giờ</span>
+                            <span className={fieldLabelClassName}>{t("fieldTotalHour")}</span>
                             <input value={totalHour} disabled className={fieldClassName} />
                         </label>
                     </div>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Lý do chi tiết (tuỳ chọn)</span>
+                        <span className={fieldLabelClassName}>{t("fieldSubReason")}</span>
                         <textarea
                             value={subReason}
                             onChange={(event) => setSubReason(event.target.value)}
@@ -585,23 +585,23 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
                 <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                     <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                        Danh sách nhân viên làm ngoài giờ
+                        {t("employeeListTitle")}
                     </h2>
                     {!groupId ? (
-                        <p className="text-sm text-[#5e3f3a]">Chọn Bộ phận để hiện danh sách nhân viên.</p>
+                        <p className="text-sm text-[#5e3f3a]">{t("chooseGroupFirstHint")}</p>
                     ) : groupEmployees.length === 0 ? (
-                        <p className="text-sm text-[#5e3f3a]">Bộ phận này chưa có nhân viên.</p>
+                        <p className="text-sm text-[#5e3f3a]">{t("noEmployeesInGroup")}</p>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="min-w-full border-collapse text-left">
                                 <thead>
                                     <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                         <th className="w-10 px-3 py-2"></th>
-                                        <th className="px-3 py-2">Mã NV</th>
-                                        <th className="px-3 py-2">Họ và tên</th>
-                                        <th className="px-3 py-2">Lũy kế tháng/năm</th>
-                                        <th className="px-3 py-2">Giờ kết thúc</th>
-                                        <th className="px-3 py-2">Ghi chú</th>
+                                        <th className="px-3 py-2">{t("colEmployeeCode")}</th>
+                                        <th className="px-3 py-2">{t("colFullName")}</th>
+                                        <th className="px-3 py-2">{t("colAccumulation")}</th>
+                                        <th className="px-3 py-2">{t("colEndTime")}</th>
+                                        <th className="px-3 py-2">{t("colNote")}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -638,7 +638,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     <input
                                                         value={employeeOverrides[employee.id]?.noteVn ?? ""}
                                                         onChange={(event) => handleEmployeeOverrideChange(employee.id, "noteVn", event.target.value)}
-                                                        placeholder="Ghi chú (tuỳ chọn)..."
+                                                        placeholder={t("notePlaceholder")}
                                                         disabled={isSubmitting || !checked}
                                                         className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                                     />
@@ -650,7 +650,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             </table>
                         </div>
                     )}
-                    <p className="text-xs text-[#5e3f3a]">Đã chọn {selectedEmployeeIds.length} nhân viên.</p>
+                    <p className="text-xs text-[#5e3f3a]">{t("selectedCount", { count: selectedEmployeeIds.length })}</p>
                 </section>
 
                 <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
@@ -663,7 +663,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                         />
                         <span className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            Yêu cầu hỗ trợ khác (ăn uống / xe đưa đón / copy)
+                            {t("otherSupportLabel")}
                         </span>
                     </label>
 
@@ -678,7 +678,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         disabled={isSubmitting}
                                         className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                     />
-                                    <span className="text-sm text-[#191c1e]">Ăn uống</span>
+                                    <span className="text-sm text-[#191c1e]">{t("eatLabel")}</span>
                                 </label>
                                 <label className="flex items-center gap-2">
                                     <input
@@ -690,7 +690,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         disabled={isSubmitting}
                                         className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                     />
-                                    <span className="text-sm text-[#191c1e]">Xe đưa đón</span>
+                                    <span className="text-sm text-[#191c1e]">{t("transportationLabel")}</span>
                                 </label>
                                 <label className="flex items-center gap-2">
                                     <input
@@ -702,14 +702,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         disabled={isSubmitting}
                                         className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                     />
-                                    <span className="text-sm text-[#191c1e]">Sử dụng phòng copy</span>
+                                    <span className="text-sm text-[#191c1e]">{t("copyRoomLabel")}</span>
                                 </label>
                             </div>
 
                             {processPart.isEat && (
                                 <div className="grid gap-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-4 md:grid-cols-3">
                                     <label className="block">
-                                        <span className={fieldLabelClassName}>Phiếu chính</span>
+                                        <span className={fieldLabelClassName}>{t("mainTicketLabel")}</span>
                                         <input
                                             type="number"
                                             min={0}
@@ -722,7 +722,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         />
                                     </label>
                                     <label className="block">
-                                        <span className={fieldLabelClassName}>Phiếu phụ</span>
+                                        <span className={fieldLabelClassName}>{t("secondaryTicketLabel")}</span>
                                         <input
                                             type="number"
                                             min={0}
@@ -735,7 +735,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         />
                                     </label>
                                     <label className="block">
-                                        <span className={fieldLabelClassName}>Sữa</span>
+                                        <span className={fieldLabelClassName}>{t("milkLabel")}</span>
                                         <input
                                             type="number"
                                             min={0}
@@ -751,7 +751,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             )}
 
                             <label className="block">
-                                <span className={fieldLabelClassName}>Đề nghị khác (VN)</span>
+                                <span className={fieldLabelClassName}>{t("anotherSuggestionVnLabel")}</span>
                                 <input
                                     value={processPart.anotherSuggestionVn ?? ""}
                                     onChange={(event) =>
@@ -772,14 +772,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         disabled={isSubmitting}
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        Huỷ
+                        {t("cancelButton")}
                     </button>
                     <button
                         type="submit"
                         disabled={isSubmitting}
                         className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {isSubmitting ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo đơn"}
+                        {isSubmitting ? t("saving") : isEditMode ? t("updateSubmit") : t("createSubmit")}
                     </button>
                 </div>
             </form>

@@ -10,6 +10,7 @@ namespace Asset.Application.Interfaces.Service
     {
         Task<PagedResponse<IpAddressDto>> GetPagedAsync(IpAddressFilterRequest request);
         Task<List<IpAddressDto>> GetAvailableAsync(string? keyword);
+        Task<IpPrefixUsageDto?> GetPrefixUsageAsync(string prefix);
         Task<IpAddressDto> GetByIdAsync(int id);
         Task UpdateAsync(UpdateIpAddressDto request);
         Task<BulkUpdateIpAddressStatusResultDto> BulkUpdateStatusAsync(BulkUpdateIpAddressStatusRequestDto request);

@@ -2,21 +2,26 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Asset.Application.Dtos.AiChat;
-using Asset.Application.Interfaces.External;
 using Microsoft.Extensions.Configuration;
+using Shared.Application.Dtos.AiChat;
+using Shared.Application.Interfaces.External;
 using Shared.Core.Exceptions;
 
-namespace Asset.Infrastructure.External
+namespace Shared.Infrastructure.External
 {
     // Talks to Ollama's /api/chat (docs/ai-chat-be-huong-dan.md §3). HttpClient is a typed client
     // registered via AddHttpClient<IOllamaChatClient, OllamaChatClient>() in
     // CompanySystem.HostApi/Configurations/DependencyInjection.cs (BaseAddress/Timeout configured
     // there from appsettings AiChatSettings) — this class only knows the request/response shape.
+    //
+    // Moved here from Asset.Infrastructure (2026-07-29) when the Attendance module gained its own
+    // tool-calling chat: nothing in this class is domain-specific, the only thing that ever differed
+    // per module was the tool catalogue, which is now a `tools` parameter instead of a hard-coded
+    // reference to Asset's AiChatToolDefinitions.
     public class OllamaChatClient : IOllamaChatClient
     {
         // Thấp để model bám sát tool schema hơn — mặc định của Ollama (kế thừa từ Modelfile, thường
-        // 0.7-0.8) ưu tiên đa dạng câu chữ, nhưng với model nhỏ chạy nội bộ (gemma4:e2b) nhiệt độ cao
+        // 0.7-0.8) ưu tiên đa dạng câu chữ, nhưng với model nhỏ chạy nội bộ (gemma4) nhiệt độ cao
         // cũng làm quyết định "có nên gọi tool không" kém nhất quán hơn — cùng 1 dạng câu hỏi lúc gọi
         // đúng tool, lúc lại tự bịa câu trả lời. Hạ nhiệt độ không đổi tool schema (không rủi ro như
         // "format" — xem ai-chat-be-huong-dan.md §3), chỉ giảm tính ngẫu nhiên khi model chọn hướng đi.
@@ -29,25 +34,30 @@ namespace Asset.Infrastructure.External
         public OllamaChatClient(HttpClient httpClient, IConfiguration configuration)
         {
             _httpClient = httpClient;
-            _model = configuration["AiChatSettings:Model"] ?? "gemma4:e2b";
+            _model = configuration["AiChatSettings:Model"] ?? "gemma4:e4b";
             _temperature = configuration.GetValue<double?>("AiChatSettings:Temperature") ?? DefaultTemperature;
         }
 
         public async IAsyncEnumerable<OllamaChatChunkWire> StreamChatAsync(
             List<OllamaMessageWire> messages,
+            JsonNode tools,
+            bool think,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var requestBody = new JsonObject
             {
                 ["model"] = _model,
                 ["messages"] = JsonSerializer.SerializeToNode(messages, OllamaJson.Options),
-                // AiChatToolDefinitions.Tools is a shared, already-parsed JsonNode — DeepClone() is
-                // mandatory here since a JsonNode can only ever be attached to 1 parent at a time.
-                ["tools"] = AiChatToolDefinitions.Tools.DeepClone(),
+                // Caller-supplied catalogue — must already be a node the caller owns (see
+                // IOllamaChatClient's remark on DeepClone()), since a JsonNode can only ever be
+                // attached to 1 parent at a time.
+                ["tools"] = tools,
                 ["stream"] = true,
-                // Mandatory, not an optimization (see docs §3): the "thinking" model is ~7x slower
-                // with chain-of-thought enabled, for an identical final answer.
-                ["think"] = false,
+                // Default false is the measured-faster choice (docs §3: the "thinking" model is ~7x
+                // slower with chain-of-thought enabled, for an identical final answer) — but it is
+                // a per-request opt-in (AiChatRequestDto.Think, 2026-07-27 §11) rather than hardcoded,
+                // so a user can knowingly trade speed for deeper reasoning on a specific question.
+                ["think"] = think,
                 ["options"] = new JsonObject { ["temperature"] = _temperature }
             };
 

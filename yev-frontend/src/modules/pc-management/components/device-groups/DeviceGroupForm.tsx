@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
@@ -30,6 +31,8 @@ const fieldClassName =
 
 // docs/asset-api-fe.md §2.1 (2026-07-13) — mỗi Nhóm bắt buộc thuộc về 1 Bộ phận.
 export default function DeviceGroupForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: DeviceGroupFormProps) {
+    const t = useTranslations("Asset.DeviceGroup");
+    const tCommon = useTranslations("Common");
     const [values, setValues] = useState<DeviceGroupFormValues>(emptyValues);
     const [departments, setDepartments] = useState<DeviceDepartmentDto[]>([]);
 
@@ -72,13 +75,13 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="device-group-form-title" className="text-lg font-semibold text-[#191c1e]">
-                        {mode === "create" ? "Thêm nhóm" : "Cập nhật nhóm"}
+                        {mode === "create" ? t("createTitle") : t("editTitle")}
                     </h3>
                     <button
                         type="button"
                         onClick={() => !loading && onClose()}
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                        aria-label="Đóng"
+                        aria-label={tCommon("close")}
                     >
                         <X className="h-5 w-5" />
                     </button>
@@ -86,7 +89,7 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Bộ phận</span>
+                        <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
                         <select
                             value={values.departmentId || ""}
                             onChange={(event) => handleChange("departmentId", Number(event.target.value))}
@@ -95,7 +98,7 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                             className={fieldClassName}
                         >
                             <option value="" disabled>
-                                Chọn bộ phận...
+                                {t("fieldDepartmentPlaceholder")}
                             </option>
                             {departments.map((department) => (
                                 <option key={department.id} value={department.id}>
@@ -106,11 +109,11 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Mã nhóm</span>
+                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
                         <input
                             value={values.groupCode}
                             onChange={(event) => handleChange("groupCode", event.target.value)}
-                            placeholder="Nhập mã nhóm..."
+                            placeholder={t("fieldCodePlaceholder")}
                             disabled={loading}
                             autoFocus
                             required
@@ -119,11 +122,11 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Tên nhóm</span>
+                        <span className={fieldLabelClassName}>{t("fieldName")}</span>
                         <input
                             value={values.groupName}
                             onChange={(event) => handleChange("groupName", event.target.value)}
-                            placeholder="Nhập tên nhóm..."
+                            placeholder={t("fieldNamePlaceholder")}
                             disabled={loading}
                             required
                             className={fieldClassName}
@@ -137,14 +140,14 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                             disabled={loading}
                             className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            Huỷ
+                            {tCommon("cancel")}
                         </button>
                         <button
                             type="submit"
                             disabled={loading}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? "Đang lưu..." : mode === "create" ? "Tạo mới" : "Lưu thay đổi"}
+                            {loading ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
                         </button>
                     </div>
                 </form>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
@@ -14,6 +15,8 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 const PAGE_SIZE = 10;
 
 export default function DeviceTypeList() {
+    const t = useTranslations("Asset.DeviceType");
+    const tCommon = useTranslations("Common");
     const [deviceTypes, setDeviceTypes] = useState<DeviceTypeDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -43,7 +46,7 @@ export default function DeviceTypeList() {
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
         },
-        "Không thể tải danh sách loại thiết bị.",
+        t("loadError"),
         (message) => toast.error(message)
     );
 
@@ -75,17 +78,17 @@ export default function DeviceTypeList() {
         try {
             if (formMode === "create") {
                 await DeviceTypeApi.createDeviceType(values);
-                toast.success("Tạo loại thiết bị thành công");
+                toast.success(t("createSuccess"));
             } else if (editingDeviceType) {
                 await DeviceTypeApi.updateDeviceType(editingDeviceType.id, values);
-                toast.success("Cập nhật loại thiết bị thành công");
+                toast.success(t("updateSuccess"));
             }
             setFormOpen(false);
             setEditingDeviceType(null);
             await fetchDeviceTypes();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo loại thiết bị thất bại" : "Cập nhật loại thiết bị thất bại"));
+            toast.error(getApiErrorMessage(err, formMode === "create" ? t("createError") : t("updateError")));
         } finally {
             setIsSaving(false);
         }
@@ -96,12 +99,12 @@ export default function DeviceTypeList() {
         setIsDeleting(true);
         try {
             await DeviceTypeApi.deleteDeviceType(deletingDeviceType.id);
-            toast.success("Xoá loại thiết bị thành công");
+            toast.success(t("deleteSuccess"));
             setDeletingDeviceType(null);
             await fetchDeviceTypes();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá loại thiết bị thất bại"));
+            toast.error(getApiErrorMessage(err, t("deleteError")));
         } finally {
             setIsDeleting(false);
         }
@@ -111,8 +114,8 @@ export default function DeviceTypeList() {
         <div className="space-y-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Loại thiết bị</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">Quản lý các nhóm thiết bị và mô tả sử dụng.</p>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -121,13 +124,13 @@ export default function DeviceTypeList() {
                         disabled={isLoading}
                         className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
-                        <RefreshCw className="h-3.5 w-3.5" /> Làm mới
+                        <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
                     </button>
                     <button
                         onClick={openCreateForm}
                         className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
                     >
-                        + Thêm mới
+                        + {tCommon("add")}
                     </button>
                 </div>
             </div>
@@ -139,7 +142,7 @@ export default function DeviceTypeList() {
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Tìm theo mã hoặc tên loại thiết bị..."
+                            placeholder={t("searchPlaceholder")}
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
@@ -147,11 +150,11 @@ export default function DeviceTypeList() {
                             disabled={isLoading}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
-                            Tìm kiếm
+                            {tCommon("search")}
                         </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${deviceTypes.length} / ${totalCount} bản ghi`}
+                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: deviceTypes.length, total: totalCount })}
                     </div>
                 </div>
 
@@ -164,16 +167,16 @@ export default function DeviceTypeList() {
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
                                 <th className="px-6 py-3">ID</th>
-                                <th className="px-6 py-3">Mã loại</th>
-                                <th className="px-6 py-3">Tên loại</th>
-                                <th className="px-6 py-3 text-right">Thao tác</th>
+                                <th className="px-6 py-3">{t("colCode")}</th>
+                                <th className="px-6 py-3">{t("colName")}</th>
+                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && deviceTypes.length === 0 && (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu loại thiết bị.
+                                        {t("noData")}
                                     </td>
                                 </tr>
                             )}
@@ -187,16 +190,16 @@ export default function DeviceTypeList() {
                                             <button
                                                 onClick={() => openEditForm(deviceType)}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                title="Sửa"
+                                                title={tCommon("edit")}
                                             >
-                                                Sửa
+                                                {tCommon("edit")}
                                             </button>
                                             <button
                                                 onClick={() => setDeletingDeviceType(deviceType)}
                                                 className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                                title="Xoá"
+                                                title={tCommon("delete")}
                                             >
-                                                Xoá
+                                                {tCommon("delete")}
                                             </button>
                                         </div>
                                     </td>
@@ -212,17 +215,17 @@ export default function DeviceTypeList() {
                         disabled={!hasPreviousPage || isLoading}
                         onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
                     >
-                        Trang trước
+                        {tCommon("prevPage")}
                     </button>
                     <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
+                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
                     </div>
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasNextPage || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        Trang sau
+                        {tCommon("nextPage")}
                     </button>
                 </div>
             </section>
@@ -238,15 +241,13 @@ export default function DeviceTypeList() {
 
             <ConfirmDialog
                 isOpen={deletingDeviceType !== null}
-                title="Xoá loại thiết bị"
-                message={
-                    <>
-                        Bạn có chắc muốn xoá loại thiết bị <strong>{deletingDeviceType?.typeName}</strong> không? Hành động này
-                        không thể hoàn tác.
-                    </>
-                }
-                approveLabel="Xoá"
-                deniedLabel="Huỷ"
+                title={t("deleteTitle")}
+                message={t.rich("deleteMessage", {
+                    name: deletingDeviceType?.typeName ?? "",
+                    b: (chunks) => <strong>{chunks}</strong>,
+                })}
+                approveLabel={tCommon("confirmDeleteApprove")}
+                deniedLabel={tCommon("confirmDeleteDenied")}
                 loading={isDeleting}
                 onApprove={handleDelete}
                 onDenied={() => {

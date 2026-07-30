@@ -129,7 +129,8 @@ namespace Asset.Application.Services
             await _unitOfWork.IpPrefixes.AddAsync(newPrefix);
             await _unitOfWork.SaveChangesAsync();
 
-            var childAddresses = Enumerable.Range(1, 255)
+            // .255 là broadcast address (không được dùng cho thiết bị nào) nên không sinh — dải chỉ còn .1..254.
+            var childAddresses = Enumerable.Range(1, 254)
                 .Select(n => new IpAddress
                 {
                     IpAddress1 = $"{request.Prefix}.{n}",
@@ -168,7 +169,7 @@ namespace Asset.Application.Services
         // Validate the network configuration when creating a range (2026-07-11) — applies the
         // logic from the internal ChangeIP tool (SetIP.cs), using NetworkHelper: every IP field
         // entered (SubnetMask/Gateway/PreferredDns/AlternateDns), if provided, must be a valid IPv4;
-        // Gateway must be in the same subnet as the IP range that will be generated (prefix.1..prefix.255)
+        // Gateway must be in the same subnet as the IP range that will be generated (prefix.1..prefix.254)
         // and must not match the network/broadcast address. Shared by Create/Update — takes the raw
         // values directly since Update has no separate Prefix field (the immutable prefix is taken
         // from the existing entity, see UpdateAsync below).
@@ -188,7 +189,7 @@ namespace Asset.Application.Services
                 if (!NetworkHelper.IsValidIpv4(gateway))
                     throw new DomainException($"Gateway '{gateway}' không hợp lệ.");
 
-                // Gateway must belong to the exact 3-octet network of the prefix (the child IP range is prefix.1..255).
+                // Gateway must belong to the exact 3-octet network of the prefix (the child IP range is prefix.1..254).
                 if (!string.Equals(NetworkHelper.GetNetworkClass(gateway), prefix, StringComparison.OrdinalIgnoreCase))
                     throw new DomainException($"Gateway '{gateway}' không nằm trong dải mạng '{prefix}'.");
 
@@ -205,7 +206,7 @@ namespace Asset.Application.Services
 
         // Update: only allows editing Branch + network configuration (SubnetMask/Gateway/DNS/Description)
         // when there is an actual change (e.g. changing DNS/Gateway), instead of having to delete the old
-        // range and recreate it. Prefix (the 3-octet identifier, with 255 child IpAddress rows already
+        // range and recreate it. Prefix (the 3-octet identifier, with 254 child IpAddress rows already
         // generated) remains immutable — it is not part of UpdateIpPrefixDto.
         public async Task UpdateAsync(UpdateIpPrefixDto request)
         {

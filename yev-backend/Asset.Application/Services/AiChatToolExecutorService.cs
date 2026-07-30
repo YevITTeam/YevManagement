@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Asset.Application.Dtos.AiChat;
 using Asset.Application.Dtos.AuditTrails;
 using Asset.Application.Dtos.Devices;
 using Asset.Application.Dtos.IpAddresses;
@@ -9,7 +11,7 @@ using Shared.Application.Wrapper;
 
 namespace Asset.Application.Services
 {
-    // Implements the 16 read-only tools from docs/ai-chat-be-huong-dan.md §5 by calling straight into
+    // Implements the 17 read-only tools from docs/ai-chat-be-huong-dan.md §5 by calling straight into
     // the existing Asset Application services — no repository access of its own, no duplicated
     // business rules (soft-delete filtering, status text, etc. all come from those services as-is).
     // Every tool caps results at MaxResults so a chatty tool doesn't flood the model's context.
@@ -78,17 +80,21 @@ namespace Asset.Application.Services
             _assetSettingService = assetSettingService;
         }
 
-        public async Task<string> ExecuteAsync(string toolName, JsonElement arguments, CancellationToken cancellationToken)
+        public async Task<AiChatToolExecutionResult> ExecuteAsync(string toolName, JsonElement arguments, CancellationToken cancellationToken)
         {
+            // Populated only by the device-related tools below — used to emit {"type":"device"} stream
+            // events for the FE's deep-link buttons (docs §11). Never sent to the model.
+            var deviceReferences = new List<AiChatDeviceReferenceDto>();
+
             object result;
             try
             {
                 result = toolName switch
                 {
-                    "search_devices" => await SearchDevicesAsync(arguments),
-                    "get_device_detail" => await GetDeviceDetailAsync(arguments),
-                    "get_device_transfer_history" => await GetDeviceTransferHistoryAsync(arguments),
-                    "get_device_change_history" => await GetDeviceChangeHistoryAsync(arguments),
+                    "search_devices" => await SearchDevicesAsync(arguments, deviceReferences),
+                    "get_device_detail" => await GetDeviceDetailAsync(arguments, deviceReferences),
+                    "get_device_transfer_history" => await GetDeviceTransferHistoryAsync(arguments, deviceReferences),
+                    "get_device_change_history" => await GetDeviceChangeHistoryAsync(arguments, deviceReferences),
                     "search_device_types" => await SearchPagedAsync(() => _deviceTypeService.GetPagedAsync(1, MaxResults, GetStringArg(arguments, "keyword"))),
                     "search_device_groups" => await SearchPagedAsync(() => _deviceGroupService.GetPagedAsync(1, MaxResults, GetStringArg(arguments, "keyword"))),
                     "search_device_departments" => await SearchPagedAsync(() => _deviceDepartmentService.GetPagedAsync(1, MaxResults, GetStringArg(arguments, "keyword"))),
@@ -98,6 +104,7 @@ namespace Asset.Application.Services
                     "search_suppliers" => await SearchPagedAsync(() => _supplierService.GetPagedAsync(1, MaxResults, GetStringArg(arguments, "keyword"))),
                     "search_software_groups" => await SearchPagedAsync(() => _softwareGroupService.GetPagedAsync(1, MaxResults, GetStringArg(arguments, "keyword"))),
                     "search_ip_prefixes" => await SearchPagedAsync(() => _ipPrefixService.GetPagedAsync(1, MaxResults, GetStringArg(arguments, "keyword"))),
+                    "get_ip_prefix_usage" => await GetIpPrefixUsageAsync(arguments),
                     "get_device_report" => await GetDeviceReportAsync(arguments),
                     "get_asset_settings" => await _assetSettingService.GetAsync(),
                     "search_audit_trail" => await SearchAuditTrailAsync(arguments),
@@ -109,68 +116,78 @@ namespace Asset.Application.Services
                 result = new { error = ex.Message };
             }
 
-            return JsonSerializer.Serialize(result, JsonOptions);
+            return new AiChatToolExecutionResult
+            {
+                Json = JsonSerializer.Serialize(result, JsonOptions),
+                DeviceReferences = deviceReferences
+            };
         }
 
-        private async Task<object> SearchDevicesAsync(JsonElement args)
+        private async Task<object> SearchDevicesAsync(JsonElement args, List<AiChatDeviceReferenceDto> deviceReferences)
         {
             var request = new DeviceFilterRequest
             {
                 PageIndex = 1,
                 PageSize = MaxResults,
-                DeviceCode = GetStringArg(args, "deviceCode"),
+                DeviceCode = GetDeviceCodeArg(args, "deviceCode"),
                 Manager = GetStringArg(args, "manager"),
                 IpAddress = GetStringArg(args, "ipAddress"),
                 Email = GetStringArg(args, "email"),
                 SupplierName = GetStringArg(args, "supplierName")
             };
             var result = await _deviceService.GetDevicesForGridAsync(request);
+            deviceReferences.AddRange(result.Data.Select(d => new AiChatDeviceReferenceDto { Id = d.Id, DeviceCode = d.DeviceCode }));
             return result.Data;
         }
 
-        private async Task<object> GetDeviceDetailAsync(JsonElement args)
+        private async Task<object> GetDeviceDetailAsync(JsonElement args, List<AiChatDeviceReferenceDto> deviceReferences)
         {
-            var deviceCode = GetStringArg(args, "deviceCode");
+            var deviceCode = GetDeviceCodeArg(args, "deviceCode");
             if (deviceCode == null) return MissingArgError("deviceCode");
 
-            var deviceId = await ResolveDeviceIdByCodeAsync(deviceCode);
-            if (deviceId == null) return DeviceNotFoundError(deviceCode);
+            var resolved = await ResolveDeviceIdByCodeAsync(deviceCode);
+            if (resolved == null) return DeviceNotFoundError(deviceCode);
 
-            return await _deviceService.GetDetailAsync(deviceId.Value);
+            var detail = await _deviceService.GetDetailAsync(resolved.Value.Id);
+            deviceReferences.Add(new AiChatDeviceReferenceDto { Id = resolved.Value.Id, DeviceCode = resolved.Value.DeviceCode });
+            return detail;
         }
 
-        private async Task<object> GetDeviceTransferHistoryAsync(JsonElement args)
+        private async Task<object> GetDeviceTransferHistoryAsync(JsonElement args, List<AiChatDeviceReferenceDto> deviceReferences)
         {
-            var deviceCode = GetStringArg(args, "deviceCode");
+            var deviceCode = GetDeviceCodeArg(args, "deviceCode");
             if (deviceCode == null) return MissingArgError("deviceCode");
 
-            var deviceId = await ResolveDeviceIdByCodeAsync(deviceCode);
-            if (deviceId == null) return DeviceNotFoundError(deviceCode);
+            var resolved = await ResolveDeviceIdByCodeAsync(deviceCode);
+            if (resolved == null) return DeviceNotFoundError(deviceCode);
 
-            var history = await _transferHistoryService.GetByDeviceIdAsync(deviceId.Value);
+            var history = await _transferHistoryService.GetByDeviceIdAsync(resolved.Value.Id);
+            deviceReferences.Add(new AiChatDeviceReferenceDto { Id = resolved.Value.Id, DeviceCode = resolved.Value.DeviceCode });
             return history.Take(MaxResults).ToList();
         }
 
-        private async Task<object> GetDeviceChangeHistoryAsync(JsonElement args)
+        private async Task<object> GetDeviceChangeHistoryAsync(JsonElement args, List<AiChatDeviceReferenceDto> deviceReferences)
         {
-            var deviceCode = GetStringArg(args, "deviceCode");
+            var deviceCode = GetDeviceCodeArg(args, "deviceCode");
             if (deviceCode == null) return MissingArgError("deviceCode");
 
-            var deviceId = await ResolveDeviceIdByCodeAsync(deviceCode);
-            if (deviceId == null) return DeviceNotFoundError(deviceCode);
+            var resolved = await ResolveDeviceIdByCodeAsync(deviceCode);
+            if (resolved == null) return DeviceNotFoundError(deviceCode);
 
-            var history = await _auditTrailService.GetByRecordAsync("Device", deviceId.Value);
+            var history = await _auditTrailService.GetByRecordAsync("Device", resolved.Value.Id);
+            deviceReferences.Add(new AiChatDeviceReferenceDto { Id = resolved.Value.Id, DeviceCode = resolved.Value.DeviceCode });
             return history.Take(MaxResults).ToList();
         }
 
         private async Task<object> SearchIpAddressesAsync(JsonElement args)
         {
-            var deviceCode = GetStringArg(args, "deviceCode");
+            var deviceCode = GetDeviceCodeArg(args, "deviceCode");
             int? deviceId = null;
             if (deviceCode != null)
             {
-                deviceId = await ResolveDeviceIdByCodeAsync(deviceCode);
-                if (deviceId == null) return DeviceNotFoundError(deviceCode);
+                var resolved = await ResolveDeviceIdByCodeAsync(deviceCode);
+                if (resolved == null) return DeviceNotFoundError(deviceCode);
+                deviceId = resolved.Value.Id;
             }
 
             var request = new IpAddressFilterRequest
@@ -182,6 +199,29 @@ namespace Asset.Application.Services
             };
             var result = await _ipAddressService.GetPagedAsync(request);
             return result.Data;
+        }
+
+        private async Task<object> GetIpPrefixUsageAsync(JsonElement args)
+        {
+            var prefix = GetStringArg(args, "prefix");
+            if (prefix == null) return MissingArgError("prefix");
+
+            var usage = await _ipAddressService.GetPrefixUsageAsync(prefix);
+            if (usage == null) return new { error = $"Không tìm thấy dải mạng '{prefix}'." };
+
+            // Same MaxResults cap as every other list tool (§5) — counts are computed from the full
+            // set BEFORE truncation so the model can still state the real totals even when the list
+            // itself is cut short (a /24 can have 200+ free IPs, far more than is worth spending
+            // tokens on).
+            return new
+            {
+                usage.Prefix,
+                usage.TotalIpCount,
+                usage.UsedCount,
+                usage.AvailableCount,
+                UsedIpAddresses = usage.UsedIpAddresses.Take(MaxResults).ToList(),
+                AvailableIpAddresses = usage.AvailableIpAddresses.Take(MaxResults).ToList()
+            };
         }
 
         private async Task<object> GetDeviceReportAsync(JsonElement args)
@@ -235,8 +275,10 @@ namespace Asset.Application.Services
         }
 
         // Model/user only knows the DeviceCode — resolve to an Id the same way the import services do
-        // (Contains match, prefer an exact case-insensitive hit, else the first result).
-        private async Task<int?> ResolveDeviceIdByCodeAsync(string deviceCode)
+        // (Contains match, prefer an exact case-insensitive hit, else the first result). Returns the
+        // canonical DeviceCode alongside the Id so callers can build a device reference for the FE's
+        // deep-link button (docs §11) without a second query.
+        private async Task<(int Id, string DeviceCode)?> ResolveDeviceIdByCodeAsync(string deviceCode)
         {
             var result = await _deviceService.GetDevicesForGridAsync(new DeviceFilterRequest
             {
@@ -246,8 +288,9 @@ namespace Asset.Application.Services
             });
             if (result.Data.Count == 0) return null;
 
-            var exact = result.Data.FirstOrDefault(d => string.Equals(d.DeviceCode, deviceCode, StringComparison.OrdinalIgnoreCase));
-            return (exact ?? result.Data[0]).Id;
+            var match = result.Data.FirstOrDefault(d => string.Equals(d.DeviceCode, deviceCode, StringComparison.OrdinalIgnoreCase))
+                ?? result.Data[0];
+            return (match.Id, match.DeviceCode);
         }
 
         private async Task<int?> ResolveDeviceTypeIdByNameAsync(string name)
@@ -290,5 +333,24 @@ namespace Asset.Application.Services
                 ? parsed
                 : null;
         }
+
+        // Every real DeviceCode in this system is "letters-digits" (e.g. "ydc-9875") — but users typing
+        // into chat (and the model itself) routinely drop/mangle the dash: "ydc 9875", "ydc_9875",
+        // "ydc9875". The system prompt already tells the model to normalize this itself, but that is
+        // not reliable with a small local model (docs ai-chat-be-huong-dan.md §11) — this is the
+        // deterministic fix, applied to every tool argument that resolves a device by code (2026-07-27).
+        // Anchored end-to-end (^...$) on purpose: only a plain "letters then digits, nothing else"
+        // string gets rewritten, so a code that doesn't fit that 2-part shape is left untouched rather
+        // than risking a wrong rewrite (DeviceCode has no format validation — see CreateDeviceDto).
+        private static readonly Regex DeviceCodeSeparatorPattern = new(@"^([A-Za-z]+)[\s_-]*([0-9]+)$", RegexOptions.Compiled);
+
+        private static string? NormalizeDeviceCode(string? raw)
+        {
+            if (raw == null) return null;
+            var match = DeviceCodeSeparatorPattern.Match(raw);
+            return match.Success ? $"{match.Groups[1].Value}-{match.Groups[2].Value}" : raw;
+        }
+
+        private static string? GetDeviceCodeArg(JsonElement args, string name) => NormalizeDeviceCode(GetStringArg(args, name));
     }
 }

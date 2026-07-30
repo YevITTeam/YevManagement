@@ -187,7 +187,7 @@ export default function IpPrefixForm({ isOpen, mode, initial, loading = false, o
 
                 <p className="mb-4 rounded-lg border border-[#d8e2ff] bg-[#f4f5ff] px-3 py-2 text-sm text-[#004494]">
                     {mode === "create"
-                        ? "Tạo dải mạng sẽ tự động sinh 255 địa chỉ IP con. Dải mạng (Prefix) cố định ngay lúc tạo — không thể sửa lại sau này, chỉ có thể xoá rồi tạo lại."
+                        ? "Tạo dải mạng sẽ tự động sinh 254 địa chỉ IP con (từ .1 đến .254, không sinh .0 và .255). Dải mạng (Prefix) cố định ngay lúc tạo — không thể sửa lại sau này, chỉ có thể xoá rồi tạo lại."
                         : "Có thể sửa Chi nhánh và cấu hình mạng. Dải mạng (Prefix) không sửa được — muốn đổi phải xoá rồi tạo lại."}
                 </p>
 

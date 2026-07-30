@@ -1,11 +1,11 @@
-﻿using Asset.Application.Interfaces.External;
-using Asset.Infrastructure.Context;
-using Asset.Infrastructure.External;
+﻿using Asset.Infrastructure.Context;
 using Attendance.Infrastructure.Context;
 using Identity.Infrastructure.Authentication;
 using Identity.Infrastructure.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
+using Shared.Application.Interfaces.External;
+using Shared.Infrastructure.External;
 
 namespace CompanySystem.HostApi.Configurations
 {
@@ -48,6 +48,9 @@ namespace CompanySystem.HostApi.Configurations
             // AI Chat -> Ollama typed HttpClient (docs/ai-chat-be-huong-dan.md). Not picked up by the
             // Scrutor scan above (class name ends in "Client", not Repository/UnitOfWork/Service) —
             // needs BaseAddress/Timeout, so it's registered explicitly instead.
+            // ONE registration serves every module that runs a tool-calling chat (Asset AI Chat +
+            // Attendance AI Chat) — the client lives in Shared.* and takes each module's tool
+            // catalogue as a parameter, so there is nothing module-specific to register twice.
             services.AddHttpClient<IOllamaChatClient, OllamaChatClient>((_, client) =>
             {
                 var baseUrl = configuration["AiChatSettings:OllamaBaseUrl"] ?? "http://localhost:11434";

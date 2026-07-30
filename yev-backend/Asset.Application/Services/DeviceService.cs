@@ -190,7 +190,8 @@ namespace Asset.Application.Services
         public async Task<List<DeviceReportItemDto>> GetReportListAsync(DeviceReportFilterRequest request)
         {
             var query = _unitOfWork.Devices.GetQueryable(false, d => d.IpAddresses)
-                .Where(d => !d.IsDeleted && d.Status == (int)DeviceStatus.InUse);
+                .Where(d => !d.IsDeleted
+                    && (d.Status == (int)DeviceStatus.PendingUse || d.Status == (int)DeviceStatus.InUse));
 
             if (request.DeviceTypeId.HasValue)
                 query = query.Where(d => d.DeviceTypeId == request.DeviceTypeId.Value);

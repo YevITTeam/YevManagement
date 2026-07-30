@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -15,6 +16,8 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 const PAGE_SIZE = 10;
 
 const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeList({ onLoadingChange }, ref) {
+    const t = useTranslations("Attendance.Employee");
+    const tCommon = useTranslations("Common");
     const [employees, setEmployees] = useState<EmployeeDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -46,7 +49,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
         },
-        "Không thể tải danh sách nhân viên.",
+        t("loadError"),
         (message) => toast.error(message)
     );
 
@@ -87,17 +90,17 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         try {
             if (formMode === "create") {
                 await EmployeeApi.createEmployee(values);
-                toast.success("Tạo nhân viên thành công");
+                toast.success(t("createSuccess"));
             } else if (editingEmployee) {
                 await EmployeeApi.updateEmployee(editingEmployee.id, values);
-                toast.success("Cập nhật nhân viên thành công");
+                toast.success(t("updateSuccess"));
             }
             setFormOpen(false);
             setEditingEmployee(null);
             await fetchEmployees();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo nhân viên thất bại" : "Cập nhật nhân viên thất bại"));
+            toast.error(getApiErrorMessage(err, formMode === "create" ? t("createError") : t("updateError")));
         } finally {
             setIsSaving(false);
         }
@@ -108,12 +111,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         setIsDeleting(true);
         try {
             await EmployeeApi.deleteEmployee(deletingEmployee.id);
-            toast.success("Xoá nhân viên thành công");
+            toast.success(t("deleteSuccess"));
             setDeletingEmployee(null);
             await fetchEmployees();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá nhân viên thất bại"));
+            toast.error(getApiErrorMessage(err, t("deleteError")));
         } finally {
             setIsDeleting(false);
         }
@@ -128,7 +131,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Tìm theo mã hoặc tên nhân viên..."
+                            placeholder={t("searchPlaceholder")}
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
@@ -136,17 +139,17 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             disabled={isLoading}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
-                            Tìm kiếm
+                            {tCommon("search")}
                         </button>
                         <button
                             onClick={() => setImportOpen(true)}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
-                            Import Excel
+                            {t("importExcel")}
                         </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${employees.length} / ${totalCount} bản ghi`}
+                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
                     </div>
                 </div>
 
@@ -158,20 +161,20 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã NV</th>
-                                <th className="px-6 py-3">Họ và tên</th>
-                                <th className="px-6 py-3">Tài khoản AD</th>
-                                <th className="px-6 py-3">Bộ phận</th>
-                                <th className="px-6 py-3">Lũy kế tháng</th>
-                                <th className="px-6 py-3">Lũy kế năm</th>
-                                <th className="px-6 py-3 text-right">Thao tác</th>
+                                <th className="px-6 py-3">{t("colCode")}</th>
+                                <th className="px-6 py-3">{t("colFullName")}</th>
+                                <th className="px-6 py-3">{t("colUserName")}</th>
+                                <th className="px-6 py-3">{t("colGroup")}</th>
+                                <th className="px-6 py-3">{t("colMonthToDate")}</th>
+                                <th className="px-6 py-3">{t("colYearToDate")}</th>
+                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && employees.length === 0 && (
                                 <tr>
                                     <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu nhân viên.
+                                        {t("noData")}
                                     </td>
                                 </tr>
                             )}
@@ -193,16 +196,16 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                             <button
                                                 onClick={() => openEditForm(employee)}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                title="Sửa"
+                                                title={tCommon("edit")}
                                             >
-                                                Sửa
+                                                {tCommon("edit")}
                                             </button>
                                             <button
                                                 onClick={() => setDeletingEmployee(employee)}
                                                 className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                                title="Xoá"
+                                                title={tCommon("delete")}
                                             >
-                                                Xoá
+                                                {tCommon("delete")}
                                             </button>
                                         </div>
                                     </td>
@@ -219,17 +222,17 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         disabled={!hasPreviousPage || isLoading}
                         onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
                     >
-                        Trang trước
+                        {tCommon("prevPage")}
                     </button>
                     <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
+                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
                     </div>
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasNextPage || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        Trang sau
+                        {tCommon("nextPage")}
                     </button>
                 </div>
             </section>
@@ -251,18 +254,13 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
 
             <ConfirmDialog
                 isOpen={deletingEmployee !== null}
-                title="Xoá nhân viên"
-                message={
-                    <>
-                        Bạn có chắc muốn xoá nhân viên{" "}
-                        <strong>
-                            {deletingEmployee?.lastName} {deletingEmployee?.firstName}
-                        </strong>{" "}
-                        không? Hành động này không thể hoàn tác.
-                    </>
-                }
-                approveLabel="Xoá"
-                deniedLabel="Huỷ"
+                title={t("deleteTitle")}
+                message={t.rich("deleteMessage", {
+                    name: deletingEmployee ? `${deletingEmployee.lastName} ${deletingEmployee.firstName}` : "",
+                    b: (chunks) => <strong>{chunks}</strong>,
+                })}
+                approveLabel={tCommon("confirmDeleteApprove")}
+                deniedLabel={tCommon("confirmDeleteDenied")}
                 loading={isDeleting}
                 onApprove={handleDelete}
                 onDenied={() => {

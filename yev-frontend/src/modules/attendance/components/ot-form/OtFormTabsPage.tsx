@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import OtFormListPage from "./OtFormListPage";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -9,19 +10,19 @@ import { SUBMITTER_ROLE_NAME } from "@/modules/attendance/types/enums";
 
 type OtFormTabKey = "my-forms" | "pending-submissions" | "pending-approvals" | "my-actions" | "my-participations";
 
-const ALL_TABS: { key: OtFormTabKey; label: string }[] = [
-    { key: "my-forms", label: "Đơn của tôi" },
-    { key: "pending-submissions", label: "Chờ tôi ký duyệt" },
-    { key: "pending-approvals", label: "Chờ tôi duyệt" },
-    { key: "my-actions", label: "Đơn đã xử lý" },
-    { key: "my-participations", label: "Đơn tôi tham gia" },
-];
-
 // docs/attendance-api-fe.md §1.1/§1.3.B (gộp 2026-07-17) — gộp 4 màn danh sách cũ ("Đơn của tôi"/
 // "Chờ tôi ký duyệt"/"Chờ tôi duyệt"/"Đơn đã xử lý") + 1 tab mới "Đơn tôi tham gia" thành 1 màn "Đơn
 // tăng ca" duy nhất. Chỉ gộp ở tầng UI — BE vẫn giữ nguyên 5 API riêng biệt, mỗi tab gọi đúng 1 API
 // (OtFormListPage đã tự làm việc này qua prop `mode`).
 export default function OtFormTabsPage() {
+    const t = useTranslations("Attendance.OtFormTabs");
+    const ALL_TABS: { key: OtFormTabKey; label: string }[] = [
+        { key: "my-forms", label: t("tabMyForms") },
+        { key: "pending-submissions", label: t("tabPendingSubmissions") },
+        { key: "pending-approvals", label: t("tabPendingApprovals") },
+        { key: "my-actions", label: t("tabMyActions") },
+        { key: "my-participations", label: t("tabMyParticipations") },
+    ];
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
@@ -59,8 +60,8 @@ export default function OtFormTabsPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">Đơn tăng ca</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">Danh sách đơn tăng ca theo từng vai trò của bạn.</p>
+                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
             </div>
 
             <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">

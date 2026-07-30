@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 interface SignatureUploadProps {
     // Base64 thuần (không kèm prefix data:image/...;base64,) của chữ ký đang có hiệu lực, để hiện preview
@@ -19,6 +20,8 @@ function stripDataUrlPrefix(dataUrl: string) {
 // (docs/attendance-api-fe.md đầu file + §1.3.D + §6: "Upload file ảnh, KHÔNG phải canvas ký bằng
 // chuột/tay ... FE chỉ cần <input type="file" accept="image/*"> rồi convert sang base64").
 export default function SignatureUpload({ initialImage, onChange, disabled = false }: SignatureUploadProps) {
+    const t = useTranslations("Attendance.SignatureUpload");
+    const tCommon = useTranslations("Common");
     const inputRef = useRef<HTMLInputElement>(null);
     const [preview, setPreview] = useState<string | null>(initialImage ?? null);
 
@@ -46,12 +49,12 @@ export default function SignatureUpload({ initialImage, onChange, disabled = fal
                 // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
                 <img
                     src={`data:image/png;base64,${preview}`}
-                    alt="Ảnh chữ ký vừa chọn"
+                    alt={t("newImageAlt")}
                     className="h-24 w-full rounded-lg border border-[#e0e3e5] bg-white object-contain"
                 />
             ) : (
                 <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-[#e0e3e5] bg-[#f8fafc] text-xs text-[#5e3f3a]">
-                    Chưa chọn ảnh chữ ký
+                    {t("noImageSelected")}
                 </div>
             )}
             <div className="flex items-center justify-between gap-3">
@@ -70,7 +73,7 @@ export default function SignatureUpload({ initialImage, onChange, disabled = fal
                         disabled={disabled}
                         className="cursor-pointer whitespace-nowrap text-xs font-semibold text-[#930006] transition hover:text-[#e3000f] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        Xoá
+                        {tCommon("delete")}
                     </button>
                 )}
             </div>

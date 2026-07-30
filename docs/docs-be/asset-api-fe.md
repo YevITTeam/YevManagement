@@ -65,10 +65,10 @@ DTO: `{id, code, name}`. POST/PUT body có Code+Name (`[Required]`), PUT thêm `
 // GET {id} → data
 { "id":28, "prefix":"1.1.1", "branchId":2, "branchName":"...",
   "subnetMask":"255.255.255.0", "gateway":"...", "preferredDns":"...", "alternateDns":"...",
-  "description":null, "usedIpCount":12, "availableIpCount":243 }
+  "description":null, "usedIpCount":12, "availableIpCount":242 }
 // grid-list/all sort theo GIÁ TRỊ IP (10.45.2 trước 10.45.10)
 ```
-- **POST tự sinh 255 IpAddress con** (`n=1..255`, Status=0). Body: `prefix[Required, regex 3 octet]`, `branchId[Required]`, +mạng. Message: "...đã sinh 255 địa chỉ IP."
+- **POST tự sinh 254 IpAddress con** (`n=1..254`, Status=0 — bỏ `.0` network và `.255` broadcast). Body: `prefix[Required, regex 3 octet]`, `branchId[Required]`, +mạng. Message: "...đã sinh 254 địa chỉ IP."
 - **PUT** — sửa Chi nhánh + cấu hình mạng, **không có `prefix`** trong body (bất biến). Body: `id`, `branchId[Required]`, subnetMask/gateway/DNS/description.
 - **Validate mạng** (POST/PUT, 400 nếu sai): `branchId` tồn tại; field mạng phải IPv4 hợp lệ; `gateway` trong network 3-octet của prefix + cùng subnet + không trùng `.0`/`.255`.
 - **DELETE** chặn nếu còn IP con đang gán Device; nếu không → **cascade xóa toàn bộ IP con chưa dùng** (FE cảnh báo).
@@ -354,7 +354,7 @@ Ai sửa/xóa gì, lúc nào — ghi tự động ở BE mỗi lần Create/Upda
 - Permission `Asset.AuditTrail.View` — **cần Admin gán** cho role muốn xem (chưa role nào có sẵn ngoài `Admin`).
 
 ## 7c. AI Chat — `POST /api/AiChat/stream` (2026-07-24, thay thế hoàn toàn cách gọi thẳng Ollama ở FE)
-Chuyển từ "FE tự gọi Ollama + tự thực thi tool" sang "FE chỉ gọi 1 endpoint BE, đọc stream, hiển thị" — xem bối cảnh đầy đủ ở [ai-chat-be-huong-dan.md](ai-chat-be-huong-dan.md). Mục này là **hợp đồng cuối cùng đã lên production** (khớp 100% với đề xuất ở §7 của tài liệu đó — không có sai khác).
+Chuyển từ "FE tự gọi Ollama + tự thực thi tool" sang "FE chỉ gọi 1 endpoint BE, đọc stream, hiển thị" — xem bối cảnh đầy đủ ở [ai-chat-be-huong-dan.md](ai-chat-be-huong-dan.md). Mục này là **hợp đồng cuối cùng đã lên production** (khớp 100% với đề xuất ở §7 của tài liệu đó — không có sai khác, trừ 2 bổ sung backward-compatible ngày 2026-07-27 ghi ở dưới: field request `think` và dòng response `"type":"device"`).
 
 **Request:**
 ```http
@@ -369,33 +369,35 @@ Content-Type: application/json
     { "role": "user", "content": "..." },
     { "role": "assistant", "content": "..." }
   ],
-  "systemPrompt": null                      // optional — null/bỏ trống thì BE dùng prompt mặc định (§9 tài liệu trên)
+  "systemPrompt": null,                     // optional — null/bỏ trống thì BE dùng prompt mặc định (§9 tài liệu trên)
+  "think": false                            // optional, 2026-07-27 — null/bỏ trống = false (mặc định nhanh, ~2-3s). true = model suy luận sâu hơn trước khi trả lời (~15-20s, xem ai-chat-be-huong-dan.md §3/§11)
 }
 ```
 `message` là `[Required]` — thiếu/rỗng → **400** theo format `ValidationProblemDetails` chuẩn của `[ApiController]` (khác `ApiResponse<T>` các API còn lại, vì lỗi này xảy ra TRƯỚC khi bắt đầu stream).
 
-**Response** — `Content-Type: application/x-ndjson`, mỗi dòng 1 JSON kết thúc `\n`, đọc dần qua `ReadableStream`/`fetch` (không phải 1 JSON duy nhất, và **không phải JSON thô của Ollama** — BE đã rút gọn, chỉ 4 dạng dòng):
+**Response** — `Content-Type: application/x-ndjson`, mỗi dòng 1 JSON kết thúc `\n`, đọc dần qua `ReadableStream`/`fetch` (không phải 1 JSON duy nhất, và **không phải JSON thô của Ollama** — BE đã rút gọn, chỉ 5 dạng dòng):
 ```jsonc
 {"type":"content","text":"PC-001 "}         // 1 mẩu chữ, nối dần vào bubble trả lời — lặp nhiều dòng
 {"type":"content","text":"đang gắn IP "}
 {"type":"tool","name":"search_ip_addresses"} // BE đang tra cứu tool này — FE hiện badge "Đang tra cứu..."
 {"type":"content","text":"192.168.1.10."}
+{"type":"device","deviceId":123,"deviceCode":"PC-001"} // 2026-07-27 §11 — thiết bị model vừa tra cứu được (chỉ khi tool liên quan đến device có resolve ra id); FE dùng để hiện nút "Xem chi tiết" điều hướng `/pc/devices?id={deviceId}`. Có thể xuất hiện nhiều dòng (nhiều thiết bị) xen giữa các dòng "content"/"tool"
 {"type":"done"}                              // hết, đóng kết nối — KHÔNG có "text" ở dòng này
 {"type":"error","message":"..."}             // có lỗi (mất kết nối AI, quá số lần gọi tool...) — FE hiện toast, dừng đọc
 ```
 - Field không áp dụng cho `type` đó **bị lược khỏi JSON** (không phải `null`) — check `"text" in obj` / optional chaining, không giả định field luôn có mặt.
 - 1 lượt hỏi có thể có **nhiều dòng `"tool"`** (model gọi nhiều tool cùng lúc) và nhiều dòng `"content"` xen kẽ trước khi tới `"done"`.
 - Nếu model gọi tool quá 3 lần liên tiếp mà không chốt câu trả lời → BE trả `{"type":"error","message":"Đã đạt giới hạn số lần gọi công cụ tra cứu..."}` thay vì treo mãi.
-- **FE lưu lịch sử**: chỉ cần gộp các `"content"` của 1 lượt thành 1 `assistant` message rồi thêm vào mảng `history` gửi lần sau — **không** lưu các dòng `"tool"` (BE không cần và cũng không hiểu nếu FE gửi ngược lại role `"tool"`).
-- Toàn bộ 16 loại câu hỏi tra cứu được BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm.
-- Permission `Asset.AiChat.Use` — **đã gán sẵn cho role `Admin`**, role khác cần Admin gán thêm nếu muốn dùng chat AI.
+- **FE lưu lịch sử**: chỉ cần gộp các `"content"` của 1 lượt thành 1 `assistant` message rồi thêm vào mảng `history` gửi lần sau — **không** lưu các dòng `"tool"`/`"device"` (BE không cần và cũng không hiểu nếu FE gửi ngược lại role `"tool"`).
+- Toàn bộ 17 loại câu hỏi tra cứu được BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm.
+- Permission `Asset.AiChat.Use` — **đã gán sẵn cho role `Admin`**, role khác cần Admin gán thêm nếu muốn dùng chat AI. Nút "Xem chi tiết" từ dòng `"device"` là UX-only, ẩn ở FE nếu user không có `Asset.Device.View` — BE vẫn enforce permission đó khi FE thật sự điều hướng sang trang chi tiết thiết bị.
 
 ## 8. Tổng hợp endpoint
 | Route | Ghi chú |
 |---|---|
 | `/api/Branch`, `/api/Supplier`, `/api/DeviceType`, `/api/SoftwareGroup`, `/api/Software` | CRUD chuẩn (grid-list, all, {id}, POST, PUT, DELETE) |
 | `/api/DeviceGroup` (`?departmentId=`), `/api/DeviceDepartment` | CRUD (Nhóm thuộc 1 Bộ phận) |
-| `/api/IpPrefix` | CRUD; POST sinh 255 IP (`branchId` bắt buộc), PUT không sửa prefix, DELETE cascade |
+| `/api/IpPrefix` | CRUD; POST sinh 254 IP (`branchId` bắt buộc), PUT không sửa prefix, DELETE cascade |
 | `/api/IpAddress` | grid-list, `available`, {id}, PUT{id}(status+note), PUT `bulk-status`(đổi status nhiều IP), `{id}/assign`, `{id}/unassign` (không POST/DELETE/all) |
 | `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, `qr-labels`(POST, in QR hàng loạt 5.4b), POST, PUT, DELETE, `bulk-delete`. Không `all` |
 | `/api/Report/device-list` | Báo cáo in ấn (không phân trang) |

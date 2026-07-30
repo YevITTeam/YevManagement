@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
@@ -15,6 +16,8 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 const PAGE_SIZE = 10;
 
 const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList({ onLoadingChange }, ref) {
+    const t = useTranslations("Attendance.OtCase");
+    const tCommon = useTranslations("Common");
     const [otCases, setOtCases] = useState<OtCaseDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -44,7 +47,7 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
         },
-        "Không thể tải danh sách trường hợp OT.",
+        t("loadError"),
         (message) => toast.error(message)
     );
 
@@ -85,19 +88,17 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
         try {
             if (formMode === "create") {
                 await OtCaseApi.createOtCase(values);
-                toast.success("Tạo trường hợp OT thành công");
+                toast.success(t("createSuccess"));
             } else if (editingOtCase) {
                 await OtCaseApi.updateOtCase(editingOtCase.id, values);
-                toast.success("Cập nhật trường hợp OT thành công");
+                toast.success(t("updateSuccess"));
             }
             setFormOpen(false);
             setEditingOtCase(null);
             await fetchOtCases();
         } catch (err) {
             console.error(err);
-            toast.error(
-                getApiErrorMessage(err, formMode === "create" ? "Tạo trường hợp OT thất bại" : "Cập nhật trường hợp OT thất bại")
-            );
+            toast.error(getApiErrorMessage(err, formMode === "create" ? t("createError") : t("updateError")));
         } finally {
             setIsSaving(false);
         }
@@ -108,12 +109,12 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
         setIsDeleting(true);
         try {
             await OtCaseApi.deleteOtCase(deletingOtCase.id);
-            toast.success("Xoá trường hợp OT thành công");
+            toast.success(t("deleteSuccess"));
             setDeletingOtCase(null);
             await fetchOtCases();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá trường hợp OT thất bại"));
+            toast.error(getApiErrorMessage(err, t("deleteError")));
         } finally {
             setIsDeleting(false);
         }
@@ -128,7 +129,7 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Tìm theo mã trường hợp..."
+                            placeholder={t("searchPlaceholder")}
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
@@ -136,11 +137,11 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                             disabled={isLoading}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
-                            Tìm kiếm
+                            {tCommon("search")}
                         </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${otCases.length} / ${totalCount} bản ghi`}
+                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: otCases.length, total: totalCount })}
                     </div>
                 </div>
 
@@ -152,18 +153,18 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã</th>
-                                <th className="px-6 py-3">Mô tả</th>
-                                <th className="px-6 py-3">Cấp duyệt cuối</th>
-                                <th className="px-6 py-3">Bắt buộc ký</th>
-                                <th className="px-6 py-3 text-right">Thao tác</th>
+                                <th className="px-6 py-3">{t("colCode")}</th>
+                                <th className="px-6 py-3">{t("colDescription")}</th>
+                                <th className="px-6 py-3">{t("colRequiredLevel")}</th>
+                                <th className="px-6 py-3">{t("colRequireSignature")}</th>
+                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && otCases.length === 0 && (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu trường hợp OT.
+                                        {t("noData")}
                                     </td>
                                 </tr>
                             )}
@@ -174,22 +175,22 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">
                                         {approvalLevelLabels[otCase.requiredApprovalLevel] ?? otCase.requiredApprovalLevel}
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{otCase.requireSignature ? "Có" : "Không"}</td>
+                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{otCase.requireSignature ? t("yes") : t("no")}</td>
                                     <td className="px-6 py-4 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button
                                                 onClick={() => openEditForm(otCase)}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                title="Sửa"
+                                                title={tCommon("edit")}
                                             >
-                                                Sửa
+                                                {tCommon("edit")}
                                             </button>
                                             <button
                                                 onClick={() => setDeletingOtCase(otCase)}
                                                 className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                                title="Xoá"
+                                                title={tCommon("delete")}
                                             >
-                                                Xoá
+                                                {tCommon("delete")}
                                             </button>
                                         </div>
                                     </td>
@@ -205,17 +206,17 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                         disabled={!hasPreviousPage || isLoading}
                         onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
                     >
-                        Trang trước
+                        {tCommon("prevPage")}
                     </button>
                     <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
+                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
                     </div>
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasNextPage || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        Trang sau
+                        {tCommon("nextPage")}
                     </button>
                 </div>
             </section>
@@ -231,15 +232,13 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
 
             <ConfirmDialog
                 isOpen={deletingOtCase !== null}
-                title="Xoá trường hợp OT"
-                message={
-                    <>
-                        Bạn có chắc muốn xoá trường hợp <strong>{deletingOtCase?.code}</strong> không? Hành động này không
-                        thể hoàn tác.
-                    </>
-                }
-                approveLabel="Xoá"
-                deniedLabel="Huỷ"
+                title={t("deleteTitle")}
+                message={t.rich("deleteMessage", {
+                    name: deletingOtCase?.code ?? "",
+                    b: (chunks) => <strong>{chunks}</strong>,
+                })}
+                approveLabel={tCommon("confirmDeleteApprove")}
+                deniedLabel={tCommon("confirmDeleteDenied")}
                 loading={isDeleting}
                 onApprove={handleDelete}
                 onDenied={() => {

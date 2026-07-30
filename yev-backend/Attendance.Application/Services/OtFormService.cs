@@ -32,7 +32,9 @@ namespace Attendance.Application.Services
         {
             Id = x.Id,
             GroupNameVn = x.Group.GroupNameVn,
+            GroupNameJp = x.Group.GroupNameJp,
             DepartmentNameVn = x.Department.DepartmentNameVn,
+            DepartmentNameJp = x.Department.DepartmentNameJp,
             OtCaseCode = x.OtCase.Code,
             Date = x.Date,
             TotalHour = x.TotalHour,
@@ -207,10 +209,13 @@ namespace Attendance.Application.Services
                 Id = otForm!.Id,
                 GroupId = otForm.GroupId,
                 GroupNameVn = otForm.Group.GroupNameVn,
+                GroupNameJp = otForm.Group.GroupNameJp,
                 DepartmentId = otForm.DepartmentId,
                 DepartmentNameVn = otForm.Department.DepartmentNameVn,
+                DepartmentNameJp = otForm.Department.DepartmentNameJp,
                 ReasonId = otForm.ReasonId,
                 ReasonNameVn = otForm.Reason.ReasonNameVn,
+                ReasonNameJp = otForm.Reason.ReasonNameJp,
                 OtCaseId = otForm.OtCaseId,
                 OtCaseCode = otForm.OtCase.Code,
                 StartTime = otForm.StartTime,
@@ -762,6 +767,17 @@ namespace Attendance.Application.Services
             var now = TimeHelper.GetCurrentUtcTime();
             var hasNewToken = false;
 
+            // Fetched fresh by Id instead of relying on otForm.Group/Department/Reason navigation
+            // properties — callers (CreateAsync/ApproveSubmitterAsync/ApproveAsync) don't all Include()
+            // these, so the navigation may be null. Needed here for the bilingual (Vn/Jp) email content
+            // (2026-07-29, see docs/attendance-module.md).
+            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == otForm.GroupId);
+            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == otForm.DepartmentId);
+            var reason = await _unitOfWork.Reasons.FirstOrDefaultAsync(x => x.Id == otForm.ReasonId);
+            var departmentName = FormatBilingual(department?.DepartmentNameVn, department?.DepartmentNameJp);
+            var groupName = FormatBilingual(group?.GroupNameVn, group?.GroupNameJp);
+            var reasonName = FormatBilingual(reason?.ReasonNameVn, reason?.ReasonNameJp);
+
             foreach (var approverUserName in approverUserNames)
             {
                 var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(approverUserName);
@@ -792,6 +808,9 @@ namespace Attendance.Application.Services
                         ["ApproverFullName"] = fullName ?? approverUserName,
                         ["OtFormId"] = otForm.Id.ToString(),
                         ["RequesterFullName"] = otForm.CreatedByFullName ?? otForm.CreatedByUserName,
+                        ["DepartmentName"] = departmentName,
+                        ["GroupName"] = groupName,
+                        ["ReasonName"] = reasonName,
                         ["OtFormDate"] = otForm.Date.ToString("dd/MM/yyyy"),
                         ["OtFormTime"] = $"{otForm.StartTime:HH\\:mm} - {otForm.EndTime:HH\\:mm}",
                         ["TotalHour"] = otForm.TotalHour.ToString("0.##"),
@@ -811,6 +830,14 @@ namespace Attendance.Application.Services
 
             if (hasNewToken)
                 await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Vietnamese is always shown; Japanese is appended only when the master data has it filled in
+        // (NameJp is nullable on Department/Group/Reason — see docs/attendance-module.md).
+        private static string FormatBilingual(string? nameVn, string? nameJp)
+        {
+            if (string.IsNullOrWhiteSpace(nameVn)) return "-";
+            return string.IsNullOrWhiteSpace(nameJp) ? nameVn : $"{nameVn} / {nameJp}";
         }
 
         // DepartmentManager/WorkshopManager: looked up via UserApprovalScope matching the form's

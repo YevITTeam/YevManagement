@@ -129,6 +129,17 @@ Phần dưới đây (duyệt cấp Trưởng phòng → Trưởng xưởng → 
 - Nhân viên đủ điều kiện phiếu ăn khi giờ OT thực tế **lớn hơn 2 giờ** (`(EndTime - StartTime) > 2h`, không tính bằng). Đây là field **tính toán khi đọc** (`OtFormEmployeeDto.IsEligibleForMeal`), KHÔNG lưu DB — không nhầm với `ProcessPart.IsEat` (cờ "có phục vụ ăn" ở cấp cả đơn, do người lập đơn tick tay). FE tick chọn `ProcessPart.IsEat` dựa gợi ý từ `IsEligibleForMeal` của từng người, BE không tự set.
 - **Số lượng phiếu ăn theo loại** (2026-07-16, migration `AddMealTicketCountsToProcessPart`): khi `IsEat = true`, người lập đơn nhập thêm 3 số lượng — `MainTicketCount` (phiếu chính), `SecondaryTicketCount` (phiếu phụ), `MilkCount` (sữa). Cả 3 đều **chung cho cả đơn** (không phải per-employee), nhập tay tự do — BE không validate tổng 3 số này phải khớp `NumberOfEmployee` hay `IsEligibleForMeal`, không tự tính.
 
+### §Song ngữ Vn/Jp trên OtFormDto — hiển thị cho Trưởng phòng/Trưởng Bộ phận xem trước khi duyệt (2026-07-29)
+- **Lý do**: `Group.GroupNameJp`/`Department.DepartmentNameJp`/`Reason.ReasonNameJp` (và `OtFormEmployee.NoteJp`/`ProcessPart.AnotherSuggestionJp` đã có sẵn từ trước) tồn tại trong DB nhưng `OtFormDto`/`OtFormListItemDto` trước đây chỉ trả field `*Vn` — 2 màn xem trước khi duyệt (`OtFormDetail.tsx` trong app, `OtFormEmailConfirmPage.tsx` public qua link email) chỉ hiện tiếng Việt dù master data đã có sẵn bản dịch tiếng Nhật.
+- **Đã thêm**: `OtFormDto.GroupNameJp`/`DepartmentNameJp`/`ReasonNameJp` (nullable, `OtFormService.GetByIdAsync`) và `OtFormListItemDto.GroupNameJp`/`DepartmentNameJp` (nullable, `OtFormService.ToListItemDto`) — map thẳng từ navigation `Group`/`Department`/`Reason` đã `Include()` sẵn ở cả 2 chỗ, không cần query thêm.
+- **KHÔNG thêm Jp cho `Employee`** — giữ đúng quyết định cũ "Tên riêng — không dịch" (xem bảng Entity đầu file).
+- FE hiện dạng `"{Vn} / {Jp}"` (bỏ `/ {Jp}` nếu `null`) qua helper `bilingualText` (`yev-frontend/src/modules/attendance/lib/bilingual.ts`), áp dụng cho Phòng ban/Bộ phận/Lý do (header + card thông tin) và Ghi chú nhân viên/Đề nghị khác (đã có Jp trong DTO từ trước, giờ mới lên UI) ở cả `OtFormDetail.tsx`, `OtFormEmailConfirmPage.tsx`, và cột "Phòng ban/Bộ phận" ở `OtFormListPage.tsx`.
+- Email thông báo duyệt đơn cũng đổi sang song ngữ tương ứng — xem bullet `OtForm/ApprovalNotification.html` ở §Xác thực qua email bên dưới.
+
+### §Popup xác nhận Từ chối trên trang xác nhận qua email (2026-07-29)
+- **Trước đây**: `OtFormEmailConfirmPage.tsx` (route public `/xac-nhan-don?token=...`, xem §Xác thực qua email) dùng chung 1 ô "Ghi chú/Lý do từ chối" luôn hiển thị sẵn cho cả 2 nút Duyệt/Từ chối — bấm "Từ chối" gửi thẳng luôn nếu ô đó không trống, không có bước xác nhận lại.
+- **Yêu cầu người dùng**: bấm "Từ chối" phải mở popup riêng để nhập lý do trước khi thật sự gửi — tránh bấm nhầm. Đã đổi FE: ô "Ghi chú" ngoài popup giờ chỉ dùng cho "Duyệt" (tuỳ chọn); bấm "Từ chối" mở modal riêng (cùng UX với modal Ký duyệt/Duyệt/Từ chối ở `OtFormDetail.tsx` trong app) với ô lý do **bắt buộc** + nút Huỷ/Xác nhận từ chối. Không đổi gì ở BE (`POST /email-confirm/{token}/reject` vẫn nhận `RejectOtFormDto { comment }` y hệt cũ).
+
 ### §Xác thực qua email — cập nhật chữ ký & duyệt đơn (2026-07-16)
 Bổ sung 1 kênh xác nhận qua email (nút bấm mở trang xác nhận nhỏ) cho 2 hành động nhạy cảm — **không thay thế** luồng trong app, chỉ là kênh phụ vì cấp quản lý ít khi mở app:
 
@@ -147,6 +158,7 @@ Bổ sung 1 kênh xác nhận qua email (nút bấm mở trang xác nhận nhỏ
   - **Giao diện template đã làm lại (2026-07-17)** — layout table-based inline CSS (tương thích Outlook nội bộ dùng `VNMAIL04`), header xanh `#1a56db` + tên "YevManagement", card trắng bo góc, nút CTA bấm được thay vì link thô, footer disclaimer "email tự động". Placeholder của từng file:
     - `UserSignature/RequestUpdateConfirmation.html`: `{{UserName}}` (fullName từ `GetContactInfoAsync`, fallback `userName`), `{{RequestedAt}}`, `{{ConfirmLink}}`, `{{ExpiryMinutes}}`.
     - `OtForm/ApprovalNotification.html`: `{{ApproverFullName}}`, `{{OtFormId}}`, `{{RequesterFullName}}` (từ `otForm.CreatedByFullName`, fallback `CreatedByUserName`), `{{OtFormDate}}` (`dd/MM/yyyy`), `{{OtFormTime}}` (`HH:mm - HH:mm`), `{{TotalHour}}`, `{{ConfirmLink}}`, `{{ExpiryDays}}` — thêm khối "thông tin đơn" (info card) hiển thị nhanh không cần bấm link mới biết đơn của ai/ngày nào.
+      **+3 placeholder (2026-07-29)**: `{{DepartmentName}}`/`{{GroupName}}`/`{{ReasonName}}` — chuỗi song ngữ `"{Vn} / {Jp}"` (helper `OtFormService.FormatBilingual`, bỏ phần `/ {Jp}` nếu master data không có tên tiếng Nhật) do `NotifyEligibleApproversAsync` tự truy `Group`/`Department`/`Reason` theo Id của đơn trước khi render (không dùng navigation property của `otForm` vì các luồng gọi hàm này — `CreateAsync`/`ApproveSubmitterAsync`/`ApproveAsync` — không phải lúc nào cũng `Include()` đủ 3 bảng). Toàn bộ nhãn tĩnh trong template cũng đổi sang song ngữ (VD "Phòng ban / 部署") theo yêu cầu người dùng "email thông báo duyệt đơn cần có tiếng Nhật".
 - **Đã xóa endpoint test rò rỉ** `GET /api/Employee/test` (`[AllowAnonymous]`, Controller tự inject thẳng `IEmailService` gửi mail hardcode) — vi phạm kiến trúc (Controller không được gọi thẳng service tầng dưới ngoài `I{Module}Service` của chính nó) và là lỗ hổng để bất kỳ ai (không cần đăng nhập) trigger gửi mail qua SMTP thật. Muốn test gửi mail giờ dùng đúng luồng nghiệp vụ thật (`PUT /api/UserSignature/me`, tạo/duyệt `OtForm`) hoặc 1 project console rời ngoài solution.
 - `AppSettings:FrontendBaseUrl` — domain FE dùng để build link trong email (`{FrontendBaseUrl}/xac-nhan-chu-ky?token=...`, `{FrontendBaseUrl}/xac-nhan-don?token=...`); **trang xác nhận do FE tự xây** (2 route public, gọi 2 cặp API preview+action ở trên), BE không server-render HTML.
 - Đã verify qua HTTP thật (2026-07-16): `PUT /me` tạo pending đúng, không áp dụng ngay; `GET/POST /confirm/{token}` preview + áp dụng đúng; gọi lại token đã dùng bị chặn (chống replay). Luồng `OtFormApprovalEmailToken` dùng lại nguyên `ApproveAsync`/`RejectAsync` đã test kỹ ở các tính năng trước nên chưa test riêng end-to-end. Riêng việc SMTP gửi được thật (kết nối + auth + send) đã verify độc lập qua console test (2026-07-17) — chưa verify lại trọn vẹn 2 luồng trên với mail thật gửi đi thành công (mới verify tới bước tạo token + gọi `SendAsync`, chưa xác nhận hộp thư nhận được đúng nội dung từ 2 luồng nghiệp vụ này).
@@ -184,6 +196,22 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `GET /email-confirm/{token}`, `POST /email-confirm/{token}/approve`, `POST /email-confirm/{token}/reject` (`[AllowAnonymous]`) — kênh bổ sung qua email, xem §Xác thực qua email.
 - `BaseController.CurrentUserName` (`Attendance.Api/Controllers/BaseController.cs`) — helper lấy `User.Identity.Name` dùng chung cho mọi Controller cần biết "ai đang gọi API".
 
+### AttendanceAiChat (`AttendanceAiChatController`) — trợ lý AI lập đơn tăng ca (2026-07-29)
+- `POST /api/AttendanceAiChat/stream` (`Attendance.AiChat.Use`, seed migration `AddAttendanceAiChatPermission`,
+  hiện chỉ gán Admin) — NDJSON streaming, cùng pattern deliberate exception "không bọc `ApiResponse<T>`"
+  như `Asset.Api.Controllers.AiChatController`. Thiết kế đầy đủ, bảng 7 tool, cơ chế xác nhận trước khi
+  ghi ở [attendance-aichat-be-huong-dan.md](attendance-aichat-be-huong-dan.md); hợp đồng FE ở
+  [attendance-api-fe.md §10](attendance-api-fe.md).
+- **Khác Asset AI Chat ở điểm cốt lõi**: đây là tool GHI dữ liệu đầu tiên (`create_ot_form_draft` gọi
+  thẳng `OtFormService.CreateAsync` đã có — không business logic mới, không bypass validate/scope nào).
+  `AttendanceAiChatController` phải tự đọc `CurrentUserName`/`CurrentFullName`/`User.IsInRole(AdminRole)`
+  rồi truyền tay xuống orchestrator (`AttendanceAiChatCallerContext`) — khác `AiChatController` của
+  Asset (không cần biết ai đang hỏi vì mọi tool đều read-only).
+- **`IOllamaChatClient`/`OllamaChatClient` dùng chung với Asset**, đã chuyển từ `Asset.Application`/
+  `Asset.Infrastructure` sang `Shared.Application`/`Shared.Infrastructure` (2026-07-29) — 1 registration
+  DI duy nhất phục vụ cả 2 module, `tools` (JSON schema) giờ là tham số thay vì hard-code
+  `AiChatToolDefinitions` của Asset.
+
 ### EmployeeImport (`EmployeeImportController`) — import Excel nhân sự (2026-07-16)
 - `POST /preview` (nhận file `.xlsx`), `POST /confirm` — pattern Preview/Confirm giống `DeviceImportController` ở module Asset (ClosedXML). Upsert theo `Employee.Code` (unique) — mã đã có thì cập nhật `FirstName/LastName/GroupId`, mã chưa có thì tạo mới kèm tự tạo `Department`/`Group` nếu mã chưa tồn tại. Gắn `[RequirePermission("Attendance.Employee.Create")]`.
 
@@ -191,7 +219,7 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `PATCH /api/Employee/{id}/adjust-accumulation` (`AdjustEmployeeAccumulationDto`) — không gắn `[RequirePermission]`, chỉ cần đăng nhập; phân quyền tự trong Service (chính chủ `UserName` hoặc quyền `Attendance.Employee.Update`). Xem §Lũy kế tháng/năm.
 
 ### Permission & Role đã seed (Identity migration `AddAttendancePermissionsAndRoles`)
-- 28 permission `Attendance.*`: CRUD 5 danh mục + `UserApprovalScope.{View,Create,Delete}` + `UserSignature.{View,Update}` + `OTForm.{View,Create,Approve}`.
+- 28 permission `Attendance.*`: CRUD 5 danh mục + `UserApprovalScope.{View,Create,Delete}` + `UserSignature.{View,Update}` + `OTForm.{View,Create,Approve}`. **+1** (2026-07-29, migration riêng `AddAttendanceAiChatPermission`): `Attendance.AiChat.Use`, hiện chỉ gán Admin — xem mục `AttendanceAiChatController` ở trên.
 - 4 Role mới: `Trưởng nhóm` (Create+View OTForm, View Employee, Update UserSignature, **+ View Department/Group/Reason/OtCase** — xem ngay dưới), `Trưởng phòng`/`Trưởng xưởng`/`Tổng Giám Đốc` (View+Approve OTForm, Update UserSignature). `Admin` được gán full toàn bộ permission `Attendance.*`.
 - **Lỗ hổng đã vá (2026-07-17, migration `AddCategoryViewPermissionsToTruongGroup`)**: seed ban đầu (`AddAttendancePermissionsAndRoles`) chỉ gán `Trưởng nhóm` 4 permission (`OTForm.Create/View`, `Employee.View`, `UserSignature.Update`) — THIẾU `Department.View`/`Group.View`/`Reason.View`/`OtCase.View` (permission riêng biệt cho từng danh mục, không nằm trong `OTForm.View`). Hậu quả: Trưởng nhóm gọi `GET /api/Department/all`, `GET /api/Group/by-department/{id}`, `GET /api/Reason/all`, `GET /api/OtCase/all` (4 API load dropdown cho màn "Tạo đơn tăng ca") đều bị 403 — màn Tạo đơn không dùng được trên thực tế dù mọi API OtForm đã sẵn sàng. Đã bổ sung 4 permission này cho Role `Trưởng nhóm`, verify lại qua SQL trực tiếp trên DB thật (2026-07-17) — Role này hiện có đủ 8 permission `Attendance.*`.
 - **Chưa làm**: gán Role cho user thật (`update-user-roles`/`create-user` — API Identity có sẵn) và tạo dòng `UserApprovalScope` cho từng Trưởng phòng/Trưởng xưởng **và mỗi người được phép tạo đơn** (`ApprovalLevel=Submitter`, xem §Business Logic — Phân quyền tạo đơn) thật (`POST /api/UserApprovalScope` — API đã có). Nhớ: từ 2026-07-16, chỉ gán được `ApprovalLevel=Submitter` cho `UserName` đã có Role `Trưởng nhóm` từ trước.

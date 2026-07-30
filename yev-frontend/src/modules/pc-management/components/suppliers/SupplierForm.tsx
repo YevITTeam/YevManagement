@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { SupplierDto } from "@/modules/pc-management/types/supplier.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
@@ -26,6 +27,8 @@ const fieldClassName =
     "h-10 w-full border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 export default function SupplierForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: SupplierFormProps) {
+    const t = useTranslations("Asset.Supplier");
+    const tCommon = useTranslations("Common");
     const [values, setValues] = useState<SupplierFormValues>(emptyValues);
 
     useDialogReset(isOpen, initial, (current) => {
@@ -56,13 +59,13 @@ export default function SupplierForm({ isOpen, mode, initial, loading = false, o
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="device-type-form-title" className="text-lg font-semibold text-[#191c1e]">
-                        {mode === "create" ? "Thêm Nhà cung cấp" : "Cập nhật nhà cung cấp"}
+                        {mode === "create" ? t("createTitle") : t("editTitle")}
                     </h3>
                     <button
                         type="button"
                         onClick={() => !loading && onClose()}
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                        aria-label="Đóng"
+                        aria-label={tCommon("close")}
                     >
                         <X className="h-5 w-5" />
                     </button>
@@ -70,11 +73,11 @@ export default function SupplierForm({ isOpen, mode, initial, loading = false, o
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Mã nhà cung cấp</span>
+                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
                         <input
                             value={values.supplierCode}
                             onChange={(event) => handleChange("supplierCode", event.target.value)}
-                            placeholder="Nhập mã nhà cung cấp..."
+                            placeholder={t("fieldCodePlaceholder")}
                             disabled={loading}
                             autoFocus
                             required
@@ -83,11 +86,11 @@ export default function SupplierForm({ isOpen, mode, initial, loading = false, o
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Tên nhà cung cấp</span>
+                        <span className={fieldLabelClassName}>{t("fieldName")}</span>
                         <input
                             value={values.supplierName}
                             onChange={(event) => handleChange("supplierName", event.target.value)}
-                            placeholder="Nhập tên nhà cung cấp..."
+                            placeholder={t("fieldNamePlaceholder")}
                             disabled={loading}
                             required
                             className={fieldClassName}
@@ -101,14 +104,14 @@ export default function SupplierForm({ isOpen, mode, initial, loading = false, o
                             disabled={loading}
                             className="cursor-pointer border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            Huỷ
+                            {tCommon("cancel")}
                         </button>
                         <button
                             type="submit"
                             disabled={loading}
                             className="cursor-pointer bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? "Đang lưu..." : mode === "create" ? "Tạo mới" : "Lưu thay đổi"}
+                            {loading ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
                         </button>
                     </div>
                 </form>

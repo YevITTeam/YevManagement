@@ -4,7 +4,9 @@ namespace Attendance.Application.Dtos.OtForms
     {
         public int Id { get; set; }
         public string GroupNameVn { get; set; } = null!;
+        public string? GroupNameJp { get; set; }
         public string DepartmentNameVn { get; set; } = null!;
+        public string? DepartmentNameJp { get; set; }
         public string OtCaseCode { get; set; } = null!;
         public DateOnly Date { get; set; }
         public decimal TotalHour { get; set; }

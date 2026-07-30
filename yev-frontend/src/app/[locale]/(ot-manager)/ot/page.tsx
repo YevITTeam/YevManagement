@@ -1,7 +1,9 @@
 "use client";
 
-import { FilePlus2, ClipboardList } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList } from "lucide-react";
 import { Link } from "@/navigation";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 
 const tiles = [
     {
@@ -18,7 +20,20 @@ const tiles = [
     },
 ];
 
+// Riêng biệt khỏi mảng tiles cố định ở trên vì mục này gate bằng permission (rollout ban đầu chỉ
+// Admin, xem migration AddAttendanceAiChatPermission) — 2 tile kia không cần gate vì permission của
+// chúng đã được cấp rộng cho mọi Role nghiệp vụ từ trước.
+const aiChatTile = {
+    title: "Trợ lý AI tạo đơn",
+    desc: "Trò chuyện để AI tự lập đơn tăng ca (nháp) cho bạn.",
+    link: "/ot/ai-chat",
+    icon: <Bot className="h-8 w-8" />,
+};
+
 export default function OtHomePage() {
+    const { user } = useAuth();
+    const visibleTiles = hasPermission(user, "Attendance.AiChat.Use") ? [...tiles, aiChatTile] : tiles;
+
     return (
         <div className="space-y-8">
             <div>
@@ -27,7 +42,7 @@ export default function OtHomePage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {tiles.map((tile) => (
+                {visibleTiles.map((tile) => (
                     <Link
                         key={tile.link}
                         href={tile.link}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -15,6 +16,8 @@ const fieldClassName =
 // docs/attendance-api-fe.md §3.6 — mọi user đăng nhập (kể cả không có Role nghiệp vụ) đều gọi được,
 // chỉ hoạt động nếu Admin đã gán Employee.userName = username AD của họ.
 export default function EmployeeAccumulationPanel() {
+    const t = useTranslations("Attendance.EmployeeAccumulation");
+    const tCommon = useTranslations("Common");
     const [employee, setEmployee] = useState<EmployeeDto | null>(null);
     const [notLinked, setNotLinked] = useState(false);
 
@@ -30,7 +33,7 @@ export default function EmployeeAccumulationPanel() {
             setMonthToDate(data.monthToDate);
             setYearToDate(data.yearToDate);
         },
-        "Tài khoản chưa được gán nhân viên tương ứng.",
+        t("notLinkedError"),
         () => setNotLinked(true)
     );
 
@@ -38,30 +41,30 @@ export default function EmployeeAccumulationPanel() {
         event.preventDefault();
         if (!employee) return;
         if (monthToDate < 0 || yearToDate < 0) {
-            toast.error("Lũy kế không được âm.");
+            toast.error(t("negativeError"));
             return;
         }
         setIsSaving(true);
         try {
             await EmployeeApi.adjustAccumulation(employee.id, { monthToDate, yearToDate });
-            toast.success("Cập nhật lũy kế thành công");
+            toast.success(t("updateSuccess"));
             await fetchMe();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Cập nhật lũy kế thất bại"));
+            toast.error(getApiErrorMessage(err, t("updateError")));
         } finally {
             setIsSaving(false);
         }
     };
 
     if (isLoading) {
-        return <div className="py-16 text-center text-sm text-[#5e3f3a]">Đang tải dữ liệu...</div>;
+        return <div className="py-16 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>;
     }
 
     if (notLinked || !employee) {
         return (
             <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">
-                Tài khoản chưa được gán nhân viên tương ứng, liên hệ Admin.
+                {t("notLinkedMessage")}
             </div>
         );
     }
@@ -69,7 +72,7 @@ export default function EmployeeAccumulationPanel() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">Lũy kế của tôi</h1>
+                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
                 <p className="mt-1 text-[15px] text-[#5e3f3a]">
                     {employee.code} — {employee.lastName} {employee.firstName} ({employee.groupNameVn})
                 </p>
@@ -77,14 +80,13 @@ export default function EmployeeAccumulationPanel() {
 
             <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 <p className="text-xs text-[#5e3f3a]">
-                    Lũy kế đang phản ánh tháng {employee.accumulationMonth}/{employee.accumulationYear}. Chỉnh trực tiếp
-                    nếu giờ OT thực tế khác với đơn đã đăng ký — không cần đợi có đơn OT mới.
+                    {t("reflectingMonth", { month: employee.accumulationMonth, year: employee.accumulationYear })}
                 </p>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Lũy kế tháng (giờ)</span>
+                            <span className={fieldLabelClassName}>{t("fieldMonthToDate")}</span>
                             <input
                                 type="number"
                                 step="0.5"
@@ -96,7 +98,7 @@ export default function EmployeeAccumulationPanel() {
                             />
                         </label>
                         <label className="block">
-                            <span className={fieldLabelClassName}>Lũy kế năm (giờ)</span>
+                            <span className={fieldLabelClassName}>{t("fieldYearToDate")}</span>
                             <input
                                 type="number"
                                 step="0.5"
@@ -115,7 +117,7 @@ export default function EmployeeAccumulationPanel() {
                             disabled={isSaving}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isSaving ? "Đang lưu..." : "Lưu lũy kế"}
+                            {isSaving ? t("saving") : t("saveButton")}
                         </button>
                     </div>
                 </form>

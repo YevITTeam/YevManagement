@@ -6,13 +6,16 @@ namespace Asset.Application.Dtos.AiChat
     // JsonIgnoreCondition.WhenWritingNull so the others are dropped from the JSON line, not sent as null.
     public class AiChatStreamEventDto
     {
-        public string Type { get; set; } = null!;  // "content" | "tool" | "done" | "error"
+        public string Type { get; set; } = null!;  // "content" | "tool" | "device" | "done" | "error"
         public string? Text { get; set; }          // Type = "content": next chunk of the answer text
         public string? Name { get; set; }          // Type = "tool": tool name currently being called
         public string? Message { get; set; }       // Type = "error": human-readable error message
+        public int? DeviceId { get; set; }         // Type = "device": id for the FE's deep-link button
+        public string? DeviceCode { get; set; }    // Type = "device": label for that button
 
         public static AiChatStreamEventDto Content(string text) => new() { Type = "content", Text = text };
         public static AiChatStreamEventDto Tool(string name) => new() { Type = "tool", Name = name };
+        public static AiChatStreamEventDto Device(int deviceId, string deviceCode) => new() { Type = "device", DeviceId = deviceId, DeviceCode = deviceCode };
         public static AiChatStreamEventDto Done() => new() { Type = "done" };
         public static AiChatStreamEventDto Error(string message) => new() { Type = "error", Message = message };
     }

@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Asset.Application.Dtos.IpPrefixes
 {
-    // Does not include Prefix — the 3-octet identifier already has its 255 child IpAddresses
+    // Does not include Prefix — the 3-octet identifier already has its 254 child IpAddresses
     // generated based on this value, so changing the Prefix still requires deleting and
     // recreating the range (keeping the previous decision). Update only allows editing the
     // Branch + network config (SubnetMask/Gateway/DNS/Description) when there's an actual

@@ -5,10 +5,13 @@ namespace Attendance.Application.Dtos.OtForms
         public int Id { get; set; }
         public int GroupId { get; set; }
         public string GroupNameVn { get; set; } = null!;
+        public string? GroupNameJp { get; set; }
         public int DepartmentId { get; set; }
         public string DepartmentNameVn { get; set; } = null!;
+        public string? DepartmentNameJp { get; set; }
         public int ReasonId { get; set; }
         public string ReasonNameVn { get; set; } = null!;
+        public string? ReasonNameJp { get; set; }
         public int OtCaseId { get; set; }
         public string OtCaseCode { get; set; } = null!;
         public TimeOnly StartTime { get; set; }

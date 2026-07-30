@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { ReasonApi } from "@/modules/attendance/api/reason.api";
 import type { ReasonDto } from "@/modules/attendance/types/reason.dto";
@@ -14,6 +15,8 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 const PAGE_SIZE = 10;
 
 const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList({ onLoadingChange }, ref) {
+    const t = useTranslations("Attendance.Reason");
+    const tCommon = useTranslations("Common");
     const [reasons, setReasons] = useState<ReasonDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -43,7 +46,7 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
         },
-        "Không thể tải danh sách lý do.",
+        t("loadError"),
         (message) => toast.error(message)
     );
 
@@ -84,17 +87,17 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
         try {
             if (formMode === "create") {
                 await ReasonApi.createReason(values);
-                toast.success("Tạo lý do thành công");
+                toast.success(t("createSuccess"));
             } else if (editingReason) {
                 await ReasonApi.updateReason(editingReason.id, values);
-                toast.success("Cập nhật lý do thành công");
+                toast.success(t("updateSuccess"));
             }
             setFormOpen(false);
             setEditingReason(null);
             await fetchReasons();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo lý do thất bại" : "Cập nhật lý do thất bại"));
+            toast.error(getApiErrorMessage(err, formMode === "create" ? t("createError") : t("updateError")));
         } finally {
             setIsSaving(false);
         }
@@ -105,12 +108,12 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
         setIsDeleting(true);
         try {
             await ReasonApi.deleteReason(deletingReason.id);
-            toast.success("Xoá lý do thành công");
+            toast.success(t("deleteSuccess"));
             setDeletingReason(null);
             await fetchReasons();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá lý do thất bại"));
+            toast.error(getApiErrorMessage(err, t("deleteError")));
         } finally {
             setIsDeleting(false);
         }
@@ -125,7 +128,7 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Tìm theo lý do..."
+                            placeholder={t("searchPlaceholder")}
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
@@ -133,11 +136,11 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
                             disabled={isLoading}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
-                            Tìm kiếm
+                            {tCommon("search")}
                         </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${reasons.length} / ${totalCount} bản ghi`}
+                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: reasons.length, total: totalCount })}
                     </div>
                 </div>
 
@@ -149,16 +152,16 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Lý do (VN)</th>
-                                <th className="px-6 py-3">Lý do (JP)</th>
-                                <th className="px-6 py-3 text-right">Thao tác</th>
+                                <th className="px-6 py-3">{t("colNameVn")}</th>
+                                <th className="px-6 py-3">{t("colNameJp")}</th>
+                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && reasons.length === 0 && (
                                 <tr>
                                     <td colSpan={3} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu lý do.
+                                        {t("noData")}
                                     </td>
                                 </tr>
                             )}
@@ -171,16 +174,16 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
                                             <button
                                                 onClick={() => openEditForm(reason)}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                title="Sửa"
+                                                title={tCommon("edit")}
                                             >
-                                                Sửa
+                                                {tCommon("edit")}
                                             </button>
                                             <button
                                                 onClick={() => setDeletingReason(reason)}
                                                 className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                                title="Xoá"
+                                                title={tCommon("delete")}
                                             >
-                                                Xoá
+                                                {tCommon("delete")}
                                             </button>
                                         </div>
                                     </td>
@@ -196,17 +199,17 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
                         disabled={!hasPreviousPage || isLoading}
                         onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
                     >
-                        Trang trước
+                        {tCommon("prevPage")}
                     </button>
                     <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
+                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
                     </div>
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasNextPage || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        Trang sau
+                        {tCommon("nextPage")}
                     </button>
                 </div>
             </section>
@@ -222,15 +225,13 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
 
             <ConfirmDialog
                 isOpen={deletingReason !== null}
-                title="Xoá lý do"
-                message={
-                    <>
-                        Bạn có chắc muốn xoá lý do <strong>{deletingReason?.reasonNameVn}</strong> không? Hành động này không
-                        thể hoàn tác.
-                    </>
-                }
-                approveLabel="Xoá"
-                deniedLabel="Huỷ"
+                title={t("deleteTitle")}
+                message={t.rich("deleteMessage", {
+                    name: deletingReason?.reasonNameVn ?? "",
+                    b: (chunks) => <strong>{chunks}</strong>,
+                })}
+                approveLabel={tCommon("confirmDeleteApprove")}
+                deniedLabel={tCommon("confirmDeleteDenied")}
                 loading={isDeleting}
                 onApprove={handleDelete}
                 onDenied={() => {

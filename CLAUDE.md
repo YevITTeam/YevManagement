@@ -38,7 +38,8 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form).
 | Dựng / sửa UI | [docs/docs-fe/DESIGN_SYSTEM.md](docs/docs-fe/DESIGN_SYSTEM.md) |
 | Đa ngôn ngữ (vi/ja) | [docs/docs-fe/thiet-ke-tinh-nang-dich-ngon-ngu.md](docs/docs-fe/thiet-ke-tinh-nang-dich-ngon-ngu.md) |
 | In PDF phiếu tăng ca | [docs/docs-be/attendance-otform-pdf-mapping.md](docs/docs-be/attendance-otform-pdf-mapping.md) |
-| AI Chat (tool-calling) | [docs/docs-be/ai-chat-be-huong-dan.md](docs/docs-be/ai-chat-be-huong-dan.md) (thiết kế gốc) — hợp đồng thật ở `asset-api-fe.md §7c` |
+| AI Chat tra cứu Asset (tool-calling, read-only) | [docs/docs-be/ai-chat-be-huong-dan.md](docs/docs-be/ai-chat-be-huong-dan.md) (thiết kế gốc) — hợp đồng thật ở `asset-api-fe.md §7c` |
+| AI Chat lập đơn tăng ca Attendance (tool-calling, có tool ghi) | [docs/docs-be/attendance-aichat-be-huong-dan.md](docs/docs-be/attendance-aichat-be-huong-dan.md) — hợp đồng thật ở `attendance-api-fe.md §10` |
 
 > 3 file `*-api-fe.md` là **hợp đồng dùng chung FE↔BE**, chỉ tồn tại 1 bản duy nhất trong
 > `docs/docs-be/`. Đây là nguồn chân lý về tên field & shape — đừng đoán, đừng chép ra bản thứ hai.

@@ -7,14 +7,16 @@ import { Check, Clock, X } from "lucide-react";
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import type { OtFormApprovalHistoryDto, OtFormDto } from "@/modules/attendance/types/ot-form.dto";
-import {
-    approvalActionLabels,
-    approvalLevelLabels,
-    otFormStatusClasses,
-    otFormStatusLabels,
-} from "@/modules/attendance/types/enums";
+import { otFormStatusClasses } from "@/modules/attendance/types/enums";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import {
+    approvalActionLabelsBilingual,
+    approvalLevelLabelsBilingual,
+    bilingualText,
+    createBilingualTranslator,
+    otFormStatusLabelsBilingual,
+} from "@/modules/attendance/lib/bilingual";
 
 function formatDate(value: string) {
     if (!value) return "-";
@@ -83,6 +85,11 @@ function buildApprovalSteps(form: OtFormDto, levels: number[]): ApprovalStep[] {
 // Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-api-fe.md §4.6.
 // Mở qua link email "Duyệt/Từ chối đơn tăng ca" gửi cho Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc.
 export default function OtFormEmailConfirmPage() {
+    // Bilingual (VN / JP) regardless of the /vi or /ja locale segment the approver opened the link
+    // in (2026-07-29, user request) — see createBilingualTranslator in lib/bilingual.ts.
+    const t = createBilingualTranslator("Attendance.OtFormDetail");
+    const tConfirm = createBilingualTranslator("Attendance.OtFormEmailConfirm");
+    const tCommon = createBilingualTranslator("Common");
     const searchParams = useSearchParams();
     const token = searchParams.get("token") ?? "";
 
@@ -96,12 +103,18 @@ export default function OtFormEmailConfirmPage() {
     const [actionResult, setActionResult] = useState<"approved" | "rejected" | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
+    // Popup riêng cho "Từ chối" (2026-07-29, yêu cầu người dùng) — thay vì ô ghi chú luôn hiện sẵn
+    // dùng chung cho cả Duyệt/Từ chối, giờ bấm "Từ chối" mới mở popup để nhập lý do, đồng bộ UX với
+    // modal Ký duyệt/Duyệt/Từ chối ở OtFormDetail.tsx (màn trong app).
+    const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+    const [rejectComment, setRejectComment] = useState("");
+
     // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
     // đúng câu thông báo riêng này thay vì rơi về fallback chung.
     const { isLoading, error: loadError } = useFetchEffect(
         async () => {
             if (!token) {
-                throw new Error(JSON.stringify({ message: "Thiếu token trong đường link." }));
+                throw new Error(JSON.stringify({ message: tConfirm("missingTokenError") }));
             }
             const data = await OtFormApi.getOtFormByEmailToken(token);
             let approvalLevel = 3;
@@ -118,7 +131,7 @@ export default function OtFormEmailConfirmPage() {
             setForm(result.data);
             setRequiredApprovalLevel(result.approvalLevel);
         },
-        "Không thể tải đơn tăng ca — link có thể đã hết hạn hoặc đã được xử lý."
+        tConfirm("loadError")
     );
 
     const handleApprove = async () => {
@@ -129,32 +142,44 @@ export default function OtFormEmailConfirmPage() {
             setActionResult("approved");
         } catch (err) {
             console.error(err);
-            setActionError(getApiErrorMessage(err, "Duyệt đơn thất bại."));
+            setActionError(getApiErrorMessage(err, tConfirm("approveError")));
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    const openRejectModal = () => {
+        setRejectComment("");
+        setActionError(null);
+        setIsRejectModalOpen(true);
+    };
+
+    const closeRejectModal = () => {
+        if (isSubmitting) return;
+        setIsRejectModalOpen(false);
+    };
+
     const handleReject = async () => {
-        if (!comment.trim()) {
-            setActionError("Vui lòng nhập lý do từ chối trước khi bấm Từ chối.");
+        if (!rejectComment.trim()) {
+            setActionError(tConfirm("rejectCommentRequiredError"));
             return;
         }
         setIsSubmitting(true);
         setActionError(null);
         try {
-            await OtFormApi.rejectOtFormByEmailToken(token, { comment: comment.trim() });
+            await OtFormApi.rejectOtFormByEmailToken(token, { comment: rejectComment.trim() });
+            setIsRejectModalOpen(false);
             setActionResult("rejected");
         } catch (err) {
             console.error(err);
-            setActionError(getApiErrorMessage(err, "Từ chối đơn thất bại."));
+            setActionError(getApiErrorMessage(err, tConfirm("rejectError")));
         } finally {
             setIsSubmitting(false);
         }
     };
 
     if (isLoading) {
-        return <div className="py-16 text-center text-sm text-[#5e3f3a]">Đang tải dữ liệu...</div>;
+        return <div className="py-16 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>;
     }
 
     if (loadError || !form) {
@@ -172,20 +197,20 @@ export default function OtFormEmailConfirmPage() {
         <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Đơn tăng ca #{form.id}</h1>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("titleWithId", { id: form.id })}</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        {form.departmentNameVn} — {form.groupNameVn}
+                        {bilingualText(form.departmentNameVn, form.departmentNameJp)} — {bilingualText(form.groupNameVn, form.groupNameJp)}
                     </p>
                 </div>
                 <span
                     className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
                 >
-                    {otFormStatusLabels[form.status] ?? "Không xác định"}
+                    {otFormStatusLabelsBilingual[form.status] ?? t("unknownStatus")}
                 </span>
             </div>
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Tiến độ duyệt</h2>
+                <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalProgressTitle")}</h2>
                 <div className="flex overflow-x-auto pb-1">
                     {approvalSteps.map((step, index) => (
                         <div key={step.level} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
@@ -224,7 +249,7 @@ export default function OtFormEmailConfirmPage() {
                                     step.state === "upcoming" ? "text-[#9aa0a6]" : "text-[#191c1e]"
                                 }`}
                             >
-                                {approvalLevelLabels[step.level]}
+                                {approvalLevelLabelsBilingual[step.level]}
                             </div>
                             {step.history ? (
                                 <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
@@ -233,7 +258,7 @@ export default function OtFormEmailConfirmPage() {
                                     {formatDateTime(step.history.actionAt)}
                                 </div>
                             ) : step.state === "current" ? (
-                                <div className="mt-0.5 text-center text-[11px] text-[#9a5b00]">Đang chờ</div>
+                                <div className="mt-0.5 text-center text-[11px] text-[#9a5b00]">{t("waitingShort")}</div>
                             ) : null}
                         </div>
                     ))}
@@ -242,30 +267,30 @@ export default function OtFormEmailConfirmPage() {
 
             <section className="grid gap-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm md:grid-cols-2 lg:grid-cols-3">
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Trường hợp OT</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("otCaseLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">{form.otCaseCode}</div>
                 </div>
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lý do</div>
-                    <div className="mt-1 text-sm text-[#191c1e]">{form.reasonNameVn}</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("reasonLabel")}</div>
+                    <div className="mt-1 text-sm text-[#191c1e]">{bilingualText(form.reasonNameVn, form.reasonNameJp)}</div>
                 </div>
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Ngày</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("dateLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">{formatDate(form.date)}</div>
                 </div>
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Thời gian</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("timeLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">
                         {formatTime(form.startTime)} — {formatTime(form.endTime)} ({form.totalHour}h)
                     </div>
                 </div>
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Người tạo</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("createdByLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">{form.createdByFullName ?? form.createdByUserName}</div>
                 </div>
                 {form.subReason && (
                     <div>
-                        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lý do chi tiết</div>
+                        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("subReasonLabel")}</div>
                         <div className="mt-1 text-sm text-[#191c1e]">{form.subReason}</div>
                     </div>
                 )}
@@ -273,43 +298,47 @@ export default function OtFormEmailConfirmPage() {
 
             {form.processPart && (
                 <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Phần xử lý</h2>
+                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
                     <div className="flex flex-wrap gap-4 text-sm text-[#191c1e]">
-                        <span>Ăn uống: {form.processPart.isEat ? "Có" : "Không"}</span>
-                        <span>Xe đưa đón: {form.processPart.isTransportation ? "Có" : "Không"}</span>
-                        <span>Phòng copy: {form.processPart.isUseCopyRoom ? "Có" : "Không"}</span>
+                        <span>{t("eatLabel", { value: form.processPart.isEat ? t("yes") : t("no") })}</span>
+                        <span>{t("transportationLabel", { value: form.processPart.isTransportation ? t("yes") : t("no") })}</span>
+                        <span>{t("copyRoomLabel", { value: form.processPart.isUseCopyRoom ? t("yes") : t("no") })}</span>
                     </div>
                     {form.processPart.isEat && (
                         <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
-                            <span>Phiếu chính: {form.processPart.mainTicketCount}</span>
-                            <span>Phiếu phụ: {form.processPart.secondaryTicketCount}</span>
-                            <span>Sữa: {form.processPart.milkCount}</span>
+                            <span>{t("mainTicketLabel", { count: form.processPart.mainTicketCount })}</span>
+                            <span>{t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}</span>
+                            <span>{t("milkLabel", { count: form.processPart.milkCount })}</span>
                         </div>
                     )}
                     {form.processPart.anotherSuggestionVn && (
-                        <p className="mt-2 text-sm text-[#5e3f3a]">Đề nghị khác: {form.processPart.anotherSuggestionVn}</p>
+                        <p className="mt-2 text-sm text-[#5e3f3a]">
+                            {t("anotherSuggestionLabel", {
+                                value: bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp),
+                            })}
+                        </p>
                     )}
                 </section>
             )}
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <h2 className="border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                    Danh sách nhân viên ({form.numberOfEmployee})
+                    {t("employeeListTitle", { count: form.numberOfEmployee })}
                 </h2>
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Mã NV</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Họ và tên</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Thời gian</th>
-                                <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">Lũy kế</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Phiếu ăn</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Ghi chú</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colEmployeeCode")}</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colFullName")}</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colTime")}</th>
+                                <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colMeal")}</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colNote")}</th>
                             </tr>
                             <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="px-6 py-2 text-center">Tháng</th>
-                                <th className="px-6 py-2 text-center">Năm</th>
+                                <th className="px-6 py-2 text-center">{t("colMonth")}</th>
+                                <th className="px-6 py-2 text-center">{t("colYear")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -336,7 +365,7 @@ export default function OtFormEmailConfirmPage() {
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">
                                             {employee.isEligibleForMeal ? <Check size={16} className="text-emerald-600" /> : "-"}
                                         </td>
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.noteVn || "-"}</td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
                                     </tr>
                                 );
                             })}
@@ -346,34 +375,34 @@ export default function OtFormEmailConfirmPage() {
             </section>
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lịch sử ký duyệt</h2>
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalHistoryTitle")}</h2>
                 <div className={`grid gap-4 md:grid-cols-2 ${APPROVAL_GRID_LG_COLS[applicableLevels.length] ?? "lg:grid-cols-5"}`}>
                     {applicableLevels.map((level) => {
                         const history = form.approvalHistories.find((item) => item.approvalLevel === level);
                         return (
                             <div key={level} className="rounded-lg border border-[#e0e3e5] p-4">
                                 <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {approvalLevelLabels[level]}
+                                    {approvalLevelLabelsBilingual[level]}
                                 </div>
                                 {history ? (
                                     <div className="mt-2 space-y-2">
                                         <div className="text-sm font-semibold text-[#191c1e]">
                                             {history.approverFullName ?? history.approverUserName}
                                         </div>
-                                        <div className="text-xs text-[#5e3f3a]">{approvalActionLabels[history.action]}</div>
+                                        <div className="text-xs text-[#5e3f3a]">{approvalActionLabelsBilingual[history.action]}</div>
                                         <div className="text-xs text-[#5e3f3a]">{formatDateTime(history.actionAt)}</div>
                                         {history.comment && <div className="text-xs text-[#191c1e]">&quot;{history.comment}&quot;</div>}
                                         {history.hasSignature && history.signatureImage && (
                                             // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
                                             <img
                                                 src={`data:image/png;base64,${history.signatureImage}`}
-                                                alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}
+                                                alt={t("signatureAlt", { name: history.approverFullName ?? history.approverUserName })}
                                                 className="h-16 w-full rounded border border-[#e0e3e5] object-contain"
                                             />
                                         )}
                                     </div>
                                 ) : (
-                                    <div className="mt-2 text-xs text-[#9aa0a6]">Chưa xử lý</div>
+                                    <div className="mt-2 text-xs text-[#9aa0a6]">{t("notProcessedYet")}</div>
                                 )}
                             </div>
                         );
@@ -383,13 +412,13 @@ export default function OtFormEmailConfirmPage() {
 
             {actionResult ? (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                    {actionResult === "approved" ? "Bạn đã duyệt đơn này thành công." : "Bạn đã từ chối đơn này."}
+                    {actionResult === "approved" ? tConfirm("approvedResultMessage") : tConfirm("rejectedResultMessage")}
                 </div>
             ) : (
                 <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                     <label className="block">
                         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            Ghi chú / Lý do từ chối
+                            {tConfirm("commentOptionalLabel")}
                         </span>
                         <textarea
                             value={comment}
@@ -400,27 +429,88 @@ export default function OtFormEmailConfirmPage() {
                         />
                     </label>
 
-                    {actionError && (
+                    {actionError && !isRejectModalOpen && (
                         <p className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{actionError}</p>
                     )}
 
                     <div className="flex justify-end gap-3">
                         <button
-                            onClick={handleReject}
+                            onClick={openRejectModal}
                             disabled={isSubmitting}
                             className="cursor-pointer rounded-lg border border-[#930006] bg-white px-4 py-2 text-sm font-semibold text-[#930006] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            Từ chối
+                            {t("rejectButton")}
                         </button>
                         <button
                             onClick={handleApprove}
                             disabled={isSubmitting}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isSubmitting ? "Đang xử lý..." : "Duyệt"}
+                            {isSubmitting ? tCommon("processing") : t("approveButton")}
                         </button>
                     </div>
                 </section>
+            )}
+
+            {isRejectModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+                    <div className="fixed inset-0 bg-black/40" onClick={closeRejectModal} />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                    >
+                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                            <h3 className="text-lg font-semibold text-[#191c1e]">{tConfirm("rejectModalTitle")}</h3>
+                            <button
+                                onClick={closeRejectModal}
+                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                aria-label={tCommon("close")}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {tConfirm("rejectReasonLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <textarea
+                                    value={rejectComment}
+                                    onChange={(event) => setRejectComment(event.target.value)}
+                                    disabled={isSubmitting}
+                                    rows={3}
+                                    required
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            {actionError && (
+                                <p className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{actionError}</p>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={closeRejectModal}
+                                    disabled={isSubmitting}
+                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {tCommon("cancel")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleReject}
+                                    disabled={isSubmitting}
+                                    className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isSubmitting ? tCommon("processing") : t("confirmReject")}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

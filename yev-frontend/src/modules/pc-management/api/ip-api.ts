@@ -115,7 +115,7 @@ export const IpApi = {
         const response = await api.get<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.getIpPrefixById(id));
         return response.data;
     },
-    // docs/asset-api-fe.md §4.1 — tạo prefix tự sinh 255 IpAddress con.
+    // docs/asset-api-fe.md §4.1 — tạo prefix tự sinh 254 IpAddress con (.1-.254, bỏ .0/.255).
     createIpPrefix: async (ipPrefixData: IpPrefixCreateDto) => {
         const response = await api.post<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.createIpPrefix, ipPrefixData);
         return response.data;

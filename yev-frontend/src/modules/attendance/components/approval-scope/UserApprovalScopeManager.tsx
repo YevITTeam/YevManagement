@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, RefreshCw, X } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { UserApprovalScopeApi } from "@/modules/attendance/api/user-approval-scope.api";
 import type { UserApprovalScopeDto } from "@/modules/attendance/types/user-approval-scope.dto";
@@ -40,6 +41,8 @@ const emptyForm: CreateFormState = { userName: "", scopeType: 1, scopeId: 0, app
 
 // docs/attendance-api-fe.md §5 — Admin gán phạm vi duyệt cho Trưởng phòng/Trưởng xưởng. Không có PUT: sửa = xoá + tạo lại.
 export default function UserApprovalScopeManager() {
+    const t = useTranslations("Attendance.UserApprovalScope");
+    const tCommon = useTranslations("Common");
     const [scopes, setScopes] = useState<UserApprovalScopeDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -78,7 +81,7 @@ export default function UserApprovalScopeManager() {
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
         },
-        "Không thể tải danh sách phân quyền duyệt.",
+        t("loadError"),
         (message) => toast.error(message)
     );
 
@@ -141,7 +144,7 @@ export default function UserApprovalScopeManager() {
         // approvalLevel=0 (Submitter) là giá trị hợp lệ — không dùng truthy check kẻo bị coi là falsy.
         if (!form.userName.trim() || !form.scopeId) return;
         if (requiredRoleMissing) {
-            toast.error(`Tài khoản chưa giữ Role "${requiredRoleName}" — gán Role qua Quản lý người dùng trước khi thêm phân quyền này.`);
+            toast.error(t("roleMissingToastError", { roleName: requiredRoleName ?? "" }));
             return;
         }
         setIsSaving(true);
@@ -152,12 +155,12 @@ export default function UserApprovalScopeManager() {
                 scopeId: form.scopeId,
                 approvalLevel: form.approvalLevel,
             });
-            toast.success("Tạo phân quyền duyệt thành công");
+            toast.success(t("createSuccess"));
             setFormOpen(false);
             await fetchScopes();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Tạo phân quyền duyệt thất bại"));
+            toast.error(getApiErrorMessage(err, t("createError")));
         } finally {
             setIsSaving(false);
         }
@@ -168,12 +171,12 @@ export default function UserApprovalScopeManager() {
         setIsDeleting(true);
         try {
             await UserApprovalScopeApi.deleteScope(deletingScope.id);
-            toast.success("Xoá phân quyền duyệt thành công");
+            toast.success(t("deleteSuccess"));
             setDeletingScope(null);
             await fetchScopes();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá phân quyền duyệt thất bại"));
+            toast.error(getApiErrorMessage(err, t("deleteError")));
         } finally {
             setIsDeleting(false);
         }
@@ -197,12 +200,8 @@ export default function UserApprovalScopeManager() {
         <div className="space-y-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền duyệt tăng ca</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Khai báo Trưởng Nhóm được tạo đơn (Người đề nghị), Trưởng Bộ phận duyệt sau khi Trưởng nhóm ký,
-                        và Trưởng phòng/Trưởng xưởng phụ trách duyệt cho từng Bộ phận/Phòng ban. Tổng Giám Đốc không cần
-                        khai báo ở đây (chỉ cần gán Role).
-                    </p>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -210,13 +209,13 @@ export default function UserApprovalScopeManager() {
                         disabled={isLoading}
                         className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
-                        <RefreshCw className="h-3.5 w-3.5" /> Làm mới
+                        <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
                     </button>
                     <button
                         onClick={openCreateForm}
                         className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
                     >
-                        + Thêm phân quyền
+                        {t("addButton")}
                     </button>
                 </div>
             </div>
@@ -228,7 +227,7 @@ export default function UserApprovalScopeManager() {
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Tìm theo tài khoản..."
+                            placeholder={t("searchPlaceholder")}
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
@@ -236,11 +235,11 @@ export default function UserApprovalScopeManager() {
                             disabled={isLoading}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
-                            Tìm kiếm
+                            {tCommon("search")}
                         </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${scopes.length} / ${totalCount} bản ghi`}
+                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: scopes.length, total: totalCount })}
                     </div>
                 </div>
 
@@ -252,18 +251,18 @@ export default function UserApprovalScopeManager() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Tài khoản</th>
-                                <th className="px-6 py-3">Phạm vi</th>
-                                <th className="px-6 py-3">Tên phạm vi</th>
-                                <th className="px-6 py-3">Cấp duyệt</th>
-                                <th className="px-6 py-3 text-right">Thao tác</th>
+                                <th className="px-6 py-3">{t("colUserName")}</th>
+                                <th className="px-6 py-3">{t("colScopeType")}</th>
+                                <th className="px-6 py-3">{t("colScopeName")}</th>
+                                <th className="px-6 py-3">{t("colApprovalLevel")}</th>
+                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && scopes.length === 0 && (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Chưa có phân quyền duyệt nào.
+                                        {t("noData")}
                                     </td>
                                 </tr>
                             )}
@@ -279,9 +278,9 @@ export default function UserApprovalScopeManager() {
                                         <button
                                             onClick={() => setDeletingScope(scope)}
                                             className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                            title="Xoá"
+                                            title={tCommon("delete")}
                                         >
-                                            Xoá
+                                            {tCommon("delete")}
                                         </button>
                                     </td>
                                 </tr>
@@ -296,17 +295,17 @@ export default function UserApprovalScopeManager() {
                         disabled={!hasPreviousPage || isLoading}
                         onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
                     >
-                        Trang trước
+                        {tCommon("prevPage")}
                     </button>
                     <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
+                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
                     </div>
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasNextPage || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        Trang sau
+                        {tCommon("nextPage")}
                     </button>
                 </div>
             </section>
@@ -320,12 +319,12 @@ export default function UserApprovalScopeManager() {
                         className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
                     >
                         <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
-                            <h3 className="text-lg font-semibold text-[#191c1e]">Thêm phân quyền duyệt</h3>
+                            <h3 className="text-lg font-semibold text-[#191c1e]">{t("createTitle")}</h3>
                             <button
                                 type="button"
                                 onClick={() => !isSaving && closeForm()}
                                 className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                aria-label="Đóng"
+                                aria-label={tCommon("close")}
                             >
                                 <X className="h-5 w-5" />
                             </button>
@@ -333,13 +332,13 @@ export default function UserApprovalScopeManager() {
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <label className="relative block">
-                                <span className={fieldLabelClassName}>Tài khoản (userName)</span>
+                                <span className={fieldLabelClassName}>{t("fieldUserName")}</span>
                                 <input
                                     value={form.userName}
                                     onChange={(event) => setForm((current) => ({ ...current, userName: event.target.value }))}
                                     onFocus={() => setShowUserSuggestions(true)}
                                     onBlur={() => setShowUserSuggestions(false)}
-                                    placeholder="VD: YEV\\n.truong.b"
+                                    placeholder={t("fieldUserNamePlaceholder")}
                                     disabled={isSaving}
                                     autoFocus
                                     required
@@ -371,7 +370,10 @@ export default function UserApprovalScopeManager() {
                             {suggestedGroup && (form.approvalLevel === 0 || form.approvalLevel === 4) && (
                                 <div className="flex items-center justify-between gap-3 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
                                     <span>
-                                        Gợi ý: tài khoản này thuộc Bộ phận <strong>{suggestedGroup.groupNameVn}</strong>.
+                                        {t.rich("suggestionText", {
+                                            groupName: suggestedGroup.groupNameVn,
+                                            b: (chunks) => <strong>{chunks}</strong>,
+                                        })}
                                     </span>
                                     <button
                                         type="button"
@@ -381,13 +383,13 @@ export default function UserApprovalScopeManager() {
                                         disabled={isSaving}
                                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-2 py-1 font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                                     >
-                                        Dùng gợi ý
+                                        {t("suggestionUseButton")}
                                     </button>
                                 </div>
                             )}
 
                             <label className="block">
-                                <span className={fieldLabelClassName}>Cấp duyệt</span>
+                                <span className={fieldLabelClassName}>{t("fieldApprovalLevel")}</span>
                                 <select
                                     value={form.approvalLevel}
                                     onChange={(event) => {
@@ -403,7 +405,7 @@ export default function UserApprovalScopeManager() {
                                     disabled={isSaving}
                                     className={fieldClassName}
                                 >
-                                    <option value={0}>Người đề nghị</option>
+                                    <option value={0}>{t("approvalLevelSubmitterOption")}</option>
                                     <option value={4}>{approvalLevelLabels[4]}</option>
                                     <option value={1}>{approvalLevelLabels[1]}</option>
                                     <option value={2}>{approvalLevelLabels[2]}</option>
@@ -411,19 +413,23 @@ export default function UserApprovalScopeManager() {
                             </label>
 
                             <label className="block">
-                                <span className={fieldLabelClassName}>Phạm vi (tự động theo Cấp duyệt)</span>
+                                <span className={fieldLabelClassName}>{t("fieldScopeTypeAuto")}</span>
                                 <select value={form.scopeType} disabled className={fieldClassName}>
-                                    <option value={0}>Bộ phận</option>
-                                    <option value={1}>Phòng ban</option>
+                                    <option value={0}>{t("scopeTypeGroup")}</option>
+                                    <option value={1}>{t("scopeTypeDepartment")}</option>
                                 </select>
                             </label>
 
                             <label className="block">
-                                <span className={fieldLabelClassName}>{form.scopeType === 0 ? "Bộ phận" : "Phòng ban"}</span>
+                                <span className={fieldLabelClassName}>
+                                    {form.scopeType === 0 ? t("scopeTypeGroup") : t("scopeTypeDepartment")}
+                                </span>
                                 <input
                                     value={scopeSearch}
                                     onChange={(event) => setScopeSearch(event.target.value)}
-                                    placeholder={`Tìm ${form.scopeType === 0 ? "bộ phận" : "phòng ban"}...`}
+                                    placeholder={t("fieldScopeSearchPlaceholder", {
+                                        scope: form.scopeType === 0 ? t("scopeTypeGroup") : t("scopeTypeDepartment"),
+                                    })}
                                     disabled={isSaving}
                                     className={`${fieldClassName} mb-2`}
                                 />
@@ -436,7 +442,9 @@ export default function UserApprovalScopeManager() {
                                     className={`${fieldClassName} h-auto py-1`}
                                 >
                                     <option value="" disabled>
-                                        Chọn {form.scopeType === 0 ? "bộ phận" : "phòng ban"}...
+                                        {t("fieldScopeChoosePlaceholder", {
+                                            scope: form.scopeType === 0 ? t("scopeTypeGroup") : t("scopeTypeDepartment"),
+                                        })}
                                     </option>
                                     {filteredScopeOptions.map((option) => (
                                         <option key={option.id} value={option.id}>
@@ -445,7 +453,7 @@ export default function UserApprovalScopeManager() {
                                     ))}
                                     {filteredScopeOptions.length === 0 && (
                                         <option value="" disabled>
-                                            Không tìm thấy kết quả phù hợp
+                                            {t("noMatchingResults")}
                                         </option>
                                     )}
                                 </select>
@@ -461,15 +469,15 @@ export default function UserApprovalScopeManager() {
                                             : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
                                     }`}
                                 >
-                                    {requiredRoleMissing
-                                        ? `Tài khoản "${form.userName.trim()}" chưa giữ Role "${requiredRoleName}" — BE sẽ từ chối. Gán Role này qua Quản lý người dùng trước.`
-                                        : matchedUser
-                                        ? (
-                                            <span className="inline-flex items-center gap-1">
-                                                {`Tài khoản đã giữ Role "${requiredRoleName}"`} <Check size={14} />
-                                            </span>
-                                        )
-                                        : `Không tìm thấy tài khoản này trong danh sách người dùng — kiểm tra lại chính tả trước khi gửi.`}
+                                    {requiredRoleMissing ? (
+                                        t("roleMissingWarning", { userName: form.userName.trim(), roleName: requiredRoleName ?? "" })
+                                    ) : matchedUser ? (
+                                        <span className="inline-flex items-center gap-1">
+                                            {t("roleMatchedText", { roleName: requiredRoleName ?? "" })} <Check size={14} />
+                                        </span>
+                                    ) : (
+                                        t("userNotFoundWarning")
+                                    )}
                                 </div>
                             )}
 
@@ -480,14 +488,14 @@ export default function UserApprovalScopeManager() {
                                     disabled={isSaving}
                                     className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    Huỷ
+                                    {tCommon("cancel")}
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={isSaving || requiredRoleMissing}
                                     className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    {isSaving ? "Đang lưu..." : "Tạo mới"}
+                                    {isSaving ? t("saving") : t("createSubmit")}
                                 </button>
                             </div>
                         </form>
@@ -497,15 +505,14 @@ export default function UserApprovalScopeManager() {
 
             <ConfirmDialog
                 isOpen={deletingScope !== null}
-                title="Xoá phân quyền duyệt"
-                message={
-                    <>
-                        Bạn có chắc muốn xoá phân quyền của <strong>{deletingScope?.userName}</strong> với{" "}
-                        <strong>{deletingScope?.scopeName}</strong> không?
-                    </>
-                }
-                approveLabel="Xoá"
-                deniedLabel="Huỷ"
+                title={t("deleteTitle")}
+                message={t.rich("deleteMessage", {
+                    userName: deletingScope?.userName ?? "",
+                    scopeName: deletingScope?.scopeName ?? "",
+                    b: (chunks) => <strong>{chunks}</strong>,
+                })}
+                approveLabel={tCommon("confirmDeleteApprove")}
+                deniedLabel={tCommon("confirmDeleteDenied")}
                 loading={isDeleting}
                 onApprove={handleDelete}
                 onDenied={() => {

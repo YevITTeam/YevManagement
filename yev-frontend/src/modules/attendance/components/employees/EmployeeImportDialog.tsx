@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { EmployeeImportApi } from "@/modules/attendance/api/employee-import.api";
 import type {
@@ -21,6 +22,7 @@ interface EmployeeImportDialogProps {
 // (src/modules/pc-management/components/devices/ImportDeviceConfigurationDialog.tsx) —
 // docs/attendance-api-fe.md §3.7/§8.
 export default function EmployeeImportDialog({ isOpen, onClose, onImported }: EmployeeImportDialogProps) {
+    const t = useTranslations("Attendance.Employee");
     const [file, setFile] = useState<File | null>(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
     const [isConfirming, setIsConfirming] = useState(false);
@@ -64,7 +66,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
 
     const handlePreview = async () => {
         if (!file) {
-            toast.error("Vui lòng chọn file Excel nhân sự trước.");
+            toast.error(t("importChooseErrorNoFile"));
             return;
         }
         setIsPreviewing(true);
@@ -79,12 +81,12 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                 newGroupCount: previewResult.newGroupCount,
             });
             if (previewResult.invalidRows > 0) {
-                toast.warn(`Có ${previewResult.invalidRows} dòng lỗi — các dòng này sẽ tự bị bỏ qua khi xác nhận import.`);
+                toast.warn(t("importWarnInvalidRows", { count: previewResult.invalidRows }));
             } else {
-                toast.success(`Đã xem trước ${previewResult.totalRows} dòng, tất cả hợp lệ.`);
+                toast.success(t("importPreviewSuccess", { count: previewResult.totalRows }));
             }
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Xem trước file Excel thất bại."));
+            toast.error(getApiErrorMessage(err, t("importPreviewError")));
         } finally {
             setIsPreviewing(false);
         }
@@ -92,7 +94,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
 
     const handleConfirm = async () => {
         if (rows.length === 0) {
-            toast.error("Chưa có dữ liệu xem trước để import.");
+            toast.error(t("importNoRowsError"));
             return;
         }
         setIsConfirming(true);
@@ -102,12 +104,16 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
             const confirmResult = await EmployeeImportApi.confirmImport(rows);
             setResult(confirmResult);
             toast.success(
-                `Import thành công — tạo mới ${confirmResult.createdEmployeeCount} nhân viên, ` +
-                    `cập nhật ${confirmResult.updatedEmployeeCount} nhân viên` +
-                    (confirmResult.skippedCount > 0 ? `, bỏ qua ${confirmResult.skippedCount} dòng lỗi.` : ".")
+                t("importConfirmSuccess", {
+                    created: confirmResult.createdEmployeeCount,
+                    updated: confirmResult.updatedEmployeeCount,
+                }) +
+                    (confirmResult.skippedCount > 0
+                        ? t("importConfirmSuccessSkipped", { skipped: confirmResult.skippedCount })
+                        : ".")
             );
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Xác nhận import thất bại."));
+            toast.error(getApiErrorMessage(err, t("importConfirmError")));
         } finally {
             setIsConfirming(false);
         }
@@ -128,19 +134,16 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] p-6 pb-4">
                     <div>
                         <h3 id="import-employee-title" className="text-lg font-semibold text-[#191c1e]">
-                            Import nhân sự từ Excel
+                            {t("importTitle")}
                         </h3>
-                        <p className="mt-1 text-xs text-[#5e3f3a]">
-                            Chọn file .xlsx (cột: No./Employee code/Full name/Department/Department Name/Group/Group
-                            Name) — upsert theo mã nhân viên, tự tạo Phòng ban/Bộ phận mới nếu chưa có.
-                        </p>
+                        <p className="mt-1 text-xs text-[#5e3f3a]">{t("importDescription")}</p>
                     </div>
                     <button
                         type="button"
                         onClick={handleClose}
                         disabled={isBusy}
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
-                        aria-label="Đóng"
+                        aria-label={t("importClose")}
                     >
                         <X className="h-5 w-5" />
                     </button>
@@ -149,24 +152,28 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                 {result ? (
                     <div className="flex-1 overflow-auto p-6">
                         <div className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm">
-                            <span className="font-semibold text-[#16a34a]">Tạo mới {result.createdEmployeeCount} nhân viên</span>
-                            <span className="text-[#5e3f3a]">Cập nhật: {result.updatedEmployeeCount}</span>
-                            <span className="text-[#5e3f3a]">Phòng ban mới: {result.createdDepartmentCount}</span>
-                            <span className="text-[#5e3f3a]">Bộ phận mới: {result.createdGroupCount}</span>
+                            <span className="font-semibold text-[#16a34a]">
+                                {t("importCreatedCount", { count: result.createdEmployeeCount })}
+                            </span>
+                            <span className="text-[#5e3f3a]">{t("importUpdatedCount", { count: result.updatedEmployeeCount })}</span>
+                            <span className="text-[#5e3f3a]">
+                                {t("importNewDepartmentCount", { count: result.createdDepartmentCount })}
+                            </span>
+                            <span className="text-[#5e3f3a]">{t("importNewGroupCount", { count: result.createdGroupCount })}</span>
                             <span className={result.skippedCount > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
-                                Bỏ qua (lỗi): {result.skippedCount}
+                                {t("importSkippedCount", { count: result.skippedCount })}
                             </span>
                         </div>
 
                         {result.skippedRows.length > 0 && (
                             <div>
-                                <h4 className="mb-2 text-sm font-semibold text-[#930006]">Dòng bị bỏ qua</h4>
+                                <h4 className="mb-2 text-sm font-semibold text-[#930006]">{t("importSkippedRowsTitle")}</h4>
                                 <table className="min-w-full border-collapse text-left text-xs">
                                     <thead>
                                         <tr className="border-b border-[#e0e3e5] bg-[#fff4f2] font-semibold uppercase tracking-[0.1em] text-[#930006]">
-                                            <th className="whitespace-nowrap px-3 py-2">Dòng</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Mã NV</th>
-                                            <th className="px-3 py-2">Lỗi</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColRow")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColCode")}</th>
+                                            <th className="px-3 py-2">{t("importColError")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -199,42 +206,41 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                                 disabled={!file || isBusy}
                                 className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                {isPreviewing ? "Đang xem trước..." : "Xem trước"}
+                                {isPreviewing ? t("importPreviewing") : t("importPreviewButton")}
                             </button>
                         </div>
 
                         {summary && (
                             <div className="flex flex-wrap items-center gap-4 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold">
-                                <span className="text-[#191c1e]">Tổng: {summary.totalRows} dòng</span>
-                                <span className="text-[#16a34a]">Hợp lệ: {summary.validRows}</span>
+                                <span className="text-[#191c1e]">{t("importSummaryTotal", { count: summary.totalRows })}</span>
+                                <span className="text-[#16a34a]">{t("importSummaryValid", { count: summary.validRows })}</span>
                                 <span className={summary.invalidRows > 0 ? "text-[#930006]" : "text-[#5e3f3a]"}>
-                                    Lỗi: {summary.invalidRows}
+                                    {t("importSummaryInvalid", { count: summary.invalidRows })}
                                 </span>
                                 <span className="text-[#5e3f3a]">
-                                    Phòng ban mới: {summary.newDepartmentCount} · Bộ phận mới: {summary.newGroupCount}
+                                    {t("importNewDepartmentCount", { count: summary.newDepartmentCount })} ·{" "}
+                                    {t("importNewGroupCount", { count: summary.newGroupCount })}
                                 </span>
-                                {summary.invalidRows > 0 && (
-                                    <span className="text-[#930006]">— Các dòng lỗi sẽ tự bị bỏ qua khi xác nhận import.</span>
-                                )}
+                                {summary.invalidRows > 0 && <span className="text-[#930006]">{t("importSummaryHint")}</span>}
                             </div>
                         )}
 
                         <div className="flex-1 overflow-auto p-2">
                             {rows.length === 0 ? (
                                 <div className="px-4 py-12 text-center text-sm text-[#5e3f3a]">
-                                    {isPreviewing ? "Đang đọc file..." : "Chưa có dữ liệu xem trước. Chọn file rồi bấm \"Xem trước\"."}
+                                    {isPreviewing ? t("importReadingFile") : t("importNoPreviewYet")}
                                 </div>
                             ) : (
                                 <table className="min-w-full border-collapse text-left text-xs">
                                     <thead>
                                         <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                            <th className="whitespace-nowrap px-3 py-2">Dòng</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Mã NV</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Họ / Tên tách được</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Phòng ban</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Bộ phận</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Mới?</th>
-                                            <th className="min-w-[200px] px-3 py-2">Lỗi</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColRow")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColCode")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColResolvedName")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColDepartment")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColGroup")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColNew")}</th>
+                                            <th className="min-w-[200px] px-3 py-2">{t("importColError")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -256,9 +262,9 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
                                                     {[
-                                                        row.isNewEmployee && "NV",
-                                                        row.isNewDepartment && "PB",
-                                                        row.isNewGroup && "Bộ phận",
+                                                        row.isNewEmployee && t("importNewEmployeeTag"),
+                                                        row.isNewDepartment && t("importNewDepartmentTag"),
+                                                        row.isNewGroup && t("importNewGroupTag"),
                                                     ]
                                                         .filter(Boolean)
                                                         .join(", ") || "-"}
@@ -280,7 +286,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                         disabled={isBusy}
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {result ? "Đóng" : "Huỷ"}
+                        {result ? t("importClose") : t("importCancel")}
                     </button>
                     {!result && (
                         <button
@@ -289,7 +295,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                             disabled={!canConfirm || isBusy}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isConfirming ? "Đang import..." : "Xác nhận import"}
+                            {isConfirming ? t("importConfirming") : t("importConfirmButton")}
                         </button>
                     )}
                 </div>

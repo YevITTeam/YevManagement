@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Asset.Application.Dtos.AiChat;
 
 namespace Asset.Application.Interfaces.Service
 {
@@ -10,6 +11,6 @@ namespace Asset.Application.Interfaces.Service
         // Never throws — any failure (unknown tool, not-found lookup, internal exception) is caught
         // and returned as a serialized {"error": "..."} object instead, per doc §4: a tool failing must
         // not break the surrounding ask-answer loop.
-        Task<string> ExecuteAsync(string toolName, JsonElement arguments, CancellationToken cancellationToken);
+        Task<AiChatToolExecutionResult> ExecuteAsync(string toolName, JsonElement arguments, CancellationToken cancellationToken);
     }
 }

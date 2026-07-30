@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
@@ -14,6 +15,8 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 const PAGE_SIZE = 10;
 
 const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function DepartmentList({ onLoadingChange }, ref) {
+    const t = useTranslations("Attendance.Department");
+    const tCommon = useTranslations("Common");
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -43,7 +46,7 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
         },
-        "Không thể tải danh sách phòng ban.",
+        t("loadError"),
         (message) => toast.error(message)
     );
 
@@ -84,17 +87,17 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
         try {
             if (formMode === "create") {
                 await DepartmentApi.createDepartment(values);
-                toast.success("Tạo phòng ban thành công");
+                toast.success(t("createSuccess"));
             } else if (editingDepartment) {
                 await DepartmentApi.updateDepartment(editingDepartment.id, values);
-                toast.success("Cập nhật phòng ban thành công");
+                toast.success(t("updateSuccess"));
             }
             setFormOpen(false);
             setEditingDepartment(null);
             await fetchDepartments();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, formMode === "create" ? "Tạo phòng ban thất bại" : "Cập nhật phòng ban thất bại"));
+            toast.error(getApiErrorMessage(err, formMode === "create" ? t("createError") : t("updateError")));
         } finally {
             setIsSaving(false);
         }
@@ -105,12 +108,12 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
         setIsDeleting(true);
         try {
             await DepartmentApi.deleteDepartment(deletingDepartment.id);
-            toast.success("Xoá phòng ban thành công");
+            toast.success(t("deleteSuccess"));
             setDeletingDepartment(null);
             await fetchDepartments();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Xoá phòng ban thất bại"));
+            toast.error(getApiErrorMessage(err, t("deleteError")));
         } finally {
             setIsDeleting(false);
         }
@@ -125,7 +128,7 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Tìm theo mã hoặc tên phòng ban..."
+                            placeholder={t("searchPlaceholder")}
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
@@ -133,11 +136,11 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
                             disabled={isLoading}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
-                            Tìm kiếm
+                            {tCommon("search")}
                         </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${departments.length} / ${totalCount} bản ghi`}
+                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: departments.length, total: totalCount })}
                     </div>
                 </div>
 
@@ -149,17 +152,17 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã phòng ban</th>
-                                <th className="px-6 py-3">Tên (VN)</th>
-                                <th className="px-6 py-3">Tên (JP)</th>
-                                <th className="px-6 py-3 text-right">Thao tác</th>
+                                <th className="px-6 py-3">{t("colCode")}</th>
+                                <th className="px-6 py-3">{t("colNameVn")}</th>
+                                <th className="px-6 py-3">{t("colNameJp")}</th>
+                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && departments.length === 0 && (
                                 <tr>
                                     <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu phòng ban.
+                                        {t("noData")}
                                     </td>
                                 </tr>
                             )}
@@ -173,16 +176,16 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
                                             <button
                                                 onClick={() => openEditForm(department)}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                title="Sửa"
+                                                title={tCommon("edit")}
                                             >
-                                                Sửa
+                                                {tCommon("edit")}
                                             </button>
                                             <button
                                                 onClick={() => setDeletingDepartment(department)}
                                                 className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                                title="Xoá"
+                                                title={tCommon("delete")}
                                             >
-                                                Xoá
+                                                {tCommon("delete")}
                                             </button>
                                         </div>
                                     </td>
@@ -198,17 +201,17 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
                         disabled={!hasPreviousPage || isLoading}
                         onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
                     >
-                        Trang trước
+                        {tCommon("prevPage")}
                     </button>
                     <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
+                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
                     </div>
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasNextPage || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        Trang sau
+                        {tCommon("nextPage")}
                     </button>
                 </div>
             </section>
@@ -224,15 +227,13 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
 
             <ConfirmDialog
                 isOpen={deletingDepartment !== null}
-                title="Xoá phòng ban"
-                message={
-                    <>
-                        Bạn có chắc muốn xoá phòng ban <strong>{deletingDepartment?.departmentNameVn}</strong> không? Hành động
-                        này không thể hoàn tác.
-                    </>
-                }
-                approveLabel="Xoá"
-                deniedLabel="Huỷ"
+                title={t("deleteTitle")}
+                message={t.rich("deleteMessage", {
+                    name: deletingDepartment?.departmentNameVn ?? "",
+                    b: (chunks) => <strong>{chunks}</strong>,
+                })}
+                approveLabel={tCommon("confirmDeleteApprove")}
+                deniedLabel={tCommon("confirmDeleteDenied")}
                 loading={isDeleting}
                 onApprove={handleDelete}
                 onDenied={() => {

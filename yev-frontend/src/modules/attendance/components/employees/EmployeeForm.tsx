@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -43,6 +44,8 @@ const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: EmployeeFormProps) {
+    const t = useTranslations("Attendance.Employee");
+    const tCommon = useTranslations("Common");
     const [values, setValues] = useState<EmployeeFormValues>(emptyValues);
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [usersWithRoles, setUsersWithRoles] = useState<UserDto[]>([]);
@@ -103,13 +106,13 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="employee-form-title" className="text-lg font-semibold text-[#191c1e]">
-                        {mode === "create" ? "Thêm nhân viên" : "Cập nhật nhân viên"}
+                        {mode === "create" ? t("createTitle") : t("editTitle")}
                     </h3>
                     <button
                         type="button"
                         onClick={() => !loading && onClose()}
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                        aria-label="Đóng"
+                        aria-label={tCommon("close")}
                     >
                         <X className="h-5 w-5" />
                     </button>
@@ -117,11 +120,11 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Mã nhân viên</span>
+                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
                         <input
                             value={values.code}
                             onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
-                            placeholder="Nhập mã nhân viên..."
+                            placeholder={t("fieldCodePlaceholder")}
                             disabled={loading}
                             autoFocus
                             required
@@ -131,22 +134,22 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
 
                     <div className="grid grid-cols-2 gap-4">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Họ</span>
+                            <span className={fieldLabelClassName}>{t("fieldLastName")}</span>
                             <input
                                 value={values.lastName}
                                 onChange={(event) => setValues((current) => ({ ...current, lastName: event.target.value }))}
-                                placeholder="Nguyễn Văn"
+                                placeholder={t("fieldLastNamePlaceholder")}
                                 disabled={loading}
                                 required
                                 className={fieldClassName}
                             />
                         </label>
                         <label className="block">
-                            <span className={fieldLabelClassName}>Tên</span>
+                            <span className={fieldLabelClassName}>{t("fieldFirstName")}</span>
                             <input
                                 value={values.firstName}
                                 onChange={(event) => setValues((current) => ({ ...current, firstName: event.target.value }))}
-                                placeholder="A"
+                                placeholder={t("fieldFirstNamePlaceholder")}
                                 disabled={loading}
                                 required
                                 className={fieldClassName}
@@ -155,7 +158,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                     </div>
 
                     <label className="relative block">
-                        <span className={fieldLabelClassName}>Tài khoản AD (userName, tuỳ chọn)</span>
+                        <span className={fieldLabelClassName}>{t("fieldUserName")}</span>
                         <input
                             value={values.userName ?? ""}
                             onChange={(event) =>
@@ -163,7 +166,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             }
                             onFocus={() => setShowUserSuggestions(true)}
                             onBlur={() => setShowUserSuggestions(false)}
-                            placeholder="VD: YEV\n.van.a — dùng cho Lũy kế của tôi"
+                            placeholder={t("fieldUserNamePlaceholder")}
                             disabled={loading}
                             autoComplete="off"
                             className={fieldClassName}
@@ -191,7 +194,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Bộ phận</span>
+                        <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
                         <select
                             value={values.groupId || ""}
                             onChange={(event) => setValues((current) => ({ ...current, groupId: Number(event.target.value) }))}
@@ -200,7 +203,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             className={fieldClassName}
                         >
                             <option value="" disabled>
-                                Chọn bộ phận...
+                                {t("fieldGroupPlaceholder")}
                             </option>
                             {groups.map((group) => (
                                 <option key={group.id} value={group.id}>
@@ -212,7 +215,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
 
                     <div className="grid grid-cols-2 gap-4">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Lũy kế tháng (giờ)</span>
+                            <span className={fieldLabelClassName}>{t("fieldMonthToDate")}</span>
                             <input
                                 type="number"
                                 step="0.5"
@@ -224,7 +227,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             />
                         </label>
                         <label className="block">
-                            <span className={fieldLabelClassName}>Lũy kế năm (giờ)</span>
+                            <span className={fieldLabelClassName}>{t("fieldYearToDate")}</span>
                             <input
                                 type="number"
                                 step="0.5"
@@ -244,14 +247,14 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             disabled={loading}
                             className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            Huỷ
+                            {tCommon("cancel")}
                         </button>
                         <button
                             type="submit"
                             disabled={loading}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? "Đang lưu..." : mode === "create" ? "Tạo mới" : "Lưu thay đổi"}
+                            {loading ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
                         </button>
                     </div>
                 </form>

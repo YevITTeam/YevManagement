@@ -1,11 +1,16 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Asset.Application.Dtos.AiChat
+namespace Shared.Application.Dtos.AiChat
 {
     // Wire format for Ollama's /api/chat (docs/ai-chat-be-huong-dan.md §3) — intentionally separate
-    // from AiChatMessageDto/AiChatStreamEventDto (the FE-facing contract): this shape is Ollama's own
-    // vocabulary (role/content/tool_calls, snake_case), not something the FE should ever see directly.
+    // from each module's own FE-facing chat DTOs (AiChatMessageDto/AiChatStreamEventDto for Asset,
+    // AttendanceAiChat* for Attendance): this shape is Ollama's own vocabulary (role/content/
+    // tool_calls, snake_case), not something any FE should ever see directly.
+    //
+    // Lives in Shared.Application (moved out of Asset.Application, 2026-07-29) because there are now
+    // 2 real consumers — the Asset AI Chat orchestrator and the Attendance AI Chat orchestrator — and
+    // duplicating the wire contract would mean fixing every Ollama-protocol quirk twice.
 
     public class OllamaMessageWire
     {

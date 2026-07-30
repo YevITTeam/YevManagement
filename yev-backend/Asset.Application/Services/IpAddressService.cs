@@ -125,6 +125,49 @@ namespace Asset.Application.Services
             return ipAddresses.OrderBy(x => NetworkHelper.ToSortableKey(x.IpAddress)).ToList();
         }
 
+        // Used by the AI Chat tool get_ip_prefix_usage (docs/ai-chat-be-huong-dan.md §5): exact match
+        // on the 3-octet prefix (not Contains — "10.45.1" is a substring of "10.45.10"/"10.45.11"/...,
+        // so a fuzzy match would silently report the wrong subnet). Returns null when the prefix
+        // doesn't exist (no generated child IpAddress rows), which the caller turns into a tool error.
+        public async Task<IpPrefixUsageDto?> GetPrefixUsageAsync(string prefix)
+        {
+            var query = _unitOfWork.IpAddresses.GetQueryable(false, x => x.Device!, x => x.IpPrefix)
+                .Where(x => !x.IsDeleted && x.IpPrefix.Prefix == prefix);
+
+            var all = await _unitOfWork.IpAddresses.ToListAsync(query, x => new
+            {
+                IpAddress = x.IpAddress1,
+                x.Status,
+                DeviceCode = x.Status == (int)IpAddressStatus.AssignedExternal ? "Khác"
+                    : x.Device != null ? x.Device.DeviceCode : null
+            });
+
+            if (all.Count == 0) return null;
+
+            var ordered = all.OrderBy(x => NetworkHelper.ToSortableKey(x.IpAddress)).ToList();
+
+            return new IpPrefixUsageDto
+            {
+                Prefix = prefix,
+                TotalIpCount = ordered.Count,
+                UsedCount = ordered.Count(x => x.Status != (int)IpAddressStatus.Available),
+                AvailableCount = ordered.Count(x => x.Status == (int)IpAddressStatus.Available),
+                UsedIpAddresses = ordered
+                    .Where(x => x.Status != (int)IpAddressStatus.Available)
+                    .Select(x => new IpAddressUsageItemDto
+                    {
+                        IpAddress = x.IpAddress,
+                        StatusText = x.Status.GetIpAddressStatusText(),
+                        DeviceCode = x.DeviceCode
+                    })
+                    .ToList(),
+                AvailableIpAddresses = ordered
+                    .Where(x => x.Status == (int)IpAddressStatus.Available)
+                    .Select(x => x.IpAddress)
+                    .ToList()
+            };
+        }
+
         public async Task<IpAddressDto> GetByIdAsync(int id)
         {
             var ipAddress = (await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.Id == id, x => x.Device!, x => x.IpPrefix)).OrThrowNotFound("Địa chỉ IP", id);
@@ -133,8 +176,8 @@ namespace Asset.Application.Services
         }
 
         // Không còn CreateAsync/DeleteAsync thủ công cho từng IpAddress (2026-07-11) — IP chỉ
-        // sinh hàng loạt qua IpPrefixService.CreateAsync (255 địa chỉ/prefix) và dọn theo qua
-        // IpPrefixService.DeleteAsync. UpdateAsync được giữ lại nhưng CHỈ cho đổi Status +
+        // sinh hàng loạt qua IpPrefixService.CreateAsync (254 địa chỉ/prefix, bỏ .0 network và .255
+        // broadcast) và dọn theo qua IpPrefixService.DeleteAsync. UpdateAsync được giữ lại nhưng CHỈ cho đổi Status +
         // Note (không đổi IpAddress/IpPrefix/DeviceId — xem UpdateIpAddressDto).
 
         public async Task UpdateAsync(UpdateIpAddressDto request)

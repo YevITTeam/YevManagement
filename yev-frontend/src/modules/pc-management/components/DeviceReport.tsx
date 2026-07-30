@@ -17,13 +17,13 @@ const PAGE_SIZE = 1000;
 const DAY_MS = 86_400_000;
 const EXPIRY_WINDOW_DAYS = 90;
 
+// Báo cáo thống kê chỉ tính thiết bị "chờ sử dụng"/"đang sử dụng" — thiết bị chờ thanh lý/đã
+// thanh lý không còn vận hành nên không đưa vào làm dữ liệu thống kê.
 const statusMeta = [
     { value: 1, label: "Đang sử dụng", bar: "bg-emerald-500" },
     { value: 0, label: "Chưa sử dụng", bar: "bg-[#94a3b8]" },
-    { value: 2, label: "Chờ thanh lý", bar: "bg-[#004494]" },
-    { value: 4, label: "Thuê ngoài", bar: "bg-[#5c647a]" },
-    { value: 3, label: "Đã thanh lý", bar: "bg-[#930006]" },
 ];
+const REPORTABLE_STATUSES = new Set(statusMeta.map((status) => status.value));
 
 function formatDate(value: string | null) {
     if (!value) return "-";
@@ -130,17 +130,18 @@ export default function DeviceReport() {
     );
 
     const stats = useMemo(() => {
-        const total = devices.length;
+        const reportableDevices = devices.filter((device) => REPORTABLE_STATUSES.has(device.status));
+        const total = reportableDevices.length;
 
         const statusRows: DistributionRow[] = statusMeta.map((status) => ({
             label: status.label,
             bar: status.bar,
-            count: devices.filter((device) => device.status === status.value).length,
+            count: reportableDevices.filter((device) => device.status === status.value).length,
         }));
 
         const countBy = (selector: (device: DeviceDto) => string) => {
             const map = new Map<string, number>();
-            devices.forEach((device) => {
+            reportableDevices.forEach((device) => {
                 const key = selector(device) || "Không xác định";
                 map.set(key, (map.get(key) ?? 0) + 1);
             });
@@ -153,7 +154,7 @@ export default function DeviceReport() {
         const typeRows = countBy((device) => device.deviceTypeName).slice(0, 6);
 
         const expiring = now
-            ? devices
+            ? reportableDevices
                   .filter((device) => device.expirationDate)
                   .map((device) => ({
                       device,

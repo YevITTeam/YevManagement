@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, RefreshCw, X } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
@@ -16,6 +17,7 @@ import {
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { bilingualText } from "@/modules/attendance/lib/bilingual";
 
 const PAGE_SIZE = 10;
 
@@ -36,6 +38,7 @@ function formatDate(value: string) {
 // "Tiến độ duyệt" (approvalSummary, mới 2026-07-17) — mỗi phần tử 1 dòng đã Ký/Duyệt/Từ chối, nối thêm
 // dòng "Đang chờ..." suy từ status nếu đơn chưa Completed/Rejected — có ở cả 5 tab danh sách (§4.2).
 function ApprovalSummaryCell({ summary, status }: { summary: OtFormApprovalSummaryItemDto[]; status: number }) {
+    const t = useTranslations("Attendance.OtFormList");
     const nextLevel = nextApprovalLevelFromStatus(status);
     if (summary.length === 0 && nextLevel === null) {
         return <span className="text-xs text-[#9aa0a6]">-</span>;
@@ -55,7 +58,7 @@ function ApprovalSummaryCell({ summary, status }: { summary: OtFormApprovalSumma
                 );
             })}
             {nextLevel !== null && (
-                <div className="text-xs text-[#9a5b00]">Đang chờ {approvalLevelLabels[nextLevel] ?? "?"}</div>
+                <div className="text-xs text-[#9a5b00]">{t("waitingFor", { level: approvalLevelLabels[nextLevel] ?? "?" })}</div>
             )}
         </div>
     );
@@ -64,6 +67,8 @@ function ApprovalSummaryCell({ summary, status }: { summary: OtFormApprovalSumma
 // docs/attendance-api-fe.md §4.2 — my-forms (đơn do chính mình tạo) và pending-approvals (đơn chờ chính
 // mình duyệt, BE tự lọc theo cấp/scope) dùng chung shape OtFormListItemDto + phân trang.
 export default function OtFormListPage({ mode, hideHeading = false }: OtFormListPageProps) {
+    const t = useTranslations("Attendance.OtFormList");
+    const tCommon = useTranslations("Common");
     const router = useRouter();
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
@@ -102,30 +107,30 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
         },
-        "Không thể tải danh sách đơn tăng ca.",
+        t("loadError"),
         (message) => toast.error(message)
     );
 
     const title =
         mode === "my-forms"
-            ? "Đơn của tôi"
+            ? t("titleMyForms")
             : mode === "pending-submissions"
-            ? "Chờ tôi ký duyệt"
+            ? t("titlePendingSubmissions")
             : mode === "pending-approvals"
-            ? "Chờ tôi duyệt"
+            ? t("titlePendingApprovals")
             : mode === "my-actions"
-            ? "Đơn đã xử lý"
-            : "Đơn tôi tham gia";
+            ? t("titleMyActions")
+            : t("titleMyParticipations");
     const description =
         mode === "my-forms"
-            ? "Danh sách đơn tăng ca do bạn tạo."
+            ? t("descMyForms")
             : mode === "pending-submissions"
-            ? "Danh sách đơn tăng ca đang Nháp, chờ bạn ký duyệt \"Người đề nghị\" trước khi vào luồng duyệt."
+            ? t("descPendingSubmissions")
             : mode === "pending-approvals"
-            ? "Danh sách đơn tăng ca đang chờ bạn duyệt ở cấp hiện tại."
+            ? t("descPendingApprovals")
             : mode === "my-actions"
-            ? "Danh sách đơn tăng ca bạn đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào (kể cả đơn đã xử lý xong)."
-            : "Danh sách đơn tăng ca bạn CÓ TÊN trong danh sách nhân viên, dù không phải người tạo/ký/duyệt.";
+            ? t("descMyActions")
+            : t("descMyParticipations");
     const columnCount = mode === "my-forms" ? 9 : 8;
 
     return (
@@ -140,14 +145,14 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
                     <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${forms.length} / ${totalCount} bản ghi`}
+                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: forms.length, total: totalCount })}
                     </div>
                     <button
                         onClick={() => fetchForms()}
                         disabled={isLoading}
                         className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
-                        <RefreshCw className="h-3.5 w-3.5" /> Làm mới
+                        <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
                     </button>
                 </div>
 
@@ -159,22 +164,22 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Phòng ban / Bộ phận</th>
-                                <th className="px-6 py-3">Trường hợp</th>
-                                <th className="px-6 py-3">Ngày</th>
-                                <th className="px-6 py-3">Số giờ</th>
-                                <th className="px-6 py-3">Số NV</th>
-                                <th className="px-6 py-3">Người tạo</th>
-                                <th className="px-6 py-3">Trạng thái</th>
-                                <th className="px-6 py-3">Tiến độ duyệt</th>
-                                {mode === "my-forms" && <th className="px-6 py-3 text-right">Thao tác</th>}
+                                <th className="px-6 py-3">{t("colDepartmentGroup")}</th>
+                                <th className="px-6 py-3">{t("colOtCase")}</th>
+                                <th className="px-6 py-3">{t("colDate")}</th>
+                                <th className="px-6 py-3">{t("colTotalHour")}</th>
+                                <th className="px-6 py-3">{t("colNumberOfEmployee")}</th>
+                                <th className="px-6 py-3">{t("colCreatedBy")}</th>
+                                <th className="px-6 py-3">{t("colStatus")}</th>
+                                <th className="px-6 py-3">{t("colApprovalProgress")}</th>
+                                {mode === "my-forms" && <th className="px-6 py-3 text-right">{tCommon("actions")}</th>}
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && forms.length === 0 && (
                                 <tr>
                                     <td colSpan={columnCount} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có đơn nào.
+                                        {t("noData")}
                                     </td>
                                 </tr>
                             )}
@@ -185,8 +190,10 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                     className="cursor-pointer border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]"
                                 >
                                     <td className="px-6 py-4 align-top">
-                                        <div className="text-sm font-semibold text-[#191c1e]">{form.departmentNameVn}</div>
-                                        <div className="text-xs text-[#5e3f3a]">{form.groupNameVn}</div>
+                                        <div className="text-sm font-semibold text-[#191c1e]">
+                                            {bilingualText(form.departmentNameVn, form.departmentNameJp)}
+                                        </div>
+                                        <div className="text-xs text-[#5e3f3a]">{bilingualText(form.groupNameVn, form.groupNameJp)}</div>
                                     </td>
                                     <td className="px-6 py-4 align-top text-sm text-[#191c1e]">{form.otCaseCode}</td>
                                     <td className="px-6 py-4 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
@@ -199,7 +206,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                         <span
                                             className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
                                         >
-                                            {otFormStatusLabels[form.status] ?? "Không xác định"}
+                                            {otFormStatusLabels[form.status] ?? t("unknownStatus")}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 align-top">
@@ -215,7 +222,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                                     }}
                                                     className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
                                                 >
-                                                    Sửa
+                                                    {tCommon("edit")}
                                                 </button>
                                             )}
                                         </td>
@@ -232,17 +239,17 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                         disabled={!hasPreviousPage || isLoading}
                         onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
                     >
-                        Trang trước
+                        {tCommon("prevPage")}
                     </button>
                     <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
+                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
                     </div>
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasNextPage || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        Trang sau
+                        {tCommon("nextPage")}
                     </button>
                 </div>
             </section>

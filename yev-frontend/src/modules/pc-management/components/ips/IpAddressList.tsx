@@ -12,10 +12,10 @@ import { ipStatusClasses, ipStatusLabels, ipStatusOptions } from "./ip-status";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
-// Lấy hẳn 255 địa chỉ IP (đúng số IP tối đa của 1 dải mạng /24) mỗi lần gọi API
+// Lấy hẳn 254 địa chỉ IP (đúng số IP tối đa của 1 dải mạng /24, đã bỏ .0/.255) mỗi lần gọi API
 // để giảm số lần bấm "Trang sau" khi xem hết 1 prefix; UI chỉ hiển thị ~10 dòng
 // cùng lúc và cho cuộn bên trong bảng (xem div bọc <table> có overflow-y-auto).
-const PAGE_SIZE = 255;
+const PAGE_SIZE = 254;
 const VISIBLE_ROWS = 10;
 const ROW_HEIGHT_PX = 53;
 

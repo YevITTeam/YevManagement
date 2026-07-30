@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { FilePlus2, ClipboardList, FolderCog, ShieldCheck, PenTool, PanelLeftClose, CalendarClock } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList, FolderCog, ShieldCheck, PenTool, PanelLeftClose, CalendarClock } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -18,6 +18,11 @@ interface OtNavItem {
 // (otAccumulation) cố ý KHÔNG gắn permission — bất kỳ user đăng nhập nào cũng thấy được (§3.6/§1.4).
 const navItems: OtNavItem[] = [
     { key: "otCreate", href: "/ot/create", icon: FilePlus2, permission: "Attendance.OTForm.Create" },
+    // Cách khác để tạo đơn — qua hội thoại AI thay vì form tay, kết quả vẫn là 1 đơn Draft y hệt
+    // (xem docs/docs-be/attendance-aichat-be-huong-dan.md). Permission riêng vì đây là tool ghi dữ
+    // liệu đầu tiên của tính năng AI Chat, cố tình tách khỏi Attendance.OTForm.Create để kiểm soát
+    // rollout độc lập.
+    { key: "otAiChat", href: "/ot/ai-chat", icon: Bot, permission: "Attendance.AiChat.Use" },
     // Gộp 2026-07-17: "Đơn của tôi"/"Chờ tôi ký duyệt"/"Chờ tôi duyệt"/"Đơn đã xử lý"/"Đơn tôi tham
     // gia" giờ là 5 tab trong CÙNG 1 màn — permission gate ở đây chỉ cần OTForm.View (điều kiện chung
     // nhỏ nhất, đủ cho mọi Role nghiệp vụ); từng tab bên trong tự ẩn/hiện theo permission chi tiết hơn

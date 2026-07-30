@@ -79,7 +79,9 @@ export interface OtFormApprovalSummaryItemDto {
 export interface OtFormListItemDto {
     id: number;
     groupNameVn: string;
+    groupNameJp: string | null;
     departmentNameVn: string;
+    departmentNameJp: string | null;
     otCaseCode: string;
     date: string;
     totalHour: number;
@@ -108,10 +110,13 @@ export interface OtFormDto {
     id: number;
     groupId: number;
     groupNameVn: string;
+    groupNameJp: string | null;
     departmentId: number;
     departmentNameVn: string;
+    departmentNameJp: string | null;
     reasonId: number;
     reasonNameVn: string;
+    reasonNameJp: string | null;
     otCaseId: number;
     otCaseCode: string;
     startTime: string;

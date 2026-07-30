@@ -9,6 +9,42 @@
 > chi tiết): (1) bản đầu tiên KHÔNG stream đúng như pseudocode §4 mô tả — gom hết cả round rồi mới
 > gửi 1 lần, đã sửa; (2) payload gọi Ollama thêm `"options":{"temperature":0.3}` (không có trong ví
 > dụ payload gốc ở §3 dưới đây); (3) `HttpClient.Timeout` nâng 120s → 300s (cấu hình được).
+>
+> **Cập nhật 2026-07-27 (2)**: thêm tool thứ 17 `get_ip_prefix_usage` — tra cứu IP nào đang dùng/còn
+> trống trong 1 dải mạng (§5, §6). Hàm mới `IpAddressService.GetPrefixUsageAsync` (`IIpAddressService`,
+> `Asset.Application/Services/IpAddressService.cs`), không đụng `IpAddressFilterRequest`/`grid-list`
+> hiện có.
+>
+> **Cập nhật 2026-07-27 (3)**: thêm nút "Xem chi tiết thiết bị" (dòng NDJSON mới `{"type":"device"}`)
+> + toggle bật/tắt suy luận sâu (field request mới `think?: boolean`), và redesign UI
+> `AiChatBox.tsx` (bubble/avatar/toolbar/gợi ý câu hỏi, nút sao chép câu trả lời) — chi tiết ở §11.
+> Đổi model & gửi ảnh **hoãn lại**: server Ollama hiện chỉ có 1 model, không có capability `"vision"`.
+>
+> **Cập nhật 2026-07-27 (4)**: fix bug gõ mã thiết bị thiếu gạch ngang (`"ydc 9875"` → tool báo
+> không tìm thấy dù thiết bị tồn tại là `"ydc-9875"`) — chuẩn hoá `deviceCode` bằng regex trước khi
+> tra cứu thay vì chỉ dựa vào system prompt. Chi tiết §12.
+>
+> **Cập nhật 2026-07-27 (5)**: fix tiếp bug khác cùng luồng — model hỏi lại "mã thiết bị chính xác
+> là gì" thay vì gọi tool luôn dù người dùng đã cung cấp đủ (`"ydc 9875"`). Thêm rule mới vào
+> `DefaultSystemPrompt` (§9) cấm hỏi lại trước khi thử gọi tool. Chi tiết §13.
+>
+> **Cập nhật 2026-07-29**: fix bug nghiêm trọng hơn — model TỰ BỊA kết quả tra cứu (vd tự nói "đã
+> gọi tool, IP là 10.20.30.150" trong khi chưa hề gọi tool nào) sau khi 1 lượt trước đó của chính nó
+> chỉ hứa suông "tôi sẽ tra cứu ngay bây giờ" mà không thực sự gọi tool. Thêm rule "KHÔNG BỊA KẾT
+> QUẢ TRA CỨU" vào `DefaultSystemPrompt` (§9) + guard cấu trúc ở `AiChatService` phát hiện lời hứa
+> chưa thực hiện trong lịch sử và tự chèn 1 tin nhắn `system` nhắc nhở trước khi gọi Ollama lại. Chi
+> tiết §14.
+>
+> **Cập nhật 2026-07-29 (2)**: `IOllamaChatClient`/`OllamaChatClient`/wire DTO (`OllamaMessageWire`
+> v.v.) đã **chuyển từ `Asset.Application`/`Asset.Infrastructure` sang `Shared.Application`/
+> `Shared.Infrastructure`** — lý do: Attendance module vừa có tính năng AI Chat riêng
+> ([attendance-aichat-be-huong-dan.md](attendance-aichat-be-huong-dan.md), tạo đơn tăng ca qua hội
+> thoại), cần dùng chung hạ tầng gọi Ollama thay vì fork 1 bản. Thay đổi chữ ký duy nhất:
+> `StreamChatAsync` nhận thêm tham số `JsonNode tools` (trước đó hard-code
+> `AiChatToolDefinitions.Tools` ngay trong Infrastructure) — `AiChatService.cs` giờ tự truyền
+> `AiChatToolDefinitions.Tools.DeepClone()` ở call site. Hành vi/API bên ngoài (endpoint
+> `POST /api/AiChat/stream`, hợp đồng NDJSON) **không đổi gì** — đã regression-test lại bằng
+> `dotnet build` + gọi thật `POST /api/AiChat/stream`, trả lời đúng như trước khi refactor.
 
 > Hướng dẫn cho đội BE (.NET) triển khai lại phần "Chat với AI" đang chạy tạm ở FE
 > (`src/modules/ai-chat/`) thành 1 endpoint BE thật. Đọc kèm [asset-api-fe.md](asset-api-fe.md)
@@ -130,7 +166,7 @@ Lưu ý khi hiện thực bằng C#: mỗi tool PHẢI bọc try/catch riêng, t
 `{"error": "..."}` vào message `"tool"` thay vì throw — throw sẽ làm gãy cả vòng hỏi-đáp giữa
 chừng (xem cách FE làm trong `runDeviceTool`).
 
-## 5. Danh mục 16 tool — CHỈ ĐỌC, không tool nào được phép gọi create/update/delete
+## 5. Danh mục 17 tool — CHỈ ĐỌC, không tool nào được phép gọi create/update/delete
 
 Nguyên tắc: mỗi tool ứng với đúng 1 câu hỏi tra cứu, gọi thẳng **service/repository nội bộ** của
 BE (không tự gọi HTTP vào chính mình). Cột "Route tương đương" đối chiếu [asset-api-fe.md](asset-api-fe.md)
@@ -151,14 +187,19 @@ BE (không tự gọi HTTP vào chính mình). Cột "Route tương đương" đ
 | `search_suppliers` | `GET /api/Supplier/grid-list` | |
 | `search_software_groups` | `GET /api/SoftwareGroup/grid-list` | |
 | `search_ip_prefixes` | `GET /api/IpPrefix/grid-list` | |
+| `get_ip_prefix_usage` | *(không có route sẵn — hàm mới `IpAddressService.GetPrefixUsageAsync`, 2026-07-27)* | Nhận **đúng** 1 dải mạng 3 octet (vd `10.45.1`), trả IP nào đang gán cho thiết bị nào + IP nào còn trống, kèm tổng số đã dùng/còn trống. **Không** resolve gần đúng như mục 6 — khớp chính xác chuỗi `Prefix`, không thấy thì báo lỗi (tránh báo nhầm dải mạng do `Contains` bắt dính "10.45.1" vào cả "10.45.10"/"10.45.11"...). |
 | `get_device_report` | `GET /api/Report/device-list` | Nhận **tên** loại thiết bị/chi nhánh → resolve sang `deviceTypeId`/`branchId` (mục 6) |
 | `get_asset_settings` | `GET /api/AssetSetting` | Không tham số |
 | `search_audit_trail` | `GET /api/AuditTrail/grid-list` | Nhật ký **toàn hệ thống**, khác `get_device_change_history` (chỉ 1 thiết bị) |
 
 Tất cả tool đều **giới hạn tối đa 10 kết quả** (`MAX_RESULTS = 10` ở FE) — giữ nguyên khi viết lại
-để tránh nhét quá nhiều token vào context của model.
+để tránh nhét quá nhiều token vào context của model. `get_ip_prefix_usage` áp dụng cùng giới hạn cho
+cả 2 danh sách (`usedIpAddresses`/`availableIpAddresses`) nhưng vẫn trả `usedCount`/`availableCount`
+tính trên **toàn bộ** tập trước khi cắt, để model không nói sai tổng số khi danh sách bị rút gọn.
 
-### JSON Schema đầy đủ (copy nguyên từ [deviceTools.ts](../src/modules/ai-chat/lib/deviceTools.ts), gửi nguyên trong field `tools` của request Ollama)
+### JSON Schema đầy đủ (16 tool đầu copy nguyên từ [deviceTools.ts](../src/modules/ai-chat/lib/deviceTools.ts);
+`get_ip_prefix_usage` thêm sau khi chuyển sang BE — 2026-07-27, không tồn tại ở bản FE cũ — gửi nguyên
+trong field `tools` của request Ollama)
 
 ```json
 [
@@ -330,6 +371,18 @@ Tất cả tool đều **giới hạn tối đa 10 kết quả** (`MAX_RESULTS =
   {
     "type": "function",
     "function": {
+      "name": "get_ip_prefix_usage",
+      "description": "Lấy tình trạng sử dụng của 1 dải mạng (IP prefix, dạng 3 octet vd \"10.45.1\"): IP nào đang được gán cho thiết bị nào, và IP nào còn trống chưa sử dụng, kèm tổng số IP đã dùng/còn trống. Dùng khi hỏi kiểu \"dải 10.45.1 còn IP nào trống\", \"IP nào trong dải 10.45.1 đang được dùng\". Muốn tra 1 địa chỉ IP cụ thể hoặc theo mã thiết bị thì dùng search_ip_addresses thay vì tool này.",
+      "parameters": {
+        "type": "object",
+        "properties": { "prefix": { "type": "string", "description": "Dải mạng 3 octet cần tra cứu, vd \"10.45.1\"" } },
+        "required": ["prefix"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "get_device_report",
       "description": "Lấy BÁO CÁO danh sách thiết bị phục vụ thống kê/kế toán: ngày mua, hạn khấu hao, tình trạng đã hết hạn hay chưa, kỳ tài chính — lọc theo loại thiết bị và/hoặc chi nhánh. Dùng khi người dùng hỏi kiểu tổng hợp/báo cáo (vd \"máy nào sắp hết khấu hao\", \"báo cáo thiết bị chi nhánh X\") thay vì hỏi 1 máy cụ thể.",
       "parameters": {
@@ -387,6 +440,24 @@ Cần 3 hàm resolve (xem code mẫu TypeScript trong `deviceTools.ts` — `reso
 - `tên loại thiết bị → deviceTypeId` — dùng cho `get_device_report`.
 - `tên chi nhánh → branchId` — dùng cho `get_device_report`.
 
+**Chuẩn hoá `deviceCode` trước khi resolve (2026-07-27, §12)**: mọi `DeviceCode` thật trong hệ thống
+là "chữ-dấu gạch ngang-số" (vd `ydc-9875`), nhưng người dùng gõ trong chat (và cả model) hay bỏ/gõ
+sai dấu gạch: `"ydc 9875"`, `"ydc_9875"`, `"ydc9875"`. Prompt mặc định (§9) đã dặn model tự chuẩn
+hoá, nhưng model nhỏ chạy local không tuân theo ổn định — nên chuẩn hoá quyết định (deterministic)
+ngay ở `AiChatToolExecutorService.GetDeviceCodeArg` bằng regex `^([A-Za-z]+)[\s_-]*([0-9]+)$` →
+`{chữ}-{số}`, áp dụng cho **mọi** tham số `deviceCode` đọc từ tool call (`search_devices`,
+`get_device_detail`, `get_device_transfer_history`, `get_device_change_history`,
+`search_ip_addresses`). Regex neo `^...$` 2 đầu nên **chỉ** biến đổi chuỗi đúng dạng "toàn chữ rồi
+toàn số" — mã không khớp dạng đó (vd có chữ xen giữa số) bị bỏ qua nguyên trạng thay vì liều sửa sai
+(`DeviceCode` không có validate format ở `CreateDeviceDto`, không đảm bảo 100% mọi mã đều theo đúng
+quy ước 2 phần này).
+
+**Ngoại lệ:** `get_ip_prefix_usage` **không** theo pattern gần đúng ở trên — `prefix` phải khớp
+**chính xác** chuỗi `IpPrefix.Prefix` (không `Contains`), vì `Contains("10.45.1")` sẽ dính luôn
+"10.45.10"/"10.45.11"/... (mọi prefix có "10.45.1" làm tiền tố chuỗi) → báo nhầm dữ liệu dải mạng
+khác cho model. Không có kết quả khớp chính xác → trả lỗi `{"error": "Không tìm thấy dải mạng ..."}`
+thay vì đoán dải gần giống.
+
 ## 7. Hợp đồng endpoint đề xuất cho FE gọi (BE tự thiết kế lại nếu cần, đây chỉ là gợi ý)
 
 ```
@@ -436,7 +507,8 @@ thiết ngay ở bản đầu.
   (`MAX_TOOL_ROUNDS`, `toolCallsBox`...) — chỉ còn gọi 1 lần endpoint BE, đọc stream, cập nhật UI;
   `toolsUsed` lấy trực tiếp từ dòng `{"type":"tool", ...}` BE gửi về.
 
-## 9. System prompt mặc định (copy nguyên văn từ FE, BE có thể giữ làm default)
+## 9. System prompt mặc định (copy nguyên văn từ `AiChatService.DefaultSystemPrompt` — nguồn xác thực
+là code, cập nhật lần cuối 2026-07-29 khi thêm mục "KHÔNG BỊA KẾT QUẢ TRA CỨU" ở §14)
 
 ```
 Bạn là trợ lý AI nội bộ của công ty. QUY TẮC NGÔN NGỮ (quan trọng nhất, luôn tuân theo): LUÔN
@@ -451,12 +523,44 @@ cài, lịch sử chuyển giao/thay đổi, IP), hoặc thông tin chi nhánh, 
 phận thiết bị, PHẢI dùng tool tra cứu phù hợp để lấy dữ liệu thật, không tự bịa số liệu. Nếu câu
 hỏi cần nhiều loại dữ liệu khác nhau, được phép gọi nhiều tool cùng lúc trong 1 lượt thay vì hỏi
 lại người dùng. Các tool chỉ tra cứu (đọc dữ liệu), không thể thêm/sửa/xoá — nếu người dùng
-muốn thay đổi dữ liệu, hướng dẫn họ thao tác trên hệ thống thay vì tự nhận đã thực hiện.
+muốn thay đổi dữ liệu, hướng dẫn họ thao tác trên hệ thống thay vì tự nhận đã thực hiện.Dữ lấy
+từ DB phải trả dạng ngôn ngữ nguyên bản ví dụ như: bảng Group có trưởng GroupName là Office thì
+không được phép dịch thành thiết bị văn phòng mà phải trả lại nguyên trạng. Ngoài ra mã thiết tự
+động hiểu ydc 9923 là ydc-9923 này vì mã sẽ được chia thành 2 phần bên chữ bên số được ngăn cách
+bởi dấu -
+
+QUY TẮC KHÔNG HỎI LẠI KHI ĐÃ CÓ MÃ THIẾT BỊ: nếu người dùng đã nhắc tới 1 chuỗi có dạng mã thiết
+bị (chữ đi kèm số, có hoặc không có dấu cách/gạch dưới/gạch ngang ở giữa — vd 'ydc 9875',
+'ydc-9875', 'ydc_9875', 'PC001'), PHẢI coi đó LÀ mã thiết bị và gọi NGAY tool tra cứu phù hợp
+(get_device_detail khi hỏi chi tiết/cấu hình, search_devices khi hỏi tìm kiếm/liệt kê) trong
+cùng lượt trả lời — TUYỆT ĐỐI KHÔNG hỏi lại người dùng '(mã thiết bị) chính xác là gì', 'bạn
+muốn tìm thông tin gì cụ thể' hay yêu cầu cung cấp thêm chi tiết trước khi thử gọi tool; hệ
+thống đã tự chuẩn hoá dấu phân cách trong mã nên không cần người dùng gõ đúng định dạng. Chỉ được
+hỏi lại người dùng SAU KHI đã thực sự gọi tool và tool trả về lỗi không tìm thấy thiết bị.
+
+QUY TẮC KHÔNG BỊA KẾT QUẢ TRA CỨU: TUYỆT ĐỐI không được nói 'tôi đã gọi tool', 'kết quả tra cứu
+là...', 'dựa trên dữ liệu vừa lấy được...' hay đưa ra bất kỳ số liệu cụ thể nào (địa chỉ IP, cấu
+hình, ngày tháng...) nếu KHÔNG có tin nhắn kết quả tool thật sự nằm ngay phía trên trong lượt trả
+lời hiện tại. Một tin nhắn trợ lý TRƯỚC ĐÓ (ở lượt chat cũ) nói 'tôi sẽ tra cứu ngay bây giờ'
+KHÔNG phải là bằng chứng việc tra cứu đã xảy ra — nếu không thấy kết quả tool thật đi kèm, nghĩa là
+việc đó CHƯA từng được thực hiện, PHẢI gọi lại tool ngay bây giờ thay vì tiếp tục câu chuyện như
+thể đã có kết quả. Bịa số liệu để trả lời cho có là lỗi nghiêm trọng hơn nhiều so với việc thừa
+nhận chưa tra cứu được.
+
+QUY TẮC BẮT BUỘC KHI CẦN GỌI THÊM TOOL: nếu bạn cần dùng kết quả tool vừa nhận được để gọi thêm
+1 tool khác (vd đã có deviceId từ search_ip_addresses, giờ cần gọi get_device_detail), PHẢI gọi
+tool đó NGAY trong cùng lượt trả lời này — tuyệt đối KHÔNG được viết thành lời hứa kiểu 'tôi sẽ
+dùng...', 'bây giờ tôi sẽ...', 'xin chờ trong giây lát' rồi kết thúc câu trả lời mà không thực sự
+gọi tool, vì hệ thống CHỈ thực thi tool khi bạn gọi tool thật, không đọc được câu chữ mô tả ý
+định. Nếu chưa gọi tool thành công để lấy dữ liệu, TUYỆT ĐỐI không được khẳng định là đã có hoặc
+sắp có kết quả, và không được tự bịa số liệu để hoàn thành những gì đã nói trước đó — nếu không
+chắc, hãy gọi lại tool cần thiết ngay trong lượt hiện tại thay vì suy đoán.
 ```
 
-Nguồn: hằng số `DEFAULT_SYSTEM_PROMPT` trong [ChatBox.tsx](../src/modules/ai-chat/components/ChatBox.tsx).
-FE hiện cho người dùng sửa system prompt qua 1 khung UI (nút "System prompt" trên header chat) —
-nếu giữ tính năng này, field `systemPrompt` ở request (mục 7) chính là giá trị người dùng sửa.
+Nguồn: hằng số `AiChatService.DefaultSystemPrompt` (`Asset.Application/Services/AiChatService.cs`) —
+đây là bản đã lên BE thật, KHÔNG còn phải `DEFAULT_SYSTEM_PROMPT` ở `ChatBox.tsx` (file đó đã xoá
+khỏi FE khi chuyển sang BE, xem §8). FE có thể gửi `systemPrompt` khác qua request (mục 7) để override,
+nhưng hiện `AiChatBox.tsx` không có UI cho việc này (đã bỏ khi redesign 2026-07-27, xem §11).
 
 ## 10. Việc chưa cần làm ngay (ghi nhận để làm sau, không nằm trong phạm vi bản đầu)
 
@@ -467,3 +571,132 @@ nếu giữ tính năng này, field `systemPrompt` ở request (mục 7) chính 
 - Model hiện tại (`gemma4:e2b`) đôi lúc lẫn vài từ tiếng Anh/Trung hoặc trả sai lệch nhẹ so với dữ
   liệu tool (đã thấy khi test) — chất lượng phụ thuộc model, không phải lỗi kiến trúc, không cần
   xử lý ở BE.
+- **Đổi model** (chọn model khác qua UI) và **gửi ảnh** (multimodal/vision): quyết định hoãn lại
+  ngày 2026-07-27 (đọc thêm ở §11) — server Ollama nội bộ (10.45.6.70:11434) tại thời điểm đó chỉ
+  có **đúng 1 model** (`gemma4:e2b`, capabilities `["completion","tools","thinking"]`, **không** có
+  `"vision"`) → chưa có model nào khác để đổi, và model hiện tại không đọc được ảnh. Làm lại 2 mục
+  này khi server có thêm model (đặc biệt 1 model có `"vision"`); lúc đó cân nhắc thêm BE endpoint
+  bọc `GET {OllamaBaseUrl}/api/tags` để FE liệt kê model thay vì hard-code.
+
+## 11. Cập nhật 2026-07-27 (2): nút xem chi tiết thiết bị + bật/tắt suy luận sâu
+
+Theo yêu cầu mở rộng UI AI Chat — 2 phần **đã làm**, đổi tương thích ngược (field mới, không phá vỡ
+FE cũ nếu có):
+
+- **Dòng NDJSON mới `{"type":"device"}`** (hợp đồng đầy đủ ở [asset-api-fe.md §7c](asset-api-fe.md)):
+  `AiChatToolExecutorService.ExecuteAsync` giờ trả `AiChatToolExecutionResult{Json, DeviceReferences}`
+  thay vì `string` trần — `Json` vẫn là nội dung đưa vào message `"tool"` gửi lại Ollama y như cũ,
+  `DeviceReferences` (`List<AiChatDeviceReferenceDto>{Id, DeviceCode}`) là dữ liệu **chỉ dành cho
+  FE**, không lộ vào context của model. 4 tool có thể sinh reference: `search_devices` (mỗi thiết bị
+  tìm được), `get_device_detail`/`get_device_transfer_history`/`get_device_change_history` (thiết bị
+  đã resolve từ `deviceCode`). `AiChatService` gom `emittedDeviceIds` (`HashSet<int>`) qua suốt 1 lượt
+  hỏi để không phát trùng 1 thiết bị nhiều lần nếu model tra cứu nó qua nhiều tool/vòng khác nhau.
+  FE (`AiChatBox.tsx`) hiện nút "Xem chi tiết {deviceCode}" dưới câu trả lời, điều hướng
+  `/pc/devices?id={deviceId}` (route FE dùng query string, không phải `[id]` động — do static export,
+  xem `app/[locale]/(pc-manager)/pc/devices/page.tsx`), ẩn nếu user không có `Asset.Device.View`.
+- **Field request mới `think?: boolean`**: `"think": false` trong `OllamaChatClient` đổi từ hard-code
+  sang tham số `think` truyền vào (`AiChatRequestDto.Think ?? false` — mặc định giữ nguyên hành vi cũ
+  vì model hiện tại (`gemma4:e2b`) có capability `"thinking"` thật, đo được ~15-20s khi bật so với
+  ~2-3s khi tắt (§3) — bật là quyết định người dùng tự chọn đánh đổi tốc độ lấy chất lượng suy luận
+  cho 1 câu hỏi cụ thể, không phải mặc định. FE thêm 1 toggle "Suy luận sâu" ở header (khóa khi đang
+  stream, vì Ollama chỉ nhận `think` cố định cho cả request, không đổi giữa chừng 1 lượt).
+- **Không đổi** endpoint, method, hay 4 dòng NDJSON gốc — chỉ thêm field/dòng mới, cả 2 optional ở
+  phía request và additive ở phía response.
+
+## 12. Cập nhật 2026-07-27 (4): chuẩn hoá `deviceCode` gõ tắt ("ydc 9875" → "ydc-9875")
+
+Bug thực tế: người dùng gõ `"ydc 9875"` (cách bằng dấu cách thay vì gạch ngang) → tool tra cứu báo
+không tìm thấy thiết bị, dù thiết bị tồn tại với mã `ydc-9875`. Nguyên nhân: `deviceCode` truyền
+thẳng vào `Contains`/so khớp (mục 5, 6) — sai 1 ký tự phân cách là trật hoàn toàn, và dặn model tự
+chuẩn hoá trong system prompt (mục 9, câu "mã sẽ được chia thành 2 phần...") không đủ tin cậy với
+model nhỏ chạy local.
+
+**Đã sửa** ở `AiChatToolExecutorService` (không đụng system prompt, giữ nguyên như 1 lớp phòng thủ
+thứ 2): thêm `GetDeviceCodeArg(args, "deviceCode")` — wrap `GetStringArg` rồi chạy qua
+`NormalizeDeviceCode`, regex `^([A-Za-z]+)[\s_-]*([0-9]+)$` → `"{chữ}-{số}"`. Áp dụng cho **mọi** nơi
+đọc tham số `deviceCode` từ tool call: `search_devices`, `get_device_detail`,
+`get_device_transfer_history`, `get_device_change_history`, `search_ip_addresses`. Xử lý được cả 3
+kiểu gõ sai: cách bằng khoảng trắng (`"ydc 9875"`), gạch dưới (`"ydc_9875"`), dính liền không có
+phân cách (`"ydc9875"`) — đều ra `"ydc-9875"`. Mã đã đúng định dạng (`"ydc-9875"`) khớp regex và bị
+"thay" bằng chính nó, coi như no-op.
+
+An toàn cho mã không theo đúng khuôn 2 phần: regex neo `^...$` cả 2 đầu, `([0-9]+)$` bắt buộc phần
+đuôi phải **toàn số tới hết chuỗi** — mã kiểu `"R2D2-001"` không khớp (sau chữ "R" phần còn lại
+`"2D2-001"` không toàn số) nên giữ nguyên, không có rủi ro sửa nhầm mã hợp lệ thành mã sai.
+
+## 13. Cập nhật 2026-07-27 (5): model hỏi lại thay vì gọi tool khi đã có mã thiết bị
+
+Bug thực tế phát hiện SAU §12 (khác nguyên nhân — §12 sửa xong vẫn còn lỗi này): người dùng gõ
+`"tìm thông tin máy ydc 9875"` rồi `"Chi tiết đầy đủ"` — model **không gọi tool nào cả**, chỉ hỏi
+lại kiểu "Bạn có mã thiết bị chính xác không?" dù đã có đủ thông tin để gọi `get_device_detail`
+ngay. §12 chuẩn hoá đúng chuỗi `deviceCode` bên trong `AiChatToolExecutorService`, nhưng vô dụng
+nếu model không hề phát sinh `tool_calls` — `AiChatService.StreamChatAsync` chỉ đọc `tool_calls` có
+thật (mục 4), không đọc được câu chữ dạng "hỏi lại" để tự suy ra là model "ngần ngại" gọi tool.
+
+**Đã sửa**: thêm đoạn mới vào `DefaultSystemPrompt` (§9) — "QUY TẮC KHÔNG HỎI LẠI KHI ĐÃ CÓ MÃ THIẾT
+BỊ": bất kỳ chuỗi nào dạng chữ+số (có/không có dấu phân cách) mà người dùng nhắc tới đều PHẢI được
+coi là mã thiết bị và gọi tool tra cứu (`get_device_detail`/`search_devices` tuỳ ngữ cảnh) **ngay**,
+tuyệt đối không hỏi lại xác nhận trước; chỉ hỏi lại **sau khi** tool đã chạy và báo không tìm thấy.
+Đây là prompt-level mitigation (giống hạn chế đã ghi ở `asset-module.md §1.18` về việc model đôi khi
+"viết lời hứa thay vì gọi tool thật") — không đảm bảo 100% với model nhỏ (`gemma4:e2b`), nhưng cùng
+với §12 (chuẩn hoá mã quyết định) đã che gần hết 2 lớp lỗi độc lập của cùng 1 luồng: model không
+chịu gọi tool, và nếu chịu gọi thì gọi sai chuỗi mã.
+
+## 14. Cập nhật 2026-07-29: model tự bịa kết quả tra cứu sau 1 lượt hứa suông
+
+Bug nghiêm trọng hơn §13, phát hiện qua transcript thật của người dùng: hỏi
+`"tìm thông tin máy ydc 9875 chi tiết đầy đủ"` → model gọi tool thật, trả lời đúng. Sau đó hỏi
+`"IP đang dùng"` → model trả lời `"Để kiểm tra... tôi sẽ thực hiện tra cứu ngay bây giờ."` **không
+kèm `tool_calls`** → round kết thúc, câu "hứa suông" này trở thành nội dung cuối cùng của lượt, được
+commit vào history. Lượt kế tiếp (`"bạn tra ra chưa"`), model đọc lại chính câu hứa của mình trong
+history và **tự bịa** ra một kết quả hợp lý ("Kết quả: IP là 10.20.30.150") thay vì gọi tool thật —
+lặp lại y hệt kiểu này thêm 2 lượt nữa (kể cả sau khi bị người dùng vặn "bạn tự bịa ak"), chỉ dừng
+bịa sau khi người dùng gõ thẳng "bạn chưa có gọi một tool nào hết á" + "hãy thực hiện đi".
+
+**Nguyên nhân gốc**: `AiChatMessageDto` (hợp đồng FE↔BE) chỉ có role `user`/`assistant` — tin nhắn
+`role: "tool"` là nội tại của 1 lần gọi `StreamChatAsync`, KHÔNG được FE lưu lại/gửi lại ở lượt sau
+(xem comment ở `AiChatMessageDto.cs`). Vì vậy khi 1 lượt trước đó kết thúc bằng lời hứa suông (không
+`tool_calls`), history gửi lại ở lượt sau **không hề có bằng chứng** việc tra cứu đã xảy ra hay chưa
+— nhưng model (nhỏ, hay "tiếp nối câu chuyện" một cách tự tin) coi lời hứa của chính nó như thể đã
+hoàn thành, rồi bịa số liệu để "hoàn tất" mạch hội thoại thay vì thừa nhận chưa làm.
+
+**Đã sửa** (2 lớp, cả 2 ở `AiChatService.cs`):
+
+1. **Prompt-level**: thêm đoạn "QUY TẮC KHÔNG BỊA KẾT QUẢ TRA CỨU" vào `DefaultSystemPrompt` (§9) —
+   cấm khẳng định đã có kết quả/tự bịa số liệu nếu không có tin nhắn kết quả tool thật ngay phía
+   trên trong lượt hiện tại; nói rõ 1 lời hứa ở lượt cũ KHÔNG phải bằng chứng đã tra cứu.
+2. **Structural-level (mới, chắc hơn thuần prompt)**: `UnfulfilledPromisePattern` — regex khớp các
+   cụm hứa suông tiếng Việt phổ biến (`"sẽ thực hiện/tra cứu/kiểm tra/gọi"`, `"ngay bây giờ"`,
+   `"trong giây lát"`, `"xin chờ"`, `"để tôi kiểm tra/tra cứu"`). Khi build `messages` từ
+   `request.History`, nếu tin nhắn **cuối cùng** là `role: assistant` và khớp regex này, tự động
+   chèn thêm 1 tin nhắn `role: "system"` ngay trước tin nhắn `user` mới, nhắc thẳng: lượt trước
+   chưa hề gọi tool thật, nếu câu hỏi hiện tại liên quan thì phải gọi tool ngay, không được bịa.
+   Cách này không phụ thuộc hoàn toàn vào việc model "tự giác" tuân theo system prompt gốc — chủ
+   động chèn lời nhắc đúng lúc lời hứa suông xuất hiện ở lượt liền trước, là điểm model dễ bịa nhất
+   theo transcript thực tế.
+
+Giới hạn đã biết: regex chỉ bắt các cụm hứa hẹn thường gặp bằng tiếng Việt, không phải NLP hoàn
+chỉnh — model vẫn có thể hứa suông bằng cách diễn đạt khác không khớp regex, hoặc bịa kết quả ngay
+trong CÙNG 1 lượt (round đầu tiên, chưa từng có lời hứa trước đó) mà không có cách nào phân biệt
+cấu trúc với 1 câu trả lời hợp lệ không cần tool. Đây vẫn là hạn chế cố hữu của model nhỏ chạy nội
+bộ, không phải lỗi có thể chặn 100% ở tầng BE.
+
+## 15. Cập nhật 2026-07-29 (3): guard §14 chỉ chặn ở lượt SAU, không ép gọi tool ngay
+
+Phát hiện qua transcript thật bên **Attendance AI Chat** (cùng orchestrator pattern với Asset, cùng
+lỗi cấu trúc): người dùng hỏi "đang có những nhóm bộ phận nào" → model trả lời "để tôi tra cứu giúp
+bạn nhé" không kèm `tool_calls` → round kết thúc, trả `done`. Người dùng hỏi tiếp "rồi nó đâu rồi" —
+guard §14 phát hiện đúng lời hứa suông ở lượt trước và chèn system message nhắc nhở — nhưng model
+**vẫn không gọi tool**, chỉ xin lỗi rồi hứa lại lần nữa ("tôi đang thực hiện tra cứu... xin chờ").
+Nguyên nhân: guard §14 chỉ hoạt động ở ĐẦU lượt kế tiếp (dựa vào history), nó chèn được lời nhắc
+nhưng không có cách nào ép model thực sự phát ra `tool_calls` ngay — nếu model tiếp tục chỉ trả lời
+text, lượt đó lại kết thúc bằng `done` và quả bóng lại được đá về phía người dùng, có thể lặp vô hạn.
+
+**Đã sửa**: thêm auto-retry **cùng lượt** (cùng 1 HTTP request) ở cả `AiChatService.cs` (Asset) và
+`AttendanceAiChatService.cs` (Attendance) — trong nhánh `toolCalls == null` của vòng lặp round, nếu
+`text` khớp `UnfulfilledPromisePattern`, thay vì `yield return Done(); yield break;` ngay, tự chèn 1
+`system` message nhắc thẳng "câu trả lời vừa rồi chỉ là lời hứa, PHẢI gọi tool NGAY" rồi `continue`
+sang round kế tiếp — model được gọi lại ngay, không cần người dùng tự gõ thêm 1 tin nhắn để nhắc.
+Giới hạn bằng biến đếm riêng `promiseRetriesUsed` (tối đa `MaxPromiseRetries = 2`, tách khỏi ngân
+sách `maxRounds` của việc gọi tool thật) — tránh trường hợp model cứng đầu chỉ lặp lại lời hứa chiếm
+hết toàn bộ round mà không bao giờ gọi tool.

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "react-toastify";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Check, Clock, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
@@ -16,6 +16,7 @@ import {
     otFormStatusClasses,
     otFormStatusLabels,
 } from "@/modules/attendance/types/enums";
+import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -97,6 +98,8 @@ function buildApprovalSteps(form: OtFormDto, levels: number[]): ApprovalStep[] {
 }
 
 export default function OtFormDetail({ id }: OtFormDetailProps) {
+    const t = useTranslations("Attendance.OtFormDetail");
+    const tCommon = useTranslations("Common");
     const { user } = useAuth();
     const router = useRouter();
     const locale = useLocale();
@@ -131,7 +134,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
             setRequiredApprovalLevel(result.approvalLevel);
             setRequireSignatureToApprove(result.requireSignature);
         },
-        "Không thể tải chi tiết đơn tăng ca."
+        t("loadError")
     );
 
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
@@ -164,18 +167,18 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     const handleSubmit = async () => {
         if (hasMySignature === false) {
-            toast.error("Bạn chưa đăng ký chữ ký — vào \"Chữ ký của tôi\" để đăng ký trước khi ký duyệt.");
+            toast.error(t("submitSignatureMissingError"));
             return;
         }
         setIsSubmittingAction(true);
         try {
             await OtFormApi.submitOtForm(id, { comment: comment.trim() || null });
-            toast.success("Ký duyệt \"Người đề nghị\" thành công — đơn đã chuyển sang chờ Trưởng phòng duyệt.");
+            toast.success(t("submitSuccess"));
             setActionOpen(null);
             await fetchForm();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Ký duyệt thất bại"));
+            toast.error(getApiErrorMessage(err, t("submitError")));
         } finally {
             setIsSubmittingAction(false);
         }
@@ -183,18 +186,18 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     const handleApprove = async () => {
         if (requireSignatureToApprove && hasMySignature === false) {
-            toast.error("Trường hợp này yêu cầu đã đăng ký chữ ký trước khi duyệt — vào \"Chữ ký của tôi\" để đăng ký.");
+            toast.error(t("approveSignatureMissingError"));
             return;
         }
         setIsSubmittingAction(true);
         try {
             await OtFormApi.approveOtForm(id, { comment: comment.trim() || null });
-            toast.success("Duyệt đơn thành công");
+            toast.success(t("approveSuccess"));
             setActionOpen(null);
             await fetchForm();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Duyệt đơn thất bại"));
+            toast.error(getApiErrorMessage(err, t("approveError")));
         } finally {
             setIsSubmittingAction(false);
         }
@@ -202,25 +205,25 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     const handleReject = async () => {
         if (!comment.trim()) {
-            toast.error("Vui lòng nhập lý do từ chối.");
+            toast.error(t("rejectCommentRequiredError"));
             return;
         }
         setIsSubmittingAction(true);
         try {
             await OtFormApi.rejectOtForm(id, { comment: comment.trim() });
-            toast.success("Đã từ chối đơn");
+            toast.success(t("rejectSuccess"));
             setActionOpen(null);
             await fetchForm();
         } catch (err) {
             console.error(err);
-            toast.error(getApiErrorMessage(err, "Từ chối đơn thất bại"));
+            toast.error(getApiErrorMessage(err, t("rejectError")));
         } finally {
             setIsSubmittingAction(false);
         }
     };
 
     if (isLoading) {
-        return <div className="py-16 text-center text-sm text-[#5e3f3a]">Đang tải dữ liệu...</div>;
+        return <div className="py-16 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>;
     }
 
     if (error || !form) {
@@ -234,23 +237,23 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Đơn tăng ca #{form.id}</h1>
+                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("titleWithId", { id: form.id })}</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        {form.departmentNameVn} — {form.groupNameVn}
+                        {bilingualText(form.departmentNameVn, form.departmentNameJp)} — {bilingualText(form.groupNameVn, form.groupNameJp)}
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     <span
                         className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
                     >
-                        {otFormStatusLabels[form.status] ?? "Không xác định"}
+                        {otFormStatusLabels[form.status] ?? t("unknownStatus")}
                     </span>
                     {canEdit && (
                         <button
                             onClick={() => router.push({ pathname: "/ot/forms/edit", query: { id: String(form.id) } })}
                             className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
-                            Sửa đơn
+                            {t("editButton")}
                         </button>
                     )}
                     <button
@@ -263,13 +266,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         }
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                     >
-                        In đơn
+                        {t("printButton")}
                     </button>
                 </div>
             </div>
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Tiến độ duyệt</h2>
+                <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalProgressTitle")}</h2>
                 <div className="flex overflow-x-auto pb-1">
                     {approvalSteps.map((step, index) => (
                         <div key={step.level} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
@@ -317,7 +320,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     {formatDateTime(step.history.actionAt)}
                                 </div>
                             ) : step.state === "current" ? (
-                                <div className="mt-0.5 text-center text-[11px] text-[#9a5b00]">Đang chờ</div>
+                                <div className="mt-0.5 text-center text-[11px] text-[#9a5b00]">{t("waitingShort")}</div>
                             ) : null}
                         </div>
                     ))}
@@ -326,30 +329,30 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
             <section className="grid gap-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm md:grid-cols-2 lg:grid-cols-3">
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Trường hợp OT</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("otCaseLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">{form.otCaseCode}</div>
                 </div>
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lý do</div>
-                    <div className="mt-1 text-sm text-[#191c1e]">{form.reasonNameVn}</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("reasonLabel")}</div>
+                    <div className="mt-1 text-sm text-[#191c1e]">{bilingualText(form.reasonNameVn, form.reasonNameJp)}</div>
                 </div>
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Ngày</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("dateLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">{formatDate(form.date)}</div>
                 </div>
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Thời gian</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("timeLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">
                         {formatTime(form.startTime)} — {formatTime(form.endTime)} ({form.totalHour}h)
                     </div>
                 </div>
                 <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Người tạo</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("createdByLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">{form.createdByFullName ?? form.createdByUserName}</div>
                 </div>
                 {form.subReason && (
                     <div>
-                        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lý do chi tiết</div>
+                        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("subReasonLabel")}</div>
                         <div className="mt-1 text-sm text-[#191c1e]">{form.subReason}</div>
                     </div>
                 )}
@@ -357,43 +360,47 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
             {form.processPart && (
                 <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Phần xử lý</h2>
+                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
                     <div className="flex flex-wrap gap-4 text-sm text-[#191c1e]">
-                        <span>Ăn uống: {form.processPart.isEat ? "Có" : "Không"}</span>
-                        <span>Xe đưa đón: {form.processPart.isTransportation ? "Có" : "Không"}</span>
-                        <span>Phòng copy: {form.processPart.isUseCopyRoom ? "Có" : "Không"}</span>
+                        <span>{t("eatLabel", { value: form.processPart.isEat ? t("yes") : t("no") })}</span>
+                        <span>{t("transportationLabel", { value: form.processPart.isTransportation ? t("yes") : t("no") })}</span>
+                        <span>{t("copyRoomLabel", { value: form.processPart.isUseCopyRoom ? t("yes") : t("no") })}</span>
                     </div>
                     {form.processPart.isEat && (
                         <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
-                            <span>Phiếu chính: {form.processPart.mainTicketCount}</span>
-                            <span>Phiếu phụ: {form.processPart.secondaryTicketCount}</span>
-                            <span>Sữa: {form.processPart.milkCount}</span>
+                            <span>{t("mainTicketLabel", { count: form.processPart.mainTicketCount })}</span>
+                            <span>{t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}</span>
+                            <span>{t("milkLabel", { count: form.processPart.milkCount })}</span>
                         </div>
                     )}
                     {form.processPart.anotherSuggestionVn && (
-                        <p className="mt-2 text-sm text-[#5e3f3a]">Đề nghị khác: {form.processPart.anotherSuggestionVn}</p>
+                        <p className="mt-2 text-sm text-[#5e3f3a]">
+                            {t("anotherSuggestionLabel", {
+                                value: bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp),
+                            })}
+                        </p>
                     )}
                 </section>
             )}
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <h2 className="border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                    Danh sách nhân viên ({form.numberOfEmployee})
+                    {t("employeeListTitle", { count: form.numberOfEmployee })}
                 </h2>
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Mã NV</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Họ và tên</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Thời gian</th>
-                                <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">Lũy kế</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Phiếu ăn</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">Ghi chú</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colEmployeeCode")}</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colFullName")}</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colTime")}</th>
+                                <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colMeal")}</th>
+                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colNote")}</th>
                             </tr>
                             <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="px-6 py-2 text-center">Tháng</th>
-                                <th className="px-6 py-2 text-center">Năm</th>
+                                <th className="px-6 py-2 text-center">{t("colMonth")}</th>
+                                <th className="px-6 py-2 text-center">{t("colYear")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -420,7 +427,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">
                                             {employee.isEligibleForMeal ? <Check size={16} className="text-emerald-600" /> : "-"}
                                         </td>
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.noteVn || "-"}</td>
+                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
                                     </tr>
                                 );
                             })}
@@ -430,7 +437,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
             </section>
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Lịch sử ký duyệt</h2>
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalHistoryTitle")}</h2>
                 <div className={`grid gap-4 md:grid-cols-2 ${APPROVAL_GRID_LG_COLS[applicableLevels.length] ?? "lg:grid-cols-5"}`}>
                     {applicableLevels.map((level) => {
                         const history = form.approvalHistories.find((item) => item.approvalLevel === level);
@@ -451,13 +458,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                             // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
                                             <img
                                                 src={`data:image/png;base64,${history.signatureImage}`}
-                                                alt={`Chữ ký ${history.approverFullName ?? history.approverUserName}`}
+                                                alt={t("signatureAlt", { name: history.approverFullName ?? history.approverUserName })}
                                                 className="h-16 w-full rounded border border-[#e0e3e5] object-contain"
                                             />
                                         )}
                                     </div>
                                 ) : (
-                                    <div className="mt-2 text-xs text-[#9aa0a6]">Chưa xử lý</div>
+                                    <div className="mt-2 text-xs text-[#9aa0a6]">{t("notProcessedYet")}</div>
                                 )}
                             </div>
                         );
@@ -471,7 +478,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         onClick={() => openAction("submit")}
                         className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                     >
-                        Ký duyệt &quot;Người đề nghị&quot;
+                        {t("submitButton")}
                     </button>
                 </div>
             )}
@@ -482,13 +489,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         onClick={() => openAction("reject")}
                         className="cursor-pointer rounded-lg border border-[#930006] bg-white px-4 py-2 text-sm font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
                     >
-                        Từ chối
+                        {t("rejectButton")}
                     </button>
                     <button
                         onClick={() => openAction("approve")}
                         className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                     >
-                        Duyệt
+                        {t("approveButton")}
                     </button>
                 </div>
             )}
@@ -503,12 +510,12 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     >
                         <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                             <h3 className="text-lg font-semibold text-[#191c1e]">
-                                {actionOpen === "submit" ? "Ký duyệt \"Người đề nghị\"" : actionOpen === "approve" ? "Duyệt đơn" : "Từ chối đơn"}
+                                {actionOpen === "submit" ? t("modalTitleSubmit") : actionOpen === "approve" ? t("modalTitleApprove") : t("modalTitleReject")}
                             </h3>
                             <button
                                 onClick={closeAction}
                                 className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                aria-label="Đóng"
+                                aria-label={tCommon("close")}
                             >
                                 <X className="h-5 w-5" />
                             </button>
@@ -517,7 +524,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         <div className="space-y-4">
                             <label className="block">
                                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    Ghi chú {actionOpen === "reject" && <span className="text-[#930006]">*</span>}
+                                    {t("commentLabel")} {actionOpen === "reject" && <span className="text-[#930006]">*</span>}
                                 </span>
                                 <textarea
                                     value={comment}
@@ -537,9 +544,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                             : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
                                     }`}
                                 >
-                                    {hasMySignature === false
-                                        ? "Bạn chưa đăng ký chữ ký — vào \"Chữ ký của tôi\" để đăng ký trước khi ký duyệt."
-                                        : "Chữ ký \"Người đề nghị\" sẽ tự lấy từ chữ ký đã đăng ký của bạn (\"Chữ ký của tôi\")."}
+                                    {hasMySignature === false ? t("submitSignatureMissingHint") : t("submitSignatureOkHint")}
                                 </div>
                             )}
 
@@ -552,8 +557,8 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     }`}
                                 >
                                     {requireSignatureToApprove && hasMySignature === false
-                                        ? "Trường hợp này yêu cầu chữ ký nhưng bạn chưa đăng ký — vào \"Chữ ký của tôi\" để đăng ký trước khi duyệt."
-                                        : "Chữ ký duyệt sẽ tự lấy từ chữ ký đã đăng ký của bạn (\"Chữ ký của tôi\")."}
+                                        ? t("approveSignatureMissingHint")
+                                        : t("approveSignatureOkHint")}
                                 </div>
                             )}
 
@@ -564,7 +569,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     disabled={isSubmittingAction}
                                     className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    Huỷ
+                                    {tCommon("cancel")}
                                 </button>
                                 <button
                                     type="button"
@@ -573,12 +578,12 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isSubmittingAction
-                                        ? "Đang xử lý..."
+                                        ? tCommon("processing")
                                         : actionOpen === "submit"
-                                        ? "Xác nhận ký duyệt"
+                                        ? t("confirmSubmit")
                                         : actionOpen === "approve"
-                                        ? "Xác nhận duyệt"
-                                        : "Xác nhận từ chối"}
+                                        ? t("confirmApprove")
+                                        : t("confirmReject")}
                                 </button>
                             </div>
                         </div>
