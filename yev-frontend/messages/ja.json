@@ -407,6 +407,8 @@
       "colEmployeeCode": "社員コード",
       "colFullName": "氏名",
       "colTime": "時間",
+      "colHours": "時間数",
+      "totalWorkedHoursLabel": "申請全体の残業時間合計：{hours}",
       "colAccumulation": "累計",
       "colMonth": "月",
       "colYear": "年",

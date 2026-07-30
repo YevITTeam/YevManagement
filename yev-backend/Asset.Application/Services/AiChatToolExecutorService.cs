@@ -125,6 +125,10 @@ namespace Asset.Application.Services
 
         private async Task<object> SearchDevicesAsync(JsonElement args, List<AiChatDeviceReferenceDto> deviceReferences)
         {
+            // Every filter field the Device grid UI offers is exposed here (2026-07-30) — previously only
+            // 5 of them were, so a question the user could answer on screen ("máy nào có serial X", "máy
+            // thuê ngoài của bộ phận Y") simply could not be answered in chat. Mirrors
+            // DeviceFilterRequest 1:1 so the two stay comparable.
             var request = new DeviceFilterRequest
             {
                 PageIndex = 1,
@@ -133,7 +137,15 @@ namespace Asset.Application.Services
                 Manager = GetStringArg(args, "manager"),
                 IpAddress = GetStringArg(args, "ipAddress"),
                 Email = GetStringArg(args, "email"),
-                SupplierName = GetStringArg(args, "supplierName")
+                SupplierName = GetStringArg(args, "supplierName"),
+                PurchaseDate = GetStringArg(args, "purchaseDate"),
+                GroupId = GetIntArg(args, "groupId"),
+                DepartmentId = GetIntArg(args, "departmentId"),
+                Note = GetStringArg(args, "note"),
+                SerialNumber = GetStringArg(args, "serialNumber"),
+                IsOutsourced = GetBoolArg(args, "isOutsourced"),
+                IsUseUsb = GetBoolArg(args, "isUseUsb"),
+                SortDeviceCodeAscending = GetBoolArg(args, "sortDeviceCodeAscending")
             };
             var result = await _deviceService.GetDevicesForGridAsync(request);
             deviceReferences.AddRange(result.Data.Select(d => new AiChatDeviceReferenceDto { Id = d.Id, DeviceCode = d.DeviceCode }));
@@ -190,15 +202,32 @@ namespace Asset.Application.Services
                 deviceId = resolved.Value.Id;
             }
 
+            // `status`/`isInUse` added 2026-07-30 so the 3 IP questions users actually ask are answerable:
+            // "IP nào còn trống" (isInUse=false), "IP này dùng được không / ai đang dùng" (keyword=<ip>,
+            // no status filter → StatusText + DeviceCode in the result answers both), "trong dải X cái nào
+            // trống" (keyword="10.45.1." + isInUse=false — Keyword does a Contains on the IP string).
+            // Note these are deliberately null-checked, never truthy-checked: Status=0 IS "Available" and
+            // isInUse=false IS "còn trống", so a truthy test would silently drop the most useful values.
             var request = new IpAddressFilterRequest
             {
                 PageIndex = 1,
                 PageSize = MaxResults,
                 Keyword = GetStringArg(args, "keyword"),
+                Status = GetIntArg(args, "status"),
+                IsInUse = GetBoolArg(args, "isInUse"),
                 DeviceId = deviceId
             };
             var result = await _ipAddressService.GetPagedAsync(request);
-            return result.Data;
+
+            // Return the total alongside the (capped) list — asking "còn IP nào trống" without knowing
+            // there are 45 matches and only 10 shown makes the answer actively misleading. Same reasoning
+            // as GetIpPrefixUsageAsync below, which already counts before truncating.
+            return new
+            {
+                totalCount = result.TotalCount,
+                returnedCount = result.Data.Count,
+                items = result.Data
+            };
         }
 
         private async Task<object> GetIpPrefixUsageAsync(JsonElement args)
@@ -322,6 +351,31 @@ namespace Asset.Application.Services
 
             var raw = value.GetString();
             return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+        }
+
+        // Small local models frequently emit numbers/booleans as JSON strings ("6", "true") instead of
+        // real JSON scalars, so both shapes are accepted. Returning null (not 0/false) for a missing arg
+        // matters: every caller treats null as "no filter", and 0/false are meaningful filter values
+        // here (Status=0 means Available, IsOutsourced=false means in-house).
+        private static int? GetIntArg(JsonElement args, string name)
+        {
+            if (args.ValueKind != JsonValueKind.Object) return null;
+            if (!args.TryGetProperty(name, out var value)) return null;
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)) return number;
+            if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out var parsed)) return parsed;
+            return null;
+        }
+
+        private static bool? GetBoolArg(JsonElement args, string name)
+        {
+            if (args.ValueKind != JsonValueKind.Object) return null;
+            if (!args.TryGetProperty(name, out var value)) return null;
+
+            if (value.ValueKind == JsonValueKind.True) return true;
+            if (value.ValueKind == JsonValueKind.False) return false;
+            if (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed)) return parsed;
+            return null;
         }
 
         private static DateTime? ParseDateArg(JsonElement args, string name)

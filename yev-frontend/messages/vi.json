@@ -407,6 +407,8 @@
       "colEmployeeCode": "Mã NV",
       "colFullName": "Họ và tên",
       "colTime": "Thời gian",
+      "colHours": "Số giờ",
+      "totalWorkedHoursLabel": "Tổng giờ OT toàn đơn: {hours}",
       "colAccumulation": "Lũy kế",
       "colMonth": "Tháng",
       "colYear": "Năm",

@@ -859,7 +859,7 @@ Trợ lý AI hỗ trợ lập đơn tăng ca qua hội thoại — thiết kế 
   ```
   `otform`: emit đúng 1 lần/lượt hỏi, ngay sau khi tool `create_ot_form_draft` tạo THẬT 1 đơn Draft —
   FE dùng để hiện nút "Xem đơn vừa tạo" điều hướng `/ot/forms/edit?id={otFormId}` (đơn Draft sửa được).
-- **Quan trọng — đây là tool GHI dữ liệu đầu tiên của toàn bộ tính năng AI Chat** (khác 17 tool
+- **Quan trọng — đây là tool GHI dữ liệu đầu tiên của toàn bộ tính năng AI Chat** (khác các tool
   tra cứu read-only của Asset): xác nhận sẽ tạo THẬT 1 bản ghi + gửi THẬT 1 email cho Trưởng nhóm
   liên quan (`NotifyEligibleApproversAsync`, không có cách tắt). Đơn tạo ra chỉ dừng ở **Draft** —
   KHÔNG tự ký duyệt, Trưởng nhóm vẫn phải tự bấm `/submit` trên UI thật. Cơ chế xác nhận trước khi

@@ -389,7 +389,7 @@ Content-Type: application/json
 - 1 lượt hỏi có thể có **nhiều dòng `"tool"`** (model gọi nhiều tool cùng lúc) và nhiều dòng `"content"` xen kẽ trước khi tới `"done"`.
 - Nếu model gọi tool quá 3 lần liên tiếp mà không chốt câu trả lời → BE trả `{"type":"error","message":"Đã đạt giới hạn số lần gọi công cụ tra cứu..."}` thay vì treo mãi.
 - **FE lưu lịch sử**: chỉ cần gộp các `"content"` của 1 lượt thành 1 `assistant` message rồi thêm vào mảng `history` gửi lần sau — **không** lưu các dòng `"tool"`/`"device"` (BE không cần và cũng không hiểu nếu FE gửi ngược lại role `"tool"`).
-- Toàn bộ 17 loại câu hỏi tra cứu được BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm.
+- BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm. **Từ 2026-07-30 catalogue rút còn 7 tool**, tập trung 2 nhóm việc: tra cứu thiết bị (đủ mọi field như màn hình danh sách) và tra cứu IP (IP trống / IP này ai đang dùng / tình trạng cả dải) — xem `ai-chat-be-huong-dan.md §16`. Gợi ý câu hỏi trên FE phải khớp đúng 2 nhóm này, đừng hứa việc thống kê theo trạng thái hay lọc theo chi nhánh (không có tool nào làm được).
 - Permission `Asset.AiChat.Use` — **đã gán sẵn cho role `Admin`**, role khác cần Admin gán thêm nếu muốn dùng chat AI. Nút "Xem chi tiết" từ dòng `"device"` là UX-only, ẩn ở FE nếu user không có `Asset.Device.View` — BE vẫn enforce permission đó khi FE thật sự điều hướng sang trang chi tiết thiết bị.
 
 ## 8. Tổng hợp endpoint

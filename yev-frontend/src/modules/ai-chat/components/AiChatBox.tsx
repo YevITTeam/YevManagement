@@ -28,31 +28,27 @@ import { useRouter } from "@/navigation";
 // Tên tool BE trả về là snake_case kỹ thuật (search_devices...). Người dùng không cần biết tool là
 // gì, chỉ cần biết hệ thống đang tra cứu cái gì — map sang nhãn tiếng Việt, tool lạ thì hiện chung.
 // Khớp đúng 17 tool khai báo ở BE (Asset.Application/Dtos/AiChat/AiChatToolDefinitions.cs).
+// Chỉ 7 tool BE còn cung cấp (AiChatToolDefinitions.cs, rút gọn 2026-07-30). Nhãn của các tool đã bỏ
+// được xoá khỏi đây luôn để danh sách này không gợi ý sai về năng lực thật của trợ lý.
 const TOOL_LABELS: Record<string, string> = {
     search_devices: "thiết bị",
     get_device_detail: "chi tiết thiết bị",
-    get_device_report: "báo cáo thiết bị",
-    get_device_change_history: "lịch sử thay đổi cấu hình",
-    get_device_transfer_history: "lịch sử chuyển máy",
-    search_branches: "chi nhánh",
-    search_suppliers: "nhà cung cấp",
-    search_device_types: "loại thiết bị",
-    search_device_groups: "nhóm",
+    search_device_groups: "nhóm thiết bị",
     search_device_departments: "bộ phận",
-    search_software: "phần mềm",
-    search_software_groups: "nhóm phần mềm",
     search_ip_addresses: "địa chỉ IP",
     search_ip_prefixes: "dải IP",
     get_ip_prefix_usage: "tình trạng dải IP",
-    search_audit_trail: "lịch sử thao tác",
-    get_asset_settings: "cấu hình hệ thống",
 };
 
+// Mỗi gợi ý phải là việc trợ lý LÀM ĐƯỢC THẬT bằng 7 tool trên, và dùng dữ liệu có thật trong hệ thống
+// (mã máy/dải IP thật) để bấm vào là ra kết quả. Bộ gợi ý cũ đã bị xoá vì hứa những thứ không có tool
+// nào làm được — "đếm thiết bị theo trạng thái" (không có tool thống kê theo trạng thái) và "liệt kê
+// thiết bị theo chi nhánh" (DeviceFilterRequest không có filter chi nhánh), nên bấm vào là thất vọng.
 const SUGGESTIONS = [
-    "Có bao nhiêu thiết bị đang chờ thanh lý?",
-    "PC-001 đang gắn IP nào?",
-    "Liệt kê thiết bị của chi nhánh Bình Dương",
     "Dải IP 10.45.1 còn bao nhiêu địa chỉ trống?",
+    "IP 10.45.1.20 có dùng được không, đang được máy nào dùng?",
+    "Xem chi tiết cấu hình máy YDC-9875",
+    "Liệt kê các thiết bị thuê ngoài",
 ];
 
 interface DeviceRef {

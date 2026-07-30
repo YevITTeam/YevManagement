@@ -18,6 +18,7 @@ import {
     otFormStatusLabels,
 } from "@/modules/attendance/types/enums";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
+import { calculateHours, formatHours } from "@/modules/attendance/lib/time";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -265,6 +266,10 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     const applicableLevels = applicableApprovalLevels(requiredApprovalLevel);
     const approvalSteps = buildApprovalSteps(form, applicableLevels);
+    const totalWorkedHours = form.employees.reduce(
+        (sum, employee) => sum + calculateHours(employee.startTime, employee.endTime),
+        0
+    );
 
     return (
         <div className="space-y-6">
@@ -417,21 +422,27 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
             )}
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <h2 className="border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                    {t("employeeListTitle", { count: form.numberOfEmployee })}
-                </h2>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-3">
+                    <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                        {t("employeeListTitle", { count: form.numberOfEmployee })}
+                    </h2>
+                    <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-white px-3 py-1 text-xs font-semibold text-[#191c1e]">
+                        {t("totalWorkedHoursLabel", { hours: formatHours(totalWorkedHours) })}
+                    </span>
+                </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colEmployeeCode")}</th>
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colFullName")}</th>
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colTime")}</th>
+                                <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colHours")}</th>
                                 <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colMeal")}</th>
+                                <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colMeal")}</th>
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colNote")}</th>
                             </tr>
-                            <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                 <th className="px-6 py-2 text-center">{t("colMonth")}</th>
                                 <th className="px-6 py-2 text-center">{t("colYear")}</th>
                             </tr>
@@ -441,15 +452,27 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 const isMonthOverLimit = employee.monthToDate > 25;
                                 const isYearOverLimit = employee.yearToDate > 300;
                                 const isOverLimit = isMonthOverLimit || isYearOverLimit;
+                                const hours = calculateHours(employee.startTime, employee.endTime);
                                 return (
                                     <tr
                                         key={employee.employeeId}
-                                        className={`border-b border-[#f1f5f9] ${isOverLimit ? "bg-[#fdecea]" : ""}`}
+                                        className={`border-b border-[#f1f5f9] transition-colors ${
+                                            isOverLimit ? "bg-[#fff4f2] hover:bg-[#ffe9e6]" : "hover:bg-[#f8fafc]"
+                                        }`}
                                     >
-                                        <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{employee.employeeCode}</td>
-                                        <td className="px-6 py-3 text-sm text-[#191c1e]">{employee.fullName}</td>
+                                        <td className="px-6 py-3 text-sm">
+                                            <span className="inline-flex items-center rounded-md bg-[#eceef0] px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e]">
+                                                {employee.employeeCode}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-3 text-sm font-medium text-[#191c1e]">{employee.fullName}</td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">
                                             {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
+                                        </td>
+                                        <td className="px-6 py-3 text-center text-sm">
+                                            <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
+                                                {formatHours(hours)}
+                                            </span>
                                         </td>
                                         <td className={`px-6 py-3 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                             {employee.monthToDate}h
@@ -457,8 +480,14 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                         <td className={`px-6 py-3 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                             {employee.yearToDate}h
                                         </td>
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">
-                                            {employee.isEligibleForMeal ? <Check size={16} className="text-emerald-600" /> : "-"}
+                                        <td className="px-6 py-3 text-center text-sm text-[#5e3f3a]">
+                                            {employee.isEligibleForMeal ? (
+                                                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50">
+                                                    <Check size={14} className="text-emerald-600" />
+                                                </span>
+                                            ) : (
+                                                <span className="text-[#9aa0a6]">—</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
                                     </tr>

@@ -6,16 +6,16 @@
 > [attendance-module.md](attendance-module.md) (mục `AttendanceAiChatController`) cho vị trí code.
 >
 > Đây là tính năng **song song** với [ai-chat-be-huong-dan.md](ai-chat-be-huong-dan.md) (AI Chat của
-> Asset — 17 tool tra cứu, chỉ đọc) chứ **không phải** mở rộng của tính năng đó — 2 endpoint, 2
+> Asset — các tool tra cứu, chỉ đọc) chứ **không phải** mở rộng của tính năng đó — 2 endpoint, 2
 > permission, 2 orchestrator, 2 system prompt hoàn toàn tách biệt, chỉ dùng chung phần hạ tầng gọi
 > Ollama (§1). Lý do tách hoàn toàn: (1) giữ đúng ranh giới module Clean Architecture (Asset không
 > được biết Attendance và ngược lại — CLAUDE.md §3.2); (2) đây là **tool ghi dữ liệu đầu tiên** của
-> toàn bộ tính năng AI Chat, cần cô lập rủi ro khỏi 17 tool đọc-only của Asset đang ổn định.
+> toàn bộ tính năng AI Chat, cần cô lập rủi ro khỏi các tool đọc-only của Asset đang ổn định.
 
 ## 0. Vì sao đây không phải "thêm 1 tool" đơn giản
 
-Toàn bộ 17 tool của Asset AI Chat cố tình chỉ đọc (xem `ai-chat-be-huong-dan.md §5`, dòng đầu class
-comment "16/17 read-only tools"). Tính năng này có đúng **1 tool ghi**: `create_ot_form_draft`, gọi
+Toàn bộ tool của Asset AI Chat cố tình chỉ đọc (xem `ai-chat-be-huong-dan.md §5`, dòng đầu class
+comment về read-only tools). Tính năng này có đúng **1 tool ghi**: `create_ot_form_draft`, gọi
 thẳng `OtFormService.CreateAsync` (không business logic mới, không bypass validate/scope nào đã có).
 Rủi ro khác hẳn tra cứu sai:
 
@@ -27,7 +27,7 @@ Rủi ro khác hẳn tra cứu sai:
   Đơn Draft **không hề "im lặng"**.
 - **Model nội bộ đã chứng minh không đáng tin cậy nhiều lần** khi xây Asset AI Chat: từ chối gọi tool
   khi cần (`ai-chat-be-huong-dan.md §13`), bịa kết quả sau khi hứa suông không thực hiện (`§14`). Với
-  17 tool đọc, hậu quả tệ nhất là câu trả lời sai. Với tool ghi này, hậu quả tệ nhất là 1 bản ghi
+  các tool đọc, hậu quả tệ nhất là câu trả lời sai. Với tool ghi này, hậu quả tệ nhất là 1 bản ghi
   nghiệp vụ thật + 1 email thật gửi nhầm.
 
 ## 1. Hạ tầng dùng chung với Asset AI Chat — chuyển sang Shared.*
@@ -59,7 +59,7 @@ refactor, không đổi hành vi.
 ```
 AttendanceAiChatController (Attendance.Api)
    — đọc CurrentUserName/CurrentFullName/User.IsInRole("Admin") NGAY TẠI ĐÂY (khác AiChatController
-     của Asset — không cần biết ai đang hỏi vì 17 tool kia toàn đọc), đóng gói vào
+     của Asset — không cần biết ai đang hỏi vì các tool kia toàn đọc), đóng gói vào
      AttendanceAiChatCallerContext rồi truyền xuống orchestrator.
    ▼
 AttendanceAiChatService (Attendance.Application) — vòng lặp tool-calling, y hệt cấu trúc AiChatService
@@ -152,7 +152,7 @@ theo đúng pattern đó:
 - `AttendanceAiChatCallerContext` truyền xuống `IAttendanceAiChatService.StreamChatAsync(request, caller, cancellationToken)`
   → `IAttendanceAiChatToolExecutorService.ExecuteAsync(toolName, arguments, caller, cancellationToken)`
   — khác Asset's `ExecuteAsync(toolName, arguments, cancellationToken)` (không cần biết ai hỏi vì toàn
-  bộ 17 tool chỉ đọc).
+  bộ tool chỉ đọc).
 - `get_my_create_scopes` và `create_ot_form_draft` là 2 tool thật sự dùng `caller` — 5 tool tra cứu
   còn lại nhận `caller` nhưng không dùng tới (không có ý nghĩa gì để lọc kết quả theo người hỏi).
 

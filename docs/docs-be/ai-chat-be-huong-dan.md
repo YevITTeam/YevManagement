@@ -166,7 +166,14 @@ Lưu ý khi hiện thực bằng C#: mỗi tool PHẢI bọc try/catch riêng, t
 `{"error": "..."}` vào message `"tool"` thay vì throw — throw sẽ làm gãy cả vòng hỏi-đáp giữa
 chừng (xem cách FE làm trong `runDeviceTool`).
 
-## 5. Danh mục 17 tool — CHỈ ĐỌC, không tool nào được phép gọi create/update/delete
+## 5. Danh mục tool — CHỈ ĐỌC, không tool nào được phép gọi create/update/delete
+
+> ⚠️ **ĐÃ LỖI THỜI MỘT PHẦN (2026-07-30)**: mục này mô tả catalogue **17 tool** ban đầu. Catalogue thực
+> tế đang chạy chỉ còn **7 tool** — 10 tool đã bị bỏ khỏi `AiChatToolDefinitions.cs` để giảm prompt-eval
+> (xem **§16** để biết danh sách giữ/bỏ, lý do, và cách phục hồi). Mục này được giữ lại vì vẫn là tài
+> liệu chính xác về *cách map từng tool sang service nội bộ*, kể cả các tool đang tắt (executor case của
+> chúng vẫn còn trong code). **Nguồn chân lý về tool nào đang bật là `AiChatToolDefinitions.cs`**, không
+> phải bảng dưới đây.
 
 Nguyên tắc: mỗi tool ứng với đúng 1 câu hỏi tra cứu, gọi thẳng **service/repository nội bộ** của
 BE (không tự gọi HTTP vào chính mình). Cột "Route tương đương" đối chiếu [asset-api-fe.md](asset-api-fe.md)
@@ -700,3 +707,95 @@ sang round kế tiếp — model được gọi lại ngay, không cần ngườ
 Giới hạn bằng biến đếm riêng `promiseRetriesUsed` (tối đa `MaxPromiseRetries = 2`, tách khỏi ngân
 sách `maxRounds` của việc gọi tool thật) — tránh trường hợp model cứng đầu chỉ lặp lại lời hứa chiếm
 hết toàn bộ round mà không bao giờ gọi tool.
+
+## 16. Cập nhật 2026-07-30: rút gọn còn 7 tool, tập trung vào tra cứu thiết bị + IP
+
+Yêu cầu từ người dùng: chatbot Asset cần (1) tra cứu thiết bị bằng **đầy đủ các field như trên UI**,
+(2) tìm IP đang trống, (3) 1 IP có dùng được không — nếu đang dùng thì máy nào đang dùng, (4) liệt kê
+IP trong 1 dải và cái nào còn trống; **các tool khác không liên quan thì bỏ đi cho đỡ nặng**.
+
+### 16.1 Bỏ 10 tool, giữ 7
+
+Catalogue được re-send và re-evaluate **mỗi lượt**, và §12 đã đo được prompt-eval của schema 17 tool là
+chi phí chi phối (~31s nguội / ~17-18s ấm trên Ollama chạy 100% CPU, `size_vram: 0`) — lớn hơn cả phần
+sinh câu trả lời. Nên rút gọn catalogue là **fix hiệu năng**, không phải dọn dẹp hình thức.
+
+| Giữ (7) | Vì sao |
+|---|---|
+| `search_devices` | Tra thiết bị — nay đủ field như UI (§16.2) |
+| `get_device_detail` | Chi tiết 1 máy (cấu hình, phần mềm đã cài) |
+| `search_device_groups` / `search_device_departments` | Đổi TÊN Nhóm/Bộ phận người dùng nói → `groupId`/`departmentId` thật cho `search_devices` |
+| `search_ip_addresses` | Nhu cầu (2) + (3) — nay có lọc trống/đang dùng (§16.3) |
+| `get_ip_prefix_usage` | Nhu cầu (4) — tổng quan cả dải, đếm trước khi cắt danh sách nên tổng luôn đúng |
+| `search_ip_prefixes` | Biết hệ thống có những dải nào |
+
+**Đã bỏ (10)**: `get_device_transfer_history`, `get_device_change_history`, `search_device_types`,
+`search_software`, `search_software_groups`, `search_branches`, `search_suppliers`, `get_device_report`,
+`get_asset_settings`, `search_audit_trail`.
+
+> **Cách phục hồi**: các `case` tương ứng trong `AiChatToolExecutorService.ExecuteAsync` được **giữ
+> nguyên có chủ ý** — muốn bật lại tool nào chỉ cần dán lại block JSON của nó vào
+> `AiChatToolDefinitions.cs`, không phải viết lại code executor. Executor không tốn token nào; chỉ
+> catalogue mới tốn.
+
+Kết quả đo (đếm trực tiếp trên chuỗi `ToolsJson`): **10.766 → 7.656 ký tự (~3.076 → ~2.187 token), giảm
+~29%**. Lưu ý: giảm ít hơn tỉ lệ 17→7 vì 2 tool được giữ lại đã được làm **giàu hơn nhiều** (13 tham số
+cho `search_devices`, mô tả IP chi tiết) — chính phần bù này mới làm 4 nhu cầu chạy được.
+
+### 16.2 `search_devices` giờ phủ đủ field của UI
+
+Trước đây chỉ có 5 tham số (`deviceCode`/`manager`/`ipAddress`/`email`/`supplierName`) trong khi
+`DeviceFilterRequest` có 13 → những câu người dùng trả lời được trên màn hình lại không trả lời được
+trong chat. Nay map **1:1** với `DeviceFilterRequest`, thêm: `serialNumber`, `note`, `purchaseDate`,
+`groupId`, `departmentId`, `isOutsourced`, `isUseUsb`, `sortDeviceCodeAscending`.
+
+Thêm 2 helper `GetIntArg`/`GetBoolArg` vào executor (trước chỉ có `GetStringArg`/`ParseDateArg`). Cả 2
+chấp nhận cả JSON scalar thật lẫn dạng chuỗi (`"6"`, `"true"`) vì model nhỏ hay trả về dạng chuỗi, và
+trả `null` (không phải `0`/`false`) khi thiếu tham số — vì `0`/`false` ở đây **là giá trị lọc có nghĩa**
+(`Status=0` = còn trống, `IsOutsourced=false` = máy công ty), đúng cảnh báo CLAUDE.md §4.4.
+
+### 16.3 `search_ip_addresses` trả lời được cả 3 câu hỏi về IP
+
+Thêm 2 tham số `isInUse` (bool) + `status` (int: 0 trống / 1 gán ngoài hệ thống / 2 gán trong hệ thống).
+`IpAddressDto` vốn đã có `StatusText` + `DeviceCode` nên câu "IP này ai đang dùng" trả lời được ngay.
+`Keyword` dùng `Contains` trên chuỗi IP nên truyền `"10.45.1."` là lọc được cả dải.
+
+Đồng thời **đổi shape kết quả** từ mảng trần thành `{ totalCount, returnedCount, items }`: trả 10 IP mà
+không nói tổng là 2775 thì câu trả lời thành ra sai lệch. System prompt có rule bắt buộc nói rõ tổng số
+khi `totalCount` lớn hơn số phần tử liệt kê.
+
+### 16.4 3 rule mới trong `DefaultSystemPrompt`
+
+1. **PHẠM VI HỖ TRỢ** — nêu thẳng chỉ hỗ trợ 2 nhóm việc (tra thiết bị / tra IP), ngoài ra nói rõ chưa
+   hỗ trợ. Rule cũ còn liệt kê "lịch sử chuyển giao", "chi nhánh", "nhà cung cấp" — những tool vừa bỏ.
+2. **QUY TẮC GỌI TOOL TRƯỚC, HỎI LẠI SAU** — sửa lỗi thật: hỏi "tìm cho tôi những IP đang còn trống" →
+   model **không gọi tool nào**, chỉ hỏi lại "trong dải mạng nào?", dù `search_ip_addresses` không có
+   tham số nào bắt buộc. Rule mới: gần như mọi tham số đều optional nên phải gọi tool ngay với những gì
+   đang có, chỉ được hỏi thu hẹp SAU KHI đã gọi và thấy kết quả quá nhiều/rỗng. (Cùng nội dung được nhắc
+   lại trong `description` của `search_ip_addresses` để củng cố ở tầng tool schema.)
+3. **QUY TẮC ĐỌC ĐÚNG KẾT QUẢ TOOL** — sửa lỗi thật, dạng ngược với §14: hỏi liệt kê chi nhánh + loại
+   thiết bị, model gọi đúng `search_branches`/`search_device_types` nhưng lại trả lời "(Không có dữ liệu
+   nào được trả về từ hệ thống.)", trong khi DB có **6 chi nhánh và 16 loại thiết bị** (đã xác minh bằng
+   `GET /api/Branch/grid-list` → `totalCount: 6`, tức tool không lỗi — model **bịa ra việc không có dữ
+   liệu**). Rule mới: báo sai là không có dữ liệu cũng nghiêm trọng ngang bịa dữ liệu.
+
+### 16.5 Gợi ý trên FE phải khớp năng lực thật
+
+`SUGGESTIONS` cũ trong `AiChatBox.tsx` hứa những thứ **không tool nào làm được**: "Có bao nhiêu thiết bị
+đang chờ thanh lý?" (không có tool thống kê theo trạng thái — đã test, model đành hỏi lại) và "Liệt kê
+thiết bị của chi nhánh Bình Dương" (`DeviceFilterRequest` **không có** filter chi nhánh, và cũng không
+có chi nhánh nào tên Bình Dương — thật là CỦ CHI/DĨ AN/MỸ PHƯỚC). Bộ mới dùng dữ liệu có thật để bấm vào
+là ra kết quả, và `TOOL_LABELS` cũng đã xoá nhãn của 10 tool đã bỏ.
+
+### 16.6 Nghiệm thu — đối chiếu từng câu với API thật
+
+| Nhu cầu | Câu hỏi test | Tool model gọi | Kết quả | Đối chiếu API |
+|---|---|---|---|---|
+| (4) IP trống trong dải | "Dải IP 10.45.1 còn bao nhiêu địa chỉ trống?" | `get_ip_prefix_usage` | 255 tổng, 0 trống | ✅ khớp (`Keyword=10.45.1.` → 255; `IsInUse=false` → 0) |
+| (3) IP dùng được / ai dùng | "IP 10.45.1.20 có dùng được không, đang được máy nào dùng?" | `search_ip_addresses` | đang dùng, máy `YDC-09333` | ✅ khớp (status 2, deviceCode YDC-09333) |
+| (1) field mới của UI | "Liệt kê các thiết bị thuê ngoài" | `search_devices` (`isOutsourced=true`) | 10 máy đầu | ✅ khớp thứ tự API (total 30) |
+| (2) IP trống toàn hệ thống | "Tìm cho tôi những IP đang còn trống" | `search_ip_addresses` (`isInUse=false`) | **2775** IP trống, nói rõ chỉ liệt kê một phần | ✅ khớp chính xác (2775) |
+
+Ghi chú về độ trễ: 4 lần đo lần lượt 150s / 47s / 89s / 141s — **không kết luận được** là nhanh hơn hay
+chậm hơn trước, vì Ollama server dùng chung và §12 đã ghi nhận độ trễ biến động lớn do tranh chấp tải.
+Con số đáng tin duy nhất là mức giảm schema ~29% ở §16.1.
