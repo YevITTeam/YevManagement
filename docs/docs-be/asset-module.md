@@ -78,6 +78,15 @@ FinancialPeriod = fiscalYearStartYear - 1940
 ```
 (vd `01-Oct-2026`→86). Không lưu DB, tính on-the-fly trong `Expression<Func<>>` (EF dịch SQL). Dùng `ToListAsync(query, selector)` (không phân trang).
 
+### 1.7b. Thống kê dashboard — `GET /api/Report/device-summary` (2026-07-30)
+Cho màn `DeviceReport.tsx` (KPI + biểu đồ tròn trạng thái + top Chi nhánh/Loại thiết bị + bảng sắp/đã hết hạn). Không tham số, cùng phạm vi thiết bị với §1.7 (`PendingUse`/`InUse`).
+`DeviceService.GetReportSummaryAsync()` — tính hoàn toàn bằng `COUNT`/`GROUP BY` qua `CountAsync`/`GroupCountAsync` mới thêm vào `IGenericRepository` (xem `architecture-core.md §1`), **không** tải nguyên bảng `Device` về rồi cộng dồn ở C#:
+- `TotalCount`/`InUseCount`/`PendingUseCount`: `CountAsync(query)` + `CountAsync(query, status==InUse)`.
+- `BranchDistribution`/`DeviceTypeDistribution`: `GroupCountAsync` theo `Branch.BranchName`/`DeviceType.TypeName`, top 6 (`OrderByDescending().Take(6)` sau khi group — tập kết quả chỉ vài chục dòng nên sort trong bộ nhớ, không cần đẩy xuống SQL).
+- `ExpiringDevices`: thiết bị có `ExpirationDate <= hôm nay + 90 ngày` (hằng số `ReportExpiryWindowDays`, **phải khớp** `EXPIRY_WINDOW_DAYS` ở FE `DeviceReport.tsx`), gồm cả thiết bị đã quá hạn (`DaysRemaining` âm). `DaysRemaining` tính trong bộ nhớ sau khi `ToListAsync` (phép trừ ngày đơn giản, không đáng dịch sang SQL).
+- `ExpiringSoonCount` = số dòng trong `ExpiringDevices` có `DaysRemaining >= 0`.
+Trước 2026-07-30, FE tự tải toàn bộ `Device/grid-list` (nhiều trang `pageSize=1000` chạy song song) rồi cộng dồn trong `useMemo` — chậm (~1.5-2s, vài MB) khi DB có hàng nghìn thiết bị; endpoint này thay thế hoàn toàn cách đó.
+
 ### 1.8. "Chuyển máy" — `TransferHistory`
 `POST /api/TransferHistory` (`CreateTransferHistoryDto`: `OldDeviceId`/`NewDeviceId`[Required], `Note?`) — **1 hành động tổng hợp** qua `TransferHistoryService.TransferAsync`:
 1. Validate `Old != New` + cả 2 tồn tại.
@@ -229,12 +238,14 @@ Chuyển tính năng "Chat với AI" từ chạy tạm ở FE (gọi thẳng Oll
 - **DeviceGroups**: `DeviceGroupDto`(+`DepartmentId`/`DepartmentName`), `Create/UpdateDeviceGroupDto`(`DepartmentId[Required]`+Code/Name).
 - **DeviceDepartments**: cùng khuôn master.
 - **Devices**:
-  - `DeviceFilterRequest`: `PageIndex=1`, `PageSize=50`, filter `DeviceCode/Manager/SupplierName`(Contains), `PurchaseDate`(Contains), `IpAddress?`/`Email?`(Contains any), `GroupId?`/`DepartmentId?`(exact), `Note`(Contains), `IsOutsourced?`/`IsUseUsb?`(exact), `SerialNumber?`(Contains), `SortDeviceCodeAscending?`(null→`OrderByDescending(PurchaseDate)`; true/false→theo `DeviceCode`).
+  - `DeviceFilterRequest`: `PageIndex=1`, `PageSize=50`, filter `DeviceCode/Manager/SupplierName`(Contains), `PurchaseDate`(parse rồi so `.Date ==`, không phải Contains chuỗi — 2026-07-30, tránh `CONVERT` non-sargable), `IpAddress?`/`Email?`(Contains any), `GroupId?`/`DepartmentId?`/`BranchId?`/`DeviceTypeId?`(exact), `Note`(Contains), `IsOutsourced?`/`IsUseUsb?`(exact), `SerialNumber?`(Contains), `Status?`(exact, enum `DeviceStatus`), `ExpiryDate?`(`ExpirationDate <= ExpiryDate`), `SortDeviceCodeAscending?`(null→`OrderByDescending(PurchaseDate)`; true/false→theo `DeviceCode`).
+    `BranchId/DeviceTypeId/Status/ExpiryDate` thêm 2026-07-30 (trước đó FE lọc 4 field này bằng cách tải `PageSize=5000` về rồi tự lọc ở client — chậm ~1.7s/request và sai khi DB vượt 5000 thiết bị).
   - `DeviceGridDto`: tên Branch/Supplier/DeviceType + `GroupName?`/`DepartmentName?` + `IpAddresses:List<string>`/`Emails:List<string>` + `StatusText` + `IsOutsourced`/`SerialNumber?`/`IsUseUsb`.
   - `DeviceDto`: tên + `GroupId?/GroupName?/DepartmentId?/DepartmentName?` + `StatusText` + `IpAddresses:List<DeviceIpAddressDto>` + `Emails:List<DeviceEmailDto>` + `ExpirationDate` + `SerialNumber?/IsUseUsb` + `SuggestedNewDeviceId?/SuggestedNewDeviceCode?`.
   - `Create/UpdateDeviceDto`: `DeviceCode/DeviceName/Manager[Required]`, `Emails[Required][MinLength(1)]`, `DeviceTypeId/SupplierId/BranchId[Required]`, `GroupId?/DepartmentId?`(validate khi có), `PurchaseDate[Required]`, `DepreciationMonths[Required][Range(1,600)]`, `IsOutsourced`, `Status[Range(0,3)]`, `Note?`, `IpAddressIds:List<int>`, `SerialNumber?[StringLength(100)]`, `IsUseUsb`, `SuggestedNewDeviceId?`. **Không có** `ExpirationDate`.
   - `DeviceIpAddressDto`(Id/IpAddress), `DeviceEmailDto`(Id/Email/Note), `DeviceEmailInputDto`(Email/Note).
   - Báo cáo: `DeviceReportFilterRequest`(`DeviceTypeId?/BranchId?/Keyword?`), `DeviceReportItemDto` (§1.7, `IpAddress` là `string?` nối `", "`).
+  - Thống kê dashboard (§1.7b): `DeviceReportSummaryDto`(`TotalCount/InUseCount/PendingUseCount/ExpiringSoonCount` + `BranchDistribution/DeviceTypeDistribution:List<DeviceReportDistributionItemDto>` + `ExpiringDevices:List<DeviceReportExpiringItemDto>`), `DeviceReportDistributionItemDto`(`Label/Count`), `DeviceReportExpiringItemDto`(`Id/DeviceCode/DeviceName/BranchName/Manager/ExpirationDate/DaysRemaining`).
   - Bulk: `BulkDeleteDeviceRequestDto{Ids[Required][MinLength(1)]}`, `BulkDeleteSkippedDeviceDto`, `BulkDeleteDeviceResultDto`.
 - **DeviceSoftwares**: `DeviceSoftwareDto`, `Create...`(+`[Required]`), `Update...`.
 - **Softwares**: `SoftwareDto`(+`SoftwareGroupName`), `Create...`(+`[Required]` Code/Name/GroupId), `Update...`.
@@ -257,7 +268,7 @@ Chuyển tính năng "Chat với AI" từ chạy tạm ở FE (gọi thẳng Oll
 | DeviceDepartment | `/api/DeviceDepartment` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.DeviceDepartment.*` |
 | Device | `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, `qr-labels`(§1.16, POST), POST, PUT, DELETE(mềm), `bulk-delete`(§1.15). **Không** `all` | `Asset.Device.*` |
 | AssetSetting | `/api/AssetSetting` | GET, PUT (1 dòng) | `Asset.Setting.View/.Update` |
-| Report | `/api/Report` | `device-list` | `Asset.Report.View` |
+| Report | `/api/Report` | `device-list`, `device-summary`(§1.7b, 2026-07-30) | `Asset.Report.View` |
 | DeviceType | `/api/DeviceType` | CRUD | `Asset.DeviceType.*` |
 | Supplier | `/api/Supplier` | CRUD | `Asset.Supplier.*` |
 | DeviceSoftware | `/api/DeviceSoftware` | GetByDevice, POST, PUT, DELETE, `picker/{deviceId}`, `sync`(PUT) | `Asset.DeviceSoftware.*` (picker→View, sync→Update) |

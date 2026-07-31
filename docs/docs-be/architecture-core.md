@@ -29,6 +29,8 @@ Method sẵn có (dùng lại, đừng viết query thô):
 | `GetQueryable(isTracking, ...includes)` | `IQueryable<T>` để build filter động. |
 | `ToPagedResponseAsync(query, pageIndex, pageSize, selector)` | **Phân trang chuẩn** → `PagedResponse<TResult>` (tự đếm TotalCount/Pages). |
 | `ToListAsync(query, selector)` | Materialize `IQueryable` đã compose (nhiều `.Where`/`OrderBy`) → `List<TResult>`, **không phân trang** (báo cáo). |
+| `CountAsync(query)` / `CountAsync(query, pred)` | Đếm ở SQL, không tải bản ghi (2026-07-30, cho màn thống kê). |
+| `GroupCountAsync(query, keySelector, resultSelector)` | `GroupBy` + `Select` ở SQL (`resultSelector` nhận `IGrouping<TKey,T>`, gọi `g.Count()` được) → `IReadOnlyList<TResult>` (2026-07-30, xem `DeviceService.GetReportSummaryAsync`). |
 
 Quy ước:
 - Repo con để **rỗng** nếu không cần method đặc thù: `class BranchRepository : GenericRepository<Branch, AssetDbContext>, IBranchRepository { public BranchRepository(AssetDbContext db) : base(db) {} }`.

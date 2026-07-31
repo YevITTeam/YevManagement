@@ -445,7 +445,16 @@
       "rejectError": "Từ chối đơn thất bại",
       "secondaryPasswordMissingError": "Bạn chưa thiết lập mật khẩu cấp 2 — vào \"Mật khẩu cấp 2\" để thiết lập trước khi ký/duyệt.",
       "secondaryPasswordRequiredError": "Vui lòng nhập mật khẩu cấp 2.",
-      "loadError": "Không thể tải chi tiết đơn tăng ca."
+      "loadError": "Không thể tải chi tiết đơn tăng ca.",
+      "removeEmployeeButton": "Loại khỏi đơn",
+      "removeModalTitle": "Loại {name} khỏi đơn",
+      "removeModalDesc": "Nhân viên này sẽ không còn được tính vào đơn tăng ca — không tính giờ OT, không cộng lũy kế. Các cấp đã ký/duyệt trước đó không cần ký lại.",
+      "removeReasonLabel": "Lý do loại",
+      "removeReasonRequiredError": "Vui lòng nhập lý do loại nhân viên khỏi đơn.",
+      "confirmRemove": "Xác nhận loại khỏi đơn",
+      "removeSuccess": "Đã loại {name} khỏi đơn.",
+      "removeError": "Loại nhân viên khỏi đơn thất bại",
+      "removedInlineNote": "Đã bị loại khỏi đơn bởi {name} (cấp {level}) — Lý do: {reason}"
     },
     "CreateOtForm": {
       "titleCreate": "Tạo đơn tăng ca",

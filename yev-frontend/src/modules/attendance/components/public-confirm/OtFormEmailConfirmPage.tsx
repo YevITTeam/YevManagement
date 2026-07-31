@@ -226,7 +226,11 @@ export default function OtFormEmailConfirmPage() {
 
     const applicableLevels = applicableApprovalLevels(requiredApprovalLevel);
     const approvalSteps = buildApprovalSteps(form, applicableLevels);
-    const totalWorkedHours = form.employees.reduce(
+    // Người đã bị loại khỏi đơn (docs §4.5a) không tính vào tổng giờ OT hiển thị ở trang xem trước qua
+    // email — kênh email KHÔNG có hành động "Loại khỏi đơn" (chỉ có ở trong app), nhưng vẫn phải phản
+    // ánh đúng trạng thái đơn hiện tại nếu việc loại người đã xảy ra trước đó qua app.
+    const activeEmployees = form.employees.filter((employee) => !employee.isRemoved);
+    const totalWorkedHours = activeEmployees.reduce(
         (sum, employee) => sum + calculateHours(employee.startTime, employee.endTime),
         0
     );
@@ -390,6 +394,31 @@ export default function OtFormEmailConfirmPage() {
                         </thead>
                         <tbody>
                             {form.employees.map((employee) => {
+                                // Đã bị loại khỏi đơn qua app (docs §4.5a) — kênh email không có hành
+                                // động loại người, nhưng vẫn phải phản ánh đúng nếu việc đó đã xảy ra
+                                // trước khi cấp duyệt mở link email này.
+                                if (employee.isRemoved) {
+                                    return (
+                                        <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#f8fafc] opacity-60">
+                                            <td className="px-6 py-3 text-sm">
+                                                <span className="inline-flex items-center rounded-md bg-[#eceef0] px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e] line-through">
+                                                    {employee.employeeCode}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-3 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
+                                            <td colSpan={5} className="px-6 py-3 text-sm text-[#930006]">
+                                                {t("removedInlineNote", {
+                                                    name: employee.removedByFullName ?? employee.removedByUserName ?? "",
+                                                    level:
+                                                        employee.removedAtLevel !== null
+                                                            ? approvalLevelLabelsBilingual[employee.removedAtLevel]
+                                                            : "",
+                                                    reason: employee.removeReason ?? "",
+                                                })}
+                                            </td>
+                                        </tr>
+                                    );
+                                }
                                 const isMonthOverLimit = employee.monthToDate > 25;
                                 const isYearOverLimit = employee.yearToDate > 300;
                                 const isOverLimit = isMonthOverLimit || isYearOverLimit;

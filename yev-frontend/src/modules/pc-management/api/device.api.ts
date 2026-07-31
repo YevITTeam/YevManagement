@@ -34,6 +34,12 @@ export interface GetDevicePageNationParams {
     isOutsourced?: boolean;
     serialNumber?: string;
     isUseUsb?: boolean;
+    branchId?: number;
+    deviceTypeId?: number;
+    // 0=Chưa sử dụng,1=Đang sử dụng,2=Chờ thanh lý,3=Đã thanh lý (Asset.Domain.Enums.DeviceStatus).
+    status?: number;
+    // Thiết bị hết hạn vào hoặc trước ngày này (yyyy-MM-dd).
+    expiryDate?: string;
     sortDeviceCodeAscending?: boolean;
 }
 
@@ -54,6 +60,10 @@ export const DeviceApi = {
         if (params?.isOutsourced !== undefined) query.set("IsOutsourced", String(params.isOutsourced));
         if (params?.serialNumber) query.set("SerialNumber", params.serialNumber);
         if (params?.isUseUsb !== undefined) query.set("IsUseUsb", String(params.isUseUsb));
+        if (params?.branchId !== undefined) query.set("BranchId", String(params.branchId));
+        if (params?.deviceTypeId !== undefined) query.set("DeviceTypeId", String(params.deviceTypeId));
+        if (params?.status !== undefined) query.set("Status", String(params.status));
+        if (params?.expiryDate) query.set("ExpiryDate", params.expiryDate);
         if (params?.sortDeviceCodeAscending !== undefined) query.set("SortDeviceCodeAscending", String(params.sortDeviceCodeAscending));
 
         const queryString = query.toString();

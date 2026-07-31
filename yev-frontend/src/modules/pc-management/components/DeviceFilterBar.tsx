@@ -89,6 +89,16 @@ const fieldWithIconClassName = `${fieldClassName} pl-9`;
 
 const fieldLabelClassName = "mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 
+// Nhãn hiển thị cho chip "Đang lọc" của field status — value thật gửi lên API là số (0-3) hoặc
+// sentinel "outsourced" (lọc theo IsOutsourced), không phải chuỗi tiếng Việt.
+const statusChipLabels: Record<string, string> = {
+    "0": "Chưa sử dụng",
+    "1": "Đang sử dụng",
+    "2": "Chờ thanh lý",
+    "3": "Đã thanh lý",
+    outsourced: "Thuê ngoài",
+};
+
 export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
     const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
@@ -143,7 +153,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
             if (serialized === lastSubmitted.current) return;
             lastSubmitted.current = serialized;
             onFilter(filters);
-        }, 400);
+        }, 250);
 
         return () => clearTimeout(timeoutId);
     }, [filters, onFilter]);
@@ -209,7 +219,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 >
                                     <option value="">Tất cả chi nhánh</option>
                                     {branches.map((branch) => (
-                                        <option key={branch.id} value={branch.branchName}>
+                                        <option key={branch.id} value={branch.id}>
                                             {branch.branchName}
                                         </option>
                                     ))}
@@ -309,7 +319,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 >
                                     <option value="">Tất cả loại</option>
                                     {deviceTypes.map((deviceType) => (
-                                        <option key={deviceType.id} value={deviceType.typeName}>
+                                        <option key={deviceType.id} value={deviceType.id}>
                                             {deviceType.typeName}
                                         </option>
                                     ))}
@@ -325,10 +335,13 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 className={fieldClassName}
                             >
                                 <option value="">Tất cả trạng thái</option>
-                                <option value="Chưa sử dụng">Chưa sử dụng</option>
-                                <option value="Đang sử dụng">Đang sử dụng</option>
-                                <option value="Chờ thanh lý">Chờ thanh lý</option>
-                                <option value="Đã thanh lý">Đã thanh lý</option>
+                                <option value="0">Chưa sử dụng</option>
+                                <option value="1">Đang sử dụng</option>
+                                <option value="2">Chờ thanh lý</option>
+                                <option value="3">Đã thanh lý</option>
+                                {/* Không phải 1 giá trị của Device.Status (chỉ có 0-3) — đây là filter riêng
+                                    trên field IsOutsourced, dùng chung dropdown cho gọn UI. */}
+                                <option value="outsourced">Thuê ngoài</option>
                             </select>
                         </label>
 
@@ -466,7 +479,13 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                       ? (deviceGroups.find((group) => String(group.id) === value)?.groupName ?? value)
                                       : field === "departmentId"
                                         ? (deviceDepartments.find((department) => String(department.id) === value)?.departmentName ?? value)
-                                        : value}
+                                        : field === "branch"
+                                          ? (branches.find((branch) => String(branch.id) === value)?.branchName ?? value)
+                                          : field === "deviceType"
+                                            ? (deviceTypes.find((deviceType) => String(deviceType.id) === value)?.typeName ?? value)
+                                            : field === "status"
+                                              ? (statusChipLabels[value] ?? value)
+                                              : value}
                                 <button
                                     type="button"
                                     onClick={() => handleRemoveChip(field)}

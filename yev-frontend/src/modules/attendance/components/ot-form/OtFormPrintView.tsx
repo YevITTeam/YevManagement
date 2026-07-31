@@ -508,10 +508,15 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
             });
     }, [id]);
 
+    // Người đã bị loại khỏi đơn (docs §4.5a) KHÔNG được in — họ không còn nằm trong đơn được duyệt.
+    // form.employees vẫn trả về cả 2 loại (để màn chi tiết trong app giữ được dấu vết), nên bản in
+    // phải tự lọc ra danh sách thật sự cần in.
+    const printableEmployees = form ? form.employees.filter((employee) => !employee.isRemoved) : [];
+
     // Đơn có số nhân viên vừa đủ trong 1 mặt A5 (<= sức chứa trang 2 A5) thì tự động chọn A5 để tiết
     // kiệm giấy — đơn nhiều người hơn thì giữ mặc định A4. Tính trực tiếp trong render (không qua
     // effect+state riêng) — chỉ dùng state cho lựa chọn THỦ CÔNG của người dùng.
-    const autoPaperSize: PaperSize = form && form.employees.length <= EMPLOYEE_PAGE_CAPACITY.a5.rest ? "a5" : "a4";
+    const autoPaperSize: PaperSize = printableEmployees.length <= EMPLOYEE_PAGE_CAPACITY.a5.rest ? "a5" : "a4";
     const paperSize = paperSizeTouched ? manualPaperSize : autoPaperSize;
 
     function selectPaperSize(size: PaperSize) {
@@ -530,7 +535,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
     const formId = form.id;
     const rejectHistory = form.approvalHistories.find((item) => item.action === 2) ?? null;
     const isA5 = paperSize === "a5";
-    const employeePages = buildEmployeePages(form.employees, paperSize);
+    const employeePages = buildEmployeePages(printableEmployees, paperSize);
 
     // Danh sách trang in thật (mỗi phần tử = đúng 1 ảnh nền = đúng 1 trang giấy). Khổ A4: trang 1 dùng
     // CHUNG ảnh nền cho cả phần đầu (ký duyệt/thông tin) lẫn 10 nhân viên đầu — không tách 2 <img>

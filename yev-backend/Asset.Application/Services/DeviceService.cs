@@ -64,9 +64,30 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.Supplier.SupplierName.Contains(request.SupplierName));
             }
 
-            if (!string.IsNullOrWhiteSpace(request.PurchaseDate))
+            // Name-based filters (2026-07-30, see DeviceFilterRequest for why they exist). Group and
+            // Department are optional on Device, hence the null-guard on the navigation property; Branch
+            // is required so it needs none.
+            if (!string.IsNullOrWhiteSpace(request.BranchName))
             {
-                query = query.Where(d => d.PurchaseDate.ToString().Contains(request.PurchaseDate));
+                query = query.Where(d => d.Branch.BranchName.Contains(request.BranchName));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.GroupName))
+            {
+                query = query.Where(d => d.DeviceGroup != null && d.DeviceGroup.GroupName.Contains(request.GroupName));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.DepartmentName))
+            {
+                query = query.Where(d => d.DeviceDepartment != null && d.DeviceDepartment.DepartmentName.Contains(request.DepartmentName));
+            }
+
+            // FE only sends a full ISO date (input type="date"), so this is really an exact-day match —
+            // parse it and compare on Date instead of PurchaseDate.ToString().Contains(...), which forced
+            // SQL Server to CONVERT every row to string (non-sargable, no index use) for a full table scan.
+            if (!string.IsNullOrWhiteSpace(request.PurchaseDate) && DateTime.TryParse(request.PurchaseDate, out var purchaseDate))
+            {
+                query = query.Where(d => d.PurchaseDate.Date == purchaseDate.Date);
             }
 
             if (!string.IsNullOrWhiteSpace(request.Note))
@@ -97,6 +118,26 @@ namespace Asset.Application.Services
             if (!string.IsNullOrWhiteSpace(request.Email))
             {
                 query = query.Where(d => d.DeviceEmails.Any(e => !e.IsDeleted && e.Email.Contains(request.Email)));
+            }
+
+            if (request.BranchId.HasValue)
+            {
+                query = query.Where(d => d.BranchId == request.BranchId.Value);
+            }
+
+            if (request.DeviceTypeId.HasValue)
+            {
+                query = query.Where(d => d.DeviceTypeId == request.DeviceTypeId.Value);
+            }
+
+            if (request.Status.HasValue)
+            {
+                query = query.Where(d => d.Status == request.Status.Value);
+            }
+
+            if (request.ExpiryDate.HasValue)
+            {
+                query = query.Where(d => d.ExpirationDate != null && d.ExpirationDate <= request.ExpiryDate.Value);
             }
 
             var orderedQuery = request.SortDeviceCodeAscending.HasValue
@@ -241,6 +282,71 @@ namespace Asset.Application.Services
             }
 
             return items;
+        }
+
+        // Số ngày cảnh báo trước khi hết hạn cho màn "Báo cáo thiết bị" (yev-frontend DeviceReport.tsx
+        // EXPIRY_WINDOW_DAYS) — 2 nơi phải khớp nhau vì FE không tự lọc lại danh sách ExpiringDevices.
+        private const int ReportExpiryWindowDays = 90;
+
+        // Thống kê cho màn "Báo cáo thiết bị" — tính bằng COUNT/GROUP BY ở SQL thay vì trả nguyên bảng
+        // Device (5000+ dòng) để FE tự cộng dồn trong bộ nhớ (2026-07-30, xem docs/docs-be/asset-module.md).
+        public async Task<DeviceReportSummaryDto> GetReportSummaryAsync()
+        {
+            var query = _unitOfWork.Devices.GetQueryable(false, d => d.Branch, d => d.DeviceType)
+                .Where(d => !d.IsDeleted
+                    && (d.Status == (int)DeviceStatus.PendingUse || d.Status == (int)DeviceStatus.InUse));
+
+            var totalCount = await _unitOfWork.Devices.CountAsync(query);
+            var inUseCount = await _unitOfWork.Devices.CountAsync(query, d => d.Status == (int)DeviceStatus.InUse);
+
+            // OrderByDescending/Take chạy trong bộ nhớ sau khi group — tập kết quả chỉ vài chục dòng
+            // (số Chi nhánh/Loại thiết bị thực tế), không đáng để làm phức tạp thêm interface repository.
+            var branchGroups = await _unitOfWork.Devices.GroupCountAsync(
+                query, d => d.Branch.BranchName,
+                g => new DeviceReportDistributionItemDto { Label = g.Key, Count = g.Count() });
+            var branchDistribution = branchGroups.OrderByDescending(x => x.Count).Take(6).ToList();
+
+            var typeGroups = await _unitOfWork.Devices.GroupCountAsync(
+                query, d => d.DeviceType.TypeName,
+                g => new DeviceReportDistributionItemDto { Label = g.Key, Count = g.Count() });
+            var typeDistribution = typeGroups.OrderByDescending(x => x.Count).Take(6).ToList();
+
+            var today = TimeHelper.GetCurrentUtcTime().Date;
+            var expiryWindowDate = today.AddDays(ReportExpiryWindowDays);
+
+            var expiringQuery = query
+                .Where(d => d.ExpirationDate != null && d.ExpirationDate <= expiryWindowDate)
+                .OrderBy(d => d.ExpirationDate);
+
+            var expiringDevices = await _unitOfWork.Devices.ToListAsync(
+                expiringQuery,
+                d => new DeviceReportExpiringItemDto
+                {
+                    Id = d.Id,
+                    DeviceCode = d.DeviceCode,
+                    DeviceName = d.DeviceName,
+                    BranchName = d.Branch.BranchName,
+                    Manager = d.Manager,
+                    ExpirationDate = d.ExpirationDate
+                });
+
+            // DaysRemaining là phép trừ ngày đơn giản — tính trong bộ nhớ vì EF không dịch được
+            // (ExpirationDate.Value - today).Days sang SQL cho mọi provider một cách nhất quán.
+            foreach (var item in expiringDevices)
+            {
+                item.DaysRemaining = (int)Math.Ceiling((item.ExpirationDate!.Value - today).TotalDays);
+            }
+
+            return new DeviceReportSummaryDto
+            {
+                TotalCount = totalCount,
+                InUseCount = inUseCount,
+                PendingUseCount = totalCount - inUseCount,
+                ExpiringSoonCount = expiringDevices.Count(d => d.DaysRemaining >= 0),
+                BranchDistribution = branchDistribution,
+                DeviceTypeDistribution = typeDistribution,
+                ExpiringDevices = expiringDevices
+            };
         }
 
         public async Task<DeviceDto> GetByIdAsync(int id)

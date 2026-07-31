@@ -799,3 +799,56 @@ là ra kết quả, và `TOOL_LABELS` cũng đã xoá nhãn của 10 tool đã b
 Ghi chú về độ trễ: 4 lần đo lần lượt 150s / 47s / 89s / 141s — **không kết luận được** là nhanh hơn hay
 chậm hơn trước, vì Ollama server dùng chung và §12 đã ghi nhận độ trễ biến động lớn do tranh chấp tải.
 Con số đáng tin duy nhất là mức giảm schema ~29% ở §16.1.
+
+## 17. Cập nhật 2026-07-30 (2): lọc theo TÊN chi nhánh/nhóm/bộ phận — bỏ chuỗi 2 bước name→id
+
+Transcript thật của người dùng phơi ra 2 lỗi, và lỗi thứ hai có nguyên nhân sâu hơn phần đã sửa ở §16.
+
+**Lỗi 1 — không lọc được theo chi nhánh.** Hỏi "các máy ở chi nhánh Dĩ An": `DeviceFilterRequest` khi đó
+**không có** filter chi nhánh nào, nên model loay hoay rồi trả lời **sai lệch về nghiệp vụ** — nói "thông
+tin chi nhánh thường được thể hiện dưới dạng Bộ phận (Department)", gọi `search_device_departments` với
+từ khoá "Dĩ An" (đương nhiên không thấy), rồi đề xuất tìm "Dĩ An" trong trường ghi chú. Người dùng phải
+tự đính chính "ko phải nó là một Branch". Dữ liệu thì hoàn toàn có sẵn: `Device.BranchId` tồn tại,
+`DeviceGridDto.BranchName` vẫn đang được trả về — **chỉ thiếu đúng tham số lọc**.
+
+**Lỗi 2 — chuỗi 2 bước làm model đứng hình.** Hỏi "tìm theo phòng Công vụ coi đang có máy nào": model
+viết ra kế hoạch 2 bước ("(1) tìm ID bộ phận bằng `search_device_departments`, (2) dùng ID đó gọi
+`search_devices`") rồi kết thúc lượt bằng "Tôi sẽ tiến hành các bước này ngay bây giờ nhé" — **không gọi
+tool nào**. Bị hỏi lại thì thừa nhận chưa làm, rồi... hứa tiếp. Cơ chế auto-retry cùng lượt (§15) có bắt
+được lời hứa và gọi lại model, nhưng nó chỉ ép "gọi tool đi", **không** làm chuỗi 2 bước ngắn lại — đúng
+điểm model nhỏ hay gãy: nó tường thuật kế hoạch nhiều bước thay vì thực thi.
+
+**Cách sửa (giống hướng đã thắng ở Attendance §16 của tài liệu kia: bỏ sự phụ thuộc vào việc model tự
+làm nhiều bước, thay vì siết prompt thêm)** — cho lọc THẲNG BẰNG TÊN:
+
+- `DeviceFilterRequest` thêm `BranchName`, `GroupName`, `DepartmentName` (tất cả optional, UI hiện tại
+  không gửi nên không đổi gì hành vi cũ). `DeviceService.GetDevicesForGridAsync` lọc bằng `Contains()`
+  qua navigation property — đúng pattern `SupplierName` vốn đã name-based từ trước; `DeviceGroup`/
+  `DeviceDepartment` là optional nên có null-guard, `Branch` là bắt buộc nên không cần.
+- `GroupName`/`DepartmentName` **trùng chức năng** với `GroupId`/`DepartmentId` một cách có chủ ý: id vẫn
+  giữ cho UI (dropdown), tên là để chat gọi 1 lần là xong.
+- Tool schema `search_devices` thêm `branchName`/`groupName`/`departmentName`/`status`, và mô tả nói rõ
+  "truyền THẲNG tên người dùng nói, KHÔNG cần và KHÔNG được gọi tool khác để đổi tên thành id trước".
+  `groupId`/`departmentId` bị hạ cấp thành "chỉ dùng khi đã có id sẵn".
+- System prompt thêm **QUY TẮC TRUYỀN TÊN TRỰC TIẾP, KHÔNG ĐỔI SANG ID**, trong đó nêu thẳng: chi nhánh
+  là tiêu chí lọc ĐỘC LẬP, **không phải** Bộ phận và **không** nằm trong ghi chú — cấm nói với người dùng
+  rằng chi nhánh phải tra qua Bộ phận/ghi chú (đúng câu sai model đã nói).
+
+> Lưu ý khi làm tiếp: `Status`/`BranchId`/`DeviceTypeId`/`ExpiryDate` **đã có sẵn** trong
+> `DeviceFilterRequest` (việc đang làm dở của người dùng) và `Status` đã được `DeviceService` lọc rồi —
+> đừng thêm lại, sẽ bị `CS0102: already contains a definition` và lọc trùng 2 lần.
+
+`search_device_groups`/`search_device_departments` **được giữ lại** nhưng chỉ để trả lời "hệ thống có
+những nhóm/bộ phận nào", KHÔNG còn dùng cho việc đổi tên→id nữa (prompt đã cấm).
+
+### 17.1 Nghiệm thu — đúng 2 câu người dùng đã gặp lỗi
+
+| Câu hỏi | Trước | Sau | Đối chiếu API |
+|---|---|---|---|
+| "các máy ở chi nhánh Dĩ An" | Nói sai rằng chi nhánh = Bộ phận, tra `search_device_departments` không ra, đề xuất tìm trong ghi chú | **1 tool call** `search_devices(branchName)` → 10 máy | ✅ khớp danh sách DĨ AN (`BranchName=AN` → 2052 máy) |
+| "tìm theo phòng Công vụ coi đang có máy nào" | Tường thuật kế hoạch 2 bước rồi kết thúc lượt, **không gọi tool nào** | **1 tool call** `search_devices(departmentName)` → 2 máy: TEST-PC-01, YDC-8333 | ✅ khớp chính xác |
+
+> **Bẫy khi tự kiểm thử lại**: gọi API bằng `curl --data-urlencode "BranchName=DĨ AN"` từ Git Bash trả về
+> `totalCount: 0` **không phải vì code sai** mà vì shell làm hỏng UTF-8 (cùng loại lỗi đã ghi ở phần
+> PowerShell). Kiểm bằng chuỗi ASCII (`BranchName=AN` → 2052, `BranchName=PH` → 1195 MỸ PHƯỚC) hoặc gọi
+> qua chính chatbot, đừng kết luận filter hỏng.

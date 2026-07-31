@@ -363,6 +363,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time");
 
+                    b.Property<bool>("IsRemoved")
+                        .HasColumnType("bit");
+
                     b.Property<decimal>("MonthToDate")
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
@@ -374,6 +377,24 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<string>("NoteVn")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("RemoveReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RemovedAtLevel")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RemovedByFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("RemovedByUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time");

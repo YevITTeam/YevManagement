@@ -15,6 +15,7 @@
 - **Cập nhật 2026-07-17 (đợt 6 — breaking, thêm cấp duyệt "Trưởng Bộ phận")**: phát hiện qua email thật của công ty rằng luồng duyệt thiếu 1 cấp — sau khi Trưởng nhóm ký, đơn phải qua **Trưởng Bộ phận** (Role mới, permission giống hệt Trưởng phòng/Trưởng xưởng/TGĐ) duyệt trước khi tới Trưởng phòng. Thêm `status = 6 PendingGroupHead` (đơn đã có chữ ký Trưởng nhóm, đang chờ Trưởng Bộ phận — chèn giữa `5 Draft` và `0 Pending` về mặt nghiệp vụ). `POST /{id}/submit` giờ chuyển đơn sang `6` thay vì `0`; Trưởng Bộ phận dùng đúng `POST /{id}/approve`/`/reject` có sẵn (permission `OTForm.Approve`, `approvalLevel=4 GroupHead`), không có endpoint riêng. **Áp dụng bắt buộc cho MỌI Group ngay** — Group nào Admin chưa gán `UserApprovalScope(approvalLevel=GroupHead)` thì đơn của Group đó sẽ kẹt ở `status=6`, không ai duyệt tiếp được cho tới khi gán xong (đã xác nhận chấp nhận rủi ro này với người yêu cầu — không có cơ chế bỏ qua cấp này). Xem §1.1/§1.2/§4.1a/§4.3/§5.
 - **Sửa label sai (2026-07-17)**: `Department` = **Phòng/Phòng ban** (không phải "Bộ phận" như bản trước ghi nhầm ở §3.1), `Group` = **Bộ phận** (không phải "Nhóm").
 - **Cập nhật 2026-07-29 (song ngữ Vn/Jp + popup Từ chối)**: (1) `OtFormDto` thêm `groupNameJp`/`departmentNameJp`/`reasonNameJp` (nullable, §4.3), `OtFormListItemDto` thêm `groupNameJp`/`departmentNameJp` (§4.2) — cùng cơ chế `"{Vn} / {Jp}"` với `employees[].noteJp`/`processPart.anotherSuggestionJp` đã có sẵn từ trước nhưng trước đây FE chưa hiện lên UI; (2) email thông báo duyệt đơn (§4.6) giờ song ngữ Việt/Nhật cả nhãn lẫn dữ liệu, thêm hẳn 3 dòng Phòng ban/Bộ phận/Lý do vào bảng thông tin (trước đây thiếu hoàn toàn); (3) trang public "Xác nhận duyệt đơn qua email" (§4.6, §6b) đổi nút "Từ chối" thành mở popup nhập lý do (bắt buộc) thay vì dùng chung 1 ô Ghi chú luôn hiện sẵn với Duyệt.
+- **Cập nhật 2026-07-30 (breaking, thêm "Loại nhân viên khỏi đơn")**: yêu cầu người dùng — cấp đang chờ ký/duyệt (kể cả Trưởng nhóm ở `/submit`) muốn không duyệt cho 1 người trong đơn nhiều người thì không còn phải Từ chối CẢ đơn nữa. Thêm `POST /api/OtForm/{id}/employees/remove` (§4.5a, permission riêng `Attendance.OTForm.RemoveEmployee`) — soft-remove 1 `OtFormEmployee`, KHÔNG đổi `status`, không ký lại các cấp trước. `OtFormEmployeeDto` (§4.3) thêm 6 field `isRemoved`/`removedByUserName`/`removedByFullName`/`removedAtLevel`/`removedAt`/`removeReason` — người bị loại **vẫn nằm trong `employees[]`** (không bị BE lọc bỏ) để giữ audit trail, FE tự lọc `isRemoved` khi tính tổng giờ OT và khi in PDF. `numberOfEmployee` chỉ đếm người **chưa** bị loại.
 
 ## 1. Tổng quan nghiệp vụ, vai trò & luồng UI (đọc trước khi code màn hình)
 
@@ -523,7 +524,9 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
   "employees": [
     { "employeeId": 100, "employeeCode": "NV001", "fullName": "Nguyễn Văn A",
       "startTime": "17:30:00", "endTime": "19:30:00", "noteVn": null, "noteJp": null,
-      "monthToDate": 12.5, "yearToDate": 80.0, "isEligibleForMeal": false }
+      "monthToDate": 12.5, "yearToDate": 80.0, "isEligibleForMeal": false,
+      "isRemoved": false, "removedByUserName": null, "removedByFullName": null,
+      "removedAtLevel": null, "removedAt": null, "removeReason": null }
   ],
   "processPart": { "isEat": true, "mainTicketCount": 3, "secondaryTicketCount": 1, "milkCount": 0,
                     "isTransportation": false, "isUseCopyRoom": false,
@@ -543,6 +546,7 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 - **`employees[].monthToDate`/`yearToDate`** — lũy kế HIỆN TẠI (live, đọc thẳng từ `Employee` lúc gọi API, không phải giá trị đóng băng lúc tạo đơn) — dùng để người duyệt đối chiếu ngưỡng TH3 (>25h/tháng, >300h/năm) ngay trên màn chi tiết, không cần mở thêm màn Employee.
 - **`employees[].isEligibleForMeal`** — `true` khi `(endTime - startTime) > 2 giờ`. Tính sẵn ở BE, FE chỉ hiển thị (gợi ý tick `processPart.isEat`), không tự tính lại.
 - **`groupNameJp`/`departmentNameJp`/`reasonNameJp` (mới, 2026-07-29)** — song ngữ Việt/Nhật (nullable), lấy thẳng từ `Group`/`Department`/`Reason` tương ứng, cùng cơ chế với `groupNameJp` ở §4.2. FE (`OtFormDetail.tsx` — màn trong app, và `OtFormEmailConfirmPage.tsx` — trang public mở qua link email cho Trưởng phòng/Trưởng Bộ phận xem trước khi duyệt) hiện cả 2 màn này bằng `"{Vn} / {Jp}"` cho Phòng ban/Bộ phận/Lý do, và tương tự cho `employees[].noteJp`/`processPart.anotherSuggestionJp` (đã có sẵn trong DTO từ trước, giờ mới được hiển thị lên UI).
+- **`employees[].isRemoved`/`removedByUserName`/`removedByFullName`/`removedAtLevel`/`removedAt`/`removeReason` (mới, 2026-07-30 — xem §4.5a)** — người bị 1 cấp duyệt loại khỏi đơn qua `POST /{id}/employees/remove` **vẫn nằm trong mảng `employees[]`** (BE cố tình KHÔNG lọc bỏ) để giữ dấu vết ai loại/lúc nào/lý do gì trên màn chi tiết — FE tự lọc `isRemoved === true` ra khỏi (1) tổng giờ OT hiển thị, (2) bản in PDF/A4/A5, (3) trang xem trước qua email. `removedAtLevel` là số `ApprovalLevel` (§2) của cấp đã loại — map qua `approvalLevelLabels`/`approvalLevelLabelsBilingual` để hiện tên cấp. `numberOfEmployee` (cả `OtFormDto` lẫn `OtFormListItemDto`) chỉ đếm người **chưa** bị loại, không cần FE tự trừ.
 
 ### 4.4 `POST /api/OtForm/{id}/approve`
 ```jsonc
@@ -561,6 +565,23 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 { "comment": "Thiếu chứng từ, cần xác nhận lại.", "secondaryPassword": "..." }   // cả 2 field [Required]
 ```
 `status → Rejected`, dừng hẳn luồng ở bất kỳ cấp Trưởng phòng/Trưởng xưởng/TGĐ nào. Cũng như `/approve`, gọi trên đơn `status=Draft` → 400 (không có Reject ở bước Trưởng nhóm ký, xem §1). `secondaryPassword` cũng bắt buộc, cùng luật với §4.4.
+
+### 4.5a `POST /api/OtForm/{id}/employees/remove` — Loại nhân viên khỏi đơn (mới, 2026-07-30)
+
+**Nghiệp vụ**: đơn nhiều người, cấp đang ký/duyệt (kể cả Trưởng nhóm ở bước `/submit`) không đồng ý cho **1 người cụ thể** trong đơn — trước đây chỉ có lựa chọn Từ chối cả đơn. Endpoint này cho loại đúng người đó ra rồi vẫn ký/duyệt được **phần còn lại**, mà không phải Từ chối/lập lại đơn.
+
+```jsonc
+// body — RemoveOtFormEmployeeDto
+{ "employeeId": 100, "reason": "Không đủ điều kiện tăng ca đợt này.", "secondaryPassword": "..." }   // cả 3 field [Required]
+```
+
+- **Permission riêng `Attendance.OTForm.RemoveEmployee`** (KHÔNG dùng chung `.Create`/`.Approve`) — gán cho đúng các Role đang giữ `Attendance.UserSignature.Update` (Admin + Trưởng Group/Trưởng Bộ phận/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc — tức MỌI cấp thực sự ký/duyệt đơn). Role "Nhân viên" (chỉ tạo đơn, không ký/duyệt) **không** có permission này dù có `.Create`.
+- **Ai loại được, đơn nào**: cùng mô hình 2 lớp Permission + `UserApprovalScope` như `/approve` — người gọi phải đang ở **đúng cấp mà đơn hiện tại chờ xử lý** (suy từ `status`, y hệt bảng ở §4.3 "Suy ra cấp đang chờ ai duyệt/ký tiếp", tính cả `Draft` → Trưởng nhóm) và có `UserApprovalScope` khớp `groupId`/`departmentId` của đơn ở đúng cấp đó (trừ Tổng Giám Đốc bypass, trừ Admin bypass riêng ở cấp Trưởng nhóm/`Draft`).
+- **Bắt buộc `secondaryPassword` khớp mật khẩu cấp 2 đã đăng ký** — cùng luật với §4.4/§4.5, xem §6c.
+- **KHÔNG đổi `status` của đơn, KHÔNG xoá/vô hiệu chữ ký các cấp đã ký trước đó** — người dùng đã chốt "duyệt tiếp bình thường", không bắt ký lại từ đầu. Loại người xong, đơn vẫn ở nguyên `status` hiện tại, chờ đúng cấp đó tự bấm Duyệt/Ký tiếp (2 hành động tách biệt, KHÔNG gộp vào `/approve` — xem lý do UX ở đầu file).
+- 400 nếu: nhân viên không có trong đơn; nhân viên đã bị loại từ trước; đơn chỉ còn 1 người CHƯA bị loại (dùng "Từ chối đơn" thay vì loại nốt người cuối); đơn đã `Completed`/`Rejected`; user không đúng cấp/scope (cùng lỗi như §4.4).
+- Thành công → trả `data: OtFormDto` đầy đủ đã cập nhật (khác `/approve`/`/reject` chỉ trả `true`) — FE **không cần** gọi lại `GET /{id}`, dùng thẳng response để refresh màn chi tiết.
+- **FE**: nút "Loại khỏi đơn" đặt trên từng dòng nhân viên ở màn Chi tiết đơn (`OtFormDetail.tsx`, trong app) — ẩn khi chỉ còn 1 người chưa bị loại, mở modal riêng (lý do + mật khẩu cấp 2) tách biệt hoàn toàn khỏi modal Duyệt/Từ chối/Ký duyệt (2 hành động, 2 lần xác thực — người dùng đã chốt phương án này thay vì gộp vào 1 lần bấm Duyệt). **Kênh email (§4.6) KHÔNG có hành động này** — chỉ hiện nếu việc loại người đã xảy ra trước đó qua app.
 
 ### 4.6 Duyệt/Từ chối qua email (2026-07-16) — kênh BỔ SUNG, không thay thế §4.4/§4.5
 
@@ -743,7 +764,7 @@ chỉ gửi email xác nhận, giá trị cũ (nếu có) vẫn còn hiệu lự
 | `/api/UserApprovalScope` | grid-list, `by-user/{userName}`, POST, DELETE (không PUT) |
 | `/api/UserSignature` | `me` (GET/PUT), `{userName}` (GET, admin), `confirm/{token}` (GET/POST, public — §6b) |
 | `/api/SecondaryPassword` | `me` (GET/PUT), `confirm/{token}` (GET/POST, public — §6c) |
-| `/api/OtForm` | `my-forms`, `pending-submissions` (§4.2a), `pending-approvals`, `my-actions` (§4.2b), `my-participations` (§4.2c), `{id}` (GET/PUT), POST, `{id}/submit` (§4.1a), `{id}/approve`, `{id}/reject`, `email-confirm/{token}` (GET), `email-confirm/{token}/approve`, `email-confirm/{token}/reject` (public — §4.6) |
+| `/api/OtForm` | `my-forms`, `pending-submissions` (§4.2a), `pending-approvals`, `my-actions` (§4.2b), `my-participations` (§4.2c), `{id}` (GET/PUT), POST, `{id}/submit` (§4.1a), `{id}/approve`, `{id}/reject`, `{id}/employees/remove` (§4.5a), `email-confirm/{token}` (GET), `email-confirm/{token}/approve`, `email-confirm/{token}/reject` (public — §4.6) |
 | `/api/EmployeeImport` | `preview`, `confirm` (Admin, §3.7) |
 
 ## 8. Checklist FE — màn hình chính
@@ -761,14 +782,16 @@ Tab **"Chờ tôi ký duyệt"** (Trưởng nhóm, mới đợt 4)
 1. `GET /pending-submissions` (§4.2a) — danh sách đơn `Draft` thuộc scope của user (`UserApprovalScope(Submitter)`).
 2. Vào chi tiết `GET /{id}` → nút "Ký duyệt".
 3. "Ký duyệt": không có bước ký/upload ảnh nào ở màn này — BE tự lấy chữ ký từ ảnh đã đăng ký sẵn (`UserSignature`) của người ký. Chưa đăng ký → nhắc điều hướng sang "Cài đặt chữ ký" trước khi cho bấm → `POST /{id}/submit` (body chỉ còn `comment`, optional).
-4. Thành công → đơn chuyển `Pending`, biến mất khỏi `pending-submissions`, xuất hiện trong `pending-approvals` của Trưởng phòng phù hợp.
+4. **"Loại khỏi đơn" (mới, §4.5a)**: Trưởng nhóm cũng loại được 1 người khỏi đơn ngay ở bước này (trước khi ký) — cùng nút/modal như ở tab "Chờ tôi duyệt", `status` vẫn `Draft` sau khi loại, chưa cần ký lại gì.
+5. Thành công (Ký duyệt) → đơn chuyển `Pending`, biến mất khỏi `pending-submissions`, xuất hiện trong `pending-approvals` của Trưởng phòng phù hợp.
 
 Tab **"Chờ tôi duyệt"** (Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc)
 1. `GET /pending-approvals` — danh sách đã tự lọc đúng phạm vi/cấp của user đang đăng nhập.
 2. Vào chi tiết `GET /{id}` → nút "Duyệt"/"Từ chối".
 3. "Duyệt": không có bước ký/upload ảnh nào ở màn này — BE tự lấy chữ ký từ ảnh đã đăng ký sẵn (`UserSignature`) của người duyệt. Nếu `otCase.requireSignature` (tra thêm `OtCase/{id}`) mà user chưa đăng ký chữ ký → nhắc điều hướng sang "Cài đặt chữ ký" trước khi cho bấm Duyệt → `POST /{id}/approve` (body chỉ còn `comment`).
 4. "Từ chối": bắt buộc nhập `comment` → `POST /{id}/reject`.
-5. Sau khi duyệt/từ chối → gọi lại `GET /{id}` refresh timeline + trạng thái nút.
+5. **"Loại khỏi đơn" (mới, §4.5a)**: nút riêng trên từng dòng nhân viên (kể cả ở tab "Chờ tôi ký duyệt" — Trưởng nhóm cũng loại được), ẩn nếu chỉ còn 1 người chưa bị loại. Mở modal RIÊNG (lý do bắt buộc + mật khẩu cấp 2) — KHÔNG gộp vào modal Duyệt/Ký duyệt, 2 hành động tách biệt hoàn toàn theo yêu cầu người dùng. Response trả thẳng `OtFormDto` mới — dùng ngay, không gọi lại `GET /{id}`.
+6. Sau khi duyệt/từ chối/loại người → gọi lại `GET /{id}` (hoặc dùng response của loại người) refresh timeline + trạng thái nút.
 
 Tab **"Đơn đã xử lý"** → `GET /my-actions` (§4.2b), click dòng → `GET /{id}` xem lại, chỉ xem (không có nút hành động vì đơn đã xử lý xong ở cấp của user đó).
 

@@ -145,7 +145,13 @@ namespace Asset.Application.Services
                 SerialNumber = GetStringArg(args, "serialNumber"),
                 IsOutsourced = GetBoolArg(args, "isOutsourced"),
                 IsUseUsb = GetBoolArg(args, "isUseUsb"),
-                SortDeviceCodeAscending = GetBoolArg(args, "sortDeviceCodeAscending")
+                SortDeviceCodeAscending = GetBoolArg(args, "sortDeviceCodeAscending"),
+                // Name-based filters — let the model pass what the user actually said instead of forcing
+                // a name→id lookup round first (see DeviceFilterRequest, 2026-07-30).
+                BranchName = GetStringArg(args, "branchName"),
+                GroupName = GetStringArg(args, "groupName"),
+                DepartmentName = GetStringArg(args, "departmentName"),
+                Status = GetIntArg(args, "status")
             };
             var result = await _deviceService.GetDevicesForGridAsync(request);
             deviceReferences.AddRange(result.Data.Select(d => new AiChatDeviceReferenceDto { Id = d.Id, DeviceCode = d.DeviceCode }));

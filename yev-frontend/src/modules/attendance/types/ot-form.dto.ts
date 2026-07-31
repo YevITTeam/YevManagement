@@ -23,6 +23,10 @@ export interface OtFormEmployeeInputDto {
 }
 
 // Chi tiết nhân viên trong OtFormDto — monthToDate/yearToDate/isEligibleForMeal là dữ liệu LIVE (§4.3).
+// isRemoved trở đi (2026-07-30, §4.5a "Loại nhân viên khỏi đơn"): người bị loại VẪN nằm trong mảng
+// employees (không bị BE lọc bỏ) để màn chi tiết hiện được lịch sử ai loại/khi nào/lý do gì — FE tự ẩn
+// khỏi bản in và khỏi phần tính tổng giờ OT. numberOfEmployee ở OtFormDto/OtFormListItemDto chỉ đếm
+// người CHƯA bị loại.
 export interface OtFormEmployeeDto {
     employeeId: number;
     employeeCode: string;
@@ -34,6 +38,12 @@ export interface OtFormEmployeeDto {
     monthToDate: number;
     yearToDate: number;
     isEligibleForMeal: boolean;
+    isRemoved: boolean;
+    removedByUserName: string | null;
+    removedByFullName: string | null;
+    removedAtLevel: number | null;
+    removedAt: string | null;
+    removeReason: string | null;
 }
 
 // GET /api/OtForm/my-create-scopes — §4.0a, mới 2026-07-17. Bộ phận/Phòng ban mà CHÍNH user gọi
@@ -145,5 +155,14 @@ export interface ApproveOtFormDto {
 // Body POST /api/OtForm/{id}/reject — §4.5.
 export interface RejectOtFormDto {
     comment: string;
+    secondaryPassword: string;
+}
+
+// Body POST /api/OtForm/{id}/employees/remove — §4.5a, mới 2026-07-30. Loại 1 nhân viên khỏi đơn để
+// duyệt được phần còn lại thay vì từ chối cả đơn — endpoint riêng, tách biệt khỏi approve (xem
+// docs/attendance-module.md — Loại nhân viên khỏi đơn). Cả 3 field bắt buộc.
+export interface RemoveOtFormEmployeeDto {
+    employeeId: number;
+    reason: string;
     secondaryPassword: string;
 }

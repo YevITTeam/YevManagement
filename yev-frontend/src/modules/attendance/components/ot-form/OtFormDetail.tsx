@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
-import { Check, Clock, X } from "lucide-react";
+import { Check, Clock, UserX, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import type { OtFormApprovalHistoryDto, OtFormDto } from "@/modules/attendance/types/ot-form.dto";
+import type { OtFormApprovalHistoryDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
@@ -118,6 +118,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const [secondaryPassword, setSecondaryPassword] = useState("");
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
+    // Loại 1 nhân viên khỏi đơn — modal RIÊNG với submit/approve/reject (docs §4.5a), người dùng đã
+    // chốt luồng 2 bước: loại xong xem lại đơn rồi mới bấm Duyệt, không gộp vào modal Duyệt.
+    const [removeTarget, setRemoveTarget] = useState<OtFormEmployeeDto | null>(null);
+    const [removeReason, setRemoveReason] = useState("");
+    const [removeSecondaryPassword, setRemoveSecondaryPassword] = useState("");
+    const [isRemovingEmployee, setIsRemovingEmployee] = useState(false);
+
     const { isLoading, error, refetch: fetchForm } = useFetchEffect(
         async () => {
             const data = await OtFormApi.getOtFormById(id);
@@ -153,6 +160,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         Boolean(form?.isEditable) &&
         form?.createdByUserName === user?.userName &&
         hasPermission(user, "Attendance.OTForm.Create");
+
+    // Nút "Loại khỏi đơn" trên từng dòng nhân viên (docs §4.5a, mới 2026-07-30): hiện đúng lúc caller
+    // đang ở đúng cấp có thể ký/duyệt đơn này (canSubmit cho Draft, showApprovalActions cho các cấp
+    // sau) VÀ có permission riêng Attendance.OTForm.RemoveEmployee — permission này KHÔNG cấp cho Role
+    // "Nhân viên" (chỉ tạo đơn, không ký/duyệt) dù họ cũng có canSubmit=false nên thực chất không cần
+    // lọc thêm ở đây, permission check là đủ.
+    const canRemoveEmployee = hasPermission(user, "Attendance.OTForm.RemoveEmployee") && (canSubmit || showApprovalActions);
 
     const openAction = (type: "submit" | "approve" | "reject") => {
         setComment("");
@@ -256,6 +270,52 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         }
     };
 
+    const openRemove = (employee: OtFormEmployeeDto) => {
+        setRemoveReason("");
+        setRemoveSecondaryPassword("");
+        setRemoveTarget(employee);
+        SecondaryPasswordApi.getMyStatus()
+            .then((data) => setHasSecondaryPassword(data.isRegistered))
+            .catch(() => setHasSecondaryPassword(false));
+    };
+
+    const closeRemove = () => {
+        if (isRemovingEmployee) return;
+        setRemoveTarget(null);
+    };
+
+    const handleRemoveEmployee = async () => {
+        if (!removeTarget) return;
+        if (!removeReason.trim()) {
+            toast.error(t("removeReasonRequiredError"));
+            return;
+        }
+        if (hasSecondaryPassword === false) {
+            toast.error(t("secondaryPasswordMissingError"));
+            return;
+        }
+        if (!removeSecondaryPassword) {
+            toast.error(t("secondaryPasswordRequiredError"));
+            return;
+        }
+        setIsRemovingEmployee(true);
+        try {
+            const updated = await OtFormApi.removeOtFormEmployee(id, {
+                employeeId: removeTarget.employeeId,
+                reason: removeReason.trim(),
+                secondaryPassword: removeSecondaryPassword,
+            });
+            toast.success(t("removeSuccess", { name: removeTarget.fullName }));
+            setForm(updated);
+            setRemoveTarget(null);
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("removeError")));
+        } finally {
+            setIsRemovingEmployee(false);
+        }
+    };
+
     if (isLoading) {
         return <div className="py-16 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>;
     }
@@ -266,7 +326,10 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     const applicableLevels = applicableApprovalLevels(requiredApprovalLevel);
     const approvalSteps = buildApprovalSteps(form, applicableLevels);
-    const totalWorkedHours = form.employees.reduce(
+    // Người đã bị loại khỏi đơn KHÔNG tính vào tổng giờ OT — họ không còn nằm trong đơn được duyệt
+    // (docs §4.5a). Vẫn hiện dòng của họ trong bảng bên dưới để giữ dấu vết ai loại/khi nào/vì sao.
+    const activeEmployees = form.employees.filter((employee) => !employee.isRemoved);
+    const totalWorkedHours = activeEmployees.reduce(
         (sum, employee) => sum + calculateHours(employee.startTime, employee.endTime),
         0
     );
@@ -441,6 +504,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
                                 <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colMeal")}</th>
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colNote")}</th>
+                                {canRemoveEmployee && <th rowSpan={2} className="px-6 py-3 align-bottom" />}
                             </tr>
                             <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                 <th className="px-6 py-2 text-center">{t("colMonth")}</th>
@@ -453,6 +517,31 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 const isYearOverLimit = employee.yearToDate > 300;
                                 const isOverLimit = isMonthOverLimit || isYearOverLimit;
                                 const hours = calculateHours(employee.startTime, employee.endTime);
+                                // Đã bị loại khỏi đơn (docs §4.5a) — vẫn hiện dòng để giữ dấu vết, nhưng
+                                // làm mờ + gạch ngang, thay toàn bộ cột số liệu bằng lý do/người loại.
+                                if (employee.isRemoved) {
+                                    return (
+                                        <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#f8fafc] opacity-60">
+                                            <td className="px-6 py-3 text-sm">
+                                                <span className="inline-flex items-center rounded-md bg-[#eceef0] px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e] line-through">
+                                                    {employee.employeeCode}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-3 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
+                                            <td colSpan={5} className="px-6 py-3 text-sm text-[#930006]">
+                                                {t("removedInlineNote", {
+                                                    name: employee.removedByFullName ?? employee.removedByUserName ?? "",
+                                                    level: employee.removedAtLevel !== null ? approvalLevelLabels[employee.removedAtLevel] : "",
+                                                    reason: employee.removeReason ?? "",
+                                                })}
+                                                {employee.removedAt && (
+                                                    <span className="ml-2 text-[#9aa0a6]">({formatDateTime(employee.removedAt)})</span>
+                                                )}
+                                            </td>
+                                            {canRemoveEmployee && <td className="px-6 py-3" />}
+                                        </tr>
+                                    );
+                                }
                                 return (
                                     <tr
                                         key={employee.employeeId}
@@ -490,6 +579,20 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                             )}
                                         </td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
+                                        {canRemoveEmployee && (
+                                            <td className="px-6 py-3 text-right">
+                                                {activeEmployees.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openRemove(employee)}
+                                                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e9bcb6] bg-white px-2.5 py-1 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
+                                                    >
+                                                        <UserX className="h-3.5 w-3.5" />
+                                                        {t("removeEmployeeButton")}
+                                                    </button>
+                                                )}
+                                            </td>
+                                        )}
                                     </tr>
                                 );
                             })}
@@ -670,6 +773,89 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                         : actionOpen === "approve"
                                         ? t("confirmApprove")
                                         : t("confirmReject")}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {removeTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+                    <div className="fixed inset-0 bg-black/40" onClick={closeRemove} />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                    >
+                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                            <h3 className="text-lg font-semibold text-[#191c1e]">{t("removeModalTitle", { name: removeTarget.fullName })}</h3>
+                            <button
+                                onClick={closeRemove}
+                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                aria-label={tCommon("close")}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <p className="text-sm text-[#5e3f3a]">{t("removeModalDesc")}</p>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("removeReasonLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <textarea
+                                    value={removeReason}
+                                    onChange={(event) => setRemoveReason(event.target.value)}
+                                    disabled={isRemovingEmployee}
+                                    rows={3}
+                                    required
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <input
+                                    type="password"
+                                    value={removeSecondaryPassword}
+                                    onChange={(event) => setRemoveSecondaryPassword(event.target.value)}
+                                    disabled={isRemovingEmployee}
+                                    autoComplete="off"
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <div
+                                className={`rounded-lg border px-3 py-2 text-xs ${
+                                    hasSecondaryPassword === false
+                                        ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                        : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                }`}
+                            >
+                                {hasSecondaryPassword === false ? t("secondaryPasswordMissingHint") : t("secondaryPasswordOkHint")}
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={closeRemove}
+                                    disabled={isRemovingEmployee}
+                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {tCommon("cancel")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveEmployee}
+                                    disabled={isRemovingEmployee}
+                                    className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isRemovingEmployee ? tCommon("processing") : t("confirmRemove")}
                                 </button>
                             </div>
                         </div>

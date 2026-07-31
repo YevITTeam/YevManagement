@@ -445,7 +445,16 @@
       "rejectError": "申請の却下に失敗しました",
       "secondaryPasswordMissingError": "第2パスワードがまだ設定されていません — 署名・承認する前に「第2パスワード」で設定してください。",
       "secondaryPasswordRequiredError": "第2パスワードを入力してください。",
-      "loadError": "残業申請の詳細を読み込めませんでした。"
+      "loadError": "残業申請の詳細を読み込めませんでした。",
+      "removeEmployeeButton": "申請から除外",
+      "removeModalTitle": "{name}を申請から除外",
+      "removeModalDesc": "この社員はこの残業申請に含まれなくなります — 残業時間は計算されず、累計にも加算されません。既に署名・承認済みの段階は再署名不要です。",
+      "removeReasonLabel": "除外理由",
+      "removeReasonRequiredError": "除外理由を入力してください。",
+      "confirmRemove": "除外を確定",
+      "removeSuccess": "{name}を申請から除外しました。",
+      "removeError": "社員の除外に失敗しました",
+      "removedInlineNote": "{name}（{level}）により除外されました — 理由：{reason}"
     },
     "CreateOtForm": {
       "titleCreate": "残業申請を作成",

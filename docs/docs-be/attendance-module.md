@@ -36,7 +36,7 @@ Nghiệp vụ OT Form:
 | Entity | Thuộc tính chính | Quan hệ | Ghi chú |
 |---|---|---|---|
 | `OtForm` | `GroupId/DepartmentId/ReasonId/OtCaseId` (FK, Restrict), `StartTime/EndTime:TimeOnly`, `SubReason?`, `TotalHour:decimal(10,2)`, `Date:DateOnly`, `NumberOfEmployee`, `CreatedByUserName:string`, `CreatedByFullName:string?`, `Status:int` (enum `OtFormStatus`, **có thêm `Draft=5`**, xem §Business Logic — Người tạo đơn ≠ Trưởng nhóm), `IsDeleted` | N-1 tới 4 danh mục trên; 1-N `OtFormEmployee`; 1-1 `ProcessPart`; 1-N `OtFormApprovalHistory` | |
-| `OtFormEmployee` | khóa kép `(OtFormId, EmployeeId)`, `StartTime/EndTime:TimeOnly`, `NoteVn?`, `NoteJp?` | N-1 OtForm (Cascade), N-1 Employee (Restrict) | Giờ OT thực tế của từng nhân viên trong 1 đơn. `StartTime` LUÔN bằng `OtForm.StartTime` (server tự set, không nhận từ FE); `EndTime` do người lập đơn tự điều chỉnh riêng cho từng người nhưng phải `> StartTime` và `<= OtForm.EndTime` (giờ khai báo ở đầu form là **giờ kết thúc tối đa**) — validate ở `OtFormService.ValidateEmployeesAsync`. |
+| `OtFormEmployee` | khóa kép `(OtFormId, EmployeeId)`, `StartTime/EndTime:TimeOnly`, `NoteVn?`, `NoteJp?`, `IsRemoved:bool`, `RemovedByUserName?`, `RemovedByFullName?`, `RemovedAtLevel:int?`, `RemovedAt:DateTime?`, `RemoveReason?` | N-1 OtForm (Cascade), N-1 Employee (Restrict) | Giờ OT thực tế của từng nhân viên trong 1 đơn. `StartTime` LUÔN bằng `OtForm.StartTime` (server tự set, không nhận từ FE); `EndTime` do người lập đơn tự điều chỉnh riêng cho từng người nhưng phải `> StartTime` và `<= OtForm.EndTime` (giờ khai báo ở đầu form là **giờ kết thúc tối đa**) — validate ở `OtFormService.ValidateEmployeesAsync`. Các cột `Removed*` (2026-07-30) là **soft-remove** — người bị 1 cấp duyệt loại khỏi đơn (xem §Loại nhân viên khỏi đơn) KHÔNG bị xoá dòng, chỉ đánh dấu `IsRemoved=true` + snapshot ai/lúc nào/cấp nào/lý do gì, để giữ nguyên audit trail của 1 văn bản có tính pháp lý. |
 | `ProcessPart` | `OtFormId`(FK unique, Cascade), `IsEat/IsTransportation/IsUseCopyRoom:bool`, `MainTicketCount/SecondaryTicketCount/MilkCount:int`, `AnotherSuggestionVn?`, `AnotherSuggestionJp?` | 1-1 OtForm | Chi tiết phát sinh riêng của từng đơn. `MainTicketCount`/`SecondaryTicketCount`/`MilkCount` (phiếu chính/phiếu phụ/sữa, 2026-07-16, migration `AddMealTicketCountsToProcessPart`) — số lượng từng loại phiếu ăn **chung cho cả đơn** (không phải theo từng nhân viên), người lập đơn (Trưởng nhóm) tự nhập tay khi `IsEat = true`; BE không tự tính từ danh sách nhân viên hay từ `OtFormEmployeeDto.IsEligibleForMeal`. |
 | `UserApprovalScope` | `UserName:string`, `ScopeType:int` (enum, `Group/Department`), `ScopeId:int`, `ApprovalLevel:int` (enum `DepartmentManager/WorkshopManager`), `IsDeleted` | Không FK thật (ScopeId đa hình theo ScopeType) | Ánh xạ 1 User (Trưởng phòng/Trưởng xưởng) phụ trách duyệt phạm vi nào. Tổng Giám Đốc KHÔNG cần dòng ở đây — bypass scope (check Role claim). |
 | `OtFormApprovalHistory` | `OtFormId`(FK, Cascade), `ApproverUserName:string`, `ApproverFullName:string?`, `ApprovalLevel:int`, `Action:int` (enum `Submitted/Approved/Rejected`), `Comment?`, `SignatureImage:byte[]?`, `ActionAt:DateTime` | N-1 OtForm | Audit trail từng cấp duyệt; `SignatureImage`/`ApproverFullName` là snapshot tại thời điểm ký (không tham chiếu ngược Identity). |
@@ -203,10 +203,71 @@ bỏ qua cho user chưa thiết lập (chặn cứng, bắt thiết lập trư�
   kèm `secondaryPassword` trong mọi request submit/approve/reject.
 - Hợp đồng FE đầy đủ ở [attendance-api-fe.md §6c](attendance-api-fe.md).
 
+### §Loại nhân viên khỏi đơn (2026-07-30)
+**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): đơn nhiều
+người tăng ca, cấp đang ký/duyệt không đồng ý cho **1 người cụ thể** — trước đây chỉ có lựa chọn Từ
+chối cả đơn (`RejectAsync`), buộc lập lại từ đầu dù 9/10 người vẫn hợp lệ. Thêm khả năng loại đúng
+người đó rồi vẫn ký/duyệt được phần còn lại.
+
+**3 quyết định đã chốt qua AskUserQuestion** (không tự suy diễn vì đụng luồng duyệt đang chạy thật):
+1. **Cấp được loại**: MỌI cấp thực sự ký/duyệt đơn — kể cả Trưởng nhóm ở bước `/submit` (Draft), không
+   riêng Trưởng phòng trở lên.
+2. **Sau khi loại, luồng duyệt xử lý ra sao**: duyệt tiếp bình thường — **không** quay lại từ đầu, không
+   xoá/vô hiệu chữ ký các cấp đã ký trước đó. Đơn giữ nguyên `Status`.
+3. **Thao tác loại người thực hiện lúc nào**: **endpoint riêng, tách biệt khỏi approve** (Phương án B) —
+   loại người trước (tự nhập mật khẩu cấp 2 riêng), xem lại đơn, rồi mới bấm Duyệt (nhập mật khẩu cấp 2
+   lần 2) — KHÔNG gộp việc loại người vào cùng 1 request với `/approve` (đã cân nhắc phương án gộp, đổi
+   lại được 1 lần xác thực nhưng người dùng chọn tách để có bước xem lại đơn trước khi duyệt thật).
+
+**Thiết kế**:
+- **Soft-remove trên `OtFormEmployee`** (không xoá dòng) — 6 cột `IsRemoved`/`RemovedByUserName`/
+  `RemovedByFullName`/`RemovedAtLevel`/`RemovedAt`/`RemoveReason` (migration
+  `AddRemovedFieldsToOtFormEmployee`), cùng nguyên tắc snapshot-đóng-băng đã dùng cho
+  `OtFormApprovalHistory`/`OtFormEmployee.MonthToDate` — đơn là văn bản có tính pháp lý, phải giữ được
+  dấu vết ai loại ai, lúc nào, ở cấp nào, vì sao, vĩnh viễn.
+- **`OtFormService.RemoveEmployeeAsync(id, userName, fullName, isAdmin, isGeneralDirector, request)`** —
+  entry point mới, KHÔNG tái dùng `ApproveAsync`/`ApproveSubmitterAsync`. Suy `currentLevel` từ `Status`
+  giống hệt `LoadFormAndValidateAuthorityAsync`, **trừ** `Draft` được chấp nhận (map sang
+  `ApprovalLevel.Submitter`, vì Trưởng nhóm ở bước ký cũng loại được) — `LoadFormAndValidateAuthorityAsync`
+  gốc ném lỗi ngay khi gặp `Draft` nên không tái dùng được nguyên hàm, phải viết logic suy cấp riêng.
+  Xác thực 2 lớp Permission + `UserApprovalScope` y hệt `ApproveAsync` (Admin bypass ở cấp Submitter
+  giống `ApproveSubmitterAsync`, TGĐ bypass scope giống `ApproveAsync`).
+- **KHÔNG đổi `OtForm.Status`** — chỉ đánh dấu `IsRemoved` trên đúng 1 `OtFormEmployee`, cập nhật lại
+  `OtForm.NumberOfEmployee = count(!IsRemoved)`, `SaveChangesAsync()`. Đơn tiếp tục chờ đúng cấp hiện tại
+  tự bấm Duyệt/Ký như luồng cũ.
+- **Validate 400**: nhân viên không có trong đơn; đã bị loại từ trước; đơn chỉ còn ≤1 người chưa bị loại
+  (loại nốt người cuối = Từ chối cả đơn, dùng `RejectAsync` thay thế, không cho đơn trống nhân viên);
+  đơn đã `Completed`/`Rejected`; sai cấp/scope (cùng lỗi §Business Logic — Chữ ký các cấp duyệt).
+- **Mật khẩu cấp 2 bắt buộc**, verify ngay đầu hàm trước bất kỳ ghi nào — cùng luật §Mật khẩu cấp 2.
+- **Ảnh hưởng các nơi khác trong `OtFormService`** (đều lọc `!IsRemoved`):
+  `AccumulateEmployeeHoursAsync` (người bị loại không cộng lũy kế); `UpdateAsync` diff nhân viên (dòng
+  đã bị loại **không** bị hard-delete kể cả khi không còn trong `request.Employees` — audit trail phải
+  sống sót qua mọi lần sửa đơn sau đó; nếu người tạo cố tình thêm lại đúng `EmployeeId` đã bị loại vào
+  request, `UpdateAsync` xoá sạch 5 cột `Removed*` — coi là "thêm lại", không phải "khôi phục").
+  `GetByIdAsync`/`ToListItemDto` **KHÔNG** lọc `IsRemoved` khỏi `employees[]` — người bị loại vẫn trả về
+  trong response để FE hiện được audit trail trên màn chi tiết, chỉ có `NumberOfEmployee` là đếm riêng
+  theo `!IsRemoved`.
+- **Permission riêng `Attendance.OTForm.RemoveEmployee`** (migration Identity
+  `AddOtFormRemoveEmployeePermission`) — KHÔNG dùng chung `.Create`/`.Approve` vì người gọi endpoint này
+  trải trên **cả 2 phía** của ranh giới quyền cũ (Trưởng nhóm chỉ có `.Create`, các cấp trên chỉ có
+  `.Approve`). Gán theo subquery cho đúng Role đang giữ `Attendance.UserSignature.Update` (Admin +
+  5 Role nghiệp vụ), y hệt cách `AddSecondaryPasswordPermission` đã làm — Role "Nhân viên" (chỉ tạo đơn,
+  không ký/duyệt, không có `UserSignature.Update`) cố tình **không** được gán, verify qua SQL thật
+  (2026-07-30): 6/6 Role khớp `UserSignature.Update`.
+- **Endpoint**: `POST /api/OtForm/{id}/employees/remove` (`RemoveOtFormEmployeeDto { EmployeeId, Reason,
+  SecondaryPassword }`, cả 3 `[Required]`) — trả `OtFormDto` đầy đủ đã cập nhật (khác `/approve`/`/reject`
+  chỉ trả `true`), để FE không phải gọi lại `GET /{id}`.
+- **FE**: nút "Loại khỏi đơn" trên từng dòng nhân viên ở `OtFormDetail.tsx` (ẩn khi chỉ còn 1 người chưa
+  bị loại), modal RIÊNG (lý do + mật khẩu cấp 2) tách biệt hoàn toàn khỏi modal Duyệt/Từ chối/Ký duyệt.
+  Người bị loại hiện dòng riêng (mờ + gạch ngang) kèm ai loại/cấp nào/lý do gì thay vì biến mất khỏi
+  bảng. `OtFormPrintView.tsx` (bản in PDF) và `OtFormEmailConfirmPage.tsx` (trang xem trước qua email —
+  kênh email KHÔNG có hành động loại người, chỉ hiển thị nếu đã xảy ra qua app) đều tự lọc `!isRemoved`
+  khỏi danh sách in/tổng giờ OT. Hợp đồng FE đầy đủ ở [attendance-api-fe.md §4.5a](attendance-api-fe.md).
+
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.
-- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`). Tất cả đã `database update` vào `YevOTManagement`.
-- Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed), và `AddSecondaryPasswordPermission` (2026-07-30, seed `Attendance.SecondaryPassword.Update`) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
+- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`). Tất cả đã `database update` vào `YevOTManagement`.
+- Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed), `AddSecondaryPasswordPermission` (2026-07-30, seed `Attendance.SecondaryPassword.Update`), và `AddOtFormRemoveEmployeePermission` (2026-07-30, seed `Attendance.OTForm.RemoveEmployee` — xem §Loại nhân viên khỏi đơn) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
 
 ## 1. Cấu trúc code đã có
 
@@ -240,6 +301,7 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `GET /api/OtForm/{id}` — chi tiết đầy đủ (Employees kèm lũy kế + phiếu ăn, ProcessPart, ApprovalHistories).
 - `PUT /api/OtForm/{id}` — sửa toàn bộ đơn, chỉ chính người tạo và chỉ khi `Status` là `Draft` hoặc `Pending` (`Attendance.OTForm.Create`, xem §Sửa đơn khi đang Draft/Pending).
 - `POST /api/OtForm/{id}/approve`, `POST /api/OtForm/{id}/reject` (`Attendance.OTForm.Approve`, chỉ áp dụng cấp Trưởng phòng/Trưởng xưởng/TGĐ — gọi trên đơn `Draft` sẽ báo lỗi rõ ràng, dùng `/submit` thay thế). `approve` tự cộng lũy kế nhân viên nếu đạt `Completed`, tự gửi email cho cấp duyệt kế tiếp nếu còn.
+- `POST /api/OtForm/{id}/employees/remove` (mới, 2026-07-30, `Attendance.OTForm.RemoveEmployee` — permission riêng, không dùng chung `.Create`/`.Approve`) — loại 1 nhân viên khỏi đơn để duyệt được phần còn lại, áp dụng cho MỌI cấp (kể cả Trưởng nhóm ở `Draft`). Không đổi `Status`, không ký lại các cấp trước. Xem §Loại nhân viên khỏi đơn.
 - `GET /email-confirm/{token}`, `POST /email-confirm/{token}/approve`, `POST /email-confirm/{token}/reject` (`[AllowAnonymous]`) — kênh bổ sung qua email, xem §Xác thực qua email.
 - `BaseController.CurrentUserName` (`Attendance.Api/Controllers/BaseController.cs`) — helper lấy `User.Identity.Name` dùng chung cho mọi Controller cần biết "ai đang gọi API".
 
@@ -266,7 +328,7 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `PATCH /api/Employee/{id}/adjust-accumulation` (`AdjustEmployeeAccumulationDto`) — không gắn `[RequirePermission]`, chỉ cần đăng nhập; phân quyền tự trong Service (chính chủ `UserName` hoặc quyền `Attendance.Employee.Update`). Xem §Lũy kế tháng/năm.
 
 ### Permission & Role đã seed (Identity migration `AddAttendancePermissionsAndRoles`)
-- 28 permission `Attendance.*`: CRUD 5 danh mục + `UserApprovalScope.{View,Create,Delete}` + `UserSignature.{View,Update}` + `OTForm.{View,Create,Approve}`. **+1** (2026-07-29, migration riêng `AddAttendanceAiChatPermission`): `Attendance.AiChat.Use`, hiện chỉ gán Admin — xem mục `AttendanceAiChatController` ở trên. **+1** (2026-07-30, migration `AddSecondaryPasswordPermission`): `Attendance.SecondaryPassword.Update`, gán qua subquery cho đúng các Role đang giữ `UserSignature.Update` (Admin + 5 Role nghiệp vụ) — xem §Mật khẩu cấp 2 khi ký/duyệt OtForm.
+- 28 permission `Attendance.*`: CRUD 5 danh mục + `UserApprovalScope.{View,Create,Delete}` + `UserSignature.{View,Update}` + `OTForm.{View,Create,Approve}`. **+1** (2026-07-29, migration riêng `AddAttendanceAiChatPermission`): `Attendance.AiChat.Use`, hiện chỉ gán Admin — xem mục `AttendanceAiChatController` ở trên. **+1** (2026-07-30, migration `AddSecondaryPasswordPermission`): `Attendance.SecondaryPassword.Update`, gán qua subquery cho đúng các Role đang giữ `UserSignature.Update` (Admin + 5 Role nghiệp vụ) — xem §Mật khẩu cấp 2 khi ký/duyệt OtForm. **+1** (2026-07-30, migration `AddOtFormRemoveEmployeePermission`): `Attendance.OTForm.RemoveEmployee`, cùng cách gán qua subquery theo `UserSignature.Update` — xem §Loại nhân viên khỏi đơn.
 - 4 Role mới: `Trưởng nhóm` (Create+View OTForm, View Employee, Update UserSignature, **+ View Department/Group/Reason/OtCase** — xem ngay dưới), `Trưởng phòng`/`Trưởng xưởng`/`Tổng Giám Đốc` (View+Approve OTForm, Update UserSignature). `Admin` được gán full toàn bộ permission `Attendance.*`.
 - **Lỗ hổng đã vá (2026-07-17, migration `AddCategoryViewPermissionsToTruongGroup`)**: seed ban đầu (`AddAttendancePermissionsAndRoles`) chỉ gán `Trưởng nhóm` 4 permission (`OTForm.Create/View`, `Employee.View`, `UserSignature.Update`) — THIẾU `Department.View`/`Group.View`/`Reason.View`/`OtCase.View` (permission riêng biệt cho từng danh mục, không nằm trong `OTForm.View`). Hậu quả: Trưởng nhóm gọi `GET /api/Department/all`, `GET /api/Group/by-department/{id}`, `GET /api/Reason/all`, `GET /api/OtCase/all` (4 API load dropdown cho màn "Tạo đơn tăng ca") đều bị 403 — màn Tạo đơn không dùng được trên thực tế dù mọi API OtForm đã sẵn sàng. Đã bổ sung 4 permission này cho Role `Trưởng nhóm`, verify lại qua SQL trực tiếp trên DB thật (2026-07-17) — Role này hiện có đủ 8 permission `Attendance.*`.
 - **Chưa làm**: gán Role cho user thật (`update-user-roles`/`create-user` — API Identity có sẵn) và tạo dòng `UserApprovalScope` cho từng Trưởng phòng/Trưởng xưởng **và mỗi người được phép tạo đơn** (`ApprovalLevel=Submitter`, xem §Business Logic — Phân quyền tạo đơn) thật (`POST /api/UserApprovalScope` — API đã có). Nhớ: từ 2026-07-16, chỉ gán được `ApprovalLevel=Submitter` cho `UserName` đã có Role `Trưởng nhóm` từ trước.

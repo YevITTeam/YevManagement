@@ -124,5 +124,18 @@ namespace Shared.Infrastructure.Repositories
         {
             return await query.Select(selector).ToListAsync();
         }
+
+        public async Task<int> CountAsync(IQueryable<T> query) => await query.CountAsync();
+
+        public async Task<int> CountAsync(IQueryable<T> query, Expression<Func<T, bool>> predicate) =>
+            await query.CountAsync(predicate);
+
+        public async Task<IReadOnlyList<TResult>> GroupCountAsync<TKey, TResult>(
+            IQueryable<T> query,
+            Expression<Func<T, TKey>> keySelector,
+            Expression<Func<IGrouping<TKey, T>, TResult>> resultSelector)
+        {
+            return await query.GroupBy(keySelector).Select(resultSelector).ToListAsync();
+        }
     }
 }

@@ -155,6 +155,22 @@ namespace Attendance.Api.Controllers
             return Success(true, "Từ chối đơn thành công.");
         }
 
+        // Drop ONE employee from the form so the rest of it can still be approved, instead of having to
+        // reject the whole form over a single person (see docs/attendance-module.md — Loại nhân viên
+        // khỏi đơn). Its own permission because the callers span BOTH sides of the existing split: the
+        // Team Leader signing a Draft holds OTForm.Create but NOT .Approve, while the levels above hold
+        // .Approve but not .Create. The Service re-validates that the caller is genuinely entitled to
+        // act at the level the form is currently sitting at.
+        [RequirePermission("Attendance.OTForm.RemoveEmployee")]
+        [HttpPost("{id}/employees/remove")]
+        public async Task<ActionResult<ApiResponse<OtFormDto>>> RemoveEmployee(int id, [FromBody] RemoveOtFormEmployeeDto request)
+        {
+            var isAdmin = User.IsInRole(AdminRole);
+            var isGeneralDirector = User.IsInRole(GeneralDirectorRole);
+            var result = await _otFormService.RemoveEmployeeAsync(id, CurrentUserName, CurrentFullName, isAdmin, isGeneralDirector, request);
+            return Success(result, "Đã loại nhân viên khỏi đơn.");
+        }
+
         // The 3 public actions below serve the small confirmation page the FE opens when an approver
         // (Department Manager/Workshop Manager/General Director) clicks the Approve/Reject link in the
         // email — a SUPPLEMENTARY CHANNEL to the 2 Approve/Reject buttons in the app above, not a

@@ -47,8 +47,8 @@ const TOOL_LABELS: Record<string, string> = {
 const SUGGESTIONS = [
     "Dải IP 10.45.1 còn bao nhiêu địa chỉ trống?",
     "IP 10.45.1.20 có dùng được không, đang được máy nào dùng?",
+    "Các máy ở chi nhánh Dĩ An",
     "Xem chi tiết cấu hình máy YDC-9875",
-    "Liệt kê các thiết bị thuê ngoài",
 ];
 
 interface DeviceRef {

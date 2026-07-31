@@ -132,6 +132,9 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.NoteJp).HasMaxLength(500);
             entity.Property(e => e.MonthToDate).HasPrecision(10, 2);
             entity.Property(e => e.YearToDate).HasPrecision(10, 2);
+            entity.Property(e => e.RemovedByUserName).HasMaxLength(100);
+            entity.Property(e => e.RemovedByFullName).HasMaxLength(255);
+            entity.Property(e => e.RemoveReason).HasMaxLength(500);
 
             entity.HasOne(d => d.OtForm).WithMany(p => p.OtFormEmployees)
                 .HasForeignKey(d => d.OtFormId)

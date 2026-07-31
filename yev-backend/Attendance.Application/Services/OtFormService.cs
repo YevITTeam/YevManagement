@@ -242,7 +242,16 @@ namespace Attendance.Application.Services
                     NoteJp = x.NoteJp,
                     MonthToDate = x.MonthToDate,
                     YearToDate = x.YearToDate,
-                    IsEligibleForMeal = (decimal)(x.EndTime - x.StartTime).TotalHours > MinHoursForMealTicket
+                    IsEligibleForMeal = (decimal)(x.EndTime - x.StartTime).TotalHours > MinHoursForMealTicket,
+                    // Employees dropped by an approver are returned here TOO (not filtered out) so the
+                    // detail screen can show who was dropped, by whom and why — the FE hides them from
+                    // the printed form (see docs/attendance-module.md — Loại nhân viên khỏi đơn).
+                    IsRemoved = x.IsRemoved,
+                    RemovedByUserName = x.RemovedByUserName,
+                    RemovedByFullName = x.RemovedByFullName,
+                    RemovedAtLevel = x.RemovedAtLevel,
+                    RemovedAt = x.RemovedAt,
+                    RemoveReason = x.RemoveReason
                 }).ToList(),
                 ProcessPart = processPart == null ? null : new ProcessPartDto
                 {
@@ -565,7 +574,13 @@ namespace Attendance.Application.Services
             var existingByEmployeeId = otForm.OtFormEmployees.ToDictionary(x => x.EmployeeId);
             var requestedEmployeeIds = request.Employees.Select(x => x.EmployeeId).ToHashSet();
 
-            var toRemove = otForm.OtFormEmployees.Where(x => !requestedEmployeeIds.Contains(x.EmployeeId)).ToList();
+            // Rows an approver already dropped are NEVER hard-deleted here, even though the edit screen
+            // doesn't list them (so they're absent from request.Employees and would otherwise land in
+            // toRemove) — that audit trail has to survive any later edit
+            // (see docs/attendance-module.md — Loại nhân viên khỏi đơn).
+            var toRemove = otForm.OtFormEmployees
+                .Where(x => !requestedEmployeeIds.Contains(x.EmployeeId) && !x.IsRemoved)
+                .ToList();
             _unitOfWork.OtFormEmployees.RemoveRange(toRemove);
 
             foreach (var item in request.Employees)
@@ -576,6 +591,20 @@ namespace Attendance.Application.Services
                     existing.EndTime = item.EndTime;
                     existing.NoteVn = item.NoteVn;
                     existing.NoteJp = item.NoteJp;
+
+                    // Deliberately putting a previously dropped employee back on the form — clear the
+                    // removal marks so they count and accumulate again. Only the creator can reach this
+                    // code, and only while the form is still Draft/PendingGroupHead/Pending.
+                    if (existing.IsRemoved)
+                    {
+                        existing.IsRemoved = false;
+                        existing.RemovedByUserName = null;
+                        existing.RemovedByFullName = null;
+                        existing.RemovedAtLevel = null;
+                        existing.RemovedAt = null;
+                        existing.RemoveReason = null;
+                    }
+
                     _unitOfWork.OtFormEmployees.Update(existing);
                 }
                 else
@@ -710,6 +739,90 @@ namespace Attendance.Application.Services
 
             _unitOfWork.OtForms.Update(otForm);
             await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Drops ONE employee from the form so the REST of it can still be approved — an approver who
+        // disagrees with one person out of many no longer has to reject all of it (requirement
+        // 2026-07-30, see docs/attendance-module.md — Loại nhân viên khỏi đơn). Deliberately a separate
+        // endpoint rather than a field on approve: the remover reviews the shortened form before
+        // deciding to approve it, so removal and approval are two distinct signed acts.
+        //
+        // Does NOT move the form's Status and does NOT invalidate signatures already collected — levels
+        // that already signed stay signed, and the flow continues from wherever it was.
+        public async Task<OtFormDto> RemoveEmployeeAsync(
+            int id, string userName, string? fullName, bool isAdmin, bool isGeneralDirector, RemoveOtFormEmployeeDto request)
+        {
+            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, x => x.OtFormEmployees);
+            otForm.OrThrowNotFound("Đơn tăng ca", id);
+
+            // Which level is the caller acting at right now? Mirrors LoadFormAndValidateAuthorityAsync,
+            // except Draft is a VALID state here: the Team Leader who signs at /submit may also drop
+            // someone, whereas approve/reject never applies to a Draft.
+            var currentLevel = ((OtFormStatus)otForm!.Status) switch
+            {
+                OtFormStatus.Draft => ApprovalLevel.Submitter,
+                OtFormStatus.PendingGroupHead => ApprovalLevel.GroupHead,
+                OtFormStatus.Pending => ApprovalLevel.DepartmentManager,
+                OtFormStatus.ApprovedByDepartment => ApprovalLevel.WorkshopManager,
+                OtFormStatus.ApprovedByWorkshop => ApprovalLevel.GeneralDirector,
+                _ => throw new DomainException("Đơn đã xử lý xong (hoàn tất/từ chối), không thể loại nhân viên khỏi đơn nữa.")
+            };
+
+            // Same 2-layer model as everywhere else (Permission gates the action at the Controller,
+            // UserApprovalScope gates WHICH form) — the caller must be entitled to act at the level the
+            // form is currently waiting on, so nobody can reach into a form that isn't theirs or that is
+            // sitting at a different level. Admin bypasses only at Submitter level, matching
+            // ApproveSubmitterAsync; the upper levels have no Admin bypass, matching ApproveAsync.
+            if (currentLevel == ApprovalLevel.GeneralDirector)
+            {
+                if (!isGeneralDirector)
+                    throw new DomainException("Bạn không có quyền loại nhân viên khỏi đơn ở cấp Tổng Giám Đốc.");
+            }
+            else if (!(currentLevel == ApprovalLevel.Submitter && isAdmin))
+            {
+                var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
+                    !x.IsDeleted && x.UserName == userName && x.ApprovalLevel == (int)currentLevel);
+
+                var authorized = scopes.Any(s =>
+                    (s.ScopeType == (int)ScopeType.Department && s.ScopeId == otForm.DepartmentId) ||
+                    (s.ScopeType == (int)ScopeType.Group && s.ScopeId == otForm.GroupId));
+
+                if (!authorized)
+                    throw new DomainException("Bạn không được phân quyền ở cấp mà đơn này đang chờ, nên không thể loại nhân viên khỏi đơn.");
+            }
+
+            // Second-factor password gate — removing someone changes a signed document, so it is held to
+            // the same bar as sign/approve/reject (see docs/attendance-module.md — Mật khẩu cấp 2).
+            // Verified before any write.
+            await _secondaryPasswordService.VerifyAsync(userName, request.SecondaryPassword);
+
+            var target = otForm.OtFormEmployees.FirstOrDefault(x => x.EmployeeId == request.EmployeeId);
+            if (target == null)
+                throw new DomainException("Nhân viên này không có trong danh sách tăng ca của đơn.");
+
+            if (target.IsRemoved)
+                throw new DomainException("Nhân viên này đã bị loại khỏi đơn trước đó.");
+
+            // A form with nobody left on it is meaningless — that case is a rejection, not a removal.
+            if (otForm.OtFormEmployees.Count(x => !x.IsRemoved) <= 1)
+                throw new DomainException("Đơn chỉ còn 1 nhân viên, không thể loại tiếp. Nếu không duyệt đơn này, hãy dùng chức năng Từ chối đơn.");
+
+            target.IsRemoved = true;
+            target.RemovedByUserName = userName;
+            target.RemovedByFullName = fullName;
+            target.RemovedAtLevel = (int)currentLevel;
+            target.RemovedAt = TimeHelper.GetCurrentUtcTime();
+            target.RemoveReason = request.Reason;
+            _unitOfWork.OtFormEmployees.Update(target);
+
+            // Keep the headline count in sync with who is actually still on the form — this is what the
+            // list screens and the printed form show.
+            otForm.NumberOfEmployee = otForm.OtFormEmployees.Count(x => !x.IsRemoved);
+            _unitOfWork.OtForms.Update(otForm);
+
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetByIdAsync(otForm.Id);
         }
 
         // === Email-based verification (a supplementary channel to Approve/Reject in the app) ===
@@ -907,8 +1020,10 @@ namespace Attendance.Application.Services
         // month/year compared to Employee.AccumulationYear/Month.
         private async Task AccumulateEmployeeHoursAsync(OtForm otForm)
         {
+            // Employees dropped by an approver never accumulate hours — they did not end up on the
+            // approved form (see docs/attendance-module.md — Loại nhân viên khỏi đơn).
             var otFormEmployees = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
-                x => x.OtFormId == otForm.Id, x => x.Employee);
+                x => x.OtFormId == otForm.Id && !x.IsRemoved, x => x.Employee);
 
             foreach (var otFormEmployee in otFormEmployees)
             {

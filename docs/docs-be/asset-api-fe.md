@@ -107,7 +107,8 @@ DTO: `{id, code, name}`. POST/PUT body có Code+Name (`[Required]`), PUT thêm `
 `statusText` server tự dịch — FE chỉ hiển thị. Chỉ cần enum số khi **gửi** `status` hoặc style badge.
 
 ### 5.2 `GET /grid-list`
-Query: `pageIndex/pageSize`, `deviceCode/manager/supplierName`(Contains), `purchaseDate`(Contains), `ipAddress`/`email`(Contains any), `groupId`/`departmentId`(exact), `note`, `isOutsourced`, `serialNumber`(Contains), `isUseUsb`(exact), `sortDeviceCodeAscending?`(null→`purchaseDate` giảm; true/false→`deviceCode` tăng/giảm, ghi đè mặc định).
+Query: `pageIndex/pageSize`, `deviceCode/manager/supplierName`(Contains), `purchaseDate`(parse rồi so khớp đúng ngày, không phải Contains chuỗi — FE luôn gửi ISO date đầy đủ từ `input type="date"`), `ipAddress`/`email`(Contains any), `groupId`/`departmentId`/`branchId`/`deviceTypeId`(exact), `note`, `isOutsourced`, `serialNumber`(Contains), `isUseUsb`(exact), `status`(exact, enum §5.1), `expiryDate`(`expirationDate <= expiryDate`), `sortDeviceCodeAscending?`(null→`purchaseDate` giảm; true/false→`deviceCode` tăng/giảm, ghi đè mặc định).
+2026-07-30: thêm `branchId/deviceTypeId/status/expiryDate` — trước đó FE phải tải `pageSize=5000` rồi tự lọc+tự phân trang ở client (chậm, và sai khi tổng số thiết bị vượt 5000).
 ```jsonc
 // data.data[]
 { "id":16925, "deviceCode":"YDF-216", "deviceName":"DA", "branchName":"...", "supplierName":"...",
@@ -176,7 +177,7 @@ Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ 
 ### 5.7 `DELETE /{id}` — soft-delete, gỡ IP về `Available`. **Không** tự xóa Config/Software.
 
 ### 5.8 Báo cáo — `GET /api/Report/device-list?deviceTypeId=&branchId=&keyword=`
-Controller riêng `/api/Report`. Không phân trang, `data` mảng thẳng. Filter optional (`keyword` Contains `deviceCode`/`deviceName`). Chỉ trả thiết bị đang **"Đang sử dụng"** (`DeviceStatus.InUse`) — thiết bị chờ sử dụng/chờ thanh lý/đã thanh lý không xuất hiện trong báo cáo.
+Controller riêng `/api/Report`. Không phân trang, `data` mảng thẳng. Filter optional (`keyword` Contains `deviceCode`/`deviceName`). Chỉ trả thiết bị **"Chờ sử dụng"/"Đang sử dụng"** (`PendingUse`/`InUse`) — thiết bị chờ thanh lý/đã thanh lý không xuất hiện trong báo cáo.
 ```jsonc
 // data[] — sort deviceCode A-Z, stt đánh lại
 { "stt":1, "deviceCode":"...", "deviceName":"...", "ipAddress":null,  // nhiều IP nối ", "
@@ -184,6 +185,24 @@ Controller riêng `/api/Report`. Không phân trang, `data` mảng thẳng. Filt
   "financialPeriod":86, "note":"..." }
 ```
 **`financialPeriod`** ("Kỳ T/C"): từ `expirationDate`, năm tài chính Yazaki 1/7→30/6, đánh số từ 1941. `expirationDate=2026-10-01` → tháng≥7 → `2026−1940=86`. `null` nếu `expirationDate` null.
+
+### 5.8b Thống kê báo cáo — `GET /api/Report/device-summary` (2026-07-30)
+Cho màn dashboard "Báo cáo thiết bị" (`yev-frontend` `DeviceReport.tsx`) — KPI + phân bổ trạng thái/chi nhánh/loại + danh sách sắp/đã hết hạn, tính sẵn bằng `COUNT`/`GROUP BY` ở SQL. Không tham số. Cùng phạm vi thiết bị với 5.8 (`PendingUse`/`InUse`).
+Thay cho cách cũ FE tự tải toàn bộ `Device/grid-list` (nhiều trang `pageSize=1000`) rồi cộng dồn trong bộ nhớ — quá chậm khi DB có hàng nghìn thiết bị.
+```jsonc
+// data
+{ "totalCount":3136, "inUseCount":2429, "pendingUseCount":707,
+  // Số dòng trong expiringDevices có daysRemaining >= 0 (chưa quá hạn).
+  "expiringSoonCount":110,
+  "branchDistribution":[{ "label":"DĨ AN", "count":1100 }, ...],   // top 6, giảm dần theo count
+  "deviceTypeDistribution":[{ "label":"Desktop", "count":1799 }, ...], // top 6
+  "expiringDevices":[
+    // Toàn bộ thiết bị hết hạn trong 90 ngày tới HOẶC đã quá hạn (daysRemaining âm), sort theo expirationDate tăng dần.
+    { "id":1, "deviceCode":"OAG-002", "deviceName":"...", "branchName":"DĨ AN", "manager":"Ms Ngoc",
+      "expirationDate":"2005-01-01T00:00:00", "daysRemaining":-7881 }
+  ] }
+```
+Cửa sổ cảnh báo 90 ngày là hằng số cứng ở BE (`DeviceService.ReportExpiryWindowDays`) — FE có hằng số tương ứng (`EXPIRY_WINDOW_DAYS` trong `DeviceReport.tsx`) chỉ để hiển thị chữ, phải sửa cả 2 nơi nếu đổi.
 
 ### 5.9 Chuyển máy — `POST /api/TransferHistory`
 Chuyển từ máy cũ sang máy mới **đã có trong hệ thống**. **1 API làm toàn bộ nghiệp vụ.**
@@ -389,7 +408,7 @@ Content-Type: application/json
 - 1 lượt hỏi có thể có **nhiều dòng `"tool"`** (model gọi nhiều tool cùng lúc) và nhiều dòng `"content"` xen kẽ trước khi tới `"done"`.
 - Nếu model gọi tool quá 3 lần liên tiếp mà không chốt câu trả lời → BE trả `{"type":"error","message":"Đã đạt giới hạn số lần gọi công cụ tra cứu..."}` thay vì treo mãi.
 - **FE lưu lịch sử**: chỉ cần gộp các `"content"` của 1 lượt thành 1 `assistant` message rồi thêm vào mảng `history` gửi lần sau — **không** lưu các dòng `"tool"`/`"device"` (BE không cần và cũng không hiểu nếu FE gửi ngược lại role `"tool"`).
-- BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm. **Từ 2026-07-30 catalogue rút còn 7 tool**, tập trung 2 nhóm việc: tra cứu thiết bị (đủ mọi field như màn hình danh sách) và tra cứu IP (IP trống / IP này ai đang dùng / tình trạng cả dải) — xem `ai-chat-be-huong-dan.md §16`. Gợi ý câu hỏi trên FE phải khớp đúng 2 nhóm này, đừng hứa việc thống kê theo trạng thái hay lọc theo chi nhánh (không có tool nào làm được).
+- BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm. **Từ 2026-07-30 catalogue rút còn 7 tool**, tập trung 2 nhóm việc: tra cứu thiết bị (đủ mọi field như màn hình danh sách) và tra cứu IP (IP trống / IP này ai đang dùng / tình trạng cả dải) — xem `ai-chat-be-huong-dan.md §16`. Gợi ý câu hỏi trên FE phải khớp đúng 2 nhóm này, lọc theo chi nhánh/nhóm/bộ phận nay truyền THẲNG TÊN (thêm 2026-07-30, xem §17) nên không cần đổi tên sang id.
 - Permission `Asset.AiChat.Use` — **đã gán sẵn cho role `Admin`**, role khác cần Admin gán thêm nếu muốn dùng chat AI. Nút "Xem chi tiết" từ dòng `"device"` là UX-only, ẩn ở FE nếu user không có `Asset.Device.View` — BE vẫn enforce permission đó khi FE thật sự điều hướng sang trang chi tiết thiết bị.
 
 ## 8. Tổng hợp endpoint
@@ -401,6 +420,7 @@ Content-Type: application/json
 | `/api/IpAddress` | grid-list, `available`, {id}, PUT{id}(status+note), PUT `bulk-status`(đổi status nhiều IP), `{id}/assign`, `{id}/unassign` (không POST/DELETE/all) |
 | `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, `qr-labels`(POST, in QR hàng loạt 5.4b), POST, PUT, DELETE, `bulk-delete`. Không `all` |
 | `/api/Report/device-list` | Báo cáo in ấn (không phân trang) |
+| `/api/Report/device-summary` | Thống kê dashboard "Báo cáo thiết bị" (5.8b, không tham số) |
 | `/api/TransferHistory` | POST(chuyển máy), `device/{deviceId}` |
 | `/api/DeviceImport` | `preview`/`confirm` (Excel/CSV) |
 | `/api/DeviceLiquidationImport` | `preview`/`confirm` — import 1 cột mã máy để thanh lý hàng loạt (6.4) |

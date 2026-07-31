@@ -22,7 +22,6 @@ const statusLabels: Record<number, string> = {
   1: "Đang sử dụng",
   2: "Chờ thanh lý",
   3: "Đã thanh lý",
-  4: "Thuê ngoài",
 };
 
 const statusClasses: Record<number, string> = {
@@ -30,7 +29,6 @@ const statusClasses: Record<number, string> = {
   1: "border border-[#16a34a] bg-[#16a34a] text-white",
   2: "border border-[#f59e0b] bg-[#fef3c7] text-[#b45309]",
   3: "border border-[#dc2626] bg-[#dc2626] text-white",
-  4: "border border-[#6366f1] bg-[#eef2ff] text-[#4338ca]",
 };
 
 const defaultFilters: DeviceFilters = {
@@ -57,31 +55,10 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleDateString("vi-VN");
 }
 
-// GET /Device/grid-list hỗ trợ lọc theo deviceCode/manager/ipAddress/supplierName/purchaseDate/groupId/departmentId (xem docs/asset-api-fe.md §5.2).
-// branch/deviceType/status/expiryDate chưa có query param tương ứng trên BE, nên khi các field này được set,
-// FE phải tải toàn bộ tập kết quả (đã lọc theo các field BE hỗ trợ) rồi tự lọc + tự phân trang ở client
-// để giữ đúng điều kiện tìm kiếm khi chuyển trang, thay vì chỉ lọc trên dữ liệu của từng trang.
-const CLIENT_FILTER_FETCH_SIZE = 5000;
-
 // Bảng thiết bị có nhiều dòng cao thấp khác nhau (IP/email nhiều dòng) nên không dùng
 // công thức "số dòng x chiều cao 1 dòng" như bảng IP; cố định chiều cao khung cuộn để
 // danh sách gọn trong màn hình, giống cách IpAddressList giới hạn maxHeight cho khung bảng.
 const TABLE_MAX_HEIGHT_PX = 640;
-
-function matchesClientOnlyFilters(device: DeviceDto, filters: DeviceFilters) {
-  const matchesBranch = !filters.branch || device.branchName.toLowerCase().includes(filters.branch.toLowerCase());
-  const matchesDeviceType = !filters.deviceType || device.deviceTypeName === filters.deviceType;
-  const matchesStatus =
-    !filters.status ||
-    (filters.status === "Chưa sử dụng" && device.status === 0) ||
-    (filters.status === "Đang sử dụng" && device.status === 1) ||
-    (filters.status === "Chờ thanh lý" && device.status === 2) ||
-    (filters.status === "Đã thanh lý" && device.status === 3) ||
-    (filters.status === "Thuê ngoài" && device.status === 4);
-  const matchesExpiry = !filters.expiryDate || (device.expirationDate ? device.expirationDate <= filters.expiryDate : false);
-
-  return matchesBranch && matchesDeviceType && matchesStatus && matchesExpiry;
-}
 
 export default function DeviceList() {
   const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
@@ -197,18 +174,13 @@ export default function DeviceList() {
     setPageIndex(1);
   }
 
-  interface DevicePageResult {
-    data: DeviceDto[];
-    totalCount: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPreviousPage: boolean;
-    safePageIndex: number;
-  }
-
-  const { isLoading, error, refetch: refetchDevices } = useFetchEffect<DevicePageResult>(
-    async () => {
-      const serverFilterParams = {
+  // Tất cả field lọc đều có query param tương ứng ở BE (Device/grid-list, docs/asset-api-fe.md §5.2)
+  // nên FE chỉ cần truyền thẳng — không còn nhánh tải nguyên bảng rồi tự lọc/tự phân trang ở client.
+  const { isLoading, error, refetch: refetchDevices } = useFetchEffect(
+    () =>
+      DeviceApi.getDevicePageNation({
+        pageIndex,
+        pageSize,
         deviceCode: filters.deviceCode || undefined,
         manager: filters.manager || undefined,
         ipAddress: filters.ipAddress || undefined,
@@ -219,38 +191,15 @@ export default function DeviceList() {
         isUseUsb: filters.isUseUsb === "" ? undefined : filters.isUseUsb === "true",
         groupId: filters.groupId === "" ? undefined : Number(filters.groupId),
         departmentId: filters.departmentId === "" ? undefined : Number(filters.departmentId),
+        branchId: filters.branch === "" ? undefined : Number(filters.branch),
+        deviceTypeId: filters.deviceType === "" ? undefined : Number(filters.deviceType),
+        // "outsourced" là sentinel riêng của dropdown Trạng thái, ánh xạ sang filter IsOutsourced
+        // (Device.Status chỉ có 0-3, không có giá trị "thuê ngoài" — xem DeviceFilterBar.tsx).
+        status: filters.status === "" || filters.status === "outsourced" ? undefined : Number(filters.status),
+        isOutsourced: filters.status === "outsourced" ? true : undefined,
+        expiryDate: filters.expiryDate || undefined,
         sortDeviceCodeAscending,
-      };
-      const hasClientOnlyFilters = Boolean(filters.branch || filters.deviceType || filters.status || filters.expiryDate);
-
-      if (hasClientOnlyFilters) {
-        const result = await DeviceApi.getDevicePageNation({
-          pageIndex: 1,
-          pageSize: CLIENT_FILTER_FETCH_SIZE,
-          ...serverFilterParams,
-        });
-        const matched = result.data.filter((device) => matchesClientOnlyFilters(device, filters));
-        const computedTotalPages = Math.max(1, Math.ceil(matched.length / pageSize));
-        const safePageIndex = Math.min(pageIndex, computedTotalPages);
-        const start = (safePageIndex - 1) * pageSize;
-
-        return {
-          data: matched.slice(start, start + pageSize),
-          totalCount: matched.length,
-          totalPages: computedTotalPages,
-          hasPreviousPage: safePageIndex > 1,
-          hasNextPage: safePageIndex < computedTotalPages,
-          safePageIndex,
-        };
-      }
-
-      const result = await DeviceApi.getDevicePageNation({
-        pageIndex,
-        pageSize,
-        ...serverFilterParams,
-      });
-      return { ...result, safePageIndex: pageIndex };
-    },
+      }),
     [pageIndex, pageSize, filtersKey],
     (result) => {
       setDevices(result.data);
@@ -258,7 +207,6 @@ export default function DeviceList() {
       setTotalPages(result.totalPages);
       setHasNextPage(result.hasNextPage);
       setHasPreviousPage(result.hasPreviousPage);
-      if (result.safePageIndex !== pageIndex) setPageIndex(result.safePageIndex);
     },
     "Không thể tải danh sách thiết bị."
   );

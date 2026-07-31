@@ -1,29 +1,28 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import { Link } from "@/navigation";
 import { toast } from "react-toastify";
 import { Computer, Monitor, HardDrive, Clock, RefreshCw, Download, ArrowLeft } from "lucide-react";
 
-import { DeviceApi } from "@/modules/pc-management/api/device.api";
-import type { DeviceDto } from "@/modules/pc-management/types/device.dto";
+import { ReportApi } from "@/modules/pc-management/api/report.api";
+import type { DeviceReportSummaryDto } from "@/modules/pc-management/types/report.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 // jsPDF/jspdf-autotable (~vài trăm KB) chỉ cần cho hành động "Xuất PDF" — code-split riêng để không
 // nằm trong bundle chính của trang báo cáo, chỉ tải khi user thực sự mở dialog này.
 const DeviceListReportPrintDialog = dynamic(() => import("./DeviceListReportPrintDialog"), { ssr: false });
 
-const PAGE_SIZE = 1000;
-const DAY_MS = 86_400_000;
+// Phải khớp ReportExpiryWindowDays ở Asset.Application/Services/DeviceService.cs — BE đã lọc sẵn
+// ExpiringDevices theo cửa sổ này, FE chỉ hiển thị lại, không tự lọc thêm.
 const EXPIRY_WINDOW_DAYS = 90;
 
-// Báo cáo thống kê chỉ tính thiết bị "chờ sử dụng"/"đang sử dụng" — thiết bị chờ thanh lý/đã
-// thanh lý không còn vận hành nên không đưa vào làm dữ liệu thống kê.
+// Báo cáo thống kê chỉ tính thiết bị "chờ sử dụng"/"đang sử dụng" (đã lọc sẵn ở BE) — thiết bị chờ
+// thanh lý/đã thanh lý không còn vận hành nên không đưa vào làm dữ liệu thống kê.
 const statusMeta = [
-    { value: 1, label: "Đang sử dụng", bar: "bg-emerald-500" },
-    { value: 0, label: "Chưa sử dụng", bar: "bg-[#94a3b8]" },
+    { key: "inUseCount" as const, label: "Đang sử dụng", color: "#10b981" },
+    { key: "pendingUseCount" as const, label: "Chưa sử dụng", color: "#94a3b8" },
 ];
-const REPORTABLE_STATUSES = new Set(statusMeta.map((status) => status.value));
 
 function formatDate(value: string | null) {
     if (!value) return "-";
@@ -33,7 +32,6 @@ function formatDate(value: string | null) {
 interface DistributionRow {
     label: string;
     count: number;
-    bar?: string;
 }
 
 function DistributionCard({
@@ -41,14 +39,12 @@ function DistributionCard({
     caption,
     rows,
     total,
-    scaleByMax = false,
     emptyText,
 }: {
     title: string;
     caption: string;
     rows: DistributionRow[];
     total: number;
-    scaleByMax?: boolean;
     emptyText: string;
 }) {
     const maxCount = rows.reduce((max, row) => Math.max(max, row.count), 0);
@@ -66,11 +62,7 @@ function DistributionCard({
                 <div className="space-y-4">
                     {rows.map((row) => {
                         const percentOfTotal = total ? Math.round((row.count / total) * 100) : 0;
-                        const width = scaleByMax
-                            ? maxCount
-                                ? Math.max(4, Math.round((row.count / maxCount) * 100))
-                                : 0
-                            : percentOfTotal;
+                        const width = maxCount ? Math.max(4, Math.round((row.count / maxCount) * 100)) : 0;
                         return (
                             <div key={row.label}>
                                 <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
@@ -82,10 +74,7 @@ function DistributionCard({
                                     </span>
                                 </div>
                                 <div className="h-2 w-full rounded-full bg-[#f1f5f9]">
-                                    <div
-                                        className={`h-2 rounded-full ${row.bar ?? "bg-[#e3000f]"}`}
-                                        style={{ width: `${width}%` }}
-                                    />
+                                    <div className="h-2 rounded-full bg-[#e3000f]" style={{ width: `${width}%` }} />
                                 </div>
                             </div>
                         );
@@ -96,86 +85,110 @@ function DistributionCard({
     );
 }
 
+interface StatusDonutRow {
+    label: string;
+    count: number;
+    color: string;
+}
+
+// Biểu đồ tròn (donut) vẽ tay bằng SVG stroke-dasharray — không thêm thư viện chart (CLAUDE.md §4.1:
+// hạn chế phụ thuộc mới) vì chỉ có 2 lát (Đang sử dụng/Chưa sử dụng), không cần cả 1 thư viện cho việc này.
+// Chart xếp TRÊN, chú thích xếp DƯỚI dạng hàng full-width (không đặt cạnh nhau) — khung thẻ chỉ rộng
+// ~1/3 màn hình nên nếu chia đôi ngang, nhãn dài ("Đang sử dụng") + số liệu dễ bị wrap xuống dòng lệch.
+function StatusDonutChart({ rows, total }: { rows: StatusDonutRow[]; total: number }) {
+    const size = 168;
+    const strokeWidth = 26;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+
+    let cumulativeFraction = 0;
+
+    return (
+        <div className="flex flex-col items-center gap-5 py-2">
+            <div className="relative shrink-0" style={{ width: size, height: size }}>
+                <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+                    <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={strokeWidth} />
+                    {total > 0 &&
+                        rows
+                            .filter((row) => row.count > 0)
+                            .map((row) => {
+                                const fraction = row.count / total;
+                                const dashLength = fraction * circumference;
+                                const dashOffset = -cumulativeFraction * circumference;
+                                cumulativeFraction += fraction;
+                                return (
+                                    <circle
+                                        key={row.label}
+                                        cx={size / 2}
+                                        cy={size / 2}
+                                        r={radius}
+                                        fill="none"
+                                        stroke={row.color}
+                                        strokeWidth={strokeWidth}
+                                        strokeDasharray={`${dashLength} ${circumference - dashLength}`}
+                                        strokeDashoffset={dashOffset}
+                                    />
+                                );
+                            })}
+                </svg>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-semibold text-[#191c1e]">{total}</span>
+                    <span className="text-[11px] text-[#5e3f3a]">thiết bị</span>
+                </div>
+            </div>
+
+            <div className="w-full space-y-2.5">
+                {rows.map((row) => (
+                    <div key={row.label} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="flex min-w-0 items-center gap-2">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
+                            <span className="truncate text-[#191c1e]">{row.label}</span>
+                        </span>
+                        <span className="shrink-0 whitespace-nowrap text-[#5e3f3a]">
+                            {row.count} · {total ? Math.round((row.count / total) * 100) : 0}%
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+const emptySummary: DeviceReportSummaryDto = {
+    totalCount: 0,
+    inUseCount: 0,
+    pendingUseCount: 0,
+    expiringSoonCount: 0,
+    branchDistribution: [],
+    deviceTypeDistribution: [],
+    expiringDevices: [],
+};
+
 export default function DeviceReport() {
-    const [devices, setDevices] = useState<DeviceDto[]>([]);
-    const [totalCount, setTotalCount] = useState(0);
-    const [now, setNow] = useState(0);
+    const [summary, setSummary] = useState<DeviceReportSummaryDto>(emptySummary);
     const [isPrintOpen, setIsPrintOpen] = useState(false);
 
-    const { isLoading, error, refetch: fetchDevices } = useFetchEffect(
-        async () => {
-            const firstPage = await DeviceApi.getDevicePageNation({ pageIndex: 1, pageSize: PAGE_SIZE });
-            let allDevices = firstPage.data;
-            const totalPages = firstPage.totalPages ?? 1;
-
-            if (totalPages > 1) {
-                const restPages = await Promise.all(
-                    Array.from({ length: totalPages - 1 }, (_, index) =>
-                        DeviceApi.getDevicePageNation({ pageIndex: index + 2, pageSize: PAGE_SIZE })
-                    )
-                );
-                allDevices = restPages.reduce((acc, page) => acc.concat(page.data), allDevices);
-            }
-
-            return { allDevices, totalCount: firstPage.totalCount };
-        },
+    // GET /Report/device-summary trả sẵn số liệu tổng hợp (COUNT/GROUP BY ở SQL) thay vì tải nguyên
+    // bảng Device (5000+ dòng) rồi tự cộng dồn ở client (2026-07-30, xem docs/asset-module.md).
+    const { isLoading, error, refetch: fetchSummary } = useFetchEffect(
+        () => ReportApi.getDeviceReportSummary(),
         [],
-        (result) => {
-            setDevices(result.allDevices);
-            setTotalCount(result.totalCount);
-            setNow(Date.now());
-        },
+        (result) => setSummary(result),
         "Không thể tải dữ liệu báo cáo thiết bị.",
         (message) => toast.error(message)
     );
 
-    const stats = useMemo(() => {
-        const reportableDevices = devices.filter((device) => REPORTABLE_STATUSES.has(device.status));
-        const total = reportableDevices.length;
-
-        const statusRows: DistributionRow[] = statusMeta.map((status) => ({
-            label: status.label,
-            bar: status.bar,
-            count: reportableDevices.filter((device) => device.status === status.value).length,
-        }));
-
-        const countBy = (selector: (device: DeviceDto) => string) => {
-            const map = new Map<string, number>();
-            reportableDevices.forEach((device) => {
-                const key = selector(device) || "Không xác định";
-                map.set(key, (map.get(key) ?? 0) + 1);
-            });
-            return Array.from(map.entries())
-                .map(([label, count]) => ({ label, count }))
-                .sort((a, b) => b.count - a.count);
-        };
-
-        const branchRows = countBy((device) => device.branchName).slice(0, 6);
-        const typeRows = countBy((device) => device.deviceTypeName).slice(0, 6);
-
-        const expiring = now
-            ? reportableDevices
-                  .filter((device) => device.expirationDate)
-                  .map((device) => ({
-                      device,
-                      days: Math.ceil((new Date(device.expirationDate as string).getTime() - now) / DAY_MS),
-                  }))
-                  .filter((entry) => entry.days <= EXPIRY_WINDOW_DAYS)
-                  .sort((a, b) => a.days - b.days)
-            : [];
-
-        const inUse = statusRows.find((row) => row.label === "Đang sử dụng")?.count ?? 0;
-        const idle = statusRows.find((row) => row.label === "Chưa sử dụng")?.count ?? 0;
-        const expiringSoon = expiring.filter((entry) => entry.days >= 0).length;
-
-        return { total, statusRows, branchRows, typeRows, expiring, inUse, idle, expiringSoon };
-    }, [devices, now]);
+    const statusRows: StatusDonutRow[] = statusMeta.map((status) => ({
+        label: status.label,
+        color: status.color,
+        count: summary[status.key],
+    }));
 
     const kpis = [
-        { label: "Tổng thiết bị", value: stats.total, icon: Computer },
-        { label: "Đang sử dụng", value: stats.inUse, icon: Monitor },
-        { label: "Chưa sử dụng", value: stats.idle, icon: HardDrive },
-        { label: `Sắp hết hạn (≤${EXPIRY_WINDOW_DAYS} ngày)`, value: stats.expiringSoon, icon: Clock },
+        { label: "Tổng thiết bị", value: summary.totalCount, icon: Computer },
+        { label: "Đang sử dụng", value: summary.inUseCount, icon: Monitor },
+        { label: "Chưa sử dụng", value: summary.pendingUseCount, icon: HardDrive },
+        { label: `Sắp hết hạn (≤${EXPIRY_WINDOW_DAYS} ngày)`, value: summary.expiringSoonCount, icon: Clock },
     ];
 
     return (
@@ -190,7 +203,7 @@ export default function DeviceReport() {
 
                 <div className="flex flex-wrap items-center gap-2">
                     <button
-                        onClick={() => fetchDevices()}
+                        onClick={() => fetchSummary()}
                         disabled={isLoading}
                         className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
@@ -216,12 +229,6 @@ export default function DeviceReport() {
                 <div className="rounded-xl border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
             )}
 
-            {totalCount > devices.length && (
-                <div className="rounded-xl border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs text-[#5e3f3a]">
-                    Thống kê dựa trên {devices.length} / {totalCount} thiết bị mới nhất.
-                </div>
-            )}
-
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {kpis.map((kpi) => (
                     <div key={kpi.label} className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
@@ -241,27 +248,29 @@ export default function DeviceReport() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <DistributionCard
-                    title="Phân bổ theo trạng thái"
-                    caption="Số lượng thiết bị theo từng trạng thái sử dụng."
-                    rows={stats.statusRows}
-                    total={stats.total}
-                    emptyText="Chưa có dữ liệu."
-                />
+                <div className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                    <div className="mb-2">
+                        <h3 className="text-base font-semibold text-[#191c1e]">Phân bổ theo trạng thái</h3>
+                        <p className="mt-1 text-xs text-[#5e3f3a]">Số lượng thiết bị theo từng trạng thái sử dụng.</p>
+                    </div>
+                    {summary.totalCount === 0 ? (
+                        <p className="py-6 text-center text-sm text-[#5e3f3a]">Chưa có dữ liệu.</p>
+                    ) : (
+                        <StatusDonutChart rows={statusRows} total={summary.totalCount} />
+                    )}
+                </div>
                 <DistributionCard
                     title="Theo chi nhánh"
                     caption="Top chi nhánh có nhiều thiết bị nhất."
-                    rows={stats.branchRows}
-                    total={stats.total}
-                    scaleByMax
+                    rows={summary.branchDistribution}
+                    total={summary.totalCount}
                     emptyText="Chưa có dữ liệu."
                 />
                 <DistributionCard
                     title="Theo loại thiết bị"
                     caption="Top loại thiết bị phổ biến nhất."
-                    rows={stats.typeRows}
-                    total={stats.total}
-                    scaleByMax
+                    rows={summary.deviceTypeDistribution}
+                    total={summary.totalCount}
                     emptyText="Chưa có dữ liệu."
                 />
             </div>
@@ -275,7 +284,7 @@ export default function DeviceReport() {
                         </p>
                     </div>
                     <span className="rounded-full border border-[#e0e3e5] bg-white px-3 py-1 text-xs font-medium text-[#5e3f3a]">
-                        {stats.expiring.length} thiết bị
+                        {summary.expiringDevices.length} thiết bị
                     </span>
                 </div>
 
@@ -291,14 +300,15 @@ export default function DeviceReport() {
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && stats.expiring.length === 0 && (
+                            {!isLoading && summary.expiringDevices.length === 0 && (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có thiết bị nào sắp hết hạn.
                                     </td>
                                 </tr>
                             )}
-                            {stats.expiring.map(({ device, days }) => {
+                            {summary.expiringDevices.map((device) => {
+                                const days = device.daysRemaining;
                                 const expired = days < 0;
                                 const urgent = days >= 0 && days <= 30;
                                 const badgeClass = expired || urgent

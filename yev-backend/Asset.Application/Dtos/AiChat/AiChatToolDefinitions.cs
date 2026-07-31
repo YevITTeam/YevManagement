@@ -27,7 +27,7 @@ namespace Asset.Application.Dtos.AiChat
             "type": "function",
             "function": {
               "name": "search_devices",
-              "description": "Tra cứu DANH SÁCH thiết bị (PC) theo BẤT KỲ tiêu chí nào có trên màn hình danh sách thiết bị: mã thiết bị, người quản lý, IP, email, nhà cung cấp, số serial, ghi chú, ngày mua, nhóm thiết bị, bộ phận, máy thuê ngoài hay không, có dùng USB hay không. Kết hợp được nhiều tiêu chí cùng lúc. Trả về tối đa 10 kết quả gần đúng nhất. Dùng khi chưa biết chính xác mã thiết bị hoặc cần liệt kê nhiều máy theo điều kiện.",
+              "description": "Tra cứu DANH SÁCH thiết bị (PC) theo BẤT KỲ tiêu chí nào: mã thiết bị, người quản lý, IP, email, nhà cung cấp, số serial, ghi chú, ngày mua, CHI NHÁNH, nhóm thiết bị, bộ phận, trạng thái, máy thuê ngoài hay không, có dùng USB hay không. Kết hợp được nhiều tiêu chí cùng lúc. QUAN TRỌNG: với chi nhánh/nhóm/bộ phận, hãy truyền THẲNG TÊN người dùng nói vào branchName/groupName/departmentName — KHÔNG cần và KHÔNG được gọi tool khác để đổi tên thành id trước, hệ thống tự khớp theo tên. Trả về tối đa 10 kết quả gần đúng nhất.",
               "parameters": {
                 "type": "object",
                 "properties": {
@@ -39,8 +39,12 @@ namespace Asset.Application.Dtos.AiChat
                   "serialNumber": { "type": "string", "description": "Số serial của thiết bị (tìm gần đúng)" },
                   "note": { "type": "string", "description": "Từ khoá trong ghi chú của thiết bị" },
                   "purchaseDate": { "type": "string", "description": "Ngày mua, định dạng yyyy-MM-dd" },
-                  "groupId": { "type": "integer", "description": "Id Nhóm thiết bị — PHẢI lấy từ tool search_device_groups, không tự bịa" },
-                  "departmentId": { "type": "integer", "description": "Id Bộ phận quản lý — PHẢI lấy từ tool search_device_departments, không tự bịa" },
+                  "branchName": { "type": "string", "description": "Tên chi nhánh, truyền thẳng tên người dùng nói (vd \"Dĩ An\", \"Củ Chi\", \"Mỹ Phước\") — khớp gần đúng, không cần id" },
+                  "groupName": { "type": "string", "description": "Tên Nhóm thiết bị, truyền thẳng tên người dùng nói (vd \"Công vụ\", \"Kế toán\") — khớp gần đúng, KHÔNG cần đổi sang id trước" },
+                  "departmentName": { "type": "string", "description": "Tên Bộ phận quản lý, truyền thẳng tên người dùng nói — khớp gần đúng, KHÔNG cần đổi sang id trước" },
+                  "status": { "type": "integer", "description": "Trạng thái thiết bị: 0 = chờ sử dụng, 1 = đang sử dụng, 2 = chờ thanh lý, 3 = đã thanh lý" },
+                  "groupId": { "type": "integer", "description": "Id Nhóm thiết bị — chỉ dùng khi đã có id sẵn; bình thường hãy dùng groupName" },
+                  "departmentId": { "type": "integer", "description": "Id Bộ phận quản lý — chỉ dùng khi đã có id sẵn; bình thường hãy dùng departmentName" },
                   "isOutsourced": { "type": "boolean", "description": "true = chỉ máy thuê ngoài, false = chỉ máy của công ty, bỏ trống = cả hai" },
                   "isUseUsb": { "type": "boolean", "description": "true = chỉ máy được phép dùng USB, false = chỉ máy không được dùng USB, bỏ trống = cả hai" },
                   "sortDeviceCodeAscending": { "type": "boolean", "description": "Sắp xếp theo mã thiết bị: true = tăng dần, false = giảm dần, bỏ trống = mặc định theo ngày mua mới nhất" }

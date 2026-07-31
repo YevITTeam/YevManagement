@@ -6,6 +6,7 @@ import type {
     OtFormDto,
     OtFormListItemDto,
     RejectOtFormDto,
+    RemoveOtFormEmployeeDto,
     UpdateOtFormDto,
 } from "@/modules/attendance/types/ot-form.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
@@ -25,6 +26,7 @@ const ENDPOINTS = {
         submitOtForm: (id: number) => `/OtForm/${id}/submit`,
         approveOtForm: (id: number) => `/OtForm/${id}/approve`,
         rejectOtForm: (id: number) => `/OtForm/${id}/reject`,
+        removeOtFormEmployee: (id: number) => `/OtForm/${id}/employees/remove`,
         emailConfirmGet: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}`,
         emailConfirmApprove: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/approve`,
         emailConfirmReject: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/reject`,
@@ -124,6 +126,13 @@ export const OtFormApi = {
     },
     rejectOtForm: async (id: number, data: RejectOtFormDto) => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.rejectOtForm(id), data);
+        return response.data;
+    },
+    // Loại 1 nhân viên khỏi đơn (cấp đang chờ duyệt của đơn) để duyệt được phần còn lại — endpoint
+    // riêng, KHÔNG đổi Status/không ký lại các cấp trước đó (docs §4.5a). Trả về OtFormDto đầy đủ đã
+    // cập nhật, không cần gọi lại getOtFormById.
+    removeOtFormEmployee: async (id: number, data: RemoveOtFormEmployeeDto) => {
+        const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.removeOtFormEmployee(id), data);
         return response.data;
     },
     // Duyệt/Từ chối qua link email — public, [AllowAnonymous] (docs §4.6).

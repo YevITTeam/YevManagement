@@ -40,6 +40,10 @@ namespace Attendance.Application.Interfaces.Service
 
         Task RejectAsync(int id, string approverUserName, string? approverFullName, bool isGeneralDirector, RejectOtFormDto request);
 
+        // Loại 1 nhân viên khỏi đơn để duyệt được phần còn lại thay vì từ chối cả đơn — xem
+        // docs/attendance-module.md § Loại nhân viên khỏi đơn.
+        Task<OtFormDto> RemoveEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, bool isGeneralDirector, RemoveOtFormEmployeeDto request);
+
         // Kênh bổ sung qua email (link Duyệt/Từ chối, [AllowAnonymous] ở Controller) — token tự nó
         // là thông tin xác thực duy nhất, xem docs/attendance-module.md.
         Task<OtFormDto> GetByEmailTokenAsync(string token);
