@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
+import { Check, Inbox, X } from "lucide-react";
 
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
@@ -153,30 +154,46 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">{t("colCode")}</th>
-                                <th className="px-6 py-3">{t("colDescription")}</th>
-                                <th className="px-6 py-3">{t("colRequiredLevel")}</th>
-                                <th className="px-6 py-3">{t("colRequireSignature")}</th>
-                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
+                                <th className="px-4 py-2.5">{t("colCode")}</th>
+                                <th className="px-4 py-2.5">{t("colDescription")}</th>
+                                <th className="px-4 py-2.5">{t("colRequiredLevel")}</th>
+                                <th className="px-4 py-2.5">{t("colRequireSignature")}</th>
+                                <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && otCases.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={5} className="px-4 py-12">
+                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
+                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
+                                            {t("noData")}
+                                        </div>
                                     </td>
                                 </tr>
                             )}
                             {otCases.map((otCase) => (
                                 <tr key={otCase.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{otCase.code}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{otCase.description || "-"}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">
-                                        {approvalLevelLabels[otCase.requiredApprovalLevel] ?? otCase.requiredApprovalLevel}
+                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{otCase.code}</td>
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{otCase.description || "-"}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
+                                            {approvalLevelLabels[otCase.requiredApprovalLevel] ?? otCase.requiredApprovalLevel}
+                                        </span>
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{otCase.requireSignature ? t("yes") : t("no")}</td>
-                                    <td className="px-6 py-4 text-right text-sm">
+                                    <td className="px-4 py-3 text-sm">
+                                        <span
+                                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                                otCase.requireSignature
+                                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                    : "border-[#e0e3e5] bg-white text-[#8a8f94]"
+                                            }`}
+                                        >
+                                            {otCase.requireSignature ? <Check size={12} /> : <X size={12} />}
+                                            {otCase.requireSignature ? t("yes") : t("no")}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button
                                                 onClick={() => openEditForm(otCase)}

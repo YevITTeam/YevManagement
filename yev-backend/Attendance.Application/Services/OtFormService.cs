@@ -518,13 +518,17 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(otForm.Id);
         }
 
-        // Edit the entire form (fields + employees + ProcessPart) — only the creator can edit it, and
-        // only while the form is still Pending (not yet approved at any level). Once past any level it
-        // becomes locked (see docs).
+        // Edit an existing form — restricted to ONLY each active employee's actual OT end time ("thực
+        // tích" — chốt lại 2026-07-31, xem docs/attendance-module.md — Sửa đơn: giới hạn chỉ sửa thực
+        // tích). Every other field (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/
+        // ProcessPart) AND the employee list itself (thêm/bớt người) are now FIXED after creation —
+        // dropping a person still goes through the separate "Loại khỏi đơn" flow
+        // (RemoveEmployeeAsync), not through this endpoint. Only the creator can edit, and only while
+        // the form is still Draft/PendingGroupHead/Pending (see IsEditableStatus).
         public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, bool isAdmin, UpdateOtFormDto request)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted,
-                x => x.OtFormEmployees, x => x.ProcessPart);
+                x => x.OtFormEmployees);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
 
             if (otForm!.CreatedByUserName != currentUserName)
@@ -533,136 +537,45 @@ namespace Attendance.Application.Services
             if (!IsEditableStatus(otForm.Status))
                 throw new DomainException("Đơn đã được Trưởng phòng duyệt trở lên, không thể sửa nữa.");
 
-            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == request.GroupId && !x.IsDeleted);
-            group.OrThrowNotFound("Nhóm", request.GroupId);
+            // Re-check the creator's scope for THIS form's (now fixed) Group/Department hasn't been
+            // revoked since creation — defense-in-depth, same permission model as CreateAsync.
+            await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, otForm.GroupId, otForm.DepartmentId);
 
-            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == request.DepartmentId && !x.IsDeleted);
-            department.OrThrowNotFound("Bộ phận", request.DepartmentId);
-
-            if (group!.DepartmentId != request.DepartmentId)
-                throw new DomainException($"Nhóm '{group.GroupNameVn}' không thuộc Bộ phận đã chọn.");
-
-            var reason = await _unitOfWork.Reasons.FirstOrDefaultAsync(x => x.Id == request.ReasonId && !x.IsDeleted);
-            reason.OrThrowNotFound("Lý do", request.ReasonId);
-
-            var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == request.OtCaseId && !x.IsDeleted);
-            otCase.OrThrowNotFound("Trường hợp OT", request.OtCaseId);
-
-            // Re-check the NEW Group/Department scope from the request (not just relying on the fact
-            // that otForm was validly created before) — prevents a "Nhân viên"/Team Leader from editing
-            // their form into a Group/Department they don't have permission for, see
-            // EnsureCanCreateOrEditForScopeAsync.
-            await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, request.GroupId, request.DepartmentId);
-
-            var validatedEmployees = await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
-            var employeeById = validatedEmployees.ToDictionary(x => x.Id);
-
-            otForm.GroupId = request.GroupId;
-            otForm.DepartmentId = request.DepartmentId;
-            otForm.ReasonId = request.ReasonId;
-            otForm.OtCaseId = request.OtCaseId;
-            otForm.StartTime = request.StartTime;
-            otForm.EndTime = request.EndTime;
-            otForm.SubReason = request.SubReason;
-            otForm.TotalHour = request.TotalHour;
-            otForm.Date = request.Date;
-            otForm.NumberOfEmployee = request.Employees.Count;
-
-            // Diff instead of delete-all-then-add: removing/adding the same EmployeeId within a single
-            // SaveChanges would collide on the tracked composite key (OtFormId, EmployeeId) — employees
-            // that are kept are UPDATEd in place instead.
-            var existingByEmployeeId = otForm.OtFormEmployees.ToDictionary(x => x.EmployeeId);
+            // Removed employees never come back through this endpoint anymore (the list itself is
+            // fixed) — only active rows are eligible to have their EndTime edited.
+            var activeEmployees = otForm.OtFormEmployees.Where(x => !x.IsRemoved).ToList();
+            var activeEmployeeIds = activeEmployees.Select(x => x.EmployeeId).ToHashSet();
             var requestedEmployeeIds = request.Employees.Select(x => x.EmployeeId).ToHashSet();
 
-            // Rows an approver already dropped are NEVER hard-deleted here, even though the edit screen
-            // doesn't list them (so they're absent from request.Employees and would otherwise land in
-            // toRemove) — that audit trail has to survive any later edit
-            // (see docs/attendance-module.md — Loại nhân viên khỏi đơn).
-            var toRemove = otForm.OtFormEmployees
-                .Where(x => !requestedEmployeeIds.Contains(x.EmployeeId) && !x.IsRemoved)
-                .ToList();
-            _unitOfWork.OtFormEmployees.RemoveRange(toRemove);
+            if (requestedEmployeeIds.Count != request.Employees.Count)
+                throw new DomainException("Danh sách nhân viên có mã trùng lặp.");
+
+            if (!requestedEmployeeIds.SetEquals(activeEmployeeIds))
+                throw new DomainException(
+                    "Danh sách nhân viên trong đơn đã thay đổi — không thể thêm/bớt người khi sửa đơn, chỉ được sửa giờ kết thúc của từng người.");
+
+            var employeeCodeById = (await _unitOfWork.Employees.FindAsync(x => activeEmployeeIds.Contains(x.Id)))
+                .ToDictionary(x => x.Id, x => x.Code);
 
             foreach (var item in request.Employees)
             {
-                if (existingByEmployeeId.TryGetValue(item.EmployeeId, out var existing))
+                if (item.EndTime <= otForm.StartTime || item.EndTime > otForm.EndTime)
                 {
-                    existing.StartTime = request.StartTime;
-                    existing.EndTime = item.EndTime;
-                    existing.NoteVn = item.NoteVn;
-                    existing.NoteJp = item.NoteJp;
-
-                    // Deliberately putting a previously dropped employee back on the form — clear the
-                    // removal marks so they count and accumulate again. Only the creator can reach this
-                    // code, and only while the form is still Draft/PendingGroupHead/Pending.
-                    if (existing.IsRemoved)
-                    {
-                        existing.IsRemoved = false;
-                        existing.RemovedByUserName = null;
-                        existing.RemovedByFullName = null;
-                        existing.RemovedAtLevel = null;
-                        existing.RemovedAt = null;
-                        existing.RemoveReason = null;
-                    }
-
-                    _unitOfWork.OtFormEmployees.Update(existing);
-                }
-                else
-                {
-                    var employee = employeeById[item.EmployeeId];
-                    await _unitOfWork.OtFormEmployees.AddAsync(new OtFormEmployee
-                    {
-                        OtFormId = otForm.Id,
-                        EmployeeId = item.EmployeeId,
-                        StartTime = request.StartTime,
-                        EndTime = item.EndTime,
-                        NoteVn = item.NoteVn,
-                        NoteJp = item.NoteJp,
-                        // Snapshot accumulation AS OF the moment this employee is added to the form
-                        // (see OtFormEmployee.MonthToDate/YearToDate) — employees kept from before (the
-                        // `if` branch above) intentionally keep their ORIGINAL snapshot, not refreshed here.
-                        MonthToDate = employee.MonthToDate,
-                        YearToDate = employee.YearToDate
-                    });
+                    var code = employeeCodeById.GetValueOrDefault(item.EmployeeId, item.EmployeeId.ToString());
+                    throw new DomainException(
+                        $"Giờ kết thúc OT của nhân viên '{code}' phải sau giờ bắt đầu ({otForm.StartTime:HH:mm}) " +
+                        $"và không được vượt quá giờ kết thúc của đơn ({otForm.EndTime:HH:mm}).");
                 }
             }
 
-            if (otForm.ProcessPart != null)
+            var activeByEmployeeId = activeEmployees.ToDictionary(x => x.EmployeeId);
+            foreach (var item in request.Employees)
             {
-                if (request.ProcessPart == null)
-                {
-                    _unitOfWork.ProcessParts.Delete(otForm.ProcessPart);
-                }
-                else
-                {
-                    otForm.ProcessPart.IsEat = request.ProcessPart.IsEat;
-                    otForm.ProcessPart.MainTicketCount = request.ProcessPart.MainTicketCount;
-                    otForm.ProcessPart.SecondaryTicketCount = request.ProcessPart.SecondaryTicketCount;
-                    otForm.ProcessPart.MilkCount = request.ProcessPart.MilkCount;
-                    otForm.ProcessPart.IsTransportation = request.ProcessPart.IsTransportation;
-                    otForm.ProcessPart.IsUseCopyRoom = request.ProcessPart.IsUseCopyRoom;
-                    otForm.ProcessPart.AnotherSuggestionVn = request.ProcessPart.AnotherSuggestionVn;
-                    otForm.ProcessPart.AnotherSuggestionJp = request.ProcessPart.AnotherSuggestionJp;
-                    _unitOfWork.ProcessParts.Update(otForm.ProcessPart);
-                }
-            }
-            else if (request.ProcessPart != null)
-            {
-                await _unitOfWork.ProcessParts.AddAsync(new ProcessPart
-                {
-                    OtFormId = otForm.Id,
-                    IsEat = request.ProcessPart.IsEat,
-                    MainTicketCount = request.ProcessPart.MainTicketCount,
-                    SecondaryTicketCount = request.ProcessPart.SecondaryTicketCount,
-                    MilkCount = request.ProcessPart.MilkCount,
-                    IsTransportation = request.ProcessPart.IsTransportation,
-                    IsUseCopyRoom = request.ProcessPart.IsUseCopyRoom,
-                    AnotherSuggestionVn = request.ProcessPart.AnotherSuggestionVn,
-                    AnotherSuggestionJp = request.ProcessPart.AnotherSuggestionJp
-                });
+                var existing = activeByEmployeeId[item.EmployeeId];
+                existing.EndTime = item.EndTime;
+                _unitOfWork.OtFormEmployees.Update(existing);
             }
 
-            _unitOfWork.OtForms.Update(otForm);
             await _unitOfWork.SaveChangesAsync();
 
             return await GetByIdAsync(otForm.Id);
@@ -752,13 +665,9 @@ namespace Attendance.Application.Services
         public async Task<OtFormDto> RemoveEmployeeAsync(
             int id, string userName, string? fullName, bool isAdmin, bool isGeneralDirector, RemoveOtFormEmployeeDto request)
         {
-            // Second-factor password gate — removing someone changes a signed document, so it is held to
-            // the same bar as sign/approve/reject in the app (see docs/attendance-module.md — Mật khẩu
-            // cấp 2). Verified before any write. The email-channel twin (RemoveEmployeeByEmailTokenAsync)
-            // deliberately SKIPS this — the token itself is the credential there, same call the user made
-            // for that channel's other actions (chốt qua AskUserQuestion 2026-07-31).
-            await _secondaryPasswordService.VerifyAsync(userName, request.SecondaryPassword);
-
+            // No second-factor password gate here — unlike sign/approve/reject, removing an employee does
+            // not re-verify SecondaryPassword (chốt lại 2026-07-31, see docs/attendance-module.md — Mật
+            // khẩu cấp 2). Same as the email-channel twin (RemoveEmployeeByEmailTokenAsync).
             return await RemoveEmployeeCoreAsync(id, userName, fullName, isAdmin, isGeneralDirector, request.EmployeeId, request.Reason);
         }
 

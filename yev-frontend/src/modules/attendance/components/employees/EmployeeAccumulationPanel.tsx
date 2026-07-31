@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AlertTriangle, Clock } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -76,6 +77,27 @@ export default function EmployeeAccumulationPanel() {
                 <p className="mt-1 text-[15px] text-[#5e3f3a]">
                     {employee.code} — {employee.lastName} {employee.firstName} ({employee.groupNameVn})
                 </p>
+            </div>
+
+            <div className="grid max-w-xl grid-cols-2 gap-4">
+                {[
+                    { label: t("fieldMonthToDate"), value: employee.monthToDate, overLimit: employee.monthToDate > 25 },
+                    { label: t("fieldYearToDate"), value: employee.yearToDate, overLimit: employee.yearToDate > 300 },
+                ].map((stat) => (
+                    <div key={stat.label} className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-[#5e3f3a]">{stat.label}</p>
+                                <h2 className={`mt-1 text-2xl font-semibold ${stat.overLimit ? "text-[#930006]" : "text-[#191c1e]"}`}>
+                                    {stat.value}h
+                                </h2>
+                            </div>
+                            <div className={`rounded-md p-3 ${stat.overLimit ? "bg-[#fff4f2] text-[#e3000f]" : "bg-[#f8fafc] text-[#5e3f3a]"}`}>
+                                {stat.overLimit ? <AlertTriangle size={20} /> : <Clock size={20} />}
+                            </div>
+                        </div>
+                    </div>
+                ))}
             </div>
 
             <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">

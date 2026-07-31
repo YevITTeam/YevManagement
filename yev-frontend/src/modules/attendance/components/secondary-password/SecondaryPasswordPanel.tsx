@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AlertTriangle, Check, Clock } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -69,20 +70,23 @@ export default function SecondaryPasswordPanel() {
                                 {t("currentStatusLabel")}
                             </div>
                             {status?.isRegistered ? (
-                                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                                <p className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                                    <Check className="h-4 w-4 shrink-0" />
                                     {status.updatedAt
                                         ? t("registeredWithDate", { date: new Date(status.updatedAt).toLocaleString("vi-VN") })
                                         : t("registered")}
                                 </p>
                             ) : (
-                                <p className="rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-sm text-[#9a5b00]">
+                                <p className="flex items-center gap-1.5 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-sm text-[#9a5b00]">
+                                    <AlertTriangle className="h-4 w-4 shrink-0" />
                                     {t("notRegistered")}
                                 </p>
                             )}
                         </div>
 
                         {confirmationSent ? (
-                            <div className="rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
+                            <div className="flex items-center gap-1.5 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
+                                <Clock className="h-4 w-4 shrink-0" />
                                 {t("confirmationSentMessage")}
                             </div>
                         ) : (

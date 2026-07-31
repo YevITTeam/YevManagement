@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Check, Clock, UserX, X } from "lucide-react";
+import { Car, Check, Clock, MessageCircle, Printer, UserX, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
@@ -86,6 +86,34 @@ function buildApprovalSteps(form: OtFormDto, levels: number[]): ApprovalStep[] {
         }
         return step;
     });
+}
+
+// Cùng pattern ProcessPartTile của OtFormDetail.tsx — badge song ngữ xanh lá/xám thay vì text phẳng.
+function ProcessPartTile({ icon, label, active, activeLabel, inactiveLabel }: {
+    icon: ReactNode;
+    label: string;
+    active: boolean;
+    activeLabel: string;
+    inactiveLabel: string;
+}) {
+    return (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5">
+            <span className="flex items-center gap-2 text-sm text-[#191c1e]">
+                <span className="text-[#5e3f3a]">{icon}</span>
+                {label}
+            </span>
+            <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                    active
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-[#e0e3e5] bg-white text-[#8a8f94]"
+                }`}
+            >
+                {active ? <Check size={12} /> : <X size={12} />}
+                {active ? activeLabel : inactiveLabel}
+            </span>
+        </div>
+    );
 }
 
 // Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-api-fe.md §4.6.
@@ -395,30 +423,51 @@ export default function OtFormEmailConfirmPage() {
                 {/* Nhãn/giá trị dựng thủ công từ literal song ngữ (bilingual.ts), KHÔNG đi qua
                     createBilingualTranslator — {value} bên dưới TỰ nó đã là chuỗi song ngữ
                     ("Có / はい"), ghép qua t() sẽ lặp lại 2 lần (bug đã gặp thực tế). */}
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{processPartTitleBilingual}</h2>
-                <div className="flex flex-wrap gap-4 text-sm text-[#191c1e]">
-                    <span>
-                        {processPartFieldLabelsBilingual.eat}: {bilingualYesNo(Boolean(form.processPart?.isEat))}
-                    </span>
-                    <span>
-                        {processPartFieldLabelsBilingual.transportation}: {bilingualYesNo(Boolean(form.processPart?.isTransportation))}
-                    </span>
-                    <span>
-                        {processPartFieldLabelsBilingual.copyRoom}: {bilingualYesNo(Boolean(form.processPart?.isUseCopyRoom))}
-                    </span>
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{processPartTitleBilingual}</h2>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                    <ProcessPartTile
+                        icon={<Utensils size={16} />}
+                        label={processPartFieldLabelsBilingual.eat}
+                        active={Boolean(form.processPart?.isEat)}
+                        activeLabel={bilingualYesNo(true)}
+                        inactiveLabel={bilingualYesNo(false)}
+                    />
+                    <ProcessPartTile
+                        icon={<Car size={16} />}
+                        label={processPartFieldLabelsBilingual.transportation}
+                        active={Boolean(form.processPart?.isTransportation)}
+                        activeLabel={bilingualYesNo(true)}
+                        inactiveLabel={bilingualYesNo(false)}
+                    />
+                    <ProcessPartTile
+                        icon={<Printer size={16} />}
+                        label={processPartFieldLabelsBilingual.copyRoom}
+                        active={Boolean(form.processPart?.isUseCopyRoom)}
+                        activeLabel={bilingualYesNo(true)}
+                        inactiveLabel={bilingualYesNo(false)}
+                    />
                 </div>
                 {form.processPart?.isEat && (
-                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
-                        <span>{t("mainTicketLabel", { count: form.processPart.mainTicketCount })}</span>
-                        <span>{t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}</span>
-                        <span>{t("milkLabel", { count: form.processPart.milkCount })}</span>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                            {t("mainTicketLabel", { count: form.processPart.mainTicketCount })}
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                            {t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                            {t("milkLabel", { count: form.processPart.milkCount })}
+                        </span>
                     </div>
                 )}
                 {form.processPart?.anotherSuggestionVn && (
-                    <p className="mt-2 text-sm text-[#5e3f3a]">
-                        {processPartFieldLabelsBilingual.anotherSuggestion}:{" "}
-                        {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
-                    </p>
+                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#5e3f3a]">
+                        <MessageCircle size={16} className="mt-0.5 shrink-0 text-[#5e3f3a]" />
+                        <span>
+                            <span className="font-semibold text-[#191c1e]">{processPartFieldLabelsBilingual.anotherSuggestion}: </span>
+                            {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
+                        </span>
+                    </div>
                 )}
             </section>
 

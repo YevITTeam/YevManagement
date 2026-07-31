@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, RefreshCw, X } from "lucide-react";
+import { Check, Inbox, RefreshCw, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -251,30 +251,41 @@ export default function UserApprovalScopeManager() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">{t("colUserName")}</th>
-                                <th className="px-6 py-3">{t("colScopeType")}</th>
-                                <th className="px-6 py-3">{t("colScopeName")}</th>
-                                <th className="px-6 py-3">{t("colApprovalLevel")}</th>
-                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
+                                <th className="px-4 py-2.5">{t("colUserName")}</th>
+                                <th className="px-4 py-2.5">{t("colScopeType")}</th>
+                                <th className="px-4 py-2.5">{t("colScopeName")}</th>
+                                <th className="px-4 py-2.5">{t("colApprovalLevel")}</th>
+                                <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && scopes.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={5} className="px-4 py-12">
+                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
+                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
+                                            {t("noData")}
+                                        </div>
                                     </td>
                                 </tr>
                             )}
                             {scopes.map((scope) => (
                                 <tr key={scope.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">
+                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">
                                         {scope.userFullName ?? scope.userName}
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{scopeTypeLabels[scope.scopeType]}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{scope.scopeName}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{approvalLevelLabels[scope.approvalLevel]}</td>
-                                    <td className="px-6 py-4 text-right text-sm">
+                                    <td className="px-4 py-3 text-sm">
+                                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
+                                            {scopeTypeLabels[scope.scopeType]}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{scope.scopeName}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                        <span className="inline-flex items-center rounded-full border border-[#e9bcb6] bg-[#fff4f2] px-2.5 py-0.5 text-xs font-semibold text-[#e3000f]">
+                                            {approvalLevelLabels[scope.approvalLevel]}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-sm">
                                         <button
                                             onClick={() => setDeletingScope(scope)}
                                             className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"

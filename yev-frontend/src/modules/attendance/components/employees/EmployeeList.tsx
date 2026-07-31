@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
+import { AlertTriangle, Inbox } from "lucide-react";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -161,37 +162,56 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">{t("colCode")}</th>
-                                <th className="px-6 py-3">{t("colFullName")}</th>
-                                <th className="px-6 py-3">{t("colUserName")}</th>
-                                <th className="px-6 py-3">{t("colGroup")}</th>
-                                <th className="px-6 py-3">{t("colMonthToDate")}</th>
-                                <th className="px-6 py-3">{t("colYearToDate")}</th>
-                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
+                                <th className="px-4 py-2.5">{t("colCode")}</th>
+                                <th className="px-4 py-2.5">{t("colFullName")}</th>
+                                <th className="px-4 py-2.5">{t("colUserName")}</th>
+                                <th className="px-4 py-2.5">{t("colGroup")}</th>
+                                <th className="px-4 py-2.5">{t("colMonthToDate")}</th>
+                                <th className="px-4 py-2.5">{t("colYearToDate")}</th>
+                                <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && employees.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={7} className="px-4 py-12">
+                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
+                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
+                                            {t("noData")}
+                                        </div>
                                     </td>
                                 </tr>
                             )}
                             {employees.map((employee) => {
                                 const isMonthOverLimit = employee.monthToDate > 25;
                                 const isYearOverLimit = employee.yearToDate > 300;
+                                const accumulationBadgeClass = (overLimit: boolean) =>
+                                    `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                        overLimit
+                                            ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                            : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                    }`;
                                 return (
                                 <tr key={employee.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">
+                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">
                                         {employee.lastName} {employee.firstName}
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{employee.groupNameVn}</td>
-                                    <td className={`px-6 py-4 text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>{employee.monthToDate}</td>
-                                    <td className={`px-6 py-4 text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>{employee.yearToDate}</td>
-                                    <td className="px-6 py-4 text-right text-sm">
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{employee.groupNameVn}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                        <span className={accumulationBadgeClass(isMonthOverLimit)}>
+                                            {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                            {employee.monthToDate}h
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm">
+                                        <span className={accumulationBadgeClass(isYearOverLimit)}>
+                                            {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                            {employee.yearToDate}h
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button
                                                 onClick={() => openEditForm(employee)}

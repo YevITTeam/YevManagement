@@ -71,8 +71,20 @@ export interface CreateOtFormDto {
     processPart: ProcessPartDto | null;
 }
 
-// Body PUT /api/OtForm/{id} — §4.1b, shape giống hệt CreateOtFormDto.
-export type UpdateOtFormDto = CreateOtFormDto;
+// Item của UpdateOtFormDto.employees — sửa 2026-07-31: chỉ còn EmployeeId + EndTime (bỏ NoteVn/NoteJp).
+export interface UpdateOtFormEmployeeTimeDto {
+    employeeId: number;
+    endTime: string;
+}
+
+// Body PUT /api/OtForm/{id} — §4.1b. Sửa lại 2026-07-31 (breaking): trước đây giống hệt
+// CreateOtFormDto (sửa được toàn bộ field + thêm/bớt nhân viên), nay CHỈ còn sửa được giờ kết thúc
+// thực tế của từng nhân viên ĐANG có trong đơn — mọi field khác (Group/Department/Reason/OtCase/Date/
+// StartTime/EndTime/SubReason/ProcessPart) và việc thêm/bớt người đều bị khoá sau khi tạo đơn (xem
+// docs/attendance-module.md — Sửa đơn: giới hạn chỉ sửa thực tích).
+export interface UpdateOtFormDto {
+    employees: UpdateOtFormEmployeeTimeDto[];
+}
 
 // Rút gọn của OtFormApprovalHistoryDto — có mặt trên cả 5 endpoint danh sách (my-forms/
 // pending-submissions/pending-approvals/my-actions/my-participations), bỏ comment/signatureImage/
@@ -158,18 +170,17 @@ export interface RejectOtFormDto {
     secondaryPassword: string;
 }
 
-// Body POST /api/OtForm/{id}/employees/remove — §4.5a, mới 2026-07-30. Loại 1 nhân viên khỏi đơn để
-// duyệt được phần còn lại thay vì từ chối cả đơn — endpoint riêng, tách biệt khỏi approve (xem
-// docs/attendance-module.md — Loại nhân viên khỏi đơn). Cả 3 field bắt buộc.
+// Body POST /api/OtForm/{id}/employees/remove — §4.5a, mới 2026-07-30, sửa 2026-07-31 (bỏ mật khẩu
+// cấp 2 — user chốt hành động loại nhân viên không cần xác thực lại, khác Duyệt/Từ chối). Loại 1 nhân
+// viên khỏi đơn để duyệt được phần còn lại thay vì từ chối cả đơn — endpoint riêng, tách biệt khỏi
+// approve (xem docs/attendance-module.md — Loại nhân viên khỏi đơn).
 export interface RemoveOtFormEmployeeDto {
     employeeId: number;
     reason: string;
-    secondaryPassword: string;
 }
 
-// Body POST /api/OtForm/email-confirm/{token}/employees/remove — §4.5a, mới 2026-07-31. Song sinh của
-// RemoveOtFormEmployeeDto cho kênh email — token trong URL đã là thông tin xác thực nên KHÔNG có
-// secondaryPassword (khác Duyệt/Từ chối qua email vẫn giữ mật khẩu cấp 2, đã chốt qua AskUserQuestion).
+// Body POST /api/OtForm/email-confirm/{token}/employees/remove — §4.5a, mới 2026-07-31. Cùng shape với
+// RemoveOtFormEmployeeDto — không endpoint nào yêu cầu mật khẩu cấp 2 cho hành động loại nhân viên.
 export interface RemoveOtFormEmployeeByEmailTokenDto {
     employeeId: number;
     reason: string;

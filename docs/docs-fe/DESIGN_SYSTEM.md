@@ -121,19 +121,46 @@ Không vuông cứng, không tròn mềm. Thang thống nhất:
 
 Giữ nguyên khung thật của dự án (`(pc-manager)/layout.tsx` + `PcManagerSidebar.tsx`), diễn giải theo chuẩn dashboard.
 
+**Khung chiều cao + vùng cuộn khai ở root layout, KHÔNG khai lại ở layout con:**
+
 ```tsx
-<div className="min-h-screen bg-[#f8fafc] text-[#191c1e]">
-  <Sidebar />                                   {/* fixed, trái */}
-  <div className="ml-[13.75rem] flex min-h-screen flex-col">
-    <main className="flex-1 overflow-y-auto p-6 md:p-8 lg:p-10">
+// src/app/[locale]/layout.tsx — DUY NHẤT nơi khai chiều cao & vùng cuộn của app
+<body className="... flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible">
+  <Header />                                                    {/* h-16, sticky → chiếm chỗ thật */}
+  <main className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">
+    {children}                                                  {/* ← mọi layout con vào đây */}
+  </main>
+</body>
+
+// src/app/[locale]/(pc-manager)/layout.tsx — layout con: CHỈ min-h-full, không tự cuộn
+<div className="min-h-full bg-[#f7f9fb] text-[#191c1e]">
+  <Sidebar />                                                   {/* fixed, trái */}
+  <div className="min-h-full" style={{ marginLeft: "var(--sidebar-w, 13.75rem)" }}>
+    <div className="min-h-full bg-[#f8fafc] p-6 md:p-8 lg:p-10">
       <div className="mx-auto max-w-[1280px]">{children}</div>
-    </main>
+    </div>
   </div>
 </div>
 ```
 
-- **Sidebar:** `fixed left-0 top-0 z-40 h-screen w-[13.75rem] (220px) flex flex-col border-r border-[#e0e3e5] bg-[#f7f9fb]`. Logo YEV = ô vuông `bg-[#e3000f] text-white`. Khối user đẩy xuống đáy bằng `mt-auto`.
-- **Main:** vùng cuộn duy nhất, nội dung giới hạn `max-w-[1280px]` căn giữa.
+- **Sidebar:** `fixed left-0 top-0 z-40 h-screen w-[13.75rem] (220px) flex flex-col border-r border-[#e0e3e5] bg-[#f7f9fb]`. Logo YEV = ô vuông `bg-[#e3000f] text-white`. Khối user đẩy xuống đáy bằng `mt-auto`. (`fixed` → nằm ngoài luồng nên `h-screen` ở đây là ĐÚNG.)
+- **Main:** vùng cuộn duy nhất của toàn app, đặt ở root layout; nội dung giới hạn `max-w-[1280px]` căn giữa.
+
+> ⚠️ **Bẫy "2 thanh cuộn chồng nhau"** — lỗi thật, người dùng phải báo 3 lần mới truy hết gốc
+> (sửa 2026-07-31). Layout con **TUYỆT ĐỐI KHÔNG** được:
+> - khai `h-screen` / `max-h-screen` / `min-h-screen` / `calc(100vh-…)` → dùng `h-full` / `min-h-full`;
+> - tự mở thêm `overflow-y-auto` ở tầng bọc toàn trang;
+> - lồng thêm `<main>` (root layout đã có — 2 `<main>` lồng nhau là HTML không hợp lệ).
+>
+> **Vì sao:** `Header` cao `h-16` = `4rem` và nằm **trong luồng** (`sticky`, KHÔNG phải `fixed`). Layout
+> con tự khai `100vh` cho phần nằm *dưới* header → tổng chiều cao trang thành `100vh + 4rem` → tràn
+> viewport → `document` sinh thanh cuộn riêng, chồng lên thanh cuộn `overflow-y-auto` của layout con.
+> Hai thanh cuộn lệch nhau khiến nội dung bị **cắt/che** ở khoảng giữa. Đã thử vá bằng `min-h-0`, rồi
+> bằng `calc(100vh-4rem)`, vẫn tái phát — vì bản chất là **nhiều tầng cùng tranh quản chiều cao**. Chữa
+> dứt điểm bằng cách dồn hết về root layout như mẫu trên.
+>
+> Ghi nhớ kèm theo: mọi flex item đóng vai vùng cuộn (`flex-1 overflow-y-auto`) **phải có `min-h-0`** —
+> flex item mặc định `min-height: auto` nên không chịu co theo chiều cao khối cha.
 - **Header (tuỳ chọn):** nếu trang cần thanh trên (breadcrumb + search + avatar) thì dùng `border-b border-[#e0e3e5] bg-white px-6 py-4`, đặt tĩnh trên đầu cột nội dung (không `fixed`).
 - **Responsive:** nhóm KPI dùng `grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4`; bảng luôn bọc `overflow-x-auto`.
 

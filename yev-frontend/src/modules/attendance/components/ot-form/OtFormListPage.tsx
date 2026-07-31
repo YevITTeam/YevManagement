@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, RefreshCw, X } from "lucide-react";
+import { Check, Inbox, RefreshCw, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
@@ -164,22 +164,25 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">{t("colDepartmentGroup")}</th>
-                                <th className="px-6 py-3">{t("colOtCase")}</th>
-                                <th className="px-6 py-3">{t("colDate")}</th>
-                                <th className="px-6 py-3">{t("colTotalHour")}</th>
-                                <th className="px-6 py-3">{t("colNumberOfEmployee")}</th>
-                                <th className="px-6 py-3">{t("colCreatedBy")}</th>
-                                <th className="px-6 py-3">{t("colStatus")}</th>
-                                <th className="px-6 py-3">{t("colApprovalProgress")}</th>
-                                {mode === "my-forms" && <th className="px-6 py-3 text-right">{tCommon("actions")}</th>}
+                                <th className="px-4 py-2.5">{t("colDepartmentGroup")}</th>
+                                <th className="px-4 py-2.5">{t("colOtCase")}</th>
+                                <th className="px-4 py-2.5">{t("colDate")}</th>
+                                <th className="px-4 py-2.5">{t("colTotalHour")}</th>
+                                <th className="px-4 py-2.5">{t("colNumberOfEmployee")}</th>
+                                <th className="px-4 py-2.5">{t("colCreatedBy")}</th>
+                                <th className="px-4 py-2.5">{t("colStatus")}</th>
+                                <th className="px-4 py-2.5">{t("colApprovalProgress")}</th>
+                                {mode === "my-forms" && <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>}
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && forms.length === 0 && (
                                 <tr>
-                                    <td colSpan={columnCount} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={columnCount} className="px-4 py-12">
+                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
+                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
+                                            {t("noData")}
+                                        </div>
                                     </td>
                                 </tr>
                             )}
@@ -189,31 +192,35 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                     onClick={() => router.push({ pathname: "/ot/forms", query: { id: String(form.id) } })}
                                     className="cursor-pointer border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]"
                                 >
-                                    <td className="px-6 py-4 align-top">
+                                    <td className="px-4 py-3 align-top">
                                         <div className="text-sm font-semibold text-[#191c1e]">
                                             {bilingualText(form.departmentNameVn, form.departmentNameJp)}
                                         </div>
                                         <div className="text-xs text-[#5e3f3a]">{bilingualText(form.groupNameVn, form.groupNameJp)}</div>
                                     </td>
-                                    <td className="px-6 py-4 align-top text-sm text-[#191c1e]">{form.otCaseCode}</td>
-                                    <td className="px-6 py-4 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
-                                    <td className="px-6 py-4 align-top text-sm text-[#191c1e]">{form.totalHour}</td>
-                                    <td className="px-6 py-4 align-top text-sm text-[#191c1e]">{form.numberOfEmployee}</td>
-                                    <td className="px-6 py-4 align-top text-sm text-[#5e3f3a]">
+                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{form.otCaseCode}</td>
+                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
+                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">
+                                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
+                                            {form.totalHour}h
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{form.numberOfEmployee}</td>
+                                    <td className="px-4 py-3 align-top text-sm text-[#5e3f3a]">
                                         {form.createdByFullName ?? form.createdByUserName}
                                     </td>
-                                    <td className="px-6 py-4 align-top">
+                                    <td className="px-4 py-3 align-top">
                                         <span
                                             className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
                                         >
                                             {otFormStatusLabels[form.status] ?? t("unknownStatus")}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 align-top">
+                                    <td className="px-4 py-3 align-top">
                                         <ApprovalSummaryCell summary={form.approvalSummary} status={form.status} />
                                     </td>
                                     {mode === "my-forms" && (
-                                        <td className="px-6 py-4 align-top text-right">
+                                        <td className="px-4 py-3 align-top text-right">
                                             {form.isEditable && canCreate && (
                                                 <button
                                                     onClick={(event) => {

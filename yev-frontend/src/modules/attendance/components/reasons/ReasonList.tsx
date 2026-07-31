@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
+import { Inbox } from "lucide-react";
 
 import { ReasonApi } from "@/modules/attendance/api/reason.api";
 import type { ReasonDto } from "@/modules/attendance/types/reason.dto";
@@ -152,24 +153,27 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">{t("colNameVn")}</th>
-                                <th className="px-6 py-3">{t("colNameJp")}</th>
-                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
+                                <th className="px-4 py-2.5">{t("colNameVn")}</th>
+                                <th className="px-4 py-2.5">{t("colNameJp")}</th>
+                                <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && reasons.length === 0 && (
                                 <tr>
-                                    <td colSpan={3} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={3} className="px-4 py-12">
+                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
+                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
+                                            {t("noData")}
+                                        </div>
                                     </td>
                                 </tr>
                             )}
                             {reasons.map((reason) => (
                                 <tr key={reason.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{reason.reasonNameVn}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{reason.reasonNameJp || "-"}</td>
-                                    <td className="px-6 py-4 text-right text-sm">
+                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{reason.reasonNameVn}</td>
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{reason.reasonNameJp || "-"}</td>
+                                    <td className="px-4 py-3 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button
                                                 onClick={() => openEditForm(reason)}

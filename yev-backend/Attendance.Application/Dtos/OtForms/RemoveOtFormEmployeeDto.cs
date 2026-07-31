@@ -15,9 +15,7 @@ namespace Attendance.Application.Dtos.OtForms
         [Required(ErrorMessage = "Lý do loại nhân viên khỏi đơn không được để trống")]
         public string Reason { get; set; } = null!;
 
-        // Second-factor password, re-verified by OtFormService before the removal is recorded — same
-        // gate as sign/approve/reject (see docs/attendance-module.md — Mật khẩu cấp 2).
-        [Required(ErrorMessage = "Mật khẩu cấp 2 không được để trống")]
-        public string SecondaryPassword { get; set; } = null!;
+        // No SecondaryPassword — unlike sign/approve/reject, removing an employee does not re-verify
+        // the second-factor password (decided 2026-07-31, see docs/attendance-module.md — Mật khẩu cấp 2).
     }
 }

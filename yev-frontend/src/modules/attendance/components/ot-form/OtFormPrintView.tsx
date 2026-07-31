@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download } from "lucide-react";
+import { Download, Printer, RectangleHorizontal, RectangleVertical } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -628,51 +628,56 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                 khung trang thật, gây tràn/mất phần cuối trang (footer) hoặc sinh trang trắng thừa khi in. */}
             <style>{`@page { size: ${isA5 ? "210mm 148mm" : "8.5in 11in"}; margin: 0; }`}</style>
 
-            <div className="no-print print:hidden mx-auto mb-4 flex max-w-4xl items-center justify-between rounded-lg border border-[#e0e3e5] bg-white px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-2 text-sm text-[#5e3f3a]">
-                    <span className="font-semibold text-[#191c1e]">{t("paperSizeLabel")}</span>
-                    <button
-                        onClick={() => selectPaperSize("a4")}
-                        className={`cursor-pointer rounded-lg border px-3 py-1.5 font-semibold transition ${
-                            paperSize === "a4"
-                                ? "border-[#e3000f] bg-[#fff4f2] text-[#e3000f]"
-                                : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
-                        }`}
-                    >
-                        {t("paperSizeA4")}
-                    </button>
-                    <button
-                        onClick={() => selectPaperSize("a5")}
-                        className={`cursor-pointer rounded-lg border px-3 py-1.5 font-semibold transition ${
-                            paperSize === "a5"
-                                ? "border-[#e3000f] bg-[#fff4f2] text-[#e3000f]"
-                                : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
-                        }`}
-                    >
-                        {t("paperSizeA5")}
-                    </button>
+            <div className="no-print print:hidden mx-auto mb-4 max-w-4xl space-y-2">
+                <div className="flex flex-col gap-3 rounded-lg border border-[#e0e3e5] bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("paperSizeLabel")}</span>
+                        <button
+                            onClick={() => selectPaperSize("a4")}
+                            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                                paperSize === "a4"
+                                    ? "border-[#e3000f] bg-[#fff4f2] text-[#e3000f]"
+                                    : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
+                            }`}
+                        >
+                            <RectangleVertical className="h-4 w-4" /> {t("paperSizeA4Short")}
+                        </button>
+                        <button
+                            onClick={() => selectPaperSize("a5")}
+                            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+                                paperSize === "a5"
+                                    ? "border-[#e3000f] bg-[#fff4f2] text-[#e3000f]"
+                                    : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
+                            }`}
+                        >
+                            <RectangleHorizontal className="h-4 w-4" /> {t("paperSizeA5Short")}
+                        </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExportPdf}
+                            disabled={isExportingPdf}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {isExportingPdf ? (
+                                t("exporting")
+                            ) : (
+                                <>
+                                    <Download className="h-4 w-4" /> {t("exportPdfButton")}
+                                </>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => window.print()}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                        >
+                            <Printer className="h-4 w-4" /> {t("printButton")}
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={handleExportPdf}
-                        disabled={isExportingPdf}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        {isExportingPdf ? (
-                            t("exporting")
-                        ) : (
-                            <>
-                                <Download className="h-4 w-4" /> {t("exportPdfButton")}
-                            </>
-                        )}
-                    </button>
-                    <button
-                        onClick={() => window.print()}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
-                    >
-                        {t("printButton")}
-                    </button>
-                </div>
+                {/* Chú thích sức chứa của khổ đang chọn — tách khỏi label nút để nút gọn, không bị xuống
+                    dòng/vỡ layout như trước (giữ nguyên nội dung text cũ, chỉ đổi chỗ hiển thị). */}
+                <p className="px-1 text-xs text-[#8a8f94]">{isA5 ? t("paperSizeA5") : t("paperSizeA4")}</p>
             </div>
 
             <div className="mx-auto max-w-4xl bg-white p-6 print:p-0 print:shadow-none shadow-sm">

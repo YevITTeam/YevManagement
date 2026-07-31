@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AlertTriangle, Car, Printer, Users, Utensils } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
@@ -17,7 +17,13 @@ import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import type { MyCreateScopeItemDto, OtFormEmployeeInputDto, ProcessPartDto } from "@/modules/attendance/types/ot-form.dto";
+import type {
+    MyCreateScopeItemDto,
+    OtFormEmployeeDto,
+    OtFormEmployeeInputDto,
+    ProcessPartDto,
+    UpdateOtFormEmployeeTimeDto,
+} from "@/modules/attendance/types/ot-form.dto";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -126,6 +132,42 @@ function TimePicker24h({
     );
 }
 
+// Ô checkbox dạng chip có icon (thay checkbox+label phẳng) — viền/nền đổi màu khi chọn, cùng ngôn ngữ
+// hình ảnh (icon + badge xanh lá) với ProcessPartTile ở OtFormDetail.tsx/OtFormEmailConfirmPage.tsx.
+function ToggleOptionCard({
+    icon,
+    label,
+    checked,
+    onChange,
+    disabled,
+}: {
+    icon: ReactNode;
+    label: string;
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    disabled?: boolean;
+}) {
+    return (
+        <label
+            className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition ${
+                checked
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f8fafc]"
+            } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+        >
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => onChange(event.target.checked)}
+                disabled={disabled}
+                className="sr-only"
+            />
+            <span className={checked ? "text-emerald-600" : "text-[#5e3f3a]"}>{icon}</span>
+            {label}
+        </label>
+    );
+}
+
 interface CreateOtFormPageProps {
     // Có giá trị → màn "Sửa đơn" (đổ sẵn dữ liệu, submit gọi PUT thay vì POST) — docs §1.3.A/§4.1b.
     otFormId?: number;
@@ -159,6 +201,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
     const [employeeOverrides, setEmployeeOverrides] = useState<Record<number, EmployeeOverride>>({});
+    // Chỉ dùng khi Sửa đơn — danh sách nhân viên CỐ ĐỊNH lấy thẳng từ đơn (đã lọc bỏ người bị loại),
+    // KHÔNG phải từ groupEmployees (chọn theo Nhóm, chỉ dùng lúc Tạo mới). Sửa đơn giờ chỉ được đổi
+    // giờ kết thúc thực tế của từng người, không thêm/bớt được ai — xem docs §Sửa đơn: giới hạn chỉ
+    // sửa thực tích.
+    const [editEmployees, setEditEmployees] = useState<OtFormEmployeeDto[]>([]);
 
     const [processPartEnabled, setProcessPartEnabled] = useState(false);
     const [processPart, setProcessPart] = useState<ProcessPartDto>(emptyProcessPart);
@@ -254,10 +301,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 setStartTime(data.startTime.slice(0, 5));
                 setEndTime(data.endTime.slice(0, 5));
                 setSubReason(data.subReason ?? "");
-                setSelectedEmployeeIds(data.employees.map((e) => e.employeeId));
+                // Người đã bị 1 cấp duyệt loại khỏi đơn (isRemoved) KHÔNG được đưa vào danh sách sửa —
+                // BE giờ CHỈ chấp nhận đúng tập nhân viên đang active, đưa cả người đã bị loại vào sẽ bị
+                // 400 "danh sách nhân viên đã thay đổi" (xem UpdateAsync).
+                const activeEmployees = data.employees.filter((e) => !e.isRemoved);
+                setEditEmployees(activeEmployees);
+                setSelectedEmployeeIds(activeEmployees.map((e) => e.employeeId));
                 setEmployeeOverrides(
                     Object.fromEntries(
-                        data.employees.map((e) => [
+                        activeEmployees.map((e) => [
                             e.employeeId,
                             { endTime: e.endTime.slice(0, 5), noteVn: e.noteVn ?? "", noteJp: e.noteJp ?? "" },
                         ])
@@ -297,11 +349,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }
 
     useEffect(() => {
-        if (!groupId) return;
+        // Sửa đơn không cần tải toàn bộ nhân viên trong Nhóm — danh sách để sửa lấy thẳng từ đơn
+        // (editEmployees), không cho chọn thêm người mới nữa.
+        if (!groupId || isEditMode) return;
         EmployeeApi.getEmployeesByGroup(groupId)
             .then(setGroupEmployees)
             .catch((err) => console.error(err));
-    }, [groupId]);
+    }, [groupId, isEditMode]);
 
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
 
@@ -342,16 +396,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
 
-        if (
-            !groupId ||
-            !departmentId ||
-            !reasonId ||
-            !otCaseId ||
-            !date ||
-            !startTime ||
-            !endTime ||
-            selectedEmployeeIds.length === 0
-        ) {
+        // Sửa đơn: mọi field khác đã bị khoá disabled từ trước (không đổi được), chỉ còn kiểm tra có
+        // ít nhất 1 người. Tạo mới: vẫn cần đủ các field bắt buộc như cũ.
+        if (!isEditMode && (!groupId || !departmentId || !reasonId || !otCaseId || !date || !startTime || !endTime)) {
+            toast.error(t("requiredFieldsError"));
+            return;
+        }
+        if (selectedEmployeeIds.length === 0) {
             toast.error(t("requiredFieldsError"));
             return;
         }
@@ -364,38 +415,44 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             let employeeEndMinutes = toMinutes(`${employeeEndTime}:00`);
             if (employeeEndMinutes < orderStartMinutes) employeeEndMinutes += 24 * 60; // qua ngày hôm sau
             if (employeeEndMinutes <= orderStartMinutes || employeeEndMinutes > orderEndMinutes) {
-                const employee = groupEmployees.find((e) => e.id === employeeId);
-                toast.error(t("employeeEndTimeError", { code: employee?.code ?? String(employeeId) }));
+                const code = isEditMode
+                    ? editEmployees.find((e) => e.employeeId === employeeId)?.employeeCode
+                    : groupEmployees.find((e) => e.id === employeeId)?.code;
+                toast.error(t("employeeEndTimeError", { code: code ?? String(employeeId) }));
                 return;
             }
         }
 
-        const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
-            employeeId,
-            endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
-            noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
-            noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
-        }));
-
-        const payload = {
-            groupId,
-            departmentId,
-            reasonId,
-            otCaseId,
-            startTime: `${startTime}:00`,
-            endTime: `${endTime}:00`,
-            subReason: subReason.trim() || null,
-            totalHour,
-            date,
-            employees,
-            processPart: processPartEnabled ? processPart : null,
-        };
-
         setIsSubmitting(true);
         try {
-            const result = isEditMode && otFormId
-                ? await OtFormApi.updateOtForm(otFormId, payload)
-                : await OtFormApi.createOtForm(payload);
+            let result;
+            if (isEditMode && otFormId) {
+                const employees: UpdateOtFormEmployeeTimeDto[] = selectedEmployeeIds.map((employeeId) => ({
+                    employeeId,
+                    endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
+                }));
+                result = await OtFormApi.updateOtForm(otFormId, { employees });
+            } else {
+                const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
+                    employeeId,
+                    endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
+                    noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
+                    noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
+                }));
+                result = await OtFormApi.createOtForm({
+                    groupId: groupId!,
+                    departmentId: departmentId!,
+                    reasonId: reasonId!,
+                    otCaseId: otCaseId!,
+                    startTime: `${startTime}:00`,
+                    endTime: `${endTime}:00`,
+                    subReason: subReason.trim() || null,
+                    totalHour,
+                    date,
+                    employees,
+                    processPart: processPartEnabled ? processPart : null,
+                });
+            }
             toast.success(isEditMode ? t("updateSuccess") : t("createSuccess"));
             router.push({ pathname: "/ot/forms", query: { id: String(result.id) } });
         } catch (err) {
@@ -460,14 +517,21 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("formInfoTitle")}</h2>
+                    <div className="flex items-center justify-between gap-2">
+                        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("formInfoTitle")}</h2>
+                        {isEditMode && (
+                            <span className="rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                                {t("formInfoLockedHint")}
+                            </span>
+                        )}
+                    </div>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
                             <select
                                 value={departmentId ?? ""}
                                 onChange={(event) => handleDepartmentChange(event.target.value)}
-                                disabled={isSubmitting || isScopeLocked}
+                                disabled={isSubmitting || isScopeLocked || isEditMode}
                                 required
                                 className={fieldClassName}
                             >
@@ -487,7 +551,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <select
                                 value={groupId ?? ""}
                                 onChange={(event) => handleGroupChange(event.target.value)}
-                                disabled={isSubmitting || isScopeLocked || !departmentId}
+                                disabled={isSubmitting || isScopeLocked || !departmentId || isEditMode}
                                 required
                                 className={fieldClassName}
                             >
@@ -507,7 +571,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <select
                                 value={reasonId ?? ""}
                                 onChange={(event) => setReasonId(event.target.value ? Number(event.target.value) : null)}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || isEditMode}
                                 required
                                 className={fieldClassName}
                             >
@@ -527,7 +591,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <select
                                 value={otCaseId ?? ""}
                                 onChange={(event) => setOtCaseId(event.target.value ? Number(event.target.value) : null)}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || isEditMode}
                                 required
                                 className={fieldClassName}
                             >
@@ -548,7 +612,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 type="date"
                                 value={date}
                                 onChange={(event) => setDate(event.target.value)}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || isEditMode}
                                 required
                                 min={isEditMode ? undefined : getTodayStr()}
                                 className={fieldClassName}
@@ -557,12 +621,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldStartTime")}</span>
-                            <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting} />
+                            <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting || isEditMode} />
                         </label>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldEndTime")}</span>
-                            <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting} />
+                            <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting || isEditMode} />
                         </label>
 
                         <label className="block">
@@ -576,7 +640,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <textarea
                             value={subReason}
                             onChange={(event) => setSubReason(event.target.value)}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || isEditMode}
                             rows={2}
                             className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                         />
@@ -584,10 +648,65 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 </section>
 
                 <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                        {t("employeeListTitle")}
-                    </h2>
-                    {!groupId ? (
+                    <div className="flex items-center justify-between gap-2">
+                        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            {t("employeeListTitle")}
+                        </h2>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                            <Users className="h-3.5 w-3.5" />
+                            {t("selectedCount", { count: selectedEmployeeIds.length })}
+                        </span>
+                    </div>
+                    {isEditMode ? (
+                        // Sửa đơn: danh sách CỐ ĐỊNH (editEmployees, lấy thẳng từ đơn) — không có ô
+                        // tick/thêm người, chỉ còn sửa được "Giờ kết thúc" của từng người đã có sẵn
+                        // (thực tích). Muốn bớt người dùng riêng chức năng "Loại khỏi đơn" ở màn Chi
+                        // tiết, không qua màn này.
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full border-collapse text-left">
+                                <thead>
+                                    <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                        <th className="px-3 py-2">{t("colEmployeeCode")}</th>
+                                        <th className="px-3 py-2">{t("colFullName")}</th>
+                                        <th className="px-3 py-2">{t("colAccumulation")}</th>
+                                        <th className="px-3 py-2">{t("colEndTime")}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {editEmployees.map((employee) => {
+                                        const isOverLimit = employee.monthToDate > 25 || employee.yearToDate > 300;
+                                        return (
+                                            <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
+                                                <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">
+                                                    {employee.employeeCode}
+                                                </td>
+                                                <td className="px-3 py-2 align-top text-sm text-[#191c1e]">{employee.fullName}</td>
+                                                <td className="px-3 py-2 align-top text-sm">
+                                                    <span
+                                                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                                            isOverLimit
+                                                                ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                                                : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                                        }`}
+                                                    >
+                                                        {isOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                                        {employee.monthToDate}h / {employee.yearToDate}h
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 align-top">
+                                                    <TimePicker24h
+                                                        value={employeeOverrides[employee.employeeId]?.endTime ?? endTime}
+                                                        onChange={(value) => handleEmployeeOverrideChange(employee.employeeId, "endTime", value)}
+                                                        disabled={isSubmitting}
+                                                    />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : !groupId ? (
                         <p className="text-sm text-[#5e3f3a]">{t("chooseGroupFirstHint")}</p>
                     ) : groupEmployees.length === 0 ? (
                         <p className="text-sm text-[#5e3f3a]">{t("noEmployeesInGroup")}</p>
@@ -609,7 +728,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         const checked = selectedEmployeeIds.includes(employee.id);
                                         const isOverLimit = employee.monthToDate > 25 || employee.yearToDate > 300;
                                         return (
-                                            <tr key={employee.id} className="border-b border-[#f1f5f9]">
+                                            <tr
+                                                key={employee.id}
+                                                className={`border-b border-[#f1f5f9] transition-colors ${checked ? "bg-[#f8fafc]" : "hover:bg-[#f8fafc]"}`}
+                                            >
                                                 <td className="px-3 py-2 align-top">
                                                     <input
                                                         type="checkbox"
@@ -623,9 +745,17 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 <td className="px-3 py-2 align-top text-sm text-[#191c1e]">
                                                     {employee.lastName} {employee.firstName}
                                                 </td>
-                                                <td className={`px-3 py-2 align-top text-sm ${isOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
-                                                    {employee.monthToDate}h / {employee.yearToDate}h
-                                                    {isOverLimit && <AlertTriangle className="ml-1 inline h-3.5 w-3.5 text-[#930006]" />}
+                                                <td className="px-3 py-2 align-top text-sm">
+                                                    <span
+                                                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                                            isOverLimit
+                                                                ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                                                : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                                        }`}
+                                                    >
+                                                        {isOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                                        {employee.monthToDate}h / {employee.yearToDate}h
+                                                    </span>
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
                                                     <TimePicker24h
@@ -650,7 +780,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             </table>
                         </div>
                     )}
-                    <p className="text-xs text-[#5e3f3a]">{t("selectedCount", { count: selectedEmployeeIds.length })}</p>
                 </section>
 
                 <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
@@ -659,7 +788,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             type="checkbox"
                             checked={processPartEnabled}
                             onChange={(event) => setProcessPartEnabled(event.target.checked)}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || isEditMode}
                             className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                         />
                         <span className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
@@ -669,41 +798,28 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
                     {processPartEnabled && (
                         <div className="space-y-4">
-                            <div className="grid gap-4 md:grid-cols-3">
-                                <label className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={processPart.isEat}
-                                        onChange={(event) => setProcessPart((current) => ({ ...current, isEat: event.target.checked }))}
-                                        disabled={isSubmitting}
-                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                    />
-                                    <span className="text-sm text-[#191c1e]">{t("eatLabel")}</span>
-                                </label>
-                                <label className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={processPart.isTransportation}
-                                        onChange={(event) =>
-                                            setProcessPart((current) => ({ ...current, isTransportation: event.target.checked }))
-                                        }
-                                        disabled={isSubmitting}
-                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                    />
-                                    <span className="text-sm text-[#191c1e]">{t("transportationLabel")}</span>
-                                </label>
-                                <label className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={processPart.isUseCopyRoom}
-                                        onChange={(event) =>
-                                            setProcessPart((current) => ({ ...current, isUseCopyRoom: event.target.checked }))
-                                        }
-                                        disabled={isSubmitting}
-                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                    />
-                                    <span className="text-sm text-[#191c1e]">{t("copyRoomLabel")}</span>
-                                </label>
+                            <div className="grid gap-3 md:grid-cols-3">
+                                <ToggleOptionCard
+                                    icon={<Utensils size={16} />}
+                                    label={t("eatLabel")}
+                                    checked={processPart.isEat}
+                                    onChange={(value) => setProcessPart((current) => ({ ...current, isEat: value }))}
+                                    disabled={isSubmitting || isEditMode}
+                                />
+                                <ToggleOptionCard
+                                    icon={<Car size={16} />}
+                                    label={t("transportationLabel")}
+                                    checked={processPart.isTransportation}
+                                    onChange={(value) => setProcessPart((current) => ({ ...current, isTransportation: value }))}
+                                    disabled={isSubmitting || isEditMode}
+                                />
+                                <ToggleOptionCard
+                                    icon={<Printer size={16} />}
+                                    label={t("copyRoomLabel")}
+                                    checked={processPart.isUseCopyRoom}
+                                    onChange={(value) => setProcessPart((current) => ({ ...current, isUseCopyRoom: value }))}
+                                    disabled={isSubmitting || isEditMode}
+                                />
                             </div>
 
                             {processPart.isEat && (
@@ -717,7 +833,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             onChange={(event) =>
                                                 setProcessPart((current) => ({ ...current, mainTicketCount: Number(event.target.value) }))
                                             }
-                                            disabled={isSubmitting}
+                                            disabled={isSubmitting || isEditMode}
                                             className={fieldClassName}
                                         />
                                     </label>
@@ -730,7 +846,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             onChange={(event) =>
                                                 setProcessPart((current) => ({ ...current, secondaryTicketCount: Number(event.target.value) }))
                                             }
-                                            disabled={isSubmitting}
+                                            disabled={isSubmitting || isEditMode}
                                             className={fieldClassName}
                                         />
                                     </label>
@@ -743,7 +859,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             onChange={(event) =>
                                                 setProcessPart((current) => ({ ...current, milkCount: Number(event.target.value) }))
                                             }
-                                            disabled={isSubmitting}
+                                            disabled={isSubmitting || isEditMode}
                                             className={fieldClassName}
                                         />
                                     </label>
@@ -757,7 +873,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     onChange={(event) =>
                                         setProcessPart((current) => ({ ...current, anotherSuggestionVn: event.target.value }))
                                     }
-                                    disabled={isSubmitting}
+                                    disabled={isSubmitting || isEditMode}
                                     className={fieldClassName}
                                 />
                             </label>

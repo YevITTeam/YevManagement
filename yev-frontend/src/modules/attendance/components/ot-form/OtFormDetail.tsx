@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
-import { Check, Clock, UserX, X } from "lucide-react";
+import { Car, Check, Clock, MessageCircle, Printer, UserX, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalHistoryDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
@@ -99,6 +99,41 @@ function buildApprovalSteps(form: OtFormDto, levels: number[]): ApprovalStep[] {
     });
 }
 
+// Ô hiển thị 1 mục trong "Yêu cầu hỗ trợ khác" (ăn uống/xe đưa đón/phòng copy) — badge màu xanh lá khi
+// Có, xám khi Không (mặc định khi form.processPart null), thay vì chuỗi text phẳng như trước.
+function ProcessPartTile({
+    icon,
+    label,
+    active,
+    activeLabel,
+    inactiveLabel,
+}: {
+    icon: ReactNode;
+    label: string;
+    active: boolean;
+    activeLabel: string;
+    inactiveLabel: string;
+}) {
+    return (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5">
+            <span className="flex items-center gap-2 text-sm text-[#191c1e]">
+                <span className="text-[#5e3f3a]">{icon}</span>
+                {label}
+            </span>
+            <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                    active
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-[#e0e3e5] bg-white text-[#8a8f94]"
+                }`}
+            >
+                {active ? <Check size={12} /> : <X size={12} />}
+                {active ? activeLabel : inactiveLabel}
+            </span>
+        </div>
+    );
+}
+
 export default function OtFormDetail({ id }: OtFormDetailProps) {
     const t = useTranslations("Attendance.OtFormDetail");
     const tCommon = useTranslations("Common");
@@ -120,9 +155,10 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     // Loại 1 nhân viên khỏi đơn — modal RIÊNG với submit/approve/reject (docs §4.5a), người dùng đã
     // chốt luồng 2 bước: loại xong xem lại đơn rồi mới bấm Duyệt, không gộp vào modal Duyệt.
+    // Không yêu cầu mật khẩu cấp 2 (khác Duyệt/Từ chối) — chốt lại 2026-07-31, áp dụng cho cả kênh
+    // trong app lẫn email.
     const [removeTarget, setRemoveTarget] = useState<OtFormEmployeeDto | null>(null);
     const [removeReason, setRemoveReason] = useState("");
-    const [removeSecondaryPassword, setRemoveSecondaryPassword] = useState("");
     const [isRemovingEmployee, setIsRemovingEmployee] = useState(false);
 
     const { isLoading, error, refetch: fetchForm } = useFetchEffect(
@@ -272,11 +308,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     const openRemove = (employee: OtFormEmployeeDto) => {
         setRemoveReason("");
-        setRemoveSecondaryPassword("");
         setRemoveTarget(employee);
-        SecondaryPasswordApi.getMyStatus()
-            .then((data) => setHasSecondaryPassword(data.isRegistered))
-            .catch(() => setHasSecondaryPassword(false));
     };
 
     const closeRemove = () => {
@@ -290,20 +322,11 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
             toast.error(t("removeReasonRequiredError"));
             return;
         }
-        if (hasSecondaryPassword === false) {
-            toast.error(t("secondaryPasswordMissingError"));
-            return;
-        }
-        if (!removeSecondaryPassword) {
-            toast.error(t("secondaryPasswordRequiredError"));
-            return;
-        }
         setIsRemovingEmployee(true);
         try {
             const updated = await OtFormApi.removeOtFormEmployee(id, {
                 employeeId: removeTarget.employeeId,
                 reason: removeReason.trim(),
-                secondaryPassword: removeSecondaryPassword,
             });
             toast.success(t("removeSuccess", { name: removeTarget.fullName }));
             setForm(updated);
@@ -464,25 +487,51 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                 (processPart?.isEat ?? false). Trước đây ẩn hẳn cả khối khi null, khiến người dùng
                 tưởng thiếu thông tin dù đây là giá trị mặc định hợp lệ, không phải dữ liệu bị mất. */}
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
-                <div className="flex flex-wrap gap-4 text-sm text-[#191c1e]">
-                    <span>{t("eatLabel", { value: form.processPart?.isEat ? t("yes") : t("no") })}</span>
-                    <span>{t("transportationLabel", { value: form.processPart?.isTransportation ? t("yes") : t("no") })}</span>
-                    <span>{t("copyRoomLabel", { value: form.processPart?.isUseCopyRoom ? t("yes") : t("no") })}</span>
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                    <ProcessPartTile
+                        icon={<Utensils size={16} />}
+                        label={t("eatFieldLabel")}
+                        active={Boolean(form.processPart?.isEat)}
+                        activeLabel={t("yes")}
+                        inactiveLabel={t("no")}
+                    />
+                    <ProcessPartTile
+                        icon={<Car size={16} />}
+                        label={t("transportationFieldLabel")}
+                        active={Boolean(form.processPart?.isTransportation)}
+                        activeLabel={t("yes")}
+                        inactiveLabel={t("no")}
+                    />
+                    <ProcessPartTile
+                        icon={<Printer size={16} />}
+                        label={t("copyRoomFieldLabel")}
+                        active={Boolean(form.processPart?.isUseCopyRoom)}
+                        activeLabel={t("yes")}
+                        inactiveLabel={t("no")}
+                    />
                 </div>
                 {form.processPart?.isEat && (
-                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
-                        <span>{t("mainTicketLabel", { count: form.processPart.mainTicketCount })}</span>
-                        <span>{t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}</span>
-                        <span>{t("milkLabel", { count: form.processPart.milkCount })}</span>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                            {t("mainTicketLabel", { count: form.processPart.mainTicketCount })}
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                            {t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                            {t("milkLabel", { count: form.processPart.milkCount })}
+                        </span>
                     </div>
                 )}
                 {form.processPart?.anotherSuggestionVn && (
-                    <p className="mt-2 text-sm text-[#5e3f3a]">
-                        {t("anotherSuggestionLabel", {
-                            value: bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp),
-                        })}
-                    </p>
+                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#5e3f3a]">
+                        <MessageCircle size={16} className="mt-0.5 shrink-0 text-[#5e3f3a]" />
+                        <span>
+                            <span className="font-semibold text-[#191c1e]">{t("anotherSuggestionFieldLabel")}: </span>
+                            {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
+                        </span>
+                    </div>
                 )}
             </section>
 
@@ -817,30 +866,6 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                 />
                             </label>
-
-                            <label className="block">
-                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
-                                </span>
-                                <input
-                                    type="password"
-                                    value={removeSecondaryPassword}
-                                    onChange={(event) => setRemoveSecondaryPassword(event.target.value)}
-                                    disabled={isRemovingEmployee}
-                                    autoComplete="off"
-                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                                />
-                            </label>
-
-                            <div
-                                className={`rounded-lg border px-3 py-2 text-xs ${
-                                    hasSecondaryPassword === false
-                                        ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                        : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                                }`}
-                            >
-                                {hasSecondaryPassword === false ? t("secondaryPasswordMissingHint") : t("secondaryPasswordOkHint")}
-                            </div>
 
                             <div className="flex justify-end gap-3 pt-2">
                                 <button

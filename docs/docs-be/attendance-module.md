@@ -102,12 +102,18 @@ Phần dưới đây (duyệt cấp Trưởng phòng → Trưởng xưởng → 
 - Reject: ở bất kỳ cấp nào, `RejectOtFormDto.Comment` bắt buộc, **không có `SignatureImage`** (từ chối chỉ ghi lý do, không ký) — `OtFormApprovalHistory.SignatureImage` luôn `null` cho dòng `Action=Rejected`. `Status → Rejected`, dừng luồng.
 
 ### §Sửa đơn khi đang Draft/Pending (2026-07-16, mở rộng phạm vi cùng ngày với luồng Draft)
-- `PUT /api/OtForm/{id}` (`OtFormService.UpdateAsync`) cho sửa **toàn bộ** đơn (danh mục + danh sách nhân viên + `ProcessPart`), điều kiện **cả hai**:
+- `PUT /api/OtForm/{id}` (`OtFormService.UpdateAsync`), điều kiện **cả hai** (không đổi):
   1. Chỉ **chính người tạo** (`OtForm.CreatedByUserName == CurrentUserName`) mới sửa được — không phải Admin, không phải Trưởng nhóm (trừ khi Trưởng nhóm đó cũng chính là người tạo), không phải cấp duyệt nào khác.
-  2. Chỉ khi `Status` là `Draft` hoặc `Pending` (**chưa tới cấp Trưởng phòng duyệt**) — qua cấp Trưởng phòng trở lên là khóa cứng, ném `DomainException`. Đây chính là câu trả lời cho yêu cầu "người tạo đơn chỉ có quyền tạo đơn và sửa trước khi được Trưởng phòng duyệt".
-- Validate lại y hệt `CreateAsync`: danh mục tồn tại, nhân viên cùng nhóm, giờ kết thúc từng nhân viên hợp lệ (`ValidateEmployeesAsync` dùng chung).
-- Danh sách nhân viên được **diff** thay vì xóa hết tạo lại (tránh đụng khóa kép `(OtFormId, EmployeeId)` khi 1 nhân viên vẫn còn trong danh sách mới): nhân viên bị bỏ khỏi request → xóa; còn giữ lại → update tại chỗ (`EndTime`/`Note`); nhân viên mới → thêm.
-- `OtFormDto.IsEditable` / `OtFormListItemDto.IsEditable` = `Status == Draft || Status == Pending` (helper `OtFormService.IsEditableStatus`) — FE dùng field này để hiện/ẩn nút "Sửa", không cần tự so sánh status.
+  2. Chỉ khi `Status` là `Draft`, `PendingGroupHead` hoặc `Pending` (**chưa tới cấp Trưởng phòng duyệt**, `IsEditableStatus`) — qua cấp Trưởng phòng trở lên là khóa cứng, ném `DomainException` "Đơn đã được Trưởng phòng duyệt trở lên, không thể sửa nữa.". Đây chính là câu trả lời cho câu hỏi "khi nào không được sửa thông tin đơn nữa".
+- `OtFormDto.IsEditable` / `OtFormListItemDto.IsEditable` = `IsEditableStatus(Status)` — FE dùng field này để hiện/ẩn nút "Sửa", không cần tự so sánh status.
+- **Giới hạn lại phạm vi sửa (2026-07-31, breaking)**: trước đây `UpdateAsync` cho sửa **toàn bộ** đơn (danh mục + danh sách nhân viên + `ProcessPart`), giống hệt `CreateAsync`. Người dùng phản hồi: đơn chỉ nên sửa được **"thực tích của nhân viên"** — tức giờ kết thúc OT thực tế của từng người — chốt qua AskUserQuestion (CLAUDE.md §2 luật 2) 2 điểm:
+  1. **Field được sửa**: CHỈ `EndTime` của từng nhân viên ĐANG có trong đơn. Không còn sửa `NoteVn`/`NoteJp`.
+  2. **Field/danh sách bị khoá**: `GroupId`/`DepartmentId`/`ReasonId`/`OtCaseId`/`Date`/`StartTime`/`EndTime`(chung)/`SubReason`/`ProcessPart` và cả **danh sách nhân viên** (không thêm/bớt được ai) đều **cố định** sau khi tạo đơn — muốn bớt 1 người dùng riêng tính năng "Loại khỏi đơn" (`POST /{id}/employees/remove`, xem §Loại nhân viên khỏi đơn), không qua endpoint này nữa.
+  - **DTO đổi hẳn**: `UpdateOtFormDto` từ giống `CreateOtFormDto` (10 field) rút gọn còn `{ Employees: List<UpdateOtFormEmployeeTimeDto { EmployeeId, EndTime }> }` — không còn field nào khác. `UpdateOtFormEmployeeTimeDto` là DTO mới, thay `CreateOtFormEmployeeItemDto` (không có `NoteVn`/`NoteJp`).
+  - **`UpdateAsync` viết lại hoàn toàn**: không còn load/validate Group/Department/Reason/OtCase từ request (vì không nhận field đó nữa); chỉ load `otForm` kèm `OtFormEmployees`, so `requestedEmployeeIds` (từ `request.Employees`) với `activeEmployeeIds` (`OtFormEmployees.Where(!IsRemoved)`) bằng `SetEquals` — **khác tập** (thiếu người, thừa người, hoặc trùng `EmployeeId`) đều bị từ chối 400 ngay, không âm thầm bỏ qua. Từng `EndTime` vẫn validate `> otForm.StartTime && <= otForm.EndTime` (giữ nguyên luật cũ, chỉ đổi nguồn `StartTime`/`EndTime` từ `request` sang `otForm` hiện có vì không nhận từ request nữa). Hợp lệ → chỉ set `EndTime` trên đúng các dòng `OtFormEmployee` active, không đụng field nào khác của `OtForm`.
+  - **Không còn nhánh "thêm lại người đã bị loại" trong `UpdateAsync`** — vì danh sách nhân viên đã cố định, `EmployeeId` đã bị loại (`IsRemoved=true`) sẽ không nằm trong `activeEmployeeIds` nên tự động bị endpoint này từ chối nếu FE lỡ gửi lên; muốn thêm lại người đã loại phải làm tính năng riêng (chưa có, ngoài phạm vi yêu cầu lần này).
+  - **`EnsureCanCreateOrEditForScopeAsync` vẫn giữ** nhưng gọi với `otForm.GroupId`/`otForm.DepartmentId` (giá trị hiện có, không đổi được nữa) thay vì `request.GroupId`/`request.DepartmentId` — vẫn re-check quyền scope của người sửa chưa bị Admin thu hồi kể từ lúc tạo đơn, dù bản thân Group/Department không còn đổi được.
+  - **FE (`CreateOtFormPage.tsx`)**: khi `isEditMode`, mọi field ở khối "Thông tin đơn" (select/date/giờ/lý do chi tiết) và cả checkbox/input "Yêu cầu hỗ trợ khác" đều `disabled`, kèm badge "Đã khoá..." ở góc phải tiêu đề khối. Bảng nhân viên đổi hẳn sang bảng CỐ ĐỊNH riêng cho Sửa đơn (nguồn dữ liệu `editEmployees` lấy thẳng từ `data.employees.filter(!isRemoved)` lúc tải đơn, KHÔNG phải `groupEmployees` chọn theo Nhóm dùng lúc Tạo mới) — không có ô tick, không có cột Ghi chú, chỉ còn cột "Giờ kết thúc" sửa được. Người bị loại (`isRemoved`) bị lọc khỏi danh sách sửa (đưa vào sẽ bị BE từ chối vì không còn trong `activeEmployeeIds`).
 
 ### §Lũy kế tháng/năm — cộng khi Completed, rollover tự động, chỉnh thủ công (2026-07-16)
 - **Thời điểm cộng**: CHỈ khi đơn đạt `Completed` (đi hết luồng duyệt theo `otCase.requiredApprovalLevel`) — `OtFormService.ApproveAsync` gọi `AccumulateEmployeeHoursAsync` ngay sau khi xác định `nextStatus == Completed`, trong cùng `SaveChangesAsync`. Đơn `Rejected` hoặc dừng ở cấp trung gian thì KHÔNG cộng gì — tránh phải rollback nếu đơn bị từ chối giữa chừng.
@@ -123,7 +129,7 @@ Phần dưới đây (duyệt cấp Trưởng phòng → Trưởng xưởng → 
 - **Bug đã sửa**: `OtFormService.GetByIdAsync` trước đây map `OtFormEmployeeDto.MonthToDate/YearToDate` trực tiếp từ `x.Employee.MonthToDate/YearToDate` (join sống tới `Employee` hiện tại) — nên xem lại đơn cũ luôn ra lũy kế **hiện tại**, không phải lũy kế **tại thời điểm lập đơn** (đơn càng cũ, giá trị hiển thị càng sai vì `Employee.MonthToDate/YearToDate` đã bị cộng dồn thêm bởi các đơn khác kể từ đó).
 - **Cách sửa**: thêm cột `OtFormEmployee.MonthToDate`/`YearToDate` (decimal(10,2), migration `AddAccumulationSnapshotToOtFormEmployee`, đã apply DB) — snapshot đóng băng giá trị `Employee.MonthToDate/YearToDate` **tại đúng thời điểm dòng `OtFormEmployee` được thêm vào đơn**, cùng nguyên tắc snapshot đã dùng cho `OtFormApprovalHistory.SignatureImage`/`ApproverFullName`.
   - `CreateAsync`: snapshot lúc tạo đơn (dùng lại `List<Employee>` mà `ValidateEmployeesAsync` đã trả về, không query thêm).
-  - `UpdateAsync` (diff nhân viên): nhân viên **mới thêm** vào đơn khi sửa → snapshot tại thời điểm sửa đó; nhân viên **giữ nguyên** từ trước → KHÔNG ghi đè, giữ nguyên snapshot gốc lúc mới thêm vào (đúng tinh thần "lũy kế tại thời điểm lập đơn", không phải "lúc sửa gần nhất").
+  - `UpdateAsync` **không còn thêm/bớt nhân viên** (giới hạn lại 2026-07-31, xem §Sửa đơn khi đang Draft/Pending) nên không còn nhánh "nhân viên mới thêm lúc sửa" — snapshot `MonthToDate`/`YearToDate` chỉ còn được ghi 1 lần duy nhất lúc `CreateAsync`, không đổi khi sửa `EndTime`.
   - `GetByIdAsync` giờ đọc `x.MonthToDate`/`x.YearToDate` từ chính `OtFormEmployee`, không còn `x.Employee.MonthToDate/YearToDate`.
 - **Giới hạn dữ liệu cũ**: các `OtFormEmployee` đã tồn tại từ trước migration này có `MonthToDate`/`YearToDate` = `0` (default cột mới, không có cách khôi phục lại giá trị lịch sử vì trước đây chưa từng lưu) — chỉ đơn tạo/sửa **sau** khi apply migration mới có snapshot đúng.
 
@@ -215,9 +221,10 @@ người đó rồi vẫn ký/duyệt được phần còn lại.
 2. **Sau khi loại, luồng duyệt xử lý ra sao**: duyệt tiếp bình thường — **không** quay lại từ đầu, không
    xoá/vô hiệu chữ ký các cấp đã ký trước đó. Đơn giữ nguyên `Status`.
 3. **Thao tác loại người thực hiện lúc nào**: **endpoint riêng, tách biệt khỏi approve** (Phương án B) —
-   loại người trước (tự nhập mật khẩu cấp 2 riêng), xem lại đơn, rồi mới bấm Duyệt (nhập mật khẩu cấp 2
-   lần 2) — KHÔNG gộp việc loại người vào cùng 1 request với `/approve` (đã cân nhắc phương án gộp, đổi
-   lại được 1 lần xác thực nhưng người dùng chọn tách để có bước xem lại đơn trước khi duyệt thật).
+   loại người trước, xem lại đơn, rồi mới bấm Duyệt (nhập mật khẩu cấp 2 cho action Duyệt) — KHÔNG gộp
+   việc loại người vào cùng 1 request với `/approve` (đã cân nhắc phương án gộp, đổi lại được 1 lần xác
+   thực nhưng người dùng chọn tách để có bước xem lại đơn trước khi duyệt thật). Action loại người **không
+   cần mật khẩu cấp 2** ở cả 2 kênh (JWT lẫn email) — chốt lại 2026-07-31, xem bullet cuối mục "Thiết kế".
 
 **Thiết kế**:
 - **Soft-remove trên `OtFormEmployee`** (không xoá dòng) — 6 cột `IsRemoved`/`RemovedByUserName`/
@@ -238,7 +245,9 @@ người đó rồi vẫn ký/duyệt được phần còn lại.
 - **Validate 400**: nhân viên không có trong đơn; đã bị loại từ trước; đơn chỉ còn ≤1 người chưa bị loại
   (loại nốt người cuối = Từ chối cả đơn, dùng `RejectAsync` thay thế, không cho đơn trống nhân viên);
   đơn đã `Completed`/`Rejected`; sai cấp/scope (cùng lỗi §Business Logic — Chữ ký các cấp duyệt).
-- **Mật khẩu cấp 2 bắt buộc**, verify ngay đầu hàm trước bất kỳ ghi nào — cùng luật §Mật khẩu cấp 2.
+- **KHÔNG yêu cầu mật khẩu cấp 2** — ban đầu (2026-07-30) kênh JWT có verify, nhưng đã bỏ (2026-07-31,
+  chốt qua yêu cầu người dùng) để nhất quán với kênh email vốn đã không yêu cầu ngay từ đầu; xem
+  §Loại nhân viên khỏi đơn — mở rộng sang kênh email.
 - **Ảnh hưởng các nơi khác trong `OtFormService`** (đều lọc `!IsRemoved`):
   `AccumulateEmployeeHoursAsync` (người bị loại không cộng lũy kế); `UpdateAsync` diff nhân viên (dòng
   đã bị loại **không** bị hard-delete kể cả khi không còn trong `request.Employees` — audit trail phải
@@ -254,11 +263,11 @@ người đó rồi vẫn ký/duyệt được phần còn lại.
   5 Role nghiệp vụ), y hệt cách `AddSecondaryPasswordPermission` đã làm — Role "Nhân viên" (chỉ tạo đơn,
   không ký/duyệt, không có `UserSignature.Update`) cố tình **không** được gán, verify qua SQL thật
   (2026-07-30): 6/6 Role khớp `UserSignature.Update`.
-- **Endpoint**: `POST /api/OtForm/{id}/employees/remove` (`RemoveOtFormEmployeeDto { EmployeeId, Reason,
-  SecondaryPassword }`, cả 3 `[Required]`) — trả `OtFormDto` đầy đủ đã cập nhật (khác `/approve`/`/reject`
-  chỉ trả `true`), để FE không phải gọi lại `GET /{id}`.
+- **Endpoint**: `POST /api/OtForm/{id}/employees/remove` (`RemoveOtFormEmployeeDto { EmployeeId, Reason }`,
+  cả 2 `[Required]`, KHÔNG có `SecondaryPassword`) — trả `OtFormDto` đầy đủ đã cập nhật (khác
+  `/approve`/`/reject` chỉ trả `true`), để FE không phải gọi lại `GET /{id}`.
 - **FE**: nút "Loại khỏi đơn" trên từng dòng nhân viên ở `OtFormDetail.tsx` (ẩn khi chỉ còn 1 người chưa
-  bị loại), modal RIÊNG (lý do + mật khẩu cấp 2) tách biệt hoàn toàn khỏi modal Duyệt/Từ chối/Ký duyệt.
+  bị loại), modal RIÊNG (chỉ có ô lý do) tách biệt hoàn toàn khỏi modal Duyệt/Từ chối/Ký duyệt.
   Người bị loại hiện dòng riêng (mờ + gạch ngang) kèm ai loại/cấp nào/lý do gì thay vì biến mất khỏi
   bảng. `OtFormPrintView.tsx` (bản in PDF) tự lọc `!isRemoved` khỏi danh sách in/tổng giờ OT.
   Hợp đồng FE đầy đủ ở [attendance-api-fe.md §4.5a](attendance-api-fe.md).
@@ -275,7 +284,8 @@ email tồn tại từ đầu, xem §Xác thực qua email) nên không loại �
 - **`OtFormService.RemoveEmployeeAsync` refactor thành 3 hàm**: `RemoveEmployeeCoreAsync` (private, logic
   gốc — suy cấp từ `Status`, xác thực Permission+Scope, ghi 5 cột `Removed*`, cập nhật
   `NumberOfEmployee`) dùng chung bởi 2 wrapper:
-  - `RemoveEmployeeAsync` (public, JWT) — verify `SecondaryPassword` trước rồi gọi Core.
+  - `RemoveEmployeeAsync` (public, JWT) — gọi thẳng Core (lúc này vẫn còn verify `SecondaryPassword`
+    trước, xem bullet sửa lại bên dưới — 2026-07-31 bỏ luôn bước này).
   - `RemoveEmployeeByEmailTokenAsync` (public, mới) — resolve `OtFormApprovalEmailToken` qua
     `ResolveEmailTokenAsync(token, requireUnused: false)` **KHÔNG tiêu token** (khác
     `ApproveByEmailTokenAsync`/`RejectByEmailTokenAsync` luôn set `UsedAt` sau khi chạy) — người duyệt
@@ -283,11 +293,22 @@ email tồn tại từ đầu, xem §Xác thực qua email) nên không loại �
     hoàn toàn bước verify mật khẩu cấp 2, gọi thẳng Core với `isAdmin: false` (không có khái niệm Admin
     qua kênh email, giống `ApproveByEmailTokenAsync`).
 - **DTO riêng `RemoveOtFormEmployeeByEmailTokenDto { EmployeeId, Reason }`** (không có `SecondaryPassword`)
-  — không tái dùng `RemoveOtFormEmployeeDto` vì 2 DTO có tập field bắt buộc khác nhau.
+  — không tái dùng `RemoveOtFormEmployeeDto` vì lúc đó 2 DTO có tập field bắt buộc khác nhau (nay đã cùng
+  shape sau bullet sửa lại bên dưới, vẫn giữ 2 type riêng ở FE vì gắn với 2 endpoint khác nhau).
 - **Endpoint**: `POST /api/OtForm/email-confirm/{token}/employees/remove` (`[AllowAnonymous]`, cạnh 3
   action email-confirm có sẵn) — trả `OtFormDto` đầy đủ như endpoint JWT.
 - **FE**: `OtFormEmailConfirmPage.tsx` thêm cùng nút/modal như `OtFormDetail.tsx`, chỉ bớt ô mật khẩu
   cấp 2. Gọi `OtFormApi.removeOtFormEmployeeByEmailToken(token, { employeeId, reason })`.
+- **Sửa lại (2026-07-31, cùng ngày)**: người dùng phản hồi thêm — kênh JWT (`RemoveEmployeeAsync`) cũng
+  KHÔNG cần mật khẩu cấp 2, bỏ luôn bước `_secondaryPasswordService.VerifyAsync(...)` từng thêm lúc tạo
+  tính năng ban đầu (2026-07-30). Lý do người dùng đưa ra: hành động loại người không phải là ký/duyệt
+  văn bản, chỉ là bước dọn danh sách trước khi ký/duyệt thật — không cần xác thực lại. `RemoveOtFormEmployeeDto`
+  bỏ field `SecondaryPassword` (nay cùng shape `{ EmployeeId, Reason }` như bản email). FE
+  (`OtFormDetail.tsx`) bỏ ô nhập mật khẩu cấp 2 + hint "chưa thiết lập mật khẩu" khỏi modal loại nhân
+  viên — modal Duyệt/Từ chối/Ký duyệt (`submit`/`approve`/`reject`) KHÔNG đổi, vẫn giữ nguyên mật khẩu
+  cấp 2. Nhân dịp này redesign UI khối "Yêu cầu hỗ trợ khác" (`OtFormDetail.tsx` +
+  `OtFormEmailConfirmPage.tsx`) từ text phẳng sang badge Có/Không (icon `Check`/`X`, màu xanh lá/xám)
+  + icon theo mục (`Utensils`/`Car`/`Printer`) cho dễ đọc hơn.
 
 #### §Đổi tên khu vực "Phần xử lý" + sửa lỗi hiển thị song ngữ (2026-07-31)
 Người dùng phản hồi tên "Phần xử lý / 処理内容" (khu vực Ăn uống/Xe đưa đón/Phòng copy/Phiếu ăn) khó
@@ -319,6 +340,112 @@ hiểu, và văn bản hiển thị trên trang email bị lặp (vd `"Ăn uốn
   minh qua SQL: `ProcessParts` không có dòng tương ứng, không phải lỗi lưu dữ liệu). Đã sửa để LUÔN hiện
   khối này, mặc định 3 checkbox "Không" khi `processPart` null — khớp đúng cách `OtFormPrintView.tsx`
   (bản in PDF) đã xử lý từ trước (`processPart?.isEat ?? false`), 2 màn hiển thị giờ nhất quán với bản in.
+
+#### §Làm đẹp giao diện OT Form — đợt 1 (2026-07-31)
+Người dùng yêu cầu "làm đẹp lại giao diện" cho toàn module Attendance — quy mô lớn (~25 màn), chốt qua
+AskUserQuestion làm theo đợt, ưu tiên các màn OT Form trước (chạm nhiều nhất), hướng thiết kế:
+badge/pill thay text phẳng + card/spacing nhất quán + bảng gọn hơn. `OtFormDetail.tsx`/
+`OtFormEmailConfirmPage.tsx` đã làm ở đợt trước (xem mục "Yêu cầu hỗ trợ khác" ở trên). Đợt này:
+
+- **`OtFormListPage.tsx`** (5 tab danh sách, §4.2): thu gọn padding ô bảng `px-6 py-4` → `px-4 py-3`
+  (đúng thang "danh sách gọn" ở `DESIGN_SYSTEM.md` §2.3, bảng này 8-9 cột nên ưu tiên gọn hơn thưa);
+  `totalHour` đổi từ số trần sang badge pill; empty-state thêm icon `Inbox` xám nhạt phía trên dòng
+  "Không có dữ liệu". Không đổi field/API nào.
+- **`CreateOtFormPage.tsx`** (form tạo/sửa đơn): (1) 3 checkbox Ăn uống/Xe đưa đón/Phòng copy trong khối
+  "Yêu cầu hỗ trợ khác" đổi từ checkbox+label phẳng sang `ToggleOptionCard` — ô bo góc có icon
+  (`Utensils`/`Car`/`Printer`), đổi viền/nền sang xanh lá nhạt khi chọn (cùng ngôn ngữ hình ảnh
+  `ProcessPartTile` đã dùng ở màn Chi tiết); input thật vẫn là `<input type="checkbox">` (`sr-only`,
+  giữ nguyên hành vi/accessibility, chỉ đổi lớp vỏ hiển thị). (2) Bảng chọn nhân viên: dòng đã chọn tô
+  nền hồng nhạt `bg-[#fff4f2]/60` để dễ nhìn; cột luỹ kế giờ OT (`monthToDate`/`yearToDate`) đổi từ text
+  trần sang badge pill, đỏ nhạt kèm icon `AlertTriangle` khi vượt ngưỡng (>25h/tháng hoặc >300h/năm),
+  xám trung tính khi bình thường — cùng bộ màu semantic ở `DESIGN_SYSTEM.md` §1.3. (3) Dòng "Đã chọn N
+  nhân viên" chuyển từ text dưới bảng lên thành badge ở góc phải tiêu đề section (mẫu Card có badge,
+  `DESIGN_SYSTEM.md` §4.1). Không đổi logic validate/submit nào.
+- Các màn OT Form còn lại (`OtFormTabsPage.tsx` — tab bar, `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx`
+  — đã làm đợt trước) giữ nguyên, đã khớp `DESIGN_SYSTEM.md`. Các nhóm màn khác của module (danh mục
+  CRUD Group/Department/Employee/Reason/OtCase, phạm vi duyệt, chữ ký, mật khẩu cấp 2) **CHƯA làm** —
+  để ở đợt sau theo đúng thứ tự người dùng chọn.
+
+#### §Làm đẹp giao diện — đợt 2 (2026-07-31, danh mục CRUD + phạm vi duyệt + chữ ký + mật khẩu cấp 2)
+Tiếp nối đợt 1 (OT Form). Cùng hướng: badge/pill thay text phẳng, bảng gọn hơn (`px-6 py-4` → `px-4
+py-3`, header `py-3` → `py-2.5`), empty-state thêm icon `Inbox`. Áp dụng cho `DepartmentList.tsx`,
+`GroupList.tsx`, `ReasonList.tsx`, `OtCaseList.tsx`, `EmployeeList.tsx`, `UserApprovalScopeManager.tsx`.
+
+- **Badge hoá field boolean/enum trong bảng**: `OtCaseList.tsx` — `requireSignature` đổi từ text "Có"/
+  "Không" sang badge xanh lá (icon `Check`)/xám (icon `X`); `requiredApprovalLevel` sang badge xám
+  trung tính. `UserApprovalScopeManager.tsx` — `scopeType` sang badge xám, `approvalLevel` sang badge đỏ
+  nhạt (accent, không phải cảnh báo — không có badge lỗi nào khác trong cùng bảng nên không xung đột
+  ngữ nghĩa). `GroupList.tsx` — tên Phòng ban của mỗi Bộ phận sang badge xám. `EmployeeList.tsx` — cột
+  luỹ kế giờ OT tháng/năm đổi từ text `font-semibold` màu đỏ sang badge pill (đỏ nhạt + icon
+  `AlertTriangle` khi vượt ngưỡng >25h/tháng hoặc >300h/năm, xám khi bình thường) — cùng bộ màu đã
+  chuẩn hoá ở `CreateOtFormPage.tsx` (đợt 1).
+- **Bài học từ lỗi đợt 1** (xem báo cáo người dùng kèm ảnh chụp màn hình ngay sau khi đợt 1 xong):
+  dùng nhầm màu "Accent nhạt / Error" (`#fff4f2`/`#e9bcb6`/`#930006`) cho trạng thái "đã chọn" (không
+  phải lỗi/cảnh báo) ở bảng chọn nhân viên `CreateOtFormPage.tsx` khiến cả bảng nhìn như đang báo lỗi
+  hàng loạt — đã sửa lại dòng đã chọn sang `bg-[#f8fafc]` (xám trung tính) và badge "Đã chọn N nhân
+  viên" cũng đổi từ đỏ sang xám. Đợt 2 rút kinh nghiệm: chỉ dùng họ màu đỏ/hồng (`#fff4f2`/`#e9bcb6`/
+  `#930006`/`#e3000f`) cho lỗi thật/cảnh báo thật/badge accent KHÔNG đứng cạnh cảnh báo khác trong cùng
+  view; trạng thái trung tính (đã chọn, nhãn phụ, đếm số lượng) luôn dùng xám (`#e0e3e5`/`#f8fafc`/
+  `#5e3f3a`); trạng thái tích cực dùng `emerald`.
+- **`UserSignaturePanel.tsx`/`SecondaryPasswordPanel.tsx`**: thêm icon vào các ô trạng thái đã có sẵn
+  màu (emerald=đã đăng ký kèm `Check`, amber=chưa đăng ký kèm `AlertTriangle`, amber=đã gửi email xác
+  nhận kèm `Clock`) — các ô này vốn đã đúng ngữ nghĩa màu từ trước, chỉ thêm icon cho rõ hơn, không đổi
+  logic.
+- **`EmployeeAccumulationPanel.tsx`**: thêm 2 thẻ KPI (mẫu Stat Card `DESIGN_SYSTEM.md` §4.1) hiện
+  monthToDate/yearToDate hiện tại phía trên form chỉnh — đỏ nhạt kèm icon `AlertTriangle` khi vượt
+  ngưỡng, xám kèm icon `Clock` khi bình thường.
+- **`EmployeeImportDialog.tsx`**: sửa màu xanh lá hardcode `#16a34a` (không có trong bảng màu
+  `DESIGN_SYSTEM.md`) thành `emerald-600` chuẩn — không đổi layout/logic.
+- Modal form (`DepartmentForm.tsx`/`GroupForm.tsx`/`ReasonForm.tsx`/`OtCaseForm.tsx`/`EmployeeForm.tsx`)
+  và `SignatureUpload.tsx`: đã khớp `DESIGN_SYSTEM.md` §4.7 từ trước, **không sửa**.
+- Còn lại (nếu có): các trang public qua email/link xác nhận ngoài OT Form (`SignatureConfirmPage.tsx`,
+  `SecondaryPasswordConfirmPage.tsx`) chưa rà — để đợt sau nếu người dùng yêu cầu tiếp.
+
+#### §Làm đẹp giao diện — đợt 3 (2026-07-31, thanh công cụ in đơn)
+Người dùng phản hồi thanh công cụ phía trên bản in (`OtFormPrintView.tsx`) xấu — 2 nút chọn khổ giấy
+nhét nguyên câu mô tả dài (`"A4 (tối đa 10 người/trang đầu, 30 người/trang sau)"`) làm nút bị xuống
+dòng, phình to, lệch layout so với nút "Xuất PDF"/"In" bên cạnh.
+
+- **Chỉ sửa thanh công cụ `no-print`** (2 nút chọn khổ giấy + "Xuất PDF" + "In") — **KHÔNG đụng** phần
+  render bản in thật (`PageFrame`/`FormHeaderFields`/`EmployeeRowFields`, ảnh nền + toạ độ `%` đo từ file
+  gốc), theo đúng nguyên tắc đã ghi ở đầu file component: bản in phải khớp tuyệt đối phiếu giấy gốc
+  YEV-22-024, không tự thêm/bớt gì ngoài ảnh nền.
+- Rút nút khổ giấy về nhãn ngắn (`"A4"`/`"A5 ngang"`, key mới `paperSizeA4Short`/`paperSizeA5Short`) +
+  icon phân biệt hướng giấy (`RectangleVertical` cho A4 dọc, `RectangleHorizontal` cho A5 ngang). Câu mô
+  tả sức chứa đầy đủ cũ (`paperSizeA4`/`paperSizeA5`, giữ nguyên nội dung) chuyển xuống thành 1 dòng chú
+  thích nhỏ màu xám bên dưới thanh nút, chỉ hiện đúng 1 câu khớp khổ đang chọn — không còn nhét trong nút.
+- Nút "In" thêm icon `Printer` cho đồng bộ với nút "Xuất PDF" (đã có icon `Download` từ trước).
+
+#### §Sửa lỗi 2 thanh cuộn chồng nhau ở khung app (2026-07-31)
+Người dùng báo bảng nhân viên ở `/ot/create` bị "che, bị cắt" và tồn tại 2 thanh cuộn cùng lúc — dựng
+lại được bằng thao tác dev tools, xác định đây là lỗi cấu trúc CSS ở khung ứng dụng
+(`(ot-manager)/layout.tsx`, dùng chung bởi MỌI trang OT chứ không riêng gì `/ot/create`), không phải
+lỗi riêng của `CreateOtFormPage.tsx`.
+
+**Phải sửa 3 lượt mới dứt** (người dùng test lại và báo còn lỗi sau mỗi lượt) — ghi lại đầy đủ để
+không lặp lại lối mò mẫm này:
+
+1. **Lượt 1 — thêm `min-h-0` vào `<main>`**: `flex-1 overflow-y-auto` là flex item, mà flex item mặc
+   định `min-height: auto` nên không chịu co theo chiều cao khối cha. Đúng nhưng **chưa đủ**.
+2. **Lượt 2 — đổi `max-h-screen` → `h-[calc(100vh-4rem)]`**: `Header`
+   (`modules/common/components/Header.tsx`) cao `h-16` = `4rem`, là `sticky` chứ **không** `fixed` nên
+   **chiếm chỗ thật** trong luồng. Khung OT/PC nằm dưới header mà vẫn khai `100vh` → tổng chiều cao
+   trang `100vh + 4rem` → tràn viewport → `document` sinh thanh cuộn riêng. Đúng hướng nhưng **vẫn tái
+   phát**, vì mới chỉ chỉnh con số chứ chưa bỏ được việc nhiều tầng cùng tranh quản chiều cao.
+3. **Lượt 3 (dứt điểm) — dồn toàn bộ chiều cao + vùng cuộn về `[locale]/layout.tsx`**:
+   - `body`: `min-h-screen flex flex-col` → **`flex h-screen flex-col overflow-hidden`** (+
+     `print:h-auto print:overflow-visible`) — chặn hẳn document tự cuộn.
+   - root `<main>`: `flex-grow` → **`min-h-0 flex-1 overflow-y-auto`** — trở thành vùng cuộn **duy
+     nhất** của toàn app.
+   - `(ot-manager)/layout.tsx` + `(pc-manager)/layout.tsx`: **bỏ sạch** mọi khai báo chiều cao/cuộn của
+     riêng mình, chỉ còn `min-h-full`; `<main>` bên trong đổi thành `<div>` (root layout đã có `<main>`
+     rồi — lồng 2 `<main>` là HTML không hợp lệ).
+   - Dọn theo cho nhất quán: `OtAccessGuard`/`PcAccessGuard` `min-h-screen` → `min-h-full`;
+     `(admin)/admin/page.tsx` `h-[calc(100vh-4rem)]` → `h-full` và `<main>` lồng bên trong → `<div>`.
+- Quy tắc rút ra đã ghi thành mục riêng ở `DESIGN_SYSTEM.md` §3: **chỉ root layout được khai chiều cao
+  và vùng cuộn**; layout con chỉ dùng `h-full`/`min-h-full`, không tự `overflow-y-auto`, không lồng
+  `<main>`. Sidebar vẫn `fixed h-screen` — đúng, vì `fixed` nằm ngoài luồng.
+- Không đổi cấu trúc/hành vi nghiệp vụ nào — thuần sửa lỗi CSS layout.
 
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.
@@ -355,7 +482,7 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `GET /api/OtForm/pending-approvals` — đơn đang chờ chính mình duyệt (cấp Trưởng phòng/Trưởng xưởng/TGĐ, KHÔNG bao gồm Draft), tự lọc theo `UserApprovalScope` hoặc bypass nếu `Role="Tổng Giám Đốc"` (`Attendance.OTForm.Approve`).
 - `GET /api/OtForm/my-actions` (mới, 2026-07-17) — lịch sử đơn **CHÍNH mình đã Ký/Duyệt/Từ chối** ở bất kỳ cấp nào (Submitter/DepartmentManager/WorkshopManager/GeneralDirector), gate bằng `Attendance.OTForm.View` (dùng chung cho cả 4 Role vì đều có sẵn permission này). Vá lỗ hổng: trước đây KHÔNG có cách nào xem lại đơn đã xử lý — `my-forms` chỉ lọc theo người **tạo** đơn (không phải người ký/duyệt), còn `pending-submissions`/`pending-approvals` chỉ hiện đơn **chưa** xử lý, đơn vừa xử lý xong lập tức biến mất khỏi 2 danh sách đó. `OtFormService.GetMyActionsAsync` truy `OtFormApprovalHistory.ApproverUserName == user hiện tại` lấy `OtFormId` (distinct) rồi trả về `OtForm` tương ứng — gồm cả đơn từng bị chính user đó **Từ chối** (không chỉ Ký/Duyệt), vì đây là lịch sử "đã xử lý" chứ không phải "đã đồng ý".
 - `GET /api/OtForm/{id}` — chi tiết đầy đủ (Employees kèm lũy kế + phiếu ăn, ProcessPart, ApprovalHistories).
-- `PUT /api/OtForm/{id}` — sửa toàn bộ đơn, chỉ chính người tạo và chỉ khi `Status` là `Draft` hoặc `Pending` (`Attendance.OTForm.Create`, xem §Sửa đơn khi đang Draft/Pending).
+- `PUT /api/OtForm/{id}` — sửa (2026-07-31: **chỉ còn** giờ kết thúc từng nhân viên, không còn sửa toàn bộ), chỉ chính người tạo và chỉ khi `Status` là `Draft`/`PendingGroupHead`/`Pending` (`Attendance.OTForm.Create`, xem §Sửa đơn khi đang Draft/Pending).
 - `POST /api/OtForm/{id}/approve`, `POST /api/OtForm/{id}/reject` (`Attendance.OTForm.Approve`, chỉ áp dụng cấp Trưởng phòng/Trưởng xưởng/TGĐ — gọi trên đơn `Draft` sẽ báo lỗi rõ ràng, dùng `/submit` thay thế). `approve` tự cộng lũy kế nhân viên nếu đạt `Completed`, tự gửi email cho cấp duyệt kế tiếp nếu còn.
 - `POST /api/OtForm/{id}/employees/remove` (mới, 2026-07-30, `Attendance.OTForm.RemoveEmployee` — permission riêng, không dùng chung `.Create`/`.Approve`) — loại 1 nhân viên khỏi đơn để duyệt được phần còn lại, áp dụng cho MỌI cấp (kể cả Trưởng nhóm ở `Draft`). Không đổi `Status`, không ký lại các cấp trước. Xem §Loại nhân viên khỏi đơn.
 - `GET /email-confirm/{token}`, `POST /email-confirm/{token}/approve`, `POST /email-confirm/{token}/reject` (`[AllowAnonymous]`) — kênh bổ sung qua email, xem §Xác thực qua email.

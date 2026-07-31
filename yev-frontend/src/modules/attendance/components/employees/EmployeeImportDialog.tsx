@@ -152,7 +152,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                 {result ? (
                     <div className="flex-1 overflow-auto p-6">
                         <div className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm">
-                            <span className="font-semibold text-[#16a34a]">
+                            <span className="font-semibold text-emerald-600">
                                 {t("importCreatedCount", { count: result.createdEmployeeCount })}
                             </span>
                             <span className="text-[#5e3f3a]">{t("importUpdatedCount", { count: result.updatedEmployeeCount })}</span>
@@ -213,7 +213,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                         {summary && (
                             <div className="flex flex-wrap items-center gap-4 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold">
                                 <span className="text-[#191c1e]">{t("importSummaryTotal", { count: summary.totalRows })}</span>
-                                <span className="text-[#16a34a]">{t("importSummaryValid", { count: summary.validRows })}</span>
+                                <span className="text-emerald-600">{t("importSummaryValid", { count: summary.validRows })}</span>
                                 <span className={summary.invalidRows > 0 ? "text-[#930006]" : "text-[#5e3f3a]"}>
                                     {t("importSummaryInvalid", { count: summary.invalidRows })}
                                 </span>

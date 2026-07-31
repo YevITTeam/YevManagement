@@ -6,19 +6,22 @@ export const metadata = {
   title: "OT Manager | YEV Management",
 };
 
+// KHÔNG tự khai chiều cao (`h-screen`/`max-h-screen`) và KHÔNG tự mở `overflow-y-auto` ở đây —
+// `[locale]/layout.tsx` đã giữ vai trò khung chiều cao + vùng cuộn DUY NHẤT của app. Khai lại ở tầng
+// này chính là nguyên nhân lỗi "2 thanh cuộn chồng nhau, bảng bị cắt/che" đã gặp. Xem DESIGN_SYSTEM.md §3.
 export default function OtManagerLayout({ children }: { children: ReactNode }) {
   return (
     <OtAccessGuard>
-      <div className="max-h-screen bg-[#f7f9fb] text-[#191c1e] print:max-h-none">
+      <div className="min-h-full bg-[#f7f9fb] text-[#191c1e]">
         <Sidebar />
 
         <div
-          className="flex max-h-screen flex-col transition-[margin-left] duration-200 print:ml-0! print:max-h-none"
+          className="min-h-full transition-[margin-left] duration-200 print:ml-0!"
           style={{ marginLeft: "var(--sidebar-w, 13.75rem)" }}
         >
-          <main className="flex-1 overflow-y-auto bg-[#f8fafc] px-5 pb-5 pt-3 md:px-8 md:pb-8 md:pt-4 lg:px-10 lg:pb-10 lg:pt-5 print:overflow-visible print:p-0">
+          <div className="min-h-full bg-[#f8fafc] px-5 pb-5 pt-3 md:px-8 md:pb-8 md:pt-4 lg:px-10 lg:pb-10 lg:pt-5 print:p-0">
             <div className="mx-auto max-w-[1280px] print:max-w-none">{children}</div>
-          </main>
+          </div>
         </div>
       </div>
     </OtAccessGuard>

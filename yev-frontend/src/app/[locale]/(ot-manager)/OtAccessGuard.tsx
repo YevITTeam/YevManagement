@@ -25,8 +25,10 @@ export default function OtAccessGuard({ children }: { children: ReactNode }) {
     }, [isLoading, canAccess, router]);
 
     if (isLoading || !canAccess) {
+        // min-h-full (không phải min-h-screen) — đã nằm trong <main> cao 1 màn hình trừ Header ở
+        // [locale]/layout.tsx; khai 100vh ở đây sẽ dôi ra đúng bằng chiều cao Header.
         return (
-            <div className="flex min-h-screen items-center justify-center bg-[#f8fafc] text-sm text-[#5e3f3a]">
+            <div className="flex min-h-full items-center justify-center bg-[#f8fafc] text-sm text-[#5e3f3a]">
                 {isLoading ? "Đang tải..." : "Bạn không có quyền truy cập mục này."}
             </div>
         );
