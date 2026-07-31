@@ -166,3 +166,11 @@ export interface RemoveOtFormEmployeeDto {
     reason: string;
     secondaryPassword: string;
 }
+
+// Body POST /api/OtForm/email-confirm/{token}/employees/remove — §4.5a, mới 2026-07-31. Song sinh của
+// RemoveOtFormEmployeeDto cho kênh email — token trong URL đã là thông tin xác thực nên KHÔNG có
+// secondaryPassword (khác Duyệt/Từ chối qua email vẫn giữ mật khẩu cấp 2, đã chốt qua AskUserQuestion).
+export interface RemoveOtFormEmployeeByEmailTokenDto {
+    employeeId: number;
+    reason: string;
+}

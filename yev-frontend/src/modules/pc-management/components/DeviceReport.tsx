@@ -17,6 +17,11 @@ const DeviceListReportPrintDialog = dynamic(() => import("./DeviceListReportPrin
 // ExpiringDevices theo cửa sổ này, FE chỉ hiển thị lại, không tự lọc thêm.
 const EXPIRY_WINDOW_DAYS = 90;
 
+// Bảng "sắp/đã hết hạn" có thể lên tới hàng nghìn dòng (toàn hệ thống) — dữ liệu đã tải hết trong
+// summary.expiringDevices (không có endpoint phân trang riêng), chỉ cắt trang khi RENDER để tránh
+// mount hàng nghìn node DOM cùng lúc.
+const EXPIRING_PAGE_SIZE = 20;
+
 // Báo cáo thống kê chỉ tính thiết bị "chờ sử dụng"/"đang sử dụng" (đã lọc sẵn ở BE) — thiết bị chờ
 // thanh lý/đã thanh lý không còn vận hành nên không đưa vào làm dữ liệu thống kê.
 const statusMeta = [
@@ -184,6 +189,20 @@ export default function DeviceReport() {
         count: summary[status.key],
     }));
 
+    // Reset về trang 1 mỗi khi refetch trả về danh sách mới — so sánh snapshot ngay trong render
+    // thay vì dùng effect (xem CLAUDE.md "Reset state khi 1 giá trị đổi").
+    const [expiringPageIndex, setExpiringPageIndex] = useState(1);
+    const [prevExpiringDevices, setPrevExpiringDevices] = useState(summary.expiringDevices);
+    if (prevExpiringDevices !== summary.expiringDevices) {
+        setPrevExpiringDevices(summary.expiringDevices);
+        setExpiringPageIndex(1);
+    }
+    const expiringTotalPages = Math.max(1, Math.ceil(summary.expiringDevices.length / EXPIRING_PAGE_SIZE));
+    const pagedExpiringDevices = summary.expiringDevices.slice(
+        (expiringPageIndex - 1) * EXPIRING_PAGE_SIZE,
+        expiringPageIndex * EXPIRING_PAGE_SIZE
+    );
+
     const kpis = [
         { label: "Tổng thiết bị", value: summary.totalCount, icon: Computer },
         { label: "Đang sử dụng", value: summary.inUseCount, icon: Monitor },
@@ -307,7 +326,7 @@ export default function DeviceReport() {
                                     </td>
                                 </tr>
                             )}
-                            {summary.expiringDevices.map((device) => {
+                            {pagedExpiringDevices.map((device) => {
                                 const days = device.daysRemaining;
                                 const expired = days < 0;
                                 const urgent = days >= 0 && days <= 30;
@@ -339,6 +358,28 @@ export default function DeviceReport() {
                         </tbody>
                     </table>
                 </div>
+
+                {expiringTotalPages > 1 && (
+                    <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+                        <button
+                            className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+                            disabled={expiringPageIndex <= 1}
+                            onClick={() => setExpiringPageIndex((current) => Math.max(1, current - 1))}
+                        >
+                            Trang trước
+                        </button>
+                        <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
+                            Trang {expiringPageIndex} / {expiringTotalPages}
+                        </div>
+                        <button
+                            className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+                            disabled={expiringPageIndex >= expiringTotalPages}
+                            onClick={() => setExpiringPageIndex((current) => Math.min(expiringTotalPages, current + 1))}
+                        >
+                            Trang sau
+                        </button>
+                    </div>
+                )}
             </section>
 
             {isPrintOpen && <DeviceListReportPrintDialog isOpen={isPrintOpen} onClose={() => setIsPrintOpen(false)} />}

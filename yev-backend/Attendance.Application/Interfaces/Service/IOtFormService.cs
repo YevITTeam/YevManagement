@@ -44,6 +44,10 @@ namespace Attendance.Application.Interfaces.Service
         // docs/attendance-module.md § Loại nhân viên khỏi đơn.
         Task<OtFormDto> RemoveEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, bool isGeneralDirector, RemoveOtFormEmployeeDto request);
 
+        // Kênh bổ sung qua email ([AllowAnonymous] ở Controller) — token tự nó là thông tin xác thực,
+        // KHÔNG cần mật khẩu cấp 2 (khác Approve/Reject qua email vẫn giữ) — xem docs/attendance-module.md.
+        Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request);
+
         // Kênh bổ sung qua email (link Duyệt/Từ chối, [AllowAnonymous] ở Controller) — token tự nó
         // là thông tin xác thực duy nhất, xem docs/attendance-module.md.
         Task<OtFormDto> GetByEmailTokenAsync(string token);

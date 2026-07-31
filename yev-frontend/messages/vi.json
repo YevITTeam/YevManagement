@@ -393,7 +393,7 @@
       "timeLabel": "Thời gian",
       "createdByLabel": "Người tạo",
       "subReasonLabel": "Lý do chi tiết",
-      "processPartTitle": "Phần xử lý",
+      "processPartTitle": "Yêu cầu hỗ trợ khác",
       "eatLabel": "Ăn uống: {value}",
       "transportationLabel": "Xe đưa đón: {value}",
       "copyRoomLabel": "Phòng copy: {value}",
@@ -538,7 +538,10 @@
       "rejectedResultMessage": "Bạn đã từ chối đơn này.",
       "commentOptionalLabel": "Ghi chú (khi Duyệt, không bắt buộc)",
       "rejectModalTitle": "Từ chối đơn",
-      "rejectReasonLabel": "Lý do từ chối"
+      "rejectReasonLabel": "Lý do từ chối",
+      "removeEmployeeButton": "Loại khỏi đơn",
+      "removeReasonRequiredError": "Vui lòng nhập lý do loại nhân viên khỏi đơn.",
+      "removeError": "Loại nhân viên khỏi đơn thất bại"
     },
     "SignatureConfirm": {
       "title": "Xác nhận cập nhật chữ ký",

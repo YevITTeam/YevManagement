@@ -260,9 +260,65 @@ người đó rồi vẫn ký/duyệt được phần còn lại.
 - **FE**: nút "Loại khỏi đơn" trên từng dòng nhân viên ở `OtFormDetail.tsx` (ẩn khi chỉ còn 1 người chưa
   bị loại), modal RIÊNG (lý do + mật khẩu cấp 2) tách biệt hoàn toàn khỏi modal Duyệt/Từ chối/Ký duyệt.
   Người bị loại hiện dòng riêng (mờ + gạch ngang) kèm ai loại/cấp nào/lý do gì thay vì biến mất khỏi
-  bảng. `OtFormPrintView.tsx` (bản in PDF) và `OtFormEmailConfirmPage.tsx` (trang xem trước qua email —
-  kênh email KHÔNG có hành động loại người, chỉ hiển thị nếu đã xảy ra qua app) đều tự lọc `!isRemoved`
-  khỏi danh sách in/tổng giờ OT. Hợp đồng FE đầy đủ ở [attendance-api-fe.md §4.5a](attendance-api-fe.md).
+  bảng. `OtFormPrintView.tsx` (bản in PDF) tự lọc `!isRemoved` khỏi danh sách in/tổng giờ OT.
+  Hợp đồng FE đầy đủ ở [attendance-api-fe.md §4.5a](attendance-api-fe.md).
+
+#### §Loại nhân viên khỏi đơn — mở rộng sang kênh email (2026-07-31)
+Người dùng test thực tế phát hiện: kênh xem trước/duyệt qua email (`OtFormEmailConfirmPage.tsx`) chưa
+có nút "Loại khỏi đơn" — cấp Trưởng phòng/Trưởng Bộ phận/Trưởng xưởng/TGĐ ít khi mở app (đúng lý do kênh
+email tồn tại từ đầu, xem §Xác thực qua email) nên không loại được người khi duyệt qua link email.
+
+- **Quyết định đã chốt qua AskUserQuestion**: hành động này qua kênh email **KHÔNG cần mật khẩu cấp 2**
+  — khác hẳn 2 action Duyệt/Từ chối qua email (`ApproveByEmailTokenAsync`/`RejectByEmailTokenAsync`) vẫn
+  giữ nguyên yêu cầu mật khẩu cấp 2. Lý do: token 256-bit trong URL tự nó đã là thông tin xác thực đủ
+  mạnh cho hành động này (người dùng tự đánh giá rủi ro thấp hơn ký/duyệt/từ chối cả đơn).
+- **`OtFormService.RemoveEmployeeAsync` refactor thành 3 hàm**: `RemoveEmployeeCoreAsync` (private, logic
+  gốc — suy cấp từ `Status`, xác thực Permission+Scope, ghi 5 cột `Removed*`, cập nhật
+  `NumberOfEmployee`) dùng chung bởi 2 wrapper:
+  - `RemoveEmployeeAsync` (public, JWT) — verify `SecondaryPassword` trước rồi gọi Core.
+  - `RemoveEmployeeByEmailTokenAsync` (public, mới) — resolve `OtFormApprovalEmailToken` qua
+    `ResolveEmailTokenAsync(token, requireUnused: false)` **KHÔNG tiêu token** (khác
+    `ApproveByEmailTokenAsync`/`RejectByEmailTokenAsync` luôn set `UsedAt` sau khi chạy) — người duyệt
+    có thể loại nhiều người rồi mới Duyệt/Từ chối bằng đúng token đó, không phải mở lại email. Bỏ qua
+    hoàn toàn bước verify mật khẩu cấp 2, gọi thẳng Core với `isAdmin: false` (không có khái niệm Admin
+    qua kênh email, giống `ApproveByEmailTokenAsync`).
+- **DTO riêng `RemoveOtFormEmployeeByEmailTokenDto { EmployeeId, Reason }`** (không có `SecondaryPassword`)
+  — không tái dùng `RemoveOtFormEmployeeDto` vì 2 DTO có tập field bắt buộc khác nhau.
+- **Endpoint**: `POST /api/OtForm/email-confirm/{token}/employees/remove` (`[AllowAnonymous]`, cạnh 3
+  action email-confirm có sẵn) — trả `OtFormDto` đầy đủ như endpoint JWT.
+- **FE**: `OtFormEmailConfirmPage.tsx` thêm cùng nút/modal như `OtFormDetail.tsx`, chỉ bớt ô mật khẩu
+  cấp 2. Gọi `OtFormApi.removeOtFormEmployeeByEmailToken(token, { employeeId, reason })`.
+
+#### §Đổi tên khu vực "Phần xử lý" + sửa lỗi hiển thị song ngữ (2026-07-31)
+Người dùng phản hồi tên "Phần xử lý / 処理内容" (khu vực Ăn uống/Xe đưa đón/Phòng copy/Phiếu ăn) khó
+hiểu, và văn bản hiển thị trên trang email bị lặp (vd `"Ăn uống: Có / はい / 食事：Có / はい"`).
+
+- **Nguyên nhân lỗi lặp**: `OtFormEmailConfirmPage.tsx` dùng `createBilingualTranslator` (ghép bản dịch
+  `vi` + `ja` của CÙNG 1 key/values thành 1 chuỗi) cho các dòng dạng `t("eatLabel", { value: t("yes") })`
+  — nhưng `t("yes")` TỰ NÓ đã trả về chuỗi song ngữ `"Có / はい"` (không phải giá trị đơn theo locale),
+  nên khi nhét `value` đó vào `t("eatLabel", ...)` rồi ghép tiếp 1 lần nữa, cả cụm nhãn+giá trị bị lặp
+  y hệt 2 lần (1 lần trong bản "vi", 1 lần trong bản "ja" — cả 2 bản đều chèn cùng `value` song ngữ).
+  Cùng lỗi cho `transportationLabel`/`copyRoomLabel`/`anotherSuggestionLabel`, và dòng
+  `removedInlineNote` (§Loại nhân viên khỏi đơn) khi `level` truyền vào là
+  `approvalLevelLabelsBilingual[...]` (đã song ngữ sẵn).
+- **Cách sửa**: KHÔNG đưa giá trị đã song ngữ hoá vào `createBilingualTranslator` nữa — với các dòng có
+  cả nhãn lẫn giá trị động, dựng thủ công bằng literal string trong `bilingual.ts`
+  (`processPartTitleBilingual`, `processPartFieldLabelsBilingual`, `bilingualYesNo()`,
+  `removedByLabelBilingual`, `removedReasonLabelBilingual`) rồi ghép trực tiếp trong JSX thay vì gọi
+  `t(key, { value })`. `OtFormDetail.tsx` (trong app, `useTranslations` 1 locale, không có khái niệm
+  ghép vi+ja) **không bị lỗi này** nên giữ nguyên cách cũ.
+- **Đổi tên**: `processPartTitle` (namespace `Attendance.OtFormDetail`, dùng chung bởi cả
+  `OtFormDetail.tsx` và `OtFormEmailConfirmPage.tsx`) đổi `"Phần xử lý"` → `"Yêu cầu hỗ trợ khác"` (vi),
+  `"処理内容"` → `"その他のご要望"` (ja). **KHÔNG đổi** ở `OtFormPrintView.tsx` (bản in PDF) — khối này
+  trên ảnh nền in vẫn giữ đúng tên gốc "Phần xử lý / 処理欄" khớp phiếu giấy thật YEV-22-024, xem
+  `attendance-otform-pdf-mapping.md` §4.
+- **Không đổi field/response BE nào** — thuần sửa UI text + cách ghép chuỗi ở FE.
+- **Sửa thêm (2026-07-31, cùng đợt)**: `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx` trước đây ẩn hẳn
+  cả khối "Yêu cầu hỗ trợ khác" khi `form.processPart == null` (đơn không tick "Yêu cầu hỗ trợ khác"
+  lúc tạo) — khiến người dùng nhầm là thiếu thông tin dù đây là giá trị mặc định hợp lệ (đơn #22 xác
+  minh qua SQL: `ProcessParts` không có dòng tương ứng, không phải lỗi lưu dữ liệu). Đã sửa để LUÔN hiện
+  khối này, mặc định 3 checkbox "Không" khi `processPart` null — khớp đúng cách `OtFormPrintView.tsx`
+  (bản in PDF) đã xử lý từ trước (`processPart?.isEat ?? false`), 2 màn hiển thị giờ nhất quán với bản in.
 
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.

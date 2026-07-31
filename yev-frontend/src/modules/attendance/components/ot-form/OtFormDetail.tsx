@@ -459,30 +459,32 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                 )}
             </section>
 
-            {form.processPart && (
-                <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
-                    <div className="flex flex-wrap gap-4 text-sm text-[#191c1e]">
-                        <span>{t("eatLabel", { value: form.processPart.isEat ? t("yes") : t("no") })}</span>
-                        <span>{t("transportationLabel", { value: form.processPart.isTransportation ? t("yes") : t("no") })}</span>
-                        <span>{t("copyRoomLabel", { value: form.processPart.isUseCopyRoom ? t("yes") : t("no") })}</span>
+            {/* Luôn hiện khối này, kể cả khi form.processPart null (đơn không yêu cầu hỗ trợ gì thêm) —
+                mặc định "Không" cho 3 checkbox, cùng cách OtFormPrintView.tsx đã xử lý từ trước
+                (processPart?.isEat ?? false). Trước đây ẩn hẳn cả khối khi null, khiến người dùng
+                tưởng thiếu thông tin dù đây là giá trị mặc định hợp lệ, không phải dữ liệu bị mất. */}
+            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
+                <div className="flex flex-wrap gap-4 text-sm text-[#191c1e]">
+                    <span>{t("eatLabel", { value: form.processPart?.isEat ? t("yes") : t("no") })}</span>
+                    <span>{t("transportationLabel", { value: form.processPart?.isTransportation ? t("yes") : t("no") })}</span>
+                    <span>{t("copyRoomLabel", { value: form.processPart?.isUseCopyRoom ? t("yes") : t("no") })}</span>
+                </div>
+                {form.processPart?.isEat && (
+                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
+                        <span>{t("mainTicketLabel", { count: form.processPart.mainTicketCount })}</span>
+                        <span>{t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}</span>
+                        <span>{t("milkLabel", { count: form.processPart.milkCount })}</span>
                     </div>
-                    {form.processPart.isEat && (
-                        <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
-                            <span>{t("mainTicketLabel", { count: form.processPart.mainTicketCount })}</span>
-                            <span>{t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}</span>
-                            <span>{t("milkLabel", { count: form.processPart.milkCount })}</span>
-                        </div>
-                    )}
-                    {form.processPart.anotherSuggestionVn && (
-                        <p className="mt-2 text-sm text-[#5e3f3a]">
-                            {t("anotherSuggestionLabel", {
-                                value: bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp),
-                            })}
-                        </p>
-                    )}
-                </section>
-            )}
+                )}
+                {form.processPart?.anotherSuggestionVn && (
+                    <p className="mt-2 text-sm text-[#5e3f3a]">
+                        {t("anotherSuggestionLabel", {
+                            value: bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp),
+                        })}
+                    </p>
+                )}
+            </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-3">

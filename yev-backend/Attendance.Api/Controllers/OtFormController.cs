@@ -199,5 +199,18 @@ namespace Attendance.Api.Controllers
             await _otFormService.RejectByEmailTokenAsync(token, request);
             return Success(true, "Từ chối đơn thành công.");
         }
+
+        // Same "loại nhân viên khỏi đơn" action as {id}/employees/remove above, reachable from the
+        // email-confirm page — token is the sole credential, deliberately NO secondary password (khác
+        // 2 action Approve/Reject qua email ở trên vẫn giữ, chốt qua AskUserQuestion 2026-07-31, xem
+        // docs/attendance-module.md). Does NOT consume the token, since the approver may still need it
+        // to Approve/Reject right after.
+        [AllowAnonymous]
+        [HttpPost("email-confirm/{token}/employees/remove")]
+        public async Task<ActionResult<ApiResponse<OtFormDto>>> RemoveEmployeeByEmailToken(string token, [FromBody] RemoveOtFormEmployeeByEmailTokenDto request)
+        {
+            var result = await _otFormService.RemoveEmployeeByEmailTokenAsync(token, request);
+            return Success(result, "Đã loại nhân viên khỏi đơn.");
+        }
     }
 }

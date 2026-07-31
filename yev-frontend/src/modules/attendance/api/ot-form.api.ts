@@ -6,6 +6,7 @@ import type {
     OtFormDto,
     OtFormListItemDto,
     RejectOtFormDto,
+    RemoveOtFormEmployeeByEmailTokenDto,
     RemoveOtFormEmployeeDto,
     UpdateOtFormDto,
 } from "@/modules/attendance/types/ot-form.dto";
@@ -30,6 +31,7 @@ const ENDPOINTS = {
         emailConfirmGet: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}`,
         emailConfirmApprove: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/approve`,
         emailConfirmReject: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/reject`,
+        emailConfirmRemoveEmployee: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/employees/remove`,
     },
 } as const;
 
@@ -146,6 +148,13 @@ export const OtFormApi = {
     },
     rejectOtFormByEmailToken: async (token: string, data: RejectOtFormDto) => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.emailConfirmReject(token), data);
+        return response.data;
+    },
+    // Loại nhân viên khỏi đơn qua link email — KHÔNG có secondaryPassword (token là thông tin xác
+    // thực duy nhất, khác approve/reject qua email vẫn giữ mật khẩu cấp 2, docs §4.5a). Trả OtFormDto
+    // đầy đủ đã cập nhật, không cần gọi lại getOtFormByEmailToken.
+    removeOtFormEmployeeByEmailToken: async (token: string, data: RemoveOtFormEmployeeByEmailTokenDto) => {
+        const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.emailConfirmRemoveEmployee(token), data);
         return response.data;
     },
 };

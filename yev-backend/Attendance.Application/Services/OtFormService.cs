@@ -752,6 +752,35 @@ namespace Attendance.Application.Services
         public async Task<OtFormDto> RemoveEmployeeAsync(
             int id, string userName, string? fullName, bool isAdmin, bool isGeneralDirector, RemoveOtFormEmployeeDto request)
         {
+            // Second-factor password gate — removing someone changes a signed document, so it is held to
+            // the same bar as sign/approve/reject in the app (see docs/attendance-module.md — Mật khẩu
+            // cấp 2). Verified before any write. The email-channel twin (RemoveEmployeeByEmailTokenAsync)
+            // deliberately SKIPS this — the token itself is the credential there, same call the user made
+            // for that channel's other actions (chốt qua AskUserQuestion 2026-07-31).
+            await _secondaryPasswordService.VerifyAsync(userName, request.SecondaryPassword);
+
+            return await RemoveEmployeeCoreAsync(id, userName, fullName, isAdmin, isGeneralDirector, request.EmployeeId, request.Reason);
+        }
+
+        // Same removal reachable from the [AllowAnonymous] email-confirm channel — authenticated by the
+        // OtFormApprovalEmailToken instead of a JWT + UserApprovalScope check, and WITHOUT a secondary
+        // password (see docs/attendance-module.md — Loại nhân viên khỏi đơn). Deliberately does NOT
+        // consume/expire the token (ResolveEmailTokenAsync requireUnused: false) — the approver may still
+        // need the same token afterward to actually Approve/Reject, and may remove more than one person
+        // before deciding.
+        public async Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request)
+        {
+            var emailToken = await ResolveEmailTokenAsync(token, requireUnused: false);
+            var isGeneralDirector = emailToken.ApprovalLevel == (int)ApprovalLevel.GeneralDirector;
+
+            return await RemoveEmployeeCoreAsync(
+                emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName,
+                isAdmin: false, isGeneralDirector, request.EmployeeId, request.Reason);
+        }
+
+        private async Task<OtFormDto> RemoveEmployeeCoreAsync(
+            int id, string userName, string? fullName, bool isAdmin, bool isGeneralDirector, int employeeId, string reason)
+        {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, x => x.OtFormEmployees);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
 
@@ -791,12 +820,7 @@ namespace Attendance.Application.Services
                     throw new DomainException("Bạn không được phân quyền ở cấp mà đơn này đang chờ, nên không thể loại nhân viên khỏi đơn.");
             }
 
-            // Second-factor password gate — removing someone changes a signed document, so it is held to
-            // the same bar as sign/approve/reject (see docs/attendance-module.md — Mật khẩu cấp 2).
-            // Verified before any write.
-            await _secondaryPasswordService.VerifyAsync(userName, request.SecondaryPassword);
-
-            var target = otForm.OtFormEmployees.FirstOrDefault(x => x.EmployeeId == request.EmployeeId);
+            var target = otForm.OtFormEmployees.FirstOrDefault(x => x.EmployeeId == employeeId);
             if (target == null)
                 throw new DomainException("Nhân viên này không có trong danh sách tăng ca của đơn.");
 
@@ -812,7 +836,7 @@ namespace Attendance.Application.Services
             target.RemovedByFullName = fullName;
             target.RemovedAtLevel = (int)currentLevel;
             target.RemovedAt = TimeHelper.GetCurrentUtcTime();
-            target.RemoveReason = request.Reason;
+            target.RemoveReason = reason;
             _unitOfWork.OtFormEmployees.Update(target);
 
             // Keep the headline count in sync with who is actually still on the form — this is what the

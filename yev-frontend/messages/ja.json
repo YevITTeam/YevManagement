@@ -393,7 +393,7 @@
       "timeLabel": "時間",
       "createdByLabel": "作成者",
       "subReasonLabel": "詳細理由",
-      "processPartTitle": "処理内容",
+      "processPartTitle": "その他のご要望",
       "eatLabel": "食事：{value}",
       "transportationLabel": "送迎：{value}",
       "copyRoomLabel": "コピー室：{value}",
@@ -538,7 +538,10 @@
       "rejectedResultMessage": "この申請を却下しました。",
       "commentOptionalLabel": "備考（承認時、任意）",
       "rejectModalTitle": "申請を却下",
-      "rejectReasonLabel": "却下理由"
+      "rejectReasonLabel": "却下理由",
+      "removeEmployeeButton": "申請から除外",
+      "removeReasonRequiredError": "除外理由を入力してください。",
+      "removeError": "社員の除外に失敗しました"
     },
     "SignatureConfirm": {
       "title": "署名更新の確認",

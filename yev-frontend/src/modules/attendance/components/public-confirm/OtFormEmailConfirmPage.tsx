@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Check, Clock, X } from "lucide-react";
+import { Check, Clock, UserX, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
-import type { OtFormApprovalHistoryDto, OtFormDto } from "@/modules/attendance/types/ot-form.dto";
+import type { OtFormApprovalHistoryDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
 import { otFormStatusClasses } from "@/modules/attendance/types/enums";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -14,8 +14,13 @@ import {
     approvalActionLabelsBilingual,
     approvalLevelLabelsBilingual,
     bilingualText,
+    bilingualYesNo,
     createBilingualTranslator,
     otFormStatusLabelsBilingual,
+    processPartFieldLabelsBilingual,
+    processPartTitleBilingual,
+    removedByLabelBilingual,
+    removedReasonLabelBilingual,
 } from "@/modules/attendance/lib/bilingual";
 import { calculateHours, formatHours } from "@/modules/attendance/lib/time";
 
@@ -118,6 +123,13 @@ export default function OtFormEmailConfirmPage() {
     // lỗi "chưa thiết lập"/"sai mật khẩu" hiện ra qua actionError trả về từ BE.
     const [rejectSecondaryPassword, setRejectSecondaryPassword] = useState("");
 
+    // Loại 1 nhân viên khỏi đơn ngay trên trang email — KHÔNG có ô mật khẩu cấp 2 (khác Duyệt/Từ chối
+    // ở trên), token trong URL tự nó là thông tin xác thực (chốt qua AskUserQuestion 2026-07-31, xem
+    // docs/attendance-module.md — Loại nhân viên khỏi đơn).
+    const [removeTarget, setRemoveTarget] = useState<OtFormEmployeeDto | null>(null);
+    const [removeReason, setRemoveReason] = useState("");
+    const [isRemovingEmployee, setIsRemovingEmployee] = useState(false);
+
     // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
     // đúng câu thông báo riêng này thay vì rơi về fallback chung.
     const { isLoading, error: loadError } = useFetchEffect(
@@ -209,6 +221,40 @@ export default function OtFormEmailConfirmPage() {
             setActionError(getApiErrorMessage(err, tConfirm("rejectError")));
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const openRemove = (employee: OtFormEmployeeDto) => {
+        setRemoveReason("");
+        setActionError(null);
+        setRemoveTarget(employee);
+    };
+
+    const closeRemove = () => {
+        if (isRemovingEmployee) return;
+        setRemoveTarget(null);
+    };
+
+    const handleRemoveEmployee = async () => {
+        if (!removeTarget) return;
+        if (!removeReason.trim()) {
+            setActionError(tConfirm("removeReasonRequiredError"));
+            return;
+        }
+        setIsRemovingEmployee(true);
+        setActionError(null);
+        try {
+            const updated = await OtFormApi.removeOtFormEmployeeByEmailToken(token, {
+                employeeId: removeTarget.employeeId,
+                reason: removeReason.trim(),
+            });
+            setForm(updated);
+            setRemoveTarget(null);
+        } catch (err) {
+            console.error(err);
+            setActionError(getApiErrorMessage(err, tConfirm("removeError")));
+        } finally {
+            setIsRemovingEmployee(false);
         }
     };
 
@@ -341,30 +387,40 @@ export default function OtFormEmailConfirmPage() {
                 )}
             </section>
 
-            {form.processPart && (
-                <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
-                    <div className="flex flex-wrap gap-4 text-sm text-[#191c1e]">
-                        <span>{t("eatLabel", { value: form.processPart.isEat ? t("yes") : t("no") })}</span>
-                        <span>{t("transportationLabel", { value: form.processPart.isTransportation ? t("yes") : t("no") })}</span>
-                        <span>{t("copyRoomLabel", { value: form.processPart.isUseCopyRoom ? t("yes") : t("no") })}</span>
+            {/* Luôn hiện khối này, kể cả khi form.processPart null — mặc định "Không" cho 3 checkbox,
+                cùng cách OtFormPrintView.tsx đã xử lý từ trước (processPart?.isEat ?? false). Trước
+                đây ẩn hẳn cả khối khi null, khiến người dùng tưởng thiếu thông tin dù đây là giá trị
+                mặc định hợp lệ (đơn không yêu cầu hỗ trợ gì thêm), không phải dữ liệu bị mất. */}
+            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                {/* Nhãn/giá trị dựng thủ công từ literal song ngữ (bilingual.ts), KHÔNG đi qua
+                    createBilingualTranslator — {value} bên dưới TỰ nó đã là chuỗi song ngữ
+                    ("Có / はい"), ghép qua t() sẽ lặp lại 2 lần (bug đã gặp thực tế). */}
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{processPartTitleBilingual}</h2>
+                <div className="flex flex-wrap gap-4 text-sm text-[#191c1e]">
+                    <span>
+                        {processPartFieldLabelsBilingual.eat}: {bilingualYesNo(Boolean(form.processPart?.isEat))}
+                    </span>
+                    <span>
+                        {processPartFieldLabelsBilingual.transportation}: {bilingualYesNo(Boolean(form.processPart?.isTransportation))}
+                    </span>
+                    <span>
+                        {processPartFieldLabelsBilingual.copyRoom}: {bilingualYesNo(Boolean(form.processPart?.isUseCopyRoom))}
+                    </span>
+                </div>
+                {form.processPart?.isEat && (
+                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
+                        <span>{t("mainTicketLabel", { count: form.processPart.mainTicketCount })}</span>
+                        <span>{t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}</span>
+                        <span>{t("milkLabel", { count: form.processPart.milkCount })}</span>
                     </div>
-                    {form.processPart.isEat && (
-                        <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#5e3f3a]">
-                            <span>{t("mainTicketLabel", { count: form.processPart.mainTicketCount })}</span>
-                            <span>{t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}</span>
-                            <span>{t("milkLabel", { count: form.processPart.milkCount })}</span>
-                        </div>
-                    )}
-                    {form.processPart.anotherSuggestionVn && (
-                        <p className="mt-2 text-sm text-[#5e3f3a]">
-                            {t("anotherSuggestionLabel", {
-                                value: bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp),
-                            })}
-                        </p>
-                    )}
-                </section>
-            )}
+                )}
+                {form.processPart?.anotherSuggestionVn && (
+                    <p className="mt-2 text-sm text-[#5e3f3a]">
+                        {processPartFieldLabelsBilingual.anotherSuggestion}:{" "}
+                        {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
+                    </p>
+                )}
+            </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-3">
@@ -386,6 +442,7 @@ export default function OtFormEmailConfirmPage() {
                                 <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
                                 <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colMeal")}</th>
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colNote")}</th>
+                                {!actionResult && <th rowSpan={2} className="px-6 py-3 align-bottom" />}
                             </tr>
                             <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                 <th className="px-6 py-2 text-center">{t("colMonth")}</th>
@@ -406,15 +463,12 @@ export default function OtFormEmailConfirmPage() {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-3 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
-                                            <td colSpan={5} className="px-6 py-3 text-sm text-[#930006]">
-                                                {t("removedInlineNote", {
-                                                    name: employee.removedByFullName ?? employee.removedByUserName ?? "",
-                                                    level:
-                                                        employee.removedAtLevel !== null
-                                                            ? approvalLevelLabelsBilingual[employee.removedAtLevel]
-                                                            : "",
-                                                    reason: employee.removeReason ?? "",
-                                                })}
+                                            <td colSpan={!actionResult ? 6 : 5} className="px-6 py-3 text-sm text-[#930006]">
+                                                {removedByLabelBilingual}: {employee.removedByFullName ?? employee.removedByUserName}
+                                                {employee.removedAtLevel !== null && <> ({approvalLevelLabelsBilingual[employee.removedAtLevel]})</>}
+                                                {" — "}
+                                                {removedReasonLabelBilingual}: {employee.removeReason}
+                                                {employee.removedAt && <span className="ml-2 text-[#9aa0a6]">({formatDateTime(employee.removedAt)})</span>}
                                             </td>
                                         </tr>
                                     );
@@ -460,6 +514,20 @@ export default function OtFormEmailConfirmPage() {
                                             )}
                                         </td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
+                                        {!actionResult && (
+                                            <td className="px-6 py-3 text-right">
+                                                {activeEmployees.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openRemove(employee)}
+                                                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e9bcb6] bg-white px-2.5 py-1 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
+                                                    >
+                                                        <UserX className="h-3.5 w-3.5" />
+                                                        {tConfirm("removeEmployeeButton")}
+                                                    </button>
+                                                )}
+                                            </td>
+                                        )}
                                     </tr>
                                 );
                             })}
@@ -671,6 +739,69 @@ export default function OtFormEmailConfirmPage() {
                                     className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isSubmitting ? tCommon("processing") : t("confirmReject")}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {removeTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+                    <div className="fixed inset-0 bg-black/40" onClick={closeRemove} />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                    >
+                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                            <h3 className="text-lg font-semibold text-[#191c1e]">{t("removeModalTitle", { name: removeTarget.fullName })}</h3>
+                            <button
+                                onClick={closeRemove}
+                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                aria-label={tCommon("close")}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <p className="text-sm text-[#5e3f3a]">{t("removeModalDesc")}</p>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("removeReasonLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <textarea
+                                    value={removeReason}
+                                    onChange={(event) => setRemoveReason(event.target.value)}
+                                    disabled={isRemovingEmployee}
+                                    rows={3}
+                                    required
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            {actionError && (
+                                <p className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{actionError}</p>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={closeRemove}
+                                    disabled={isRemovingEmployee}
+                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {tCommon("cancel")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveEmployee}
+                                    disabled={isRemovingEmployee}
+                                    className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isRemovingEmployee ? tCommon("processing") : t("confirmRemove")}
                                 </button>
                             </div>
                         </div>
