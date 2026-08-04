@@ -8,6 +8,8 @@ import { useTranslations } from "next-intl";
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalHistoryDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { DEFAULT_ATTENDANCE_SETTING, useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
+import type { AttendanceSettingDto } from "@/modules/attendance/types/attendance-setting.dto";
 
 interface OtFormPrintViewProps {
     id: number;
@@ -426,14 +428,23 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
 // Đè danh sách nhân viên lên đúng dòng in sẵn (Stt đã in sẵn trong ảnh nên không đè). KHÔNG tự vẽ
 // <img> — dùng bên trong PageFrame để tận dụng chung ảnh nền với FormHeaderFields khi cùng 1 trang
 // (trang 1 khổ A4) hoặc dùng ảnh nền riêng của trang tiếp theo.
-function EmployeeRowFields({ layout, employees }: { layout: EmployeePageLayout; employees: OtFormEmployeeDto[] }) {
+function EmployeeRowFields({
+    layout,
+    employees,
+    setting = DEFAULT_ATTENDANCE_SETTING,
+}: {
+    layout: EmployeePageLayout;
+    employees: OtFormEmployeeDto[];
+    // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
+    setting?: AttendanceSettingDto;
+}) {
     return (
         <div className="text-[8pt]">
             {layout.rows.map((row, index) => {
                 const employee = employees[index];
                 if (!employee) return null;
-                const isMonthOverLimit = employee.monthToDate > 25;
-                const isYearOverLimit = employee.yearToDate > 300;
+                const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
+                const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
                 return (
                     <div key={employee.employeeId}>
                         <div style={nowrapBoxStyle(columnBox(layout.columns.hoTen, row))} className="pl-1">
@@ -494,6 +505,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
     // 1 lần thì tôn trọng lựa chọn đó, không tự đổi lại nữa dù state form có thay đổi.
     const [paperSizeTouched, setPaperSizeTouched] = useState(false);
     const [isExportingPdf, setIsExportingPdf] = useState(false);
+    const { setting } = useAttendanceSetting();
     // Ref tới từng trang in thật (mỗi phần tử = 1 ảnh nền = 1 trang giấy) — dùng để chụp canvas từng
     // trang khi xuất PDF, KHÔNG dùng ref tới toàn bộ container vì mỗi trang có kích thước/tỉ lệ khác
     // ảnh nền chung (aspect-ratio riêng), phải chụp tách trang mới ra đúng khổ giấy thật.
@@ -549,7 +561,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                   key: `emp-${index}`,
                   image: A5_PAGE2_EMPLOYEE.image,
                   aspect: A5_PAGE2_EMPLOYEE.aspect,
-                  content: <EmployeeRowFields layout={A5_PAGE2_EMPLOYEE} employees={chunk} />,
+                  content: <EmployeeRowFields layout={A5_PAGE2_EMPLOYEE} employees={chunk} setting={setting} />,
               })),
           ]
         : [
@@ -560,7 +572,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                   content: (
                       <>
                           <FormHeaderFields form={form} paperSize={paperSize} />
-                          <EmployeeRowFields layout={A4_PAGE1_EMPLOYEE} employees={employeePages[0] ?? []} />
+                          <EmployeeRowFields layout={A4_PAGE1_EMPLOYEE} employees={employeePages[0] ?? []} setting={setting} />
                       </>
                   ),
               },
@@ -568,7 +580,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                   key: `emp-${index}`,
                   image: A4_PAGE2_EMPLOYEE.image,
                   aspect: A4_PAGE2_EMPLOYEE.aspect,
-                  content: <EmployeeRowFields layout={A4_PAGE2_EMPLOYEE} employees={chunk} />,
+                  content: <EmployeeRowFields layout={A4_PAGE2_EMPLOYEE} employees={chunk} setting={setting} />,
               })),
           ];
 

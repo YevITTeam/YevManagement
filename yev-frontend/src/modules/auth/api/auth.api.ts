@@ -1,10 +1,11 @@
-import { api, windowsLogin as requestWindowsLogin } from "@/lib/client";
+import { api, getAuthToken, windowsLogin as requestWindowsLogin } from "@/lib/client";
 import type { UserDto, RoleDto, WindowsLoginResponseDto, CreateUserDto } from "@/modules/auth/types/auth.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
   AUTH: {
     windowsLogin: "/Auth/windows-login",
+    me: "/Auth/me",
     createUser: "/Auth/create-user",
     getAllUsersWithRoles: "/Auth/get-all-users-with-roles",
     updateUserRoles: "/Auth/update-user-roles",
@@ -28,13 +29,27 @@ export const AuthApi = {
     return payload.data.user;
   },
 
-  // Luôn gọi thẳng windows-login (Negotiate/Kerberos — âm thầm dùng phiên đăng nhập Windows hiện tại,
-  // KHÔNG phải popup nhập mật khẩu, gọi nhiều lần vẫn an toàn/idempotent, xem docs/identity-api-fe.md §2.2).
+  // Lấy hồ sơ + quyền hiện hành bằng JWT đang có (Bearer) và gia hạn luôn token đó — KHÔNG cần
+  // handshake Negotiate (docs/identity-api-fe.md §2b). `client.ts` tự lưu token mới trong payload.
+  me: async (): Promise<UserDto> => {
+    const payload = await api.get<ApiResponse<WindowsLoginResponseDto>>(ENDPOINTS.AUTH.me);
+    if (!payload?.data?.user) {
+      throw new Error("Không lấy được thông tin phiên đăng nhập.");
+    }
+    return payload.data.user;
+  },
+
+  // ĐÃ có token → lấy hồ sơ qua `/Auth/me`; CHƯA có mới gọi `windows-login`.
+  // Lý do không gọi thẳng windows-login như trước: mỗi lời gọi là một handshake Negotiate/NTLM mới.
+  // Trên máy đã bật SSO cho origin của BE (site nằm trong vùng Local Intranet / AuthServerAllowlist)
+  // thì handshake này âm thầm; máy CHƯA bật thì trình duyệt hỏi lại tài khoản domain — nên mỗi lần
+  // F5 trang là một lần bị bắt đăng nhập lại dù vừa đăng nhập đúng.
+  // Token hỏng/hết hạn → `/Auth/me` trả 401 → `client.ts` tự re-login (đúng 1 lần) rồi retry.
   // KHÔNG cache profile user ở localStorage (permissions/roles là dữ liệu nhạy cảm) — nơi cache hợp lý là
   // AuthContext (React state, chỉ tồn tại trong bộ nhớ JS của tab hiện tại), không phải ở đây.
   getCurrentUser: async (): Promise<UserDto | null> => {
     if (typeof window === "undefined") return null;
-    return AuthApi.windowsLogin();
+    return getAuthToken() ? AuthApi.me() : AuthApi.windowsLogin();
   },
 
   // Chuẩn bị trước 1 user cho UserName cụ thể — dùng khi nhân viên mới chưa từng đăng nhập Windows

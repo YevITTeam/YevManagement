@@ -19,6 +19,7 @@
 - **Cập nhật 2026-07-31 (mở rộng "Loại nhân viên khỏi đơn" sang kênh email + đổi tên khu vực)**: (1) thêm `POST /api/OtForm/email-confirm/{token}/employees/remove` (`RemoveOtFormEmployeeByEmailTokenDto { EmployeeId, Reason }`, **KHÔNG có `SecondaryPassword`** — khác hẳn 2 action Duyệt/Từ chối qua email vẫn giữ mật khẩu cấp 2, đã chốt qua AskUserQuestion vì token trong URL tự nó là thông tin xác thực cho hành động này — xem §4.5a); (2) đổi tên khu vực UI "Phần xử lý / 処理欄" (ăn uống/xe đưa đón/phòng copy/phiếu ăn) thành **"Yêu cầu hỗ trợ khác"** ở cả 2 màn hiển thị JSON này (`OtFormDetail.tsx` trong app, `OtFormEmailConfirmPage.tsx` qua email) — **không đổi** ở bản in PDF (`OtFormPrintView.tsx`, vẫn giữ đúng tên khối trên phiếu giấy gốc YEV-22-024, xem `attendance-otform-pdf-mapping.md`); (3) sửa lỗi hiển thị trùng lặp song ngữ trên trang email — không đổi field/response nào, chỉ là bug FE (xem `bilingual.ts`).
 - **Cập nhật 2026-07-31 (cùng ngày, thêm 1 đợt sửa)**: (1) bỏ luôn `secondaryPassword` khỏi kênh JWT `POST /{id}/employees/remove` (`RemoveOtFormEmployeeDto` nay chỉ còn `{ EmployeeId, Reason }`) — người dùng phản hồi hành động loại người không cần xác thực lại, nay CẢ 2 kênh (JWT + email) loại nhân viên đều không cần mật khẩu cấp 2, chỉ Duyệt/Từ chối (§4.4/§4.5/§4.6) mới cần; (2) redesign UI khối "Yêu cầu hỗ trợ khác" ở `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx` từ text phẳng sang badge Có/Không (icon `Check`/`X` màu xanh lá/xám) + icon theo mục (`Utensils`/`Car`/`Printer`) — không đổi field/response nào, chỉ UI.
 - **Cập nhật 2026-07-31 (breaking, giới hạn lại "Sửa đơn")**: `PUT /api/OtForm/{id}` (§4.1b) trước đây sửa được toàn bộ đơn giống hệt lúc tạo, nay **chỉ còn sửa được giờ kết thúc thực tế của từng nhân viên đang có trong đơn** — chốt qua AskUserQuestion. `UpdateOtFormDto` đổi hẳn còn `{ Employees: [{ EmployeeId, EndTime }] }`, không còn `GroupId`/`DepartmentId`/`ReasonId`/`OtCaseId`/`Date`/`StartTime`/`EndTime`(chung)/`SubReason`/`TotalHour`/`ProcessPart`/`NoteVn`/`NoteJp` nào. Danh sách nhân viên trong body phải khớp **chính xác** tập nhân viên active của đơn (không thêm/bớt được nữa — bớt người dùng riêng `POST /{id}/employees/remove`, §4.5a). FE (`CreateOtFormPage.tsx`) khoá toàn bộ field khác + đổi bảng chọn nhân viên sang bảng cố định chỉ sửa được cột "Giờ kết thúc".
+- **Cập nhật 2026-08-01 (mới, "Cấu hình phiếu ăn & giới hạn lũy kế")**: chốt qua AskUserQuestion — 2 nhóm ngưỡng trước đây hardcode (mốc giờ nhận phiếu ăn `> 2h` ở BE; ngưỡng cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào `AttendanceSetting`, Admin tự sửa qua UI, không cần deploy lại. Thêm `GET/PUT /api/AttendanceSetting` (§6d) — `GET` mở cho mọi tài khoản đăng nhập, `PUT` cần permission mới `Attendance.Setting.Update` (chỉ Admin). `OtFormEmployeeDto.isEligibleForMeal` đổi ngưỡng từ hardcode `> 2h` sang `>= mainMealTicketMinHours` (mặc định 2.5h). FE `CreateOtFormPage.tsx` **tự tính** `processPart.mainTicketCount`/`secondaryTicketCount` theo giờ OT từng người (>= ngưỡng → phiếu chính, dưới → phiếu phụ, mọi người đều nhận đúng 1 trong 2 loại) — người lập đơn vẫn sửa tay được, gõ đè thì tắt tự tính và hiện nút "Tính lại". Thêm tab "Cấu hình" trong `/ot/categories` (Admin) để sửa 3 ngưỡng này.
 
 ## 1. Tổng quan nghiệp vụ, vai trò & luồng UI (đọc trước khi code màn hình)
 
@@ -135,7 +136,8 @@ Quy tắc dựng nút chung cho màn "Chi tiết đơn" (`GET /{id}`):
 ──────────────────────────────────────────────
 Danh sách nhân viên nhóm đã chọn (checkbox chọn nhiều + giờ riêng từng người)
 Lũy kế hiện tại lấy từ Employee/by-group/{groupId} — hiển thị NGAY khi chọn để Trưởng
-Group tự cân nhắc trước khi gửi (vd sắp vượt 25h/tháng thì nên chọn OtCase TH3).
+Group tự cân nhắc trước khi gửi (vd sắp vượt ngưỡng tháng cấu hình thì nên chọn OtCase TH3
+— ngưỡng đọc từ GET /AttendanceSetting, mặc định 25h/tháng·300h/năm, xem §6d).
 [ ] NV001 - Nguyễn Văn A   (Lũy kế: 12.5h/tháng, 80h/năm)
        Giờ kết thúc [_] (mặc định = Giờ kết thúc đơn, cho sửa nhỏ hơn)   Ghi chú [_]
 [ ] NV002 - Trần Thị B     (Lũy kế: 20.0h/tháng, 150h/năm)  ...
@@ -180,9 +182,11 @@ Danh sách nhân viên đã đăng ký (bảng, chỉ sửa được qua màn "S
 └──────────┴────────────┴───────┴───────┴────────────┴────────────┴──────────────┘
   ↑ "Lũy kế tháng/năm" lấy TRỰC TIẾP từ employees[].monthToDate/yearToDate — đây là
     giá trị HIỆN TẠI (live) của nhân viên, không phải snapshot lúc tạo đơn, giúp người
-    duyệt đối chiếu ngưỡng TH3 (>25h/tháng, >300h/năm) ngay tại đây, không cần mở màn Employee.
-  ↑ "Phiếu ăn" = employees[].isEligibleForMeal (giờ KT - giờ BĐ > 2h), chỉ mang tính
-    tham khảo hiển thị — không quyết định ProcessPart.isEat (cờ đó do người lập đơn tự tick).
+    duyệt đối chiếu ngưỡng TH3 (mặc định >25h/tháng, >300h/năm — đọc từ GET /AttendanceSetting,
+    Admin sửa được, xem §6d) ngay tại đây, không cần mở màn Employee.
+  ↑ "Phiếu ăn" = employees[].isEligibleForMeal (giờ KT - giờ BĐ >= ngưỡng cấu hình, mặc định
+    2.5h — xem §6d), chỉ mang tính tham khảo hiển thị — không quyết định ProcessPart.isEat
+    (cờ đó do người lập đơn tự tick, FE tự tính gợi ý mainTicketCount/secondaryTicketCount).
 ──────────────────────────────────────────────
 Phát sinh khác (ProcessPart, nếu có)
 ──────────────────────────────────────────────
@@ -546,8 +550,8 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 - **Ô "Tên công đoạn / 工程名" trên form giấy `YEV-22-024` KHÔNG có field tương ứng trong `OtFormDto`** — BE hiện không lưu trường này (field `AreaLine` cũ từng có nhưng đã bị xóa ở migration `RemoveAreaLineFromOtFormAddGroupDepartment`, thay bằng `groupId`/`departmentId`). FE tự dựng PDF (xem bullet trên) nên **để trống ô này** — `groupNameVn`/`departmentNameVn` là khái niệm khác (Bộ phận/Phòng ban), không nên dùng thay thế.
 - **Suy ra "cấp đang chờ ai duyệt/ký tiếp"** từ `status`: `Draft`(5)→đang chờ Trưởng nhóm ký (`POST /{id}/submit`), `PendingGroupHead`(6, **mới**)→đang chờ Trưởng Bộ phận, `Pending`(0)→đang chờ Trưởng phòng, `ApprovedByDepartment`(1)→chờ Trưởng xưởng, `ApprovedByWorkshop`(2)→chờ Tổng Giám Đốc, `Completed`(3)/`Rejected`(4)→hết, ẩn nút Duyệt/Từ chối.
 - `isEditable` = `status == Draft || status == PendingGroupHead || status == Pending` — điều kiện CẦN (chưa đủ) để hiện nút "Sửa", xem §1.2 và §4.1b.
-- **`employees[].monthToDate`/`yearToDate`** — lũy kế HIỆN TẠI (live, đọc thẳng từ `Employee` lúc gọi API, không phải giá trị đóng băng lúc tạo đơn) — dùng để người duyệt đối chiếu ngưỡng TH3 (>25h/tháng, >300h/năm) ngay trên màn chi tiết, không cần mở thêm màn Employee.
-- **`employees[].isEligibleForMeal`** — `true` khi `(endTime - startTime) > 2 giờ`. Tính sẵn ở BE, FE chỉ hiển thị (gợi ý tick `processPart.isEat`), không tự tính lại.
+- **`employees[].monthToDate`/`yearToDate`** — lũy kế HIỆN TẠI (live, đọc thẳng từ `Employee` lúc gọi API, không phải giá trị đóng băng lúc tạo đơn) — dùng để người duyệt đối chiếu ngưỡng TH3 (mặc định >25h/tháng, >300h/năm — Admin sửa được qua `GET/PUT /AttendanceSetting`, xem §6d) ngay trên màn chi tiết, không cần mở thêm màn Employee.
+- **`employees[].isEligibleForMeal`** — `true` khi `(endTime - startTime) >= AttendanceSetting.mainMealTicketMinHours` (mặc định 2.5h, đã đổi từ hardcode `> 2h` sang cấu hình 2026-08-01, xem §6d). Tính sẵn ở BE, FE chỉ hiển thị (gợi ý tick `processPart.isEat`), không tự tính lại field này — nhưng FE TỰ TÍNH `processPart.mainTicketCount`/`secondaryTicketCount` theo cùng ngưỡng (§4.1/§6d), khác với `isEligibleForMeal` chỉ mang tính hiển thị tham khảo.
 - **`groupNameJp`/`departmentNameJp`/`reasonNameJp` (mới, 2026-07-29)** — song ngữ Việt/Nhật (nullable), lấy thẳng từ `Group`/`Department`/`Reason` tương ứng, cùng cơ chế với `groupNameJp` ở §4.2. FE (`OtFormDetail.tsx` — màn trong app, và `OtFormEmailConfirmPage.tsx` — trang public mở qua link email cho Trưởng phòng/Trưởng Bộ phận xem trước khi duyệt) hiện cả 2 màn này bằng `"{Vn} / {Jp}"` cho Phòng ban/Bộ phận/Lý do, và tương tự cho `employees[].noteJp`/`processPart.anotherSuggestionJp` (đã có sẵn trong DTO từ trước, giờ mới được hiển thị lên UI).
 - **`employees[].isRemoved`/`removedByUserName`/`removedByFullName`/`removedAtLevel`/`removedAt`/`removeReason` (mới, 2026-07-30 — xem §4.5a)** — người bị 1 cấp duyệt loại khỏi đơn qua `POST /{id}/employees/remove` **vẫn nằm trong mảng `employees[]`** (BE cố tình KHÔNG lọc bỏ) để giữ dấu vết ai loại/lúc nào/lý do gì trên màn chi tiết — FE tự lọc `isRemoved === true` ra khỏi (1) tổng giờ OT hiển thị, (2) bản in PDF/A4/A5, (3) trang xem trước qua email. `removedAtLevel` là số `ApprovalLevel` (§2) của cấp đã loại — map qua `approvalLevelLabels`/`approvalLevelLabelsBilingual` để hiện tên cấp. `numberOfEmployee` (cả `OtFormDto` lẫn `OtFormListItemDto`) chỉ đếm người **chưa** bị loại, không cần FE tự trừ.
 
@@ -759,6 +763,45 @@ chỉ gửi email xác nhận, giá trị cũ (nếu có) vẫn còn hiệu lự
   `Attendance.UserSignature.Update` (Admin, Trưởng nhóm, Trưởng Bộ phận, Trưởng phòng, Trưởng xưởng,
   Tổng Giám Đốc) — không có permission `.View` riêng (không có nhu cầu Admin xem hộ mật khẩu người khác).
 
+## 6d. AttendanceSetting (`/api/AttendanceSetting`) — cấu hình phiếu ăn & giới hạn lũy kế (mới, 2026-08-01)
+
+**Lý do**: 2 nhóm ngưỡng trước đây hardcode trong code (mốc giờ nhận phiếu ăn ở BE — `> 2h`; ngưỡng
+cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấu hình 1 dòng, Admin tự sửa qua UI
+(tab "Cấu hình" trong `/ot/categories`), không cần deploy lại khi chính sách công ty đổi.
+
+| Method | Route | Permission | Việc gì |
+|---|---|---|---|
+| GET | `/api/AttendanceSetting` | **Không cần** (mọi tài khoản đăng nhập) | Đọc cấu hình hiện hành |
+| PUT | `/api/AttendanceSetting` | `Attendance.Setting.Update` (chỉ Admin) | Sửa cấu hình |
+
+```jsonc
+// AttendanceSettingDto — response GET, body PUT (cùng shape)
+{
+  "mainMealTicketMinHours": 2.5,   // decimal, [Range(0.5, 24)] khi PUT
+  "monthlyOtHourLimit": 25,        // decimal, [Range(1, 744)] khi PUT
+  "yearlyOtHourLimit": 300         // decimal, [Range(1, 8784)] khi PUT
+}
+```
+
+- **`GET` cố tình KHÔNG gắn permission** — Role "Nhân viên"/"Trưởng nhóm" không có permission quản trị
+  nào nhưng màn Tạo đơn của họ vẫn phải đọc được cấu hình này để tự tính phiếu ăn (§4.1) và tô đỏ lũy
+  kế vượt ngưỡng. Chỉ hành động **SỬA** mới cần `Attendance.Setting.Update`.
+- **`mainMealTicketMinHours`** — mốc giờ OT để nhận **phiếu chính**; dưới mốc này nhận **phiếu phụ**
+  (không có ngưỡng sàn, mọi người tăng ca đều nhận đúng 1 trong 2 loại — chốt qua AskUserQuestion). Áp
+  dụng cho cả `OtFormEmployeeDto.isEligibleForMeal` (BE tính) lẫn `processPart.mainTicketCount`/
+  `secondaryTicketCount` (FE tự tính ở `CreateOtFormPage.tsx`, người dùng vẫn sửa tay được — xem §4.1).
+- **`monthlyOtHourLimit`/`yearlyOtHourLimit`** — chỉ ảnh hưởng **hiển thị** (badge/pill đỏ cảnh báo ở
+  `EmployeeList.tsx`, `EmployeeAccumulationPanel.tsx`, `CreateOtFormPage.tsx`, `OtFormDetail.tsx`,
+  `OtFormPrintView.tsx`), **không** chặn tạo/duyệt đơn hay chỉnh lũy kế thủ công
+  (`PATCH /Employee/{id}/adjust-accumulation`, §3.6 vẫn không giới hạn gì).
+- **FE cache dùng chung** (`useAttendanceSetting.ts`) — 1 promise cấp module, không gọi lại API mỗi màn
+  mount; gọi `invalidateAttendanceSettingCache()` sau khi Admin lưu cấu hình mới để các màn mở sau đó
+  thấy ngay, không cần F5 cả trang.
+- **Trang public qua email** (`OtFormEmailConfirmPage.tsx`, không JWT) **không gọi được endpoint này**
+  — vẫn dùng cứng giá trị mặc định (2.5h/25h/300h) cho màu cảnh báo lũy kế. Chấp nhận được vì đây chỉ
+  là gợi ý hiển thị, không phải số liệu quyết định nghiệp vụ.
+- Thành công → `data` = `AttendanceSettingDto` đầy đủ (cả GET lẫn PUT), không cần gọi lại `GetById`.
+
 ## 7. Tổng hợp endpoint
 
 | Route | Ghi chú |
@@ -769,6 +812,7 @@ chỉ gửi email xác nhận, giá trị cũ (nếu có) vẫn còn hiệu lự
 | `/api/UserApprovalScope` | grid-list, `by-user/{userName}`, POST, DELETE (không PUT) |
 | `/api/UserSignature` | `me` (GET/PUT), `{userName}` (GET, admin), `confirm/{token}` (GET/POST, public — §6b) |
 | `/api/SecondaryPassword` | `me` (GET/PUT), `confirm/{token}` (GET/POST, public — §6c) |
+| `/api/AttendanceSetting` | GET (mọi tài khoản), PUT (Admin — §6d) |
 | `/api/OtForm` | `my-forms`, `pending-submissions` (§4.2a), `pending-approvals`, `my-actions` (§4.2b), `my-participations` (§4.2c), `{id}` (GET/PUT), POST, `{id}/submit` (§4.1a), `{id}/approve`, `{id}/reject`, `{id}/employees/remove` (§4.5a), `email-confirm/{token}` (GET), `email-confirm/{token}/approve`, `email-confirm/{token}/reject`, `email-confirm/{token}/employees/remove` (public, không mật khẩu cấp 2 — §4.6) |
 | `/api/EmployeeImport` | `preview`, `confirm` (Admin, §3.7) |
 

@@ -14,10 +14,10 @@ namespace Asset.Application.Services
     public class DeviceImportService : BaseService<IAssetUnitOfWork>, IDeviceImportService
     {
         // The sample Excel file (see docs/asset-module.md) has no DeviceName/Manager/Email/
-        // DepreciationMonths even though these fields are [Required] on CreateDeviceDto — per user
-        // decision (2026-07-10): DeviceName is taken from the MQL (device code), Manager/Email are
-        // left blank, DepreciationMonths defaults to 60 months, edit later via the Device screen
-        // if needed.
+        // DepreciationMonths — per user decision (2026-07-10): DeviceName is taken from the MQL
+        // (device code), Manager/Email are left blank (optional since 2026-08-01, see
+        // CreateDeviceDto), DepreciationMonths defaults to 60 months, edit later via the Device
+        // screen if needed.
         private const int DefaultDepreciationMonths = 60;
 
         private readonly IDeviceService _deviceService;
@@ -89,7 +89,7 @@ namespace Asset.Application.Services
                         DepreciationMonths = DefaultDepreciationMonths,
                         IsOutsourced = false,
                         Status = (int)DeviceStatus.PendingUse,
-                        Note = row.Note,
+                        Note = row.Note ?? string.Empty,
                         SerialNumber = row.SerialNumber
                     };
 

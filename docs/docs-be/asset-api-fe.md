@@ -161,10 +161,12 @@ Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ 
 { "deviceCode":"...[Required]unique", "deviceName":"[Required]", "deviceTypeId":11[Required],
   "supplierId":2[Required], "branchId":9[Required],
   "groupId":null, "departmentId":null,   // optional, gán Nhóm bắt buộc kèm departmentId cha (2.1)
-  "manager":"[Required]", "emails":[{ "email":"[Required][EmailAddress]", "note":null }],  // [Required][MinLength(1)]
+  "manager":"",  // tuỳ chọn (2026-08-01) — máy chưa dùng thì chưa biết ai quản lý, mặc định ""
+  "emails":[{ "email":"[EmailAddress]", "note":null }],  // tuỳ chọn (2026-08-01), cho phép mảng rỗng []
   "purchaseDate":"...[Required]", "depreciationMonths":36,  // [Required][Range(1,600)]
   "isOutsourced":false, "status":0,  // [Range(0,3)], default 0
-  "note":null, "serialNumber":"...",  // nullable [StringLength(100)], unique nếu có
+  "note":"...[Required]",  // bắt buộc (2026-08-01) — thay cho manager/emails, giải thích tình trạng máy
+  "serialNumber":"...",  // nullable [StringLength(100)], unique nếu có
   "isUseUsb":false, "ipAddressIds":[6989],  // IP đang Available, server tự set Assigned
   "suggestedNewDeviceId":null }  // Id máy MỚI thay chính device này (import tự set, xem 5.10)
 ```
@@ -239,7 +241,7 @@ Mẫu **13 cột đúng thứ tự, dòng 1 header**:
 > H–L: dòng có ≥1 cột khác rỗng → Confirm tạo kèm `DeviceConfiguration` (chỉ 5 field, còn lại trống).
 > "Ngày Mua": ô Date thật → đọc trực tiếp; ô text → chỉ nhận `dd/MM/yyyy` (VD `01/07/2026`). Khác/trống → lỗi.
 
-Field `[Required]` Excel không có → mặc định: `deviceName`=`deviceCode`, `manager`="", `emails`=[], `depreciationMonths`=**60**, `status`=`0`. (FE nhắc user sửa lại sau.)
+Field `[Required]` Excel không có → mặc định: `deviceName`=`deviceCode`, `depreciationMonths`=**60**, `status`=`0`. (FE nhắc user sửa lại sau.) `manager`/`emails` luôn để trống (tuỳ chọn từ 2026-08-01, không riêng gì import). Cột "Ghi Chú" trống → `note`="" (Note `[Required]` trên `CreateDeviceDto` chỉ áp dụng cho form nhập tay qua controller, nhánh import gọi service trực tiếp nên không bị chặn — nhưng vẫn nên nhập Ghi Chú trong Excel để tránh máy trống ghi chú).
 
 **"MQL Cũ" chỉ GỢI Ý, không tự chuyển**: phải khớp 1 thiết bị `!IsDeleted` (không → lỗi), Confirm chỉ tạo máy mới + trả `pendingTransfers` + lưu DB (tra lại qua `replacement-suggestion` 5.9). FE điền sẵn màn "Chuyển máy", user tự bấm "Chuyển".
 

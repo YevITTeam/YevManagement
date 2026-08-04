@@ -1,4 +1,5 @@
-﻿using Identity.Domain.Entities;
+﻿using Identity.Application.Authentication;
+using Identity.Domain.Entities;
 using Identity.Infrastructure.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -26,13 +27,13 @@ namespace Identity.Infrastructure.Authentication
         public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
         {
             var windowsUsername = principal.Identity?.Name;
-            if (string.IsNullOrEmpty(windowsUsername) || principal.HasClaim(x => x.Type == "RolesLoaded"))
+            if (string.IsNullOrEmpty(windowsUsername) || principal.HasClaim(x => x.Type == IdentityClaimTypes.RolesLoaded))
             {
                 return principal;
             }
 
             var clone = principal.Clone();
-            var dbIdentity = new ClaimsIdentity("DbRoles", ClaimTypes.Name, ClaimTypes.Role);
+            var dbIdentity = new ClaimsIdentity(IdentityClaimTypes.DbRolesAuthenticationType, ClaimTypes.Name, ClaimTypes.Role);
 
             string? ipAddress = GetClientIp();
             // DeviceName is now only for reference/display purposes (2026-07-11, changed back —
@@ -150,12 +151,12 @@ namespace Identity.Infrastructure.Authentication
 
                 if (!string.IsNullOrEmpty(user.FullName))
                 {
-                    dbIdentity.AddClaim(new Claim("FullName", user.FullName));
+                    dbIdentity.AddClaim(new Claim(IdentityClaimTypes.FullName, user.FullName));
                 }
 
                 if (!string.IsNullOrEmpty(user.Email))
                 {
-                    dbIdentity.AddClaim(new Claim("Email", user.Email));
+                    dbIdentity.AddClaim(new Claim(IdentityClaimTypes.Email, user.Email));
                 }
 
                 if (user.Roles != null)
@@ -173,18 +174,18 @@ namespace Identity.Infrastructure.Authentication
 
                     foreach (var code in effectiveCodes)
                     {
-                        dbIdentity.AddClaim(new Claim("Permission", code));
+                        dbIdentity.AddClaim(new Claim(IdentityClaimTypes.Permission, code));
                     }
                 }
             }
 
-            dbIdentity.AddClaim(new Claim("RolesLoaded", "true"));
+            dbIdentity.AddClaim(new Claim(IdentityClaimTypes.RolesLoaded, "true"));
 
             if (!string.IsNullOrEmpty(ipAddress))
-                dbIdentity.AddClaim(new Claim("IpAddress", ipAddress));
+                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.IpAddress, ipAddress));
 
             if (!string.IsNullOrEmpty(deviceName))
-                dbIdentity.AddClaim(new Claim("DeviceName", deviceName));
+                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.DeviceName, deviceName));
 
             clone.AddIdentity(dbIdentity);
             return clone;

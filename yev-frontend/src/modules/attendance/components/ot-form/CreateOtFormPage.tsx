@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, Car, Printer, Users, Utensils } from "lucide-react";
+import { AlertTriangle, Calculator, Car, Check, Printer, RefreshCw, Users, Utensils } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
@@ -28,6 +28,7 @@ import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
+import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -209,6 +210,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     const [processPartEnabled, setProcessPartEnabled] = useState(false);
     const [processPart, setProcessPart] = useState<ProcessPartDto>(emptyProcessPart);
+    // true = số phiếu chính/phụ đang do HỆ THỐNG tự tính; chuyển false vĩnh viễn ngay khi người dùng
+    // tự gõ đè 1 trong 2 ô, để không ghi đè lại con số họ vừa chỉnh (yêu cầu "vẫn cho phép user sửa").
+    const [autoMealTicket, setAutoMealTicket] = useState(true);
+
+    const { setting } = useAttendanceSetting();
 
     // Chữ ký "Người đề nghị" (đợt 4, 2026-07-16) KHÔNG còn gắn với bước tạo đơn — POST /api/OtForm chỉ
     // tạo status=Draft chưa ký, chữ ký thật chỉ bắt buộc ở bước Ký duyệt riêng (POST /{id}/submit, màn
@@ -358,6 +364,48 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [groupId, isEditMode]);
 
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
+
+    // Tự tính số phiếu ăn theo giờ OT THỰC TẾ của từng người đang chọn (docs §Cấu hình phiếu ăn):
+    // tăng ca >= mốc cấu hình (mặc định 2h30) → 1 phiếu CHÍNH, dưới mốc → 1 phiếu PHỤ. Mọi người đang
+    // chọn đều nhận đúng 1 trong 2 loại nên main + secondary luôn = số người chọn. Sữa KHÔNG tự tính —
+    // luôn để người lập đơn tự nhập.
+    const mealTicketCounts = useMemo(() => {
+        let main = 0;
+        let secondary = 0;
+        for (const employeeId of selectedEmployeeIds) {
+            const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
+            const hours = computeTotalHour(startTime, employeeEndTime);
+            if (hours >= setting.mainMealTicketMinHours) main += 1;
+            else secondary += 1;
+        }
+        return { main, secondary };
+    }, [selectedEmployeeIds, employeeOverrides, startTime, endTime, setting.mainMealTicketMinHours]);
+
+    // Đồng bộ kết quả tự tính vào ô nhập — so sánh snapshot NGAY TRONG RENDER thay vì dùng effect
+    // (CLAUDE.md §4.5: không setState đồng bộ trong useEffect). Dừng đồng bộ ngay khi người dùng tự gõ
+    // đè (autoMealTicket=false), và không chạy ở màn Sửa đơn vì khối này đã bị khoá.
+    const autoMealTicketKey = `${mealTicketCounts.main}/${mealTicketCounts.secondary}`;
+    const [prevAutoMealTicketKey, setPrevAutoMealTicketKey] = useState(autoMealTicketKey);
+    if (prevAutoMealTicketKey !== autoMealTicketKey) {
+        setPrevAutoMealTicketKey(autoMealTicketKey);
+        if (autoMealTicket && !isEditMode) {
+            setProcessPart((current) => ({
+                ...current,
+                mainTicketCount: mealTicketCounts.main,
+                secondaryTicketCount: mealTicketCounts.secondary,
+            }));
+        }
+    }
+
+    // Người dùng bấm "Tính lại" sau khi đã tự sửa tay — bật lại chế độ tự tính và áp ngay con số hiện tại.
+    const recalculateMealTickets = () => {
+        setAutoMealTicket(true);
+        setProcessPart((current) => ({
+            ...current,
+            mainTicketCount: mealTicketCounts.main,
+            secondaryTicketCount: mealTicketCounts.secondary,
+        }));
+    };
 
     const toggleEmployee = (employeeId: number) => {
         setSelectedEmployeeIds((current) =>
@@ -674,7 +722,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 </thead>
                                 <tbody>
                                     {editEmployees.map((employee) => {
-                                        const isOverLimit = employee.monthToDate > 25 || employee.yearToDate > 300;
+                                        const isOverLimit =
+                                            employee.monthToDate > setting.monthlyOtHourLimit ||
+                                            employee.yearToDate > setting.yearlyOtHourLimit;
                                         return (
                                             <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
                                                 <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">
@@ -726,7 +776,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <tbody>
                                     {groupEmployees.map((employee) => {
                                         const checked = selectedEmployeeIds.includes(employee.id);
-                                        const isOverLimit = employee.monthToDate > 25 || employee.yearToDate > 300;
+                                        const isOverLimit =
+                                            employee.monthToDate > setting.monthlyOtHourLimit ||
+                                            employee.yearToDate > setting.yearlyOtHourLimit;
                                         return (
                                             <tr
                                                 key={employee.id}
@@ -823,16 +875,43 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             </div>
 
                             {processPart.isEat && (
-                                <div className="grid gap-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-4 md:grid-cols-3">
+                                <div className="space-y-3 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-4">
+                                    {/* Dải giải thích quy tắc + trạng thái tự tính. Hệ thống tự điền số
+                                        phiếu chính/phụ theo giờ OT từng người; người lập đơn gõ đè được,
+                                        khi đó hiện nút "Tính lại" để quay về số hệ thống gợi ý. */}
+                                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                        <span className="flex items-center gap-1.5 text-[#5e3f3a]">
+                                            <Calculator className="h-3.5 w-3.5 shrink-0" />
+                                            {t("mealTicketRuleHint", { hours: setting.mainMealTicketMinHours })}
+                                        </span>
+                                        {!isEditMode &&
+                                            (autoMealTicket ? (
+                                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-semibold text-emerald-700">
+                                                    <Check className="h-3 w-3" /> {t("mealTicketAutoBadge")}
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={recalculateMealTickets}
+                                                    disabled={isSubmitting}
+                                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    <RefreshCw className="h-3.5 w-3.5" /> {t("mealTicketRecalcButton")}
+                                                </button>
+                                            ))}
+                                    </div>
+
+                                    <div className="grid gap-4 md:grid-cols-3">
                                     <label className="block">
                                         <span className={fieldLabelClassName}>{t("mainTicketLabel")}</span>
                                         <input
                                             type="number"
                                             min={0}
                                             value={processPart.mainTicketCount}
-                                            onChange={(event) =>
-                                                setProcessPart((current) => ({ ...current, mainTicketCount: Number(event.target.value) }))
-                                            }
+                                            onChange={(event) => {
+                                                setAutoMealTicket(false);
+                                                setProcessPart((current) => ({ ...current, mainTicketCount: Number(event.target.value) }));
+                                            }}
                                             disabled={isSubmitting || isEditMode}
                                             className={fieldClassName}
                                         />
@@ -843,9 +922,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             type="number"
                                             min={0}
                                             value={processPart.secondaryTicketCount}
-                                            onChange={(event) =>
-                                                setProcessPart((current) => ({ ...current, secondaryTicketCount: Number(event.target.value) }))
-                                            }
+                                            onChange={(event) => {
+                                                setAutoMealTicket(false);
+                                                setProcessPart((current) => ({
+                                                    ...current,
+                                                    secondaryTicketCount: Number(event.target.value),
+                                                }));
+                                            }}
                                             disabled={isSubmitting || isEditMode}
                                             className={fieldClassName}
                                         />
@@ -863,6 +946,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             className={fieldClassName}
                                         />
                                     </label>
+                                    </div>
                                 </div>
                             )}
 

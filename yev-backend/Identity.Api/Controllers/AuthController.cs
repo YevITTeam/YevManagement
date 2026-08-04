@@ -1,4 +1,5 @@
-﻿using Identity.Application.Dtos.UserDto;
+﻿using Identity.Application.Authentication;
+using Identity.Application.Dtos.UserDto;
 using Identity.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,12 +31,40 @@ namespace Identity.Api.Controllers
                 return Fail<LoginResponseDto>("Xác thực Windows thất bại. Vui lòng kiểm tra lại cấu hình hệ thống.");
             }
 
-            var fullName = User.Claims.FirstOrDefault(c => c.Type == "FullName")?.Value ?? User.Identity.Name;
-            var username = User.Identity.Name;
-            var roles = User.Claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value).ToList();
-            var permissions = User.Claims.Where(c => c.Type == "Permission").Select(c => c.Value).Distinct().ToList();
-            var deviceName = User.Claims.FirstOrDefault(c => c.Type == "DeviceName")?.Value;
-            var email = User.Claims.FirstOrDefault(c => c.Type == "Email")?.Value;
+            return Success(BuildSession(), "Đăng nhập thành công!");
+        }
+
+        // Re-reads the current profile/permissions and renews the JWT using the Bearer token the caller
+        // already has — no Negotiate handshake involved. The frontend calls this on every page load when
+        // a token is already stored, instead of hitting windows-login again: each windows-login call is
+        // one more NTLM/Kerberos handshake, and on a machine where the browser has no SSO configured for
+        // this origin that handshake is a domain credential prompt — the reason users kept being asked to
+        // sign in again although they had just signed in successfully.
+        // Permissions stay fresh because MyClaimsTransformation reloads Role/Permission from the DB on
+        // every authenticated request, Bearer requests included.
+        [Authorize]
+        [HttpGet("me")]
+        public ActionResult<ApiResponse<LoginResponseDto>> Me()
+        {
+            return Success(BuildSession(), "Lấy thông tin phiên đăng nhập thành công!");
+        }
+
+        // Builds the profile + JWT from the principal of the current request. Role/Permission/FullName…
+        // are read from the "DbRoles" identity that MyClaimsTransformation just loaded from the DB in
+        // THIS request; the copies carried inside an incoming JWT are only the snapshot taken at login
+        // time and may already be stale (e.g. a permission revoked in the meantime).
+        private LoginResponseDto BuildSession()
+        {
+            var dbIdentity = User.Identities
+                .FirstOrDefault(i => i.AuthenticationType == IdentityClaimTypes.DbRolesAuthenticationType);
+            var profileClaims = (IEnumerable<Claim>?)dbIdentity?.Claims ?? User.Claims;
+
+            var username = User.Identity?.Name ?? string.Empty;
+            var fullName = profileClaims.FirstOrDefault(c => c.Type == IdentityClaimTypes.FullName)?.Value ?? username;
+            var roles = profileClaims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value).Distinct().ToList();
+            var permissions = profileClaims.Where(c => c.Type == IdentityClaimTypes.Permission).Select(c => c.Value).Distinct().ToList();
+            var deviceName = profileClaims.FirstOrDefault(c => c.Type == IdentityClaimTypes.DeviceName)?.Value;
+            var email = profileClaims.FirstOrDefault(c => c.Type == IdentityClaimTypes.Email)?.Value;
 
             int userId = 0;
             var idClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier);
@@ -55,15 +84,11 @@ namespace Identity.Api.Controllers
                 Email = email
             };
 
-            var token = _tokenService.GenerateJwtToken(User);
-
-            var responseData = new LoginResponseDto
+            return new LoginResponseDto
             {
                 User = userProfile,
-                Token = token
+                Token = _tokenService.GenerateJwtToken(User)
             };
-
-            return Success(responseData, "Đăng nhập thành công!");
         }
 
         [RequirePermission("Identity.User.View")]

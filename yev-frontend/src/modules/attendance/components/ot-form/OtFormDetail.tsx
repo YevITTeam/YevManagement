@@ -24,6 +24,7 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useRouter, getPathname } from "@/navigation";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 
 interface OtFormDetailProps {
     id: number;
@@ -147,6 +148,8 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const [requiredApprovalLevel, setRequiredApprovalLevel] = useState(3);
     const [hasMySignature, setHasMySignature] = useState<boolean | null>(null);
     const [hasSecondaryPassword, setHasSecondaryPassword] = useState<boolean | null>(null);
+    // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
+    const { setting } = useAttendanceSetting();
 
     const [actionOpen, setActionOpen] = useState<"submit" | "approve" | "reject" | null>(null);
     const [comment, setComment] = useState("");
@@ -564,8 +567,8 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         </thead>
                         <tbody>
                             {form.employees.map((employee) => {
-                                const isMonthOverLimit = employee.monthToDate > 25;
-                                const isYearOverLimit = employee.yearToDate > 300;
+                                const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
+                                const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
                                 const isOverLimit = isMonthOverLimit || isYearOverLimit;
                                 const hours = calculateHours(employee.startTime, employee.endTime);
                                 // Đã bị loại khỏi đơn (docs §4.5a) — vẫn hiện dòng để giữ dấu vết, nhưng

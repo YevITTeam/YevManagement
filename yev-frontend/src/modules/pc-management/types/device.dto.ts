@@ -54,13 +54,15 @@ export interface CreateUpdateDeviceDto {
     // Id Nhóm/Bộ phận nếu có gán (docs/asset-api-fe.md §5.5), null nếu bỏ trống — không bắt buộc.
     groupId: number | null;
     departmentId: number | null;
+    // Máy chưa đưa vào dùng thì chưa biết ai sẽ dùng — không bắt buộc (2026-08-01), Ghi chú mới
+    // là field bắt buộc để giải thích tình trạng máy.
     manager: string;
     emails: DeviceEmailInputDto[];
     purchaseDate: string;
     depreciationMonths: number;
     isOutsourced: boolean;
     status: number;
-    note: string | null;
+    note: string;
     serialNumber: string | null;
     isUseUsb: boolean;
     ipAddressIds: number[];

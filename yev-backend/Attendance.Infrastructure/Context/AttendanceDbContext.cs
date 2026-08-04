@@ -29,9 +29,20 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<OtFormApprovalEmailToken> OtFormApprovalEmailTokens { get; set; }
     public virtual DbSet<SecondaryPassword> SecondaryPasswords { get; set; }
     public virtual DbSet<PendingSecondaryPasswordConfirmation> PendingSecondaryPasswordConfirmations { get; set; }
+    public virtual DbSet<AttendanceSetting> AttendanceSettings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<AttendanceSetting>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_AttendanceSettings");
+            // decimal(5,2) đủ cho mốc giờ phiếu ăn (vd 2.50), decimal(10,2) cho giới hạn lũy kế
+            // tháng/năm — cùng kiểu với Employee.MonthToDate/YearToDate để so sánh không bị lệch.
+            entity.Property(e => e.MainMealTicketMinHours).HasColumnType("decimal(5, 2)");
+            entity.Property(e => e.MonthlyOtHourLimit).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.YearlyOtHourLimit).HasColumnType("decimal(10, 2)");
+        });
+
         modelBuilder.Entity<Department>(entity =>
         {
             entity.HasIndex(e => e.DepartmentCode, "IX_Departments_DepartmentCode").IsUnique();

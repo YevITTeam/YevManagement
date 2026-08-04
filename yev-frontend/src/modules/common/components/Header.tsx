@@ -27,7 +27,7 @@ export default function Header() {
 
   const canSeeAdmin = hasAnyPermission(user, IDENTITY_ADMIN_PERMISSIONS);
 
-  // Xoá token cũ + đăng nhập lại — dùng khi Admin vừa cấp quyền mới cho Role của mình và cần thấy hiệu
+  // Nạp lại hồ sơ + quyền từ BE — dùng khi Admin vừa cấp quyền mới cho Role của mình và cần thấy hiệu
   // lực ngay trên UI (nút bấm/menu ẩn hiện theo permissions), thay vì phải tự đóng tab/mở lại.
   const handleRefreshPermissions = async () => {
     setIsRefreshing(true);

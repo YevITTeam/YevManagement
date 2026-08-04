@@ -41,7 +41,7 @@ Fluent (`IdentityDbContext.OnModelCreating`):
 |---|---|
 | `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync(roleId?)` (lọc theo Role qua `Roles.Any(r => r.Id == roleId)` khi có, 2026-07-16), `UpdateUserRolesAsync`, `CreateUserAsync` (§5.1), `DeleteUserAsync` (§5.2, **xóa cứng**) |
 | `RoleService` | CRUD role (`Create` ném `DomainException` nếu trùng tên; xóa = soft-delete). ⚠️ `GetRoleByIdAsync` **không check null** → NRE nếu id sai (nên `.OrThrowNotFound`) |
-| `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` — JWT HS256, loại claim `RolesLoaded`, hạn `JwtSettings:ExpiryMinutes` |
+| `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` — JWT HS256, hạn `JwtSettings:ExpiryMinutes`. Loại `RolesLoaded` + claim do JWT tự sinh (`exp/nbf/iat/iss/aud/jti`, nếu không token gia hạn sẽ có `aud`/`exp` trùng → không validate được); `Role`/`Permission` **chỉ lấy từ identity `DbRoles`** rồi `DistinctBy` — xem §5 |
 | `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync`, `UpdateRolePermissionsAsync` (clear+add lại), `GetUserPermissionOverridesAsync`, `GetEffectivePermissionsForUserAsync`, `UpdateUserPermissionOverridesAsync` (§9.1) |
 
 ## 5. Xác thực: Windows Negotiate → ClaimsTransformation → JWT
@@ -50,11 +50,21 @@ Fluent (`IdentityDbContext.OnModelCreating`):
    - Resolve `deviceName` (reverse-DNS từ IP) **chỉ để hiển thị/log**, KHÔNG dùng khớp User. ⚠️ Reverse-DNS không ổn định (NAT/nhiều PTR) → **khớp User CHỈ theo `UserName` suông** (từng dùng cặp `(UserName,DeviceName)` gây tạo User trùng — đã bỏ; data debt trùng cũ cần rà tay).
    - Chưa có claim `RolesLoaded` → tra `Users` (`.Include(Roles).ThenInclude(Permissions)` + `.Include(UserPermissions).ThenInclude(Permission)`) theo `UserName`.
    - `UserName` chưa có → tạo User MỚI, role `"Basic"`, `FullName` từ AD (`UserPrincipal.FindByIdentity`, chỉ Windows). Đã có → dùng lại, chỉ refresh `DeviceName` nếu resolve ra giá trị khác (bỏ qua nếu null).
-   - Ghi/update `LoginUserIP`. Bơm claims: `Role` (mỗi role), `Permission` (mỗi mã hiệu lực §9.1), `FullName`, `IpAddress`, `DeviceName`, `RolesLoaded=true`.
-3. **`AuthController.WindowsLogin`** (`[Authorize(AuthenticationSchemes="Negotiate")]`): đọc claims → `TokenService.GenerateJwtToken` → `LoginResponseDto`. Client dùng `Authorization: Bearer <token>` cho request sau.
+   - Ghi/update `LoginUserIP`. Bơm claims vào **một `ClaimsIdentity` riêng** `AuthenticationType = "DbRoles"`: `Role` (mỗi role), `Permission` (mỗi mã hiệu lực §9.1), `FullName`, `Email`, `IpAddress`, `DeviceName`, `RolesLoaded=true`. Tên các claim/identity này là hằng dùng chung ở `Identity.Application/Authentication/IdentityClaimTypes.cs` (Infrastructure tạo → Application đóng vào JWT → Api đọc ra `UserDto`, cả 3 phải khớp chính xác).
+3. **`AuthController.WindowsLogin`** (`[Authorize(AuthenticationSchemes="Negotiate")]`) và **`AuthController.Me`** (`[Authorize]`, Bearer) cùng gọi private `BuildSession()`: đọc claims → `UserDto` + `TokenService.GenerateJwtToken` → `LoginResponseDto`. Client dùng `Authorization: Bearer <token>` cho request sau.
 
 > ⚠️ **`RolesLoaded` bị loại khỏi JWT** → mỗi request Bearer chạy lại `MyClaimsTransformation` → **Role/Permission luôn refresh theo DB hiện tại mỗi request**, không cần login lại sau khi Admin đổi quyền. Đánh đổi: +1 query DB/request.
+> ⚠️ **`BuildSession()` + `GenerateJwtToken` chỉ tin identity `DbRoles`** cho `Role`/`Permission`, bỏ bản cũ nằm trong JWT gửi lên (2026-08-01). Bắt buộc từ khi có `/Auth/me` gia hạn token: nếu gộp cả 2, mỗi lần gia hạn lại cộng dồn snapshot cũ → quyền đã thu hồi không bao giờ mất và token phình dần. Lưu ý claim **trong token đang lưu ở FE vẫn có thể cũ** trong tối đa 120 phút — `PermissionAuthorizationHandler` xét trên toàn principal (union JWT cũ + `DbRoles` mới), nên **thu hồi quyền chỉ có hiệu lực đầy đủ sau lần gia hạn/login kế tiếp**; cấp thêm quyền thì hiệu lực ngay.
 > ⚠️ AD (`System.DirectoryServices.AccountManagement`) chỉ chạy trên Windows domain-joined (warning CA1416). `TransformAsync` có ghi DB → windows-login **không** read-only.
+
+### 5.3. `GET /api/Auth/me` — lấy lại phiên & gia hạn token *(2026-08-01)*
+`[Authorize]` (JWT Bearer, không cần permission). Trả `LoginResponseDto` y hệt `windows-login`, `Token` là JWT
+mới hạn thêm `ExpiryMinutes` → **sliding session**, không cần handshake Negotiate.
+
+**Lý do thêm:** trước đó FE gọi `windows-login` mỗi lần mount `AuthProvider` (mỗi lần F5/mở tab) và mỗi lần
+gặp 401. Mỗi lời gọi = 1 handshake Negotiate/NTLM; máy chưa bật SSO cho origin BE (Local Intranet zone /
+`AuthServerAllowlist`) sẽ bị trình duyệt **hỏi lại tài khoản domain mỗi lần** → người dùng báo "đã đăng nhập
+đúng rồi vẫn bị bắt đăng nhập lại". Hợp đồng FE + cách dùng: [identity-api-fe.md §2b](identity-api-fe.md).
 
 ### 5.1. Tạo User thủ công (pre-provision)
 Admin tạo trước User cho người **chưa từng đăng nhập Windows**. Login lần đầu khớp theo `UserName` → dùng Role đã gán, không rơi `"Basic"`.
@@ -68,6 +78,7 @@ Admin tạo trước User cho người **chưa từng đăng nhập Windows**. L
 | Method | Route | Permission |
 |---|---|---|
 | POST | `windows-login` | Negotiate |
+| GET | `me` | Bearer, không cần permission (§5.3) |
 | POST | `create-user` | `Identity.User.Create` |
 | GET | `get-all-users-with-roles` | `Identity.User.View` |
 | POST | `update-user-roles` | `Identity.User.UpdateRoles` |

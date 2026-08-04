@@ -92,7 +92,11 @@ export default function OtManagerSidebar() {
                 )}
             </div>
 
-            <nav className="mt-8 flex-1 overflow-y-auto overflow-x-hidden">
+            {/* overflow-x-clip (KHÔNG phải overflow-x-hidden): hidden vẫn tạo scroll container nên khi
+                trình duyệt tự scrollIntoView() 1 link đang focus/active, nav bị cuộn ngang và kẹt luôn
+                ở đó (không thanh cuộn để kéo lại) — icon + đầu chữ label bị cắt mất. clip không tạo
+                scroll container nên không thể bị cuộn ngang nữa. */}
+            <nav className="mt-8 flex-1 overflow-y-auto overflow-x-clip">
                 {navItems
                     .filter((item) => !item.permission || hasPermission(user, item.permission))
                     .map((item) => {
@@ -102,15 +106,15 @@ export default function OtManagerSidebar() {
                                 key={item.key}
                                 href={item.href}
                                 prefetch={false}
-                                title={collapsed ? t(item.key) : undefined}
-                                className={`flex items-center gap-3 border-l-4 py-3 text-sm font-medium transition ${collapsed ? "justify-center px-0" : "px-5"
+                                title={t(item.key)}
+                                className={`flex min-w-0 items-center gap-3 border-l-4 py-3 text-sm font-medium transition ${collapsed ? "justify-center px-0" : "px-5"
                                     } ${isActive
                                         ? "border-[#e3000f] bg-[#eceef0] text-[#191c1e]"
                                         : "border-transparent text-[#5e3f3a] hover:bg-[#eceef0] hover:text-[#191c1e]"
                                     }`}
                             >
-                                <item.icon size={18} className={isActive ? "text-[#e3000f]" : "text-[#5e3f3a]"} />
-                                {!collapsed && <span>{t(item.key)}</span>}
+                                <item.icon size={18} className={`shrink-0 ${isActive ? "text-[#e3000f]" : "text-[#5e3f3a]"}`} />
+                                {!collapsed && <span className="truncate">{t(item.key)}</span>}
                             </Link>
                         );
                     })}

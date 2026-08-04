@@ -27,11 +27,10 @@ namespace Asset.Application.Dtos.Devices
 
         public int? DepartmentId { get; set; }
 
-        [Required(ErrorMessage = "Người quản lý không được để trống")]
-        public string Manager { get; set; } = null!;
+        // Manager/Emails: optional at Create/Update — a device not yet in use has no assigned
+        // user, only Note is mandatory to explain its status (2026-08-01 business decision).
+        public string Manager { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Email không được để trống")]
-        [MinLength(1, ErrorMessage = "Cần ít nhất 1 email")]
         public List<DeviceEmailInputDto> Emails { get; set; } = new();
 
         [Required(ErrorMessage = "Ngày mua không được để trống")]
@@ -46,7 +45,8 @@ namespace Asset.Application.Dtos.Devices
         [Range(0, 3, ErrorMessage = "Trạng thái không hợp lệ")]
         public int Status { get; set; }
 
-        public string? Note { get; set; }
+        [Required(ErrorMessage = "Ghi chú không được để trống")]
+        public string Note { get; set; } = null!;
 
         [StringLength(100, ErrorMessage = "Số Serial không được vượt quá 100 ký tự")]
         public string? SerialNumber { get; set; }

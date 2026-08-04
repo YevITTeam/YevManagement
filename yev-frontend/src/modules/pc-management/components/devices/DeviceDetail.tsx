@@ -145,7 +145,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                     </div>
                     <div>
                         <div className={infoLabelClassName}>Người quản lý</div>
-                        <div className="mt-1 text-sm text-[#191c1e]">{device.manager}</div>
+                        <div className="mt-1 text-sm text-[#191c1e]">{device.manager || "-"}</div>
                     </div>
                     <div>
                         <div className={infoLabelClassName}>Email</div>

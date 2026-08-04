@@ -540,7 +540,7 @@ export default function DeviceList() {
                       <span className="text-sm text-[#5e3f3a]">-</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top text-sm text-[#191c1e]">{device.manager}</td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-sm text-[#191c1e]">{device.manager || "-"}</td>
                   <td className="min-w-[180px] px-4 py-3 align-top">
                     {device.emails.length > 0 ? (
                       <div className="flex flex-col gap-0.5">

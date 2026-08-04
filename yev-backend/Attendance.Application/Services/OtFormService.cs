@@ -14,8 +14,8 @@ namespace Attendance.Application.Services
 {
     public class OtFormService : BaseService<IAttendanceUnitOfWork>, IOtFormService
     {
-        // Minimum OT hours (not equal to) for an employee to be eligible for a meal ticket (see docs/attendance-module.md).
-        private const decimal MinHoursForMealTicket = 2m;
+        // Ngưỡng giờ OT để nhận PHIẾU CHÍNH giờ đọc từ AttendanceSetting (Admin sửa được), không còn
+        // hardcode 2h nữa — xem docs/attendance-module.md §Cấu hình phiếu ăn & giới hạn lũy kế.
 
         // Much longer than the PendingSignatureConfirmation expiry — superiors (Department Manager/
         // Workshop Manager/General Director) rarely open the app/mailbox right away, so they need
@@ -60,6 +60,7 @@ namespace Attendance.Application.Services
         private readonly IEmailTemplateRenderer _emailTemplateRenderer;
         private readonly IConfiguration _configuration;
         private readonly ISecondaryPasswordService _secondaryPasswordService;
+        private readonly IAttendanceSettingService _attendanceSettingService;
 
         public OtFormService(
             IAttendanceUnitOfWork unitOfWork,
@@ -67,13 +68,15 @@ namespace Attendance.Application.Services
             IEmailService emailService,
             IEmailTemplateRenderer emailTemplateRenderer,
             IConfiguration configuration,
-            ISecondaryPasswordService secondaryPasswordService) : base(unitOfWork)
+            ISecondaryPasswordService secondaryPasswordService,
+            IAttendanceSettingService attendanceSettingService) : base(unitOfWork)
         {
             _userDirectoryService = userDirectoryService;
             _emailService = emailService;
             _emailTemplateRenderer = emailTemplateRenderer;
             _configuration = configuration;
             _secondaryPasswordService = secondaryPasswordService;
+            _attendanceSettingService = attendanceSettingService;
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(string userName, int pageIndex, int pageSize)
@@ -207,6 +210,9 @@ namespace Attendance.Application.Services
 
             var histories = await _unitOfWork.OtFormApprovalHistories.FindAsync(x => x.OtFormId == id);
 
+            // Ngưỡng "đủ điều kiện phiếu chính" đọc từ cấu hình (Admin sửa được) thay vì hardcode.
+            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+
             return new OtFormDto
             {
                 Id = otForm!.Id,
@@ -242,7 +248,9 @@ namespace Attendance.Application.Services
                     NoteJp = x.NoteJp,
                     MonthToDate = x.MonthToDate,
                     YearToDate = x.YearToDate,
-                    IsEligibleForMeal = (decimal)(x.EndTime - x.StartTime).TotalHours > MinHoursForMealTicket,
+                    // >= (không phải >) — "tăng ca TỪ 2h30 mới có phiếu chính" (chốt 2026-08-01), đúng
+                    // mốc 2h30 vẫn được tính. Người dưới mốc này nhận phiếu phụ, không phải không có gì.
+                    IsEligibleForMeal = (decimal)(x.EndTime - x.StartTime).TotalHours >= mainMealTicketMinHours,
                     // Employees dropped by an approver are returned here TOO (not filtered out) so the
                     // detail screen can show who was dropped, by whom and why — the FE hides them from
                     // the printed form (see docs/attendance-module.md — Loại nhân viên khỏi đơn).

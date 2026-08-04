@@ -32,10 +32,11 @@ export default function AdminDashboard() {
       : "bg-white text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
     }`;
 
-  // h-full (không phải calc(100vh-4rem)) — đã nằm trong <main> cao đúng 1 màn hình trừ Header ở
-  // [locale]/layout.tsx, không cần tự tính lại chiều cao Header nữa. Xem DESIGN_SYSTEM.md §3.
+  // min-h-full (không phải h-full/calc(100vh-4rem)) — [locale]/layout.tsx đã là chủ chiều cao +
+  // vùng cuộn DUY NHẤT của app, ở đây chỉ cần đảm bảo nền phủ tối thiểu hết 1 màn hình, không tự
+  // ép chiều cao cứng hay tự mở overflow-y-auto riêng nữa. Xem DESIGN_SYSTEM.md §3.
   return (
-    <div className="flex h-full bg-[#f8fafc]">
+    <div className="flex min-h-full bg-[#f8fafc]">
       <aside className="w-64 space-y-2 border-r border-[#e0e3e5] bg-white p-4 shadow-sm">
         <h3 className="mb-4 px-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
           Quản trị hệ thống
@@ -83,8 +84,9 @@ export default function AdminDashboard() {
       </aside>
 
       {/* <div> chứ không phải <main> — [locale]/layout.tsx đã có <main> bọc ngoài rồi, lồng 2 <main>
-          là HTML không hợp lệ. */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-8">
+          là HTML không hợp lệ. Không tự mở overflow-y-auto riêng — <main> gốc đã là vùng cuộn DUY
+          NHẤT của app (xem DESIGN_SYSTEM.md §3). */}
+      <div className="flex-1 p-8">
         {isUserRoles && canViewUserRoles ? (
           <UserRoleModal isOpen onClose={() => setActiveMenu(null)} />
         ) : isRoles && canViewRoles ? (
@@ -94,7 +96,7 @@ export default function AdminDashboard() {
         ) : isUserPermissions && canViewPermissions ? (
           <UserPermissionOverrideManager />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center rounded-xl border border-[#e0e3e5] bg-white p-8 text-center shadow-sm">
+          <div className="flex min-h-[60vh] flex-col items-center justify-center rounded-xl border border-[#e0e3e5] bg-white p-8 text-center shadow-sm">
             <div className="mb-4 text-6xl">👋</div>
             <h1 className="mb-2 text-2xl font-semibold text-[#191c1e]">Xin chào Quản trị viên!</h1>
             <p className="max-w-md text-[#5e3f3a]">

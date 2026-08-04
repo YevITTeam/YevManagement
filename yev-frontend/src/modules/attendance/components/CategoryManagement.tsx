@@ -8,28 +8,32 @@ import GroupList from "./groups/GroupList";
 import ReasonList from "./reasons/ReasonList";
 import OtCaseList from "./ot-cases/OtCaseList";
 import EmployeeList from "./employees/EmployeeList";
+import AttendanceSettingPanel from "./settings/AttendanceSettingPanel";
 import type { ListHandle } from "./list-toolbar";
 
-type CategoryTab = "departments" | "groups" | "reasons" | "ot-cases" | "employees";
+type CategoryTab = "departments" | "groups" | "reasons" | "ot-cases" | "employees" | "settings";
 
 export default function CategoryManagement() {
     const t = useTranslations("Attendance.CategoryManagement");
     const tCommon = useTranslations("Common");
-    const tabs: { key: CategoryTab; label: string; addLabel: string }[] = [
+    // "settings" không có addLabel — tab này không phải danh sách CRUD nên không có nút "Thêm mới"
+    // (xem chỗ ẩn nút bên dưới).
+    const tabs: { key: CategoryTab; label: string; addLabel: string | null }[] = [
         { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments") },
         { key: "groups", label: t("tabGroups"), addLabel: t("addGroups") },
         { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons") },
         { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases") },
         { key: "employees", label: t("tabEmployees"), addLabel: t("addEmployees") },
+        { key: "settings", label: t("tabSettings"), addLabel: null },
     ];
     const [activeTab, setActiveTab] = useState<CategoryTab>("departments");
     // Tab nào đã từng được xem thì mới mount (và giữ mounted luôn sau đó) — chỉ tab "departments"
-    // (mặc định) mount ngay từ đầu. Tránh gọi song song cả 5 API mỗi lần vào màn "Danh mục" trong khi
+    // (mặc định) mount ngay từ đầu. Tránh gọi song song cả 6 API mỗi lần vào màn "Danh mục" trong khi
     // đa số user chỉ xem 1-2 tab/lượt, nhưng vẫn giữ được lợi ích "chuyển tab tức thì, không tải lại"
     // cho những tab đã ghé qua trong phiên này.
     const [visitedTabs, setVisitedTabs] = useState<Set<CategoryTab>>(() => new Set(["departments"]));
-    // Cả 5 list giờ mounted song song (xem ghi chú bên dưới) nên mỗi list phải báo loading vào
-    // đúng slot riêng của nó — nếu dùng chung 1 state boolean, list nào báo xong (setLoading(false))
+    // Cả 6 tab giờ mounted song song (xem ghi chú bên dưới) nên mỗi tab phải báo loading vào
+    // đúng slot riêng của nó — nếu dùng chung 1 state boolean, tab nào báo xong (setLoading(false))
     // sau cùng sẽ đè mất trạng thái loading thật của tab đang xem.
     const [loadingByTab, setLoadingByTab] = useState<Record<CategoryTab, boolean>>({
         departments: false,
@@ -37,6 +41,7 @@ export default function CategoryManagement() {
         reasons: false,
         "ot-cases": false,
         employees: false,
+        settings: false,
     });
     const loading = loadingByTab[activeTab];
 
@@ -45,6 +50,7 @@ export default function CategoryManagement() {
     const reasonRef = useRef<ListHandle>(null);
     const otCaseRef = useRef<ListHandle>(null);
     const employeeRef = useRef<ListHandle>(null);
+    const settingRef = useRef<ListHandle>(null);
 
     const refByTab: Record<CategoryTab, React.RefObject<ListHandle | null>> = {
         departments: departmentRef,
@@ -52,6 +58,7 @@ export default function CategoryManagement() {
         reasons: reasonRef,
         "ot-cases": otCaseRef,
         employees: employeeRef,
+        settings: settingRef,
     };
 
     const activeRef = refByTab[activeTab];
@@ -81,6 +88,10 @@ export default function CategoryManagement() {
         (value: boolean) => setLoadingByTab((current) => ({ ...current, employees: value })),
         []
     );
+    const handleSettingLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, settings: value })),
+        []
+    );
 
     return (
         <div className="space-y-6">
@@ -98,12 +109,14 @@ export default function CategoryManagement() {
                     >
                         <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
                     </button>
-                    <button
-                        onClick={() => activeRef.current?.openCreate()}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
-                    >
-                        {activeTabMeta.addLabel}
-                    </button>
+                    {activeTabMeta.addLabel && (
+                        <button
+                            onClick={() => activeRef.current?.openCreate()}
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                        >
+                            {activeTabMeta.addLabel}
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -158,6 +171,11 @@ export default function CategoryManagement() {
             {visitedTabs.has("employees") && (
                 <div className={activeTab === "employees" ? "" : "hidden"}>
                     <EmployeeList ref={employeeRef} onLoadingChange={handleEmployeeLoadingChange} />
+                </div>
+            )}
+            {visitedTabs.has("settings") && (
+                <div className={activeTab === "settings" ? "" : "hidden"}>
+                    <AttendanceSettingPanel ref={settingRef} onLoadingChange={handleSettingLoadingChange} />
                 </div>
             )}
         </div>

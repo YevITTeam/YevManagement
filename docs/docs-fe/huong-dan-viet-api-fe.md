@@ -43,7 +43,7 @@ Cung cấp object `api` với 5 method. Tất cả trả về **payload đã par
 envelope `ApiResponse`), tự động:
 - Ghép `BASE_URL` (`process.env.NEXT_PUBLIC_API_URL`) vào trước endpoint → **endpoint truyền vào luôn bắt đầu bằng `/`** (ví dụ `/Device/grid-list`), **không** kèm `/api` hay host.
 - Gắn `Authorization: Bearer <token>` nếu có token trong localStorage.
-- Tự re-login qua `/windows-login` khi gặp 401 rồi retry request.
+- Tự re-login qua `/windows-login` khi gặp 401 rồi retry request — **nhưng chỉ khi thật sự cần**: nếu token trong localStorage đã khác token vừa gắn cho request đó (một request khác đã đăng nhập lại xong trong lúc chờ) thì chỉ retry, không mở thêm handshake Negotiate. Mỗi handshake thừa là một lần trình duyệt có thể hỏi lại tài khoản domain — xem [identity-api-fe.md §2b](../docs-be/identity-api-fe.md).
 - Ném `new Error(errorBody)` khi `!response.ok` — `errorBody` là **chuỗi JSON gốc** của BE.
 
 ```ts

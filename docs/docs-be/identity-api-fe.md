@@ -7,10 +7,13 @@
 - Envelope `ApiResponse<T>` + cách đọc `data`/`errors` giống Asset — xem [asset-api-fe.md §1](asset-api-fe.md).
 - **Cập nhật 2026-07-16**: `UserDto` thêm `email` (nullable, tự resolve từ AD, không tự nhập/sửa được) — trả về ở `windows-login` (mục 2) và `get-all-users-with-roles` (mục 4.1). Phục vụ tính năng gửi email xác nhận cập nhật chữ ký/duyệt đơn ở module Attendance.
 
+- **Cập nhật 2026-08-01**: thêm `GET /api/Auth/me` (mục 2b) — lấy lại hồ sơ + **gia hạn JWT bằng chính token đang có**, không cần handshake Negotiate. FE chỉ gọi `windows-login` khi **chưa có** token.
+
 ## 1. Auth
 | Endpoint | Cơ chế |
 |---|---|
 | `POST /api/Auth/windows-login` | **Windows Negotiate** (IWA), không dùng Bearer |
+| `GET /api/Auth/me` | **JWT Bearer** (chỉ cần đã đăng nhập, không cần permission) |
 | Tất cả còn lại (Identity + Asset) | **JWT Bearer** + user phải có **permission** cụ thể (không phải check "role Admin") |
 
 ## 2. Login — `POST /api/Auth/windows-login`
@@ -40,11 +43,38 @@ const res = await fetch("http://10.45.1.155:8080/api/Auth/windows-login", {
 - **Định danh = `UserName` suông.** `DeviceName` chỉ hiển thị (reverse-DNS không ổn định) — FE **đừng** dùng để định danh.
 - **`email`** (2026-07-16, mới) — tự resolve từ thuộc tính AD `mail` ngay lần đăng nhập đầu tiên (giống `fullName`), **không** phải do user tự nhập. Nullable — có thể `null` nếu tài khoản AD chưa cấu hình mail, hoặc user đã tồn tại từ trước tính năng này và chưa đăng nhập lại lần nào kể từ đó (BE tự "chữa lành" — chỉ set nếu đang trống, ở lần đăng nhập kế tiếp). Đây **không phải field để FE sửa** — không có endpoint nào cho phép update `email` trực tiếp; muốn đổi phải sửa trong AD rồi chờ user đăng nhập lại (hoặc Admin không có cách set tay). Dùng bởi module Attendance để gửi email xác nhận cập nhật chữ ký/duyệt đơn — xem [attendance-api-fe.md §6b/§4.6](attendance-api-fe.md).
 - `windows-login` có **side-effect ghi DB** (IP + DeviceName + Email nếu đang trống) nhưng idempotent.
-- `token` hết hạn **120 phút** → 401, gọi lại `windows-login` (không có refresh-token).
+- `token` hết hạn **120 phút** → 401. Gia hạn bằng `GET /api/Auth/me` (mục 2b), chỉ khi không còn token hợp lệ mới phải gọi lại `windows-login`.
 - **Permission tự refresh mỗi request** — Admin đổi permission Role có hiệu lực ngay request sau, không cần login lại. `user.permissions` lúc login chỉ là snapshot.
 - **JWT cũng có claim `Email`** (nếu có giá trị, cùng cách claim `FullName` đã có) — nhưng FE không cần tự decode JWT, dùng thẳng `data.user.email` ở trên là đủ.
 
 Request sau: `headers: { Authorization: 'Bearer ${token}' }`.
+
+## 2b. Lấy lại phiên & gia hạn token — `GET /api/Auth/me` *(2026-08-01)*
+Chỉ cần `Authorization: Bearer <token>` (không cần permission). Trả về **đúng shape `data` của `windows-login`**
+(`{ user, token }`) trong đó `token` là **JWT mới đã gia hạn thêm 120 phút**.
+
+**Vì sao có endpoint này — đừng gọi `windows-login` để "lấy lại user".** Mỗi lời gọi `windows-login` là
+một handshake Negotiate/NTLM mới. Handshake chỉ **âm thầm** khi trình duyệt đã bật SSO cho origin của BE
+(site nằm trong vùng *Local Intranet* của Windows, hoặc policy `AuthServerAllowlist` của Chrome/Edge);
+máy chưa cấu hình sẽ bị **hỏi lại tài khoản domain mỗi lần** — đúng triệu chứng "đã đăng nhập rồi vẫn bị
+bắt đăng nhập lại". `/Auth/me` chỉ dùng Bearer nên không kéo theo handshake nào.
+
+Quy tắc dùng ở FE (đã implement trong `AuthApi.getCurrentUser`):
+- localStorage **đã có** token → `GET /Auth/me`. Token hết hạn/hỏng → 401 → `client.ts` tự `windows-login` 1 lần rồi retry.
+- localStorage **chưa có** token → `POST /Auth/windows-login`.
+- Tab mở lâu: `AuthProvider` tự gọi `/Auth/me` mỗi **30 phút** để token không bao giờ kịp hết hạn giữa giờ làm.
+- Nút "Làm mới quyền" cũng đi qua `/Auth/me` (không cần đăng nhập lại) — xem gạch đầu dòng kế.
+
+**Dữ liệu trả về luôn là bản mới nhất, không phải snapshot trong token cũ.** `MyClaimsTransformation` đọc lại
+Role/Permission từ DB ở **mọi** request đã xác thực (kể cả Bearer) và gắn vào một `ClaimsIdentity` riêng
+(`AuthenticationType = "DbRoles"`). `/Auth/me` (và `windows-login`) dựng `user` + JWT mới **chỉ từ identity đó**,
+bỏ bản Role/Permission cũ nằm trong JWT gửi lên. Nhờ vậy quyền vừa **bị thu hồi** cũng biến mất khỏi token
+sau lần gia hạn kế tiếp, và token không phình to dần qua mỗi lần gia hạn.
+
+**Lưu ý bảo mật:** đây là *sliding session* — người dùng còn mở app thì token cứ được gia hạn, không có mốc
+buộc xác thực lại Windows. Quyền vẫn luôn theo DB (khoá quyền có hiệu lực gần như tức thì), nhưng tài khoản
+AD bị vô hiệu hoá thì phiên đang mở vẫn sống tới khi user đóng app quá 120 phút. Chấp nhận được với app nội bộ;
+muốn chặt hơn thì phải thêm mốc buộc `windows-login` lại (chưa làm).
 
 ## 3. Phân quyền hiển thị UI
 Dùng **`user.permissions`** (mảng `Module.Entity.Action`) để bật/tắt tính năng — **không** dùng `user.roles`. FE ẩn/hiện nút theo `user.permissions.includes(code)`; BE luôn enforce lại (thiếu permission → **403**). `user.permissions` đã là danh sách hiệu lực cuối (đã áp override). Lấy toàn bộ mã qua `GET /api/Permission/all` (mục 4.7). **Chỉ `Admin` seed full quyền**, 3 role còn lại cần Admin tự gán.
@@ -72,6 +102,7 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
 | Method | Route | Permission |
 |---|---|---|
 | POST | `/api/Auth/windows-login` | Negotiate |
+| GET | `/api/Auth/me` | Bearer (không cần permission) |
 | POST | `/api/Auth/create-user` | `Identity.User.Create` |
 | GET | `/api/Auth/get-all-users-with-roles` | `Identity.User.View` |
 | POST | `/api/Auth/update-user-roles` | `Identity.User.UpdateRoles` |
@@ -88,7 +119,8 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
 | Hiện tượng | Nguyên nhân → xử lý |
 |---|---|
 | `windows-login` luôn 401 | Thiếu `credentials:"include"` / máy không trong domain → thêm credentials, test máy joined domain |
-| API 401 dù đã login | Token hết hạn (120') / thiếu header → login lại |
+| **Trình duyệt hỏi tài khoản domain lặp lại dù vừa nhập đúng** | Đang gọi `windows-login` nhiều lần (mỗi lần = 1 handshake Negotiate). FE đã sửa: còn token thì dùng `GET /Auth/me` (mục 2b). Vẫn còn hỏi ở lần đăng nhập ĐẦU → máy chưa bật SSO cho origin BE: thêm `http://10.45.1.155:8080` vào vùng **Local Intranet** (Internet Options → Security → Local intranet → Sites → Advanced) hoặc policy `AuthServerAllowlist` của Chrome/Edge |
+| API 401 dù đã login | Token hết hạn (120') / thiếu header → `GET /Auth/me` gia hạn, hỏng nữa thì `windows-login` |
 | API 403 dù token còn hạn | Role thiếu permission → Admin `PUT /api/Permission/role/{roleId}` hoặc đổi Role |
 | Có Role đủ quyền vẫn 403 | Bị **deny override** riêng → `GET /api/Permission/user/{userId}` kiểm tra, PUT gỡ deny |
 | API Asset 401/403 | Asset cũng cần JWT + permission → gắn Bearer cho mọi request |

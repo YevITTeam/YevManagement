@@ -109,6 +109,7 @@ const fetchWithAuth = async (
   options: RequestInit = {}
 ): Promise<Response> => {
   const url = `${BASE_URL}${endpoint}`;
+  // Giữ lại ĐÚNG token đã gắn cho lần gọi này để so ở nhánh xử lý 401 bên dưới.
   const token = getStoredToken();
   const headers = new Headers(options.headers);
 
@@ -135,11 +136,21 @@ const fetchWithAuth = async (
   // -----------------------------------------------------------
   if (response.status === 401 && !endpoint.includes("windows-login")) {
     try {
-      await requestWindowsLogin();
-      const newToken = getStoredToken();
+      // Single-flight `pendingWindowsLogin` chỉ gộp được các lời gọi TRÙNG THỜI ĐIỂM. Một request chậm
+      // (đi kèm token cũ) trả 401 SAU khi phiên đăng nhập kia đã kết thúc sẽ thấy `pendingWindowsLogin`
+      // đã null → tự mở thêm 1 handshake Negotiate nữa, và trên máy chưa bật SSO cho origin của BE thì
+      // đó là popup hỏi mật khẩu domain lần 2 dù người dùng vừa nhập đúng xong.
+      // Vì vậy: token trong localStorage đã KHÁC token vừa gắn ⇒ ai đó đã đăng nhập lại xong rồi,
+      // chỉ cần thử lại với token mới, KHÔNG gọi thêm windows-login.
+      let latestToken = getStoredToken();
 
-      if (newToken) {
-        headers.set("Authorization", `Bearer ${newToken}`);
+      if (latestToken === token) {
+        await requestWindowsLogin();
+        latestToken = getStoredToken();
+      }
+
+      if (latestToken && latestToken !== token) {
+        headers.set("Authorization", `Bearer ${latestToken}`);
         defaultOptions.headers = headers;
 
         // THỰC HIỆN GỌI LẠI (RETRY) REQUEST BAN ĐẦU
@@ -276,6 +287,11 @@ export const postFormForBlob = async (
 
   return { blob, fileName, headers: response.headers };
 };
+
+// Cho phép tầng trên biết ĐÃ có phiên đăng nhập hay chưa để chọn cách lấy hồ sơ user: còn token thì
+// gọi `GET /Auth/me` (Bearer, âm thầm), chưa có mới phải `windows-login` (Negotiate → có thể bị trình
+// duyệt hỏi tài khoản domain). Chỉ trả về sự hiện diện của token, không dùng để đọc/parse nội dung JWT.
+export const getAuthToken = (): string | null => getStoredToken();
 
 export const setAuthToken = (token: string | null) => {
   persistToken(token);

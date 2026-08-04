@@ -10,6 +10,7 @@ import type { OtFormApprovalHistoryDto, OtFormDto, OtFormEmployeeDto } from "@/m
 import { otFormStatusClasses } from "@/modules/attendance/types/enums";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { DEFAULT_ATTENDANCE_SETTING } from "@/modules/attendance/hooks/useAttendanceSetting";
 import {
     approvalActionLabelsBilingual,
     approvalLevelLabelsBilingual,
@@ -522,8 +523,12 @@ export default function OtFormEmailConfirmPage() {
                                         </tr>
                                     );
                                 }
-                                const isMonthOverLimit = employee.monthToDate > 25;
-                                const isYearOverLimit = employee.yearToDate > 300;
+                                // Trang public (không JWT) nên KHÔNG gọi được GET /AttendanceSetting —
+                                // dùng mặc định dùng chung với BE. Admin đổi ngưỡng thì màn trong app
+                                // đổi theo ngay, riêng trang email này vẫn theo mặc định (chấp nhận
+                                // được: đây chỉ là màu cảnh báo, không phải số liệu nghiệp vụ).
+                                const isMonthOverLimit = employee.monthToDate > DEFAULT_ATTENDANCE_SETTING.monthlyOtHourLimit;
+                                const isYearOverLimit = employee.yearToDate > DEFAULT_ATTENDANCE_SETTING.yearlyOtHourLimit;
                                 const isOverLimit = isMonthOverLimit || isYearOverLimit;
                                 const hours = calculateHours(employee.startTime, employee.endTime);
                                 return (

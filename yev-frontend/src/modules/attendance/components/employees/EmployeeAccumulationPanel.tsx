@@ -9,6 +9,7 @@ import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -25,6 +26,8 @@ export default function EmployeeAccumulationPanel() {
     const [monthToDate, setMonthToDate] = useState(0);
     const [yearToDate, setYearToDate] = useState(0);
     const [isSaving, setIsSaving] = useState(false);
+    // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
+    const { setting } = useAttendanceSetting();
 
     const { isLoading, refetch: fetchMe } = useFetchEffect(
         () => EmployeeApi.getMe(),
@@ -81,8 +84,16 @@ export default function EmployeeAccumulationPanel() {
 
             <div className="grid max-w-xl grid-cols-2 gap-4">
                 {[
-                    { label: t("fieldMonthToDate"), value: employee.monthToDate, overLimit: employee.monthToDate > 25 },
-                    { label: t("fieldYearToDate"), value: employee.yearToDate, overLimit: employee.yearToDate > 300 },
+                    {
+                        label: t("fieldMonthToDate"),
+                        value: employee.monthToDate,
+                        overLimit: employee.monthToDate > setting.monthlyOtHourLimit,
+                    },
+                    {
+                        label: t("fieldYearToDate"),
+                        value: employee.yearToDate,
+                        overLimit: employee.yearToDate > setting.yearlyOtHourLimit,
+                    },
                 ].map((stat) => (
                     <div key={stat.label} className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                         <div className="flex items-center justify-between">

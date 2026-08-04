@@ -43,6 +43,7 @@ Nghiệp vụ OT Form:
 | `UserSignature` | `UserName:string`(unique), `SignatureImage:byte[]`, `UpdatedAt` | Không FK thật | Chữ ký đăng ký sẵn để auto-fill lúc duyệt — không phải nguồn sự thật cho audit (nguồn thật = `OtFormApprovalHistory.SignatureImage`). |
 | `SecondaryPassword` | `UserName:string`(unique), `PasswordHash:string`, `UpdatedAt` | Không FK thật | Mật khẩu cấp 2 (2026-07-30) — bắt buộc nhập lại ở MỌI hành động ký/duyệt OtForm (submit/approve/reject, kể cả kênh email), xem §Business Logic — Mật khẩu cấp 2. `PasswordHash` dùng `Microsoft.AspNetCore.Identity.PasswordHasher<object>`, không lưu plaintext. |
 | `PendingSecondaryPasswordConfirmation` | `UserName:string`, `PasswordHash:string`, `Token:string`(unique), `ExpiresAt`, `ConfirmedAt:DateTime?`, `CreatedAt` | Không FK thật | Y hệt `PendingSignatureConfirmation` — mật khẩu cấp 2 mới KHÔNG áp dụng ngay, chờ xác nhận qua email. |
+| `AttendanceSetting` | `MainMealTicketMinHours:decimal(5,2)`, `MonthlyOtHourLimit:decimal(10,2)`, `YearlyOtHourLimit:decimal(10,2)` | Không FK thật | Cấu hình dùng chung (2026-08-01) — bảng LUÔN đúng 1 dòng, mirror `Asset.Domain.Entities.AssetSetting`. Xem §Cấu hình phiếu ăn & giới hạn lũy kế. |
 
 Enum (`Attendance.Domain/Enums/`): `OtFormStatus` (Pending=0/ApprovedByDepartment=1/ApprovedByWorkshop=2/Completed=3/Rejected=4/**Draft=5**, giá trị `Draft` cố tình gán số 5 — thêm cuối cùng thay vì chèn lên đầu để không đổi int của các trạng thái cũ đã lưu DB), `ApprovalLevel` (Submitter/DepartmentManager/WorkshopManager/GeneralDirector), `ApprovalAction` (Submitted/Approved/Rejected), `ScopeType` (Group/Department). Lưu dưới dạng `int` trên entity, không dùng `HasConversion`.
 
@@ -133,9 +134,77 @@ Phần dưới đây (duyệt cấp Trưởng phòng → Trưởng xưởng → 
   - `GetByIdAsync` giờ đọc `x.MonthToDate`/`x.YearToDate` từ chính `OtFormEmployee`, không còn `x.Employee.MonthToDate/YearToDate`.
 - **Giới hạn dữ liệu cũ**: các `OtFormEmployee` đã tồn tại từ trước migration này có `MonthToDate`/`YearToDate` = `0` (default cột mới, không có cách khôi phục lại giá trị lịch sử vì trước đây chưa từng lưu) — chỉ đơn tạo/sửa **sau** khi apply migration mới có snapshot đúng.
 
-### §Phiếu ăn — ngưỡng giờ OT (2026-07-16)
-- Nhân viên đủ điều kiện phiếu ăn khi giờ OT thực tế **lớn hơn 2 giờ** (`(EndTime - StartTime) > 2h`, không tính bằng). Đây là field **tính toán khi đọc** (`OtFormEmployeeDto.IsEligibleForMeal`), KHÔNG lưu DB — không nhầm với `ProcessPart.IsEat` (cờ "có phục vụ ăn" ở cấp cả đơn, do người lập đơn tick tay). FE tick chọn `ProcessPart.IsEat` dựa gợi ý từ `IsEligibleForMeal` của từng người, BE không tự set.
-- **Số lượng phiếu ăn theo loại** (2026-07-16, migration `AddMealTicketCountsToProcessPart`): khi `IsEat = true`, người lập đơn nhập thêm 3 số lượng — `MainTicketCount` (phiếu chính), `SecondaryTicketCount` (phiếu phụ), `MilkCount` (sữa). Cả 3 đều **chung cho cả đơn** (không phải per-employee), nhập tay tự do — BE không validate tổng 3 số này phải khớp `NumberOfEmployee` hay `IsEligibleForMeal`, không tự tính.
+### §Phiếu ăn — ngưỡng giờ OT (2026-07-16, ngưỡng đưa vào cấu hình + tự tính ở FE 2026-08-01)
+- Nhân viên đủ điều kiện phiếu ăn khi giờ OT thực tế **>= ngưỡng cấu hình** (`(EndTime - StartTime) >=
+  AttendanceSetting.MainMealTicketMinHours`, mặc định 2.5h = 2h30 — trước 2026-08-01 hardcode `> 2h`,
+  xem §Cấu hình phiếu ăn & giới hạn lũy kế). Đây là field **tính toán khi đọc**
+  (`OtFormEmployeeDto.IsEligibleForMeal`), KHÔNG lưu DB — không nhầm với `ProcessPart.IsEat` (cờ "có
+  phục vụ ăn" ở cấp cả đơn, do người lập đơn tick tay).
+- **Số lượng phiếu ăn theo loại** (2026-07-16, migration `AddMealTicketCountsToProcessPart`): khi
+  `IsEat = true`, người lập đơn nhập thêm 3 số lượng — `MainTicketCount` (phiếu chính),
+  `SecondaryTicketCount` (phiếu phụ), `MilkCount` (sữa). Cả 3 đều **chung cho cả đơn** (không phải
+  per-employee). BE không validate tổng 3 số này phải khớp `NumberOfEmployee` hay `IsEligibleForMeal`,
+  không tự tính — **FE mới là nơi tự tính** `MainTicketCount`/`SecondaryTicketCount` (xem §Cấu hình
+  phiếu ăn & giới hạn lũy kế), `MilkCount` luôn nhập tay 100%.
+
+### §Cấu hình phiếu ăn & giới hạn lũy kế (2026-08-01)
+**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): 2 nhóm quy tắc
+trước đây hardcode trong code (mốc 2h nhận phiếu ăn ở BE; ngưỡng cảnh báo lũy kế 25h/tháng, 300h/năm ở
+FE) nay gộp thành 1 bảng cấu hình Admin tự sửa được, không cần deploy lại khi chính sách đổi.
+
+- **Phiếu ăn**: tăng ca **từ** `MainMealTicketMinHours` giờ trở lên (mặc định 2.5h = 2h30) → nhận
+  **phiếu chính**; **dưới** mốc đó → nhận **phiếu phụ** (chốt: mọi người tăng ca đều nhận đúng 1 trong 2
+  loại, **không có ngưỡng sàn** riêng cho phiếu phụ). Sữa (`MilkCount`) **luôn nhập tay**, không tự tính.
+- **Giới hạn lũy kế**: `MonthlyOtHourLimit` (mặc định 25h) và `YearlyOtHourLimit` (mặc định 300h) — vượt
+  ngưỡng thì UI tô đỏ cảnh báo trên MỌI màn hiển thị lũy kế, **không chặn** tạo/duyệt đơn hay sửa lũy kế
+  thủ công.
+
+**Thiết kế BE** (mirror `Asset.Domain.Entities.AssetSetting` — bảng cấu hình 1 dòng, xem
+`asset-module.md`):
+- Entity mới `AttendanceSetting { Id, MainMealTicketMinHours:decimal(5,2), MonthlyOtHourLimit:decimal(10,2), YearlyOtHourLimit:decimal(10,2) }`
+  — bảng `AttendanceSettings` LUÔN đúng 1 dòng (migration `AddAttendanceSetting` seed sẵn
+  `(2.5, 25, 300)`), không có `IsDeleted`.
+- `IAttendanceSettingRepository`/`AttendanceSettingRepository` theo đúng khuôn `GenericRepository`,
+  thêm `AttendanceSettings` vào `IAttendanceUnitOfWork`/`AttendanceUnitOfWork`.
+- `AttendanceSettingService.GetOrCreateSettingEntityAsync()` — tự tạo lại dòng mặc định
+  (`DefaultMainMealTicketMinHours = 2.5m`, `DefaultMonthlyOtHourLimit = 25m`,
+  `DefaultYearlyOtHourLimit = 300m`, đúng bằng giá trị seed migration) nếu dòng cấu hình bị xoá tay dưới
+  DB — tránh sập cả API lẫn màn Tạo đơn chỉ vì thiếu cấu hình.
+- `AttendanceSettingController`:
+  - `GET /api/AttendanceSetting` **KHÔNG gắn `[RequirePermission]`** — cố tình mở cho MỌI tài khoản đăng
+    nhập (kể cả Role "Nhân viên"), vì màn Tạo đơn của họ cần đọc cấu hình để tự tính phiếu ăn/tô đỏ lũy
+    kế, dù họ không có permission quản trị nào.
+  - `PUT /api/AttendanceSetting` gắn `Attendance.Setting.Update` — permission mới, migration Identity
+    `AddAttendanceSettingPermission`, gán qua subquery theo `Attendance.Department.Create` (chỉ Admin,
+    đúng nhóm Role được vào màn "Danh mục" — verify SQL: 1/1 Role = Admin).
+- `OtFormService.GetByIdAsync` inject thêm `IAttendanceSettingService`, đọc
+  `GetMainMealTicketMinHoursAsync()` thay hằng số `MinHoursForMealTicket = 2m` đã xoá.
+
+**Thiết kế FE**:
+- `attendance-setting.dto.ts` + `attendance-setting.api.ts` theo đúng khuôn `huong-dan-viet-api-fe.md`.
+- `hooks/useAttendanceSetting.ts` — cache **1 promise dùng chung ở tầng module** (không dùng React
+  Query) vì cấu hình này được đọc ở RẤT nhiều màn (Tạo đơn, Chi tiết đơn, danh sách nhân viên, bản in,
+  Lũy kế của tôi...) nhưng gần như không đổi — tránh mỗi component tự gọi lại API. `invalidateAttendanceSettingCache()`
+  gọi sau khi Admin lưu cấu hình mới để các màn mở sau đó thấy giá trị mới ngay, không cần F5.
+  `DEFAULT_ATTENDANCE_SETTING` (khớp seed) dùng làm giá trị tạm trong lúc tải + fallback khi lỗi mạng —
+  cố tình KHÔNG toast lỗi vì cấu hình chỉ ảnh hưởng gợi ý hiển thị, không phải luồng nghiệp vụ chính.
+- **`CreateOtFormPage.tsx`** — tự tính `mainTicketCount`/`secondaryTicketCount` theo giờ OT thực tế của
+  từng nhân viên **đang chọn** (>= ngưỡng → phiếu chính, dưới → phiếu phụ), đồng bộ vào 2 ô nhập ngay
+  khi danh sách nhân viên/giờ thay đổi — **NGƯỜI DÙNG VẪN SỬA TAY ĐƯỢC** (đúng yêu cầu "tiện hơn nhưng
+  vẫn cho phép chỉnh"): gõ đè 1 trong 2 ô → tắt hẳn chế độ tự tính (`autoMealTicket=false`), hiện nút
+  "Tính lại" để quay về số hệ thống gợi ý. Không tự tính ở màn Sửa đơn (khối này đã khoá từ đợt giới
+  hạn "chỉ sửa thực tích", xem §Sửa đơn khi đang Draft/Pending).
+- **6 file trước đây hardcode `> 25`/`> 300`** đổi sang đọc `setting.monthlyOtHourLimit`/
+  `yearlyOtHourLimit`: `EmployeeList.tsx`, `EmployeeAccumulationPanel.tsx`, `CreateOtFormPage.tsx`,
+  `OtFormDetail.tsx`, `OtFormPrintView.tsx` (nhận `setting` qua prop vì `EmployeeRowFields` không phải
+  page). Riêng `OtFormEmailConfirmPage.tsx` (trang public, không JWT nên không gọi được
+  `GET /AttendanceSetting`) **giữ nguyên `DEFAULT_ATTENDANCE_SETTING`** — chấp nhận được vì đây chỉ là
+  màu cảnh báo hiển thị, không phải số liệu nghiệp vụ.
+- **UI cấu hình**: tab mới "Cấu hình" trong `CategoryManagement.tsx` (`/ot/categories`, màn vốn đã khoá
+  sau permission `Attendance.Department.Create` nên không cần tự kiểm tra quyền lần nữa) —
+  `AttendanceSettingPanel.tsx`, 2 khối "Phiếu ăn" + "Giới hạn lũy kế", nút "Lưu cấu hình" gọi PUT rồi
+  `invalidateAttendanceSettingCache()`. Tab này không có bảng/nút "Thêm mới" nên `CategoryManagement.tsx`
+  ẩn nút đó khi `addLabel == null`.
 
 ### §Song ngữ Vn/Jp trên OtFormDto — hiển thị cho Trưởng phòng/Trưởng Bộ phận xem trước khi duyệt (2026-07-29)
 - **Lý do**: `Group.GroupNameJp`/`Department.DepartmentNameJp`/`Reason.ReasonNameJp` (và `OtFormEmployee.NoteJp`/`ProcessPart.AnotherSuggestionJp` đã có sẵn từ trước) tồn tại trong DB nhưng `OtFormDto`/`OtFormListItemDto` trước đây chỉ trả field `*Vn` — 2 màn xem trước khi duyệt (`OtFormDetail.tsx` trong app, `OtFormEmailConfirmPage.tsx` public qua link email) chỉ hiện tiếng Việt dù master data đã có sẵn bản dịch tiếng Nhật.
@@ -449,8 +518,8 @@ không lặp lại lối mò mẫm này:
 
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.
-- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`). Tất cả đã `database update` vào `YevOTManagement`.
-- Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed), `AddSecondaryPasswordPermission` (2026-07-30, seed `Attendance.SecondaryPassword.Update`), và `AddOtFormRemoveEmployeePermission` (2026-07-30, seed `Attendance.OTForm.RemoveEmployee` — xem §Loại nhân viên khỏi đơn) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
+- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`) → `AddAttendanceSetting` (2026-08-01, bảng `AttendanceSettings` 1 dòng, seed `(2.5, 25, 300)` — xem §Cấu hình phiếu ăn & giới hạn lũy kế). Tất cả đã `database update` vào `YevOTManagement`.
+- Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed), `AddSecondaryPasswordPermission` (2026-07-30, seed `Attendance.SecondaryPassword.Update`), `AddOtFormRemoveEmployeePermission` (2026-07-30, seed `Attendance.OTForm.RemoveEmployee` — xem §Loại nhân viên khỏi đơn), và `AddAttendanceSettingPermission` (2026-08-01, seed `Attendance.Setting.Update` — xem §Cấu hình phiếu ăn & giới hạn lũy kế) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
 
 ## 1. Cấu trúc code đã có
 
@@ -473,6 +542,12 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `GET/POST /confirm/{token}` (`[AllowAnonymous]`) — xác nhận qua email, mirror `UserSignatureController`.
 - Không có `GET /{userName}` (khác `UserSignature`) — không có nhu cầu Admin xem hộ mật khẩu người khác.
 - Xem §Mật khẩu cấp 2 khi ký/duyệt OtForm.
+
+### AttendanceSetting (`AttendanceSettingController`) — cấu hình dùng chung (2026-08-01)
+- `GET /api/AttendanceSetting` — **KHÔNG có `[RequirePermission]`**, mở cho mọi tài khoản đăng nhập
+  (kể cả Role "Nhân viên") vì màn Tạo đơn cần đọc để tự tính phiếu ăn/tô đỏ lũy kế.
+- `PUT /api/AttendanceSetting` — `[RequirePermission("Attendance.Setting.Update")]` (chỉ Admin).
+- Xem §Cấu hình phiếu ăn & giới hạn lũy kế.
 
 ### OtForm (`OtFormController`) — nghiệp vụ chính
 - `POST /api/OtForm` — tạo đơn ở trạng thái **Draft** (`Attendance.OTForm.Create`), CHƯA ký "Người đề nghị" (xem §Người tạo đơn KHÁC Trưởng nhóm).
@@ -511,7 +586,7 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `PATCH /api/Employee/{id}/adjust-accumulation` (`AdjustEmployeeAccumulationDto`) — không gắn `[RequirePermission]`, chỉ cần đăng nhập; phân quyền tự trong Service (chính chủ `UserName` hoặc quyền `Attendance.Employee.Update`). Xem §Lũy kế tháng/năm.
 
 ### Permission & Role đã seed (Identity migration `AddAttendancePermissionsAndRoles`)
-- 28 permission `Attendance.*`: CRUD 5 danh mục + `UserApprovalScope.{View,Create,Delete}` + `UserSignature.{View,Update}` + `OTForm.{View,Create,Approve}`. **+1** (2026-07-29, migration riêng `AddAttendanceAiChatPermission`): `Attendance.AiChat.Use`, hiện chỉ gán Admin — xem mục `AttendanceAiChatController` ở trên. **+1** (2026-07-30, migration `AddSecondaryPasswordPermission`): `Attendance.SecondaryPassword.Update`, gán qua subquery cho đúng các Role đang giữ `UserSignature.Update` (Admin + 5 Role nghiệp vụ) — xem §Mật khẩu cấp 2 khi ký/duyệt OtForm. **+1** (2026-07-30, migration `AddOtFormRemoveEmployeePermission`): `Attendance.OTForm.RemoveEmployee`, cùng cách gán qua subquery theo `UserSignature.Update` — xem §Loại nhân viên khỏi đơn.
+- 28 permission `Attendance.*`: CRUD 5 danh mục + `UserApprovalScope.{View,Create,Delete}` + `UserSignature.{View,Update}` + `OTForm.{View,Create,Approve}`. **+1** (2026-07-29, migration riêng `AddAttendanceAiChatPermission`): `Attendance.AiChat.Use`, hiện chỉ gán Admin — xem mục `AttendanceAiChatController` ở trên. **+1** (2026-07-30, migration `AddSecondaryPasswordPermission`): `Attendance.SecondaryPassword.Update`, gán qua subquery cho đúng các Role đang giữ `UserSignature.Update` (Admin + 5 Role nghiệp vụ) — xem §Mật khẩu cấp 2 khi ký/duyệt OtForm. **+1** (2026-07-30, migration `AddOtFormRemoveEmployeePermission`): `Attendance.OTForm.RemoveEmployee`, cùng cách gán qua subquery theo `UserSignature.Update` — xem §Loại nhân viên khỏi đơn. **+1** (2026-08-01, migration `AddAttendanceSettingPermission`): `Attendance.Setting.Update`, gán qua subquery theo `Attendance.Department.Create` (chỉ Admin) — xem §Cấu hình phiếu ăn & giới hạn lũy kế. `GET /api/AttendanceSetting` cố tình KHÔNG có permission riêng (mở cho mọi tài khoản đăng nhập).
 - 4 Role mới: `Trưởng nhóm` (Create+View OTForm, View Employee, Update UserSignature, **+ View Department/Group/Reason/OtCase** — xem ngay dưới), `Trưởng phòng`/`Trưởng xưởng`/`Tổng Giám Đốc` (View+Approve OTForm, Update UserSignature). `Admin` được gán full toàn bộ permission `Attendance.*`.
 - **Lỗ hổng đã vá (2026-07-17, migration `AddCategoryViewPermissionsToTruongGroup`)**: seed ban đầu (`AddAttendancePermissionsAndRoles`) chỉ gán `Trưởng nhóm` 4 permission (`OTForm.Create/View`, `Employee.View`, `UserSignature.Update`) — THIẾU `Department.View`/`Group.View`/`Reason.View`/`OtCase.View` (permission riêng biệt cho từng danh mục, không nằm trong `OTForm.View`). Hậu quả: Trưởng nhóm gọi `GET /api/Department/all`, `GET /api/Group/by-department/{id}`, `GET /api/Reason/all`, `GET /api/OtCase/all` (4 API load dropdown cho màn "Tạo đơn tăng ca") đều bị 403 — màn Tạo đơn không dùng được trên thực tế dù mọi API OtForm đã sẵn sàng. Đã bổ sung 4 permission này cho Role `Trưởng nhóm`, verify lại qua SQL trực tiếp trên DB thật (2026-07-17) — Role này hiện có đủ 8 permission `Attendance.*`.
 - **Chưa làm**: gán Role cho user thật (`update-user-roles`/`create-user` — API Identity có sẵn) và tạo dòng `UserApprovalScope` cho từng Trưởng phòng/Trưởng xưởng **và mỗi người được phép tạo đơn** (`ApprovalLevel=Submitter`, xem §Business Logic — Phân quyền tạo đơn) thật (`POST /api/UserApprovalScope` — API đã có). Nhớ: từ 2026-07-16, chỉ gán được `ApprovalLevel=Submitter` cho `UserName` đã có Role `Trưởng nhóm` từ trước.

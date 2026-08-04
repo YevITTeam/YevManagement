@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 
 const PAGE_SIZE = 10;
 
@@ -39,6 +40,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [isDeleting, setIsDeleting] = useState(false);
 
     const [importOpen, setImportOpen] = useState(false);
+    // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
+    const { setting } = useAttendanceSetting();
 
     const { isLoading, error, refetch: fetchEmployees } = useFetchEffect(
         () => EmployeeApi.getEmployeePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
@@ -183,8 +186,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                 </tr>
                             )}
                             {employees.map((employee) => {
-                                const isMonthOverLimit = employee.monthToDate > 25;
-                                const isYearOverLimit = employee.yearToDate > 300;
+                                const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
+                                const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
                                 const accumulationBadgeClass = (overLimit: boolean) =>
                                     `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                                         overLimit

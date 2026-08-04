@@ -22,6 +22,29 @@ namespace Attendance.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Attendance.Domain.Entities.AttendanceSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("MainMealTicketMinHours")
+                        .HasColumnType("decimal(5, 2)");
+
+                    b.Property<decimal>("MonthlyOtHourLimit")
+                        .HasColumnType("decimal(10, 2)");
+
+                    b.Property<decimal>("YearlyOtHourLimit")
+                        .HasColumnType("decimal(10, 2)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AttendanceSettings");
+
+                    b.ToTable("AttendanceSettings");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.Department", b =>
                 {
                     b.Property<int>("Id")

@@ -2,18 +2,23 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AuthApi } from "@/modules/auth/api/auth.api";
-import { clearAuthToken } from "@/lib/client";
+import { getAuthToken } from "@/lib/client";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
 
 interface AuthContextValue {
     user: UserDto | null;
     isLoading: boolean;
-    // Xoá token cũ rồi gọi lại windows-login để lấy JWT + user/permissions mới nhất — dùng khi Admin vừa
-    // đổi permission của Role mình (docs/identity-api-fe.md §2.2: gọi lại windows-login là cách duy nhất
-    // để lấy `user.permissions` mới nhất hiển thị lên UI, dù BE vẫn luôn tự enforce lại permission mới nhất
-    // ở tầng API bất kể FE có refresh hay không).
+    // Lấy lại JWT + user/permissions mới nhất — dùng khi Admin vừa đổi permission của Role mình.
+    // Đi qua `/Auth/me` (Bearer) nên KHÔNG kéo theo handshake Negotiate: BE dựng lại Role/Permission từ DB
+    // ở mọi request nên dữ liệu trả về vẫn là bản mới nhất (docs/identity-api-fe.md §2b).
     refreshUser: () => Promise<void>;
 }
+
+// Chu kỳ tự gia hạn JWT khi tab vẫn đang mở. Token sống 120 phút (`JwtSettings:ExpiryMinutes` ở BE);
+// nếu để hết hạn giữa chừng, request nghiệp vụ kế tiếp sẽ 401 → `client.ts` buộc phải đăng nhập lại bằng
+// Negotiate, và trên máy chưa bật SSO cho origin của BE thì đó là một popup hỏi mật khẩu domain ngay
+// giữa giờ làm. `/Auth/me` gia hạn được âm thầm bằng chính token cũ nên chỉ cần gọi định kỳ là đủ.
+const TOKEN_RENEW_INTERVAL_MS = 30 * 60 * 1000;
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -29,13 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const refreshUser = useCallback(async () => {
         setIsLoading(true);
-        clearAuthToken();
         try {
             const current = await AuthApi.getCurrentUser();
             setUser(current);
         } catch {
             setUser(null);
-            throw new Error("Không thể đăng nhập lại. Vui lòng thử lại.");
+            throw new Error("Không thể làm mới phiên đăng nhập. Vui lòng thử lại.");
         } finally {
             setIsLoading(false);
         }
@@ -43,19 +47,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         let isCancelled = false;
-        (async () => {
-            try {
-                const current = await AuthApi.getCurrentUser();
+        // Promise chain (không async/await) vì rule `react-hooks/set-state-in-effect` của React Compiler
+        // chỉ cho phép setState trong `.then()/.catch()/.finally()` — xem CLAUDE.md §4.5.
+        AuthApi.getCurrentUser()
+            .then((current) => {
                 if (!isCancelled) setUser(current);
-            } catch {
+            })
+            .catch(() => {
                 if (!isCancelled) setUser(null);
-            } finally {
+            })
+            .finally(() => {
                 if (!isCancelled) setIsLoading(false);
-            }
-        })();
+            });
         return () => {
             isCancelled = true;
         };
+    }, []);
+
+    // Gia hạn token định kỳ (xem TOKEN_RENEW_INTERVAL_MS). Không đụng tới state — hồ sơ user hiển thị
+    // trên Header không đổi, chỉ có JWT trong localStorage được thay bằng bản còn hạn; gia hạn hỏng thì
+    // im lặng bỏ qua, request nghiệp vụ kế tiếp gặp 401 sẽ tự xử lý như trước.
+    useEffect(() => {
+        const timer = setInterval(() => {
+            if (!getAuthToken()) return;
+            AuthApi.me().catch(() => undefined);
+        }, TOKEN_RENEW_INTERVAL_MS);
+        return () => clearInterval(timer);
     }, []);
 
     const value = useMemo<AuthContextValue>(() => ({ user, isLoading, refreshUser }), [user, isLoading, refreshUser]);

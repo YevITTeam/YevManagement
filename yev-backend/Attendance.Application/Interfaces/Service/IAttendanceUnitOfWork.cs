@@ -20,5 +20,6 @@ namespace Attendance.Application.Interfaces.Service
         IOtFormApprovalEmailTokenRepository OtFormApprovalEmailTokens { get; }
         ISecondaryPasswordRepository SecondaryPasswords { get; }
         IPendingSecondaryPasswordConfirmationRepository PendingSecondaryPasswordConfirmations { get; }
+        IAttendanceSettingRepository AttendanceSettings { get; }
     }
 }

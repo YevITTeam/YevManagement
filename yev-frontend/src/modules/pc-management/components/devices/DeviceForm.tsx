@@ -31,7 +31,7 @@ export interface DeviceFormValues {
     depreciationMonths: number;
     isOutsourced: boolean;
     status: number;
-    note: string | null;
+    note: string;
     serialNumber: string | null;
     isUseUsb: boolean;
     ipAddressIds: number[];
@@ -62,7 +62,7 @@ const emptyValues: DeviceFormValues = {
     groupId: null,
     departmentId: null,
     manager: "",
-    emails: [{ email: "", note: null }],
+    emails: [],
     purchaseDate: "",
     depreciationMonths: 36,
     isOutsourced: false,
@@ -157,10 +157,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                       groupId: current.groupId,
                       departmentId: current.departmentId,
                       manager: current.manager,
-                      emails:
-                          current.emails.length > 0
-                              ? current.emails.map((item) => ({ email: item.email, note: item.note }))
-                              : [{ email: "", note: null }],
+                      emails: current.emails.map((item) => ({ email: item.email, note: item.note })),
                       purchaseDate: toDateInputValue(current.purchaseDate),
                       depreciationMonths: current.depreciationMonths,
                       isOutsourced: current.isOutsourced,
@@ -229,16 +226,16 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
             !values.deviceTypeId ||
             !values.supplierId ||
             !values.branchId ||
-            !values.manager.trim() ||
             !values.purchaseDate ||
-            trimmedEmails.length === 0
+            !values.note.trim()
         ) {
             return;
         }
         onSubmit({
             ...values,
+            manager: values.manager.trim(),
             emails: trimmedEmails,
-            note: values.note?.trim() ? values.note : null,
+            note: values.note.trim(),
             serialNumber: values.serialNumber?.trim() ? values.serialNumber : null,
         });
     };
@@ -398,9 +395,8 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                             <input
                                 value={values.manager}
                                 onChange={(event) => handleChange("manager", event.target.value)}
-                                placeholder="Nhập tên người quản lý..."
+                                placeholder="Chưa xác định (tuỳ chọn)..."
                                 disabled={loading}
-                                required
                                 className={fieldClassName}
                             />
                         </label>
@@ -575,7 +571,6 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                         onChange={(event) => handleEmailChange(index, "email", event.target.value)}
                                         placeholder="Nhập email..."
                                         disabled={loading}
-                                        required={values.emails.length === 1}
                                         className={`${fieldClassName} flex-1`}
                                     />
                                     <input
@@ -588,7 +583,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                     <button
                                         type="button"
                                         onClick={() => handleRemoveEmail(index)}
-                                        disabled={loading || values.emails.length === 1}
+                                        disabled={loading}
                                         className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#e3000f] disabled:cursor-not-allowed disabled:opacity-50"
                                         aria-label="Xoá email"
                                     >
@@ -602,10 +597,11 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                     <label className="block">
                         <span className={fieldLabelClassName}>Ghi chú</span>
                         <textarea
-                            value={values.note ?? ""}
+                            value={values.note}
                             onChange={(event) => handleChange("note", event.target.value)}
-                            placeholder="Ghi chú tuỳ chọn..."
+                            placeholder="Nhập ghi chú..."
                             disabled={loading}
+                            required
                             rows={2}
                             className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                         />

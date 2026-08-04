@@ -1,4 +1,5 @@
-﻿using Identity.Application.Interfaces.Service;
+﻿using Identity.Application.Authentication;
+using Identity.Application.Interfaces.Service;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using Shared.Application.Services;
@@ -12,6 +13,32 @@ namespace Identity.Application.Services
 {
     public class TokenService : BaseService<IIdentityUnitOfWork>, ITokenService
     {
+        // Claims that a JWT produces itself and that must NOT be copied into a new token:
+        // SecurityTokenDescriptor already sets Issuer/Audience/Expires, so copying the old values back
+        // would emit duplicate `iss`/`aud`/`exp` entries and the resulting token would fail validation.
+        // This only matters when GenerateJwtToken runs on a principal authenticated with Bearer, i.e.
+        // the session-renewal endpoint GET /Auth/me.
+        private static readonly HashSet<string> IgnoredClaimTypes = new(StringComparer.Ordinal)
+        {
+            IdentityClaimTypes.RolesLoaded,
+            JwtRegisteredClaimNames.Exp,
+            JwtRegisteredClaimNames.Nbf,
+            JwtRegisteredClaimNames.Iat,
+            JwtRegisteredClaimNames.Iss,
+            JwtRegisteredClaimNames.Aud,
+            JwtRegisteredClaimNames.Jti,
+        };
+
+        // Role/Permission are always re-read from the "DbRoles" identity that MyClaimsTransformation
+        // just built from the DB. Merging in the copies carried by the incoming JWT would make every
+        // renewal accumulate the previous snapshot: a revoked permission would never disappear and the
+        // token would grow on each renewal.
+        private static readonly HashSet<string> DbSourcedClaimTypes = new(StringComparer.Ordinal)
+        {
+            ClaimTypes.Role,
+            IdentityClaimTypes.Permission,
+        };
+
         private readonly IConfiguration _configuration;
         public TokenService(
             IIdentityUnitOfWork unitOfWork, 
@@ -30,8 +57,19 @@ namespace Identity.Application.Services
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-            var claims = user.Claims
-                .Where(c => c.Type != "RolesLoaded")
+            var dbIdentity = user.Identities
+                .FirstOrDefault(i => i.AuthenticationType == IdentityClaimTypes.DbRolesAuthenticationType);
+
+            IEnumerable<Claim> source = user.Claims;
+            if (dbIdentity is not null)
+            {
+                source = user.Claims.Where(c => !DbSourcedClaimTypes.Contains(c.Type))
+                    .Concat(dbIdentity.Claims.Where(c => DbSourcedClaimTypes.Contains(c.Type)));
+            }
+
+            var claims = source
+                .Where(c => !IgnoredClaimTypes.Contains(c.Type))
+                .DistinctBy(c => (c.Type, c.Value))
                 .Select(c => new Claim(c.Type, c.Value))
                 .ToList();
 
