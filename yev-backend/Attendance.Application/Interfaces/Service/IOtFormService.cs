@@ -13,7 +13,7 @@ namespace Attendance.Application.Interfaces.Service
             string currentUserName, bool isAdmin, int pageIndex, int pageSize);
 
         Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
-            string approverUserName, bool isGeneralDirector, int pageIndex, int pageSize);
+            string approverUserName, int pageIndex, int pageSize);
 
         // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 vai trò
         // (Trưởng nhóm/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc), gate bằng Attendance.OTForm.View.
@@ -36,13 +36,13 @@ namespace Attendance.Application.Interfaces.Service
 
         Task<OtFormDto> UpdateAsync(int id, string currentUserName, bool isAdmin, UpdateOtFormDto request);
 
-        Task ApproveAsync(int id, string approverUserName, string? approverFullName, bool isGeneralDirector, ApproveOtFormDto request);
+        Task ApproveAsync(int id, string approverUserName, string? approverFullName, ApproveOtFormDto request);
 
-        Task RejectAsync(int id, string approverUserName, string? approverFullName, bool isGeneralDirector, RejectOtFormDto request);
+        Task RejectAsync(int id, string approverUserName, string? approverFullName, RejectOtFormDto request);
 
         // Loại 1 nhân viên khỏi đơn để duyệt được phần còn lại thay vì từ chối cả đơn — xem
         // docs/attendance-module.md § Loại nhân viên khỏi đơn.
-        Task<OtFormDto> RemoveEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, bool isGeneralDirector, RemoveOtFormEmployeeDto request);
+        Task<OtFormDto> RemoveEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request);
 
         // Kênh bổ sung qua email ([AllowAnonymous] ở Controller) — token tự nó là thông tin xác thực,
         // KHÔNG cần mật khẩu cấp 2 (khác Approve/Reject qua email vẫn giữ) — xem docs/attendance-module.md.

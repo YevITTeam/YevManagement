@@ -157,7 +157,7 @@ export default function UserPermissionOverrideManager() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-[280px_1fr]">
-                    <section className="h-fit overflow-hidden border border-[#e0e3e5] bg-white">
+                    <section className="h-fit overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                         <div className="border-b border-[#e0e3e5] bg-[#f8fafc] p-3">
                             <div className="relative">
                                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
@@ -192,7 +192,7 @@ export default function UserPermissionOverrideManager() {
                         </div>
                     </section>
 
-                    <section className="overflow-hidden border border-[#e0e3e5] bg-white">
+                    <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                         <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3">
                             <div className="text-sm font-semibold text-[#191c1e]">
                                 {selectedUser ? `Quyền riêng của "${selectedUser.fullName || selectedUser.userName}"` : "Chọn 1 người dùng"}
@@ -246,7 +246,7 @@ export default function UserPermissionOverrideManager() {
                                                                     <div className="flex items-center gap-2 text-sm">
                                                                         <span
                                                                             className={`h-2 w-2 flex-shrink-0 rounded-full ${
-                                                                                effectiveHasAccess ? "bg-[#1a7f37]" : "bg-[#e0e3e5]"
+                                                                                effectiveHasAccess ? "bg-emerald-500" : "bg-[#e0e3e5]"
                                                                             }`}
                                                                         />
                                                                         <span className="text-[#191c1e]">{permission.description}</span>
@@ -254,25 +254,27 @@ export default function UserPermissionOverrideManager() {
                                                                             ({roleHasAccess ? "có theo Role" : "không có theo Role"})
                                                                         </span>
                                                                     </div>
-                                                                    <div className="flex flex-shrink-0 gap-1 text-xs">
+                                                                    <div className="flex flex-shrink-0 overflow-hidden rounded-full border border-[#e0e3e5] text-xs">
                                                                         {(
                                                                             [
+                                                                                ["deny", "Thu hồi"],
                                                                                 ["inherit", "Theo Role"],
                                                                                 ["grant", "Cấp thêm"],
-                                                                                ["deny", "Thu hồi"],
                                                                             ] as [OverrideChoice, string][]
-                                                                        ).map(([value, label]) => (
+                                                                        ).map(([value, label], index) => (
                                                                             <button
                                                                                 key={value}
                                                                                 type="button"
                                                                                 disabled={!canEditSelectedUser}
                                                                                 onClick={() => setChoice(permission.id, value)}
-                                                                                className={`cursor-pointer rounded px-2 py-1 font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                                                                className={`cursor-pointer px-2.5 py-1 font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                                                                    index > 0 ? "border-l border-[#e0e3e5]" : ""
+                                                                                } ${
                                                                                     choice === value
                                                                                         ? value === "deny"
-                                                                                            ? "bg-[#930006] text-white"
+                                                                                            ? "bg-[#fff4f2] text-[#930006]"
                                                                                             : value === "grant"
-                                                                                              ? "bg-[#1a7f37] text-white"
+                                                                                              ? "bg-emerald-50 text-emerald-600"
                                                                                               : "bg-[#eceef0] text-[#191c1e]"
                                                                                         : "bg-white text-[#5e3f3a] hover:bg-[#f8fafc]"
                                                                                 }`}

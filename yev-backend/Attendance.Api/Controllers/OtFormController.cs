@@ -9,7 +9,6 @@ namespace Attendance.Api.Controllers
 {
     public class OtFormController : BaseController
     {
-        private const string GeneralDirectorRole = "Tổng Giám Đốc";
         private const string AdminRole = "Admin";
 
         private readonly IOtFormService _otFormService;
@@ -41,15 +40,14 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Forms awaiting approval from the CURRENT user (Department Manager/Workshop Manager via
-        // UserApprovalScope, or General Director bypassing the scope check).
+        // Forms awaiting approval from the CURRENT user (Department Manager/Workshop Manager/General
+        // Director — all via UserApprovalScope; General Director's scope is ScopeType.All).
         [RequirePermission("Attendance.OTForm.Approve")]
         [HttpGet("pending-approvals")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingApprovals(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
         {
-            var isGeneralDirector = User.IsInRole(GeneralDirectorRole);
-            var result = await _otFormService.GetPendingApprovalsAsync(CurrentUserName, isGeneralDirector, pageIndex, pageSize);
+            var result = await _otFormService.GetPendingApprovalsAsync(CurrentUserName, pageIndex, pageSize);
             return Success(result);
         }
 
@@ -141,8 +139,7 @@ namespace Attendance.Api.Controllers
         [HttpPost("{id}/approve")]
         public async Task<ActionResult<ApiResponse<bool>>> Approve(int id, [FromBody] ApproveOtFormDto request)
         {
-            var isGeneralDirector = User.IsInRole(GeneralDirectorRole);
-            await _otFormService.ApproveAsync(id, CurrentUserName, CurrentFullName, isGeneralDirector, request);
+            await _otFormService.ApproveAsync(id, CurrentUserName, CurrentFullName, request);
             return Success(true, "Duyệt đơn thành công.");
         }
 
@@ -150,8 +147,7 @@ namespace Attendance.Api.Controllers
         [HttpPost("{id}/reject")]
         public async Task<ActionResult<ApiResponse<bool>>> Reject(int id, [FromBody] RejectOtFormDto request)
         {
-            var isGeneralDirector = User.IsInRole(GeneralDirectorRole);
-            await _otFormService.RejectAsync(id, CurrentUserName, CurrentFullName, isGeneralDirector, request);
+            await _otFormService.RejectAsync(id, CurrentUserName, CurrentFullName, request);
             return Success(true, "Từ chối đơn thành công.");
         }
 
@@ -166,8 +162,7 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<OtFormDto>>> RemoveEmployee(int id, [FromBody] RemoveOtFormEmployeeDto request)
         {
             var isAdmin = User.IsInRole(AdminRole);
-            var isGeneralDirector = User.IsInRole(GeneralDirectorRole);
-            var result = await _otFormService.RemoveEmployeeAsync(id, CurrentUserName, CurrentFullName, isAdmin, isGeneralDirector, request);
+            var result = await _otFormService.RemoveEmployeeAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
             return Success(result, "Đã loại nhân viên khỏi đơn.");
         }
 

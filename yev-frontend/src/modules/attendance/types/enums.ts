@@ -1,28 +1,16 @@
 // Enum dùng chung module Attendance (docs/attendance-api-fe.md §2) — gửi/nhận là số, FE tự map label.
 
-// Tên Role Identity chính xác (case-sensitive) của cấp Submitter — dùng ở màn "Phân quyền duyệt"
-// (kiểm tra trước khi cho Admin gán approvalLevel=0) và màn "Đơn tăng ca" (ẩn tab "Chờ tôi ký duyệt"
-// cho Role "Nhân viên" — có OTForm.Create nhưng không phải Trưởng Nhóm nên tab luôn rỗng, docs §1.1).
-export const SUBMITTER_ROLE_NAME = "Trưởng nhóm";
-
-// Role Identity bắt buộc theo từng approvalLevel khi Admin gán UserApprovalScope — ràng buộc mở rộng
-// cho cả 4 cấp (trước 2026-07-17 chỉ áp dụng cho Submitter), xem docs §5 "Ràng buộc theo đúng Role".
-// BE luôn là nguồn chặn thật (400 nếu sai) — map này chỉ để FE cảnh báo sớm trước khi submit.
-export const APPROVAL_LEVEL_ROLE_NAME: Record<number, string> = {
-    0: SUBMITTER_ROLE_NAME,
-    4: "Trưởng Bộ phận",
-    1: "Trưởng phòng",
-    2: "Trưởng xưởng",
-};
-
 // scopeType bắt buộc theo từng approvalLevel (docs §5 "Ràng buộc ScopeType theo đúng thứ bậc", mới
 // 2026-07-17): Submitter/GroupHead luôn theo Bộ phận (Group), DepartmentManager/WorkshopManager luôn
-// theo Phòng ban (Department). FE ép sẵn PHẠM VI theo approvalLevel đã chọn để tránh lỗi 400.
+// theo Phòng ban (Department), GeneralDirector luôn "Toàn công ty" (All, mới 2026-08-05 — họ duyệt
+// toàn công ty, không gán theo 1 Group/Department cụ thể được). FE ép sẵn PHẠM VI theo approvalLevel
+// đã chọn để tránh lỗi 400.
 export const APPROVAL_LEVEL_SCOPE_TYPE: Record<number, number> = {
     0: 0, // Submitter → Group
     4: 0, // GroupHead → Group
     1: 1, // DepartmentManager → Department
     2: 1, // WorkshopManager → Department
+    3: 2, // GeneralDirector → All
 };
 
 export const approvalLevelLabels: Record<number, string> = {
@@ -63,9 +51,11 @@ export const approvalActionLabels: Record<number, string> = {
 
 // Sửa label 2026-07-17: Group thực ra là "Bộ phận" (không phải "Nhóm"), Department thực ra là
 // "Phòng ban" (không phải "Bộ phận") — xem docs/attendance-api-fe.md đầu file.
+// 2: "Toàn công ty" (All, mới 2026-08-05) — dành riêng cho ApprovalLevel.GeneralDirector.
 export const scopeTypeLabels: Record<number, string> = {
     0: "Bộ phận",
     1: "Phòng ban",
+    2: "Toàn công ty",
 };
 
 // Cấp đang chờ duyệt kế tiếp suy ra từ status (docs/attendance-api-fe.md §4.3) — null khi đã xong (Completed/Rejected).

@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl";
 import OtFormListPage from "./OtFormListPage";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
-import { SUBMITTER_ROLE_NAME } from "@/modules/attendance/types/enums";
 
 type OtFormTabKey = "my-forms" | "pending-submissions" | "pending-approvals" | "my-actions" | "my-participations";
 
@@ -26,13 +25,14 @@ export default function OtFormTabsPage() {
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
-    // Role "Nhân viên" (mới 2026-07-17) cũng có OTForm.Create nhưng không có UserApprovalScope(Submitter)
-    // nên tab "Chờ tôi ký duyệt" luôn rỗng — ẩn hẳn cho gọn, chỉ Role "Trưởng Nhóm" mới thấy tab này.
-    const isGroupLead = Boolean(user?.roles.includes(SUBMITTER_ROLE_NAME));
 
+    // Từ 2026-08-05, khu vực OT chỉ còn 1 Role trên Identity (không còn Role riêng theo tên "Trưởng
+    // nhóm") nên không còn cách nào tra "user có phải Trưởng nhóm" từ FE — hiện tab này cho mọi người
+    // có OTForm.Create (cùng điều kiện với "my-forms"). Người không có UserApprovalScope(Submitter)
+    // vẫn vào được tab nhưng danh sách rỗng (BE tự lọc), không còn ẩn hẳn tab như trước.
     const visibleTabs = ALL_TABS.filter((tab) => {
         if (tab.key === "my-forms") return canCreate;
-        if (tab.key === "pending-submissions") return canCreate && isGroupLead;
+        if (tab.key === "pending-submissions") return canCreate;
         if (tab.key === "pending-approvals") return canApprove;
         return true; // "my-actions"/"my-participations" luôn hiện — chỉ cần OTForm.View để vào được cả màn
     });

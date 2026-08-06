@@ -22,8 +22,6 @@ namespace Attendance.Application.Services
         // enough time to process it (see docs/attendance-module.md).
         private const int EmailApprovalTokenExpiryDays = 3;
 
-        private const string GeneralDirectorRoleName = "Tổng Giám Đốc";
-
         // Shared by all list endpoints (my-forms/pending-submissions/pending-approvals/
         // my-actions/my-participations) — avoids repeating the same Select block in 5 places. EF Core
         // automatically translates OtFormApprovalHistories (navigation collection, see OtForm.cs) into
@@ -155,9 +153,14 @@ namespace Attendance.Application.Services
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
-            string approverUserName, bool isGeneralDirector, int pageIndex, int pageSize)
+            string approverUserName, int pageIndex, int pageSize)
         {
             var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x => !x.IsDeleted && x.UserName == approverUserName);
+
+            // GeneralDirector's scope is always ScopeType.All (company-wide, no Department/Group to
+            // match against) — a data-driven replacement for the old User.IsInRole(GeneralDirectorRole)
+            // bypass (removed 2026-08-05, see docs/attendance-module.md).
+            var isGeneralDirectorApprover = scopes.Any(s => s.ApprovalLevel == (int)ApprovalLevel.GeneralDirector);
 
             // GroupHead (Trưởng Bộ phận, new as of 2026-07-17) — an intermediate level between Team
             // Leader and Department Manager, using the same Group/Department scope mechanism as
@@ -190,7 +193,7 @@ namespace Attendance.Application.Services
                         (deptManagerDepartmentIds.Contains(x.DepartmentId) || deptManagerGroupIds.Contains(x.GroupId))) ||
                     (x.Status == (int)OtFormStatus.ApprovedByDepartment &&
                         (workshopManagerDepartmentIds.Contains(x.DepartmentId) || workshopManagerGroupIds.Contains(x.GroupId))) ||
-                    (isGeneralDirector && x.Status == (int)OtFormStatus.ApprovedByWorkshop)
+                    (isGeneralDirectorApprover && x.Status == (int)OtFormStatus.ApprovedByWorkshop)
                 ))
                 .OrderBy(x => x.Date);
 
@@ -589,9 +592,9 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(otForm.Id);
         }
 
-        public async Task ApproveAsync(int id, string approverUserName, string? approverFullName, bool isGeneralDirector, ApproveOtFormDto request)
+        public async Task ApproveAsync(int id, string approverUserName, string? approverFullName, ApproveOtFormDto request)
         {
-            var (otForm, currentLevel) = await LoadFormAndValidateAuthorityAsync(id, approverUserName, isGeneralDirector);
+            var (otForm, currentLevel) = await LoadFormAndValidateAuthorityAsync(id, approverUserName);
 
             // Second-factor password gate — see docs/attendance-module.md — Mật khẩu cấp 2.
             await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
@@ -638,9 +641,9 @@ namespace Attendance.Application.Services
                 await NotifyEligibleApproversAsync(otForm, ApprovalLevel.GeneralDirector);
         }
 
-        public async Task RejectAsync(int id, string approverUserName, string? approverFullName, bool isGeneralDirector, RejectOtFormDto request)
+        public async Task RejectAsync(int id, string approverUserName, string? approverFullName, RejectOtFormDto request)
         {
-            var (otForm, currentLevel) = await LoadFormAndValidateAuthorityAsync(id, approverUserName, isGeneralDirector);
+            var (otForm, currentLevel) = await LoadFormAndValidateAuthorityAsync(id, approverUserName);
 
             // Second-factor password gate — see docs/attendance-module.md — Mật khẩu cấp 2.
             await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
@@ -671,12 +674,12 @@ namespace Attendance.Application.Services
         // Does NOT move the form's Status and does NOT invalidate signatures already collected — levels
         // that already signed stay signed, and the flow continues from wherever it was.
         public async Task<OtFormDto> RemoveEmployeeAsync(
-            int id, string userName, string? fullName, bool isAdmin, bool isGeneralDirector, RemoveOtFormEmployeeDto request)
+            int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request)
         {
             // No second-factor password gate here — unlike sign/approve/reject, removing an employee does
             // not re-verify SecondaryPassword (chốt lại 2026-07-31, see docs/attendance-module.md — Mật
             // khẩu cấp 2). Same as the email-channel twin (RemoveEmployeeByEmailTokenAsync).
-            return await RemoveEmployeeCoreAsync(id, userName, fullName, isAdmin, isGeneralDirector, request.EmployeeId, request.Reason);
+            return await RemoveEmployeeCoreAsync(id, userName, fullName, isAdmin, request.EmployeeId, request.Reason);
         }
 
         // Same removal reachable from the [AllowAnonymous] email-confirm channel — authenticated by the
@@ -688,15 +691,14 @@ namespace Attendance.Application.Services
         public async Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request)
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: false);
-            var isGeneralDirector = emailToken.ApprovalLevel == (int)ApprovalLevel.GeneralDirector;
 
             return await RemoveEmployeeCoreAsync(
                 emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName,
-                isAdmin: false, isGeneralDirector, request.EmployeeId, request.Reason);
+                isAdmin: false, request.EmployeeId, request.Reason);
         }
 
         private async Task<OtFormDto> RemoveEmployeeCoreAsync(
-            int id, string userName, string? fullName, bool isAdmin, bool isGeneralDirector, int employeeId, string reason)
+            int id, string userName, string? fullName, bool isAdmin, int employeeId, string reason)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, x => x.OtFormEmployees);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
@@ -719,19 +721,17 @@ namespace Attendance.Application.Services
             // form is currently waiting on, so nobody can reach into a form that isn't theirs or that is
             // sitting at a different level. Admin bypasses only at Submitter level, matching
             // ApproveSubmitterAsync; the upper levels have no Admin bypass, matching ApproveAsync.
-            if (currentLevel == ApprovalLevel.GeneralDirector)
-            {
-                if (!isGeneralDirector)
-                    throw new DomainException("Bạn không có quyền loại nhân viên khỏi đơn ở cấp Tổng Giám Đốc.");
-            }
-            else if (!(currentLevel == ApprovalLevel.Submitter && isAdmin))
+            // GeneralDirector is no longer a special case (2026-08-05) — their scope is always
+            // ScopeType.All, matched by the 3rd branch below, same mechanism as every other level.
+            if (!(currentLevel == ApprovalLevel.Submitter && isAdmin))
             {
                 var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
                     !x.IsDeleted && x.UserName == userName && x.ApprovalLevel == (int)currentLevel);
 
                 var authorized = scopes.Any(s =>
                     (s.ScopeType == (int)ScopeType.Department && s.ScopeId == otForm.DepartmentId) ||
-                    (s.ScopeType == (int)ScopeType.Group && s.ScopeId == otForm.GroupId));
+                    (s.ScopeType == (int)ScopeType.Group && s.ScopeId == otForm.GroupId) ||
+                    s.ScopeType == (int)ScopeType.All);
 
                 if (!authorized)
                     throw new DomainException("Bạn không được phân quyền ở cấp mà đơn này đang chờ, nên không thể loại nhân viên khỏi đơn.");
@@ -779,15 +779,14 @@ namespace Attendance.Application.Services
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: true);
 
             // The Submitter level (Team Leader signing a Draft) goes through a separate handling branch —
-            // there's no concept of isGeneralDirector/isAdmin over the email channel (see docs/attendance-module.md).
+            // there's no concept of isAdmin over the email channel (see docs/attendance-module.md).
             if ((ApprovalLevel)emailToken.ApprovalLevel == ApprovalLevel.Submitter)
             {
                 await ApproveSubmitterAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, isAdmin: false, request);
             }
             else
             {
-                var isGeneralDirector = emailToken.ApprovalLevel == (int)ApprovalLevel.GeneralDirector;
-                await ApproveAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, isGeneralDirector, request);
+                await ApproveAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, request);
             }
 
             emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
@@ -798,9 +797,8 @@ namespace Attendance.Application.Services
         public async Task RejectByEmailTokenAsync(string token, RejectOtFormDto request)
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: true);
-            var isGeneralDirector = emailToken.ApprovalLevel == (int)ApprovalLevel.GeneralDirector;
 
-            await RejectAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, isGeneralDirector, request);
+            await RejectAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, request);
 
             emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
             _unitOfWork.OtFormApprovalEmailTokens.Update(emailToken);
@@ -907,20 +905,19 @@ namespace Attendance.Application.Services
             return string.IsNullOrWhiteSpace(nameJp) ? nameVn : $"{nameVn} / {nameJp}";
         }
 
-        // DepartmentManager/WorkshopManager: looked up via UserApprovalScope matching the form's
-        // Department/Group (reuses the same scope-matching logic as
+        // DepartmentManager/WorkshopManager/GeneralDirector: all looked up via UserApprovalScope
+        // matching the form's Department/Group (reuses the same scope-matching logic as
         // LoadFormAndValidateAuthorityAsync, just querying in the opposite direction — here we find
-        // ALL matching users instead of checking one specific user).
-        // GeneralDirector: has no UserApprovalScope, gets all users holding the corresponding Role.
+        // ALL matching users instead of checking one specific user). GeneralDirector's scope is
+        // always ScopeType.All (company-wide, matched unconditionally) — no longer a Role lookup
+        // (removed 2026-08-05, see docs/attendance-module.md).
         private async Task<List<string>> ResolveEligibleApproverUserNamesAsync(ApprovalLevel level, int departmentId, int groupId)
         {
-            if (level == ApprovalLevel.GeneralDirector)
-                return await _userDirectoryService.GetUserNamesInRoleAsync(GeneralDirectorRoleName);
-
             var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
                 !x.IsDeleted && x.ApprovalLevel == (int)level &&
                 ((x.ScopeType == (int)ScopeType.Department && x.ScopeId == departmentId) ||
-                 (x.ScopeType == (int)ScopeType.Group && x.ScopeId == groupId)));
+                 (x.ScopeType == (int)ScopeType.Group && x.ScopeId == groupId) ||
+                 x.ScopeType == (int)ScopeType.All));
 
             return scopes.Select(s => s.UserName).Distinct().ToList();
         }
@@ -992,7 +989,7 @@ namespace Attendance.Application.Services
         }
 
         private async Task<(OtForm otForm, ApprovalLevel currentLevel)> LoadFormAndValidateAuthorityAsync(
-            int id, string approverUserName, bool isGeneralDirector)
+            int id, string approverUserName)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, x => x.OtCase);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
@@ -1007,23 +1004,19 @@ namespace Attendance.Application.Services
                 _ => throw new DomainException("Đơn đã xử lý xong (hoàn tất/từ chối), không thể duyệt/từ chối thêm.")
             };
 
-            if (currentLevel == ApprovalLevel.GeneralDirector)
-            {
-                if (!isGeneralDirector)
-                    throw new DomainException("Bạn không có quyền duyệt ở cấp Tổng Giám Đốc.");
-            }
-            else
-            {
-                var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
-                    !x.IsDeleted && x.UserName == approverUserName && x.ApprovalLevel == (int)currentLevel);
+            // GeneralDirector is no longer a special case (2026-08-05) — their UserApprovalScope is
+            // always ScopeType.All, matched by the 3rd branch below, same mechanism as every other
+            // level. Previously bypassed entirely via User.IsInRole(GeneralDirectorRole).
+            var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
+                !x.IsDeleted && x.UserName == approverUserName && x.ApprovalLevel == (int)currentLevel);
 
-                var authorized = scopes.Any(s =>
-                    (s.ScopeType == (int)ScopeType.Department && s.ScopeId == otForm.DepartmentId) ||
-                    (s.ScopeType == (int)ScopeType.Group && s.ScopeId == otForm.GroupId));
+            var authorized = scopes.Any(s =>
+                (s.ScopeType == (int)ScopeType.Department && s.ScopeId == otForm.DepartmentId) ||
+                (s.ScopeType == (int)ScopeType.Group && s.ScopeId == otForm.GroupId) ||
+                s.ScopeType == (int)ScopeType.All);
 
-                if (!authorized)
-                    throw new DomainException("Bạn không được phân quyền duyệt phạm vi (nhóm/bộ phận) của đơn này.");
-            }
+            if (!authorized)
+                throw new DomainException("Bạn không được phân quyền duyệt phạm vi (nhóm/bộ phận) của đơn này.");
 
             return (otForm, currentLevel);
         }

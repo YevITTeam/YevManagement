@@ -16,7 +16,6 @@ import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import {
-    APPROVAL_LEVEL_ROLE_NAME,
     APPROVAL_LEVEL_SCOPE_TYPE,
     approvalLevelLabels,
     scopeTypeLabels,
@@ -32,9 +31,9 @@ const fieldClassName =
 
 interface CreateFormState {
     userName: string;
-    scopeType: number; // 0=Group, 1=Department
+    scopeType: number; // 0=Group, 1=Department, 2=All (Toàn công ty)
     scopeId: number;
-    approvalLevel: number; // 0=Submitter (quyền tạo đơn), 1=DepartmentManager, 2=WorkshopManager
+    approvalLevel: number; // 0=Submitter, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector, 4=GroupHead
 }
 
 const emptyForm: CreateFormState = { userName: "", scopeType: 1, scopeId: 0, approvalLevel: 1 };
@@ -88,7 +87,7 @@ export default function UserApprovalScopeManager() {
     useEffect(() => {
         GroupApi.getAllGroups().then(setGroups).catch((err) => console.error(err));
         DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
-        // Chỉ để tra Role trước khi cho chọn Cấp duyệt "Người đề nghị" — không chặn màn nếu lỗi/thiếu quyền.
+        // Chỉ để gợi ý tài khoản (autocomplete) khi Admin gõ userName — không chặn màn nếu lỗi/thiếu quyền.
         AuthApi.getAllUsersWithRoles().then(setUsersWithRoles).catch((err) => console.error(err));
     }, []);
 
@@ -112,15 +111,13 @@ export default function UserApprovalScopeManager() {
         return () => clearTimeout(timer);
     }, [formOpen, form.userName]);
 
-    // Docs §5: chỉ chặn được khi tìm thấy đúng tài khoản (khớp userName tuyệt đối) và xác nhận thiếu Role —
-    // không tìm thấy (vd đang gõ dở, sai hoa/thường theo AD) thì để BE tự quyết định, tránh chặn nhầm.
-    // Mở rộng cho cả 4 cấp (trước 2026-07-17 chỉ check Submitter) — xem docs §5 "vá lỗ hổng".
+    // Chỉ để cảnh báo sớm khi tài khoản gõ vào không khớp bất kỳ ai trong danh sách (khả năng gõ sai
+    // chính tả) — không tìm thấy thì để BE tự quyết định, tránh chặn nhầm. Từ 2026-08-05 không còn
+    // check theo Role tương ứng từng cấp nữa (khu vực OT chỉ còn 1 Role trên Identity, BE giờ chặn
+    // bằng permission — xem docs/attendance-module.md).
     const matchedUser = usersWithRoles.find(
         (u) => u.userName.trim().toLowerCase() === form.userName.trim().toLowerCase()
     );
-    const requiredRoleName = APPROVAL_LEVEL_ROLE_NAME[form.approvalLevel];
-    const requiredRoleMissing =
-        matchedUser !== undefined && requiredRoleName !== undefined && !matchedUser.roles.includes(requiredRoleName);
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -139,14 +136,13 @@ export default function UserApprovalScopeManager() {
         setFormOpen(false);
     };
 
+    // ScopeType.All (Tổng Giám Đốc — Toàn công ty) không cần chọn Group/Department, scopeId luôn 0.
+    const scopeIdRequired = form.scopeType !== 2;
+
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         // approvalLevel=0 (Submitter) là giá trị hợp lệ — không dùng truthy check kẻo bị coi là falsy.
-        if (!form.userName.trim() || !form.scopeId) return;
-        if (requiredRoleMissing) {
-            toast.error(t("roleMissingToastError", { roleName: requiredRoleName ?? "" }));
-            return;
-        }
+        if (!form.userName.trim() || (scopeIdRequired && !form.scopeId)) return;
         setIsSaving(true);
         try {
             await UserApprovalScopeApi.createScope({
@@ -420,6 +416,7 @@ export default function UserApprovalScopeManager() {
                                     <option value={4}>{approvalLevelLabels[4]}</option>
                                     <option value={1}>{approvalLevelLabels[1]}</option>
                                     <option value={2}>{approvalLevelLabels[2]}</option>
+                                    <option value={3}>{approvalLevelLabels[3]}</option>
                                 </select>
                             </label>
 
@@ -428,63 +425,66 @@ export default function UserApprovalScopeManager() {
                                 <select value={form.scopeType} disabled className={fieldClassName}>
                                     <option value={0}>{t("scopeTypeGroup")}</option>
                                     <option value={1}>{t("scopeTypeDepartment")}</option>
+                                    <option value={2}>{t("scopeTypeAll")}</option>
                                 </select>
                             </label>
 
-                            <label className="block">
-                                <span className={fieldLabelClassName}>
-                                    {form.scopeType === 0 ? t("scopeTypeGroup") : t("scopeTypeDepartment")}
-                                </span>
-                                <input
-                                    value={scopeSearch}
-                                    onChange={(event) => setScopeSearch(event.target.value)}
-                                    placeholder={t("fieldScopeSearchPlaceholder", {
-                                        scope: form.scopeType === 0 ? t("scopeTypeGroup") : t("scopeTypeDepartment"),
-                                    })}
-                                    disabled={isSaving}
-                                    className={`${fieldClassName} mb-2`}
-                                />
-                                <select
-                                    value={form.scopeId || ""}
-                                    onChange={(event) => setForm((current) => ({ ...current, scopeId: Number(event.target.value) }))}
-                                    disabled={isSaving}
-                                    required
-                                    size={Math.min(6, Math.max(3, filteredScopeOptions.length + 1))}
-                                    className={`${fieldClassName} h-auto py-1`}
-                                >
-                                    <option value="" disabled>
-                                        {t("fieldScopeChoosePlaceholder", {
+                            {scopeIdRequired ? (
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>
+                                        {form.scopeType === 0 ? t("scopeTypeGroup") : t("scopeTypeDepartment")}
+                                    </span>
+                                    <input
+                                        value={scopeSearch}
+                                        onChange={(event) => setScopeSearch(event.target.value)}
+                                        placeholder={t("fieldScopeSearchPlaceholder", {
                                             scope: form.scopeType === 0 ? t("scopeTypeGroup") : t("scopeTypeDepartment"),
                                         })}
-                                    </option>
-                                    {filteredScopeOptions.map((option) => (
-                                        <option key={option.id} value={option.id}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                    {filteredScopeOptions.length === 0 && (
+                                        disabled={isSaving}
+                                        className={`${fieldClassName} mb-2`}
+                                    />
+                                    <select
+                                        value={form.scopeId || ""}
+                                        onChange={(event) => setForm((current) => ({ ...current, scopeId: Number(event.target.value) }))}
+                                        disabled={isSaving}
+                                        required
+                                        size={Math.min(6, Math.max(3, filteredScopeOptions.length + 1))}
+                                        className={`${fieldClassName} h-auto py-1`}
+                                    >
                                         <option value="" disabled>
-                                            {t("noMatchingResults")}
+                                            {t("fieldScopeChoosePlaceholder", {
+                                                scope: form.scopeType === 0 ? t("scopeTypeGroup") : t("scopeTypeDepartment"),
+                                            })}
                                         </option>
-                                    )}
-                                </select>
-                            </label>
+                                        {filteredScopeOptions.map((option) => (
+                                            <option key={option.id} value={option.id}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                        {filteredScopeOptions.length === 0 && (
+                                            <option value="" disabled>
+                                                {t("noMatchingResults")}
+                                            </option>
+                                        )}
+                                    </select>
+                                </label>
+                            ) : (
+                                <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
+                                    {t("scopeAllNote")}
+                                </div>
+                            )}
 
                             {form.userName.trim() && (
                                 <div
                                     className={`rounded-lg border px-3 py-2 text-xs ${
-                                        requiredRoleMissing
-                                            ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                            : matchedUser
+                                        matchedUser
                                             ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                            : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                            : "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
                                     }`}
                                 >
-                                    {requiredRoleMissing ? (
-                                        t("roleMissingWarning", { userName: form.userName.trim(), roleName: requiredRoleName ?? "" })
-                                    ) : matchedUser ? (
+                                    {matchedUser ? (
                                         <span className="inline-flex items-center gap-1">
-                                            {t("roleMatchedText", { roleName: requiredRoleName ?? "" })} <Check size={14} />
+                                            {t("userFoundText")} <Check size={14} />
                                         </span>
                                     ) : (
                                         t("userNotFoundWarning")
@@ -503,7 +503,7 @@ export default function UserApprovalScopeManager() {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={isSaving || requiredRoleMissing}
+                                    disabled={isSaving}
                                     className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isSaving ? t("saving") : t("createSubmit")}

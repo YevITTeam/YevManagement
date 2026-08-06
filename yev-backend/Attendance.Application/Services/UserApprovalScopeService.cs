@@ -11,20 +11,32 @@ namespace Attendance.Application.Services
 {
     public class UserApprovalScopeService : BaseService<IAttendanceUnitOfWork>, IUserApprovalScopeService
     {
-        // Mỗi ApprovalLevel gán qua UserApprovalScope chỉ có ý nghĩa nếu userName đang giữ đúng Role
+        // Mỗi ApprovalLevel gán qua UserApprovalScope chỉ có ý nghĩa nếu userName đang có đúng permission
         // tương ứng — nếu không, dòng UserApprovalScope vẫn tạo được (không lỗi) nhưng người đó KHÔNG
-        // BAO GIỜ gọi được /approve thật (bị chặn 403 ở [RequirePermission("Attendance.OTForm.Approve")]
-        // vì Role của họ không có permission này, VD Role "Nhân viên") — tạo ra 1 "cấu hình ma": nhìn
-        // giống đã gán duyệt đầy đủ nhưng đơn sẽ kẹt vĩnh viễn ở cấp đó, không ai biết vì sao (2026-07-17,
-        // phát hiện qua việc Admin gán được ApprovalLevel=GroupHead cho tài khoản Role "Nhân viên").
-        // GeneralDirector (3) không nằm trong danh sách vì cấp đó KHÔNG dùng UserApprovalScope (bypass
-        // qua Role, xem OtFormService).
-        private static readonly Dictionary<int, string> RequiredRoleByApprovalLevel = new()
+        // BAO GIỜ gọi được hành động thật (bị chặn 403 ở [RequirePermission] vì họ thiếu permission đó)
+        // — tạo ra 1 "cấu hình ma": nhìn giống đã gán duyệt đầy đủ nhưng đơn sẽ kẹt vĩnh viễn ở cấp đó,
+        // không ai biết vì sao (2026-07-17, phát hiện qua việc Admin gán được ApprovalLevel=GroupHead
+        // cho tài khoản Role "Nhân viên").
+        //
+        // Đổi từ check TÊN ROLE sang check PERMISSION (2026-08-05) — kể từ khi khu vực OT chỉ còn 1 Role
+        // trên Identity (`Quản lý tăng ca`, không còn Role riêng theo từng cấp duyệt), không thể tra
+        // "user có giữ đúng Role của cấp X" được nữa; "ai được gán quyền ở cấp nào" giờ hoàn toàn là
+        // permission (Admin tự cấp qua UserPermissionOverride) + dữ liệu UserApprovalScope, không còn
+        // phụ thuộc Identity phình Role mỗi khi thêm cấp duyệt (xem docs/attendance-module.md).
+        // Submitter đòi hỏi OTForm.Create (không phải .Approve) vì hành động tương ứng (/submit) được
+        // gate bằng permission đó, không phải .Approve — xem OtFormController.
+        // GeneralDirector (3) NAY CŨNG nằm trong danh sách này (trước 2026-08-05 không có, vì cấp đó khi
+        // ấy bypass qua Role thay vì dùng UserApprovalScope) — xem RequiredScopeTypeByApprovalLevel bên
+        // dưới và ScopeType.All.
+        private const string ApproveActionPermission = "Attendance.OTForm.Approve";
+
+        private static readonly Dictionary<int, string> RequiredPermissionByApprovalLevel = new()
         {
-            [(int)ApprovalLevel.Submitter] = "Trưởng nhóm",
-            [(int)ApprovalLevel.GroupHead] = "Trưởng Bộ phận",
-            [(int)ApprovalLevel.DepartmentManager] = "Trưởng phòng",
-            [(int)ApprovalLevel.WorkshopManager] = "Trưởng xưởng",
+            [(int)ApprovalLevel.Submitter] = "Attendance.OTForm.Create",
+            [(int)ApprovalLevel.GroupHead] = ApproveActionPermission,
+            [(int)ApprovalLevel.DepartmentManager] = ApproveActionPermission,
+            [(int)ApprovalLevel.WorkshopManager] = ApproveActionPermission,
+            [(int)ApprovalLevel.GeneralDirector] = ApproveActionPermission,
         };
 
         // Trưởng nhóm/Trưởng Bộ phận chỉ quản 1 Bộ phận (Group) cụ thể — không hợp lý nếu gán theo cả
@@ -32,13 +44,15 @@ namespace Attendance.Application.Services
         // cả 1 Phòng ban — gán theo 1 Bộ phận lẻ bên trong sẽ gây hiểu nhầm (thấy đúng như ảnh chụp màn
         // "Phân quyền duyệt": "Trưởng Bộ phận" lại gán theo phạm vi "Phòng ban", "Trưởng phòng" lại gán
         // theo phạm vi "Bộ phận" — ngược thứ bậc, dễ đọc nhầm). Khoá cứng đúng cặp ScopeType theo tên gọi
-        // thật của từng cấp (2026-07-17).
+        // thật của từng cấp (2026-07-17). GeneralDirector luôn ScopeType.All (2026-08-05) — họ duyệt
+        // toàn công ty, không gán theo 1 Group/Department cụ thể được.
         private static readonly Dictionary<int, int> RequiredScopeTypeByApprovalLevel = new()
         {
             [(int)ApprovalLevel.Submitter] = (int)ScopeType.Group,
             [(int)ApprovalLevel.GroupHead] = (int)ScopeType.Group,
             [(int)ApprovalLevel.DepartmentManager] = (int)ScopeType.Department,
             [(int)ApprovalLevel.WorkshopManager] = (int)ScopeType.Department,
+            [(int)ApprovalLevel.GeneralDirector] = (int)ScopeType.All,
         };
 
         private readonly IUserDirectoryService _userDirectoryService;
@@ -79,17 +93,23 @@ namespace Attendance.Application.Services
             if (RequiredScopeTypeByApprovalLevel.TryGetValue(request.ApprovalLevel, out var requiredScopeType) &&
                 request.ScopeType != requiredScopeType)
             {
-                var requiredScopeTypeName = requiredScopeType == (int)ScopeType.Group ? "Bộ phận" : "Phòng ban";
+                var requiredScopeTypeName = requiredScopeType switch
+                {
+                    (int)ScopeType.Group => "Bộ phận",
+                    (int)ScopeType.Department => "Phòng ban",
+                    (int)ScopeType.All => "Toàn công ty",
+                    _ => "không xác định"
+                };
                 throw new DomainException($"Cấp duyệt này chỉ được gán theo phạm vi '{requiredScopeTypeName}'.");
             }
 
             var scopeName = await ResolveScopeNameAsync(request.ScopeType, request.ScopeId);
 
-            if (RequiredRoleByApprovalLevel.TryGetValue(request.ApprovalLevel, out var requiredRole))
+            if (RequiredPermissionByApprovalLevel.TryGetValue(request.ApprovalLevel, out var requiredPermission))
             {
-                var hasRequiredRole = await _userDirectoryService.IsUserInRoleAsync(request.UserName, requiredRole);
-                if (!hasRequiredRole)
-                    throw new DomainException($"'{request.UserName}' chưa giữ Role '{requiredRole}' — chỉ '{requiredRole}' mới được gán quyền duyệt ở cấp này.");
+                var hasPermission = await _userDirectoryService.UserHasPermissionAsync(request.UserName, requiredPermission);
+                if (!hasPermission)
+                    throw new DomainException($"'{request.UserName}' chưa có quyền '{requiredPermission}' — không thể gán quyền duyệt ở cấp này. Cấp quyền này qua Quản lý người dùng (Tuỳ chỉnh quyền) trước.");
             }
 
             var exists = await _unitOfWork.UserApprovalScopes.FirstOrDefaultAsync(x =>
@@ -148,6 +168,13 @@ namespace Attendance.Application.Services
                 var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == scopeId && !x.IsDeleted);
                 department.OrThrowNotFound("Bộ phận", scopeId);
                 return department!.DepartmentNameVn;
+            }
+
+            // ScopeType.All không trỏ tới bảng nào (ScopeId luôn 0, không có ý nghĩa) — dành cho
+            // ApprovalLevel.GeneralDirector, người duyệt toàn công ty.
+            if (scopeType == (int)ScopeType.All)
+            {
+                return "Toàn công ty";
             }
 
             throw new DomainException($"ScopeType '{scopeType}' không hợp lệ.");

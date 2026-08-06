@@ -93,7 +93,7 @@ export default function RolePermissionManager() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
-                    <section className="h-fit overflow-hidden border border-[#e0e3e5] bg-white">
+                    <section className="h-fit overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                         <div className="border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                             Vai trò
                         </div>
@@ -115,7 +115,7 @@ export default function RolePermissionManager() {
                         </div>
                     </section>
 
-                    <section className="overflow-hidden border border-[#e0e3e5] bg-white">
+                    <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                         <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3">
                             <div className="text-sm font-semibold text-[#191c1e]">
                                 {selectedRole ? `Quyền của "${selectedRole.roleName}"` : "Chọn 1 vai trò"}

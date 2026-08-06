@@ -38,7 +38,7 @@ Nghiệp vụ OT Form:
 | `OtForm` | `GroupId/DepartmentId/ReasonId/OtCaseId` (FK, Restrict), `StartTime/EndTime:TimeOnly`, `SubReason?`, `TotalHour:decimal(10,2)`, `Date:DateOnly`, `NumberOfEmployee`, `CreatedByUserName:string`, `CreatedByFullName:string?`, `Status:int` (enum `OtFormStatus`, **có thêm `Draft=5`**, xem §Business Logic — Người tạo đơn ≠ Trưởng nhóm), `IsDeleted` | N-1 tới 4 danh mục trên; 1-N `OtFormEmployee`; 1-1 `ProcessPart`; 1-N `OtFormApprovalHistory` | |
 | `OtFormEmployee` | khóa kép `(OtFormId, EmployeeId)`, `StartTime/EndTime:TimeOnly`, `NoteVn?`, `NoteJp?`, `IsRemoved:bool`, `RemovedByUserName?`, `RemovedByFullName?`, `RemovedAtLevel:int?`, `RemovedAt:DateTime?`, `RemoveReason?` | N-1 OtForm (Cascade), N-1 Employee (Restrict) | Giờ OT thực tế của từng nhân viên trong 1 đơn. `StartTime` LUÔN bằng `OtForm.StartTime` (server tự set, không nhận từ FE); `EndTime` do người lập đơn tự điều chỉnh riêng cho từng người nhưng phải `> StartTime` và `<= OtForm.EndTime` (giờ khai báo ở đầu form là **giờ kết thúc tối đa**) — validate ở `OtFormService.ValidateEmployeesAsync`. Các cột `Removed*` (2026-07-30) là **soft-remove** — người bị 1 cấp duyệt loại khỏi đơn (xem §Loại nhân viên khỏi đơn) KHÔNG bị xoá dòng, chỉ đánh dấu `IsRemoved=true` + snapshot ai/lúc nào/cấp nào/lý do gì, để giữ nguyên audit trail của 1 văn bản có tính pháp lý. |
 | `ProcessPart` | `OtFormId`(FK unique, Cascade), `IsEat/IsTransportation/IsUseCopyRoom:bool`, `MainTicketCount/SecondaryTicketCount/MilkCount:int`, `AnotherSuggestionVn?`, `AnotherSuggestionJp?` | 1-1 OtForm | Chi tiết phát sinh riêng của từng đơn. `MainTicketCount`/`SecondaryTicketCount`/`MilkCount` (phiếu chính/phiếu phụ/sữa, 2026-07-16, migration `AddMealTicketCountsToProcessPart`) — số lượng từng loại phiếu ăn **chung cho cả đơn** (không phải theo từng nhân viên), người lập đơn (Trưởng nhóm) tự nhập tay khi `IsEat = true`; BE không tự tính từ danh sách nhân viên hay từ `OtFormEmployeeDto.IsEligibleForMeal`. |
-| `UserApprovalScope` | `UserName:string`, `ScopeType:int` (enum, `Group/Department`), `ScopeId:int`, `ApprovalLevel:int` (enum `DepartmentManager/WorkshopManager`), `IsDeleted` | Không FK thật (ScopeId đa hình theo ScopeType) | Ánh xạ 1 User (Trưởng phòng/Trưởng xưởng) phụ trách duyệt phạm vi nào. Tổng Giám Đốc KHÔNG cần dòng ở đây — bypass scope (check Role claim). |
+| `UserApprovalScope` | `UserName:string`, `ScopeType:int` (enum, `Group/Department/All` — `All` thêm 2026-08-05), `ScopeId:int`, `ApprovalLevel:int` (enum `Submitter/DepartmentManager/WorkshopManager/GeneralDirector/GroupHead`), `IsDeleted` | Không FK thật (ScopeId đa hình theo ScopeType) | Ánh xạ 1 User phụ trách duyệt phạm vi nào ở cấp nào. Từ 2026-08-05, **Tổng Giám Đốc CŨNG có dòng ở đây** (`ScopeType=All, ScopeId=0` — phạm vi "Toàn công ty", không phân biệt Group/Department cụ thể), không còn bypass qua Role claim nữa — xem §Permission & Role đã seed. |
 | `OtFormApprovalHistory` | `OtFormId`(FK, Cascade), `ApproverUserName:string`, `ApproverFullName:string?`, `ApprovalLevel:int`, `Action:int` (enum `Submitted/Approved/Rejected`), `Comment?`, `SignatureImage:byte[]?`, `ActionAt:DateTime` | N-1 OtForm | Audit trail từng cấp duyệt; `SignatureImage`/`ApproverFullName` là snapshot tại thời điểm ký (không tham chiếu ngược Identity). |
 | `UserSignature` | `UserName:string`(unique), `SignatureImage:byte[]`, `UpdatedAt` | Không FK thật | Chữ ký đăng ký sẵn để auto-fill lúc duyệt — không phải nguồn sự thật cho audit (nguồn thật = `OtFormApprovalHistory.SignatureImage`). |
 | `SecondaryPassword` | `UserName:string`(unique), `PasswordHash:string`, `UpdatedAt` | Không FK thật | Mật khẩu cấp 2 (2026-07-30) — bắt buộc nhập lại ở MỌI hành động ký/duyệt OtForm (submit/approve/reject, kể cả kênh email), xem §Business Logic — Mật khẩu cấp 2. `PasswordHash` dùng `Microsoft.AspNetCore.Identity.PasswordHasher<object>`, không lưu plaintext. |
@@ -86,7 +86,7 @@ Phần dưới đây (duyệt cấp Trưởng phòng → Trưởng xưởng → 
   - TH1 (ngày thường) → `RequiredApprovalLevel = DepartmentManager`.
   - TH2 (ngày nghỉ/CN/lễ) → `RequiredApprovalLevel = WorkshopManager`.
   - TH3 (lũy kế > 25h/tháng hoặc > 300h/năm) → `RequiredApprovalLevel = GeneralDirector`.
-- Phân quyền 2 lớp: **Permission** (`Attendance.OTForm.Approve` gate hành động) + **`UserApprovalScope`** (gate dữ liệu — khớp `ScopeType/ScopeId` với `OtForm.DepartmentId`/`GroupId` VÀ đúng `ApprovalLevel` đang chờ). `GeneralDirector` bypass scope, chỉ cần `User.IsInRole("Tổng Giám Đốc")`.
+- Phân quyền 2 lớp: **Permission** (`Attendance.OTForm.Approve` gate hành động) + **`UserApprovalScope`** (gate dữ liệu — khớp `ScopeType/ScopeId` với `OtForm.DepartmentId`/`GroupId`, hoặc `ScopeType=All` khớp mọi đơn, VÀ đúng `ApprovalLevel` đang chờ). Từ 2026-08-05, `GeneralDirector` KHÔNG còn bypass qua `User.IsInRole(...)` nữa — cũng đi qua đúng cơ chế `UserApprovalScope` như mọi cấp khác (dòng `ScopeType=All`) — xem §Permission & Role đã seed.
 - Ký tên các cấp duyệt: nếu `OtCase.RequireSignature = true` thì người duyệt **phải đã đăng ký chữ ký** qua `UserSignature` (validate trong `OtFormService.ApproveAsync`, ném `DomainException` nếu chưa đăng ký).
 - **Chữ ký không còn nhận qua request body** (2026-07-16, bỏ `CreateOtFormDto.SubmitterSignatureImage` và `ApproveOtFormDto.SignatureImage`) — lý do đặt ra: nếu người trưởng nhóm/trưởng phòng thay đổi (nghỉ việc, bàn giao), FE không còn phải tự quản lý gửi đúng ảnh chữ ký mỗi lần ký; BE tự `_unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == <người đang gọi API>)` lấy chữ ký **đã đăng ký sẵn** của đúng người đang thao tác (Submitter lúc `CreateAsync`, Approver lúc `ApproveAsync`) rồi snapshot vào `OtFormApprovalHistory.SignatureImage`. Toàn vẹn dữ liệu vẫn được giữ đúng như trước: bản ghi lịch sử duyệt luôn là **snapshot đóng băng tại đúng thời điểm ký** (không tham chiếu ngược `UserSignature`), nên nếu sau này người đó đổi chữ ký mới, hoặc bị thay thế bởi người khác giữ chức vụ, các đơn cũ vẫn hiển thị đúng chữ ký + tên người đã ký tại thời điểm đó.
 - **Mục đích chữ ký = ảnh stamp lên PDF khi in, không phải chữ ký số/PKI** (đã chốt 2026-07-15) — FE tự dựng file PDF từ JSON do BE cung cấp (`GET /api/OtForm/{id}` đã đủ dữ liệu: thông tin đơn, danh sách nhân viên, ProcessPart, `ApprovalHistories` kèm `SignatureImage`+`ApproverFullName` từng cấp). BE không cần thêm thư viện PDF nào.
@@ -590,6 +590,48 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - 4 Role mới: `Trưởng nhóm` (Create+View OTForm, View Employee, Update UserSignature, **+ View Department/Group/Reason/OtCase** — xem ngay dưới), `Trưởng phòng`/`Trưởng xưởng`/`Tổng Giám Đốc` (View+Approve OTForm, Update UserSignature). `Admin` được gán full toàn bộ permission `Attendance.*`.
 - **Lỗ hổng đã vá (2026-07-17, migration `AddCategoryViewPermissionsToTruongGroup`)**: seed ban đầu (`AddAttendancePermissionsAndRoles`) chỉ gán `Trưởng nhóm` 4 permission (`OTForm.Create/View`, `Employee.View`, `UserSignature.Update`) — THIẾU `Department.View`/`Group.View`/`Reason.View`/`OtCase.View` (permission riêng biệt cho từng danh mục, không nằm trong `OTForm.View`). Hậu quả: Trưởng nhóm gọi `GET /api/Department/all`, `GET /api/Group/by-department/{id}`, `GET /api/Reason/all`, `GET /api/OtCase/all` (4 API load dropdown cho màn "Tạo đơn tăng ca") đều bị 403 — màn Tạo đơn không dùng được trên thực tế dù mọi API OtForm đã sẵn sàng. Đã bổ sung 4 permission này cho Role `Trưởng nhóm`, verify lại qua SQL trực tiếp trên DB thật (2026-07-17) — Role này hiện có đủ 8 permission `Attendance.*`.
 - **Chưa làm**: gán Role cho user thật (`update-user-roles`/`create-user` — API Identity có sẵn) và tạo dòng `UserApprovalScope` cho từng Trưởng phòng/Trưởng xưởng **và mỗi người được phép tạo đơn** (`ApprovalLevel=Submitter`, xem §Business Logic — Phân quyền tạo đơn) thật (`POST /api/UserApprovalScope` — API đã có). Nhớ: từ 2026-07-16, chỉ gán được `ApprovalLevel=Submitter` cho `UserName` đã có Role `Trưởng nhóm` từ trước.
+
+### Gom Role về 1 Role duy nhất (`Quản lý tăng ca`) — 2026-08-05
+
+Chốt theo yêu cầu người dùng: cắt gốc việc Identity phình Role mỗi khi Attendance mọc thêm cấp duyệt
+mới (điển hình `AddGroupHeadRole` — thêm đúng 1 cấp duyệt mà phải sinh 1 Role mới ở Identity). Kế
+hoạch chi tiết + lý do từng quyết định: `~/.claude/plans/attendance-single-role-permission-refactor.md`.
+
+- **Migration Identity mới `AddQuanLyTangCaRole`**: seed **đúng 1 Role `Quản lý tăng ca`**, **KHÔNG
+  gán permission nào kèm theo** (khác hẳn `AddGroupHeadRole`) — Admin tự cấp permission theo từng
+  người qua "Quản lý người dùng > Tuỳ chỉnh quyền" (`UserPermissionOverride`, UI có sẵn:
+  `UserPermissionOverrideManager.tsx`). **Giữ nguyên 32 permission `Attendance.*` hiện có** — refactor
+  này KHÔNG đụng vào permission, chỉ gom Role.
+- **Cập nhật 2026-08-05 (migration `RemoveLegacyOtRoles`, đã chạy lên DB thật)**: 5 Role legacy
+  (`Trưởng nhóm`/`Trưởng Bộ phận`/`Trưởng phòng`/`Trưởng xưởng`/`Tổng Giám Đốc`) **đã bị xoá hẳn**
+  khỏi Identity — ban đầu định giữ lại làm nhãn legacy nhưng người dùng yêu cầu dọn luôn. Trước khi
+  xoá, đã migrate an toàn 4 user thật đang giữ các Role này (`m.khoi80419`, `t.nhung50`,
+  `tuan.system.da`, `v.vinh72266`, verify qua SQL read-only trước khi làm): gán `Quản lý tăng ca` +
+  cấp lại đúng bộ permission Role cũ của họ qua `UserPermissionOverride` — permission hiệu lực của cả
+  4 người **không đổi**, đã verify lại bằng SQL sau khi chạy migration. Không còn Role nào đại diện
+  cho 1 cấp duyệt cụ thể trong Identity nữa — Identity giờ chỉ có `Basic/Admin/Quản lý Hợp Đồng/Quản
+  lý Thiết bị/Nhân viên/Quản lý tăng ca`.
+- **Gỡ hardcode tên Role** — `RequiredRoleByApprovalLevel` ở `UserApprovalScopeService.cs` (map
+  `ApprovalLevel` → tên Role tiếng Việt, chặn Admin gán scope sai người) đã đổi thành
+  `RequiredPermissionByApprovalLevel` (check qua `IUserDirectoryService.UserHasPermissionAsync`, tính
+  cả `UserPermissionOverride`): Submitter cần `Attendance.OTForm.Create`; GroupHead/DepartmentManager/
+  WorkshopManager/**GeneralDirector** (mới, xem dưới) cần `Attendance.OTForm.Approve`.
+- **`ScopeType` thêm `All = 2`** (`Attendance.Domain/Enums/ScopeType.cs`) — dành cho
+  `ApprovalLevel.GeneralDirector`. TGĐ nay có **1 dòng `UserApprovalScope(ScopeType=All, ScopeId=0,
+  ApprovalLevel=GeneralDirector)`** thay vì bypass `User.IsInRole("Tổng Giám Đốc")` như trước — mọi
+  chỗ so khớp scope (`OtFormService`: `LoadFormAndValidateAuthorityAsync`, `RemoveEmployeeCoreAsync`,
+  `ResolveEligibleApproverUserNamesAsync`, `GetPendingApprovalsAsync`) đã thêm nhánh
+  `|| ScopeType.All` để khớp vô điều kiện.
+- **`IUserDirectoryService`**: xoá `IsUserInRoleAsync`/`GetUserNamesInRoleAsync` (không còn nơi nào
+  cần tra theo tên Role), thêm `UserHasPermissionAsync(userName, permissionCode)`.
+- **⚠ Vận hành sau khi deploy migration này — bắt buộc làm ngay, không thì TGĐ không duyệt được gì**:
+  vào khu OT → "Phân quyền duyệt" → chọn Cấp duyệt "Tổng Giám Đốc" (phạm vi tự động "Toàn công ty",
+  không cần chọn Group/Department) → gán cho (các) UserName đang là TGĐ thật. Trước đây việc này làm
+  qua gán Role ở trang Admin; từ nay phải làm ở khu OT như mọi cấp khác.
+- FE: `UserApprovalScopeManager.tsx` thêm lựa chọn "Tổng Giám Đốc"/"Toàn công ty"; bỏ hẳn cảnh báo
+  "chưa giữ Role X" (không còn tra được theo Role nữa, BE chặn bằng permission ở tầng Service).
+  `OtFormTabsPage.tsx`: tab "Chờ tôi ký duyệt" trước đây ẩn cho ai không giữ Role `Trưởng nhóm`, nay
+  hiện cho mọi người có `Attendance.OTForm.Create` (không còn cách nào tra "là Trưởng nhóm" từ FE).
 
 ## 2. Wiring Host — đã xong
 1. `Configurations/DependencyInjection.cs`: `AddDbContext<AttendanceDbContext>` với `OTManagementConnection`.

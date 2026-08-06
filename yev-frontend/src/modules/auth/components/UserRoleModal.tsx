@@ -179,7 +179,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     Đang tải dữ liệu...
                 </div>
             ) : (
-                <section className="overflow-hidden border border-[#e0e3e5] bg-white">
+                <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                     {/* Search / Filter Bar */}
                     <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -243,7 +243,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                                     {user.fullName || user.userName}
                                                 </span>
                                                 {isSelf && (
-                                                    <span className="border border-[#e9bcb6] bg-[#fff4f2] px-2 py-0.5 text-[10px] font-semibold tracking-wider text-[#930006]">
+                                                    <span className="rounded-full border border-[#e9bcb6] bg-[#fff4f2] px-2 py-0.5 text-[10px] font-semibold tracking-wider text-[#930006]">
                                                         BẠN
                                                     </span>
                                                 )}
@@ -267,7 +267,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                                             return role ? (
                                                                 <span
                                                                     key={role.id}
-                                                                    className="border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-medium text-[#191c1e]"
+                                                                    className="rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#191c1e]"
                                                                 >
                                                                     {role.roleName}
                                                                 </span>
