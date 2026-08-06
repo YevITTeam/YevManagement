@@ -656,9 +656,12 @@ namespace Attendance.Application.Services
 
             // If there's a next level still needing approval (not yet Completed), send an email to
             // that level — for Completed/Rejected, stop, since no one needs to approve further.
-            if (nextStatus == OtFormStatus.Pending)
-                await NotifyEligibleApproversAsync(otForm, ApprovalLevel.DepartmentManager);
-            else if (nextStatus == OtFormStatus.ApprovedByDepartment)
+            // DepartmentManager is deliberately NOT notified here (unlike WorkshopManager/GeneralDirector
+            // below): as of 2026-08-06 those forms are gathered into "Đơn tổng" and emailed once a day at
+            // 15:00 by OtFormBatchBackgroundService instead of 1 email per form (see docs/attendance-
+            // module.md — §Đơn tổng). The form just sits with OtFormBatchId=null until that sweep picks
+            // it up — no action needed here.
+            if (nextStatus == OtFormStatus.ApprovedByDepartment)
                 await NotifyEligibleApproversAsync(otForm, ApprovalLevel.WorkshopManager);
             else if (nextStatus == OtFormStatus.ApprovedByWorkshop)
                 await NotifyEligibleApproversAsync(otForm, ApprovalLevel.GeneralDirector);

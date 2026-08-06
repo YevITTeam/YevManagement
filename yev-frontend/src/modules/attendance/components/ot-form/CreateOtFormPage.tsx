@@ -139,6 +139,11 @@ function TimePicker24h({
 
 // Ô checkbox dạng chip có icon (thay checkbox+label phẳng) — viền/nền đổi màu khi chọn, cùng ngôn ngữ
 // hình ảnh (icon + badge xanh lá) với ProcessPartTile ở OtFormDetail.tsx/OtFormEmailConfirmPage.tsx.
+// Dùng <button role="checkbox"> thay vì <input type="checkbox" className="sr-only"> trong <label>:
+// input ẩn kiểu sr-only (position: absolute, không có top/left) khi nhận focus (label click luôn focus
+// vào input liên kết) khiến trình duyệt tự scrollIntoView input đó — với các trang có bảng nhân viên dài
+// phía trên, thao tác này làm cả vùng cuộn <main> nhảy lên, để lại khoảng trắng phía dưới. Button thật
+// không có input ẩn nên không gặp side-effect scroll này.
 function ToggleOptionCard({
     icon,
     label,
@@ -153,23 +158,21 @@ function ToggleOptionCard({
     disabled?: boolean;
 }) {
     return (
-        <label
+        <button
+            type="button"
+            role="checkbox"
+            aria-checked={checked}
+            onClick={() => onChange(!checked)}
+            disabled={disabled}
             className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition ${
                 checked
                     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                     : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f8fafc]"
             } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         >
-            <input
-                type="checkbox"
-                checked={checked}
-                onChange={(event) => onChange(event.target.checked)}
-                disabled={disabled}
-                className="sr-only"
-            />
             <span className={checked ? "text-emerald-600" : "text-[#5e3f3a]"}>{icon}</span>
             {label}
-        </label>
+        </button>
     );
 }
 
