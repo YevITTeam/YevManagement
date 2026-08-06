@@ -178,10 +178,24 @@ nhập tay, không theo từng người) — giữ nguyên `ProcessPart`, không
   `NoMealExtraAccumulationHours = 0.5m` vào biến `hours` TRƯỚC khi cộng vào `MonthToDate`/`YearToDate`.
   **CHỈ ảnh hưởng lũy kế** — `EndTime`, `TotalHour`, giờ hiển thị trên đơn/PDF **giữ nguyên**, không đổi.
 - **FE**: `CreateOtFormPage.tsx` — checkbox "Có ăn" ở cả 2 bảng nhân viên (tạo mới + sửa đơn), chỉ hiện
-  khi giờ OT thực tế của người đó (tính lại theo `endTime` override hiện tại) đủ ngưỡng, mặc định `true`
-  khi chọn người mới. `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx` (đọc, dùng chung namespace dịch
+  khi giờ OT thực tế của người đó (tính lại theo `endTime` override hiện tại) đủ ngưỡng. `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx` (đọc, dùng chung namespace dịch
   `Attendance.OtFormDetail`) — thêm cột hiển thị Có ăn/Không ăn cạnh cột Phiếu ăn, không sửa được.
   `OtFormPrintView.tsx` (bản in chính thức) **không đổi** — đúng theo chốt "không đụng giờ hiển thị".
+- **Giá trị mặc định "Có ăn" đồng bộ theo "Ăn uống" (2026-08-06)** — `ProcessPart.IsEat` (cấp cả đơn,
+  đặt suất ăn) và `OtFormEmployee.DidEat` (cấp từng người, quyết định +30 phút) là 2 field **độc lập ở
+  BE**, nhưng dễ khiến người lập đơn nhầm 2 cái liên quan nhau (bỏ tích "Ăn uống" nhưng quên đổi tay
+  "Có ăn" từng người → không ai được cộng bù 30 phút dù thực tế không đặt suất ăn cho ai). Chỉ sửa ở
+  FE (`CreateOtFormPage.tsx`, `mealServiceActive = processPartEnabled && processPart.isEat`), **không**
+  đổi logic BE: giá trị mặc định của "Có ăn" khi chọn nhân viên mới, và khi bấm sửa giờ/ghi chú trước
+  khi tick "Có ăn", đều lấy theo `mealServiceActive` thay vì hardcode `true`; mỗi lần bật/tắt "Ăn uống"
+  (hoặc cả khối "Yêu cầu hỗ trợ khác") đồng bộ lại "Có ăn" cho MỌI người đang chọn theo giá trị mới —
+  vẫn sửa tay được từng người sau đó. Chỉ áp dụng màn Tạo mới; màn Sửa đơn khoá hẳn khối này nên không
+  áp dụng (tránh ghi đè `didEat` vừa tải từ đơn cũ).
+- **Số phiếu tự tính cũng loại người "Không ăn" (2026-08-06)** — `mealTicketCounts` (`CreateOtFormPage.tsx`)
+  trước đây chỉ tính theo giờ OT, không đọc `didEat`, nên người tick "Không ăn" vẫn bị tính vào phiếu
+  chính/phụ. Sửa lại: người đủ ngưỡng mà `didEat=false` → **không tính vào phiếu nào cả** (không ăn thì
+  không cần suất, họ đã được cộng bù 30 phút lũy kế thay vào đó); người đủ ngưỡng và có ăn → phiếu chính;
+  người dưới ngưỡng (chưa có ô "Có ăn" để tự khai) → vẫn mặc định phiếu phụ như cũ.
 
 **Thiết kế BE** (mirror `Asset.Domain.Entities.AssetSetting` — bảng cấu hình 1 dòng, xem
 `asset-module.md`):
