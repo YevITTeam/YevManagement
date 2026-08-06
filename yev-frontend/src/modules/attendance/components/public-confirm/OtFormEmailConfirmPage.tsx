@@ -540,7 +540,7 @@ export default function OtFormEmailConfirmPage() {
                                         }`}
                                     >
                                         <td className="px-6 py-3 text-sm">
-                                            <span className="inline-flex items-center rounded-md bg-[#eceef0] px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e]">
+                                            <span className="inline-flex items-center whitespace-nowrap rounded-md bg-[#eceef0] px-3 py-1 font-mono text-xs font-semibold text-[#191c1e]">
                                                 {employee.employeeCode}
                                             </span>
                                         </td>
@@ -591,10 +591,11 @@ export default function OtFormEmailConfirmPage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => openRemove(employee)}
-                                                        className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e9bcb6] bg-white px-2.5 py-1 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
+                                                        title={tConfirm("removeEmployeeButton")}
+                                                        aria-label={tConfirm("removeEmployeeButton")}
+                                                        className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-[#e9bcb6] bg-white p-1.5 text-[#930006] transition hover:bg-[#fff4f2]"
                                                     >
-                                                        <UserX className="h-3.5 w-3.5 shrink-0" />
-                                                        {tConfirm("removeEmployeeButton")}
+                                                        <UserX className="h-3.5 w-3.5" />
                                                     </button>
                                                 )}
                                             </td>
