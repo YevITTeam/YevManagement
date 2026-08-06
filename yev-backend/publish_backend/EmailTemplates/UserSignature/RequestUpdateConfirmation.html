@@ -3,73 +3,131 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Xác nhận cập nhật chữ ký</title>
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>Xác nhận cập nhật chữ ký / 署名更新の確認</title>
+<!--[if mso]>
+<style type="text/css">
+table { border-collapse: collapse; }
+</style>
+<![endif]-->
 </head>
-<body style="margin:0; padding:0; background-color:#f2f4f7; font-family:Segoe UI, Arial, Helvetica, sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2f4f7; padding:32px 16px;">
-  <tr>
-    <td align="center">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #e5e8ec;">
-        <!-- Header -->
-        <tr>
-          <td style="background-color:#1a56db; padding:24px 40px;">
-            <span style="font-size:20px; font-weight:700; color:#ffffff; letter-spacing:0.5px;">YevManagement</span>
-          </td>
-        </tr>
-        <!-- Body -->
-        <tr>
-          <td style="padding:36px 40px 8px 40px;">
-            <p style="margin:0 0 4px 0; font-size:13px; font-weight:600; color:#1a56db; text-transform:uppercase; letter-spacing:0.5px;">Xác nhận cập nhật chữ ký / 署名更新の確認</p>
-            <h1 style="margin:0 0 20px 0; font-size:20px; color:#1f2937;">Xin chào {{UserName}} 様,</h1>
-            <p style="margin:0 0 16px 0; font-size:15px; line-height:24px; color:#374151;">
-              Hệ thống ghi nhận một yêu cầu cập nhật chữ ký điện tử trên tài khoản của bạn vào lúc
-              <strong>{{RequestedAt}}</strong>. Chữ ký mới sẽ chỉ có hiệu lực sau khi bạn xác nhận yêu cầu này.<br>
-              <span style="color:#6b7280;">あなたのアカウントで電子署名の更新リクエストが<strong>{{RequestedAt}}</strong>に登録されました。新しい署名は、このリクエストを確認した後にのみ有効になります。</span>
-            </p>
-          </td>
-        </tr>
-        <!-- CTA button -->
-        <tr>
-          <td align="center" style="padding:8px 40px 28px 40px;">
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-              <tr>
-                <td align="center" style="border-radius:6px; background-color:#1a56db;">
-                  <a href="{{ConfirmLink}}" target="_blank" style="display:inline-block; padding:13px 32px; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:6px;">Xác nhận cập nhật chữ ký / 署名更新を確認</a>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:14px 0 0 0; font-size:13px; color:#9ca3af;">
-              Liên kết sẽ hết hạn sau {{ExpiryMinutes}} phút.<br>
-              リンクの有効期限は{{ExpiryMinutes}}分間です。
-            </p>
-          </td>
-        </tr>
-        <!-- Notice -->
-        <tr>
-          <td style="padding:0 40px 32px 40px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff7ed; border-left:3px solid #f59e0b; border-radius:4px;">
-              <tr>
-                <td style="padding:14px 16px; font-size:13px; line-height:20px; color:#92400e;">
-                  Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email — chữ ký hiện tại của bạn sẽ
-                  không thay đổi cho đến khi có xác nhận.<br>
-                  このリクエストに心当たりがない場合は、このメールを無視してください。確認されるまで、現在の署名は変更されません。
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <!-- Footer -->
-        <tr>
-          <td style="padding:20px 40px; background-color:#f9fafb; border-top:1px solid #e5e8ec;">
-            <p style="margin:0; font-size:12px; line-height:18px; color:#9ca3af;">
-              Đây là email tự động từ hệ thống YevManagement, vui lòng không trả lời email này.<br>
-              これはYevManagementシステムからの自動送信メールです。返信しないでください。
-            </p>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
+<body style="margin:0; padding:0; background-color:#eef0f2; font-family:Arial, Helvetica, sans-serif;">
+<div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#eef0f2;">
+Xác nhận yêu cầu cập nhật chữ ký điện tử cho tài khoản của bạn. / 電子署名更新リクエストの確認をお願いします。
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef0f2;">
+<tr>
+<td align="center" style="padding:40px 16px;">
+
+<table role="presentation" width="720" cellpadding="0" cellspacing="0" border="0" style="max-width:720px; width:100%; background-color:#ffffff;">
+
+<!-- Header -->
+<tr>
+<td style="padding:36px 40px 24px 40px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td style="font-family:Georgia, 'Times New Roman', serif; font-size:22px; color:#16233d; letter-spacing:0.3px; mso-line-height-rule:exactly; line-height:28px;">
+Yev<span style="color:#8a2432;">Management</span>
+</td>
+<td align="right" style="font-size:11px; color:#9aa2b1; letter-spacing:1px; mso-line-height-rule:exactly; line-height:28px;">
+勤怠管理システム
+</td>
+</tr>
 </table>
+</td>
+</tr>
+<tr>
+<td style="padding:0 40px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr><td style="background-color:#16233d; height:2px; line-height:2px; font-size:0;">&nbsp;</td></tr>
+</table>
+</td>
+</tr>
+
+<!-- Status -->
+<tr>
+<td style="padding:28px 40px 0 40px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td style="border:1px solid #16233d; padding:5px 14px;">
+<span style="font-size:11px; font-weight:bold; color:#16233d; letter-spacing:0.5px; mso-line-height-rule:exactly; line-height:16px;">XÁC NHẬN BẢO MẬT&nbsp;&nbsp;·&nbsp;&nbsp;セキュリティ確認</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<!-- Body intro -->
+<tr>
+<td style="padding:20px 40px 4px 40px;">
+<p style="margin:0 0 6px 0; font-size:17px; font-weight:bold; color:#16233d; mso-line-height-rule:exactly; line-height:24px;">
+Xin chào {{UserName}} 様,
+</p>
+<p style="margin:0 0 22px 0; font-size:14px; line-height:23px; color:#4a5266; mso-line-height-rule:exactly;">
+Hệ thống ghi nhận một yêu cầu cập nhật chữ ký điện tử trên tài khoản của bạn vào lúc <strong style="color:#16233d;">{{RequestedAt}}</strong>. Chữ ký mới sẽ chỉ có hiệu lực sau khi bạn xác nhận yêu cầu này.<br>
+<span style="color:#8b93a3;">あなたのアカウントで電子署名の更新リクエストが<strong style="color:#6b7280;">{{RequestedAt}}</strong>に登録されました。新しい署名は、このリクエストを確認した後にのみ有効になります。</span>
+</p>
+</td>
+</tr>
+
+<!-- CTA -->
+<tr>
+<td align="center" style="padding:12px 40px 8px 40px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td align="center" bgcolor="#16233d" style="background-color:#16233d; border-radius:24px;">
+<a href="{{ConfirmLink}}" target="_blank" style="display:block; padding:14px 36px; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; letter-spacing:0.3px; border-radius:24px; mso-line-height-rule:exactly; line-height:18px;">Xác nhận cập nhật chữ ký / 署名更新を確認</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:6px 40px 24px 40px;">
+<p style="margin:0; font-size:12px; font-style:italic; color:#9aa2b1; text-align:center; mso-line-height-rule:exactly; line-height:18px;">
+* Liên kết sẽ hết hạn sau {{ExpiryMinutes}} phút.<br>
+* リンクの有効期限は{{ExpiryMinutes}}分間です。
+</p>
+</td>
+</tr>
+
+<!-- Notice -->
+<tr>
+<td style="padding:0 40px 32px 40px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #e7e9ee; border-bottom:1px solid #e7e9ee;">
+<tr>
+<td style="padding:16px 4px; font-size:13px; line-height:21px; color:#4a5266; mso-line-height-rule:exactly;">
+<span style="display:block; font-size:11px; letter-spacing:0.5px; color:#8a2432; font-weight:bold; margin-bottom:6px; mso-line-height-rule:exactly; line-height:16px;">LƯU Ý&nbsp;/&nbsp;ご注意</span>
+Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email — chữ ký hiện tại của bạn sẽ không thay đổi cho đến khi có xác nhận.<br>
+<span style="color:#8b93a3;">このリクエストに心当たりがない場合は、このメールを無視してください。確認されるまで、現在の署名は変更されません。</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<!-- Footer -->
+<tr>
+<td style="padding:24px 40px; background-color:#f7f8fa;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr><td style="border-top:1px solid #e7e9ee; padding-top:18px;">
+<p style="margin:0 0 6px 0; font-size:11px; color:#9aa2b1; text-align:center; mso-line-height-rule:exactly; line-height:17px;">
+Đây là email tự động từ hệ thống <strong style="color:#5c6478;">YevManagement</strong>, vui lòng không trả lời email này.<br>
+これは<strong style="color:#5c6478;">YevManagement</strong>システムからの自動送信メールです。返信しないでください。
+</p>
+</td></tr>
+</table>
+</td>
+</tr>
+
+</table>
+
+</td>
+</tr>
+</table>
+
 </body>
 </html>
