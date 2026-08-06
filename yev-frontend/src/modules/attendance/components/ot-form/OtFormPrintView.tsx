@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Download, Printer, RectangleHorizontal, RectangleVertical } from "lucide-react";
-import { toast } from "react-toastify";
+import { useState, useEffect } from "react";
+import { Printer, RectangleHorizontal, RectangleVertical } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
@@ -16,13 +15,6 @@ interface OtFormPrintViewProps {
 }
 
 type PaperSize = "a4" | "a5";
-
-// Kích thước trang PDF (pt) PHẢI khớp @page ở dưới (Letter cho A4, ISO A5 ngang cho A5) — dùng
-// chung 1 nguồn để export PDF ra đúng tỉ lệ như bản in giấy thật.
-const PDF_PAGE_SIZE: Record<PaperSize, [number, number]> = {
-    a4: [612, 792],
-    a5: [595.28, 419.53],
-};
 
 function formatDate(value: string) {
     if (!value) return "……………………";
@@ -278,12 +270,7 @@ function boxStyle(box: FieldBox): React.CSSProperties {
     };
 }
 
-// Như boxStyle() nhưng khoá cứng "1 dòng, không xuống dòng" bằng inline style thay vì chỉ dựa vào
-// class Tailwind (flex items-center overflow-hidden whitespace-nowrap) — khi xuất PDF, html2canvas
-// đọc style tính toán trên DOM nó tự clone sang iframe ẩn, và không phải lúc nào cũng áp đúng rule từ
-// stylesheet ngoài (CSS layer/at-rule của Tailwind v4) lên bản clone đó, khiến giá trị điền bị xuống
-// dòng trong PDF dù trên màn hình/khi in vẫn đúng 1 dòng (lỗi thực tế người dùng gặp phải). Inline
-// style luôn được giữ nguyên khi clone nên đảm bảo đúng trong mọi trường hợp.
+// Như boxStyle() nhưng khoá cứng "1 dòng, không xuống dòng, canh giữa dọc" cho ô đè dữ liệu.
 function nowrapBoxStyle(box: FieldBox): React.CSSProperties {
     return {
         ...boxStyle(box),
@@ -326,17 +313,15 @@ function PageFrame({
     image,
     aspect,
     alt,
-    pageRef,
     children,
 }: {
     image: string;
     aspect: string;
     alt: string;
-    pageRef?: (el: HTMLDivElement | null) => void;
     children: React.ReactNode;
 }) {
     return (
-        <div ref={pageRef} className="relative w-full text-black" style={{ aspectRatio: aspect }}>
+        <div className="relative w-full text-black" style={{ aspectRatio: aspect }}>
             {/* eslint-disable-next-line @next/next/no-img-element -- ảnh nền tĩnh từ public/, next/image không cần thiết cho asset in ấn cố định này */}
             <img src={image} alt={alt} className="absolute inset-0 h-full w-full" />
             {children}
@@ -504,12 +489,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
     // Chỉ tự động chọn khổ giấy lần đầu (khi vừa tải xong đơn) — sau khi người dùng đã bấm chọn tay
     // 1 lần thì tôn trọng lựa chọn đó, không tự đổi lại nữa dù state form có thay đổi.
     const [paperSizeTouched, setPaperSizeTouched] = useState(false);
-    const [isExportingPdf, setIsExportingPdf] = useState(false);
     const { setting } = useAttendanceSetting();
-    // Ref tới từng trang in thật (mỗi phần tử = 1 ảnh nền = 1 trang giấy) — dùng để chụp canvas từng
-    // trang khi xuất PDF, KHÔNG dùng ref tới toàn bộ container vì mỗi trang có kích thước/tỉ lệ khác
-    // ảnh nền chung (aspect-ratio riêng), phải chụp tách trang mới ra đúng khổ giấy thật.
-    const pageNodesRef = useRef<(HTMLDivElement | null)[]>([]);
 
     useEffect(() => {
         OtFormApi.getOtFormById(id)
@@ -544,7 +524,6 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
         return <div className="p-8 text-sm text-[#5e3f3a]">{t("loading")}</div>;
     }
 
-    const formId = form.id;
     const rejectHistory = form.approvalHistories.find((item) => item.action === 2) ?? null;
     const isA5 = paperSize === "a5";
     const employeePages = buildEmployeePages(printableEmployees, paperSize);
@@ -584,53 +563,6 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
               })),
           ];
 
-    async function handleExportPdf() {
-        if (isExportingPdf) return;
-        const nodes = pageNodesRef.current.filter((el): el is HTMLDivElement => el !== null);
-        if (nodes.length === 0) {
-            toast.error(t("noContentError"));
-            return;
-        }
-        setIsExportingPdf(true);
-        try {
-            // Chụp ảnh raster từng trang bằng html2canvas rồi nhúng vào PDF (KHÔNG dùng jsPDF.html() —
-            // API đó luôn vẽ nội dung dạng vector/text qua "context2d" của jsPDF, không có chế độ raster
-            // cho PDF, nên layout đè theo % + ảnh nền phức tạp của form này bị vỡ (chữ chồng lên nhau,
-            // cắt lề — lỗi thực tế người dùng gặp phải).
-            const [{ default: JsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
-            const [pageWidth, pageHeight] = PDF_PAGE_SIZE[paperSize];
-            const orientation = pageWidth > pageHeight ? "landscape" : "portrait";
-            const doc = new JsPDF({ orientation, unit: "pt", format: [pageWidth, pageHeight] });
-
-            for (let i = 0; i < nodes.length; i++) {
-                const node = nodes[i];
-                // html2canvas 1.4.1 không hiểu CSS "aspect-ratio" (dùng để giữ đúng tỉ lệ khung ảnh nền) —
-                // khi nó clone node sang iframe ẩn để chụp, chiều cao co về 0 khiến mọi dòng dữ liệu đè
-                // top:0 lên nhau. Phải "đóng băng" chiều cao thật (trình duyệt đã tính đúng trên màn hình)
-                // thành px cụ thể trước khi chụp, rồi trả lại nguyên trạng ngay sau đó.
-                const frozenHeight = node.getBoundingClientRect().height;
-                const originalHeight = node.style.height;
-                node.style.height = `${frozenHeight}px`;
-                let canvas: HTMLCanvasElement;
-                try {
-                    canvas = await html2canvas(node, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-                } finally {
-                    node.style.height = originalHeight;
-                }
-
-                if (i > 0) doc.addPage([pageWidth, pageHeight], orientation);
-                doc.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, pageWidth, pageHeight);
-            }
-
-            doc.save(`don-tang-ca-${formId}.pdf`);
-        } catch (err) {
-            console.error("Export PDF failed:", err);
-            toast.error(getApiErrorMessage(err, t("exportError")));
-        } finally {
-            setIsExportingPdf(false);
-        }
-    }
-
     return (
         <div className="bg-[#f2f4f6] py-6 print:bg-white print:py-0">
             {/* @page phải khớp CHÍNH XÁC kích thước thật của ảnh nền (612x792pt ~ 8.5x11in cho file A4 —
@@ -667,19 +599,6 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                     </div>
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={handleExportPdf}
-                            disabled={isExportingPdf}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {isExportingPdf ? (
-                                t("exporting")
-                            ) : (
-                                <>
-                                    <Download className="h-4 w-4" /> {t("exportPdfButton")}
-                                </>
-                            )}
-                        </button>
-                        <button
                             onClick={() => window.print()}
                             className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                         >
@@ -695,14 +614,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
             <div className="mx-auto max-w-4xl bg-white p-6 print:p-0 print:shadow-none shadow-sm">
                 {printPages.map((page, index) => (
                     <div key={page.key} className={index > 0 ? "break-before-page" : undefined}>
-                        <PageFrame
-                            image={page.image}
-                            aspect={page.aspect}
-                            alt="Giấy đề nghị làm ngoài giờ"
-                            pageRef={(el) => {
-                                pageNodesRef.current[index] = el;
-                            }}
-                        >
+                        <PageFrame image={page.image} aspect={page.aspect} alt="Giấy đề nghị làm ngoài giờ">
                             {page.content}
                         </PageFrame>
                     </div>

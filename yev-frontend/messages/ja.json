@@ -557,11 +557,7 @@
       "paperSizeA5Short": "A5横",
       "paperSizeA4": "A4（1ページ目最大10名、以降のページ最大30名）",
       "paperSizeA5": "A5横（両面 — 裏面最大12名）",
-      "exporting": "出力中...",
-      "exportPdfButton": "PDF出力",
-      "printButton": "印刷",
-      "noContentError": "PDFに出力する内容がありません。",
-      "exportError": "PDFファイルの出力に失敗しました。もう一度お試しください。"
+      "printButton": "印刷"
     },
     "OtFormEmailConfirm": {
       "missingTokenError": "リンクにトークンがありません。",

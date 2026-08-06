@@ -557,11 +557,7 @@
       "paperSizeA5Short": "A5 ngang",
       "paperSizeA4": "A4 (tối đa 10 người/trang đầu, 30 người/trang sau)",
       "paperSizeA5": "A5 ngang (2 mặt — mặt sau tối đa 12 người/trang)",
-      "exporting": "Đang xuất...",
-      "exportPdfButton": "Xuất PDF",
-      "printButton": "In",
-      "noContentError": "Không có nội dung để xuất PDF.",
-      "exportError": "Xuất file PDF thất bại. Vui lòng thử lại."
+      "printButton": "In"
     },
     "OtFormEmailConfirm": {
       "missingTokenError": "Thiếu token trong đường link.",
