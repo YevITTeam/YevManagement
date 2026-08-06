@@ -1,6 +1,7 @@
 import { api } from "@/lib/client";
 import type {
     ApproveOtFormDto,
+    CheckOtFormOverlapDto,
     CreateOtFormDto,
     MyCreateScopeItemDto,
     OtFormDto,
@@ -16,6 +17,7 @@ import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 const ENDPOINTS = {
     OT_FORM: {
         getMyCreateScopes: "/OtForm/my-create-scopes",
+        checkOverlap: "/OtForm/check-overlap",
         createOtForm: "/OtForm",
         getMyForms: "/OtForm/my-forms",
         getPendingSubmissions: "/OtForm/pending-submissions",
@@ -59,6 +61,11 @@ export const OtFormApi = {
     // để tự điền sẵn/khoá dropdown thay vì bắt chọn lại từ toàn bộ danh sách (docs §4.0a).
     getMyCreateScopes: async () => {
         const response = await api.get<ApiResponse<MyCreateScopeItemDto[]>>(ENDPOINTS.OT_FORM.getMyCreateScopes);
+        return response.data;
+    },
+    // Frontend proactive conflict check
+    checkOverlap: async (data: CheckOtFormOverlapDto) => {
+        const response = await api.post<ApiResponse<number[]>>(ENDPOINTS.OT_FORM.checkOverlap, data);
         return response.data;
     },
     // Response 201, data trả về OtFormDto đầy đủ luôn — không cần gọi lại getOtFormById (docs §4.1).

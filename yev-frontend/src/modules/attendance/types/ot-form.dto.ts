@@ -1,6 +1,18 @@
 // Schema theo docs/attendance-api-fe.md §4 (đã cập nhật 2026-07-16, đợt 1-3). date: DateOnly
 // "yyyy-MM-dd" — startTime/endTime: TimeOnly "HH:mm:ss".
 
+export interface CheckOtFormOverlapEmployeeDto {
+    employeeId: number;
+    endTime: string;
+}
+
+export interface CheckOtFormOverlapDto {
+    date: string;
+    startTime: string;
+    employees: CheckOtFormOverlapEmployeeDto[];
+    excludeFormId?: number | null;
+}
+
 // mainTicketCount/secondaryTicketCount/milkCount (2026-07-16 đợt 3): nhập tay, chung cho cả đơn,
 // chỉ có ý nghĩa khi isEat=true — xem §4.1.
 export interface ProcessPartDto {

@@ -250,6 +250,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [loadError, setLoadError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const [overlappingEmployeeIds, setOverlappingEmployeeIds] = useState<number[]>([]);
+
     // Bộ phận/Phòng ban CHÍNH user được phép tạo đơn — gọi TRƯỚC khi cho chọn Phòng ban/Bộ phận, để tự
     // điền sẵn (1 phần tử) hoặc thu hẹp dropdown (nhiều phần tử) thay vì bắt chọn từ toàn bộ danh sách
     // (docs §4.0a/§1.3.A). null = đang tải, [] = Admin (bypass) HOẶC tài khoản chưa cấu hình gì.
@@ -437,6 +439,32 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             secondaryTicketCount: mealTicketCounts.secondary,
         }));
     };
+
+    // Kiểm tra trùng giờ tăng ca (chỉ chạy khi đã nhập đủ ngày, giờ bắt đầu và có ít nhất 1 nhân viên)
+    useEffect(() => {
+        if (!date || !startTime || selectedEmployeeIds.length === 0) {
+            setOverlappingEmployeeIds([]);
+            return;
+        }
+
+        const timeout = setTimeout(() => {
+            const reqEmployees = selectedEmployeeIds.map(id => ({
+                employeeId: id,
+                endTime: `${employeeOverrides[id]?.endTime || endTime}:00`,
+            }));
+
+            OtFormApi.checkOverlap({
+                date,
+                startTime: `${startTime}:00`,
+                employees: reqEmployees,
+                excludeFormId: isEditMode ? otFormId : null,
+            })
+                .then(setOverlappingEmployeeIds)
+                .catch(err => console.error("Failed to check overlap", err));
+        }, 500);
+
+        return () => clearTimeout(timeout);
+    }, [date, startTime, endTime, selectedEmployeeIds, employeeOverrides, isEditMode, otFormId]);
 
     const toggleEmployee = (employeeId: number) => {
         setSelectedEmployeeIds((current) =>
@@ -871,8 +899,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">{employee.code}</td>
-                                                <td className="px-3 py-2 align-top text-sm text-[#191c1e]">
-                                                    {employee.lastName} {employee.firstName}
+                                                <td className="px-3 py-2 align-top text-sm">
+                                                    <span className={overlappingEmployeeIds.includes(employee.id) ? "line-through text-[#930006]" : "text-[#191c1e]"}>
+                                                        {employee.lastName} {employee.firstName}
+                                                    </span>
+                                                    {overlappingEmployeeIds.includes(employee.id) && (
+                                                        <div className="mt-1 text-xs font-semibold text-[#930006]">
+                                                            {t("colOverlapWarning")}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-3 py-2 align-top text-sm">
                                                     <span

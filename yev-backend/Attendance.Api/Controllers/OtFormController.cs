@@ -105,6 +105,14 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Attendance.OTForm.Create")]
+        [HttpPost("check-overlap")]
+        public async Task<ActionResult<ApiResponse<List<int>>>> CheckOverlap([FromBody] CheckOtFormOverlapDto request)
+        {
+            var result = await _otFormService.CheckOverlapAsync(request);
+            return Success(result);
+        }
+
         // Create a form — only creates a draft (Draft), NOT YET signed as "Requester". The form
         // creator is only responsible for data entry; the Team Leader must call POST /{id}/submit
         // themselves to sign before the form actually enters the flow (see docs/attendance-module.md).

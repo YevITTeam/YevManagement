@@ -48,7 +48,7 @@ export default function Home() {
   ].filter((item) => item.visible);
 
   return (
-    <div className="min-h-[80vh] bg-[#f8fafc] px-6 py-10">
+    <div className="min-h-[80vh] bg-[#f8fafc] px-6 py-10">  
       <div className="mx-auto flex max-w-6xl flex-col gap-8">
         <div className="rounded-2xl border border-[#e0e3e5] bg-white p-8 shadow-sm">
           <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">{t("eyebrow")}</p>

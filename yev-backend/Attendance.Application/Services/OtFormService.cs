@@ -360,6 +360,13 @@ namespace Attendance.Application.Services
             var validatedEmployees = await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
             var employeeById = validatedEmployees.ToDictionary(x => x.Id);
 
+            // Kiểm tra trùng giờ tăng ca — 1 nhân viên không được xuất hiện trong 2 đơn tăng ca có
+            // giờ chồng chéo trong cùng 1 ngày (chốt 2026-08-06). Chỉ xét các đơn chưa bị xóa và
+            // chưa bị từ chối (Rejected) — đơn Rejected đã trả lũy kế và không còn hiệu lực nữa.
+            var employeeEndTimes = request.Employees.ToDictionary(x => x.EmployeeId, x => x.EndTime);
+            await EnsureNoOverlappingOtFormsAsync(
+                validatedEmployees, request.Date, request.StartTime, employeeEndTimes, excludeFormId: null);
+
             var newOtForm = new OtForm
             {
                 GroupId = request.GroupId,
@@ -1036,6 +1043,73 @@ namespace Attendance.Application.Services
 
             return employees.ToList();
         }
+
+        // Kiểm tra trùng giờ tăng ca trong cùng ngày — 1 nhân viên không được nằm trong 2 đơn tăng ca
+        // có khoảng giờ chồng chéo (overlap) trong cùng 1 ngày. Đơn bị xóa (IsDeleted) hoặc bị từ
+        // chối (Rejected) không tính. excludeFormId cho phép loại trừ chính đơn đang sửa (nếu gọi từ
+        // UpdateAsync trong tương lai) — CreateAsync truyền null vì chưa có Id (chốt 2026-08-06).
+        private async Task EnsureNoOverlappingOtFormsAsync(
+            List<Employee> employees, DateOnly date, TimeOnly formStartTime, Dictionary<int, TimeOnly> employeeEndTimes, int? excludeFormId)
+        {
+            var employeeIds = employees.Select(x => x.Id).ToList();
+
+            // Lấy tất cả OtFormEmployee của các nhân viên này trong các đơn cùng ngày, non-deleted,
+            // non-rejected — join qua OtForm để lọc theo Date/Status/IsDeleted.
+            var existingRecords = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
+                x => employeeIds.Contains(x.EmployeeId)
+                     && x.OtForm.Date == date
+                     && !x.OtForm.IsDeleted
+                     && x.OtForm.Status != (int)OtFormStatus.Rejected
+                     && !x.IsRemoved
+                     && (excludeFormId == null || x.OtFormId != excludeFormId.Value),
+                x => x.OtForm);
+
+            // Kiểm tra chồng chéo giờ: khoảng [formStartTime, employeeEndTime) chồng với [existing.StartTime,
+            // existing.EndTime) khi formStartTime < existing.EndTime AND employeeEndTime > existing.StartTime.
+            var overlapping = existingRecords
+                .Where(x => formStartTime < x.EndTime && employeeEndTimes.GetValueOrDefault(x.EmployeeId, formStartTime) > x.StartTime)
+                .ToList();
+
+            if (overlapping.Count > 0)
+            {
+                var employeeCodeById = employees.ToDictionary(x => x.Id, x => x.Code);
+                var conflicts = overlapping
+                    .Select(x => $"'{employeeCodeById.GetValueOrDefault(x.EmployeeId, x.EmployeeId.ToString())}' " +
+                                 $"(đơn #{x.OtFormId}, giờ {x.StartTime:HH:mm}–{x.EndTime:HH:mm})")
+                    .Distinct()
+                    .ToList();
+
+                throw new DomainException(
+                    $"Không thể tạo đơn — các nhân viên sau đã có đơn tăng ca trùng giờ trong ngày {date:dd/MM/yyyy}: " +
+                    string.Join(", ", conflicts) + ".");
+            }
+        }
+
+        public async Task<List<int>> CheckOverlapAsync(CheckOtFormOverlapDto request)
+        {
+            var employeeIds = request.Employees.Select(x => x.EmployeeId).Distinct().ToList();
+            if (employeeIds.Count == 0) return new List<int>();
+
+            var existingRecords = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
+                x => employeeIds.Contains(x.EmployeeId)
+                     && x.OtForm.Date == request.Date
+                     && !x.OtForm.IsDeleted
+                     && x.OtForm.Status != (int)OtFormStatus.Rejected
+                     && !x.IsRemoved
+                     && (request.ExcludeFormId == null || x.OtFormId != request.ExcludeFormId.Value),
+                x => x.OtForm);
+
+            var employeeEndTimes = request.Employees.ToDictionary(x => x.EmployeeId, x => x.EndTime);
+
+            var overlappingIds = existingRecords
+                .Where(x => request.StartTime < x.EndTime && employeeEndTimes.GetValueOrDefault(x.EmployeeId, request.StartTime) > x.StartTime)
+                .Select(x => x.EmployeeId)
+                .Distinct()
+                .ToList();
+
+            return overlappingIds;
+        }
+
 
         // Adds each employee's actual OT hours (EndTime - StartTime) to their monthly/yearly
         // accumulation, automatically rolling over to 0 when the form's Date falls into a new

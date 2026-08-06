@@ -34,10 +34,11 @@ namespace Attendance.Application.Interfaces.Service
 
         Task<OtFormDto> GetByIdAsync(int id);
 
-        // (Các) Group mà người gọi được phép tạo đơn — FE dùng để tự điền sẵn Bộ phận/Phòng ban trên
-        // màn "Tạo đơn tăng ca" thay vì bắt chọn từ toàn bộ danh sách. Admin trả về rỗng (không giới hạn).
+        // Scopes / Validations
         Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin);
+        Task<List<int>> CheckOverlapAsync(CheckOtFormOverlapDto request);
 
+        // Mutations
         Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request);
 
         // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).

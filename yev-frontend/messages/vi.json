@@ -525,6 +525,7 @@
       "colDidEat": "Có ăn",
       "didEatLabel": "Có ăn",
       "colNote": "Ghi chú",
+      "colOverlapWarning": "Trùng giờ tăng ca",
       "notePlaceholder": "Ghi chú (tuỳ chọn)...",
       "selectedCount": "Đã chọn {count} nhân viên.",
       "otherSupportLabel": "Yêu cầu hỗ trợ khác (ăn uống / xe đưa đón / copy)",
