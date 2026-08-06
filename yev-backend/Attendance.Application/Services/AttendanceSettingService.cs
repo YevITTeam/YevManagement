@@ -11,7 +11,9 @@ namespace Attendance.Application.Services
     {
         // Giá trị mặc định phải KHỚP với seed trong migration AddAttendanceSetting — dùng lại ở đây làm
         // fallback khi dòng cấu hình bị xoá tay trực tiếp dưới DB.
-        public const decimal DefaultMainMealTicketMinHours = 2.5m;
+        // Đổi lại 2.5 -> 2 (2026-08-05, theo yêu cầu người dùng) — ngưỡng này giờ dùng chung cho cả
+        // việc chia phiếu chính/phụ VÀ rule "không ăn +30p lũy kế" (OtFormService.AccumulateEmployeeHoursAsync).
+        public const decimal DefaultMainMealTicketMinHours = 2m;
         public const decimal DefaultMonthlyOtHourLimit = 25m;
         public const decimal DefaultYearlyOtHourLimit = 300m;
 

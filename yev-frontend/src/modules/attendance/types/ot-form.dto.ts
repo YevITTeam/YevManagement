@@ -15,9 +15,12 @@ export interface ProcessPartDto {
 }
 
 // employees[].startTime KHÔNG còn tồn tại (bỏ 2026-07-16) — luôn bằng startTime của đơn, BE tự set.
+// didEat (mới 2026-08-06): chỉ có ý nghĩa khi giờ OT thực tế của người này >= setting.mainMealTicketMinHours
+// — xem §Phiếu ăn. Dưới ngưỡng thì gửi giá trị nào cũng không ảnh hưởng gì (BE bỏ qua).
 export interface OtFormEmployeeInputDto {
     employeeId: number;
     endTime: string;
+    didEat: boolean;
     noteVn: string | null;
     noteJp: string | null;
 }
@@ -38,6 +41,9 @@ export interface OtFormEmployeeDto {
     monthToDate: number;
     yearToDate: number;
     isEligibleForMeal: boolean;
+    // Có ăn hay không (chỉ có ý nghĩa khi isEligibleForMeal=true) — mới 2026-08-06, xem §Phiếu ăn.
+    // Không ăn dù đủ ngưỡng thì +30 phút vào lũy kế lúc đơn Hoàn tất (BE tự cộng, FE không tự tính).
+    didEat: boolean;
     isRemoved: boolean;
     removedByUserName: string | null;
     removedByFullName: string | null;
@@ -72,16 +78,18 @@ export interface CreateOtFormDto {
 }
 
 // Item của UpdateOtFormDto.employees — sửa 2026-07-31: chỉ còn EmployeeId + EndTime (bỏ NoteVn/NoteJp).
+// Thêm didEat 2026-08-06 — sửa được cùng lúc với EndTime (xem OtFormEmployeeDto.didEat).
 export interface UpdateOtFormEmployeeTimeDto {
     employeeId: number;
     endTime: string;
+    didEat: boolean;
 }
 
 // Body PUT /api/OtForm/{id} — §4.1b. Sửa lại 2026-07-31 (breaking): trước đây giống hệt
 // CreateOtFormDto (sửa được toàn bộ field + thêm/bớt nhân viên), nay CHỈ còn sửa được giờ kết thúc
-// thực tế của từng nhân viên ĐANG có trong đơn — mọi field khác (Group/Department/Reason/OtCase/Date/
-// StartTime/EndTime/SubReason/ProcessPart) và việc thêm/bớt người đều bị khoá sau khi tạo đơn (xem
-// docs/attendance-module.md — Sửa đơn: giới hạn chỉ sửa thực tích).
+// thực tế + didEat (mới 2026-08-06) của từng nhân viên ĐANG có trong đơn — mọi field khác
+// (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart) và việc thêm/bớt
+// người đều bị khoá sau khi tạo đơn (xem docs/attendance-module.md — Sửa đơn: giới hạn chỉ sửa thực tích).
 export interface UpdateOtFormDto {
     employees: UpdateOtFormEmployeeTimeDto[];
 }

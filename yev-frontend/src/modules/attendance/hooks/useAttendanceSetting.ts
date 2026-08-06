@@ -10,7 +10,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 // AddAttendanceSetting + các hằng Default* trong AttendanceSettingService bên BE, để UI không nhảy số
 // giữa lúc tải xong và cũng không cảnh báo sai nếu mạng lỗi.
 export const DEFAULT_ATTENDANCE_SETTING: AttendanceSettingDto = {
-    mainMealTicketMinHours: 2.5,
+    mainMealTicketMinHours: 2,
     monthlyOtHourLimit: 25,
     yearlyOtHourLimit: 300,
 };

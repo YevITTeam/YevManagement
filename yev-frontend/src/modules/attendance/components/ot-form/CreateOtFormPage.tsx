@@ -69,6 +69,10 @@ const emptyProcessPart: ProcessPartDto = {
 
 interface EmployeeOverride {
     endTime: string;
+    // Có ăn hay không — chỉ có ý nghĩa khi giờ OT thực tế của người này >= ngưỡng phiếu ăn (mới
+    // 2026-08-06). Mặc định true (giả định ăn) khi chọn mới; không ăn dù đủ ngưỡng thì BE tự +30
+    // phút vào lũy kế lúc đơn Hoàn tất — xem docs/attendance-module.md §Phiếu ăn.
+    didEat: boolean;
     noteVn: string;
     noteJp: string;
 }
@@ -317,7 +321,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     Object.fromEntries(
                         activeEmployees.map((e) => [
                             e.employeeId,
-                            { endTime: e.endTime.slice(0, 5), noteVn: e.noteVn ?? "", noteJp: e.noteJp ?? "" },
+                            { endTime: e.endTime.slice(0, 5), didEat: e.didEat, noteVn: e.noteVn ?? "", noteJp: e.noteJp ?? "" },
                         ])
                     )
                 );
@@ -412,18 +416,31 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId]
         );
         setEmployeeOverrides((current) =>
-            current[employeeId] ? current : { ...current, [employeeId]: { endTime, noteVn: "", noteJp: "" } }
+            current[employeeId] ? current : { ...current, [employeeId]: { endTime, didEat: true, noteVn: "", noteJp: "" } }
         );
     };
 
-    const handleEmployeeOverrideChange = (employeeId: number, field: keyof EmployeeOverride, value: string) => {
+    const handleEmployeeOverrideChange = (employeeId: number, field: "endTime" | "noteVn" | "noteJp", value: string) => {
         setEmployeeOverrides((current) => ({
             ...current,
             [employeeId]: {
                 endTime: current[employeeId]?.endTime ?? endTime,
+                didEat: current[employeeId]?.didEat ?? true,
                 noteVn: current[employeeId]?.noteVn ?? "",
                 noteJp: current[employeeId]?.noteJp ?? "",
                 [field]: value,
+            },
+        }));
+    };
+
+    const handleEmployeeDidEatChange = (employeeId: number, didEat: boolean) => {
+        setEmployeeOverrides((current) => ({
+            ...current,
+            [employeeId]: {
+                endTime: current[employeeId]?.endTime ?? endTime,
+                didEat,
+                noteVn: current[employeeId]?.noteVn ?? "",
+                noteJp: current[employeeId]?.noteJp ?? "",
             },
         }));
     };
@@ -478,12 +495,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 const employees: UpdateOtFormEmployeeTimeDto[] = selectedEmployeeIds.map((employeeId) => ({
                     employeeId,
                     endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
+                    didEat: employeeOverrides[employeeId]?.didEat ?? true,
                 }));
                 result = await OtFormApi.updateOtForm(otFormId, { employees });
             } else {
                 const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
                     employeeId,
                     endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
+                    didEat: employeeOverrides[employeeId]?.didEat ?? true,
                     noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
                     noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
                 }));
@@ -718,6 +737,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <th className="px-3 py-2">{t("colFullName")}</th>
                                         <th className="px-3 py-2">{t("colAccumulation")}</th>
                                         <th className="px-3 py-2">{t("colEndTime")}</th>
+                                        <th className="px-3 py-2">{t("colDidEat")}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -725,6 +745,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         const isOverLimit =
                                             employee.monthToDate > setting.monthlyOtHourLimit ||
                                             employee.yearToDate > setting.yearlyOtHourLimit;
+                                        const currentEndTime = employeeOverrides[employee.employeeId]?.endTime ?? endTime;
+                                        const isEligibleForMeal =
+                                            computeTotalHour(startTime, currentEndTime) >= setting.mainMealTicketMinHours;
                                         return (
                                             <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
                                                 <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">
@@ -745,10 +768,28 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
                                                     <TimePicker24h
-                                                        value={employeeOverrides[employee.employeeId]?.endTime ?? endTime}
+                                                        value={currentEndTime}
                                                         onChange={(value) => handleEmployeeOverrideChange(employee.employeeId, "endTime", value)}
                                                         disabled={isSubmitting}
                                                     />
+                                                </td>
+                                                <td className="px-3 py-2 align-top">
+                                                    {isEligibleForMeal ? (
+                                                        <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={employeeOverrides[employee.employeeId]?.didEat ?? true}
+                                                                onChange={(event) =>
+                                                                    handleEmployeeDidEatChange(employee.employeeId, event.target.checked)
+                                                                }
+                                                                disabled={isSubmitting}
+                                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                            />
+                                                            {t("didEatLabel")}
+                                                        </label>
+                                                    ) : (
+                                                        <span className="text-sm text-[#8a8f94]">—</span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
@@ -770,6 +811,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <th className="px-3 py-2">{t("colFullName")}</th>
                                         <th className="px-3 py-2">{t("colAccumulation")}</th>
                                         <th className="px-3 py-2">{t("colEndTime")}</th>
+                                        <th className="px-3 py-2">{t("colDidEat")}</th>
                                         <th className="px-3 py-2">{t("colNote")}</th>
                                     </tr>
                                 </thead>
@@ -779,6 +821,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         const isOverLimit =
                                             employee.monthToDate > setting.monthlyOtHourLimit ||
                                             employee.yearToDate > setting.yearlyOtHourLimit;
+                                        const currentEndTime = employeeOverrides[employee.id]?.endTime ?? endTime;
+                                        const isEligibleForMeal =
+                                            computeTotalHour(startTime, currentEndTime) >= setting.mainMealTicketMinHours;
                                         return (
                                             <tr
                                                 key={employee.id}
@@ -811,10 +856,26 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
                                                     <TimePicker24h
-                                                        value={employeeOverrides[employee.id]?.endTime ?? endTime}
+                                                        value={currentEndTime}
                                                         onChange={(value) => handleEmployeeOverrideChange(employee.id, "endTime", value)}
                                                         disabled={isSubmitting || !checked}
                                                     />
+                                                </td>
+                                                <td className="px-3 py-2 align-top">
+                                                    {isEligibleForMeal ? (
+                                                        <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={employeeOverrides[employee.id]?.didEat ?? true}
+                                                                onChange={(event) => handleEmployeeDidEatChange(employee.id, event.target.checked)}
+                                                                disabled={isSubmitting || !checked}
+                                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                            />
+                                                            {t("didEatLabel")}
+                                                        </label>
+                                                    ) : (
+                                                        <span className="text-sm text-[#8a8f94]">—</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
                                                     <input

@@ -21,6 +21,9 @@ namespace Attendance.Application.Dtos.OtForms
         // precomputed so the FE doesn't have to subtract the times itself (see docs/attendance-module.md).
         public bool IsEligibleForMeal { get; set; }
 
+        // Có ăn hay không (chỉ có ý nghĩa khi IsEligibleForMeal=true) — xem OtFormEmployee.DidEat.
+        public bool DidEat { get; set; }
+
         // Dropped from the form by an approver (see docs/attendance-module.md — Loại nhân viên khỏi đơn).
         // Rows with IsRemoved = true are STILL returned here on purpose so the detail screen can show
         // an audit trail of who was dropped and why — the FE is what filters them out of the printed

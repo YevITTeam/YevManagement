@@ -557,6 +557,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colHours")}</th>
                                 <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
                                 <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colMeal")}</th>
+                                <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colDidEat")}</th>
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colNote")}</th>
                                 {canRemoveEmployee && <th rowSpan={2} className="px-6 py-3 align-bottom" />}
                             </tr>
@@ -582,7 +583,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-3 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
-                                            <td colSpan={5} className="px-6 py-3 text-sm text-[#930006]">
+                                            <td colSpan={6} className="px-6 py-3 text-sm text-[#930006]">
                                                 {t("removedInlineNote", {
                                                     name: employee.removedByFullName ?? employee.removedByUserName ?? "",
                                                     level: employee.removedAtLevel !== null ? approvalLevelLabels[employee.removedAtLevel] : "",
@@ -630,6 +631,22 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                 </span>
                                             ) : (
                                                 <span className="text-[#9aa0a6]">—</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-3 text-center text-sm">
+                                            {!employee.isEligibleForMeal ? (
+                                                <span className="text-[#9aa0a6]">—</span>
+                                            ) : employee.didEat ? (
+                                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                                                    <Check size={12} /> {t("didEatYes")}
+                                                </span>
+                                            ) : (
+                                                <span
+                                                    className="inline-flex items-center gap-1 rounded-full border border-[#f5d0a9] bg-[#fff4e5] px-2 py-0.5 text-xs font-semibold text-[#9a5b00]"
+                                                    title={t("didEatNoHint")}
+                                                >
+                                                    <X size={12} /> {t("didEatNo")}
+                                                </span>
                                             )}
                                         </td>
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>

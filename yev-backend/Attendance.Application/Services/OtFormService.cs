@@ -254,6 +254,7 @@ namespace Attendance.Application.Services
                     // >= (không phải >) — "tăng ca TỪ 2h30 mới có phiếu chính" (chốt 2026-08-01), đúng
                     // mốc 2h30 vẫn được tính. Người dưới mốc này nhận phiếu phụ, không phải không có gì.
                     IsEligibleForMeal = (decimal)(x.EndTime - x.StartTime).TotalHours >= mainMealTicketMinHours,
+                    DidEat = x.DidEat,
                     // Employees dropped by an approver are returned here TOO (not filtered out) so the
                     // detail screen can show who was dropped, by whom and why — the FE hides them from
                     // the printed form (see docs/attendance-module.md — Loại nhân viên khỏi đơn).
@@ -355,6 +356,7 @@ namespace Attendance.Application.Services
                     EmployeeId = item.EmployeeId,
                     StartTime = request.StartTime,
                     EndTime = item.EndTime,
+                    DidEat = item.DidEat,
                     NoteVn = item.NoteVn,
                     NoteJp = item.NoteJp,
                     // Snapshot accumulation AS OF form creation — see OtFormEmployee.MonthToDate/YearToDate.
@@ -584,6 +586,7 @@ namespace Attendance.Application.Services
             {
                 var existing = activeByEmployeeId[item.EmployeeId];
                 existing.EndTime = item.EndTime;
+                existing.DidEat = item.DidEat;
                 _unitOfWork.OtFormEmployees.Update(existing);
             }
 
@@ -956,8 +959,15 @@ namespace Attendance.Application.Services
         // Adds each employee's actual OT hours (EndTime - StartTime) to their monthly/yearly
         // accumulation, automatically rolling over to 0 when the form's Date falls into a new
         // month/year compared to Employee.AccumulationYear/Month.
+        // Nhân viên đủ ngưỡng nhận phiếu ăn (xem IsEligibleForMeal) mà KHÔNG ăn (DidEat=false) thì được
+        // cộng thêm đúng 30 phút vào lũy kế — CHỈ vào MonthToDate/YearToDate, KHÔNG đổi EndTime/giờ thực
+        // tích đã ký trên đơn (chốt 2026-08-05, xem docs/attendance-module.md — Phiếu ăn).
+        private const decimal NoMealExtraAccumulationHours = 0.5m;
+
         private async Task AccumulateEmployeeHoursAsync(OtForm otForm)
         {
+            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+
             // Employees dropped by an approver never accumulate hours — they did not end up on the
             // approved form (see docs/attendance-module.md — Loại nhân viên khỏi đơn).
             var otFormEmployees = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
@@ -967,6 +977,11 @@ namespace Attendance.Application.Services
             {
                 var employee = otFormEmployee.Employee;
                 var hours = (decimal)(otFormEmployee.EndTime - otFormEmployee.StartTime).TotalHours;
+
+                if (hours >= mainMealTicketMinHours && !otFormEmployee.DidEat)
+                {
+                    hours += NoMealExtraAccumulationHours;
+                }
 
                 if (employee.AccumulationYear != otForm.Date.Year)
                 {

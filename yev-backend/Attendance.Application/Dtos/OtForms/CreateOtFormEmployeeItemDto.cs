@@ -12,6 +12,9 @@ namespace Attendance.Application.Dtos.OtForms
         // is NO LONGER accepted from the FE — it's always fixed to the form's StartTime (see docs/attendance-module.md).
         public TimeOnly EndTime { get; set; }
 
+        // Có ăn hay không (chỉ có ý nghĩa nếu đủ ngưỡng giờ nhận phiếu ăn) — xem OtFormEmployee.DidEat.
+        public bool DidEat { get; set; }
+
         public string? NoteVn { get; set; }
 
         public string? NoteJp { get; set; }

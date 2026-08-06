@@ -13,6 +13,15 @@ public partial class OtFormEmployee
 
     public TimeOnly EndTime { get; set; }
 
+    // Có dùng phiếu ăn (ăn tại công ty) hay không — chỉ có ý nghĩa khi giờ OT thực tế của người này
+    // (EndTime - StartTime) >= AttendanceSetting.MainMealTicketMinHours; dưới ngưỡng thì field này
+    // không được dùng tới ở đâu cả. Nhập lúc tạo đơn, sửa được cùng lúc với EndTime tới trước khi
+    // Trưởng phòng duyệt (xem OtFormService.UpdateAsync — Sửa đơn: giới hạn chỉ sửa thực tích).
+    // Khi Completed, nếu đủ ngưỡng mà DidEat=false thì +30 phút vào lũy kế (MonthToDate/YearToDate) —
+    // xem AccumulateEmployeeHoursAsync. Không liên quan ProcessPart.IsEat (cờ "có phục vụ ăn" chung
+    // cho cả đơn, người lập đơn tick tay, không theo từng người).
+    public bool DidEat { get; set; }
+
     public string? NoteVn { get; set; }
 
     public string? NoteJp { get; set; }

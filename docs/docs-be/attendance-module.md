@@ -118,7 +118,7 @@ Phần dưới đây (duyệt cấp Trưởng phòng → Trưởng xưởng → 
 
 ### §Lũy kế tháng/năm — cộng khi Completed, rollover tự động, chỉnh thủ công (2026-07-16)
 - **Thời điểm cộng**: CHỈ khi đơn đạt `Completed` (đi hết luồng duyệt theo `otCase.requiredApprovalLevel`) — `OtFormService.ApproveAsync` gọi `AccumulateEmployeeHoursAsync` ngay sau khi xác định `nextStatus == Completed`, trong cùng `SaveChangesAsync`. Đơn `Rejected` hoặc dừng ở cấp trung gian thì KHÔNG cộng gì — tránh phải rollback nếu đơn bị từ chối giữa chừng.
-- **Số giờ cộng** = `OtFormEmployee.EndTime - OtFormEmployee.StartTime` (giờ OT thực tế đã đăng ký của từng người trong đơn đó), cộng vào cả `MonthToDate` và `YearToDate` của `Employee` tương ứng.
+- **Số giờ cộng** = `OtFormEmployee.EndTime - OtFormEmployee.StartTime` (giờ OT thực tế đã đăng ký của từng người trong đơn đó), cộng vào cả `MonthToDate` và `YearToDate` của `Employee` tương ứng. Từ 2026-08-06: nếu số giờ này `>= AttendanceSetting.MainMealTicketMinHours` và `OtFormEmployee.DidEat = false` thì cộng thêm **0.5h (30 phút)** trước khi cộng vào lũy kế — xem §Có ăn hay không theo từng nhân viên.
 - **Rollover tự động theo `OtForm.Date`**: so `Date.Year`/`Date.Month` của đơn với `Employee.AccumulationYear`/`AccumulationMonth` hiện tại — khác năm thì reset cả `YearToDate` và `MonthToDate` về 0 trước khi cộng; cùng năm nhưng khác tháng thì chỉ reset `MonthToDate`. Sau đó luôn stamp lại `AccumulationYear`/`AccumulationMonth` = năm/tháng của đơn.
 - **Điều chỉnh lũy kế thủ công**: `PATCH /api/Employee/{id}/adjust-accumulation` (`AdjustEmployeeAccumulationDto { MonthToDate, YearToDate }`) — vì không phải ai cũng làm đúng giờ OT đã đăng ký trong form. Không gắn `[RequirePermission]` (chỉ cần đăng nhập, theo `FallbackPolicy`); `EmployeeService.AdjustAccumulationAsync` tự phân quyền:
   - Chính nhân viên (`Employee.UserName == CurrentUserName`) luôn chỉnh được lũy kế của chính mình.
@@ -152,12 +152,36 @@ Phần dưới đây (duyệt cấp Trưởng phòng → Trưởng xưởng → 
 trước đây hardcode trong code (mốc 2h nhận phiếu ăn ở BE; ngưỡng cảnh báo lũy kế 25h/tháng, 300h/năm ở
 FE) nay gộp thành 1 bảng cấu hình Admin tự sửa được, không cần deploy lại khi chính sách đổi.
 
-- **Phiếu ăn**: tăng ca **từ** `MainMealTicketMinHours` giờ trở lên (mặc định 2.5h = 2h30) → nhận
-  **phiếu chính**; **dưới** mốc đó → nhận **phiếu phụ** (chốt: mọi người tăng ca đều nhận đúng 1 trong 2
-  loại, **không có ngưỡng sàn** riêng cho phiếu phụ). Sữa (`MilkCount`) **luôn nhập tay**, không tự tính.
+- **Phiếu ăn**: tăng ca **từ** `MainMealTicketMinHours` giờ trở lên (mặc định **2h** — đổi lại từ 2.5h
+  ngày 2026-08-05) → nhận **phiếu chính**; **dưới** mốc đó → nhận **phiếu phụ** (chốt: mọi người tăng ca
+  đều nhận đúng 1 trong 2 loại, **không có ngưỡng sàn** riêng cho phiếu phụ). Sữa (`MilkCount`) **luôn
+  nhập tay**, không tự tính.
 - **Giới hạn lũy kế**: `MonthlyOtHourLimit` (mặc định 25h) và `YearlyOtHourLimit` (mặc định 300h) — vượt
   ngưỡng thì UI tô đỏ cảnh báo trên MỌI màn hiển thị lũy kế, **không chặn** tạo/duyệt đơn hay sửa lũy kế
   thủ công.
+
+### §Có ăn hay không theo từng nhân viên — +30 phút lũy kế nếu không ăn (2026-08-06)
+
+**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): nhân viên đủ
+ngưỡng nhận phiếu ăn (`IsEligibleForMeal`) mà **không ăn** thì được cộng bù **30 phút** vào lũy kế
+tháng/năm — khác hẳn `ProcessPart.IsEat`/`MainTicketCount` hiện có (cờ + số lượng **chung cho cả đơn**,
+nhập tay, không theo từng người) — giữ nguyên `ProcessPart`, không đụng gì.
+
+- **Entity**: `OtFormEmployee.DidEat: bool` (mới, default `false`) — chỉ có ý nghĩa khi giờ OT thực tế
+  của người đó `>= AttendanceSetting.MainMealTicketMinHours` (dùng CHUNG ngưỡng với việc chia phiếu
+  chính/phụ, không phải ngưỡng riêng).
+- **Nhập/sửa**: cùng luồng và cùng giới hạn thời gian với việc sửa giờ kết thúc thực tế ("thực tích") —
+  nhập lúc tạo đơn (`CreateOtFormEmployeeItemDto.DidEat`), sửa được tới trước khi Trưởng phòng duyệt
+  (`UpdateOtFormEmployeeTimeDto.DidEat`, cùng `OtFormService.UpdateAsync` đang giới hạn phạm vi sửa).
+- **Tính toán**: `OtFormService.AccumulateEmployeeHoursAsync` (chạy đúng 1 lần khi đơn `Completed`,
+  xem §Lũy kế tháng/năm) — nếu `hours >= MainMealTicketMinHours && !DidEat` thì cộng thêm
+  `NoMealExtraAccumulationHours = 0.5m` vào biến `hours` TRƯỚC khi cộng vào `MonthToDate`/`YearToDate`.
+  **CHỈ ảnh hưởng lũy kế** — `EndTime`, `TotalHour`, giờ hiển thị trên đơn/PDF **giữ nguyên**, không đổi.
+- **FE**: `CreateOtFormPage.tsx` — checkbox "Có ăn" ở cả 2 bảng nhân viên (tạo mới + sửa đơn), chỉ hiện
+  khi giờ OT thực tế của người đó (tính lại theo `endTime` override hiện tại) đủ ngưỡng, mặc định `true`
+  khi chọn người mới. `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx` (đọc, dùng chung namespace dịch
+  `Attendance.OtFormDetail`) — thêm cột hiển thị Có ăn/Không ăn cạnh cột Phiếu ăn, không sửa được.
+  `OtFormPrintView.tsx` (bản in chính thức) **không đổi** — đúng theo chốt "không đụng giờ hiển thị".
 
 **Thiết kế BE** (mirror `Asset.Domain.Entities.AssetSetting` — bảng cấu hình 1 dòng, xem
 `asset-module.md`):
