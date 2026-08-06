@@ -9,12 +9,9 @@ import { hasModuleAccess } from "@/modules/auth/lib/permissions";
 export default function Home() {
   const t = useTranslations("Home");
   const { user, isLoading } = useAuth();
-  // Chỉ hiện mục "Quản lý thiết bị" nếu user có ít nhất 1 permission module Asset (role "Quản lý Thiết
-  // bị" hoặc "Admin" được seed sẵn full quyền) — trong lúc đang tải user thì ẩn tạm để tránh chớp UI
-  // cho người không có quyền.
+  // Chỉ hiện mục "Quản lý thiết bị" nếu user có ít nhất 1 permission module Asset
   const canManagePc = !isLoading && hasModuleAccess(user, "Asset");
   // Chỉ hiện mục "Quản lý tăng ca" nếu user có ít nhất 1 permission module Attendance
-  // (docs/attendance-api-fe.md) — cùng cách gate với tile PC ở trên.
   const canManageOt = !isLoading && hasModuleAccess(user, "Attendance");
 
   const menuItems = [
@@ -30,16 +27,16 @@ export default function Home() {
       desc: t("scheduleDesc"),
       link: "/schedule",
       icon: <CalendarClock className="w-8 h-8" />,
-      // Tạm ẩn: /api/schedule đọc/ghi file trên server, không tương thích `output: "export"`
-      // (static export không có server để phục vụ route này). Bật lại khi có hướng xử lý BE.
       visible: false,
     },
     {
       title: t("contractsTitle"),
       desc: t("contractsDesc"),
-      link: "#",
+     
+      link: "http://10.45.1.49:9000", 
       icon: <FileText className="w-8 h-8" />,
       visible: true,
+      isExternal: true, // Thêm cờ này để nhận diện link ngoài
     },
     {
       title: t("overtimeTitle"),
@@ -62,23 +59,49 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-          {menuItems.map((item, index) => (
-            <Link
-              key={index}
-              href={item.link}
-              prefetch={false}
-              className="group rounded-2xl border border-[#e0e3e5] bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#e3000f] hover:shadow-md"
-            >
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#fff4f2] text-[#e3000f] transition-colors group-hover:bg-[#ffe0e3]">
-                {item.icon}
-              </div>
+          {menuItems.map((item, index) => {
+            const cardClasses = "group rounded-2xl border border-[#e0e3e5] bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#e3000f] hover:shadow-md block";
+            
+            // Tách phần nội dung thẻ ra để tái sử dụng
+            const CardContent = () => (
+              <>
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#fff4f2] text-[#e3000f] transition-colors group-hover:bg-[#ffe0e3]">
+                  {item.icon}
+                </div>
+                <h3 className="text-lg font-semibold text-[#191c1e] transition-colors group-hover:text-[#e3000f]">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-sm text-[#5e3f3a]">{item.desc}</p>
+              </>
+            );
 
-              <h3 className="text-lg font-semibold text-[#191c1e] transition-colors group-hover:text-[#e3000f]">
-                {item.title}
-              </h3>
-              <p className="mt-2 text-sm text-[#5e3f3a]">{item.desc}</p>
-            </Link>
-          ))}
+            // Nếu là link ngoài, dùng thẻ <a> để mở tab mới và tránh bị next-intl can thiệp prefix ngôn ngữ
+            if (item.isExternal) {
+              return (
+                <a
+                  key={index}
+                  href={item.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cardClasses}
+                >
+                  <CardContent />
+                </a>
+              );
+            }
+
+            // Nếu là link nội bộ, giữ nguyên <Link> của next-intl
+            return (
+              <Link
+                key={index}
+                href={item.link}
+                prefetch={false}
+                className={cardClasses}
+              >
+                <CardContent />
+              </Link>
+            );
+          })}
         </div>
       </div>
     </div>
