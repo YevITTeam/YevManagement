@@ -198,26 +198,26 @@ export default function UserApprovalScopeManager() {
 
     return (
         <div className="space-y-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
+            <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
+                    <div className="flex shrink-0 items-center gap-2">
+                        <button
+                            onClick={() => fetchScopes()}
+                            disabled={isLoading}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        >
+                            <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
+                        </button>
+                        <button
+                            onClick={openCreateForm}
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                        >
+                            {t("addButton")}
+                        </button>
+                    </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        onClick={() => fetchScopes()}
-                        disabled={isLoading}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                    >
-                        <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
-                    </button>
-                    <button
-                        onClick={openCreateForm}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
-                    >
-                        {t("addButton")}
-                    </button>
-                </div>
+                <p className="text-sm text-[#5e3f3a]">{t("description")}</p>
             </div>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
