@@ -17,6 +17,12 @@ namespace Attendance.Application.Dtos.Employees
         public int AccumulationYear { get; set; }
         public int AccumulationMonth { get; set; }
 
+        // Lũy kế DỰ KIẾN — thực tế + các đơn khác đang chờ duyệt (chưa Completed/Rejected) của người
+        // này (xem Employee.ProjectedMonthToDate/YearToDate). FE dùng 2 field này để cảnh báo hạn mức
+        // lúc TẠO đơn mới, thay vì MonthToDate/YearToDate (chỉ phản ánh phần đã duyệt xong).
+        public decimal ProjectedMonthToDate { get; set; }
+        public decimal ProjectedYearToDate { get; set; }
+
         public int GroupId { get; set; }
         public string GroupNameVn { get; set; } = null!;
     }

@@ -73,6 +73,17 @@ namespace Attendance.Application.Services
             ProcessedByFullName = b.ProcessedByFullName
         };
 
+        // Lọc chung cho cả 5 endpoint danh sách đơn (my-forms/pending-submissions/pending-approvals/
+        // my-actions/my-participations) — fromDate/toDate theo OtForm.Date (bao gồm 2 đầu mút), status
+        // theo đúng giá trị OtFormStatus, cả 3 đều optional (2026-08-06).
+        private static IQueryable<OtForm> ApplyListFilters(IQueryable<OtForm> query, DateOnly? fromDate, DateOnly? toDate, int? status)
+        {
+            if (fromDate.HasValue) query = query.Where(x => x.Date >= fromDate.Value);
+            if (toDate.HasValue) query = query.Where(x => x.Date <= toDate.Value);
+            if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+            return query;
+        }
+
         private readonly IUserDirectoryService _userDirectoryService;
         private readonly IEmailService _emailService;
         private readonly IEmailTemplateRenderer _emailTemplateRenderer;
@@ -97,11 +108,12 @@ namespace Attendance.Application.Services
             _attendanceSettingService = attendanceSettingService;
         }
 
-        public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(string userName, int pageIndex, int pageSize)
+        public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
         {
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
-                .Where(x => !x.IsDeleted && x.CreatedByUserName == userName)
-                .OrderByDescending(x => x.Id);
+                .Where(x => !x.IsDeleted && x.CreatedByUserName == userName);
+            query = ApplyListFilters(query, fromDate, toDate, status).OrderByDescending(x => x.Id);
 
             return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
         }
@@ -110,7 +122,8 @@ namespace Attendance.Application.Services
         // gated by Attendance.OTForm.Create (not .Approve, since the Team Leader role does not have
         // the Approve permission — see docs/attendance-module.md §Form creator DIFFERENT from Team Leader).
         public async Task<PagedResponse<OtFormListItemDto>> GetPendingSubmissionsAsync(
-            string currentUserName, bool isAdmin, int pageIndex, int pageSize)
+            string currentUserName, bool isAdmin, int pageIndex, int pageSize,
+            DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
         {
             List<int> submitterDepartmentIds = new();
             List<int> submitterGroupIds = new();
@@ -126,8 +139,8 @@ namespace Attendance.Application.Services
 
             var draftQuery = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && x.Status == (int)OtFormStatus.Draft &&
-                    (isAdmin || submitterDepartmentIds.Contains(x.DepartmentId) || submitterGroupIds.Contains(x.GroupId)))
-                .OrderBy(x => x.Date);
+                    (isAdmin || submitterDepartmentIds.Contains(x.DepartmentId) || submitterGroupIds.Contains(x.GroupId)));
+            draftQuery = ApplyListFilters(draftQuery, fromDate, toDate, status).OrderBy(x => x.Date);
 
             return await _unitOfWork.OtForms.ToPagedResponseAsync(draftQuery, pageIndex, pageSize, ToListItemDto);
         }
@@ -138,15 +151,16 @@ namespace Attendance.Application.Services
         // look this up: `my-forms` only filters by the form CREATOR (not the signer/approver), while
         // `pending-submissions`/`pending-approvals` only show forms NOT YET processed — a form that was
         // just processed instantly disappears from those 2 lists (see docs/attendance-module.md).
-        public async Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(string userName, int pageIndex, int pageSize)
+        public async Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
         {
             var actedFormIds = await _unitOfWork.OtFormApprovalHistories.SelectAsync(
                 h => h.ApproverUserName == userName, h => h.OtFormId);
             var distinctFormIds = actedFormIds.Distinct().ToList();
 
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
-                .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id))
-                .OrderByDescending(x => x.Id);
+                .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id));
+            query = ApplyListFilters(query, fromDate, toDate, status).OrderByDescending(x => x.Id);
 
             return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
         }
@@ -155,7 +169,8 @@ namespace Attendance.Application.Services
         // who created/signed/approved that form. Available to every Attendance user (including Role
         // "Nhân viên", only needs OTForm.View), derived via Employee.UserName linked to the calling
         // account (2026-07-17, see docs/attendance-module.md).
-        public async Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(string userName, int pageIndex, int pageSize)
+        public async Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
         {
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted);
             if (employee == null)
@@ -166,14 +181,15 @@ namespace Attendance.Application.Services
             var distinctFormIds = participatedFormIds.Distinct().ToList();
 
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
-                .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id))
-                .OrderByDescending(x => x.Id);
+                .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id));
+            query = ApplyListFilters(query, fromDate, toDate, status).OrderByDescending(x => x.Id);
 
             return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
-            string approverUserName, int pageIndex, int pageSize)
+            string approverUserName, int pageIndex, int pageSize,
+            DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
         {
             var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x => !x.IsDeleted && x.UserName == approverUserName);
 
@@ -214,8 +230,8 @@ namespace Attendance.Application.Services
                     (x.Status == (int)OtFormStatus.ApprovedByDepartment &&
                         (workshopManagerDepartmentIds.Contains(x.DepartmentId) || workshopManagerGroupIds.Contains(x.GroupId))) ||
                     (isGeneralDirectorApprover && x.Status == (int)OtFormStatus.ApprovedByWorkshop)
-                ))
-                .OrderBy(x => x.Date);
+                ));
+            query = ApplyListFilters(query, fromDate, toDate, status).OrderBy(x => x.Date);
 
             return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
         }
@@ -367,9 +383,25 @@ namespace Attendance.Application.Services
 
             await _unitOfWork.OtForms.AddAsync(newOtForm);
 
+            // Đơn mới luôn ở trạng thái chưa duyệt (Draft) — reserve ngay giờ OT dự kiến của từng người
+            // vào lũy kế dự kiến (xem docs/attendance-module.md — Lũy kế dự kiến), để đơn khác tạo sau
+            // cho cùng người này thấy được cảnh báo dù đơn này chưa ai duyệt.
+            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+
             foreach (var item in request.Employees)
             {
                 var employee = employeeById[item.EmployeeId];
+
+                ApplyProjectedRollover(employee, request.Date);
+                // Snapshot dự kiến TRƯỚC khi cộng chính đơn này — see OtFormEmployee.MonthToDate/YearToDate.
+                var projectedMonthBefore = employee.ProjectedMonthToDate;
+                var projectedYearBefore = employee.ProjectedYearToDate;
+
+                var hours = CalculateOtHours(request.StartTime, item.EndTime, item.DidEat, mainMealTicketMinHours);
+                employee.ProjectedMonthToDate += hours;
+                employee.ProjectedYearToDate += hours;
+                _unitOfWork.Employees.Update(employee);
+
                 await _unitOfWork.OtFormEmployees.AddAsync(new OtFormEmployee
                 {
                     OtForm = newOtForm,
@@ -379,9 +411,8 @@ namespace Attendance.Application.Services
                     DidEat = item.DidEat,
                     NoteVn = item.NoteVn,
                     NoteJp = item.NoteJp,
-                    // Snapshot accumulation AS OF form creation — see OtFormEmployee.MonthToDate/YearToDate.
-                    MonthToDate = employee.MonthToDate,
-                    YearToDate = employee.YearToDate
+                    MonthToDate = projectedMonthBefore,
+                    YearToDate = projectedYearBefore
                 });
             }
 
@@ -587,8 +618,9 @@ namespace Attendance.Application.Services
                 throw new DomainException(
                     "Danh sách nhân viên trong đơn đã thay đổi — không thể thêm/bớt người khi sửa đơn, chỉ được sửa giờ kết thúc của từng người.");
 
-            var employeeCodeById = (await _unitOfWork.Employees.FindAsync(x => activeEmployeeIds.Contains(x.Id)))
-                .ToDictionary(x => x.Id, x => x.Code);
+            var employeesById = (await _unitOfWork.Employees.FindAsync(x => activeEmployeeIds.Contains(x.Id)))
+                .ToDictionary(x => x.Id);
+            var employeeCodeById = employeesById.ToDictionary(x => x.Key, x => x.Value.Code);
 
             foreach (var item in request.Employees)
             {
@@ -601,13 +633,24 @@ namespace Attendance.Application.Services
                 }
             }
 
+            // Sửa "thực tích"/DidEat trước khi Trưởng phòng duyệt làm số giờ đã reserve lúc tạo không
+            // còn đúng nữa — điều chỉnh đúng phần chênh lệch vào lũy kế dự kiến (xem
+            // docs/attendance-module.md — Lũy kế dự kiến), không cộng/trừ lại từ đầu để tránh đụng tới
+            // phần dự kiến của các đơn khác đã cộng chung vào cùng Employee từ trước.
+            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+
             var activeByEmployeeId = activeEmployees.ToDictionary(x => x.EmployeeId);
             foreach (var item in request.Employees)
             {
                 var existing = activeByEmployeeId[item.EmployeeId];
+                var oldHours = CalculateOtHours(existing.StartTime, existing.EndTime, existing.DidEat, mainMealTicketMinHours);
+
                 existing.EndTime = item.EndTime;
                 existing.DidEat = item.DidEat;
                 _unitOfWork.OtFormEmployees.Update(existing);
+
+                var newHours = CalculateOtHours(existing.StartTime, existing.EndTime, existing.DidEat, mainMealTicketMinHours);
+                ApplyProjectedDelta(employeesById[item.EmployeeId], otForm.Date, newHours - oldHours);
             }
 
             await _unitOfWork.SaveChangesAsync();
@@ -686,8 +729,12 @@ namespace Attendance.Application.Services
             });
 
             otForm.Status = (int)OtFormStatus.Rejected;
-
             _unitOfWork.OtForms.Update(otForm);
+
+            // Đơn bị từ chối — trả lại lũy kế dự kiến đã reserve lúc tạo (xem docs/attendance-module.md
+            // — Lũy kế dự kiến). Lũy kế thực tế không đụng gì vì chưa bao giờ được cộng cho đơn này.
+            await ReverseProjectedAccumulationAsync(otForm);
+
             await _unitOfWork.SaveChangesAsync();
         }
 
@@ -781,6 +828,17 @@ namespace Attendance.Application.Services
             target.RemovedAt = TimeHelper.GetCurrentUtcTime();
             target.RemoveReason = reason;
             _unitOfWork.OtFormEmployees.Update(target);
+
+            // Người bị loại không còn nằm trong đơn nữa — trả lại đúng phần giờ dự kiến của riêng họ,
+            // dù đơn vẫn tiếp tục chạy cho những người còn lại (xem docs/attendance-module.md — Lũy kế
+            // dự kiến). Không đụng lũy kế thực tế vì chưa bao giờ được cộng cho đơn chưa Completed.
+            var removedEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId);
+            if (removedEmployee != null)
+            {
+                var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+                var hours = CalculateOtHours(target.StartTime, target.EndTime, target.DidEat, mainMealTicketMinHours);
+                ApplyProjectedDelta(removedEmployee, otForm.Date, -hours);
+            }
 
             // Keep the headline count in sync with who is actually still on the form — this is what the
             // list screens and the printed form show.
@@ -987,6 +1045,21 @@ namespace Attendance.Application.Services
         // tích đã ký trên đơn (chốt 2026-08-05, xem docs/attendance-module.md — Phiếu ăn).
         private const decimal NoMealExtraAccumulationHours = 0.5m;
 
+        // Số giờ OT thực sự sẽ được cộng vào lũy kế cho 1 người — dùng chung cho cả lũy kế thực tế
+        // (Completed) lẫn lũy kế dự kiến (Create/Update/Remove/Reject), để 2 loại lũy kế luôn tính theo
+        // đúng 1 công thức (kể cả phần +30 phút không ăn).
+        private static decimal CalculateOtHours(TimeOnly startTime, TimeOnly endTime, bool didEat, decimal mainMealTicketMinHours)
+        {
+            var hours = (decimal)(endTime - startTime).TotalHours;
+
+            if (hours >= mainMealTicketMinHours && !didEat)
+            {
+                hours += NoMealExtraAccumulationHours;
+            }
+
+            return hours;
+        }
+
         private async Task AccumulateEmployeeHoursAsync(OtForm otForm)
         {
             var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
@@ -999,12 +1072,7 @@ namespace Attendance.Application.Services
             foreach (var otFormEmployee in otFormEmployees)
             {
                 var employee = otFormEmployee.Employee;
-                var hours = (decimal)(otFormEmployee.EndTime - otFormEmployee.StartTime).TotalHours;
-
-                if (hours >= mainMealTicketMinHours && !otFormEmployee.DidEat)
-                {
-                    hours += NoMealExtraAccumulationHours;
-                }
+                var hours = CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mainMealTicketMinHours);
 
                 if (employee.AccumulationYear != otForm.Date.Year)
                 {
@@ -1023,6 +1091,55 @@ namespace Attendance.Application.Services
                 employee.YearToDate += hours;
 
                 _unitOfWork.Employees.Update(employee);
+            }
+        }
+
+        // === Lũy kế DỰ KIẾN (2026-08-06) — xem Employee.ProjectedMonthToDate/YearToDate ===
+
+        // Mốc rollover RIÊNG cho lũy kế dự kiến (ProjectedAccumulationYear/Month) — không dùng chung
+        // AccumulationYear/Month của lũy kế thực tế, vì dự kiến có thể bị trừ ngược sau khi cộng
+        // (Reject/loại người), còn thực tế thì không bao giờ bị đảo ngược.
+        private static void ApplyProjectedRollover(Employee employee, DateOnly formDate)
+        {
+            if (employee.ProjectedAccumulationYear != formDate.Year)
+            {
+                employee.ProjectedYearToDate = 0;
+                employee.ProjectedAccumulationYear = formDate.Year;
+                employee.ProjectedMonthToDate = 0;
+                employee.ProjectedAccumulationMonth = formDate.Month;
+            }
+            else if (employee.ProjectedAccumulationMonth != formDate.Month)
+            {
+                employee.ProjectedMonthToDate = 0;
+                employee.ProjectedAccumulationMonth = formDate.Month;
+            }
+        }
+
+        // deltaHours dương khi tạo đơn/tăng giờ, âm khi Reject/loại người/giảm giờ.
+        private void ApplyProjectedDelta(Employee employee, DateOnly formDate, decimal deltaHours)
+        {
+            if (deltaHours == 0) return;
+
+            ApplyProjectedRollover(employee, formDate);
+            employee.ProjectedMonthToDate += deltaHours;
+            employee.ProjectedYearToDate += deltaHours;
+
+            _unitOfWork.Employees.Update(employee);
+        }
+
+        // Đơn bị Rejected — trả lại toàn bộ giờ đã reserve lúc tạo cho những người còn active trong đơn
+        // (người đã bị loại trước đó qua RemoveEmployeeAsync thì phần của họ đã được trả lại từ lúc đó rồi).
+        private async Task ReverseProjectedAccumulationAsync(OtForm otForm)
+        {
+            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+
+            var otFormEmployees = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
+                x => x.OtFormId == otForm.Id && !x.IsRemoved, x => x.Employee);
+
+            foreach (var otFormEmployee in otFormEmployees)
+            {
+                var hours = CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mainMealTicketMinHours);
+                ApplyProjectedDelta(otFormEmployee.Employee, otForm.Date, -hours);
             }
         }
 

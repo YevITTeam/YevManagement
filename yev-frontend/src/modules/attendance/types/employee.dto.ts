@@ -11,6 +11,11 @@ export interface EmployeeDto {
     // Tháng/năm mà monthToDate/yearToDate đang phản ánh — BE tự stamp, rollover tự động theo tháng/năm.
     accumulationYear: number;
     accumulationMonth: number;
+    // Lũy kế DỰ KIẾN = thực tế + các đơn khác đang chờ duyệt (chưa Completed/Rejected) của người này
+    // (2026-08-06) — dùng cảnh báo hạn mức lúc TẠO đơn mới thay cho monthToDate/yearToDate, để thấy
+    // được cả những đơn khác đang treo chưa duyệt.
+    projectedMonthToDate: number;
+    projectedYearToDate: number;
     groupId: number;
     groupNameVn: string;
 }

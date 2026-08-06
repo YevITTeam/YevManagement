@@ -19,7 +19,7 @@ Danh mục (master data, đều có `IsDeleted`):
 | `Group` | `GroupCode`(unique), `GroupNameVn`, `GroupNameJp?`, `DepartmentId`(FK, **1 Department - N Group**, theo pattern `Asset.Domain.Entities.DeviceGroup.DepartmentId`) | Có |
 | `Reason` | `ReasonNameVn`, `ReasonNameJp?` | Có |
 | `OtCase` | `Code`(unique), `Description?`, `RequireSignature:bool`, `RequiredApprovalLevel:int` (enum `ApprovalLevel` — cấp CUỐI phải đạt) | Không |
-| `Employee` | `Code`(unique), `FirstName`, `LastName`, `UserName:string?`(unique filtered — tài khoản AD của chính nhân viên, nullable), `MonthToDate:decimal(10,2)`, `YearToDate:decimal(10,2)`, `AccumulationYear:int`, `AccumulationMonth:int`, `GroupId`(FK, **BẮT BUỘC**) | Tên riêng — không dịch. Department suy ra qua `Group.DepartmentId`, không lưu trùng trên Employee. |
+| `Employee` | `Code`(unique), `FirstName`, `LastName`, `UserName:string?`(unique filtered — tài khoản AD của chính nhân viên, nullable), `MonthToDate:decimal(10,2)`, `YearToDate:decimal(10,2)`, `AccumulationYear:int`, `AccumulationMonth:int`, `ProjectedMonthToDate:decimal(10,2)`, `ProjectedYearToDate:decimal(10,2)`, `ProjectedAccumulationYear:int`, `ProjectedAccumulationMonth:int`, `GroupId`(FK, **BẮT BUỘC**) | Tên riêng — không dịch. Department suy ra qua `Group.DepartmentId`, không lưu trùng trên Employee. `Projected*` xem §Lũy kế dự kiến. |
 
 > **Đã bỏ `Area`/`Line`** (2026-07-14): OT Form không cần "tên công đoạn" ở cấp Area/Line. Xoá hẳn (migration `RemoveAreaLineFromOtFormAddGroupDepartment`), không giữ bảng mồ côi.
 >
@@ -229,6 +229,58 @@ nhập tay, không theo từng người) — giữ nguyên `ProcessPart`, không
   `AttendanceSettingPanel.tsx`, 2 khối "Phiếu ăn" + "Giới hạn lũy kế", nút "Lưu cấu hình" gọi PUT rồi
   `invalidateAttendanceSettingCache()`. Tab này không có bảng/nút "Thêm mới" nên `CategoryManagement.tsx`
   ẩn nút đó khi `addLabel == null`.
+
+### §Lũy kế dự kiến — cảnh báo cả những đơn khác đang chờ duyệt (2026-08-06)
+
+**Vấn đề người dùng nêu**: `Employee.MonthToDate`/`YearToDate` chỉ cộng khi đơn đạt `Completed`
+(xem §Lũy kế tháng/năm) — nên nếu nhân viên A đang có đơn #1 (ngày 3) chờ duyệt, lúc lập đơn #2
+cho cùng A, mọi màn cảnh báo hạn mức đều so với `MonthToDate` CHƯA cộng đơn #1 → không cảnh báo,
+dù cả 2 đơn cộng lại đã vượt hạn mức. Bản chất: hệ thống "mù" trước các đơn khác đang treo.
+
+**Giải pháp** (chốt qua trao đổi trước khi code, CLAUDE.md §2 luật 2): thêm 2 cột lũy kế **DỰ KIẾN**
+trên `Employee` — cộng ngay khi đơn được TẠO (bất kể đơn đang ở trạng thái chưa duyệt nào: Draft,
+PendingGroupHead, Pending, ApprovedByDepartment, ApprovedByWorkshop), trừ lại khi đơn bị **Rejected**
+hoặc khi 1 người bị **loại khỏi đơn** (`RemoveEmployeeAsync`), điều chỉnh đúng phần chênh lệch khi
+sửa "thực tích"/`DidEat` trước khi Trưởng phòng duyệt (`UpdateAsync`). Cột lũy kế **thực tế**
+(`MonthToDate`/`YearToDate`) giữ nguyên hành vi cũ, không đụng gì.
+
+- **Entity**: `Employee.ProjectedMonthToDate`/`ProjectedYearToDate` (decimal(10,2)) + mốc rollover
+  RIÊNG `ProjectedAccumulationYear`/`ProjectedAccumulationMonth` (KHÔNG dùng chung
+  `AccumulationYear`/`AccumulationMonth` của lũy kế thực tế — lũy kế dự kiến có thể bị trừ ngược sau
+  khi cộng, còn thực tế thì chỉ cộng 1 chiều, không bao giờ bị đảo ngược). Migration
+  `AddProjectedAccumulationToEmployee`, default `0` cho cả 4 cột — **không backfill dữ liệu cũ**
+  (các đơn đang chờ duyệt từ trước khi apply migration sẽ không có trong lũy kế dự kiến cho tới khi
+  chúng được sửa/loại người/từ chối lần đầu sau migration; đơn mới tạo sau migration luôn đúng).
+- **Công thức số giờ** dùng CHUNG 1 hàm `OtFormService.CalculateOtHours(startTime, endTime, didEat,
+  mainMealTicketMinHours)` cho cả lũy kế thực tế lẫn dự kiến — gồm cả phần +30 phút không ăn
+  (§Có ăn hay không) — để 2 loại lũy kế luôn nhất quán công thức.
+- **4 điểm cộng/trừ** (`OtFormService`):
+  - `CreateAsync` — mỗi nhân viên trong đơn: `ApplyProjectedRollover` rồi `+= hours`.
+  - `UpdateAsync` (sửa "thực tích"/DidEat trước khi Trưởng phòng duyệt) — tính `oldHours` (từ giá trị
+    cũ) và `newHours` (từ giá trị mới), `ApplyProjectedDelta(employee, otForm.Date, newHours - oldHours)`.
+  - `RemoveEmployeeCoreAsync` (loại 1 người khỏi đơn, đơn vẫn tiếp tục chạy cho người còn lại) —
+    trừ đúng phần giờ của riêng người bị loại, KHÔNG đụng phần của những người còn lại trong đơn.
+  - `RejectAsync` (`ReverseProjectedAccumulationAsync`) — trừ lại toàn bộ giờ đã reserve lúc tạo cho
+    những người còn active trong đơn (người đã bị loại trước đó thì phần của họ đã được trả lại từ
+    lúc bị loại rồi, không trừ lần 2).
+  - Khi đơn tới `Completed`: KHÔNG đụng gì tới lũy kế dự kiến (đã được cộng sẵn từ lúc tạo) — chỉ lũy
+    kế thực tế mới cộng thêm ở bước này, độc lập hoàn toàn với dự kiến.
+- **Giới hạn đã biết**: nếu 1 đơn bị Reject/loại người SAU KHI lũy kế dự kiến của nhân viên đó đã
+  rollover sang tháng mới (đơn treo cả tháng trời chưa ai xử lý), phần trừ sẽ rơi vào lũy kế dự kiến
+  của tháng mới thay vì tháng đơn đó thuộc về — chấp nhận được vì đơn OT thực tế luôn xử lý trong vài
+  ngày, không phải hàng tháng.
+- **`OtFormEmployee.MonthToDate`/`YearToDate` đổi nguồn snapshot** (không đổi tên field) — từ
+  "lũy kế THỰC TẾ lúc tạo đơn" (§Lũy kế hiển thị trên đơn) sang **"lũy kế DỰ KIẾN lúc tạo đơn, TRƯỚC
+  khi cộng chính đơn đó"** — nên các màn đọc field này (`OtFormDetail.tsx`, `OtFormEmailConfirmPage.tsx`,
+  `OtFormPrintView.tsx`, và bảng "sửa đơn" trong `CreateOtFormPage.tsx`) tự động phản ánh đúng, không
+  cần sửa gì ở FE cho các màn này.
+- **`EmployeeDto` thêm `ProjectedMonthToDate`/`ProjectedYearToDate`** (map trong `EmployeeService`,
+  mọi hàm trả `EmployeeDto`) — `CreateOtFormPage.tsx` phần chọn nhân viên MỚI (bảng `groupEmployees`,
+  nguồn `GET /api/Employee/by-group/{groupId}`) đổi từ `employee.monthToDate`/`yearToDate` sang
+  `employee.projectedMonthToDate`/`projectedYearToDate` để cảnh báo đúng. `EmployeeList.tsx`/
+  `EmployeeAccumulationPanel.tsx` (màn quản lý nhân viên, không gắn với 1 đơn cụ thể) **giữ nguyên**
+  dùng lũy kế thực tế — theo đúng phạm vi đã chốt.
+- Xem hợp đồng field chi tiết ở [attendance-api-fe.md §3.5b](attendance-api-fe.md).
 
 ### §Song ngữ Vn/Jp trên OtFormDto — hiển thị cho Trưởng phòng/Trưởng Bộ phận xem trước khi duyệt (2026-07-29)
 - **Lý do**: `Group.GroupNameJp`/`Department.DepartmentNameJp`/`Reason.ReasonNameJp` (và `OtFormEmployee.NoteJp`/`ProcessPart.AnotherSuggestionJp` đã có sẵn từ trước) tồn tại trong DB nhưng `OtFormDto`/`OtFormListItemDto` trước đây chỉ trả field `*Vn` — 2 màn xem trước khi duyệt (`OtFormDetail.tsx` trong app, `OtFormEmailConfirmPage.tsx` public qua link email) chỉ hiện tiếng Việt dù master data đã có sẵn bản dịch tiếng Nhật.
@@ -633,6 +685,7 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `GET /api/OtForm/pending-submissions` — đơn `Draft` đang chờ chính mình (Trưởng nhóm) ký duyệt, tự lọc theo `UserApprovalScope(Submitter)` (`Attendance.OTForm.Create` — KHÔNG dùng `.Approve` vì Role "Trưởng nhóm" không có permission này).
 - `GET /api/OtForm/pending-approvals` — đơn đang chờ chính mình duyệt (cấp Trưởng phòng/Trưởng xưởng/TGĐ, KHÔNG bao gồm Draft), tự lọc theo `UserApprovalScope` hoặc bypass nếu `Role="Tổng Giám Đốc"` (`Attendance.OTForm.Approve`).
 - `GET /api/OtForm/my-actions` (mới, 2026-07-17) — lịch sử đơn **CHÍNH mình đã Ký/Duyệt/Từ chối** ở bất kỳ cấp nào (Submitter/DepartmentManager/WorkshopManager/GeneralDirector), gate bằng `Attendance.OTForm.View` (dùng chung cho cả 4 Role vì đều có sẵn permission này). Vá lỗ hổng: trước đây KHÔNG có cách nào xem lại đơn đã xử lý — `my-forms` chỉ lọc theo người **tạo** đơn (không phải người ký/duyệt), còn `pending-submissions`/`pending-approvals` chỉ hiện đơn **chưa** xử lý, đơn vừa xử lý xong lập tức biến mất khỏi 2 danh sách đó. `OtFormService.GetMyActionsAsync` truy `OtFormApprovalHistory.ApproverUserName == user hiện tại` lấy `OtFormId` (distinct) rồi trả về `OtForm` tương ứng — gồm cả đơn từng bị chính user đó **Từ chối** (không chỉ Ký/Duyệt), vì đây là lịch sử "đã xử lý" chứ không phải "đã đồng ý".
+- **Lọc theo ngày + trạng thái** (2026-08-06) — cả 5 endpoint danh sách trên (`my-forms`/`pending-submissions`/`pending-approvals`/`my-actions`/`my-participations`, cộng thêm `my-participations` ở dưới) nhận thêm `fromDate`/`toDate` (`OtForm.Date`, bao gồm 2 đầu mút) và `status` (đúng giá trị `OtFormStatus`) — cả 3 optional, kết hợp AND với điều kiện lọc gốc của từng endpoint qua helper `OtFormService.ApplyListFilters`. FE: bộ lọc dùng chung trong `OtFormListPage.tsx` (2 ô ngày + dropdown trạng thái + nút Tìm kiếm/Xoá lọc, cùng khuôn `AuditTrailList.tsx`) — xem hợp đồng field ở [attendance-api-fe.md §4.2](attendance-api-fe.md).
 - `GET /api/OtForm/{id}` — chi tiết đầy đủ (Employees kèm lũy kế + phiếu ăn, ProcessPart, ApprovalHistories).
 - `PUT /api/OtForm/{id}` — sửa (2026-07-31: **chỉ còn** giờ kết thúc từng nhân viên, không còn sửa toàn bộ), chỉ chính người tạo và chỉ khi `Status` là `Draft`/`PendingGroupHead`/`Pending` (`Attendance.OTForm.Create`, xem §Sửa đơn khi đang Draft/Pending).
 - `POST /api/OtForm/{id}/approve`, `POST /api/OtForm/{id}/reject` (`Attendance.OTForm.Approve`, chỉ áp dụng cấp Trưởng phòng/Trưởng xưởng/TGĐ — gọi trên đơn `Draft` sẽ báo lỗi rõ ràng, dùng `/submit` thay thế). `approve` tự cộng lũy kế nhân viên nếu đạt `Completed`, tự gửi email cho cấp duyệt kế tiếp nếu còn.

@@ -398,7 +398,12 @@
       "noData": "Không có đơn nào.",
       "waitingFor": "Đang chờ {level}",
       "unknownStatus": "Không xác định",
-      "loadError": "Không thể tải danh sách đơn tăng ca."
+      "loadError": "Không thể tải danh sách đơn tăng ca.",
+      "filterFromDateLabel": "Từ ngày",
+      "filterToDateLabel": "Đến ngày",
+      "filterStatusLabel": "Trạng thái",
+      "filterAllStatus": "Tất cả",
+      "resetFilterButton": "Xoá lọc"
     },
     "OtFormDetail": {
       "titleWithId": "Đơn tăng ca #{id}",

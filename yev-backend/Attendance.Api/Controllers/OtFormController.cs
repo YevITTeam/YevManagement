@@ -19,12 +19,16 @@ namespace Attendance.Api.Controllers
         }
 
         // Forms created by the CURRENT user (Team Leader reviewing their own team's forms).
+        // fromDate/toDate lọc theo OtForm.Date (bao gồm cả 2 đầu mút), status lọc theo đúng giá trị
+        // OtFormStatus (§2) — cả 3 optional, dùng chung cho cả 5 endpoint danh sách bên dưới
+        // (2026-08-06, xem docs/attendance-module.md §Lọc danh sách đơn).
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("my-forms")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyForms(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
         {
-            var result = await _otFormService.GetMyFormsAsync(CurrentUserName, pageIndex, pageSize);
+            var result = await _otFormService.GetMyFormsAsync(CurrentUserName, pageIndex, pageSize, fromDate, toDate, status);
             return Success(result);
         }
 
@@ -33,10 +37,11 @@ namespace Attendance.Api.Controllers
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpGet("pending-submissions")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingSubmissions(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
         {
             var isAdmin = User.IsInRole(AdminRole);
-            var result = await _otFormService.GetPendingSubmissionsAsync(CurrentUserName, isAdmin, pageIndex, pageSize);
+            var result = await _otFormService.GetPendingSubmissionsAsync(CurrentUserName, isAdmin, pageIndex, pageSize, fromDate, toDate, status);
             return Success(result);
         }
 
@@ -45,9 +50,10 @@ namespace Attendance.Api.Controllers
         [RequirePermission("Attendance.OTForm.Approve")]
         [HttpGet("pending-approvals")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingApprovals(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
         {
-            var result = await _otFormService.GetPendingApprovalsAsync(CurrentUserName, pageIndex, pageSize);
+            var result = await _otFormService.GetPendingApprovalsAsync(CurrentUserName, pageIndex, pageSize, fromDate, toDate, status);
             return Success(result);
         }
 
@@ -58,9 +64,10 @@ namespace Attendance.Api.Controllers
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("my-actions")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyActions(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
         {
-            var result = await _otFormService.GetMyActionsAsync(CurrentUserName, pageIndex, pageSize);
+            var result = await _otFormService.GetMyActionsAsync(CurrentUserName, pageIndex, pageSize, fromDate, toDate, status);
             return Success(result);
         }
 
@@ -70,9 +77,10 @@ namespace Attendance.Api.Controllers
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("my-participations")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyParticipations(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
         {
-            var result = await _otFormService.GetMyParticipationsAsync(CurrentUserName, pageIndex, pageSize);
+            var result = await _otFormService.GetMyParticipationsAsync(CurrentUserName, pageIndex, pageSize, fromDate, toDate, status);
             return Success(result);
         }
 
