@@ -398,7 +398,12 @@
       "noData": "申請がありません。",
       "waitingFor": "{level}待ち",
       "unknownStatus": "不明",
-      "loadError": "残業申請一覧を読み込めませんでした。"
+      "loadError": "残業申請一覧を読み込めませんでした。",
+      "filterFromDateLabel": "開始日",
+      "filterToDateLabel": "終了日",
+      "filterStatusLabel": "ステータス",
+      "filterAllStatus": "すべて",
+      "resetFilterButton": "フィルターを解除"
     },
     "OtFormDetail": {
       "titleWithId": "残業申請 #{id}",

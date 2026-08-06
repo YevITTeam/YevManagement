@@ -818,9 +818,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <tbody>
                                     {groupEmployees.map((employee) => {
                                         const checked = selectedEmployeeIds.includes(employee.id);
+                                        // Dùng lũy kế DỰ KIẾN (thực tế + đơn khác đang chờ duyệt) chứ không phải
+                                        // monthToDate/yearToDate (chỉ phản ánh phần đã duyệt xong) — tránh trường
+                                        // hợp tạo 2 đơn cùng lúc mà đơn nào cũng không thấy cảnh báo vượt hạn mức.
                                         const isOverLimit =
-                                            employee.monthToDate > setting.monthlyOtHourLimit ||
-                                            employee.yearToDate > setting.yearlyOtHourLimit;
+                                            employee.projectedMonthToDate > setting.monthlyOtHourLimit ||
+                                            employee.projectedYearToDate > setting.yearlyOtHourLimit;
                                         const currentEndTime = employeeOverrides[employee.id]?.endTime ?? endTime;
                                         const isEligibleForMeal =
                                             computeTotalHour(startTime, currentEndTime) >= setting.mainMealTicketMinHours;
@@ -851,7 +854,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         }`}
                                                     >
                                                         {isOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                                        {employee.monthToDate}h / {employee.yearToDate}h
+                                                        {employee.projectedMonthToDate}h / {employee.projectedYearToDate}h
                                                     </span>
                                                 </td>
                                                 <td className="px-3 py-2 align-top">

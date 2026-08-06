@@ -117,6 +117,20 @@ namespace Attendance.Infrastructure.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
 
+                    b.Property<int>("ProjectedAccumulationMonth")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProjectedAccumulationYear")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ProjectedMonthToDate")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal>("ProjectedYearToDate")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
                     b.Property<string>("UserName")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");

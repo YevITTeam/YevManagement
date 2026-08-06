@@ -26,10 +26,11 @@ public partial class OtFormEmployee
 
     public string? NoteJp { get; set; }
 
-    // Snapshot of Employee.MonthToDate/YearToDate at the moment this row was added to the form
-    // (CreateAsync, or UpdateAsync when a new employee is added to an existing form) — frozen so
-    // viewing an old form always shows the accumulation AS OF form-creation time, not whatever the
-    // Employee's accumulation happens to be right now (same principle as
+    // Snapshot of Employee.ProjectedMonthToDate/ProjectedYearToDate (NOT MonthToDate/YearToDate —
+    // changed 2026-08-06) at the moment this row was added to the form, BEFORE this form's own hours
+    // were reserved into the projected total — frozen so viewing an old form always shows "how much
+    // this person already had pending (including OTHER not-yet-decided forms) right before this one",
+    // not whatever the Employee's projected accumulation happens to be right now (same principle as
     // OtFormApprovalHistory.SignatureImage/ApproverFullName being snapshots, not live joins).
     public decimal MonthToDate { get; set; }
 

@@ -47,6 +47,8 @@ namespace Attendance.Application.Services
                     YearToDate = x.YearToDate,
                     AccumulationYear = x.AccumulationYear,
                     AccumulationMonth = x.AccumulationMonth,
+                    ProjectedMonthToDate = x.ProjectedMonthToDate,
+                    ProjectedYearToDate = x.ProjectedYearToDate,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group.GroupNameVn
                 }
@@ -69,6 +71,8 @@ namespace Attendance.Application.Services
                     YearToDate = x.YearToDate,
                     AccumulationYear = x.AccumulationYear,
                     AccumulationMonth = x.AccumulationMonth,
+                    ProjectedMonthToDate = x.ProjectedMonthToDate,
+                    ProjectedYearToDate = x.ProjectedYearToDate,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group.GroupNameVn
                 }
@@ -92,6 +96,8 @@ namespace Attendance.Application.Services
                 YearToDate = employee.YearToDate,
                 AccumulationYear = employee.AccumulationYear,
                 AccumulationMonth = employee.AccumulationMonth,
+                ProjectedMonthToDate = employee.ProjectedMonthToDate,
+                ProjectedYearToDate = employee.ProjectedYearToDate,
                 GroupId = employee.GroupId,
                 GroupNameVn = employee.Group.GroupNameVn
             };
@@ -114,6 +120,8 @@ namespace Attendance.Application.Services
                 YearToDate = employee.YearToDate,
                 AccumulationYear = employee.AccumulationYear,
                 AccumulationMonth = employee.AccumulationMonth,
+                ProjectedMonthToDate = employee.ProjectedMonthToDate,
+                ProjectedYearToDate = employee.ProjectedYearToDate,
                 GroupId = employee.GroupId,
                 GroupNameVn = employee.Group.GroupNameVn
             };
@@ -162,6 +170,8 @@ namespace Attendance.Application.Services
                 YearToDate = newEmployee.YearToDate,
                 AccumulationYear = newEmployee.AccumulationYear,
                 AccumulationMonth = newEmployee.AccumulationMonth,
+                ProjectedMonthToDate = newEmployee.ProjectedMonthToDate,
+                ProjectedYearToDate = newEmployee.ProjectedYearToDate,
                 GroupId = newEmployee.GroupId,
                 GroupNameVn = group!.GroupNameVn
             };

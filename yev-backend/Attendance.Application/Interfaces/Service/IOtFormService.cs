@@ -6,23 +6,31 @@ namespace Attendance.Application.Interfaces.Service
 {
     public interface IOtFormService
     {
-        Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(string userName, int pageIndex, int pageSize);
+        // fromDate/toDate lọc theo OtForm.Date (bao gồm cả 2 đầu mút), status lọc theo đúng giá trị
+        // OtFormStatus — cả 3 đều optional, dùng chung cho mọi tab danh sách (2026-08-06, xem
+        // docs/attendance-module.md §Lọc danh sách đơn).
+        Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
 
         // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — tách riêng khỏi GetPendingApprovalsAsync
         // vì gate bằng permission Attendance.OTForm.Create, không phải .Approve.
         Task<PagedResponse<OtFormListItemDto>> GetPendingSubmissionsAsync(
-            string currentUserName, bool isAdmin, int pageIndex, int pageSize);
+            string currentUserName, bool isAdmin, int pageIndex, int pageSize,
+            DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
 
         Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
-            string approverUserName, int pageIndex, int pageSize);
+            string approverUserName, int pageIndex, int pageSize,
+            DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
 
         // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 vai trò
         // (Trưởng nhóm/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc), gate bằng Attendance.OTForm.View.
-        Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(string userName, int pageIndex, int pageSize);
+        Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
 
         // Đơn tôi CÓ TÊN trong danh sách nhân viên tăng ca (OtFormEmployee) — không nhất thiết là người
         // tạo/ký/duyệt. Dành cho mọi user (kể cả Role "Nhân viên"), gate bằng Attendance.OTForm.View.
-        Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(string userName, int pageIndex, int pageSize);
+        Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
 
         Task<OtFormDto> GetByIdAsync(int id);
 

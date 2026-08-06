@@ -80,26 +80,45 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const [hasNextPage, setHasNextPage] = useState(false);
     const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
-    // Đổi mode (chuyển menu) → về trang 1, phát hiện bằng so sánh snapshot ngay trong render
-    // (React khuyến khích thay effect chỉ để "phản ứng" theo prop/state khác đổi).
+    // Ô nhập bộ lọc (chưa áp dụng) — tách khỏi appliedFilters để gõ/chọn xong mới bấm "Tìm kiếm" mới
+    // gọi API, giống khuôn AuditTrailList.tsx.
+    const [fromDateInput, setFromDateInput] = useState("");
+    const [toDateInput, setToDateInput] = useState("");
+    const [statusInput, setStatusInput] = useState("");
+    const [appliedFilters, setAppliedFilters] = useState({ fromDate: "", toDate: "", status: "" });
+
+    // Đổi mode (chuyển menu) → về trang 1 + xoá bộ lọc, phát hiện bằng so sánh snapshot ngay trong
+    // render (React khuyến khích thay effect chỉ để "phản ứng" theo prop/state khác đổi).
     const [prevMode, setPrevMode] = useState(mode);
     if (prevMode !== mode) {
         setPrevMode(mode);
         setPageIndex(1);
+        setFromDateInput("");
+        setToDateInput("");
+        setStatusInput("");
+        setAppliedFilters({ fromDate: "", toDate: "", status: "" });
     }
+
+    const listParams = {
+        pageIndex,
+        pageSize: PAGE_SIZE,
+        fromDate: appliedFilters.fromDate || undefined,
+        toDate: appliedFilters.toDate || undefined,
+        status: appliedFilters.status !== "" ? Number(appliedFilters.status) : undefined,
+    };
 
     const { isLoading, error, refetch: fetchForms } = useFetchEffect(
         () =>
             mode === "my-forms"
-                ? OtFormApi.getMyForms({ pageIndex, pageSize: PAGE_SIZE })
+                ? OtFormApi.getMyForms(listParams)
                 : mode === "pending-submissions"
-                ? OtFormApi.getPendingSubmissions({ pageIndex, pageSize: PAGE_SIZE })
+                ? OtFormApi.getPendingSubmissions(listParams)
                 : mode === "pending-approvals"
-                ? OtFormApi.getPendingApprovals({ pageIndex, pageSize: PAGE_SIZE })
+                ? OtFormApi.getPendingApprovals(listParams)
                 : mode === "my-actions"
-                ? OtFormApi.getMyActions({ pageIndex, pageSize: PAGE_SIZE })
-                : OtFormApi.getMyParticipations({ pageIndex, pageSize: PAGE_SIZE }),
-        [mode, pageIndex],
+                ? OtFormApi.getMyActions(listParams)
+                : OtFormApi.getMyParticipations(listParams),
+        [mode, pageIndex, appliedFilters],
         (result) => {
             setForms(result.data);
             setTotalCount(result.totalCount);
@@ -110,6 +129,19 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         t("loadError"),
         (message) => toast.error(message)
     );
+
+    const handleSearch = () => {
+        setPageIndex(1);
+        setAppliedFilters({ fromDate: fromDateInput, toDate: toDateInput, status: statusInput });
+    };
+
+    const handleResetFilter = () => {
+        setFromDateInput("");
+        setToDateInput("");
+        setStatusInput("");
+        setPageIndex(1);
+        setAppliedFilters({ fromDate: "", toDate: "", status: "" });
+    };
 
     const title =
         mode === "my-forms"
@@ -141,6 +173,66 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">{description}</p>
                 </div>
             )}
+
+            <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <label className="block">
+                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            {t("filterFromDateLabel")}
+                        </span>
+                        <input
+                            type="date"
+                            value={fromDateInput}
+                            onChange={(event) => setFromDateInput(event.target.value)}
+                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
+                    </label>
+                    <label className="block">
+                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            {t("filterToDateLabel")}
+                        </span>
+                        <input
+                            type="date"
+                            value={toDateInput}
+                            onChange={(event) => setToDateInput(event.target.value)}
+                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
+                    </label>
+                    <label className="block">
+                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            {t("filterStatusLabel")}
+                        </span>
+                        <select
+                            value={statusInput}
+                            onChange={(event) => setStatusInput(event.target.value)}
+                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        >
+                            <option value="">{t("filterAllStatus")}</option>
+                            {Object.entries(otFormStatusLabels).map(([value, label]) => (
+                                <option key={value} value={value}>
+                                    {label}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <div className="flex items-end gap-2">
+                        <button
+                            onClick={handleResetFilter}
+                            disabled={isLoading}
+                            className="h-10 flex-1 cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        >
+                            {t("resetFilterButton")}
+                        </button>
+                        <button
+                            onClick={handleSearch}
+                            disabled={isLoading}
+                            className="h-10 flex-1 cursor-pointer rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:opacity-50"
+                        >
+                            {tCommon("search")}
+                        </button>
+                    </div>
+                </div>
+            </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] p-4">

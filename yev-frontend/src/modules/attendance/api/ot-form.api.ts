@@ -38,6 +38,20 @@ const ENDPOINTS = {
 export interface GetOtFormListParams {
     pageIndex?: number;
     pageSize?: number;
+    // Lọc theo OtForm.date (bao gồm cả 2 đầu mút, chuỗi "yyyy-MM-dd") và status (giá trị enum
+    // OtFormStatus) — cả 3 optional, dùng chung cho cả 5 hàm danh sách bên dưới (2026-08-06).
+    fromDate?: string;
+    toDate?: string;
+    status?: number;
+}
+
+function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListParams) {
+    if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
+    if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+    if (params?.fromDate) query.set("FromDate", params.fromDate);
+    if (params?.toDate) query.set("ToDate", params.toDate);
+    // status=0 (Pending) là giá trị hợp lệ — không được dùng truthy check kẻo rớt mất (CLAUDE.md §4.4).
+    if (params?.status !== undefined) query.set("Status", String(params.status));
 }
 
 export const OtFormApi = {
@@ -59,8 +73,7 @@ export const OtFormApi = {
     },
     getMyForms: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
-        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
-        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        appendOtFormListParams(query, params);
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.OT_FORM.getMyForms}?${queryString}` : ENDPOINTS.OT_FORM.getMyForms;
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
@@ -70,8 +83,7 @@ export const OtFormApi = {
     // Role "Trưởng Nhóm" chỉ có permission Create, không có Approve (docs §4.2a).
     getPendingSubmissions: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
-        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
-        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        appendOtFormListParams(query, params);
         const queryString = query.toString();
         const url = queryString
             ? `${ENDPOINTS.OT_FORM.getPendingSubmissions}?${queryString}`
@@ -87,8 +99,7 @@ export const OtFormApi = {
     // BE tự lọc theo cấp/scope của user gọi API — FE không truyền tham số lọc cấp (docs §4.2).
     getPendingApprovals: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
-        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
-        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        appendOtFormListParams(query, params);
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.OT_FORM.getPendingApprovals}?${queryString}` : ENDPOINTS.OT_FORM.getPendingApprovals;
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
@@ -98,8 +109,7 @@ export const OtFormApi = {
     // vá lỗ hổng UX đơn biến mất khỏi pending-submissions/pending-approvals sau khi xử lý (docs §4.2b).
     getMyActions: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
-        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
-        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        appendOtFormListParams(query, params);
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.OT_FORM.getMyActions}?${queryString}` : ENDPOINTS.OT_FORM.getMyActions;
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
@@ -109,8 +119,7 @@ export const OtFormApi = {
     // tạo/ký/duyệt hay không — trả rỗng (không lỗi) nếu account chưa được gán Employee.userName (§4.2c).
     getMyParticipations: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
-        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
-        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        appendOtFormListParams(query, params);
         const queryString = query.toString();
         const url = queryString
             ? `${ENDPOINTS.OT_FORM.getMyParticipations}?${queryString}`
