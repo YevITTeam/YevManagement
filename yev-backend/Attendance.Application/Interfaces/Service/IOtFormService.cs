@@ -1,3 +1,4 @@
+using Attendance.Application.Dtos.OtFormBatches;
 using Attendance.Application.Dtos.OtForms;
 using Shared.Application.Wrapper;
 
@@ -53,5 +54,15 @@ namespace Attendance.Application.Interfaces.Service
         Task<OtFormDto> GetByEmailTokenAsync(string token);
         Task ApproveByEmailTokenAsync(string token, ApproveOtFormDto request);
         Task RejectByEmailTokenAsync(string token, RejectOtFormDto request);
+
+        // === "Đơn tổng" — xem docs/attendance-module.md §Đơn tổng. ===
+        Task<PagedResponse<OtFormBatchListItemDto>> GetBatchesAsync(string userName, bool isAdmin, int pageIndex, int pageSize);
+        Task<OtFormBatchDto> GetBatchByIdAsync(int id);
+        Task<OtFormBatchDto> ProcessBatchAsync(int batchId, string approverUserName, string? approverFullName, ProcessOtFormBatchDto request);
+        Task<OtFormBatchDto> GetBatchByEmailTokenAsync(string token);
+        Task<OtFormBatchDto> ProcessBatchByEmailTokenAsync(string token, ProcessOtFormBatchDto request);
+
+        // Called by OtFormBatchBackgroundService (daily sweep, default 15:00).
+        Task RunDailyBatchSweepAsync();
     }
 }

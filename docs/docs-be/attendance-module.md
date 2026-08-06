@@ -241,6 +241,59 @@ nhập tay, không theo từng người) — giữ nguyên `ProcessPart`, không
 - **Trước đây**: `OtFormEmailConfirmPage.tsx` (route public `/xac-nhan-don?token=...`, xem §Xác thực qua email) dùng chung 1 ô "Ghi chú/Lý do từ chối" luôn hiển thị sẵn cho cả 2 nút Duyệt/Từ chối — bấm "Từ chối" gửi thẳng luôn nếu ô đó không trống, không có bước xác nhận lại.
 - **Yêu cầu người dùng**: bấm "Từ chối" phải mở popup riêng để nhập lý do trước khi thật sự gửi — tránh bấm nhầm. Đã đổi FE: ô "Ghi chú" ngoài popup giờ chỉ dùng cho "Duyệt" (tuỳ chọn); bấm "Từ chối" mở modal riêng (cùng UX với modal Ký duyệt/Duyệt/Từ chối ở `OtFormDetail.tsx` trong app) với ô lý do **bắt buộc** + nút Huỷ/Xác nhận từ chối. Không đổi gì ở BE (`POST /email-confirm/{token}/reject` vẫn nhận `RejectOtFormDto { comment }` y hệt cũ).
 
+### §Đơn tổng — gom nhiều OtForm theo Phòng ban, duyệt 1 lần cho Trưởng phòng (2026-08-06)
+**Yêu cầu người dùng**: Trưởng phòng phải duyệt từng đơn (`status=0 Pending`) một, rất mất công khi 1
+Phòng ban có nhiều Bộ phận cùng gửi đơn trong ngày. Chốt qua AskUserQuestion (CLAUDE.md §2 luật 2):
+- Mỗi ngày **15:00** (giờ hệ thống, `TimeHelper.GetCurrentUtcTime()` = UTC+7), job tự động gom **các đơn
+  MỚI, chưa từng vào batch nào** (`OtForm.Status==Pending && OtFormBatchId==null`) theo `DepartmentId`
+  thành 1 `OtFormBatch` mới, gửi mail lần đầu. Batch cũ chưa xử lý xong (`Status==Pending`, `BatchDate`
+  < hôm nay) được gửi **mail nhắc lại** (token mới, KHÔNG tạo batch mới, KHÔNG gộp thêm đơn) — 1 đơn chỉ
+  thuộc đúng 1 batch trong suốt vòng đời của nó.
+- Trong màn duyệt, ngoài bỏ chọn từng nhân viên (loại khỏi đơn), Trưởng phòng có thể **Từ chối cả 1 đơn
+  nhỏ** ngay tại đây (đơn 1 người mà không muốn duyệt thì phải Từ chối, vì "Loại nhân viên" chặn xoá hết).
+- Có thêm màn "Đơn tổng" trong app (`/ot/batches`), không chỉ qua email.
+
+**Entity mới** (`Attendance.Domain/Entities/`):
+| Entity | Thuộc tính | Ghi chú |
+|---|---|---|
+| `OtFormBatch` | `Id`, `DepartmentId`(FK Restrict), `BatchDate:DateOnly`, `Status:int` (enum `OtFormBatchStatus` Pending=0/Processed=1), `CreatedAt`, `ProcessedAt:DateTime?`, `ProcessedByUserName:string?`, `ProcessedByFullName:string?` | Không `IsDeleted` — bảng hệ thống tự quản lý, giống `OtFormApprovalEmailToken`. |
+| `OtFormBatchEmailToken` | `Id`, `OtFormBatchId`(FK Cascade), `ApproverUserName`, `ApproverFullName?`, `IsReminder:bool`, `Token`, `ExpiresAt`, `UsedAt:DateTime?`, `CreatedAt` | Bản sao mẫu `OtFormApprovalEmailToken` — mỗi lần gửi mail (mới hoặc nhắc) tạo 1 token mới. |
+
+`OtForm` thêm cột `OtFormBatchId:int?` (FK Restrict → `OtFormBatch`, nullable — `null` = chưa được gom).
+Migration `AddOtFormBatch`. Enum mới `OtFormBatchStatus`, `OtFormBatchFormDecision` (Approve=0/Reject=1,
+chỉ dùng trong DTO xử lý, không lưu DB). **Không có permission mới** — tái dùng
+`Attendance.OTForm.View`/`Attendance.OTForm.Approve` đã gán sẵn cho Trưởng phòng.
+
+**Business logic, tất cả nằm trong `OtFormService`** (không tạo service riêng — tái dùng trực tiếp
+`ApproveAsync`/`RejectAsync`/`RemoveEmployeeCoreAsync`/`ResolveEligibleApproverUserNamesAsync` đã có,
+không viết lại logic duyệt/từ chối):
+- `RunDailyBatchSweepAsync()` — gọi bởi `OtFormBatchBackgroundService` (15:00 hằng ngày, bản sao mẫu
+  `DeviceLiquidationBackgroundService`, đăng ký `Program.cs`). (a) Gom đơn chưa từng batch theo
+  `DepartmentId` → tạo `OtFormBatch` mới, gán `form.OtFormBatch = newBatch` (EF tự fixup FK, không cần
+  `SaveChanges` trước để lấy Id) → gửi mail lần đầu. (b) Với mỗi batch cũ còn `Pending`: nếu KHÔNG còn
+  đơn nào thật sự `Status==Pending` (đã bị duyệt/từ chối lẻ tay ở tab "Chờ tôi duyệt" bình thường, ngoài
+  luồng batch) → tự đóng batch (`Status=Processed`, không `ProcessedByUserName`), không gửi mail; còn lại
+  → gửi mail nhắc (`IsReminder=true`).
+- `ProcessBatchAsync(batchId, approverUserName, approverFullName, ProcessOtFormBatchDto)` — auth y hệt
+  nhánh `DepartmentManager` của `LoadFormAndValidateAuthorityAsync` (KHÔNG có Admin bypass, đúng tinh
+  thần `ApproveAsync` ở cấp này). `request.Forms` phải khớp **chính xác** (SetEquals) tập `OtFormId` của
+  batch vẫn còn `Status==Pending` — thiếu/thừa → 400. Validate fail-fast TRƯỚC khi ghi gì (Reject thiếu
+  lý do; Approve mà `ExcludedEmployeeIds` khiến đơn còn 0 người active → báo dùng Reject thay vì bỏ hết
+  người). Verify `SecondaryPassword` 1 lần ở cấp batch (các lệnh gọi bên dưới vẫn tự verify lại, rẻ và
+  không cần sửa chữ ký của chúng). Với từng đơn: Reject → gọi thẳng `RejectAsync`; Approve → loop
+  `RemoveEmployeeCoreAsync` cho từng nhân viên bị loại rồi gọi thẳng `ApproveAsync` — mỗi đơn tiếp tục
+  đúng luồng hiện có (`DetermineNextStatus`, cộng lũy kế, gửi mail cấp kế tiếp) không đổi 1 dòng. Xong
+  hết → `batch.Status=Processed`. **Không dùng transaction DB** (theo đúng tiền lệ codebase, không có
+  chỗ nào khác dùng) — rủi ro xử lý dở dang giảm thiểu nhờ validate fail-fast trước khi ghi bất cứ gì.
+- Email: người nhận = mọi `UserName` có `UserApprovalScope(ApprovalLevel=DepartmentManager)` khớp
+  `Department` của batch hoặc `ScopeType.All` (tái dùng `ResolveEligibleApproverUserNamesAsync` với
+  `groupId: 0` — sentinel không khớp Group nào, vì batch gom nhiều Group cùng lúc, không gắn 1 Group cụ
+  thể). Template `EmailTemplates/OtForm/BatchApprovalNotification.html` (bản tóm tắt — số đơn/số NV/tổng
+  giờ, KHÔNG liệt kê chi tiết từng đơn trong mail) — Subject thêm tiền tố `[Nhắc nhở]` khi `IsReminder`,
+  dùng chung 1 template. Link `{FrontendBaseUrl}/xac-nhan-don-tong?token={token}`.
+- Kênh public (`OtFormBatchController`, `[AllowAnonymous]`): `GET/POST email-confirm/{token}` (approve)
+  — y hệt cấu trúc `OtFormController` email-confirm, resolve token rồi gọi thẳng `ProcessBatchAsync`.
+
 ### §Xác thực qua email — cập nhật chữ ký & duyệt đơn (2026-07-16)
 Bổ sung 1 kênh xác nhận qua email (nút bấm mở trang xác nhận nhỏ) cho 2 hành động nhạy cảm — **không thay thế** luồng trong app, chỉ là kênh phụ vì cấp quản lý ít khi mở app:
 
@@ -586,6 +639,13 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 - `POST /api/OtForm/{id}/employees/remove` (mới, 2026-07-30, `Attendance.OTForm.RemoveEmployee` — permission riêng, không dùng chung `.Create`/`.Approve`) — loại 1 nhân viên khỏi đơn để duyệt được phần còn lại, áp dụng cho MỌI cấp (kể cả Trưởng nhóm ở `Draft`). Không đổi `Status`, không ký lại các cấp trước. Xem §Loại nhân viên khỏi đơn.
 - `GET /email-confirm/{token}`, `POST /email-confirm/{token}/approve`, `POST /email-confirm/{token}/reject` (`[AllowAnonymous]`) — kênh bổ sung qua email, xem §Xác thực qua email.
 - `BaseController.CurrentUserName` (`Attendance.Api/Controllers/BaseController.cs`) — helper lấy `User.Identity.Name` dùng chung cho mọi Controller cần biết "ai đang gọi API".
+
+### OtFormBatch (`OtFormBatchController`) — Đơn tổng (2026-08-06)
+- `GET /api/OtFormBatch/grid-list` (`Attendance.OTForm.Approve`) — Admin thấy tất cả, còn lại chỉ thấy batch thuộc Department mình có `UserApprovalScope(DepartmentManager)`.
+- `GET /api/OtFormBatch/{id}` (`Attendance.OTForm.Approve`) — chi tiết, `otForms[]` chỉ gồm đơn vẫn còn `Status==Pending`.
+- `POST /api/OtFormBatch/{id}/approve` (`Attendance.OTForm.Approve`) — duyệt/từ chối hàng loạt, xem §Đơn tổng.
+- `GET /email-confirm/{token}`, `POST /email-confirm/{token}/approve` (`[AllowAnonymous]`) — kênh qua email, xem §Đơn tổng.
+- Job `OtFormBatchBackgroundService` (`CompanySystem.HostApi/BackgroundServices/`) chạy 15:00 hằng ngày, gọi `IOtFormService.RunDailyBatchSweepAsync()`.
 
 ### AttendanceAiChat (`AttendanceAiChatController`) — trợ lý AI lập đơn tăng ca (2026-07-29)
 - `POST /api/AttendanceAiChat/stream` (`Attendance.AiChat.Use`, seed migration `AddAttendanceAiChatPermission`,

@@ -30,6 +30,8 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<SecondaryPassword> SecondaryPasswords { get; set; }
     public virtual DbSet<PendingSecondaryPasswordConfirmation> PendingSecondaryPasswordConfirmations { get; set; }
     public virtual DbSet<AttendanceSetting> AttendanceSettings { get; set; }
+    public virtual DbSet<OtFormBatch> OtFormBatches { get; set; }
+    public virtual DbSet<OtFormBatchEmailToken> OtFormBatchEmailTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -132,6 +134,11 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.OtCaseId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_OtForms_OtCases_OtCaseId");
+
+            entity.HasOne(d => d.OtFormBatch).WithMany(p => p.OtForms)
+                .HasForeignKey(d => d.OtFormBatchId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OtForms_OtFormBatches_OtFormBatchId");
         });
 
         modelBuilder.Entity<OtFormEmployee>(entity =>
@@ -231,6 +238,36 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.UserName).HasMaxLength(100);
             entity.Property(e => e.PasswordHash).HasMaxLength(200);
             entity.Property(e => e.Token).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<OtFormBatch>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_OtFormBatches");
+            entity.HasIndex(e => e.DepartmentId, "IX_OtFormBatches_DepartmentId");
+            entity.HasIndex(e => e.Status, "IX_OtFormBatches_Status");
+
+            entity.Property(e => e.ProcessedByUserName).HasMaxLength(100);
+            entity.Property(e => e.ProcessedByFullName).HasMaxLength(255);
+
+            entity.HasOne(d => d.Department).WithMany()
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OtFormBatches_Departments_DepartmentId");
+        });
+
+        modelBuilder.Entity<OtFormBatchEmailToken>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_OtFormBatchEmailTokens");
+            entity.HasIndex(e => e.Token, "IX_OtFormBatchEmailTokens_Token").IsUnique();
+            entity.HasIndex(e => e.OtFormBatchId, "IX_OtFormBatchEmailTokens_OtFormBatchId");
+
+            entity.Property(e => e.ApproverUserName).HasMaxLength(100);
+            entity.Property(e => e.ApproverFullName).HasMaxLength(255);
+            entity.Property(e => e.Token).HasMaxLength(64);
+
+            entity.HasOne(d => d.OtFormBatch).WithMany(p => p.OtFormBatchEmailTokens)
+                .HasForeignKey(d => d.OtFormBatchId)
+                .HasConstraintName("FK_OtFormBatchEmailTokens_OtFormBatches_OtFormBatchId");
         });
 
         OnModelCreatingPartial(modelBuilder);

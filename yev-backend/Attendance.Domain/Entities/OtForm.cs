@@ -43,6 +43,10 @@ public partial class OtForm
 
     public bool IsDeleted { get; set; }
 
+    // "Đơn tổng" this form was swept into, once it reaches OtFormStatus.Pending (awaiting Department
+    // Manager) — null until the daily sweep picks it up (see docs/attendance-module.md — §Đơn tổng).
+    public int? OtFormBatchId { get; set; }
+
     public virtual Group Group { get; set; } = null!;
 
     public virtual Department Department { get; set; } = null!;
@@ -50,6 +54,8 @@ public partial class OtForm
     public virtual Reason Reason { get; set; } = null!;
 
     public virtual OtCase OtCase { get; set; } = null!;
+
+    public virtual OtFormBatch? OtFormBatch { get; set; }
 
     public virtual ProcessPart? ProcessPart { get; set; }
 

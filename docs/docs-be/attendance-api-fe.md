@@ -20,6 +20,12 @@
 - **Cập nhật 2026-07-31 (cùng ngày, thêm 1 đợt sửa)**: (1) bỏ luôn `secondaryPassword` khỏi kênh JWT `POST /{id}/employees/remove` (`RemoveOtFormEmployeeDto` nay chỉ còn `{ EmployeeId, Reason }`) — người dùng phản hồi hành động loại người không cần xác thực lại, nay CẢ 2 kênh (JWT + email) loại nhân viên đều không cần mật khẩu cấp 2, chỉ Duyệt/Từ chối (§4.4/§4.5/§4.6) mới cần; (2) redesign UI khối "Yêu cầu hỗ trợ khác" ở `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx` từ text phẳng sang badge Có/Không (icon `Check`/`X` màu xanh lá/xám) + icon theo mục (`Utensils`/`Car`/`Printer`) — không đổi field/response nào, chỉ UI.
 - **Cập nhật 2026-07-31 (breaking, giới hạn lại "Sửa đơn")**: `PUT /api/OtForm/{id}` (§4.1b) trước đây sửa được toàn bộ đơn giống hệt lúc tạo, nay **chỉ còn sửa được giờ kết thúc thực tế của từng nhân viên đang có trong đơn** — chốt qua AskUserQuestion. `UpdateOtFormDto` đổi hẳn còn `{ Employees: [{ EmployeeId, EndTime }] }`, không còn `GroupId`/`DepartmentId`/`ReasonId`/`OtCaseId`/`Date`/`StartTime`/`EndTime`(chung)/`SubReason`/`TotalHour`/`ProcessPart`/`NoteVn`/`NoteJp` nào. Danh sách nhân viên trong body phải khớp **chính xác** tập nhân viên active của đơn (không thêm/bớt được nữa — bớt người dùng riêng `POST /{id}/employees/remove`, §4.5a). FE (`CreateOtFormPage.tsx`) khoá toàn bộ field khác + đổi bảng chọn nhân viên sang bảng cố định chỉ sửa được cột "Giờ kết thúc".
 - **Cập nhật 2026-08-01 (mới, "Cấu hình phiếu ăn & giới hạn lũy kế")**: chốt qua AskUserQuestion — 2 nhóm ngưỡng trước đây hardcode (mốc giờ nhận phiếu ăn `> 2h` ở BE; ngưỡng cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào `AttendanceSetting`, Admin tự sửa qua UI, không cần deploy lại. Thêm `GET/PUT /api/AttendanceSetting` (§6d) — `GET` mở cho mọi tài khoản đăng nhập, `PUT` cần permission mới `Attendance.Setting.Update` (chỉ Admin). `OtFormEmployeeDto.isEligibleForMeal` đổi ngưỡng từ hardcode `> 2h` sang `>= mainMealTicketMinHours` (mặc định 2.5h). FE `CreateOtFormPage.tsx` **tự tính** `processPart.mainTicketCount`/`secondaryTicketCount` theo giờ OT từng người (>= ngưỡng → phiếu chính, dưới → phiếu phụ, mọi người đều nhận đúng 1 trong 2 loại) — người lập đơn vẫn sửa tay được, gõ đè thì tắt tự tính và hiện nút "Tính lại". Thêm tab "Cấu hình" trong `/ot/categories` (Admin) để sửa 3 ngưỡng này.
+- **Cập nhật 2026-08-06 (mới, "Đơn tổng")**: chốt qua AskUserQuestion — gom nhiều `OtForm` đang chờ đúng
+  cấp Trưởng phòng (`status=0 Pending`) của cùng 1 Phòng ban thành 1 "Đơn tổng", job chạy 15:00 hằng
+  ngày, gửi mail (+ nhắc lại mỗi ngày nếu chưa xử lý), Trưởng phòng duyệt/từ chối hàng loạt 1 lần thay vì
+  từng đơn. Thêm hẳn `OtFormBatchController` (`/api/OtFormBatch`, §6e) — không đụng gì tới các endpoint
+  `/api/OtForm` hiện có (mỗi đơn thành viên vẫn duyệt qua đúng `ApproveAsync`/`RejectAsync` nội bộ).
+  Route public mới `/xac-nhan-don-tong?token=...`; menu app mới "Đơn tổng" (`/ot/batches`, §1.4).
 
 ## 1. Tổng quan nghiệp vụ, vai trò & luồng UI (đọc trước khi code màn hình)
 
@@ -235,6 +241,7 @@ Giấy tăng ca (Attendance)
 │     ├── Chờ tôi duyệt            [có OTForm.Approve]
 │     ├── Đơn đã xử lý             [mọi role]  (GET /my-actions, §4.2b)
 │     └── Đơn tôi tham gia (mới)   [mọi role]  (GET /my-participations, §4.2c)
+├── Đơn tổng (mới, 2026-08-06)  [có OTForm.Approve]  (GET /api/OtFormBatch/grid-list, §6e — dự phòng cho kênh email)
 ├── Cài đặt chữ ký           [mọi role nghiệp vụ]
 ├── Lũy kế của tôi           [nhân viên có Employee.UserName gán sẵn — xem §3.6]
 └── Quản trị (Admin)
@@ -244,7 +251,7 @@ Giấy tăng ca (Attendance)
 ```
 > **"Sửa đơn tăng ca" KHÔNG phải menu riêng** — chỉ là nút "Sửa" xuất hiện trong tab "Đơn của tôi"/"Chi tiết đơn" khi `isEditable = true`, mở lại đúng form "Tạo đơn tăng ca" (§1.3.A) với dữ liệu có sẵn.
 > **"Lũy kế của tôi"** không gắn permission Attendance nào (bất kỳ user đăng nhập nào, kể cả không có Role nghiệp vụ) — chỉ hoạt động nếu Admin đã gán `Employee.UserName` = username AD của họ.
-> **2 trang "Xác nhận cập nhật chữ ký" / "Xác nhận duyệt đơn qua email" (§6b, §4.6) KHÔNG nằm trong sơ đồ menu này** — đây là route **public**, chỉ mở qua link trong email, không cần đăng nhập SPA và không hiện trong bất kỳ menu điều hướng nào.
+> **3 trang "Xác nhận cập nhật chữ ký" / "Xác nhận duyệt đơn qua email" / "Xác nhận duyệt đơn tổng qua email" (§6b, §4.6, §6e) KHÔNG nằm trong sơ đồ menu này** — đây là route **public**, chỉ mở qua link trong email, không cần đăng nhập SPA và không hiện trong bất kỳ menu điều hướng nào.
 
 ## 2. Enum dùng chung (gửi/nhận là số `int`, FE tự map label)
 
@@ -801,6 +808,75 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
   — vẫn dùng cứng giá trị mặc định (2.5h/25h/300h) cho màu cảnh báo lũy kế. Chấp nhận được vì đây chỉ
   là gợi ý hiển thị, không phải số liệu quyết định nghiệp vụ.
 - Thành công → `data` = `AttendanceSettingDto` đầy đủ (cả GET lẫn PUT), không cần gọi lại `GetById`.
+
+## 6e. Đơn tổng (`/api/OtFormBatch`) — gom nhiều đơn theo Phòng ban, duyệt 1 lần (mới, 2026-08-06)
+
+**Lý do**: đơn tăng ca tới cấp Trưởng phòng (`otForm.status=0 Pending`) trước đây phải duyệt riêng lẻ
+từng đơn. Mỗi ngày **15:00**, hệ thống tự gom **các đơn MỚI, chưa từng vào batch nào** của cùng 1 Phòng
+ban thành 1 "Đơn tổng", gửi mail cho Trưởng phòng — bấm vào duyệt 1 lần là cả loạt được xử lý. Batch cũ
+chưa xử lý xong (từ ngày trước) được gửi **mail nhắc lại mỗi ngày** (không tạo batch mới, không gộp
+thêm đơn — 1 đơn chỉ thuộc đúng 1 batch). Chi tiết thiết kế BE ở
+[attendance-module.md §Đơn tổng](attendance-module.md).
+
+| Method | Route | Permission | Việc gì |
+|---|---|---|---|
+| GET | `/api/OtFormBatch/grid-list?pageIndex&pageSize` | `Attendance.OTForm.Approve` | Danh sách batch (Admin thấy tất cả; còn lại chỉ thấy batch thuộc Department mình có `UserApprovalScope(DepartmentManager)`) |
+| GET | `/api/OtFormBatch/{id}` | `Attendance.OTForm.Approve` | Chi tiết 1 batch |
+| POST | `/api/OtFormBatch/{id}/approve` | `Attendance.OTForm.Approve` | Duyệt/Từ chối hàng loạt |
+| GET | `/api/OtFormBatch/email-confirm/{token}` | `[AllowAnonymous]` | Chi tiết qua link email |
+| POST | `/api/OtFormBatch/email-confirm/{token}/approve` | `[AllowAnonymous]` | Duyệt/Từ chối qua link email |
+
+```jsonc
+// OtFormBatchListItemDto — item của grid-list
+{
+  "id": 12, "departmentId": 1, "departmentNameVn": "Xưởng lắp ráp", "departmentNameJp": null,
+  "batchDate": "2026-08-06", "status": 0,           // OtFormBatchStatus: 0=Pending, 1=Processed
+  "formCount": 3, "employeeCount": 8, "totalHour": 14.5,
+  "createdAt": "2026-08-06T15:00:00", "processedAt": null, "processedByFullName": null
+}
+
+// OtFormBatchDto — response GET /{id} (và /email-confirm/{token})
+{
+  "id": 12, "departmentId": 1, "departmentNameVn": "Xưởng lắp ráp", "departmentNameJp": null,
+  "batchDate": "2026-08-06", "status": 0,
+  "createdAt": "2026-08-06T15:00:00", "processedAt": null, "processedByUserName": null, "processedByFullName": null,
+  "otForms": [   // CHỈ gồm đơn vẫn còn status==Pending (còn hiệu lực xử lý)
+    {
+      "otFormId": 101, "groupNameVn": "Nhóm 1", "groupNameJp": null,
+      "reasonNameVn": "Tăng ca sản xuất gấp", "reasonNameJp": null, "otCaseCode": "TH1",
+      "date": "2026-08-06", "startTime": "17:30:00", "endTime": "20:00:00", "totalHour": 2.5,
+      "createdByUserName": "nva", "createdByFullName": "Nguyễn Văn A", "numberOfEmployee": 3,
+      "employees": [ /* OtFormEmployeeDto[] — chỉ nhân viên ĐANG active, xem §4.3 */ ]
+    }
+  ]
+}
+```
+
+- **Duyệt hàng loạt** — body `ProcessOtFormBatchDto`:
+  ```jsonc
+  {
+    "secondaryPassword": "••••••",
+    "forms": [
+      { "otFormId": 101, "decision": 0, "rejectReason": null, "excludedEmployeeIds": [5] }, // 0=Approve, loại nhân viên id=5
+      { "otFormId": 102, "decision": 1, "rejectReason": "Không đủ định biên", "excludedEmployeeIds": null } // 1=Reject cả đơn
+    ]
+  }
+  ```
+  `forms[]` **phải khớp CHÍNH XÁC** (không thiếu/thừa) tập `otFormId` đang có trong `otForms[]` của batch
+  lúc `GET` — thiếu 1 đơn hoặc thừa 1 `otFormId` không thuộc batch → 400. `decision=1` (Reject) bắt buộc
+  `rejectReason`. `decision=0` (Approve) mà `excludedEmployeeIds` khiến đơn còn 0 người active → 400,
+  báo dùng `decision=1` cho đơn đó thay vì bỏ chọn hết (khớp giới hạn sẵn có của "Loại nhân viên khỏi
+  đơn", §4.5a — không xoá được người cuối cùng). Thành công → `data` = `OtFormBatchDto` đã cập nhật
+  (`status=1 Processed`, `otForms` rỗng vì mọi đơn thành viên không còn `Pending` nữa).
+- Mỗi đơn `decision=0` vẫn tiếp tục đúng luồng duyệt hiện có (`POST /OtForm/{id}/approve` nội bộ) — nếu
+  `OtCase.RequiredApprovalLevel` cần thêm cấp (Trưởng xưởng/TGĐ) thì đơn đó vẫn nhận mail duyệt tiếp như
+  bình thường, KHÔNG kết thúc ngay ở bước Trưởng phòng chỉ vì đã qua "Đơn tổng".
+- **Không có `SubReason`/`comment` cho quyết định Approve** — chỉ `decision=1` mới có ô lý do.
+- Màn "Đơn tổng" trong app (`/ot/batches`, menu cùng cấp "Đơn tăng ca", gate bằng `Attendance.OTForm.Approve`
+  — trùng điều kiện tab "Chờ tôi duyệt") dự phòng khi Trưởng phòng mất/quên link email — danh sách rỗng tự
+  nhiên nếu không có `UserApprovalScope(DepartmentManager)` nào, không cần ẩn hẳn mục menu.
+- Trang public `/xac-nhan-don-tong?token=...` (FE tự xây, không đăng nhập SPA) — cùng nguyên tắc
+  `/xac-nhan-don` (§4.6): token là thông tin xác thực duy nhất, không nằm trong sơ đồ menu.
 
 ## 7. Tổng hợp endpoint
 

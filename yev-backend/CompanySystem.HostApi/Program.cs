@@ -83,6 +83,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddDIConfig(builder.Configuration);
 
 builder.Services.AddHostedService<DeviceLiquidationBackgroundService>();
+builder.Services.AddHostedService<OtFormBatchBackgroundService>();
 
 var app = builder.Build();
 

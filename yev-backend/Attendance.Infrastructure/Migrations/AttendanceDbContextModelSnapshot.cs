@@ -249,6 +249,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<int>("OtCaseId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("OtFormBatchId")
+                        .HasColumnType("int");
+
                     b.Property<int>("ReasonId")
                         .HasColumnType("int");
 
@@ -267,6 +270,8 @@ namespace Attendance.Infrastructure.Migrations
                         .HasColumnType("decimal(10,2)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OtFormBatchId");
 
                     b.HasIndex(new[] { "CreatedByUserName" }, "IX_OtForms_CreatedByUserName");
 
@@ -373,6 +378,95 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "OtFormId" }, "IX_OtFormApprovalHistories_OtFormId");
 
                     b.ToTable("OtFormApprovalHistories");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly>("BatchDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ProcessedByFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ProcessedByUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OtFormBatches");
+
+                    b.HasIndex(new[] { "DepartmentId" }, "IX_OtFormBatches_DepartmentId");
+
+                    b.HasIndex(new[] { "Status" }, "IX_OtFormBatches_Status");
+
+                    b.ToTable("OtFormBatches");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatchEmailToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ApproverFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ApproverUserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsReminder")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("OtFormBatchId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id")
+                        .HasName("PK_OtFormBatchEmailTokens");
+
+                    b.HasIndex(new[] { "OtFormBatchId" }, "IX_OtFormBatchEmailTokens_OtFormBatchId");
+
+                    b.HasIndex(new[] { "Token" }, "IX_OtFormBatchEmailTokens_Token")
+                        .IsUnique();
+
+                    b.ToTable("OtFormBatchEmailTokens");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormEmployee", b =>
@@ -728,6 +822,12 @@ namespace Attendance.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_OtForms_OtCases_OtCaseId");
 
+                    b.HasOne("Attendance.Domain.Entities.OtFormBatch", "OtFormBatch")
+                        .WithMany("OtForms")
+                        .HasForeignKey("OtFormBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_OtForms_OtFormBatches_OtFormBatchId");
+
                     b.HasOne("Attendance.Domain.Entities.Reason", "Reason")
                         .WithMany("OtForms")
                         .HasForeignKey("ReasonId")
@@ -740,6 +840,8 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("Group");
 
                     b.Navigation("OtCase");
+
+                    b.Navigation("OtFormBatch");
 
                     b.Navigation("Reason");
                 });
@@ -766,6 +868,30 @@ namespace Attendance.Infrastructure.Migrations
                         .HasConstraintName("FK_OtFormApprovalHistories_OtForms_OtFormId");
 
                     b.Navigation("OtForm");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatch", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormBatches_Departments_DepartmentId");
+
+                    b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatchEmailToken", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.OtFormBatch", "OtFormBatch")
+                        .WithMany("OtFormBatchEmailTokens")
+                        .HasForeignKey("OtFormBatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormBatchEmailTokens_OtFormBatches_OtFormBatchId");
+
+                    b.Navigation("OtFormBatch");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormEmployee", b =>
@@ -834,6 +960,13 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtFormEmployees");
 
                     b.Navigation("ProcessPart");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatch", b =>
+                {
+                    b.Navigation("OtFormBatchEmailTokens");
+
+                    b.Navigation("OtForms");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Reason", b =>

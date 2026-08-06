@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Attendance.Application.Dtos.OtFormBatches;
 using Attendance.Application.Dtos.OtForms;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
@@ -51,6 +52,25 @@ namespace Attendance.Application.Services
                     Action = h.Action,
                     ActionAt = h.ActionAt
                 }).ToList()
+        };
+
+        // Shared by GetBatchesAsync — FormCount/EmployeeCount/TotalHour only count member forms still
+        // Status==Pending (still waiting on THIS batch); a form resolved individually outside the batch
+        // flow no longer counts (see docs/attendance-module.md — §Đơn tổng).
+        private static readonly Expression<Func<OtFormBatch, OtFormBatchListItemDto>> ToBatchListItemDto = b => new OtFormBatchListItemDto
+        {
+            Id = b.Id,
+            DepartmentId = b.DepartmentId,
+            DepartmentNameVn = b.Department.DepartmentNameVn,
+            DepartmentNameJp = b.Department.DepartmentNameJp,
+            BatchDate = b.BatchDate,
+            Status = b.Status,
+            FormCount = b.OtForms.Count(f => !f.IsDeleted && f.Status == (int)OtFormStatus.Pending),
+            EmployeeCount = b.OtForms.Where(f => !f.IsDeleted && f.Status == (int)OtFormStatus.Pending).Sum(f => (int?)f.NumberOfEmployee) ?? 0,
+            TotalHour = b.OtForms.Where(f => !f.IsDeleted && f.Status == (int)OtFormStatus.Pending).Sum(f => (decimal?)f.TotalHour) ?? 0,
+            CreatedAt = b.CreatedAt,
+            ProcessedAt = b.ProcessedAt,
+            ProcessedByFullName = b.ProcessedByFullName
         };
 
         private readonly IUserDirectoryService _userDirectoryService;
@@ -1060,6 +1080,380 @@ namespace Attendance.Application.Services
                 ApprovalLevel.GeneralDirector => OtFormStatus.Completed,
                 _ => throw new DomainException("Cấp duyệt không hợp lệ.")
             };
+        }
+
+        // === "Đơn tổng" — gom nhiều OtForm đang chờ đúng cấp DepartmentManager của cùng 1 Department,
+        // duyệt 1 lần thay vì từng đơn (see docs/attendance-module.md — §Đơn tổng). ===
+
+        public async Task<PagedResponse<OtFormBatchListItemDto>> GetBatchesAsync(
+            string userName, bool isAdmin, int pageIndex, int pageSize)
+        {
+            var departmentIds = new List<int>();
+            var hasAllScope = false;
+
+            if (!isAdmin)
+            {
+                var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
+                    !x.IsDeleted && x.UserName == userName && x.ApprovalLevel == (int)ApprovalLevel.DepartmentManager);
+
+                departmentIds = scopes.Where(s => s.ScopeType == (int)ScopeType.Department).Select(s => s.ScopeId).ToList();
+                hasAllScope = scopes.Any(s => s.ScopeType == (int)ScopeType.All);
+            }
+
+            var query = _unitOfWork.OtFormBatches.GetQueryable(false, x => x.Department)
+                .Where(b => isAdmin || hasAllScope || departmentIds.Contains(b.DepartmentId))
+                .OrderByDescending(b => b.Id);
+
+            return await _unitOfWork.OtFormBatches.ToPagedResponseAsync(query, pageIndex, pageSize, ToBatchListItemDto);
+        }
+
+        public async Task<OtFormBatchDto> GetBatchByIdAsync(int id)
+        {
+            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == id, x => x.Department);
+            batch.OrThrowNotFound("Đơn tổng", id);
+
+            return await BuildBatchDtoAsync(batch!);
+        }
+
+        public async Task<OtFormBatchDto> GetBatchByEmailTokenAsync(string token)
+        {
+            var emailToken = await ResolveBatchEmailTokenAsync(token, requireUnused: false);
+
+            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == emailToken.OtFormBatchId, x => x.Department);
+            batch.OrThrowNotFound("Đơn tổng", emailToken.OtFormBatchId);
+
+            return await BuildBatchDtoAsync(batch!);
+        }
+
+        public async Task<OtFormBatchDto> ProcessBatchByEmailTokenAsync(string token, ProcessOtFormBatchDto request)
+        {
+            var emailToken = await ResolveBatchEmailTokenAsync(token, requireUnused: true);
+
+            var result = await ProcessBatchAsync(emailToken.OtFormBatchId, emailToken.ApproverUserName, emailToken.ApproverFullName, request);
+
+            emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
+            _unitOfWork.OtFormBatchEmailTokens.Update(emailToken);
+            await _unitOfWork.SaveChangesAsync();
+
+            return result;
+        }
+
+        // Duyệt/Từ chối hàng loạt — mỗi đơn nhỏ (còn Status==Pending trong batch) BẮT BUỘC có đúng 1
+        // quyết định trong request.Forms. Không viết lại logic duyệt/từ chối: gọi thẳng ApproveAsync/
+        // RejectAsync/RemoveEmployeeCoreAsync đã có cho từng đơn — mỗi đơn tiếp tục đúng luồng hiện có
+        // (DetermineNextStatus, cộng lũy kế, gửi mail cấp kế tiếp). Không có Admin bypass, cùng tinh
+        // thần ApproveAsync ở cấp DepartmentManager (chỉ cấp Submitter mới bypass được cho Admin).
+        public async Task<OtFormBatchDto> ProcessBatchAsync(
+            int batchId, string approverUserName, string? approverFullName, ProcessOtFormBatchDto request)
+        {
+            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == batchId, x => x.Department);
+            batch.OrThrowNotFound("Đơn tổng", batchId);
+
+            if (batch!.Status != (int)OtFormBatchStatus.Pending)
+                throw new DomainException("Đơn tổng này đã được xử lý.");
+
+            var scopes = await _unitOfWork.UserApprovalScopes.FindAsync(x =>
+                !x.IsDeleted && x.UserName == approverUserName && x.ApprovalLevel == (int)ApprovalLevel.DepartmentManager);
+            var authorized = scopes.Any(s =>
+                (s.ScopeType == (int)ScopeType.Department && s.ScopeId == batch.DepartmentId) ||
+                s.ScopeType == (int)ScopeType.All);
+            if (!authorized)
+                throw new DomainException("Bạn không được phân quyền duyệt đơn tổng của phòng ban này.");
+
+            var activeForms = await _unitOfWork.OtForms.FindAsync(x =>
+                x.OtFormBatchId == batchId && !x.IsDeleted && x.Status == (int)OtFormStatus.Pending);
+
+            if (activeForms.Count == 0)
+            {
+                // Every member form was already resolved individually outside the batch flow (normal
+                // "Chờ tôi duyệt" tab) — auto-close instead of leaving this batch Pending forever.
+                batch.Status = (int)OtFormBatchStatus.Processed;
+                batch.ProcessedAt = TimeHelper.GetCurrentUtcTime();
+                _unitOfWork.OtFormBatches.Update(batch);
+                await _unitOfWork.SaveChangesAsync();
+                throw new DomainException("Toàn bộ đơn trong đơn tổng này đã được xử lý ở nơi khác, không còn gì để duyệt.");
+            }
+
+            var activeFormIds = activeForms.Select(x => x.Id).ToHashSet();
+            var requestedFormIds = request.Forms.Select(x => x.OtFormId).ToHashSet();
+
+            if (requestedFormIds.Count != request.Forms.Count)
+                throw new DomainException("Danh sách đơn có mã trùng lặp.");
+
+            if (!requestedFormIds.SetEquals(activeFormIds))
+                throw new DomainException("Danh sách đơn trong yêu cầu không khớp với danh sách đơn hiện còn hiệu lực của đơn tổng này.");
+
+            // Fail-fast validation BEFORE writing anything, so the batch action never ends up half-applied.
+            var activeEmployeeCountByForm = (await _unitOfWork.OtFormEmployees.FindAsync(
+                    x => activeFormIds.Contains(x.OtFormId) && !x.IsRemoved))
+                .GroupBy(x => x.OtFormId)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            foreach (var item in request.Forms)
+            {
+                if ((OtFormBatchFormDecision)item.Decision == OtFormBatchFormDecision.Reject)
+                {
+                    if (string.IsNullOrWhiteSpace(item.RejectReason))
+                        throw new DomainException($"Đơn #{item.OtFormId}: lý do từ chối không được để trống.");
+                }
+                else
+                {
+                    var excludedCount = item.ExcludedEmployeeIds?.Distinct().Count() ?? 0;
+                    var totalActive = activeEmployeeCountByForm.GetValueOrDefault(item.OtFormId, 0);
+                    if (excludedCount >= totalActive)
+                        throw new DomainException($"Đơn #{item.OtFormId}: không thể bỏ chọn hết nhân viên, hãy dùng quyết định Từ chối cho đơn này.");
+                }
+            }
+
+            // Verified once here (fail fast at batch level); ApproveAsync/RejectAsync below re-verify
+            // it again per form — cheap and harmless, avoids touching their existing signatures.
+            await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
+
+            foreach (var item in request.Forms)
+            {
+                if ((OtFormBatchFormDecision)item.Decision == OtFormBatchFormDecision.Reject)
+                {
+                    await RejectAsync(item.OtFormId, approverUserName, approverFullName, new RejectOtFormDto
+                    {
+                        Comment = item.RejectReason!,
+                        SecondaryPassword = request.SecondaryPassword
+                    });
+                }
+                else
+                {
+                    foreach (var employeeId in (item.ExcludedEmployeeIds ?? new List<int>()).Distinct())
+                    {
+                        await RemoveEmployeeCoreAsync(item.OtFormId, approverUserName, approverFullName, isAdmin: false,
+                            employeeId, "Bị loại khi duyệt đơn tổng");
+                    }
+
+                    await ApproveAsync(item.OtFormId, approverUserName, approverFullName, new ApproveOtFormDto
+                    {
+                        SecondaryPassword = request.SecondaryPassword
+                    });
+                }
+            }
+
+            batch.Status = (int)OtFormBatchStatus.Processed;
+            batch.ProcessedAt = TimeHelper.GetCurrentUtcTime();
+            batch.ProcessedByUserName = approverUserName;
+            batch.ProcessedByFullName = approverFullName;
+            _unitOfWork.OtFormBatches.Update(batch);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await BuildBatchDtoAsync(batch);
+        }
+
+        // Daily sweep, called by OtFormBatchBackgroundService (default 15:00, see docs/attendance-module.md
+        // — §Đơn tổng). Does 2 things: (a) bundles every OtForm still un-batched (OtFormBatchId == null)
+        // and Status==Pending into ONE NEW batch per Department, (b) sends a reminder for every still-open
+        // batch from a PREVIOUS day — deliberately NEVER re-bundles a form that already belongs to a batch,
+        // so a form is only ever the subject of exactly 1 "new batch" email, plus 1 reminder per day it
+        // stays unresolved (chốt qua AskUserQuestion — xem docs).
+        public async Task RunDailyBatchSweepAsync()
+        {
+            var todayDateOnly = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime().Date);
+
+            var unbatchedForms = await _unitOfWork.OtForms.FindAsync(x =>
+                !x.IsDeleted && x.Status == (int)OtFormStatus.Pending && x.OtFormBatchId == null);
+
+            var newBatches = new List<OtFormBatch>();
+            foreach (var group in unbatchedForms.GroupBy(x => x.DepartmentId))
+            {
+                var newBatch = new OtFormBatch
+                {
+                    DepartmentId = group.Key,
+                    BatchDate = todayDateOnly,
+                    Status = (int)OtFormBatchStatus.Pending,
+                    CreatedAt = TimeHelper.GetCurrentUtcTime()
+                };
+                await _unitOfWork.OtFormBatches.AddAsync(newBatch);
+                newBatches.Add(newBatch);
+
+                foreach (var form in group)
+                {
+                    form.OtFormBatch = newBatch;
+                    _unitOfWork.OtForms.Update(form);
+                }
+            }
+
+            if (newBatches.Count > 0)
+                await _unitOfWork.SaveChangesAsync();
+
+            foreach (var batch in newBatches)
+                await NotifyBatchApproversAsync(batch, isReminder: false);
+
+            var openOldBatches = await _unitOfWork.OtFormBatches.FindAsync(x =>
+                x.Status == (int)OtFormBatchStatus.Pending && x.BatchDate < todayDateOnly);
+
+            foreach (var batch in openOldBatches)
+            {
+                var stillPendingCount = (await _unitOfWork.OtForms.FindAsync(x =>
+                    x.OtFormBatchId == batch.Id && !x.IsDeleted && x.Status == (int)OtFormStatus.Pending)).Count;
+
+                if (stillPendingCount == 0)
+                {
+                    // Every member form got resolved individually (outside the batch flow) since this
+                    // batch was created — auto-close it instead of nagging forever with reminder mails.
+                    batch.Status = (int)OtFormBatchStatus.Processed;
+                    batch.ProcessedAt = TimeHelper.GetCurrentUtcTime();
+                    _unitOfWork.OtFormBatches.Update(batch);
+                    await _unitOfWork.SaveChangesAsync();
+                    continue;
+                }
+
+                await NotifyBatchApproversAsync(batch, isReminder: true);
+            }
+        }
+
+        private async Task<OtFormBatchDto> BuildBatchDtoAsync(OtFormBatch batch)
+        {
+            var forms = await _unitOfWork.OtForms.FindWithIncludesAsync(
+                x => x.OtFormBatchId == batch.Id && !x.IsDeleted && x.Status == (int)OtFormStatus.Pending,
+                x => x.Group, x => x.Reason, x => x.OtCase);
+
+            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+            var formIds = forms.Select(f => f.Id).ToList();
+            var allEmployees = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
+                x => formIds.Contains(x.OtFormId) && !x.IsRemoved, x => x.Employee);
+            var employeesByFormId = allEmployees.ToLookup(x => x.OtFormId);
+
+            return new OtFormBatchDto
+            {
+                Id = batch.Id,
+                DepartmentId = batch.DepartmentId,
+                DepartmentNameVn = batch.Department.DepartmentNameVn,
+                DepartmentNameJp = batch.Department.DepartmentNameJp,
+                BatchDate = batch.BatchDate,
+                Status = batch.Status,
+                CreatedAt = batch.CreatedAt,
+                ProcessedAt = batch.ProcessedAt,
+                ProcessedByUserName = batch.ProcessedByUserName,
+                ProcessedByFullName = batch.ProcessedByFullName,
+                OtForms = forms.Select(f => new OtFormBatchItemDto
+                {
+                    OtFormId = f.Id,
+                    GroupNameVn = f.Group.GroupNameVn,
+                    GroupNameJp = f.Group.GroupNameJp,
+                    ReasonNameVn = f.Reason.ReasonNameVn,
+                    ReasonNameJp = f.Reason.ReasonNameJp,
+                    OtCaseCode = f.OtCase.Code,
+                    Date = f.Date,
+                    StartTime = f.StartTime,
+                    EndTime = f.EndTime,
+                    TotalHour = f.TotalHour,
+                    CreatedByUserName = f.CreatedByUserName,
+                    CreatedByFullName = f.CreatedByFullName,
+                    NumberOfEmployee = f.NumberOfEmployee,
+                    Employees = employeesByFormId[f.Id].Select(x => new OtFormEmployeeDto
+                    {
+                        EmployeeId = x.EmployeeId,
+                        EmployeeCode = x.Employee.Code,
+                        FullName = $"{x.Employee.LastName} {x.Employee.FirstName}",
+                        StartTime = x.StartTime,
+                        EndTime = x.EndTime,
+                        NoteVn = x.NoteVn,
+                        NoteJp = x.NoteJp,
+                        MonthToDate = x.MonthToDate,
+                        YearToDate = x.YearToDate,
+                        IsEligibleForMeal = (decimal)(x.EndTime - x.StartTime).TotalHours >= mainMealTicketMinHours,
+                        DidEat = x.DidEat,
+                        IsRemoved = x.IsRemoved,
+                        RemovedByUserName = x.RemovedByUserName,
+                        RemovedByFullName = x.RemovedByFullName,
+                        RemovedAtLevel = x.RemovedAtLevel,
+                        RemovedAt = x.RemovedAt,
+                        RemoveReason = x.RemoveReason
+                    }).ToList()
+                }).ToList()
+            };
+        }
+
+        // Người nhận luôn là mọi UserName giữ UserApprovalScope(ApprovalLevel=DepartmentManager) khớp
+        // Department của batch (hoặc ScopeType.All) — tái dùng ResolveEligibleApproverUserNamesAsync với
+        // groupId: 0 (sentinel không khớp Group nào, vì batch gom nhiều Group, không gắn 1 Group cụ thể).
+        private async Task NotifyBatchApproversAsync(OtFormBatch batch, bool isReminder)
+        {
+            var approverUserNames = await ResolveEligibleApproverUserNamesAsync(ApprovalLevel.DepartmentManager, batch.DepartmentId, groupId: 0);
+            if (approverUserNames.Count == 0) return;
+
+            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == batch.DepartmentId);
+            var departmentName = FormatBilingual(department?.DepartmentNameVn, department?.DepartmentNameJp);
+
+            var pendingForms = await _unitOfWork.OtForms.FindAsync(x =>
+                x.OtFormBatchId == batch.Id && !x.IsDeleted && x.Status == (int)OtFormStatus.Pending);
+            var formCount = pendingForms.Count;
+            var employeeCount = pendingForms.Sum(x => x.NumberOfEmployee);
+            var totalHour = pendingForms.Sum(x => x.TotalHour);
+
+            var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
+            var now = TimeHelper.GetCurrentUtcTime();
+            var hasNewToken = false;
+
+            foreach (var approverUserName in approverUserNames)
+            {
+                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(approverUserName);
+                if (string.IsNullOrWhiteSpace(email)) continue;
+
+                var emailToken = new OtFormBatchEmailToken
+                {
+                    OtFormBatchId = batch.Id,
+                    ApproverUserName = approverUserName,
+                    ApproverFullName = fullName,
+                    IsReminder = isReminder,
+                    Token = TokenHelper.GenerateSecureToken(),
+                    ExpiresAt = now.AddDays(EmailApprovalTokenExpiryDays),
+                    CreatedAt = now
+                };
+                await _unitOfWork.OtFormBatchEmailTokens.AddAsync(emailToken);
+                hasNewToken = true;
+
+                var link = $"{baseUrl}/xac-nhan-don-tong?token={emailToken.Token}";
+
+                try
+                {
+                    var html = _emailTemplateRenderer.Render("OtForm/BatchApprovalNotification.html", new Dictionary<string, string>
+                    {
+                        ["ApproverFullName"] = fullName ?? approverUserName,
+                        ["OtFormBatchId"] = batch.Id.ToString(),
+                        ["DepartmentName"] = departmentName,
+                        ["BatchDate"] = batch.BatchDate.ToString("dd/MM/yyyy"),
+                        ["FormCount"] = formCount.ToString(),
+                        ["EmployeeCount"] = employeeCount.ToString(),
+                        ["TotalHour"] = totalHour.ToString("0.##"),
+                        ["ConfirmLink"] = link,
+                        ["ExpiryDays"] = EmailApprovalTokenExpiryDays.ToString()
+                    });
+
+                    var subject = isReminder
+                        ? $"[Nhắc nhở] Đơn tổng #{batch.Id} đang chờ bạn duyệt - YevManagement"
+                        : $"Đơn tổng #{batch.Id} đang chờ bạn duyệt - YevManagement";
+
+                    await _emailService.SendAsync(email, subject, html);
+                }
+                catch (FileNotFoundException)
+                {
+                    // A missing template file is a deployment error — skip this recipient rather than
+                    // blocking the whole sweep, same principle as NotifyEligibleApproversAsync.
+                }
+            }
+
+            if (hasNewToken)
+                await _unitOfWork.SaveChangesAsync();
+        }
+
+        private async Task<OtFormBatchEmailToken> ResolveBatchEmailTokenAsync(string token, bool requireUnused)
+        {
+            var emailToken = await _unitOfWork.OtFormBatchEmailTokens.FirstOrDefaultAsync(x => x.Token == token);
+            emailToken.OrThrowNotFound("Link duyệt đơn tổng qua email", token);
+
+            if (emailToken!.ExpiresAt < TimeHelper.GetCurrentUtcTime())
+                throw new DomainException("Link duyệt đơn tổng qua email đã hết hạn.");
+
+            if (requireUnused && emailToken.UsedAt != null)
+                throw new DomainException("Link duyệt đơn tổng này đã được sử dụng.");
+
+            return emailToken;
         }
     }
 }
