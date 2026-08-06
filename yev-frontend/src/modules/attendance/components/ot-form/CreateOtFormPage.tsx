@@ -223,6 +223,24 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     const { setting } = useAttendanceSetting();
 
+    // "Ăn uống" ở "Yêu cầu hỗ trợ khác" (cấp cả đơn, đặt suất ăn) và "Có ăn" của từng người (cấp cá
+    // nhân, quyết định +30 phút lũy kế + số phiếu) là 2 field ĐỘC LẬP ở BE — nhưng để tránh người lập
+    // đơn quên đổi tay "Có ăn" khi đã bỏ tích "Ăn uống" (dễ hiểu nhầm 2 cái liên quan nhau), FE tự
+    // đồng bộ GIÁ TRỊ MẶC ĐỊNH của "Có ăn" theo "Ăn uống" — vẫn cho sửa tay từng người sau đó (2026-08-06).
+    const mealServiceActive = processPartEnabled && processPart.isEat;
+
+    // Đồng bộ lại "Có ăn" mặc định cho MỌI người đang chọn mỗi khi "Ăn uống" đổi — so sánh snapshot
+    // ngay trong render (không dùng effect để setState, xem CLAUDE.md §4.5). Chỉ áp dụng ở màn Tạo
+    // mới — màn Sửa đơn khoá hẳn khối "Yêu cầu hỗ trợ khác" nên mealServiceActive không đổi sau khi
+    // đổ dữ liệu ban đầu, nhưng vẫn cần chặn tường minh để không lỡ ghi đè didEat vừa tải từ đơn cũ.
+    const [prevMealServiceActive, setPrevMealServiceActive] = useState(mealServiceActive);
+    if (!isEditMode && prevMealServiceActive !== mealServiceActive) {
+        setPrevMealServiceActive(mealServiceActive);
+        setEmployeeOverrides((current) =>
+            Object.fromEntries(Object.entries(current).map(([id, override]) => [id, { ...override, didEat: mealServiceActive }]))
+        );
+    }
+
     // Chữ ký "Người đề nghị" (đợt 4, 2026-07-16) KHÔNG còn gắn với bước tạo đơn — POST /api/OtForm chỉ
     // tạo status=Draft chưa ký, chữ ký thật chỉ bắt buộc ở bước Ký duyệt riêng (POST /{id}/submit, màn
     // "Chờ tôi ký duyệt"). Ở đây chỉ hiện gợi ý mềm, KHÔNG chặn nút Tạo đơn.
@@ -373,20 +391,26 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
 
     // Tự tính số phiếu ăn theo giờ OT THỰC TẾ của từng người đang chọn (docs §Cấu hình phiếu ăn):
-    // tăng ca >= mốc cấu hình (mặc định 2h30) → 1 phiếu CHÍNH, dưới mốc → 1 phiếu PHỤ. Mọi người đang
-    // chọn đều nhận đúng 1 trong 2 loại nên main + secondary luôn = số người chọn. Sữa KHÔNG tự tính —
-    // luôn để người lập đơn tự nhập.
+    // tăng ca >= mốc cấu hình (mặc định 2h30) → 1 phiếu CHÍNH, dưới mốc → 1 phiếu PHỤ. Người đủ ngưỡng
+    // nhưng tick "Không ăn" (didEat=false) thì KHÔNG tính vào phiếu nào cả — không ăn thì không cần
+    // suất, và họ đã được cộng bù 30 phút lũy kế thay vào đó (2026-08-06, xem §Có ăn hay không). Người
+    // dưới ngưỡng chưa có ô "Có ăn" để tự khai nên vẫn mặc định tính vào phiếu phụ như cũ. Sữa KHÔNG
+    // tự tính — luôn để người lập đơn tự nhập.
     const mealTicketCounts = useMemo(() => {
         let main = 0;
         let secondary = 0;
         for (const employeeId of selectedEmployeeIds) {
             const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
             const hours = computeTotalHour(startTime, employeeEndTime);
-            if (hours >= setting.mainMealTicketMinHours) main += 1;
-            else secondary += 1;
+            if (hours >= setting.mainMealTicketMinHours) {
+                const didEat = employeeOverrides[employeeId]?.didEat ?? mealServiceActive;
+                if (didEat) main += 1;
+            } else {
+                secondary += 1;
+            }
         }
         return { main, secondary };
-    }, [selectedEmployeeIds, employeeOverrides, startTime, endTime, setting.mainMealTicketMinHours]);
+    }, [selectedEmployeeIds, employeeOverrides, startTime, endTime, setting.mainMealTicketMinHours, mealServiceActive]);
 
     // Đồng bộ kết quả tự tính vào ô nhập — so sánh snapshot NGAY TRONG RENDER thay vì dùng effect
     // (CLAUDE.md §4.5: không setState đồng bộ trong useEffect). Dừng đồng bộ ngay khi người dùng tự gõ
@@ -419,7 +443,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId]
         );
         setEmployeeOverrides((current) =>
-            current[employeeId] ? current : { ...current, [employeeId]: { endTime, didEat: true, noteVn: "", noteJp: "" } }
+            current[employeeId]
+                ? current
+                : { ...current, [employeeId]: { endTime, didEat: mealServiceActive, noteVn: "", noteJp: "" } }
         );
     };
 
@@ -428,7 +454,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             ...current,
             [employeeId]: {
                 endTime: current[employeeId]?.endTime ?? endTime,
-                didEat: current[employeeId]?.didEat ?? true,
+                didEat: current[employeeId]?.didEat ?? mealServiceActive,
                 noteVn: current[employeeId]?.noteVn ?? "",
                 noteJp: current[employeeId]?.noteJp ?? "",
                 [field]: value,
@@ -505,7 +531,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
                     employeeId,
                     endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
-                    didEat: employeeOverrides[employeeId]?.didEat ?? true,
+                    didEat: employeeOverrides[employeeId]?.didEat ?? mealServiceActive,
                     noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
                     noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
                 }));
@@ -872,7 +898,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={employeeOverrides[employee.id]?.didEat ?? true}
+                                                                checked={employeeOverrides[employee.id]?.didEat ?? mealServiceActive}
                                                                 onChange={(event) => handleEmployeeDidEatChange(employee.id, event.target.checked)}
                                                                 disabled={isSubmitting || !checked}
                                                                 className="h-4 w-4 cursor-pointer accent-[#e3000f]"
