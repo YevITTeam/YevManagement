@@ -33,6 +33,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<OtFormBatch> OtFormBatches { get; set; }
     public virtual DbSet<OtFormBatchEmailToken> OtFormBatchEmailTokens { get; set; }
     public virtual DbSet<JobTitle> JobTitles { get; set; }
+    public virtual DbSet<DepartmentApprovalStep> DepartmentApprovalSteps { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -125,6 +126,22 @@ public partial class AttendanceDbContext : DbContext
             entity.HasIndex(e => e.Code, "IX_JobTitles_Code").IsUnique();
             entity.Property(e => e.Code).HasMaxLength(50);
             entity.Property(e => e.Name).HasMaxLength(150);
+        });
+
+        modelBuilder.Entity<DepartmentApprovalStep>(entity =>
+        {
+            entity.HasIndex(e => e.DepartmentId, "IX_DepartmentApprovalSteps_DepartmentId");
+            entity.HasIndex(e => e.JobTitleId, "IX_DepartmentApprovalSteps_JobTitleId");
+
+            entity.HasOne(d => d.Department).WithMany(p => p.DepartmentApprovalSteps)
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_DepartmentApprovalSteps_Departments_DepartmentId");
+
+            entity.HasOne(d => d.JobTitle).WithMany(p => p.DepartmentApprovalSteps)
+                .HasForeignKey(d => d.JobTitleId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_DepartmentApprovalSteps_JobTitles_JobTitleId");
         });
 
         modelBuilder.Entity<OtForm>(entity =>

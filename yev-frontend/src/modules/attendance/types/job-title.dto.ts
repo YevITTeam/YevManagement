@@ -3,7 +3,6 @@ export interface JobTitleDto {
     code: string;
     name: string;
     rankOrder: number;
-    requiresSignature: boolean;
     // JobTitleTerminalLevel (docs/attendance-api-fe.md) — 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
     terminalLevel: number;
 }
@@ -22,6 +21,7 @@ export interface ResolvedApprovalStepDto {
     jobTitleName: string;
     rankOrder: number;
     requiresSignature: boolean;
+    isResponsible: boolean;
     terminalLevel: number;
     candidates: ResolvedApprovalCandidateDto[];
 }

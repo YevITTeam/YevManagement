@@ -24,5 +24,6 @@ namespace Attendance.Application.Interfaces.Service
         IOtFormBatchRepository OtFormBatches { get; }
         IOtFormBatchEmailTokenRepository OtFormBatchEmailTokens { get; }
         IJobTitleRepository JobTitles { get; }
+        IDepartmentApprovalStepRepository DepartmentApprovalSteps { get; }
     }
 }

@@ -27,12 +27,14 @@ namespace Attendance.Infrastructure.Repositories
             IAttendanceSettingRepository attendanceSettings,
             IOtFormBatchRepository otFormBatches,
             IOtFormBatchEmailTokenRepository otFormBatchEmailTokens,
-            IJobTitleRepository jobTitles) : base(dbContext)
+            IJobTitleRepository jobTitles,
+            IDepartmentApprovalStepRepository departmentApprovalSteps) : base(dbContext)
         {
             AttendanceSettings = attendanceSettings;
             OtFormBatches = otFormBatches;
             OtFormBatchEmailTokens = otFormBatchEmailTokens;
             JobTitles = jobTitles;
+            DepartmentApprovalSteps = departmentApprovalSteps;
             Departments = departments;
             Groups = groups;
             Reasons = reasons;
@@ -69,5 +71,6 @@ namespace Attendance.Infrastructure.Repositories
         public IOtFormBatchRepository OtFormBatches { get; }
         public IOtFormBatchEmailTokenRepository OtFormBatchEmailTokens { get; }
         public IJobTitleRepository JobTitles { get; }
+        public IDepartmentApprovalStepRepository DepartmentApprovalSteps { get; }
     }
 }

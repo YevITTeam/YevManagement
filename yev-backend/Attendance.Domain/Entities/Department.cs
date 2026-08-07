@@ -17,4 +17,6 @@ public partial class Department
     public virtual ICollection<Group> Groups { get; set; } = new List<Group>();
 
     public virtual ICollection<OtForm> OtForms { get; set; } = new List<OtForm>();
+
+    public virtual ICollection<DepartmentApprovalStep> DepartmentApprovalSteps { get; set; } = new List<DepartmentApprovalStep>();
 }

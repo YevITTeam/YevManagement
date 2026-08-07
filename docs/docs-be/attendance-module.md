@@ -20,7 +20,8 @@ Danh mục (master data, đều có `IsDeleted`):
 | `Reason` | `ReasonNameVn`, `ReasonNameJp?` | Có |
 | `OtCase` | `Code`(unique), `Description?`, `RequireSignature:bool`, `RequiredApprovalLevel:int` (enum `ApprovalLevel` — cấp CUỐI phải đạt) | Không |
 | `Employee` | `Code`(unique), `FirstName`, `LastName`, `UserName:string?`(unique filtered — tài khoản AD của chính nhân viên, nullable), `MonthToDate:decimal(10,2)`, `YearToDate:decimal(10,2)`, `AccumulationYear:int`, `AccumulationMonth:int`, `ProjectedMonthToDate:decimal(10,2)`, `ProjectedYearToDate:decimal(10,2)`, `ProjectedAccumulationYear:int`, `ProjectedAccumulationMonth:int`, `GroupId`(FK, **BẮT BUỘC**), `JobTitleId:int?`(FK, nullable — xem §Cây chức vụ) | Tên riêng — không dịch. Department suy ra qua `Group.DepartmentId`, không lưu trùng trên Employee. `Projected*` xem §Lũy kế dự kiến. |
-| `JobTitle` | `Code`(unique), `Name`, `RankOrder:int` (CapDo, số lớn = cao hơn), `RequiresSignature:bool`, `TerminalLevel:int` (enum `JobTitleTerminalLevel` — `None/DepartmentManager/WorkshopManager/GeneralDirector`, tối đa 1 JobTitle active/giá trị non-None) | Tên riêng — không dịch. Master data cho cây chức vụ (2026-08-06), xem §Cây chức vụ. |
+| `JobTitle` | `Code`(unique), `Name`, `RankOrder:int` (CapDo, số lớn = cao hơn — chỉ dùng loại bỏ bước ngang/thấp hơn người tạo, KHÔNG dùng bắc cầu tự động), `TerminalLevel:int` (enum `JobTitleTerminalLevel` — `None/DepartmentManager/WorkshopManager/GeneralDirector`, tối đa 1 JobTitle active/giá trị non-None) | Tên riêng — không dịch. Master data cho cây chức vụ (2026-08-06), xem §Cây chức vụ. |
+| `DepartmentApprovalStep` | `DepartmentId`(FK), `StepOrder:int`, `JobTitleId`(FK), `RequiresSignature:bool`, `IsResponsible:bool` | Không FK song ngữ. Cây duyệt cấu hình TAY cho từng Phòng ban (2026-08-06, Giai đoạn 2b), xem §Cây chức vụ. Không có unique index — Admin tự đảm bảo không lặp `JobTitleId` khi thay danh sách (validate ở Service, không phải DB). `RequiresSignature` chuyển từ `JobTitle` xuống đây (2026-08-07, Giai đoạn 2c). `IsResponsible` tối đa 1 bước/Department được đặt `true` (2026-08-07, Giai đoạn 2d, validate ở Service). |
 
 > **Đã bỏ `Area`/`Line`** (2026-07-14): OT Form không cần "tên công đoạn" ở cấp Area/Line. Xoá hẳn (migration `RemoveAreaLineFromOtFormAddGroupDepartment`), không giữ bảng mồ côi.
 >
@@ -686,23 +687,107 @@ Thiết kế đầy đủ + các quyết định đã chốt với người dùn
   có thêm cột Chức vụ, hiện badge đỏ "Chưa gán chức vụ" khi `jobTitleId == null` để Admin rà soát trước
   khi bật tính năng chuỗi duyệt tự động cho 1 Department.
 
-**Đã xong (Giai đoạn 2 — engine suy luận chuỗi, XÂY SONG SONG, chốt qua AskUserQuestion 2026-08-06):**
+**Đã xong (Giai đoạn 2 — engine suy luận chuỗi, XÂY SONG SONG, chốt qua AskUserQuestion 2026-08-06),
+SAU ĐÓ ĐÃ SỬA LẠI THEO PHẢN HỒI NGƯỜI DÙNG cùng ngày (xem Giai đoạn 2b ngay dưới):**
 - `IJobTitleApprovalChainService`/`JobTitleApprovalChainService` (`Attendance.Application/Services/`)
-  — thuật toán suy luận thuần đọc: từ `creatorEmployeeId` + `otCaseId`, lấy `Employee.JobTitle.RankOrder`
-  của người tạo, tìm `JobTitle` giữ đúng `TerminalLevel = OtCase.RequiredApprovalLevel` (numeric dùng
-  chung với `ApprovalLevel` — cả 2 enum cố tình đồng bộ giá trị `1/2/3`), rồi lấy toàn bộ `Employee`
-  active có `JobTitleId != null` + có `UserName` trong đúng Department của người tạo, `RankOrder` nằm
-  trong khoảng `(creatorRank, targetRank]`, group theo `RankOrder` tăng dần → mỗi nhóm là 1 bước, mọi
-  người trong nhóm là candidate (quyết định #4 của plan — ai duyệt trước tính). Trả `IsComplete=false`
-  + `Warning` nếu chuỗi không leo tới đúng `targetRank` (Department thiếu người giữ 1 cấp nào đó) —
-  **không tự fallback** về `UserApprovalScope` cũ (quyết định #10).
+  — thuật toán suy luận thuần đọc, xem chi tiết bản MỚI ở Giai đoạn 2b.
 - Endpoint xem trước: `GET /api/JobTitle/resolve-chain?employeeId=&otCaseId=` (`Attendance.JobTitle.View`,
-  read-only, không tạo/sửa gì) — trả `ResolveApprovalChainResultDto`.
+  read-only, không tạo/sửa gì) — trả `ResolveApprovalChainResultDto` (giữ nguyên shape, không đổi khi
+  sửa thuật toán ở Giai đoạn 2b).
 - FE: tab "Thử chuỗi duyệt" trong `CategoryManagement.tsx` (`ApprovalChainPreviewPanel.tsx`) — chọn 1
   Nhân viên + 1 Trường hợp OT, xem ngay chuỗi bước + candidate từng bước trên dữ liệu thật, để kiểm tra
   thuật toán đúng trước khi quyết định wiring/xoá dữ liệu cũ.
 - **Chưa được `OtFormService` gọi tới ở bất kỳ đâu** — cơ chế duyệt OT hiện tại (§Business Logic ở trên)
   vẫn chạy y nguyên, hoàn toàn tách biệt khỏi engine mới này.
+
+**Đã xong (Giai đoạn 2b — sửa thuật toán suy luận + entity `DepartmentApprovalStep`, 2026-08-06):**
+
+Bản đầu của Giai đoạn 2 tự bắc cầu qua MỌI `RankOrder` đang có người giữ giữa người tạo đơn và cấp
+đích — người dùng phản hồi cách này khiến 1 đơn phải đi qua quá nhiều bước nếu Phòng ban có đủ người ở
+mọi cấp (VD 10 bước cho 1 đơn). Đã sửa theo hướng: **cây duyệt cấu hình TAY cho từng Phòng ban**, không
+còn tự động suy ra từ toàn bộ 14 Chức vụ.
+
+- Entity mới `DepartmentApprovalStep` (`DepartmentId`, `StepOrder`, `JobTitleId`, `IsDeleted`) —
+  mỗi dòng = 1 bước duyệt CỐ ĐỊNH của 1 Department, theo đúng thứ tự Admin sắp xếp. KHÔNG có
+  Create/Update/Delete từng dòng riêng — quản lý kiểu "thay nguyên danh sách" một lần.
+- `IDepartmentApprovalStepService`: `GetByDepartmentAsync` (đọc), `ReplaceAsync` (xoá hết bước cũ của
+  Department đó, chèn lại theo đúng thứ tự mảng `JobTitleIds` gửi lên — `StepOrder` = index+1). Validate:
+  không trùng `JobTitleId` trong cùng 1 lần replace, mọi `JobTitleId` phải tồn tại/active.
+- `DepartmentApprovalStepController`: `GET /by-department/{departmentId}`
+  (`Attendance.DepartmentApprovalStep.View`), `PUT /by-department/{departmentId}` body
+  `{ jobTitleIds: number[] }` (`Attendance.DepartmentApprovalStep.Update`) — seed migration Identity
+  `AddDepartmentApprovalStepPermissions`, gán qua subquery theo `Attendance.Department.Create` (Admin).
+- `JobTitleApprovalChainService.ResolveChainAsync` viết lại: đọc `DepartmentApprovalStep` của Department
+  người tạo (không còn dùng `JobTitle.RankOrder` để bắc cầu tự động — field này giờ CHỈ dùng để loại bỏ
+  các bước cấu hình ở cấp ngang/thấp hơn người tạo, tức người tạo không tự duyệt đơn của mình), cắt danh
+  sách tại bước đầu tiên có `TerminalLevel` khớp `OtCase.RequiredApprovalLevel`. Nếu Department chưa cấu
+  hình cây duyệt, hoặc cây duyệt không tới đúng cấp cần thiết, hoặc 1 bước nào đó chưa có ai giữ đúng
+  Chức vụ trong Department → `IsComplete=false` kèm `Warning` cụ thể (**không tự fallback**, đúng
+  nguyên tắc quyết định #10 của plan). Bước có `TerminalLevel=GeneralDirector` vẫn tìm candidate TOÀN
+  CÔNG TY (không lọc Department), mirror `ScopeType.All`.
+- FE: tab "Cây duyệt Phòng ban" (`DepartmentApprovalStepManager.tsx`) — chọn 1 Phòng ban, xem/sửa danh
+  sách bước (thêm Chức vụ, xoá, chuyển lên/xuống bằng nút mũi tên), bấm "Lưu cây duyệt" mới gọi API thay
+  nguyên danh sách. Phòng ban chưa cấu hình gì → danh sách rỗng, panel "Thử chuỗi duyệt" sẽ báo kẹt.
+- Migration `AddDepartmentApprovalStep` (Attendance DB, chỉ tạo bảng `DepartmentApprovalSteps`, KHÔNG
+  seed dữ liệu — Admin tự cấu hình từng Phòng ban khi cần) — tách RIÊNG khỏi migration
+  `AddRequesterResponsible` (cột `Requester*`/`Responsible*` trên `Group`/`OtForm`, tính năng khác không
+  liên quan tới Cây chức vụ, đã có sẵn trong code nhưng chưa từng được migrate — 2 migration được tạo
+  tách bạch để không lỡ áp dụng chung 2 việc không liên quan).
+
+**Đã xong (Giai đoạn 2c — chuyển `RequiresSignature` từ `JobTitle` xuống `DepartmentApprovalStep`,
+2026-08-07):**
+
+Người dùng chỉ ra lỗ hổng thiết kế: `JobTitle.RequiresSignature` là cờ TOÀN CỤC nên cùng 1 Chức vụ
+(VD "Manager") không thể vừa bắt ký ở Phòng ban này vừa chỉ cần xác nhận ở Phòng ban khác — trái với
+chính triết lý "cấu hình riêng theo từng Phòng ban" đã chốt ở Giai đoạn 2b. Đã chuyển cờ này xuống
+đúng cấp `DepartmentApprovalStep` — mỗi BƯỚC trong cây duyệt của mỗi Phòng ban tự quyết định ký hay
+chỉ xác nhận, độc lập với các Phòng ban khác dùng cùng Chức vụ đó.
+
+- `JobTitle` bỏ hẳn `RequiresSignature` — Chức vụ giờ chỉ còn `Code/Name/RankOrder/TerminalLevel`.
+- `DepartmentApprovalStep` thêm cột `RequiresSignature:bool` (mặc định `false`).
+- `ReplaceDepartmentApprovalStepsDto.JobTitleIds:List<int>` đổi thành `Steps:List<ReplaceDepartmentApprovalStepItemDto>`
+  (`{ JobTitleId, RequiresSignature }`) — thứ tự phần tử vẫn là `StepOrder`.
+- `JobTitleApprovalChainService.ResolveChainAsync`: `ResolvedApprovalStepDto.RequiresSignature` giờ đọc
+  từ `DepartmentApprovalStep.RequiresSignature` (không còn `JobTitle.RequiresSignature`) — shape response
+  không đổi, chỉ đổi nguồn dữ liệu.
+- FE: bỏ checkbox "Bắt buộc ký khi duyệt" khỏi `JobTitleForm.tsx` + cột tương ứng khỏi `JobTitleList.tsx`.
+  `DepartmentApprovalStepManager.tsx`: mỗi bước thêm mới mặc định `requiresSignature=false`; badge
+  "Bắt buộc ký"/"Chỉ xác nhận" cạnh mỗi bước giờ là **nút bấm để đổi trạng thái** (`handleToggleSignature`),
+  không còn chỉ hiển thị tĩnh — Admin tự bật/tắt cho từng bước trước khi "Lưu cây duyệt".
+- Migration `MoveRequiresSignatureToDepartmentApprovalStep` (Attendance DB) — `DropColumn
+  JobTitles.RequiresSignature` + `AddColumn DepartmentApprovalSteps.RequiresSignature` (default `false`,
+  Admin cần vào lại "Cây duyệt Phòng ban" bật ký cho đúng bước sau khi migrate vì dữ liệu cũ không có
+  chỗ suy ra giá trị này theo từng bước).
+
+**Đã xong (Giai đoạn 2d — cờ `IsResponsible` trên `DepartmentApprovalStep`, 2026-08-07):**
+
+Người dùng hỏi: cây duyệt Phòng ban đã có cách chọn "người chịu trách nhiệm" trên form in chưa? Trả
+lời: chưa — cơ chế cũ (`Group.RequesterEmployeeId`/`ResponsibleEmployeeId`, cấu hình qua
+`GroupForm.tsx`) là tính năng KHÁC, không liên quan Cây chức vụ, và hiện là dữ liệu chết (không FE nào
+đọc `OtForm.ResponsibleFullName`). Ô "người chịu trách nhiệm" thật trên `OtFormPrintView.tsx` đang lấy
+từ snapshot người duyệt cấp 0 (`OtFormApprovalHistory`, cơ chế Submitter/GroupHead cũ) — cơ chế này
+KHÔNG áp dụng được nguyên trạng cho chuỗi động mới vì số bước/thứ tự bước thay đổi theo Phòng ban.
+Đã chốt: Admin tự đánh dấu tường minh **đúng 1 bước** trong cây duyệt của mỗi Phòng ban là "người chịu
+trách nhiệm" (phương án linh hoạt nhất trong 3 phương án đưa ra — thay vì mặc định cứng "luôn là bước
+đầu" hay "luôn là bước cuối").
+
+- `DepartmentApprovalStep` thêm cột `IsResponsible:bool` (mặc định `false`) — đánh dấu bước này là
+  "người chịu trách nhiệm" trên form in. Validate ở `DepartmentApprovalStepService.ReplaceAsync`: tối
+  đa 1 phần tử trong `Steps` được đặt `IsResponsible=true` mỗi lần replace (400 nếu vi phạm) — có thể
+  để cả cây duyệt không có bước nào được đánh dấu (Phòng ban chưa xác định).
+- `ReplaceDepartmentApprovalStepItemDto` thêm `IsResponsible:bool`; `DepartmentApprovalStepDto` và
+  `ResolvedApprovalStepDto` (kết quả `resolve-chain`, §3.4d) đều có thêm field này để phản ánh đúng
+  cấu hình khi xem trước chuỗi duyệt.
+- FE: `DepartmentApprovalStepManager.tsx` — mỗi bước thêm badge/nút thứ 2 (biểu tượng ngôi sao,
+  `handleSetResponsible`) cạnh badge chữ ký, hành vi kiểu "radio" (bấm bước khác → tự bỏ đánh dấu bước
+  cũ, khớp validate "tối đa 1" ở BE; bấm lại chính bước đang đánh dấu → bỏ chọn). `ApprovalChainPreviewPanel.tsx`
+  hiển thị thêm badge "Người chịu trách nhiệm" cạnh bước tương ứng khi xem trước.
+- Migration `AddIsResponsibleToDepartmentApprovalStep` (Attendance DB) — `AddColumn
+  DepartmentApprovalSteps.IsResponsible` (default `false`).
+- **Vẫn CHƯA áp dụng vào form in thật** — `OtFormPrintView.tsx` tiếp tục dùng snapshot cấp 0 cũ cho
+  tới khi Giai đoạn 3 wiring chuỗi mới vào `OtFormService` thật; lúc đó "người chịu trách nhiệm" sẽ đổi
+  nguồn sang bước có `IsResponsible=true` trong chuỗi đã snapshot của đơn, theo đúng pattern
+  snapshot-từ-người-duyệt-thật đã dùng cho `OtFormApprovalHistory.ApproverFullName`.
 
 **CHƯA làm (Giai đoạn 3 — wiring thật, cần xác nhận riêng trước khi làm, theo đúng plan §3 quyết định #1):**
 - Persist chuỗi đã suy luận vào entity `OtFormApprovalStep`/`OtFormApprovalStepCandidate` (snapshot lúc
@@ -720,12 +805,14 @@ Thiết kế đầy đủ + các quyết định đã chốt với người dùn
 
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.
-- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`) → `AddAttendanceSetting` (2026-08-01, bảng `AttendanceSettings` 1 dòng, seed `(2.5, 25, 300)` — xem §Cấu hình phiếu ăn & giới hạn lũy kế) → `AddOtFormBatch` (2026-08-06, bảng `OtFormBatches`/`OtFormBatchEmailTokens` — xem §Đơn tổng) → `AddProjectedAccumulationToEmployee` (2026-08-06, 4 cột `Projected*` trên `Employees` — xem §Lũy kế dự kiến) → `AddJobTitle` (2026-08-06, bảng `JobTitles` + cột `Employees.JobTitleId` + seed 14 chức vụ — xem §Cây chức vụ). Tất cả đã `database update` vào `YevOTManagement` (permission Identity tương ứng `AddJobTitlePermissions` cũng đã apply vào `YevIdentityManagement`).
+- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`) → `AddAttendanceSetting` (2026-08-01, bảng `AttendanceSettings` 1 dòng, seed `(2.5, 25, 300)` — xem §Cấu hình phiếu ăn & giới hạn lũy kế) → `AddOtFormBatch` (2026-08-06, bảng `OtFormBatches`/`OtFormBatchEmailTokens` — xem §Đơn tổng) → `AddProjectedAccumulationToEmployee` (2026-08-06, 4 cột `Projected*` trên `Employees` — xem §Lũy kế dự kiến) → `AddJobTitle` (2026-08-06, bảng `JobTitles` + cột `Employees.JobTitleId` + seed 14 chức vụ — xem §Cây chức vụ) → `AddRequesterResponsible` (2026-08-06, cột `Requester*`/`Responsible*` trên `Group`/`OtForm` — tính năng KHÁC, không thuộc Cây chức vụ; **DB thật đã có sẵn schema này từ trước** do ai đó áp dụng tay ngoài EF, migration được **stamp thẳng vào `__EFMigrationsHistory` chứ không chạy lại DDL**, xem ghi chú cuối §Cây chức vụ Giai đoạn 2b) → `AddDepartmentApprovalStep` (2026-08-06, bảng `DepartmentApprovalSteps`, không seed dữ liệu — xem §Cây chức vụ Giai đoạn 2b) → `MoveRequiresSignatureToDepartmentApprovalStep` (2026-08-07, `DropColumn JobTitles.RequiresSignature` + `AddColumn DepartmentApprovalSteps.RequiresSignature` — xem §Cây chức vụ Giai đoạn 2c) → `AddIsResponsibleToDepartmentApprovalStep` (2026-08-07, `AddColumn DepartmentApprovalSteps.IsResponsible` — xem §Cây chức vụ Giai đoạn 2d). Tất cả đã `database update`/stamp vào `YevOTManagement` (permission Identity tương ứng `AddJobTitlePermissions`/`AddDepartmentApprovalStepPermissions` cũng đã apply vào `YevIdentityManagement`).
 - Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed), `AddSecondaryPasswordPermission` (2026-07-30, seed `Attendance.SecondaryPassword.Update`), `AddOtFormRemoveEmployeePermission` (2026-07-30, seed `Attendance.OTForm.RemoveEmployee` — xem §Loại nhân viên khỏi đơn), và `AddAttendanceSettingPermission` (2026-08-01, seed `Attendance.Setting.Update` — xem §Cấu hình phiếu ăn & giới hạn lũy kế) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
 
 ## 1. Cấu trúc code đã có
 
 ### Danh mục CRUD chuẩn (Department/Group/Reason/OtCase/JobTitle/Employee)
+`DepartmentApprovalStepController` KHÔNG theo pattern CRUD chuẩn này — xem riêng ở §Cây chức vụ Giai
+đoạn 2b (`GET`/`PUT by-department/{departmentId}`, quản lý theo kiểu thay nguyên danh sách).
 Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository) + impl (Infrastructure/Repositories) → property trong `IAttendanceUnitOfWork`/`AttendanceUnitOfWork` → `{Entity}Dto`/`Create{Entity}Dto`/`Update{Entity}Dto` (Application/Dtos) → `{Entity}Service : BaseService<IAttendanceUnitOfWork>` → `{Entity}Controller : BaseController` (route `grid-list`/`all`/`{id}`/POST/PUT/DELETE, `[RequirePermission("Attendance.{Entity}.{Action}")]`).
 - `GroupController` có thêm `GET /by-department/{departmentId}` (dropdown phụ thuộc).
 - `EmployeeController` có thêm `GET /all` (toàn bộ nhân viên active, mọi Group — mới 2026-08-06, dùng
@@ -802,7 +889,7 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
 
 ### Permission & Role đã seed (Identity migration `AddAttendancePermissionsAndRoles`)
 - 28 permission `Attendance.*`: CRUD 5 danh mục + `UserApprovalScope.{View,Create,Delete}` + `UserSignature.{View,Update}` + `OTForm.{View,Create,Approve}`. **+1** (2026-07-29, migration riêng `AddAttendanceAiChatPermission`): `Attendance.AiChat.Use`, hiện chỉ gán Admin — xem mục `AttendanceAiChatController` ở trên. **+1** (2026-07-30, migration `AddSecondaryPasswordPermission`): `Attendance.SecondaryPassword.Update`, gán qua subquery cho đúng các Role đang giữ `UserSignature.Update` (Admin + 5 Role nghiệp vụ) — xem §Mật khẩu cấp 2 khi ký/duyệt OtForm. **+1** (2026-07-30, migration `AddOtFormRemoveEmployeePermission`): `Attendance.OTForm.RemoveEmployee`, cùng cách gán qua subquery theo `UserSignature.Update` — xem §Loại nhân viên khỏi đơn. **+1** (2026-08-01, migration `AddAttendanceSettingPermission`): `Attendance.Setting.Update`, gán qua subquery theo `Attendance.Department.Create` (chỉ Admin) — xem §Cấu hình phiếu ăn & giới hạn lũy kế. `GET /api/AttendanceSetting` cố tình KHÔNG có permission riêng (mở cho mọi tài khoản đăng nhập).
-**+4** (2026-08-06, migration `AddJobTitlePermissions`): `Attendance.JobTitle.{View,Create,Update,Delete}`, cùng cách gán qua subquery theo `Attendance.Department.Create` (chỉ Admin) — xem §Cây chức vụ.
+**+4** (2026-08-06, migration `AddJobTitlePermissions`): `Attendance.JobTitle.{View,Create,Update,Delete}`, cùng cách gán qua subquery theo `Attendance.Department.Create` (chỉ Admin) — xem §Cây chức vụ. **+2** (2026-08-06, migration `AddDepartmentApprovalStepPermissions`): `Attendance.DepartmentApprovalStep.{View,Update}`, cùng cách gán qua subquery — xem §Cây chức vụ Giai đoạn 2b.
 - 4 Role mới: `Trưởng nhóm` (Create+View OTForm, View Employee, Update UserSignature, **+ View Department/Group/Reason/OtCase** — xem ngay dưới), `Trưởng phòng`/`Trưởng xưởng`/`Tổng Giám Đốc` (View+Approve OTForm, Update UserSignature). `Admin` được gán full toàn bộ permission `Attendance.*`.
 - **Lỗ hổng đã vá (2026-07-17, migration `AddCategoryViewPermissionsToTruongGroup`)**: seed ban đầu (`AddAttendancePermissionsAndRoles`) chỉ gán `Trưởng nhóm` 4 permission (`OTForm.Create/View`, `Employee.View`, `UserSignature.Update`) — THIẾU `Department.View`/`Group.View`/`Reason.View`/`OtCase.View` (permission riêng biệt cho từng danh mục, không nằm trong `OTForm.View`). Hậu quả: Trưởng nhóm gọi `GET /api/Department/all`, `GET /api/Group/by-department/{id}`, `GET /api/Reason/all`, `GET /api/OtCase/all` (4 API load dropdown cho màn "Tạo đơn tăng ca") đều bị 403 — màn Tạo đơn không dùng được trên thực tế dù mọi API OtForm đã sẵn sàng. Đã bổ sung 4 permission này cho Role `Trưởng nhóm`, verify lại qua SQL trực tiếp trên DB thật (2026-07-17) — Role này hiện có đủ 8 permission `Attendance.*`.
 - **Chưa làm**: gán Role cho user thật (`update-user-roles`/`create-user` — API Identity có sẵn) và tạo dòng `UserApprovalScope` cho từng Trưởng phòng/Trưởng xưởng **và mỗi người được phép tạo đơn** (`ApprovalLevel=Submitter`, xem §Business Logic — Phân quyền tạo đơn) thật (`POST /api/UserApprovalScope` — API đã có). Nhớ: từ 2026-07-16, chỉ gán được `ApprovalLevel=Submitter` cho `UserName` đã có Role `Trưởng nhóm` từ trước.

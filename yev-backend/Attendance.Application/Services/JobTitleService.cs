@@ -18,7 +18,6 @@ namespace Attendance.Application.Services
             Code = jobTitle.Code,
             Name = jobTitle.Name,
             RankOrder = jobTitle.RankOrder,
-            RequiresSignature = jobTitle.RequiresSignature,
             TerminalLevel = jobTitle.TerminalLevel
         };
 
@@ -79,7 +78,6 @@ namespace Attendance.Application.Services
                 Code = request.Code,
                 Name = request.Name,
                 RankOrder = request.RankOrder,
-                RequiresSignature = request.RequiresSignature,
                 TerminalLevel = request.TerminalLevel,
                 IsDeleted = false
             };
@@ -102,7 +100,6 @@ namespace Attendance.Application.Services
             jobTitle.Code = request.Code;
             jobTitle.Name = request.Name;
             jobTitle.RankOrder = request.RankOrder;
-            jobTitle.RequiresSignature = request.RequiresSignature;
             jobTitle.TerminalLevel = request.TerminalLevel;
 
             _unitOfWork.JobTitles.Update(jobTitle);

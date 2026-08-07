@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Star, X } from "lucide-react";
 
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
@@ -310,22 +310,30 @@ const ApprovalChainPreviewPanel = forwardRef<ListHandle, ListToolbarProps>(funct
                                                 ({step.jobTitleCode}, cấp {step.rankOrder})
                                             </span>
                                         </div>
-                                        <span
-                                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                                                step.requiresSignature
-                                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                                    : "border-[#e0e3e5] bg-white text-[#8a8f94]"
-                                            }`}
-                                        >
-                                            {step.requiresSignature ? (
-                                                <Check size={12} />
-                                            ) : (
-                                                <X size={12} />
+                                        <div className="flex items-center gap-2">
+                                            <span
+                                                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                                    step.requiresSignature
+                                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                        : "border-[#e0e3e5] bg-white text-[#8a8f94]"
+                                                }`}
+                                            >
+                                                {step.requiresSignature ? (
+                                                    <Check size={12} />
+                                                ) : (
+                                                    <X size={12} />
+                                                )}
+                                                {step.requiresSignature
+                                                    ? t("requiresSignatureYes")
+                                                    : t("requiresSignatureNo")}
+                                            </span>
+                                            {step.isResponsible && (
+                                                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+                                                    <Star size={12} fill="currentColor" />
+                                                    {t("isResponsibleYes")}
+                                                </span>
                                             )}
-                                            {step.requiresSignature
-                                                ? t("requiresSignatureYes")
-                                                : t("requiresSignatureNo")}
-                                        </span>
+                                        </div>
                                     </div>
                                     <ul className="mt-2 space-y-1">
                                         {step.candidates.map((candidate) => (

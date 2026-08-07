@@ -78,6 +78,41 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("Departments");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.DepartmentApprovalStep", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsResponsible")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("JobTitleId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresSignature")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "DepartmentId" }, "IX_DepartmentApprovalSteps_DepartmentId");
+
+                    b.HasIndex(new[] { "JobTitleId" }, "IX_DepartmentApprovalSteps_JobTitleId");
+
+                    b.ToTable("DepartmentApprovalSteps");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.Employee", b =>
                 {
                     b.Property<int>("Id")
@@ -186,7 +221,17 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("RequesterEmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ResponsibleEmployeeId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("RequesterEmployeeId");
+
+                    b.HasIndex("ResponsibleEmployeeId");
 
                     b.HasIndex(new[] { "DepartmentId" }, "IX_Groups_DepartmentId");
 
@@ -219,9 +264,6 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<int>("RankOrder")
                         .HasColumnType("int");
-
-                    b.Property<bool>("RequiresSignature")
-                        .HasColumnType("bit");
 
                     b.Property<int>("TerminalLevel")
                         .HasColumnType("int");
@@ -311,6 +353,28 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<int>("ReasonId")
                         .HasColumnType("int");
+
+                    b.Property<int?>("RequesterEmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RequesterFullName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("RequesterUserName")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("ResponsibleEmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ResponsibleFullName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ResponsibleUserName")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time");
@@ -832,6 +896,27 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("UserSignatures");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.DepartmentApprovalStep", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Department", "Department")
+                        .WithMany("DepartmentApprovalSteps")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_DepartmentApprovalSteps_Departments_DepartmentId");
+
+                    b.HasOne("Attendance.Domain.Entities.JobTitle", "JobTitle")
+                        .WithMany("DepartmentApprovalSteps")
+                        .HasForeignKey("JobTitleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_DepartmentApprovalSteps_JobTitles_JobTitleId");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("JobTitle");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.Employee", b =>
                 {
                     b.HasOne("Attendance.Domain.Entities.Group", "Group")
@@ -861,7 +946,23 @@ namespace Attendance.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_Groups_Departments_DepartmentId");
 
+                    b.HasOne("Attendance.Domain.Entities.Employee", "RequesterEmployee")
+                        .WithMany()
+                        .HasForeignKey("RequesterEmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Groups_Employees_Requester");
+
+                    b.HasOne("Attendance.Domain.Entities.Employee", "ResponsibleEmployee")
+                        .WithMany()
+                        .HasForeignKey("ResponsibleEmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Groups_Employees_Responsible");
+
                     b.Navigation("Department");
+
+                    b.Navigation("RequesterEmployee");
+
+                    b.Navigation("ResponsibleEmployee");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtForm", b =>
@@ -994,6 +1095,8 @@ namespace Attendance.Infrastructure.Migrations
 
             modelBuilder.Entity("Attendance.Domain.Entities.Department", b =>
                 {
+                    b.Navigation("DepartmentApprovalSteps");
+
                     b.Navigation("Groups");
 
                     b.Navigation("OtForms");
@@ -1013,6 +1116,8 @@ namespace Attendance.Infrastructure.Migrations
 
             modelBuilder.Entity("Attendance.Domain.Entities.JobTitle", b =>
                 {
+                    b.Navigation("DepartmentApprovalSteps");
+
                     b.Navigation("Employees");
                 });
 

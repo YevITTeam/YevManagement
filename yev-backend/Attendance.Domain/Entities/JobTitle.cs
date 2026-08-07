@@ -12,13 +12,12 @@ public partial class JobTitle
 
     public string Name { get; set; } = null!;
 
-    // Cấp độ (CapDo) — số càng lớn càng cao. Dùng để suy luận chuỗi duyệt: từ người tạo đơn, đi qua
-    // các RankOrder tăng dần đang có người giữ trong cùng Department, bắc cầu qua cấp trống.
+    // Cấp độ (CapDo) — số càng lớn càng cao. Dùng để loại các Chức vụ ngang/thấp hơn người tạo đơn ra
+    // khỏi cây duyệt của Phòng ban (DepartmentApprovalStep) — KHÔNG dùng để tự bắc cầu qua mọi cấp
+    // đang có người giữ nữa (2026-08-06, sửa theo phản hồi người dùng — bắc cầu tự động khiến 1 đơn
+    // phải qua quá nhiều bước nếu Phòng ban có đủ người ở mọi cấp). Cây duyệt thật nằm ở
+    // DepartmentApprovalStep, Admin tự chọn tay các Chức vụ nào là bước duyệt cho từng Phòng ban.
     public int RankOrder { get; set; }
-
-    // Cấp này khi duyệt có bắt buộc chữ ký tay (UserSignature) hay chỉ cần xác nhận — Admin tự cấu
-    // hình, không hardcode theo Code (xem GuardExtensions/JobTitleService).
-    public bool RequiresSignature { get; set; }
 
     // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — None nếu chỉ là cấp trung gian.
     public int TerminalLevel { get; set; }
@@ -26,4 +25,6 @@ public partial class JobTitle
     public bool IsDeleted { get; set; }
 
     public virtual ICollection<Employee> Employees { get; set; } = new List<Employee>();
+
+    public virtual ICollection<DepartmentApprovalStep> DepartmentApprovalSteps { get; set; } = new List<DepartmentApprovalStep>();
 }

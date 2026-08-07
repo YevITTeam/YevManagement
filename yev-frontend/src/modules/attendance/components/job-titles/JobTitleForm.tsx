@@ -11,7 +11,6 @@ export interface JobTitleFormValues {
     code: string;
     name: string;
     rankOrder: number;
-    requiresSignature: boolean;
     terminalLevel: number;
 }
 
@@ -26,7 +25,7 @@ interface JobTitleFormProps {
 
 const terminalLevelOptions = [0, 1, 2, 3];
 
-const emptyValues: JobTitleFormValues = { code: "", name: "", rankOrder: 1, requiresSignature: false, terminalLevel: 0 };
+const emptyValues: JobTitleFormValues = { code: "", name: "", rankOrder: 1, terminalLevel: 0 };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -44,7 +43,6 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                       code: current.code,
                       name: current.name,
                       rankOrder: current.rankOrder,
-                      requiresSignature: current.requiresSignature,
                       terminalLevel: current.terminalLevel,
                   }
                 : emptyValues
@@ -136,17 +134,6 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                                 </option>
                             ))}
                         </select>
-                    </label>
-
-                    <label className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={values.requiresSignature}
-                            onChange={(event) => setValues((current) => ({ ...current, requiresSignature: event.target.checked }))}
-                            disabled={loading}
-                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                        />
-                        <span className="text-sm text-[#191c1e]">{t("fieldRequiresSignature")}</span>
                     </label>
 
                     <div className="flex justify-end gap-3 pt-2">

@@ -8,6 +8,7 @@ import GroupList from "./groups/GroupList";
 import ReasonList from "./reasons/ReasonList";
 import OtCaseList from "./ot-cases/OtCaseList";
 import JobTitleList from "./job-titles/JobTitleList";
+import DepartmentApprovalStepManager from "./job-titles/DepartmentApprovalStepManager";
 import ApprovalChainPreviewPanel from "./job-titles/ApprovalChainPreviewPanel";
 import EmployeeList from "./employees/EmployeeList";
 import AttendanceSettingPanel from "./settings/AttendanceSettingPanel";
@@ -19,6 +20,7 @@ type CategoryTab =
     | "reasons"
     | "ot-cases"
     | "job-titles"
+    | "department-approval-steps"
     | "chain-preview"
     | "employees"
     | "settings";
@@ -34,6 +36,7 @@ export default function CategoryManagement() {
         { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons") },
         { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases") },
         { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles") },
+        { key: "department-approval-steps", label: t("tabDepartmentApprovalSteps"), addLabel: null },
         { key: "chain-preview", label: t("tabChainPreview"), addLabel: null },
         { key: "employees", label: t("tabEmployees"), addLabel: t("addEmployees") },
         { key: "settings", label: t("tabSettings"), addLabel: null },
@@ -53,6 +56,7 @@ export default function CategoryManagement() {
         reasons: false,
         "ot-cases": false,
         "job-titles": false,
+        "department-approval-steps": false,
         "chain-preview": false,
         employees: false,
         settings: false,
@@ -64,6 +68,7 @@ export default function CategoryManagement() {
     const reasonRef = useRef<ListHandle>(null);
     const otCaseRef = useRef<ListHandle>(null);
     const jobTitleRef = useRef<ListHandle>(null);
+    const departmentApprovalStepRef = useRef<ListHandle>(null);
     const chainPreviewRef = useRef<ListHandle>(null);
     const employeeRef = useRef<ListHandle>(null);
     const settingRef = useRef<ListHandle>(null);
@@ -74,6 +79,7 @@ export default function CategoryManagement() {
         reasons: reasonRef,
         "ot-cases": otCaseRef,
         "job-titles": jobTitleRef,
+        "department-approval-steps": departmentApprovalStepRef,
         "chain-preview": chainPreviewRef,
         employees: employeeRef,
         settings: settingRef,
@@ -104,6 +110,10 @@ export default function CategoryManagement() {
     );
     const handleJobTitleLoadingChange = useCallback(
         (value: boolean) => setLoadingByTab((current) => ({ ...current, "job-titles": value })),
+        []
+    );
+    const handleDepartmentApprovalStepLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, "department-approval-steps": value })),
         []
     );
     const handleChainPreviewLoadingChange = useCallback(
@@ -197,6 +207,11 @@ export default function CategoryManagement() {
             {visitedTabs.has("job-titles") && (
                 <div className={activeTab === "job-titles" ? "" : "hidden"}>
                     <JobTitleList ref={jobTitleRef} onLoadingChange={handleJobTitleLoadingChange} />
+                </div>
+            )}
+            {visitedTabs.has("department-approval-steps") && (
+                <div className={activeTab === "department-approval-steps" ? "" : "hidden"}>
+                    <DepartmentApprovalStepManager ref={departmentApprovalStepRef} onLoadingChange={handleDepartmentApprovalStepLoadingChange} />
                 </div>
             )}
             {visitedTabs.has("chain-preview") && (

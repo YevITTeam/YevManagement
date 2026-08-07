@@ -335,12 +335,45 @@ POST/PUT: `code`[Required], `description?`, `requireSignature`(bool), `requiredA
 
 ```jsonc
 // JobTitleDto
-{ "id": 11, "code": "M", "name": "Manager", "rankOrder": 11,
-  "requiresSignature": true, "terminalLevel": 1 }
+{ "id": 11, "code": "M", "name": "Manager", "rankOrder": 11, "terminalLevel": 1 }
 ```
-POST/PUT: `code`[Required], `name`[Required], `rankOrder`[Required] (int, số lớn = cấp cao hơn), `requiresSignature`(bool), `terminalLevel` (enum `JobTitleTerminalLevel`: `0=None/1=DepartmentManager/2=WorkshopManager/3=GeneralDirector`). Trùng `code` (kể cả bản ghi đã xóa mềm) → 400. Đặt `terminalLevel` khác `0` khi đã có 1 `JobTitle` active khác giữ đúng giá trị đó → 400 (mỗi `TerminalLevel` non-None chỉ 1 chức vụ). Xóa khi còn `Employee.jobTitleId` trỏ tới → 400.
+POST/PUT: `code`[Required], `name`[Required], `rankOrder`[Required] (int, số lớn = cấp cao hơn — **chỉ dùng để loại bỏ bước ở cấp ngang/thấp hơn người tạo đơn** khỏi cây duyệt, KHÔNG còn dùng để tự bắc cầu qua mọi cấp đang có người giữ, xem §3.4c), `terminalLevel` (enum `JobTitleTerminalLevel`: `0=None/1=DepartmentManager/2=WorkshopManager/3=GeneralDirector`). Trùng `code` (kể cả bản ghi đã xóa mềm) → 400. Đặt `terminalLevel` khác `0` khi đã có 1 `JobTitle` active khác giữ đúng giá trị đó → 400 (mỗi `TerminalLevel` non-None chỉ 1 chức vụ). Xóa khi còn `Employee.jobTitleId` trỏ tới → 400.
+>
+> `requiresSignature` **không còn nằm ở đây** — 2026-08-07 đã chuyển xuống `DepartmentApprovalStep`
+> (§3.4c), vì cùng 1 Chức vụ có thể cần ký ở Phòng ban này nhưng chỉ cần xác nhận ở Phòng ban khác.
 
-**Xem trước chuỗi duyệt tự động (Giai đoạn 2, mới 2026-08-06)** — `GET /api/JobTitle/resolve-chain?employeeId=&otCaseId=` (`Attendance.JobTitle.View`, đọc-only, KHÔNG tạo/sửa gì):
+### 3.4c DepartmentApprovalStep (Cây duyệt Phòng ban) — `/api/DepartmentApprovalStep` (mới, 2026-08-06 — Giai đoạn 2b)
+
+> Cấu hình TAY danh sách Chức vụ (theo thứ tự) là bước duyệt THẬT của 1 Phòng ban — thay cho việc suy
+> luận tự động qua mọi `RankOrder` đang có người giữ (cách cũ khiến 1 đơn có thể phải qua quá nhiều
+> bước). Phòng ban chưa cấu hình gì → chuỗi duyệt rỗng, `resolve-chain` báo kẹt.
+
+`GET /by-department/{departmentId}` (`Attendance.DepartmentApprovalStep.View`) → `DepartmentApprovalStepDto[]` đã sắp theo `stepOrder`:
+```jsonc
+[
+  { "id": 5, "departmentId": 1, "stepOrder": 1, "jobTitleId": 6, "jobTitleCode": "SUP", "jobTitleName": "Supervisor",
+    "rankOrder": 5, "requiresSignature": false, "isResponsible": false, "terminalLevel": 0 },
+  { "id": 6, "departmentId": 1, "stepOrder": 2, "jobTitleId": 11, "jobTitleCode": "M", "jobTitleName": "Manager",
+    "rankOrder": 11, "requiresSignature": true, "isResponsible": true, "terminalLevel": 1 }
+]
+```
+`PUT /by-department/{departmentId}` (`Attendance.DepartmentApprovalStep.Update`) — **thay NGUYÊN danh sách**, không có Create/Update/Delete từng dòng riêng:
+```jsonc
+// Request body — thứ tự phần tử = thứ tự bước duyệt (phần tử đầu = bước 1)
+{
+  "steps": [
+    { "jobTitleId": 6, "requiresSignature": false, "isResponsible": false },
+    { "jobTitleId": 11, "requiresSignature": true, "isResponsible": true },
+    { "jobTitleId": 16, "requiresSignature": true, "isResponsible": false },
+    { "jobTitleId": 17, "requiresSignature": true, "isResponsible": false }
+  ]
+}
+```
+Trả về `DepartmentApprovalStepDto[]` mới sau khi thay. Validate: không được lặp lại cùng 1 `jobTitleId` (400), mọi `jobTitleId` phải tồn tại/active (404), **tối đa 1 phần tử** trong `steps` được đặt `isResponsible: true` (400 nếu >1 — có thể để 0). Gửi mảng rỗng `{ "steps": [] }` để xoá hết cây duyệt của Phòng ban đó. `requiresSignature` áp dụng riêng cho BƯỚC này của Phòng ban này (2026-08-07 — xem §3.4b). `isResponsible` (2026-08-07) đánh dấu bước sẽ là "người chịu trách nhiệm" trên form in — **chưa được `OtFormPrintView` nào đọc**, chỉ mới lưu cấu hình + hiện trong `resolve-chain` (§3.4d), chờ Giai đoạn 3 wiring thật.
+
+### 3.4d Xem trước chuỗi duyệt tự động (Giai đoạn 2, mới 2026-08-06, thuật toán sửa lại ở Giai đoạn 2b)
+
+`GET /api/JobTitle/resolve-chain?employeeId=&otCaseId=` (`Attendance.JobTitle.View`, đọc-only, KHÔNG tạo/sửa gì):
 ```jsonc
 // ResolveApprovalChainResultDto
 {
@@ -348,12 +381,18 @@ POST/PUT: `code`[Required], `name`[Required], `rankOrder`[Required] (int, số l
   "warning": null,
   "steps": [
     { "stepOrder": 1, "jobTitleCode": "M", "jobTitleName": "Manager", "rankOrder": 11,
-      "requiresSignature": true, "terminalLevel": 1,
+      "requiresSignature": true, "isResponsible": true, "terminalLevel": 1,
       "candidates": [ { "employeeId": 42, "userName": "YEV\\n.van.b", "fullName": "Nguyễn Văn B" } ] }
   ]
 }
 ```
-`isComplete=false` (kèm `warning` giải thích) nếu Department của `employeeId` chưa có đủ người giữ Chức vụ ở 1 cấp nào đó — **không** tự fallback về `UserApprovalScope` cũ. `steps=[]` + `isComplete=true` nghĩa là người tạo đã ở cấp bằng/cao hơn cấp duyệt cuối, không cần bước nào. **Endpoint này chỉ để xem trước/test** — chưa được `OtFormService` nào gọi tới, chưa ảnh hưởng luồng duyệt thật (xem [attendance-module.md §Cây chức vụ](attendance-module.md)).
+Thuật toán đọc `DepartmentApprovalStep` của Department người tạo (§3.4c) — **không còn** tự bắc cầu qua
+`JobTitle.RankOrder`. `isComplete=false` (kèm `warning` giải thích) nếu: Department chưa cấu hình cây
+duyệt nào, hoặc cây duyệt không có bước nào khớp đúng `TerminalLevel` cần tới, hoặc 1 bước nào đó chưa
+có ai giữ đúng Chức vụ đó trong Phòng ban — **không** tự fallback về `UserApprovalScope` cũ. `steps=[]`
++ `isComplete=true` nghĩa là người tạo đã ở cấp bằng/cao hơn cấp duyệt cuối, không cần bước nào.
+**Endpoint này chỉ để xem trước/test** — chưa được `OtFormService` nào gọi tới, chưa ảnh hưởng luồng
+duyệt thật (xem [attendance-module.md §Cây chức vụ](attendance-module.md)).
 
 ### 3.5 Employee (Nhân viên) — `/api/Employee` — thuộc 1 Group (bắt buộc)
 ```jsonc
@@ -938,7 +977,8 @@ thêm đơn — 1 đơn chỉ thuộc đúng 1 batch). Chi tiết thiết kế B
 | Route | Ghi chú |
 |---|---|
 | `/api/Department`, `/api/Reason`, `/api/OtCase`, `/api/JobTitle` | CRUD chuẩn (grid-list, all, {id}, POST, PUT, DELETE) — JobTitle mới 2026-08-06, §3.4b |
-| `/api/JobTitle/resolve-chain?employeeId=&otCaseId=` | Xem trước chuỗi duyệt tự động (đọc-only, mới 2026-08-06, §3.4b) |
+| `/api/JobTitle/resolve-chain?employeeId=&otCaseId=` | Xem trước chuỗi duyệt tự động (đọc-only, mới 2026-08-06, §3.4d) |
+| `/api/DepartmentApprovalStep/by-department/{departmentId}` | GET (xem)/PUT (thay nguyên danh sách) cây duyệt của 1 Phòng ban — mới 2026-08-06, §3.4c |
 | `/api/Group` (`?by-department/{id}`) | CRUD + cascading theo Department |
 | `/api/Employee` (`all`, `by-group/{id}`, `me`, `{id}/adjust-accumulation`) | CRUD + liệt kê toàn bộ/theo Group + tự tra/tự chỉnh lũy kế (không cần permission) — `all` mới 2026-08-06 |
 | `/api/UserApprovalScope` | grid-list, `by-user/{userName}`, POST, DELETE (không PUT) |

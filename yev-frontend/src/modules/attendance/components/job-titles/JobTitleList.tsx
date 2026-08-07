@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Check, Inbox, X } from "lucide-react";
+import { Inbox } from "lucide-react";
 
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
@@ -158,14 +158,13 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                                 <th className="px-4 py-2.5">{t("colName")}</th>
                                 <th className="px-4 py-2.5">{t("colRankOrder")}</th>
                                 <th className="px-4 py-2.5">{t("colTerminalLevel")}</th>
-                                <th className="px-4 py-2.5">{t("colRequiresSignature")}</th>
                                 <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && jobTitles.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-12">
+                                    <td colSpan={5} className="px-4 py-12">
                                         <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                             <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                             {t("noData")}
@@ -181,18 +180,6 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                                     <td className="px-4 py-3 text-sm">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
                                             {jobTitleTerminalLevelLabels[jobTitle.terminalLevel] ?? jobTitle.terminalLevel}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm">
-                                        <span
-                                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                                                jobTitle.requiresSignature
-                                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                                    : "border-[#e0e3e5] bg-white text-[#8a8f94]"
-                                            }`}
-                                        >
-                                            {jobTitle.requiresSignature ? <Check size={12} /> : <X size={12} />}
-                                            {jobTitle.requiresSignature ? t("yes") : t("no")}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-right text-sm">
