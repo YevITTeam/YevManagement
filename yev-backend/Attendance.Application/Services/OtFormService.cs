@@ -274,6 +274,12 @@ namespace Attendance.Application.Services
                 NumberOfEmployee = otForm.NumberOfEmployee,
                 CreatedByUserName = otForm.CreatedByUserName,
                 CreatedByFullName = otForm.CreatedByFullName,
+                RequesterEmployeeId = otForm.RequesterEmployeeId,
+                RequesterFullName = otForm.RequesterFullName,
+                RequesterUserName = otForm.RequesterUserName,
+                ResponsibleEmployeeId = otForm.ResponsibleEmployeeId,
+                ResponsibleFullName = otForm.ResponsibleFullName,
+                ResponsibleUserName = otForm.ResponsibleUserName,
                 Status = otForm.Status,
                 IsEditable = IsEditableStatus(otForm.Status),
                 Employees = employees.Select(x => new OtFormEmployeeDto
@@ -367,6 +373,34 @@ namespace Attendance.Application.Services
             await EnsureNoOverlappingOtFormsAsync(
                 validatedEmployees, request.Date, request.StartTime, employeeEndTimes, excludeFormId: null);
 
+            // Lấy thông tin Requester & Responsible mặc định từ Group nếu không truyền từ client
+            int? requesterEmpId = request.RequesterEmployeeId ?? group.RequesterEmployeeId;
+            int? responsibleEmpId = request.ResponsibleEmployeeId ?? group.ResponsibleEmployeeId;
+
+            string? requesterFullName = null;
+            string? requesterUserName = null;
+            if (requesterEmpId.HasValue)
+            {
+                var reqEmp = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == requesterEmpId.Value);
+                if (reqEmp != null)
+                {
+                    requesterFullName = $"{reqEmp.LastName} {reqEmp.FirstName}";
+                    requesterUserName = reqEmp.UserName;
+                }
+            }
+
+            string? responsibleFullName = null;
+            string? responsibleUserName = null;
+            if (responsibleEmpId.HasValue)
+            {
+                var respEmp = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == responsibleEmpId.Value);
+                if (respEmp != null)
+                {
+                    responsibleFullName = $"{respEmp.LastName} {respEmp.FirstName}";
+                    responsibleUserName = respEmp.UserName;
+                }
+            }
+
             var newOtForm = new OtForm
             {
                 GroupId = request.GroupId,
@@ -381,6 +415,12 @@ namespace Attendance.Application.Services
                 NumberOfEmployee = request.Employees.Count,
                 CreatedByUserName = createdByUserName,
                 CreatedByFullName = createdByFullName,
+                RequesterEmployeeId = requesterEmpId,
+                RequesterFullName = requesterFullName,
+                RequesterUserName = requesterUserName,
+                ResponsibleEmployeeId = responsibleEmpId,
+                ResponsibleFullName = responsibleFullName,
+                ResponsibleUserName = responsibleUserName,
                 // Just a Draft — DOES NOT YET have the "Requester" signature. The Team Leader must call
                 // POST /{id}/submit to sign it before the form moves to Pending (awaiting Department
                 // Manager) (see docs/attendance-module.md — the form creator differs from the signer).

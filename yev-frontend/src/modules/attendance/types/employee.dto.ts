@@ -18,6 +18,10 @@ export interface EmployeeDto {
     projectedYearToDate: number;
     groupId: number;
     groupNameVn: string;
+
+    // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán (xem docs/attendance-api-fe.md §Cây chức vụ).
+    jobTitleId: number | null;
+    jobTitleName: string | null;
 }
 
 // Body PATCH /api/Employee/{id}/adjust-accumulation — docs §3.6, cả 2 field bắt buộc >= 0.

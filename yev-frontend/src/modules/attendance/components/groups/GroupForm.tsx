@@ -13,6 +13,8 @@ export interface GroupFormValues {
     groupCode: string;
     groupNameVn: string;
     groupNameJp: string | null;
+    requesterEmployeeId: number | null;
+    responsibleEmployeeId: number | null;
 }
 
 interface GroupFormProps {
@@ -24,7 +26,14 @@ interface GroupFormProps {
     onSubmit: (values: GroupFormValues) => void | Promise<void>;
 }
 
-const emptyValues: GroupFormValues = { departmentId: 0, groupCode: "", groupNameVn: "", groupNameJp: null };
+const emptyValues: GroupFormValues = {
+    departmentId: 0,
+    groupCode: "",
+    groupNameVn: "",
+    groupNameJp: null,
+    requesterEmployeeId: null,
+    responsibleEmployeeId: null,
+};
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -36,11 +45,24 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
     const tCommon = useTranslations("Common");
     const [values, setValues] = useState<GroupFormValues>(emptyValues);
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+    const [employees, setEmployees] = useState<{ id: number; fullName: string; code: string }[]>([]);
 
     useEffect(() => {
         if (!isOpen) return;
-        DepartmentApi.getAllDepartments()
-            .then((data) => setDepartments(data))
+        Promise.all([
+            DepartmentApi.getAllDepartments(),
+            import("@/modules/attendance/api/employee.api").then((m) => m.EmployeeApi.getAllEmployees()),
+        ])
+            .then(([deptData, empData]) => {
+                setDepartments(deptData);
+                setEmployees(
+                    empData.map((e) => ({
+                        id: e.id,
+                        fullName: `${e.lastName} ${e.firstName}`,
+                        code: e.code,
+                    }))
+                );
+            })
             .catch((err) => console.error(err));
     }, [isOpen]);
 
@@ -52,6 +74,8 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                       groupCode: current.groupCode,
                       groupNameVn: current.groupNameVn,
                       groupNameJp: current.groupNameJp,
+                      requesterEmployeeId: current.requesterEmployeeId,
+                      responsibleEmployeeId: current.responsibleEmployeeId,
                   }
                 : emptyValues
         );
@@ -144,6 +168,40 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             disabled={loading}
                             className={fieldClassName}
                         />
+                    </label>
+
+                    <label className="block">
+                        <span className={fieldLabelClassName}>Người đề nghị mặc định</span>
+                        <select
+                            value={values.requesterEmployeeId ?? ""}
+                            onChange={(event) => setValues((current) => ({ ...current, requesterEmployeeId: event.target.value ? Number(event.target.value) : null }))}
+                            disabled={loading}
+                            className={fieldClassName}
+                        >
+                            <option value="">-- Chưa chọn --</option>
+                            {employees.map((emp) => (
+                                <option key={emp.id} value={emp.id}>
+                                    {emp.fullName} ({emp.code})
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="block">
+                        <span className={fieldLabelClassName}>Người chịu trách nhiệm mặc định</span>
+                        <select
+                            value={values.responsibleEmployeeId ?? ""}
+                            onChange={(event) => setValues((current) => ({ ...current, responsibleEmployeeId: event.target.value ? Number(event.target.value) : null }))}
+                            disabled={loading}
+                            className={fieldClassName}
+                        >
+                            <option value="">-- Chưa chọn --</option>
+                            {employees.map((emp) => (
+                                <option key={emp.id} value={emp.id}>
+                                    {emp.fullName} ({emp.code})
+                                </option>
+                            ))}
+                        </select>
                     </label>
 
                     <div className="flex justify-end gap-3 pt-2">

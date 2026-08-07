@@ -274,11 +274,17 @@ Giấy tăng ca (Attendance)
 
 // ScopeType — Attendance.Domain.Enums.ScopeType (chỉ dùng trong UserApprovalScope)
 { 0: "Group", 1: "Department" }
+
+// JobTitleTerminalLevel — Attendance.Domain.Enums.JobTitleTerminalLevel (chỉ dùng trong JobTitleDto.terminalLevel, §3.4b — MỚI 2026-08-06)
+{ 0: "None (chỉ là cấp trung gian)", 1: "DepartmentManager (Trưởng phòng)",
+  2: "WorkshopManager (Trưởng xưởng)", 3: "GeneralDirector (Tổng Giám Đốc)" }
+// Tối đa 1 JobTitle active giữ mỗi giá trị non-0. CHƯA liên quan tới ApprovalLevel/OtFormStatus ở
+// trên — JobTitle hiện là danh mục độc lập, chưa được luồng duyệt OtForm nào đọc tới (xem attendance-module.md §Cây chức vụ).
 ```
 
 ## 3. Danh mục CRUD chuẩn
 
-5 entity: `Department`, `Group`, `Reason`, `OtCase`, `Employee`. Đều theo pattern chung (giống Asset):
+6 entity: `Department`, `Group`, `Reason`, `OtCase`, `JobTitle`, `Employee`. Đều theo pattern chung (giống Asset):
 ```
 GET /api/{Entity}/grid-list?pageIndex=1&pageSize=50&keyword=   → PagedResponse
 GET /api/{Entity}/all                                           → Dto[] (active, cho dropdown)
@@ -321,6 +327,34 @@ POST/PUT: `reasonNameVn`[Required], `reasonNameJp?`.
 ```
 POST/PUT: `code`[Required], `description?`, `requireSignature`(bool), `requiredApprovalLevel`[Required] (enum `ApprovalLevel` §2 — **chỉ nên chọn `1`/`2`/`3`**, không dùng `0=Submitter` hoặc `4=GroupHead` làm cấp cuối — cả 2 cấp này luôn bắt buộc chạy qua trước khi tới cấp `requiredApprovalLevel` thật sự, không phải cấp có thể chọn làm điểm dừng). Đây là **master data admin cấu hình sẵn** (thường 3 dòng cố định TH1/TH2/TH3), FE màn tạo đơn chỉ cần dropdown chọn từ `/all`.
 
+### 3.4b JobTitle (Chức vụ) — `/api/JobTitle` (mới, 2026-08-06 — Giai đoạn 1 "Cây chức vụ")
+
+> Danh mục độc lập, **CHƯA được đọc bởi bất kỳ luồng duyệt OtForm nào** — xem
+> [attendance-module.md §Cây chức vụ](attendance-module.md) để biết phạm vi Giai đoạn 1 đã xong và
+> phần còn thiếu (suy luận chuỗi duyệt tự động, thay thế `UserApprovalScope`).
+
+```jsonc
+// JobTitleDto
+{ "id": 11, "code": "M", "name": "Manager", "rankOrder": 11,
+  "requiresSignature": true, "terminalLevel": 1 }
+```
+POST/PUT: `code`[Required], `name`[Required], `rankOrder`[Required] (int, số lớn = cấp cao hơn), `requiresSignature`(bool), `terminalLevel` (enum `JobTitleTerminalLevel`: `0=None/1=DepartmentManager/2=WorkshopManager/3=GeneralDirector`). Trùng `code` (kể cả bản ghi đã xóa mềm) → 400. Đặt `terminalLevel` khác `0` khi đã có 1 `JobTitle` active khác giữ đúng giá trị đó → 400 (mỗi `TerminalLevel` non-None chỉ 1 chức vụ). Xóa khi còn `Employee.jobTitleId` trỏ tới → 400.
+
+**Xem trước chuỗi duyệt tự động (Giai đoạn 2, mới 2026-08-06)** — `GET /api/JobTitle/resolve-chain?employeeId=&otCaseId=` (`Attendance.JobTitle.View`, đọc-only, KHÔNG tạo/sửa gì):
+```jsonc
+// ResolveApprovalChainResultDto
+{
+  "isComplete": true,
+  "warning": null,
+  "steps": [
+    { "stepOrder": 1, "jobTitleCode": "M", "jobTitleName": "Manager", "rankOrder": 11,
+      "requiresSignature": true, "terminalLevel": 1,
+      "candidates": [ { "employeeId": 42, "userName": "YEV\\n.van.b", "fullName": "Nguyễn Văn B" } ] }
+  ]
+}
+```
+`isComplete=false` (kèm `warning` giải thích) nếu Department của `employeeId` chưa có đủ người giữ Chức vụ ở 1 cấp nào đó — **không** tự fallback về `UserApprovalScope` cũ. `steps=[]` + `isComplete=true` nghĩa là người tạo đã ở cấp bằng/cao hơn cấp duyệt cuối, không cần bước nào. **Endpoint này chỉ để xem trước/test** — chưa được `OtFormService` nào gọi tới, chưa ảnh hưởng luồng duyệt thật (xem [attendance-module.md §Cây chức vụ](attendance-module.md)).
+
 ### 3.5 Employee (Nhân viên) — `/api/Employee` — thuộc 1 Group (bắt buộc)
 ```jsonc
 // EmployeeDto
@@ -329,11 +363,14 @@ POST/PUT: `code`[Required], `description?`, `requireSignature`(bool), `requiredA
   "monthToDate": 12.5, "yearToDate": 80.0,
   "accumulationYear": 2026, "accumulationMonth": 7, // tháng/năm mà monthToDate/yearToDate đang phản ánh
   "projectedMonthToDate": 14.5, "projectedYearToDate": 82.0, // MỚI 2026-08-06, xem §3.5b — dự kiến
-  "groupId": 5, "groupNameVn": "Nhóm 1" }
+  "groupId": 5, "groupNameVn": "Nhóm 1",
+  "jobTitleId": 11, "jobTitleName": "Manager" }    // nullable, MỚI 2026-08-06 — xem §3.4b
 ```
-POST/PUT: `code`[Required], `firstName`[Required], `lastName`[Required], `userName?` (optional — gán tài khoản AD để nhân viên tự chỉnh lũy kế, xem §3.6), `monthToDate`, `yearToDate` (decimal, giờ OT lũy kế — dùng để cảnh báo TH3 vượt 25h/tháng hoặc 300h/năm), `groupId`[Required]. Trùng `userName` với nhân viên khác (kể cả đang active) → 400. `projectedMonthToDate`/`projectedYearToDate` là field **chỉ đọc** (response only) — không có trong POST/PUT body.
+POST/PUT: `code`[Required], `firstName`[Required], `lastName`[Required], `userName?` (optional — gán tài khoản AD để nhân viên tự chỉnh lũy kế, xem §3.6), `monthToDate`, `yearToDate` (decimal, giờ OT lũy kế — dùng để cảnh báo TH3 vượt 25h/tháng hoặc 300h/năm), `groupId`[Required], `jobTitleId?` (optional, MỚI 2026-08-06 — id không tồn tại/đã xóa → 404). Trùng `userName` với nhân viên khác (kể cả đang active) → 400. `projectedMonthToDate`/`projectedYearToDate` là field **chỉ đọc** (response only) — không có trong POST/PUT body.
 
 **Chọn nhân viên hàng loạt khi lập đơn**: `GET /api/Employee/by-group/{groupId}` → `EmployeeDto[]` toàn bộ nhân viên nhóm đó (Trưởng nhóm tick chọn nhiều người cho `CreateOtFormDto.employees`) — FE dùng **`projectedMonthToDate`/`projectedYearToDate`** (KHÔNG dùng `monthToDate`/`yearToDate`) để cảnh báo hạn mức TH3 ngay lúc chọn (§1.3.A, §3.5b).
+
+**Toàn bộ nhân viên active (mọi Group)**: `GET /api/Employee/all` (`Attendance.Employee.View`, mới 2026-08-06) → `EmployeeDto[]` — dùng cho dropdown/công cụ cần chọn 1 nhân viên bất kỳ không giới hạn theo Group, vd panel "Thử chuỗi duyệt" (§3.4b). Trước đó FE (`EmployeeApi.getAllEmployees()`) đã gọi sẵn route này nhưng BE chưa có action khớp — request rơi vào `GET /{id}` với `id="all"`, trả 400 `"The value 'all' is not valid"`; đã bổ sung action thật.
 
 ### 3.5b Lũy kế DỰ KIẾN — `projectedMonthToDate`/`projectedYearToDate` (2026-08-06)
 
@@ -900,9 +937,10 @@ thêm đơn — 1 đơn chỉ thuộc đúng 1 batch). Chi tiết thiết kế B
 
 | Route | Ghi chú |
 |---|---|
-| `/api/Department`, `/api/Reason`, `/api/OtCase` | CRUD chuẩn (grid-list, all, {id}, POST, PUT, DELETE) |
+| `/api/Department`, `/api/Reason`, `/api/OtCase`, `/api/JobTitle` | CRUD chuẩn (grid-list, all, {id}, POST, PUT, DELETE) — JobTitle mới 2026-08-06, §3.4b |
+| `/api/JobTitle/resolve-chain?employeeId=&otCaseId=` | Xem trước chuỗi duyệt tự động (đọc-only, mới 2026-08-06, §3.4b) |
 | `/api/Group` (`?by-department/{id}`) | CRUD + cascading theo Department |
-| `/api/Employee` (`by-group/{id}`, `me`, `{id}/adjust-accumulation`) | CRUD + liệt kê theo Group + tự tra/tự chỉnh lũy kế (không cần permission) |
+| `/api/Employee` (`all`, `by-group/{id}`, `me`, `{id}/adjust-accumulation`) | CRUD + liệt kê toàn bộ/theo Group + tự tra/tự chỉnh lũy kế (không cần permission) — `all` mới 2026-08-06 |
 | `/api/UserApprovalScope` | grid-list, `by-user/{userName}`, POST, DELETE (không PUT) |
 | `/api/UserSignature` | `me` (GET/PUT), `{userName}` (GET, admin), `confirm/{token}` (GET/POST, public — §6b) |
 | `/api/SecondaryPassword` | `me` (GET/PUT), `confirm/{token}` (GET/POST, public — §6c) |

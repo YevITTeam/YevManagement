@@ -169,6 +169,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                 <th className="px-4 py-2.5">{t("colFullName")}</th>
                                 <th className="px-4 py-2.5">{t("colUserName")}</th>
                                 <th className="px-4 py-2.5">{t("colGroup")}</th>
+                                <th className="px-4 py-2.5">{t("colJobTitle")}</th>
                                 <th className="px-4 py-2.5">{t("colMonthToDate")}</th>
                                 <th className="px-4 py-2.5">{t("colYearToDate")}</th>
                                 <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
@@ -177,7 +178,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         <tbody>
                             {!isLoading && employees.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-12">
+                                    <td colSpan={8} className="px-4 py-12">
                                         <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                             <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                             {t("noData")}
@@ -202,6 +203,15 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     </td>
                                     <td className="px-4 py-3 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
                                     <td className="px-4 py-3 text-sm text-[#5e3f3a]">{employee.groupNameVn}</td>
+                                    <td className="px-4 py-3 text-sm">
+                                        {employee.jobTitleName ? (
+                                            <span className="text-[#5e3f3a]">{employee.jobTitleName}</span>
+                                        ) : (
+                                            <span className="inline-flex items-center rounded-full border border-[#e9bcb6] bg-[#fff4f2] px-2.5 py-0.5 text-xs font-medium text-[#930006]">
+                                                {t("noJobTitle")}
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="px-4 py-3 text-sm">
                                         <span className={accumulationBadgeClass(isMonthOverLimit)}>
                                             {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}

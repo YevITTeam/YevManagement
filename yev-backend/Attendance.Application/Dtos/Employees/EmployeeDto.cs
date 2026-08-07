@@ -25,5 +25,9 @@ namespace Attendance.Application.Dtos.Employees
 
         public int GroupId { get; set; }
         public string GroupNameVn { get; set; } = null!;
+
+        // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán.
+        public int? JobTitleId { get; set; }
+        public string? JobTitleName { get; set; }
     }
 }

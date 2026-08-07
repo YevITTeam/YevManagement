@@ -13,7 +13,7 @@ namespace Attendance.Application.Services
 
         public async Task<PagedResponse<GroupDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword)
         {
-            var query = _unitOfWork.Groups.GetQueryable(false, x => x.Department).Where(x => !x.IsDeleted);
+            var query = _unitOfWork.Groups.GetQueryable(false, x => x.Department, x => x.RequesterEmployee!, x => x.ResponsibleEmployee!).Where(x => !x.IsDeleted);
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {
@@ -31,7 +31,11 @@ namespace Attendance.Application.Services
                     GroupNameVn = x.GroupNameVn,
                     GroupNameJp = x.GroupNameJp,
                     DepartmentId = x.DepartmentId,
-                    DepartmentNameVn = x.Department.DepartmentNameVn
+                    DepartmentNameVn = x.Department.DepartmentNameVn,
+                    RequesterEmployeeId = x.RequesterEmployeeId,
+                    RequesterFullName = x.RequesterEmployee != null ? $"{x.RequesterEmployee.LastName} {x.RequesterEmployee.FirstName}" : null,
+                    ResponsibleEmployeeId = x.ResponsibleEmployeeId,
+                    ResponsibleFullName = x.ResponsibleEmployee != null ? $"{x.ResponsibleEmployee.LastName} {x.ResponsibleEmployee.FirstName}" : null
                 }
             );
         }
@@ -47,7 +51,11 @@ namespace Attendance.Application.Services
                     GroupNameVn = x.GroupNameVn,
                     GroupNameJp = x.GroupNameJp,
                     DepartmentId = x.DepartmentId,
-                    DepartmentNameVn = x.Department.DepartmentNameVn
+                    DepartmentNameVn = x.Department.DepartmentNameVn,
+                    RequesterEmployeeId = x.RequesterEmployeeId,
+                    RequesterFullName = x.RequesterEmployee != null ? $"{x.RequesterEmployee.LastName} {x.RequesterEmployee.FirstName}" : null,
+                    ResponsibleEmployeeId = x.ResponsibleEmployeeId,
+                    ResponsibleFullName = x.ResponsibleEmployee != null ? $"{x.ResponsibleEmployee.LastName} {x.ResponsibleEmployee.FirstName}" : null
                 }
             );
             return groups.OrderBy(x => x.GroupNameVn).ToList();
@@ -64,7 +72,11 @@ namespace Attendance.Application.Services
                     GroupNameVn = x.GroupNameVn,
                     GroupNameJp = x.GroupNameJp,
                     DepartmentId = x.DepartmentId,
-                    DepartmentNameVn = x.Department.DepartmentNameVn
+                    DepartmentNameVn = x.Department.DepartmentNameVn,
+                    RequesterEmployeeId = x.RequesterEmployeeId,
+                    RequesterFullName = x.RequesterEmployee != null ? $"{x.RequesterEmployee.LastName} {x.RequesterEmployee.FirstName}" : null,
+                    ResponsibleEmployeeId = x.ResponsibleEmployeeId,
+                    ResponsibleFullName = x.ResponsibleEmployee != null ? $"{x.ResponsibleEmployee.LastName} {x.ResponsibleEmployee.FirstName}" : null
                 }
             );
             return groups.OrderBy(x => x.GroupNameVn).ToList();
@@ -72,7 +84,7 @@ namespace Attendance.Application.Services
 
         public async Task<GroupDto> GetByIdAsync(int id)
         {
-            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == id, x => x.Department);
+            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == id, x => x.Department, x => x.RequesterEmployee!, x => x.ResponsibleEmployee!);
             group.OrThrowNotFound("Nhóm", id);
 
             return new GroupDto
@@ -82,7 +94,11 @@ namespace Attendance.Application.Services
                 GroupNameVn = group.GroupNameVn,
                 GroupNameJp = group.GroupNameJp,
                 DepartmentId = group.DepartmentId,
-                DepartmentNameVn = group.Department.DepartmentNameVn
+                DepartmentNameVn = group.Department.DepartmentNameVn,
+                RequesterEmployeeId = group.RequesterEmployeeId,
+                RequesterFullName = group.RequesterEmployee != null ? $"{group.RequesterEmployee.LastName} {group.RequesterEmployee.FirstName}" : null,
+                ResponsibleEmployeeId = group.ResponsibleEmployeeId,
+                ResponsibleFullName = group.ResponsibleEmployee != null ? $"{group.ResponsibleEmployee.LastName} {group.ResponsibleEmployee.FirstName}" : null
             };
         }
 
@@ -100,21 +116,15 @@ namespace Attendance.Application.Services
                 GroupNameVn = request.GroupNameVn,
                 GroupNameJp = request.GroupNameJp,
                 DepartmentId = request.DepartmentId,
+                RequesterEmployeeId = request.RequesterEmployeeId,
+                ResponsibleEmployeeId = request.ResponsibleEmployeeId,
                 IsDeleted = false
             };
 
             await _unitOfWork.Groups.AddAsync(newGroup);
             await _unitOfWork.SaveChangesAsync();
 
-            return new GroupDto
-            {
-                Id = newGroup.Id,
-                GroupCode = newGroup.GroupCode,
-                GroupNameVn = newGroup.GroupNameVn,
-                GroupNameJp = newGroup.GroupNameJp,
-                DepartmentId = newGroup.DepartmentId,
-                DepartmentNameVn = department!.DepartmentNameVn
-            };
+            return await GetByIdAsync(newGroup.Id);
         }
 
         public async Task UpdateAsync(UpdateGroupDto request)
@@ -138,6 +148,8 @@ namespace Attendance.Application.Services
             group.GroupNameVn = request.GroupNameVn;
             group.GroupNameJp = request.GroupNameJp;
             group.DepartmentId = request.DepartmentId;
+            group.RequesterEmployeeId = request.RequesterEmployeeId;
+            group.ResponsibleEmployeeId = request.ResponsibleEmployeeId;
 
             _unitOfWork.Groups.Update(group);
             await _unitOfWork.SaveChangesAsync();

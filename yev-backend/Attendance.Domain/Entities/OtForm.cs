@@ -37,6 +37,18 @@ public partial class OtForm
     // OtFormApprovalHistory.ApproverFullName.
     public string? CreatedByFullName { get; set; }
 
+    public int? RequesterEmployeeId { get; set; }
+
+    public string? RequesterFullName { get; set; }
+
+    public string? RequesterUserName { get; set; }
+
+    public int? ResponsibleEmployeeId { get; set; }
+
+    public string? ResponsibleFullName { get; set; }
+
+    public string? ResponsibleUserName { get; set; }
+
     // Stores the Attendance.Domain.Enums.OtFormStatus enum as an int (following the same convention as
     // Asset.Domain.Entities.Device.Status).
     public int Status { get; set; }

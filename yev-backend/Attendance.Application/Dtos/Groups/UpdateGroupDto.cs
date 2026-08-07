@@ -16,5 +16,9 @@ namespace Attendance.Application.Dtos.Groups
 
         [Required(ErrorMessage = "Bộ phận không được để trống")]
         public int DepartmentId { get; set; }
+
+        public int? RequesterEmployeeId { get; set; }
+
+        public int? ResponsibleEmployeeId { get; set; }
     }
 }

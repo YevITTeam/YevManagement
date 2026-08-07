@@ -32,6 +32,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<AttendanceSetting> AttendanceSettings { get; set; }
     public virtual DbSet<OtFormBatch> OtFormBatches { get; set; }
     public virtual DbSet<OtFormBatchEmailToken> OtFormBatchEmailTokens { get; set; }
+    public virtual DbSet<JobTitle> JobTitles { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,6 +66,16 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_Groups_Departments_DepartmentId");
+
+            entity.HasOne(d => d.RequesterEmployee).WithMany()
+                .HasForeignKey(d => d.RequesterEmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_Groups_Employees_Requester");
+
+            entity.HasOne(d => d.ResponsibleEmployee).WithMany()
+                .HasForeignKey(d => d.ResponsibleEmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_Groups_Employees_Responsible");
         });
 
         modelBuilder.Entity<Reason>(entity =>
@@ -84,6 +95,7 @@ public partial class AttendanceDbContext : DbContext
         {
             entity.HasIndex(e => e.Code, "IX_Employees_Code").IsUnique();
             entity.HasIndex(e => e.GroupId, "IX_Employees_GroupId");
+            entity.HasIndex(e => e.JobTitleId, "IX_Employees_JobTitleId");
             // Filtered unique index: SQL Server only allows 1 NULL in a regular unique index,
             // so filter IS NOT NULL to let multiple employees without an assigned UserName still be insertable.
             entity.HasIndex(e => e.UserName, "IX_Employees_UserName").IsUnique().HasFilter("[UserName] IS NOT NULL");
@@ -101,6 +113,18 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.GroupId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_Employees_Groups_GroupId");
+
+            entity.HasOne(d => d.JobTitle).WithMany(p => p.Employees)
+                .HasForeignKey(d => d.JobTitleId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_Employees_JobTitles_JobTitleId");
+        });
+
+        modelBuilder.Entity<JobTitle>(entity =>
+        {
+            entity.HasIndex(e => e.Code, "IX_JobTitles_Code").IsUnique();
+            entity.Property(e => e.Code).HasMaxLength(50);
+            entity.Property(e => e.Name).HasMaxLength(150);
         });
 
         modelBuilder.Entity<OtForm>(entity =>
@@ -114,6 +138,10 @@ public partial class AttendanceDbContext : DbContext
 
             entity.Property(e => e.CreatedByUserName).HasMaxLength(100);
             entity.Property(e => e.CreatedByFullName).HasMaxLength(255);
+            entity.Property(e => e.RequesterFullName).HasMaxLength(100);
+            entity.Property(e => e.RequesterUserName).HasMaxLength(50);
+            entity.Property(e => e.ResponsibleFullName).HasMaxLength(100);
+            entity.Property(e => e.ResponsibleUserName).HasMaxLength(50);
             entity.Property(e => e.SubReason).HasMaxLength(500);
             entity.Property(e => e.TotalHour).HasPrecision(10, 2);
 

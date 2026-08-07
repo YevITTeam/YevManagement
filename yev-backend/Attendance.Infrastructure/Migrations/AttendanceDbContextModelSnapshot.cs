@@ -108,6 +108,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("JobTitleId")
+                        .HasColumnType("int");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -145,6 +148,8 @@ namespace Attendance.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex(new[] { "GroupId" }, "IX_Employees_GroupId");
+
+                    b.HasIndex(new[] { "JobTitleId" }, "IX_Employees_JobTitleId");
 
                     b.HasIndex(new[] { "UserName" }, "IX_Employees_UserName")
                         .IsUnique()
@@ -189,6 +194,44 @@ namespace Attendance.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Groups");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.JobTitle", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("RankOrder")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresSignature")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("TerminalLevel")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "Code" }, "IX_JobTitles_Code")
+                        .IsUnique();
+
+                    b.ToTable("JobTitles");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtCase", b =>
@@ -798,7 +841,15 @@ namespace Attendance.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_Employees_Groups_GroupId");
 
+                    b.HasOne("Attendance.Domain.Entities.JobTitle", "JobTitle")
+                        .WithMany("Employees")
+                        .HasForeignKey("JobTitleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Employees_JobTitles_JobTitleId");
+
                     b.Navigation("Group");
+
+                    b.Navigation("JobTitle");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Group", b =>
@@ -958,6 +1009,11 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("Employees");
 
                     b.Navigation("OtForms");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.JobTitle", b =>
+                {
+                    b.Navigation("Employees");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtCase", b =>

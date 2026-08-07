@@ -58,6 +58,15 @@ export const scopeTypeLabels: Record<number, string> = {
     2: "Toàn công ty",
 };
 
+// JobTitleTerminalLevel (docs/attendance-api-fe.md §Cây chức vụ) — None nếu chỉ là cấp trung gian,
+// 3 giá trị còn lại tương ứng đúng 3 cấp duyệt cuối cố định (Trưởng phòng/Trưởng Xưởng/TGĐ).
+export const jobTitleTerminalLevelLabels: Record<number, string> = {
+    0: "Không (cấp trung gian)",
+    1: "Trưởng phòng",
+    2: "Trưởng xưởng",
+    3: "Tổng Giám Đốc",
+};
+
 // Cấp đang chờ duyệt kế tiếp suy ra từ status (docs/attendance-api-fe.md §4.3) — null khi đã xong (Completed/Rejected).
 export function nextApprovalLevelFromStatus(status: number): number | null {
     if (status === 6) return 4; // Chờ Trưởng Bộ phận (GroupHead, mới 2026-07-17)

@@ -24,6 +24,16 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
+        // Toàn bộ nhân viên active (mọi Group) — dùng cho dropdown/công cụ cần chọn 1 nhân viên bất kỳ
+        // (vd JobTitle "Thử chuỗi duyệt", xem docs/docs-be/attendance-module.md §Cây chức vụ).
+        [RequirePermission("Attendance.Employee.View")]
+        [HttpGet("all")]
+        public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetAllActive()
+        {
+            var result = await _employeeService.GetAllActiveAsync();
+            return Success(result);
+        }
+
         // Trưởng nhóm dùng liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm.
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("by-group/{groupId}")]

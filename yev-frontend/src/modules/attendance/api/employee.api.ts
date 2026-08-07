@@ -31,6 +31,7 @@ export interface CreateUpdateEmployeeDto {
     monthToDate: number;
     yearToDate: number;
     groupId: number;
+    jobTitleId?: number | null;
 }
 
 export const EmployeeApi = {

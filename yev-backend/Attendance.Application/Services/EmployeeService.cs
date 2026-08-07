@@ -14,7 +14,7 @@ namespace Attendance.Application.Services
 
         public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword)
         {
-            var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group).Where(x => !x.IsDeleted);
+            var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group, x => x.JobTitle!).Where(x => !x.IsDeleted);
             var orderedQuery = query.OrderBy(x => x.Code);
 
             if (!string.IsNullOrWhiteSpace(keyword))
@@ -50,9 +50,39 @@ namespace Attendance.Application.Services
                     ProjectedMonthToDate = x.ProjectedMonthToDate,
                     ProjectedYearToDate = x.ProjectedYearToDate,
                     GroupId = x.GroupId,
-                    GroupNameVn = x.Group.GroupNameVn
+                    GroupNameVn = x.Group.GroupNameVn,
+                    JobTitleId = x.JobTitleId,
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
                 }
             );
+        }
+
+        // Toàn bộ nhân viên active (mọi Group) — dùng cho các dropdown/công cụ cần chọn 1 nhân viên bất
+        // kỳ, vd JobTitle "Thử chuỗi duyệt" (docs/docs-be/attendance-module.md §Cây chức vụ).
+        public async Task<List<EmployeeDto>> GetAllActiveAsync()
+        {
+            var items = await _unitOfWork.Employees.SelectAsync(
+                predicate: x => !x.IsDeleted,
+                selector: x => new EmployeeDto
+                {
+                    Id = x.Id,
+                    Code = x.Code,
+                    FirstName = x.FirstName,
+                    LastName = x.LastName,
+                    UserName = x.UserName,
+                    MonthToDate = x.MonthToDate,
+                    YearToDate = x.YearToDate,
+                    AccumulationYear = x.AccumulationYear,
+                    AccumulationMonth = x.AccumulationMonth,
+                    ProjectedMonthToDate = x.ProjectedMonthToDate,
+                    ProjectedYearToDate = x.ProjectedYearToDate,
+                    GroupId = x.GroupId,
+                    GroupNameVn = x.Group.GroupNameVn,
+                    JobTitleId = x.JobTitleId,
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
+                }
+            );
+            return items.OrderBy(x => x.Code).ToList();
         }
 
         // Dùng cho Trưởng nhóm liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm.
@@ -74,7 +104,9 @@ namespace Attendance.Application.Services
                     ProjectedMonthToDate = x.ProjectedMonthToDate,
                     ProjectedYearToDate = x.ProjectedYearToDate,
                     GroupId = x.GroupId,
-                    GroupNameVn = x.Group.GroupNameVn
+                    GroupNameVn = x.Group.GroupNameVn,
+                    JobTitleId = x.JobTitleId,
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
                 }
             );
             return items.OrderBy(x => x.Code).ToList();
@@ -82,7 +114,7 @@ namespace Attendance.Application.Services
 
         public async Task<EmployeeDto> GetByIdAsync(int id)
         {
-            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == id, x => x.Group);
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == id, x => x.Group, x => x.JobTitle!);
             employee.OrThrowNotFound("Nhân viên", id);
 
             return new EmployeeDto
@@ -99,14 +131,16 @@ namespace Attendance.Application.Services
                 ProjectedMonthToDate = employee.ProjectedMonthToDate,
                 ProjectedYearToDate = employee.ProjectedYearToDate,
                 GroupId = employee.GroupId,
-                GroupNameVn = employee.Group.GroupNameVn
+                GroupNameVn = employee.Group.GroupNameVn,
+                JobTitleId = employee.JobTitleId,
+                JobTitleName = employee.JobTitle?.Name
             };
         }
 
         // Nhân viên tự tra employeeId của chính mình (màn "Lũy kế của tôi") — so khớp Employee.UserName.
         public async Task<EmployeeDto> GetByUserNameAsync(string userName)
         {
-            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted, x => x.Group);
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted, x => x.Group, x => x.JobTitle!);
             employee.OrThrowNotFound("Nhân viên (tài khoản chưa được gán cho nhân viên nào)", userName);
 
             return new EmployeeDto
@@ -123,7 +157,9 @@ namespace Attendance.Application.Services
                 ProjectedMonthToDate = employee.ProjectedMonthToDate,
                 ProjectedYearToDate = employee.ProjectedYearToDate,
                 GroupId = employee.GroupId,
-                GroupNameVn = employee.Group.GroupNameVn
+                GroupNameVn = employee.Group.GroupNameVn,
+                JobTitleId = employee.JobTitleId,
+                JobTitleName = employee.JobTitle?.Name
             };
         }
 
@@ -141,6 +177,14 @@ namespace Attendance.Application.Services
                 if (existsUserName != null) throw new DomainException($"Tài khoản '{request.UserName}' đã được gán cho nhân viên khác.");
             }
 
+            string? jobTitleName = null;
+            if (request.JobTitleId.HasValue)
+            {
+                var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == request.JobTitleId.Value && !x.IsDeleted);
+                jobTitle.OrThrowNotFound("Chức vụ", request.JobTitleId.Value);
+                jobTitleName = jobTitle!.Name;
+            }
+
             var now = TimeHelper.GetCurrentUtcTime();
             var newEmployee = new Employee
             {
@@ -153,6 +197,7 @@ namespace Attendance.Application.Services
                 AccumulationYear = now.Year,
                 AccumulationMonth = now.Month,
                 GroupId = request.GroupId,
+                JobTitleId = request.JobTitleId,
                 IsDeleted = false
             };
 
@@ -173,7 +218,9 @@ namespace Attendance.Application.Services
                 ProjectedMonthToDate = newEmployee.ProjectedMonthToDate,
                 ProjectedYearToDate = newEmployee.ProjectedYearToDate,
                 GroupId = newEmployee.GroupId,
-                GroupNameVn = group!.GroupNameVn
+                GroupNameVn = group!.GroupNameVn,
+                JobTitleId = newEmployee.JobTitleId,
+                JobTitleName = jobTitleName
             };
         }
 
@@ -200,6 +247,12 @@ namespace Attendance.Application.Services
                 group.OrThrowNotFound("Nhóm", request.GroupId);
             }
 
+            if (request.JobTitleId.HasValue && request.JobTitleId != employee.JobTitleId)
+            {
+                var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == request.JobTitleId.Value && !x.IsDeleted);
+                jobTitle.OrThrowNotFound("Chức vụ", request.JobTitleId.Value);
+            }
+
             var now = TimeHelper.GetCurrentUtcTime();
             employee.Code = request.Code;
             employee.FirstName = request.FirstName;
@@ -210,6 +263,7 @@ namespace Attendance.Application.Services
             employee.AccumulationYear = now.Year;
             employee.AccumulationMonth = now.Month;
             employee.GroupId = request.GroupId;
+            employee.JobTitleId = request.JobTitleId;
 
             _unitOfWork.Employees.Update(employee);
             await _unitOfWork.SaveChangesAsync();

@@ -47,9 +47,15 @@ public partial class Employee
     // mình khi lập đơn OT. Department suy ra qua Group.DepartmentId, không cần lưu trùng trên Employee.
     public int GroupId { get; set; }
 
+    // Chức vụ hiện tại (cây Chức vụ dùng suy luận chuỗi duyệt OT) — nullable vì nhân viên cũ có thể
+    // chưa được gán, và 1 người chỉ giữ đúng 1 Chức vụ tại 1 thời điểm (không kiêm nhiệm).
+    public int? JobTitleId { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual Group Group { get; set; } = null!;
+
+    public virtual JobTitle? JobTitle { get; set; }
 
     public virtual ICollection<OtFormEmployee> OtFormEmployees { get; set; } = new List<OtFormEmployee>();
 }

@@ -23,5 +23,7 @@ namespace Attendance.Application.Dtos.Employees
 
         [Required(ErrorMessage = "Nhóm không được để trống")]
         public int GroupId { get; set; }
+
+        public int? JobTitleId { get; set; }
     }
 }

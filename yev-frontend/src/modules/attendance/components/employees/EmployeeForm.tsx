@@ -5,6 +5,8 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
+import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
+import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
@@ -18,6 +20,7 @@ export interface EmployeeFormValues {
     monthToDate: number;
     yearToDate: number;
     groupId: number;
+    jobTitleId: number | null;
 }
 
 interface EmployeeFormProps {
@@ -37,6 +40,7 @@ const emptyValues: EmployeeFormValues = {
     monthToDate: 0,
     yearToDate: 0,
     groupId: 0,
+    jobTitleId: null,
 };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
@@ -48,6 +52,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     const tCommon = useTranslations("Common");
     const [values, setValues] = useState<EmployeeFormValues>(emptyValues);
     const [groups, setGroups] = useState<GroupDto[]>([]);
+    const [jobTitles, setJobTitles] = useState<JobTitleDto[]>([]);
     const [usersWithRoles, setUsersWithRoles] = useState<UserDto[]>([]);
     const [showUserSuggestions, setShowUserSuggestions] = useState(false);
 
@@ -55,6 +60,9 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         if (!isOpen) return;
         GroupApi.getAllGroups()
             .then((data) => setGroups(data))
+            .catch((err) => console.error(err));
+        JobTitleApi.getAllJobTitles()
+            .then((data) => setJobTitles(data))
             .catch((err) => console.error(err));
         AuthApi.getAllUsersWithRoles()
             .then((data) => setUsersWithRoles(data))
@@ -72,6 +80,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                       monthToDate: current.monthToDate,
                       yearToDate: current.yearToDate,
                       groupId: current.groupId,
+                      jobTitleId: current.jobTitleId,
                   }
                 : emptyValues
         );
@@ -208,6 +217,28 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             {groups.map((group) => (
                                 <option key={group.id} value={group.id}>
                                     {group.groupNameVn}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldJobTitle")}</span>
+                        <select
+                            value={values.jobTitleId ?? ""}
+                            onChange={(event) =>
+                                setValues((current) => ({
+                                    ...current,
+                                    jobTitleId: event.target.value ? Number(event.target.value) : null,
+                                }))
+                            }
+                            disabled={loading}
+                            className={fieldClassName}
+                        >
+                            <option value="">{t("fieldJobTitlePlaceholder")}</option>
+                            {jobTitles.map((jobTitle) => (
+                                <option key={jobTitle.id} value={jobTitle.id}>
+                                    {jobTitle.name}
                                 </option>
                             ))}
                         </select>

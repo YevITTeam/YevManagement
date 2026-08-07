@@ -78,6 +78,8 @@ export interface MyCreateScopeItemDto {
 export interface CreateOtFormDto {
     groupId: number;
     departmentId: number;
+    requesterEmployeeId?: number | null;
+    responsibleEmployeeId?: number | null;
     reasonId: number;
     otCaseId: number;
     startTime: string;
@@ -169,6 +171,12 @@ export interface OtFormDto {
     numberOfEmployee: number;
     createdByUserName: string;
     createdByFullName: string | null;
+    requesterEmployeeId: number | null;
+    requesterFullName: string | null;
+    requesterUserName: string | null;
+    responsibleEmployeeId: number | null;
+    responsibleFullName: string | null;
+    responsibleUserName: string | null;
     status: number;
     isEditable: boolean;
     employees: OtFormEmployeeDto[];

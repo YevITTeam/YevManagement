@@ -26,11 +26,13 @@ namespace Attendance.Infrastructure.Repositories
             IPendingSecondaryPasswordConfirmationRepository pendingSecondaryPasswordConfirmations,
             IAttendanceSettingRepository attendanceSettings,
             IOtFormBatchRepository otFormBatches,
-            IOtFormBatchEmailTokenRepository otFormBatchEmailTokens) : base(dbContext)
+            IOtFormBatchEmailTokenRepository otFormBatchEmailTokens,
+            IJobTitleRepository jobTitles) : base(dbContext)
         {
             AttendanceSettings = attendanceSettings;
             OtFormBatches = otFormBatches;
             OtFormBatchEmailTokens = otFormBatchEmailTokens;
+            JobTitles = jobTitles;
             Departments = departments;
             Groups = groups;
             Reasons = reasons;
@@ -66,5 +68,6 @@ namespace Attendance.Infrastructure.Repositories
         public IAttendanceSettingRepository AttendanceSettings { get; }
         public IOtFormBatchRepository OtFormBatches { get; }
         public IOtFormBatchEmailTokenRepository OtFormBatchEmailTokens { get; }
+        public IJobTitleRepository JobTitles { get; }
     }
 }

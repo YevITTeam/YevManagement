@@ -7,11 +7,21 @@ import DepartmentList from "./departments/DepartmentList";
 import GroupList from "./groups/GroupList";
 import ReasonList from "./reasons/ReasonList";
 import OtCaseList from "./ot-cases/OtCaseList";
+import JobTitleList from "./job-titles/JobTitleList";
+import ApprovalChainPreviewPanel from "./job-titles/ApprovalChainPreviewPanel";
 import EmployeeList from "./employees/EmployeeList";
 import AttendanceSettingPanel from "./settings/AttendanceSettingPanel";
 import type { ListHandle } from "./list-toolbar";
 
-type CategoryTab = "departments" | "groups" | "reasons" | "ot-cases" | "employees" | "settings";
+type CategoryTab =
+    | "departments"
+    | "groups"
+    | "reasons"
+    | "ot-cases"
+    | "job-titles"
+    | "chain-preview"
+    | "employees"
+    | "settings";
 
 export default function CategoryManagement() {
     const t = useTranslations("Attendance.CategoryManagement");
@@ -23,6 +33,8 @@ export default function CategoryManagement() {
         { key: "groups", label: t("tabGroups"), addLabel: t("addGroups") },
         { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons") },
         { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases") },
+        { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles") },
+        { key: "chain-preview", label: t("tabChainPreview"), addLabel: null },
         { key: "employees", label: t("tabEmployees"), addLabel: t("addEmployees") },
         { key: "settings", label: t("tabSettings"), addLabel: null },
     ];
@@ -32,7 +44,7 @@ export default function CategoryManagement() {
     // đa số user chỉ xem 1-2 tab/lượt, nhưng vẫn giữ được lợi ích "chuyển tab tức thì, không tải lại"
     // cho những tab đã ghé qua trong phiên này.
     const [visitedTabs, setVisitedTabs] = useState<Set<CategoryTab>>(() => new Set(["departments"]));
-    // Cả 6 tab giờ mounted song song (xem ghi chú bên dưới) nên mỗi tab phải báo loading vào
+    // Cả 7 tab giờ mounted song song (xem ghi chú bên dưới) nên mỗi tab phải báo loading vào
     // đúng slot riêng của nó — nếu dùng chung 1 state boolean, tab nào báo xong (setLoading(false))
     // sau cùng sẽ đè mất trạng thái loading thật của tab đang xem.
     const [loadingByTab, setLoadingByTab] = useState<Record<CategoryTab, boolean>>({
@@ -40,6 +52,8 @@ export default function CategoryManagement() {
         groups: false,
         reasons: false,
         "ot-cases": false,
+        "job-titles": false,
+        "chain-preview": false,
         employees: false,
         settings: false,
     });
@@ -49,6 +63,8 @@ export default function CategoryManagement() {
     const groupRef = useRef<ListHandle>(null);
     const reasonRef = useRef<ListHandle>(null);
     const otCaseRef = useRef<ListHandle>(null);
+    const jobTitleRef = useRef<ListHandle>(null);
+    const chainPreviewRef = useRef<ListHandle>(null);
     const employeeRef = useRef<ListHandle>(null);
     const settingRef = useRef<ListHandle>(null);
 
@@ -57,6 +73,8 @@ export default function CategoryManagement() {
         groups: groupRef,
         reasons: reasonRef,
         "ot-cases": otCaseRef,
+        "job-titles": jobTitleRef,
+        "chain-preview": chainPreviewRef,
         employees: employeeRef,
         settings: settingRef,
     };
@@ -82,6 +100,14 @@ export default function CategoryManagement() {
     );
     const handleOtCaseLoadingChange = useCallback(
         (value: boolean) => setLoadingByTab((current) => ({ ...current, "ot-cases": value })),
+        []
+    );
+    const handleJobTitleLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, "job-titles": value })),
+        []
+    );
+    const handleChainPreviewLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, "chain-preview": value })),
         []
     );
     const handleEmployeeLoadingChange = useCallback(
@@ -166,6 +192,16 @@ export default function CategoryManagement() {
             {visitedTabs.has("ot-cases") && (
                 <div className={activeTab === "ot-cases" ? "" : "hidden"}>
                     <OtCaseList ref={otCaseRef} onLoadingChange={handleOtCaseLoadingChange} />
+                </div>
+            )}
+            {visitedTabs.has("job-titles") && (
+                <div className={activeTab === "job-titles" ? "" : "hidden"}>
+                    <JobTitleList ref={jobTitleRef} onLoadingChange={handleJobTitleLoadingChange} />
+                </div>
+            )}
+            {visitedTabs.has("chain-preview") && (
+                <div className={activeTab === "chain-preview" ? "" : "hidden"}>
+                    <ApprovalChainPreviewPanel ref={chainPreviewRef} onLoadingChange={handleChainPreviewLoadingChange} />
                 </div>
             )}
             {visitedTabs.has("employees") && (

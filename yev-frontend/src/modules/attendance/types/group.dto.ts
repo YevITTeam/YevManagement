@@ -5,4 +5,8 @@ export interface GroupDto {
     groupNameJp: string | null;
     departmentId: number;
     departmentNameVn: string;
+    requesterEmployeeId: number | null;
+    requesterFullName: string | null;
+    responsibleEmployeeId: number | null;
+    responsibleFullName: string | null;
 }

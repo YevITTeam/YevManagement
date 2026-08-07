@@ -25,6 +25,14 @@ namespace Attendance.Application.Dtos.OtForms
         // Snapshot of the creator's full name — FE always prefers displaying this field, falling back to CreatedByUserName if null.
         public string? CreatedByFullName { get; set; }
 
+        public int? RequesterEmployeeId { get; set; }
+        public string? RequesterFullName { get; set; }
+        public string? RequesterUserName { get; set; }
+
+        public int? ResponsibleEmployeeId { get; set; }
+        public string? ResponsibleFullName { get; set; }
+        public string? ResponsibleUserName { get; set; }
+
         // Enum Attendance.Domain.Enums.OtFormStatus.
         public int Status { get; set; }
 
