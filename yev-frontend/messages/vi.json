@@ -55,7 +55,8 @@
     "refreshPermissionsTitle": "Đăng nhập lại để cập nhật quyền mới được cấp",
     "admin": "Admin",
     "notLoggedIn": "Chưa đăng nhập",
-    "language": "Ngôn ngữ"
+    "language": "Ngôn ngữ",
+    "logout": "Đăng xuất"
   },
   "Attendance": {
     "Department": {

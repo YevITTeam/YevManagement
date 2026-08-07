@@ -75,6 +75,39 @@ const requestWindowsLogin = async (): Promise<unknown> => {
 // Dùng cho AuthApi.windowsLogin() — đi qua đúng 1 cơ chế single-flight với nhánh auto re-login bên dưới.
 export const windowsLogin = requestWindowsLogin;
 
+const LOGIN_ENDPOINT = "/Auth/login";
+
+// Đăng nhập bằng form username/password tự viết (trang /login) — khác windowsLogin ở chỗ đây là
+// request JSON thường (không "credentials: include", không phải handshake Negotiate), BE tự xác
+// thực bằng cách bind vào AD (docs/identity-api-fe.md §2c). Mirror lại đúng cách đọc payload/lưu
+// token của requestWindowsLogin ở trên để 2 luồng đăng nhập cho ra cùng 1 shape kết quả.
+const requestPasswordLogin = async (userName: string, password: string): Promise<unknown> => {
+  const response = await fetch(`${BASE_URL}${LOGIN_ENDPOINT}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userName, password }),
+  });
+
+  let payload: unknown = null;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (response.status !== 204 && contentType.includes("application/json")) {
+    payload = await response.json();
+  }
+
+  if (!response.ok) {
+    const errorBody = typeof payload === "string" ? payload : JSON.stringify(payload ?? {});
+    throw new Error(errorBody || `API Error: ${response.status}`);
+  }
+
+  const token = extractTokenFromPayload(payload);
+  if (token) {
+    persistToken(token);
+  }
+  return payload;
+};
+
+export const passwordLogin = requestPasswordLogin;
+
 const extractTokenFromPayload = (payload: unknown): string | null => {
   if (!payload || typeof payload !== "object") {
     return null;

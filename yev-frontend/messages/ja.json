@@ -55,7 +55,8 @@
     "refreshPermissionsTitle": "新しく付与された権限を反映するには再ログインしてください",
     "admin": "管理者",
     "notLoggedIn": "未ログイン",
-    "language": "言語"
+    "language": "言語",
+    "logout": "ログアウト"
   },
   "Attendance": {
     "Department": {

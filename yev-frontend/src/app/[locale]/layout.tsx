@@ -11,6 +11,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 import Header from "@/modules/common/components/Header";
 import { AuthProvider } from "@/modules/auth/context/AuthContext";
+import AuthGuard from "@/modules/auth/components/AuthGuard";
 import { routing } from "@/i18n/routing";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -54,7 +55,7 @@ export default async function RootLayout({
             <Header />
 
             <main className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">
-              {children}
+              <AuthGuard>{children}</AuthGuard>
             </main>
           </AuthProvider>
 

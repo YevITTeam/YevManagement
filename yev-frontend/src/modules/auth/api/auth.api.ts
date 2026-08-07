@@ -1,10 +1,11 @@
-import { api, getAuthToken, windowsLogin as requestWindowsLogin } from "@/lib/client";
-import type { UserDto, RoleDto, WindowsLoginResponseDto, CreateUserDto } from "@/modules/auth/types/auth.dto";
+import { api, getAuthToken, passwordLogin as requestPasswordLogin, windowsLogin as requestWindowsLogin } from "@/lib/client";
+import type { UserDto, RoleDto, WindowsLoginResponseDto, LoginRequestDto, CreateUserDto } from "@/modules/auth/types/auth.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
   AUTH: {
     windowsLogin: "/Auth/windows-login",
+    login: "/Auth/login",
     me: "/Auth/me",
     createUser: "/Auth/create-user",
     getAllUsersWithRoles: "/Auth/get-all-users-with-roles",
@@ -23,6 +24,17 @@ export const AuthApi = {
   // trình duyệt phải xử lý nhiều handshake NTLM chồng chéo (nguyên nhân gây lặp popup đăng nhập domain).
   windowsLogin: async (): Promise<UserDto> => {
     const payload = (await requestWindowsLogin()) as ApiResponse<WindowsLoginResponseDto> | null;
+    if (!payload?.data?.user) {
+      throw new Error("Đăng nhập thất bại: phản hồi từ server không hợp lệ.");
+    }
+    return payload.data.user;
+  },
+
+  // Đăng nhập bằng form username/password tự viết (trang /login) — BE tự xác thực qua AD, không phải
+  // Negotiate (docs/identity-api-fe.md §2c). Không đi qua ENDPOINTS.AUTH.login/api.post vì cần tự lưu
+  // token giống windowsLogin (client.ts đã làm sẵn trong requestPasswordLogin).
+  login: async ({ userName, password }: LoginRequestDto): Promise<UserDto> => {
+    const payload = (await requestPasswordLogin(userName, password)) as ApiResponse<WindowsLoginResponseDto> | null;
     if (!payload?.data?.user) {
       throw new Error("Đăng nhập thất bại: phản hồi từ server không hợp lệ.");
     }

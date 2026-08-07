@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Link, usePathname } from "@/navigation";
+import { Link, useRouter, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { RefreshCw, Settings } from "lucide-react";
+import { LogOut, RefreshCw, Settings } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission } from "@/modules/auth/lib/permissions";
@@ -22,10 +22,16 @@ export default function Header() {
   const t = useTranslations("Header");
   const pathname = usePathname() || "";
   const hasSidebar = pathname.startsWith("/pc") || pathname.startsWith("/ot");
-  const { user, isLoading, refreshUser } = useAuth();
+  const { user, isLoading, refreshUser, logout } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const router = useRouter();
 
   const canSeeAdmin = hasAnyPermission(user, IDENTITY_ADMIN_PERMISSIONS);
+
+  const handleLogout = () => {
+    logout();
+    router.push("/login");
+  };
 
   // Nạp lại hồ sơ + quyền từ BE — dùng khi Admin vừa cấp quyền mới cho Role của mình và cần thấy hiệu
   // lực ngay trên UI (nút bấm/menu ẩn hiện theo permissions), thay vì phải tự đóng tab/mở lại.
@@ -97,6 +103,16 @@ export default function Header() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#191c1e] text-sm font-semibold text-white">
                   {user.fullName?.charAt(0)?.toUpperCase() ?? "U"}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  title={t("logout")}
+                  className="cursor-pointer flex items-center gap-1.5 rounded-lg border border-transparent p-2 text-[#5e3f3a] transition hover:border-[#e0e3e5] hover:text-[#e3000f]"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="sr-only">{t("logout")}</span>
+                </button>
               </div>
             </>
           ) : (

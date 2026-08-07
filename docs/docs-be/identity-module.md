@@ -66,6 +66,40 @@ gặp 401. Mỗi lời gọi = 1 handshake Negotiate/NTLM; máy chưa bật SSO 
 `AuthServerAllowlist`) sẽ bị trình duyệt **hỏi lại tài khoản domain mỗi lần** → người dùng báo "đã đăng nhập
 đúng rồi vẫn bị bắt đăng nhập lại". Hợp đồng FE + cách dùng: [identity-api-fe.md §2b](identity-api-fe.md).
 
+### 5.4. `POST /api/Auth/login` — form username/password tự viết (vẫn xác thực AD) *(2026-08-07)*
+`[AllowAnonymous]`. Body `LoginRequestDto { userName, password }` (`userName` là sAMAccountName thuần,
+KHÔNG kèm domain). Dùng cho trang `/login` tự viết ở FE, thay cho popup gốc "Windows Security" của
+Negotiate (JS không custom được popup đó, không hiện được thông báo sai mật khẩu).
+
+Luồng: `IActiveDirectoryAuthService.ValidateCredentials(domain, userName, password)`
+(`Indentity.Infrastructure/Authentication/ActiveDirectoryAuthService.cs`, bọc
+`PrincipalContext.ValidateCredentials` — CA1416, chỉ chạy Windows domain-joined) bind thẳng vào AD,
+domain đọc từ config `ActiveDirectory:Domain` (mặc định `"YEV"`) — **không lưu password ở đâu cả**,
+
+> ⚠️ **Bắt buộc gọi `ValidateCredentials(userName, password, ContextOptions.SimpleBind)` — KHÔNG được
+> dùng overload 2 tham số.** Đã kiểm chứng thực tế: overload mặc định (`ContextOptions.Negotiate`)
+> trả về **`true` cho BẤT KỲ username/password nào** (kể cả user không tồn tại) khi tiến trình BE
+> đang chạy dưới 1 tài khoản domain đã có sẵn Kerberos ticket hợp lệ — Negotiate bind "tự xác thực"
+> bằng danh tính tiến trình thay vì thật sự kiểm tra credential truyền vào. Đây là lỗ hổng bypass xác
+> thực nghiêm trọng nếu quên `SimpleBind`. `SimpleBind` ép LDAP bind thật sự bằng đúng
+> username/password nhận được.
+> ⚠️ **`SimpleBind` không tự resolve `sAMAccountName` trần** như Negotiate/Kerberos — phải truyền
+> theo **down-level logon name `"{domain}\{userName}"`** (đã kiểm chứng: `userName` trần luôn bị AD
+> từ chối dưới `SimpleBind` dù đúng mật khẩu, dù chính tài khoản đó đăng nhập Negotiate bình thường).
+> `ActiveDirectoryAuthService.ValidateCredentials` tự ghép chuỗi này trước khi gọi, caller
+> (`AuthController.Login`) chỉ truyền `userName` trần như nhận từ FE.
+
+`User` entity không có cột password. Sai user hoặc sai password đều trả chung message "Tên đăng nhập
+hoặc mật khẩu không đúng." (không tiết lộ user có tồn tại). Xác thực AD thành công → dựng 1
+`ClaimsPrincipal` "mồi" chỉ có `ClaimTypes.Name = "{domain}\{userName}"`, chạy qua **đúng**
+`IClaimsTransformation` (`MyClaimsTransformation`) mà `windows-login`/`me` đang dùng — tái sử dụng
+nguyên vẹn JIT-provisioning + gộp Role/Permission (§5), rồi gọi `BuildSession(transformedPrincipal)`
+(đã refactor nhận `ClaimsPrincipal` tường minh thay vì đọc thẳng `User` của controller). Response
+shape y hệt `windows-login`/`me`.
+
+FE vẫn giữ nút phụ gọi `windows-login` (Negotiate) cho máy đã cấu hình SSO — `POST /login` không thay
+thế, chỉ thêm lựa chọn. Hợp đồng FE: [identity-api-fe.md §2c](identity-api-fe.md).
+
 ### 5.1. Tạo User thủ công (pre-provision)
 Admin tạo trước User cho người **chưa từng đăng nhập Windows**. Login lần đầu khớp theo `UserName` → dùng Role đã gán, không rơi `"Basic"`.
 `POST /api/Auth/create-user` (`Identity.User.Create`, seed migration `AddIdentityUserCreatePermission`) — `CreateUserDto`. `CreateUserAsync` chặn trùng `UserName` + validate `RoleIds` tồn tại `!IsDeleted`. **Bất biến: 1 `UserName` = đúng 1 dòng User.**
@@ -79,6 +113,7 @@ Admin tạo trước User cho người **chưa từng đăng nhập Windows**. L
 |---|---|---|
 | POST | `windows-login` | Negotiate |
 | GET | `me` | Bearer, không cần permission (§5.3) |
+| POST | `login` | AllowAnonymous — tự bind AD bằng username/password (§5.4) |
 | POST | `create-user` | `Identity.User.Create` |
 | GET | `get-all-users-with-roles` | `Identity.User.View` |
 | POST | `update-user-roles` | `Identity.User.UpdateRoles` |

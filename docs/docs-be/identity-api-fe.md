@@ -2,7 +2,7 @@
 
 > Hợp đồng API cho đội FE (login + quản trị user/role). Implementation: [identity-module.md](identity-module.md). Module Asset: [asset-api-fe.md](asset-api-fe.md) · Module Attendance: [attendance-api-fe.md](attendance-api-fe.md).
 
-- **Base URL (Dev)**: `http://10.45.1.155:8080` (theo `CompanySystem.HostApi/Properties/launchSettings.json` — đây là nguồn chuẩn; giá trị cũ `http://localhost:5000` đã không còn dùng) · Scalar UI `/scalar/v1`.
+- **Base URL (Dev)**: `http://10.45.1.181:8080` (theo `CompanySystem.HostApi/Properties/launchSettings.json` — đây là nguồn chuẩn; giá trị cũ `http://localhost:5000` đã không còn dùng) · Scalar UI `/scalar/v1`.
 - **CORS**: chỉ `http://localhost:3000` + `http://10.45.1.181:3000` (`AllowCredentials`). Origin khác → báo BE thêm whitelist.
 - Envelope `ApiResponse<T>` + cách đọc `data`/`errors` giống Asset — xem [asset-api-fe.md §1](asset-api-fe.md).
 - **Cập nhật 2026-07-16**: `UserDto` thêm `email` (nullable, tự resolve từ AD, không tự nhập/sửa được) — trả về ở `windows-login` (mục 2) và `get-all-users-with-roles` (mục 4.1). Phục vụ tính năng gửi email xác nhận cập nhật chữ ký/duyệt đơn ở module Attendance.
@@ -13,6 +13,7 @@
 | Endpoint | Cơ chế |
 |---|---|
 | `POST /api/Auth/windows-login` | **Windows Negotiate** (IWA), không dùng Bearer |
+| `POST /api/Auth/login` | Public, body `{userName, password}` — BE tự bind AD (§2c) |
 | `GET /api/Auth/me` | **JWT Bearer** (chỉ cần đã đăng nhập, không cần permission) |
 | Tất cả còn lại (Identity + Asset) | **JWT Bearer** + user phải có **permission** cụ thể (không phải check "role Admin") |
 
@@ -20,7 +21,7 @@
 Không phải username/password — xác thực qua **Windows Negotiate** dựa phiên Windows của máy client (phải trong domain AD). **Không có body request.**
 
 ```js
-const res = await fetch("http://10.45.1.155:8080/api/Auth/windows-login", {
+const res = await fetch("http://10.45.1.181:8080/api/Auth/windows-login", {
   method: "POST", credentials: "include" // BẮT BUỘC, thiếu → luôn 401
 });
 ```
@@ -76,6 +77,29 @@ buộc xác thực lại Windows. Quyền vẫn luôn theo DB (khoá quyền có
 AD bị vô hiệu hoá thì phiên đang mở vẫn sống tới khi user đóng app quá 120 phút. Chấp nhận được với app nội bộ;
 muốn chặt hơn thì phải thêm mốc buộc `windows-login` lại (chưa làm).
 
+## 2c. Đăng nhập bằng form tự viết — `POST /api/Auth/login` *(2026-08-07)*
+Dùng cho trang `/login` tự viết ở FE — thay thế popup gốc "Windows Security" mà `windows-login`
+(Negotiate) tự bật, không custom UI/thông báo lỗi được. **Vẫn xác thực bằng Windows Authentication
+thật sự**: BE tự bind username/password vào AD, không tự chế hệ mật khẩu riêng, không lưu password.
+
+```js
+const res = await fetch("http://10.45.1.181:8080/api/Auth/login", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ userName: "n.truong.da.pcd.it", password: "..." }) // userName KHÔNG kèm domain
+});
+```
+- Response `data` **shape y hệt `windows-login`** (`{ user, token }`, xem mục 2) — cùng cách lưu
+  `token`, cùng cách dùng `Authorization: Bearer <token>` cho request sau.
+- Sai username hoặc sai password → `isSuccess: false`, message chung
+  "Tên đăng nhập hoặc mật khẩu không đúng." (không tiết lộ username có tồn tại hay không).
+- Không cần `credentials: "include"` (không phải Negotiate) — gửi JSON body bình thường.
+- **Bảo mật:** password đi trong body JSON qua mạng (LAN nội bộ, hiện chưa bật HTTPS ở production) —
+  khác NTLM cũ (challenge-response, không gửi password thô). Đã chấp nhận rủi ro này cho môi trường
+  LAN nội bộ hiện tại; nếu đổi sang mạng rộng hơn cần bật HTTPS trước.
+- FE nên giữ thêm nút gọi thẳng `windows-login` (Negotiate) làm lựa chọn phụ cho máy đã có SSO — đăng
+  nhập 1 chạm không cần gõ mật khẩu, xem [identity-module.md §5.4](identity-module.md).
+
 ## 3. Phân quyền hiển thị UI
 Dùng **`user.permissions`** (mảng `Module.Entity.Action`) để bật/tắt tính năng — **không** dùng `user.roles`. FE ẩn/hiện nút theo `user.permissions.includes(code)`; BE luôn enforce lại (thiếu permission → **403**). `user.permissions` đã là danh sách hiệu lực cuối (đã áp override). Lấy toàn bộ mã qua `GET /api/Permission/all` (mục 4.7). **Chỉ `Admin` seed full quyền**, 3 role còn lại cần Admin tự gán.
 
@@ -102,6 +126,7 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
 | Method | Route | Permission |
 |---|---|---|
 | POST | `/api/Auth/windows-login` | Negotiate |
+| POST | `/api/Auth/login` | Public — tự bind AD (§2c) |
 | GET | `/api/Auth/me` | Bearer (không cần permission) |
 | POST | `/api/Auth/create-user` | `Identity.User.Create` |
 | GET | `/api/Auth/get-all-users-with-roles` | `Identity.User.View` |
@@ -119,7 +144,7 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
 | Hiện tượng | Nguyên nhân → xử lý |
 |---|---|
 | `windows-login` luôn 401 | Thiếu `credentials:"include"` / máy không trong domain → thêm credentials, test máy joined domain |
-| **Trình duyệt hỏi tài khoản domain lặp lại dù vừa nhập đúng** | Đang gọi `windows-login` nhiều lần (mỗi lần = 1 handshake Negotiate). FE đã sửa: còn token thì dùng `GET /Auth/me` (mục 2b). Vẫn còn hỏi ở lần đăng nhập ĐẦU → máy chưa bật SSO cho origin BE: thêm `http://10.45.1.155:8080` vào vùng **Local Intranet** (Internet Options → Security → Local intranet → Sites → Advanced) hoặc policy `AuthServerAllowlist` của Chrome/Edge |
+| **Trình duyệt hỏi tài khoản domain lặp lại dù vừa nhập đúng** | Đang gọi `windows-login` nhiều lần (mỗi lần = 1 handshake Negotiate). FE đã sửa: còn token thì dùng `GET /Auth/me` (mục 2b). Vẫn còn hỏi ở lần đăng nhập ĐẦU → máy chưa bật SSO cho origin BE: thêm `http://10.45.1.181:8080` vào vùng **Local Intranet** (Internet Options → Security → Local intranet → Sites → Advanced) hoặc policy `AuthServerAllowlist` của Chrome/Edge |
 | API 401 dù đã login | Token hết hạn (120') / thiếu header → `GET /Auth/me` gia hạn, hỏng nữa thì `windows-login` |
 | API 403 dù token còn hạn | Role thiếu permission → Admin `PUT /api/Permission/role/{roleId}` hoặc đổi Role |
 | Có Role đủ quyền vẫn 403 | Bị **deny override** riêng → `GET /api/Permission/user/{userId}` kiểm tra, PUT gỡ deny |

@@ -45,3 +45,10 @@ export interface WindowsLoginResponseDto {
   user: UserDto;
   token: string;
 }
+
+// Body cho POST /api/Auth/login — trang /login tự viết, BE tự xác thực bằng cách bind username/password
+// vào AD (không phải Negotiate) — xem docs/identity-api-fe.md §2c. userName KHÔNG kèm domain.
+export interface LoginRequestDto {
+  userName: string;
+  password: string;
+}
