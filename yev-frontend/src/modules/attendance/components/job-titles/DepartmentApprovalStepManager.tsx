@@ -8,11 +8,14 @@ import { ArrowDown, ArrowUp, Check, Plus, Star, Trash2, X } from "lucide-react";
 import { DepartmentApprovalStepApi } from "@/modules/attendance/api/department-approval-step.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
+import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { DepartmentApprovalStepDto } from "@/modules/attendance/types/department-approval-step.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
+import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+import { SearchableSelect, type SelectOption } from "./SearchableSelect";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -37,6 +40,15 @@ const DepartmentApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(f
     const [isLoadingSteps, setIsLoadingSteps] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
+
+    // Nhân viên trong Phòng ban đang chọn — dùng để (a) hiện ai đang giữ mỗi Chức vụ ngay dưới từng
+    // bước, (b) gán nhanh Chức vụ ngay tại màn này thay vì phải sang riêng màn "Nhân viên".
+    const [departmentEmployees, setDepartmentEmployees] = useState<EmployeeDto[]>([]);
+    const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
+    const [assigningEmployeeId, setAssigningEmployeeId] = useState<number | null>(null);
+    // Lựa chọn đang gõ dở ở ô "+ Thêm người giữ" của từng bước, key = jobTitleId — reset về "" ngay
+    // sau khi gán thành công để ô luôn sẵn sàng chọn tiếp người khác.
+    const [addingHolderByJobTitle, setAddingHolderByJobTitle] = useState<Record<number, number | "">>({});
 
     useEffect(() => {
         setIsLoadingOptions(true);
@@ -70,9 +82,23 @@ const DepartmentApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(f
             .finally(() => setIsLoadingSteps(false));
     };
 
+    const fetchDepartmentEmployees = (targetDepartmentId: number) => {
+        setIsLoadingEmployees(true);
+        EmployeeApi.getEmployeesByDepartment(targetDepartmentId)
+            .then((data) => setDepartmentEmployees(data))
+            .catch((err) => {
+                console.error(err);
+                toast.error(getApiErrorMessage(err, t("loadEmployeesError")));
+            })
+            .finally(() => setIsLoadingEmployees(false));
+    };
+
     useImperativeHandle(ref, () => ({
         refresh: () => {
-            if (typeof departmentId === "number") fetchSteps(departmentId);
+            if (typeof departmentId === "number") {
+                fetchSteps(departmentId);
+                fetchDepartmentEmployees(departmentId);
+            }
         },
         openCreate: () => {},
     }));
@@ -81,13 +107,106 @@ const DepartmentApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(f
         const nextId = value ? Number(value) : "";
         setDepartmentId(nextId);
         setSteps([]);
+        setDepartmentEmployees([]);
         setAddingJobTitleId("");
         setIsDirty(false);
-        if (typeof nextId === "number") fetchSteps(nextId);
+        if (typeof nextId === "number") {
+            fetchSteps(nextId);
+            fetchDepartmentEmployees(nextId);
+        }
     };
 
+    // Gán nhanh Chức vụ ngay tại màn này (docs §Cây chức vụ) — dùng lại PUT /api/Employee/{id} hiện có.
+    // 2026-08-08: tự tính lại groupId/departmentId theo TerminalLevel của Chức vụ MỚI (không còn
+    // pass-through nguyên giá trị cũ) — nếu không, gán 1 người đang có Bộ phận thật sang Trưởng phòng/
+    // Trưởng Xưởng/Giám đốc (hoặc ngược lại) sẽ luôn bị BE từ chối 400 vì lẫn field tổ chức cũ.
+    const handleAssignJobTitle = async (employee: EmployeeDto, jobTitleId: number | "") => {
+        const nextJobTitleId = jobTitleId === "" ? null : jobTitleId;
+        const nextJobTitle = jobTitles.find((jt) => jt.id === nextJobTitleId);
+        const nextTerminalLevel = nextJobTitle?.terminalLevel ?? 0;
+
+        let nextGroupId = employee.groupId;
+        let nextDepartmentId = employee.departmentId;
+
+        if (nextTerminalLevel === 1) {
+            // DepartmentManager (Trưởng phòng) — gán đúng Phòng ban đang xem trên màn này, không thuộc Bộ phận nào.
+            nextGroupId = null;
+            nextDepartmentId = typeof departmentId === "number" ? departmentId : null;
+        } else if (nextTerminalLevel === 2 || nextTerminalLevel === 3) {
+            // WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc) — dùng chung toàn công ty.
+            nextGroupId = null;
+            nextDepartmentId = null;
+        } else if (employee.groupId === null) {
+            // Đang là Trưởng phòng/Trưởng Xưởng/Giám đốc (không có Bộ phận thật), muốn chuyển về Chức vụ
+            // thường/bỏ hẳn Chức vụ — màn này không đủ thông tin để tự chọn đúng Bộ phận, phải sửa qua
+            // form Nhân viên đầy đủ.
+            toast.error(t("assignNeedsGroupError"));
+            return;
+        }
+
+        setAssigningEmployeeId(employee.id);
+        try {
+            await EmployeeApi.updateEmployee(employee.id, {
+                code: employee.code,
+                firstName: employee.firstName,
+                lastName: employee.lastName,
+                userName: employee.userName,
+                monthToDate: employee.monthToDate,
+                yearToDate: employee.yearToDate,
+                groupId: nextGroupId,
+                departmentId: nextDepartmentId,
+                jobTitleId: nextJobTitleId,
+            });
+            setDepartmentEmployees((current) =>
+                current.map((e) =>
+                    e.id === employee.id
+                        ? { ...e, jobTitleId: nextJobTitleId, jobTitleName: nextJobTitle?.name ?? null, groupId: nextGroupId, departmentId: nextDepartmentId }
+                        : e
+                )
+            );
+            toast.success(t("assignSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("assignError")));
+        } finally {
+            setAssigningEmployeeId(null);
+        }
+    };
+
+    // Ô "+ Thêm người giữ" ngay dưới mỗi bước — chọn 1 nhân viên trong Phòng ban (kể cả đang giữ Chức
+    // vụ khác) để gán luôn Chức vụ của bước này, không cần mở bảng riêng.
+    const handlePickHolder = async (jobTitleId: number, employeeId: number | "") => {
+        setAddingHolderByJobTitle((current) => ({ ...current, [jobTitleId]: employeeId }));
+        if (employeeId === "") return;
+        const employee = departmentEmployees.find((e) => e.id === employeeId);
+        if (!employee) return;
+        await handleAssignJobTitle(employee, jobTitleId);
+        setAddingHolderByJobTitle((current) => ({ ...current, [jobTitleId]: "" }));
+    };
+
+    // Options cho SearchableSelect của ô "+ Thêm người giữ" — loại người đã giữ đúng Chức vụ này,
+    // tìm được theo tên/mã NV/chức vụ hiện tại (đỡ phải cuộn danh sách dài khi Phòng ban đông người).
+    const buildHolderOptions = (jobTitleId: number): SelectOption[] =>
+        departmentEmployees
+            .filter((e) => e.jobTitleId !== jobTitleId)
+            .map((e) => ({
+                value: e.id,
+                label: `${e.lastName} ${e.firstName} (${e.code})${e.jobTitleName ? ` — ${e.jobTitleName}` : ""}`,
+                searchText: [e.lastName, e.firstName, `${e.firstName} ${e.lastName}`, e.code, e.jobTitleName ?? ""]
+                    .join(" ")
+                    .toLowerCase(),
+            }));
+
     const usedJobTitleIds = new Set(steps.map((s) => s.jobTitleId));
-    const availableJobTitles = jobTitles.filter((jt) => !usedJobTitleIds.has(jt.id));
+    // Tối đa 2 bước "trung gian" (terminalLevel=0, dưới cấp Trưởng phòng) — khớp đúng 2 ô "Người đề
+    // nghị" cố định trên giấy in YEV-22-024 (2026-08-08, Giai đoạn 3.2, xem OtFormPrintView.tsx và
+    // validate BE ở DepartmentApprovalStepService.ReplaceAsync). 3 Chức vụ cấp cuối (Trưởng phòng/
+    // Trưởng xưởng/Tổng Giám Đốc, terminalLevel>0) không bị giới hạn này.
+    const intermediateStepCount = steps.filter((s) => s.terminalLevel === 0).length;
+    const intermediateLimitReached = intermediateStepCount >= 2;
+    const availableJobTitles = jobTitles.filter(
+        (jt) => !usedJobTitleIds.has(jt.id) && !(intermediateLimitReached && jt.terminalLevel === 0)
+    );
 
     const handleAddStep = () => {
         if (!addingJobTitleId) return;
@@ -199,42 +318,43 @@ const DepartmentApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(f
                                     {steps.map((step, index) => (
                                         <li
                                             key={`${step.jobTitleId}-${index}`}
-                                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#e0e3e5] p-3"
+                                            className="space-y-2 rounded-lg border border-[#e0e3e5] p-3"
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#191c1e] text-xs font-bold text-white">
+                                        <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+                                            <div className="flex w-[230px] shrink-0 items-center gap-2" title={`${step.jobTitleName} (${step.jobTitleCode}, cấp ${step.rankOrder})`}>
+                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-xs font-bold text-white">
                                                     {index + 1}
                                                 </span>
-                                                <span className="text-sm font-semibold text-[#191c1e]">{step.jobTitleName}</span>
-                                                <span className="text-xs text-[#8a8f94]">({step.jobTitleCode}, cấp {step.rankOrder})</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleSignature(index)}
-                                                    title={t("toggleSignatureHint")}
-                                                    className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
-                                                        step.requiresSignature
-                                                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                                            : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
-                                                    }`}
-                                                >
-                                                    {step.requiresSignature ? <Check size={11} /> : <X size={11} />}
-                                                    {step.requiresSignature ? t("requiresSignatureYes") : t("requiresSignatureNo")}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleSetResponsible(index)}
-                                                    title={t("toggleResponsibleHint")}
-                                                    className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
-                                                        step.isResponsible
-                                                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                                                            : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
-                                                    }`}
-                                                >
-                                                    <Star size={11} fill={step.isResponsible ? "currentColor" : "none"} />
-                                                    {step.isResponsible ? t("isResponsibleYes") : t("isResponsibleNo")}
-                                                </button>
+                                                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#191c1e]">{step.jobTitleName}</span>
+                                                <span className="shrink-0 whitespace-nowrap text-xs text-[#8a8f94]">({step.jobTitleCode}, cấp {step.rankOrder})</span>
                                             </div>
-                                            <div className="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleToggleSignature(index)}
+                                                title={t("toggleSignatureHint")}
+                                                className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
+                                                    step.requiresSignature
+                                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                                        : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
+                                                }`}
+                                            >
+                                                {step.requiresSignature ? <Check size={11} /> : <X size={11} />}
+                                                {step.requiresSignature ? t("requiresSignatureYes") : t("requiresSignatureNo")}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSetResponsible(index)}
+                                                title={t("toggleResponsibleHint")}
+                                                className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
+                                                    step.isResponsible
+                                                        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                                        : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
+                                                }`}
+                                            >
+                                                <Star size={11} fill={step.isResponsible ? "currentColor" : "none"} />
+                                                {step.isResponsible ? t("isResponsibleYes") : t("isResponsibleNo")}
+                                            </button>
+                                            <div className="ml-auto flex shrink-0 items-center gap-1">
                                                 <button
                                                     type="button"
                                                     onClick={() => handleMoveStep(index, -1)}
@@ -265,6 +385,52 @@ const DepartmentApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(f
                                                     <Trash2 className="h-3.5 w-3.5" />
                                                 </button>
                                             </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-1.5 pl-8">
+                                            <span className="text-xs font-semibold text-[#8a8f94]">{t("holdersLabel")}</span>
+                                            {isLoadingEmployees ? (
+                                                <span className="text-xs text-[#8a8f94]">{t("loadingEmployees")}</span>
+                                            ) : (
+                                                <>
+                                                    {(() => {
+                                                        const holders = departmentEmployees.filter((e) => e.jobTitleId === step.jobTitleId);
+                                                        return holders.length === 0 ? (
+                                                            <span className="text-xs italic text-[#8a8f94]">{t("noHolders")}</span>
+                                                        ) : (
+                                                            holders.map((holder) => (
+                                                                <span
+                                                                    key={holder.id}
+                                                                    className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-[#f8fafc] py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
+                                                                >
+                                                                    {holder.lastName} {holder.firstName} ({holder.code})
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleAssignJobTitle(holder, "")}
+                                                                        disabled={assigningEmployeeId === holder.id}
+                                                                        title={t("removeHolderHint")}
+                                                                        aria-label={t("removeHolderHint")}
+                                                                        className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
+                                                                    >
+                                                                        <X size={10} />
+                                                                    </button>
+                                                                </span>
+                                                            ))
+                                                        );
+                                                    })()}
+                                                    <div className="w-56 shrink-0">
+                                                        <SearchableSelect
+                                                            options={buildHolderOptions(step.jobTitleId)}
+                                                            value={addingHolderByJobTitle[step.jobTitleId] ?? ""}
+                                                            onChange={(v) => handlePickHolder(step.jobTitleId, v)}
+                                                            placeholder={t("addHolderPlaceholder")}
+                                                            disabled={assigningEmployeeId !== null}
+                                                            triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
+                                                        />
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
                                         </li>
                                     ))}
                                 </ol>
@@ -292,6 +458,7 @@ const DepartmentApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(f
                                     <Plus className="h-3.5 w-3.5" /> {t("addStepButton")}
                                 </button>
                             </div>
+                            {intermediateLimitReached && <p className="text-xs text-[#9a5b00]">{t("intermediateLimitHint")}</p>}
 
                             <div className="flex justify-end pt-2">
                                 <button

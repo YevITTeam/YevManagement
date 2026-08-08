@@ -6,7 +6,11 @@ import { useTranslations } from "next-intl";
 import { AlertTriangle, Inbox } from "lucide-react";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
+import { DepartmentApi } from "@/modules/attendance/api/department.api";
+import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
 import EmployeeImportDialog from "./EmployeeImportDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
@@ -24,6 +28,13 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
+
+    // Lọc theo Phòng ban/Bộ phận — giúp Admin dễ tìm đúng nhóm nhân viên cần gán Chức vụ (docs
+    // §Cây chức vụ). Bộ phận cascading theo Phòng ban đã chọn, giống pattern OtCaseForm/GroupForm.
+    const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+    const [groups, setGroups] = useState<GroupDto[]>([]);
+    const [departmentId, setDepartmentId] = useState<number | "">("");
+    const [groupId, setGroupId] = useState<number | "">("");
 
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -43,9 +54,46 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
     const { setting } = useAttendanceSetting();
 
+    useEffect(() => {
+        DepartmentApi.getAllDepartments()
+            .then(setDepartments)
+            .catch((err) => console.error(err));
+        GroupApi.getAllGroups()
+            .then(setGroups)
+            .catch((err) => console.error(err));
+    }, []);
+
+    const handleSelectDepartment = (value: string) => {
+        const nextId = value ? Number(value) : "";
+        setDepartmentId(nextId);
+        setGroupId("");
+        setPageIndex(1);
+        if (typeof nextId === "number") {
+            GroupApi.getGroupsByDepartment(nextId)
+                .then(setGroups)
+                .catch((err) => console.error(err));
+        } else {
+            GroupApi.getAllGroups()
+                .then(setGroups)
+                .catch((err) => console.error(err));
+        }
+    };
+
+    const handleSelectGroup = (value: string) => {
+        setGroupId(value ? Number(value) : "");
+        setPageIndex(1);
+    };
+
     const { isLoading, error, refetch: fetchEmployees } = useFetchEffect(
-        () => EmployeeApi.getEmployeePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-        [pageIndex, appliedKeyword],
+        () =>
+            EmployeeApi.getEmployeePageNation({
+                pageIndex,
+                pageSize: PAGE_SIZE,
+                keyword: appliedKeyword || undefined,
+                departmentId: departmentId || undefined,
+                groupId: groupId || undefined,
+            }),
+        [pageIndex, appliedKeyword, departmentId, groupId],
         (result) => {
             setEmployees(result.data);
             setTotalCount(result.totalCount);
@@ -130,7 +178,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         <div className="space-y-4">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
@@ -145,6 +193,30 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         >
                             {tCommon("search")}
                         </button>
+                        <select
+                            value={departmentId}
+                            onChange={(event) => handleSelectDepartment(event.target.value)}
+                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        >
+                            <option value="">{t("filterDepartmentPlaceholder")}</option>
+                            {departments.map((department) => (
+                                <option key={department.id} value={department.id}>
+                                    {department.departmentNameVn}
+                                </option>
+                            ))}
+                        </select>
+                        <select
+                            value={groupId}
+                            onChange={(event) => handleSelectGroup(event.target.value)}
+                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        >
+                            <option value="">{t("filterGroupPlaceholder")}</option>
+                            {groups.map((group) => (
+                                <option key={group.id} value={group.id}>
+                                    {group.groupNameVn}
+                                </option>
+                            ))}
+                        </select>
                         <button
                             onClick={() => setImportOpen(true)}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
@@ -202,7 +274,11 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                         {employee.lastName} {employee.firstName}
                                     </td>
                                     <td className="px-4 py-3 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{employee.groupNameVn}</td>
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">
+                                        {employee.groupNameVn ?? employee.departmentNameVn ?? (
+                                            <span className="text-xs italic text-[#8a8f94]">{t("orgUnitCompanyWide")}</span>
+                                        )}
+                                    </td>
                                     <td className="px-4 py-3 text-sm">
                                         {employee.jobTitleName ? (
                                             <span className="text-[#5e3f3a]">{employee.jobTitleName}</span>

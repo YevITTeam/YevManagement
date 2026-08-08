@@ -23,8 +23,13 @@ namespace Attendance.Application.Dtos.Employees
         public decimal ProjectedMonthToDate { get; set; }
         public decimal ProjectedYearToDate { get; set; }
 
-        public int GroupId { get; set; }
-        public string GroupNameVn { get; set; } = null!;
+        // Nullable (2026-08-08) — Trưởng phòng dùng DepartmentId thay vì GroupId (không thuộc Bộ phận
+        // cụ thể nào); Trưởng Xưởng/Giám đốc cả 2 đều null (dùng chung toàn công ty) — xem
+        // docs/docs-be/attendance-module.md §Cây chức vụ.
+        public int? GroupId { get; set; }
+        public string? GroupNameVn { get; set; }
+        public int? DepartmentId { get; set; }
+        public string? DepartmentNameVn { get; set; }
 
         // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán.
         public int? JobTitleId { get; set; }

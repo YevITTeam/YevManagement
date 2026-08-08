@@ -8,12 +8,7 @@ import { useRouter } from "@/navigation";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalSummaryItemDto, OtFormListItemDto } from "@/modules/attendance/types/ot-form.dto";
-import {
-    approvalLevelLabels,
-    nextApprovalLevelFromStatus,
-    otFormStatusClasses,
-    otFormStatusLabels,
-} from "@/modules/attendance/types/enums";
+import { otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -21,7 +16,7 @@ import { bilingualText } from "@/modules/attendance/lib/bilingual";
 
 const PAGE_SIZE = 10;
 
-type OtFormListMode = "my-forms" | "pending-submissions" | "pending-approvals" | "my-actions" | "my-participations";
+type OtFormListMode = "my-forms" | "pending-approvals" | "my-actions" | "my-participations";
 
 interface OtFormListPageProps {
     mode: OtFormListMode;
@@ -35,12 +30,25 @@ function formatDate(value: string) {
     return new Date(value).toLocaleDateString("vi-VN");
 }
 
-// "Tiến độ duyệt" (approvalSummary, mới 2026-07-17) — mỗi phần tử 1 dòng đã Ký/Duyệt/Từ chối, nối thêm
-// dòng "Đang chờ..." suy từ status nếu đơn chưa Completed/Rejected — có ở cả 5 tab danh sách (§4.2).
-function ApprovalSummaryCell({ summary, status }: { summary: OtFormApprovalSummaryItemDto[]; status: number }) {
+// "Tiến độ duyệt" (approvalSummary) — mỗi phần tử 1 dòng đã Ký/Duyệt/Từ chối theo bước Chức vụ
+// (StepOrder + jobTitleNameSnapshot, xem docs §Cây chức vụ), nối thêm dòng "Đang chờ duyệt" chung
+// chung nếu đơn chưa Completed/Rejected — tên Chức vụ đang chờ nằm ở OtFormDto.approvalSteps (chỉ
+// xem được khi mở chi tiết đơn, danh sách không có field này) — có ở cả 5 tab danh sách (§4.2).
+// currentStepCandidateCount > 1 nghĩa là bước đang chờ có NHIỀU người cùng giữ Chức vụ đó — hiện rõ
+// "đang chờ 1 trong N người" để người xem hiểu đây không phải riêng họ phải xử lý (2026-08-08, Giai
+// đoạn 3.2 — polish UX "Chờ tôi duyệt", trước đây không có chỉ báo gì).
+function ApprovalSummaryCell({
+    summary,
+    status,
+    currentStepCandidateCount,
+}: {
+    summary: OtFormApprovalSummaryItemDto[];
+    status: number;
+    currentStepCandidateCount: number;
+}) {
     const t = useTranslations("Attendance.OtFormList");
-    const nextLevel = nextApprovalLevelFromStatus(status);
-    if (summary.length === 0 && nextLevel === null) {
+    const isWaiting = status === 0; // OtFormStatus.InApproval
+    if (summary.length === 0 && !isWaiting) {
         return <span className="text-xs text-[#9aa0a6]">-</span>;
     }
     return (
@@ -53,12 +61,14 @@ function ApprovalSummaryCell({ summary, status }: { summary: OtFormApprovalSumma
                         className={`flex items-center gap-1 text-xs ${isRejected ? "text-[#930006]" : "text-emerald-700"}`}
                     >
                         {isRejected ? <X size={12} /> : <Check size={12} />} {item.approverFullName ?? item.approverUserName} (
-                        {approvalLevelLabels[item.approvalLevel] ?? "?"})
+                        {item.jobTitleNameSnapshot})
                     </div>
                 );
             })}
-            {nextLevel !== null && (
-                <div className="text-xs text-[#9a5b00]">{t("waitingFor", { level: approvalLevelLabels[nextLevel] ?? "?" })}</div>
+            {isWaiting && (
+                <div className="text-xs text-[#9a5b00]">
+                    {currentStepCandidateCount > 1 ? t("waitingForNextMulti", { count: currentStepCandidateCount }) : t("waitingForNext")}
+                </div>
             )}
         </div>
     );
@@ -111,8 +121,6 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         () =>
             mode === "my-forms"
                 ? OtFormApi.getMyForms(listParams)
-                : mode === "pending-submissions"
-                ? OtFormApi.getPendingSubmissions(listParams)
                 : mode === "pending-approvals"
                 ? OtFormApi.getPendingApprovals(listParams)
                 : mode === "my-actions"
@@ -146,8 +154,6 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const title =
         mode === "my-forms"
             ? t("titleMyForms")
-            : mode === "pending-submissions"
-            ? t("titlePendingSubmissions")
             : mode === "pending-approvals"
             ? t("titlePendingApprovals")
             : mode === "my-actions"
@@ -156,8 +162,6 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const description =
         mode === "my-forms"
             ? t("descMyForms")
-            : mode === "pending-submissions"
-            ? t("descPendingSubmissions")
             : mode === "pending-approvals"
             ? t("descPendingApprovals")
             : mode === "my-actions"
@@ -309,7 +313,11 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 align-top">
-                                        <ApprovalSummaryCell summary={form.approvalSummary} status={form.status} />
+                                        <ApprovalSummaryCell
+                                            summary={form.approvalSummary}
+                                            status={form.status}
+                                            currentStepCandidateCount={form.currentStepCandidateCount}
+                                        />
                                     </td>
                                     {mode === "my-forms" && (
                                         <td className="px-4 py-3 align-top text-right">

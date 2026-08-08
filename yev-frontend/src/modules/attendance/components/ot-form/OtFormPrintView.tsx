@@ -25,8 +25,17 @@ function formatTime(value: string) {
     return value?.slice(0, 5) ?? "-";
 }
 
-function findHistory(histories: OtFormApprovalHistoryDto[], level: number) {
-    return histories.find((item) => item.approvalLevel === level && item.action !== 2) ?? null;
+// Tra lịch sử ký/duyệt theo StepOrder (2026-08-07, Giai đoạn 3.1) — trước đây tra theo ApprovalLevel
+// cố định, nay chuỗi bước là động theo Cây chức vụ, xem docs §Cây chức vụ.
+function findHistory(histories: OtFormApprovalHistoryDto[], stepOrder: number) {
+    return histories.find((item) => item.stepOrder === stepOrder && item.action !== 2) ?? null;
+}
+
+// 3 ô ký cuối trên giấy in (Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc) vẫn là 3 Chức vụ CỐ ĐỊNH
+// (TerminalLevelSnapshot 1/2/3, xem docs §Cây chức vụ) dù số bước trung gian trước đó co giãn theo
+// Phòng ban — tra đúng bước snapshot của ĐÚNG đơn này theo TerminalLevelSnapshot thay vì StepOrder cố định.
+function findStepByTerminalLevel(form: OtFormDto, terminalLevel: number) {
+    return form.approvalSteps.find((s) => s.terminalLevelSnapshot === terminalLevel);
 }
 
 // Ô "Người đề nghị" quá hẹp (chia đôi cho 2 chữ ký) nên chỉ in "tên" (từ cuối) thay vì đầy đủ họ tên,
@@ -59,8 +68,15 @@ interface FieldBox {
 interface HeaderLayout {
     image: string;
     aspect: string;
+    // level = JobTitleTerminalLevel (1=Trưởng phòng, 2=Trưởng xưởng, 3=Tổng Giám Đốc) — 3 Chức vụ
+    // CỐ ĐỊNH, tra đúng bước snapshot của đơn qua findStepByTerminalLevel (xem docs §Cây chức vụ).
     signature: { level: number; box: FieldBox }[];
-    requester: { level: number; box: FieldBox }[];
+    // Ô "Người đề nghị" trên giấy chỉ có 2 chỗ trống, dùng cho bước trung gian ĐẦU và CUỐI (trước khi
+    // tới 3 Chức vụ cố định ở trên). Từ Giai đoạn 3.2 (2026-08-08), số bước trung gian mỗi Phòng ban bị
+    // giới hạn CỨNG tối đa 2 (validate ở DepartmentApprovalStepService.ReplaceAsync + chặn ngay trên UI
+    // DepartmentApprovalStepManager.tsx) CHÍNH LÀ để khớp đúng 2 ô này — không còn là giải pháp tạm,
+    // "đầu"/"cuối" luôn phủ hết toàn bộ bước trung gian thật của đơn (0/1/2 bước), không mất tên ai.
+    requester: { slot: "first" | "last"; box: FieldBox }[];
     tenCongDoan: FieldBox;
     soLuongNhanVien: FieldBox;
     nguoiChiuTrachNhiem: FieldBox;
@@ -81,8 +97,8 @@ const HEADER_LAYOUTS: Record<PaperSize, HeaderLayout> = {
             { level: 1, box: { left: 51.618, top: 17.614, width: 23.529, height: 5.221 } }, // Trưởng phòng
         ],
         requester: [
-            { level: 0, box: { left: 75.147, top: 17.614, width: 9.926, height: 5.221 } }, // Trưởng nhóm
-            { level: 4, box: { left: 85.074, top: 17.614, width: 9.926, height: 5.221 } }, // Trưởng Bộ phận
+            { slot: "first", box: { left: 75.147, top: 17.614, width: 9.926, height: 5.221 } },
+            { slot: "last", box: { left: 85.074, top: 17.614, width: 9.926, height: 5.221 } },
         ],
         tenCongDoan: { left: 34.706, top: 26.61, width: 60.294, height: 2.727 },
         soLuongNhanVien: { left: 34.706, top: 29.545, width: 15, height: 2.727 },
@@ -110,8 +126,8 @@ const HEADER_LAYOUTS: Record<PaperSize, HeaderLayout> = {
             { level: 1, box: { left: 52.671, top: 27.887, width: 22.678, height: 7.401 } },
         ],
         requester: [
-            { level: 0, box: { left: 75.349, top: 27.887, width: 10.747, height: 7.401 } },
-            { level: 4, box: { left: 86.095, top: 27.887, width: 10.747, height: 7.401 } },
+            { slot: "first", box: { left: 75.349, top: 27.887, width: 10.747, height: 7.401 } },
+            { slot: "last", box: { left: 86.095, top: 27.887, width: 10.747, height: 7.401 } },
         ],
         tenCongDoan: { left: 33.286, top: 41.831, width: 63.556, height: 4.374 },
         soLuongNhanVien: { left: 33.286, top: 46.657, width: 15, height: 5.148 },
@@ -336,27 +352,43 @@ function PageFrame({
 function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: PaperSize }) {
     const layout = HEADER_LAYOUTS[paperSize];
     const processPart = form.processPart;
-    // "Người chịu trách nhiệm" = Trưởng nhóm đã ký duyệt "Người đề nghị" (approvalLevel=0, POST
-    // /{id}/submit) — KHÔNG phải người nhập liệu tạo đơn (createdBy), vì 2 bước này có thể khác người
-    // (docs §1: "Người tạo đơn nhập liệu" rồi mới tới "Trưởng nhóm ký duyệt Người đề nghị"). Fallback
-    // về createdBy khi đơn còn Draft, chưa ai ký ở cấp này.
-    const requesterHistory = findHistory(form.approvalHistories, 0);
+
+    // "Người chịu trách nhiệm" = bước được Admin đánh dấu IsResponsible khi cấu hình Cây duyệt Phòng
+    // ban (2026-08-07, xem docs §Cây chức vụ) — KHÔNG mặc định là người tạo đơn. Fallback về createdBy
+    // khi chưa ai ký tới bước đó hoặc chuỗi chưa cấu hình bước chịu trách nhiệm.
+    const responsibleStep = form.approvalSteps.find((s) => s.isResponsibleSnapshot);
+    const responsibleHistory = responsibleStep ? findHistory(form.approvalHistories, responsibleStep.stepOrder) : null;
     const nguoiChiuTrachNhiemName =
-        requesterHistory?.approverFullName ?? requesterHistory?.approverUserName ?? form.createdByFullName ?? form.createdByUserName;
+        responsibleHistory?.approverFullName ?? responsibleHistory?.approverUserName ?? form.createdByFullName ?? form.createdByUserName;
+
+    // Bước trung gian (TerminalLevelSnapshot=None) — tối đa 2 bước/Phòng ban (chốt cứng từ Giai đoạn
+    // 3.2, xem ghi chú ở HeaderLayout.requester phía trên), nên "đầu"/"cuối" luôn đủ chỗ cho cả 2.
+    const intermediateSteps = form.approvalSteps.filter((s) => s.terminalLevelSnapshot === 0);
+    const firstIntermediate = intermediateSteps[0];
+    const lastIntermediate = intermediateSteps[intermediateSteps.length - 1];
 
     return (
         <div className="text-[9pt]">
-            {layout.signature.map(({ level, box }) => (
-                <SignatureCell key={level} box={box} history={findHistory(form.approvalHistories, level)} />
-            ))}
-            {/* Ô "Người đề nghị" gộp chung 2 chữ ký trên giấy gốc: Trưởng nhóm (approvalLevel=0) và
-                Trưởng Bộ phận (approvalLevel=4) — thêm đường kẻ dọc mảnh để phân tách, tiêu đề ô giữ
-                nguyên "Người đề nghị" như bản in gốc. */}
-            {layout.requester.map(({ level, box }, index) => (
-                <div key={level} style={{ ...boxStyle(box), borderRight: index === 0 ? "1px solid #000" : undefined }}>
-                    <SignatureCell box={{ left: 0, top: 0, width: 100, height: 100 }} history={findHistory(form.approvalHistories, level)} nameOnly />
-                </div>
-            ))}
+            {layout.signature.map(({ level, box }) => {
+                const step = findStepByTerminalLevel(form, level);
+                return <SignatureCell key={level} box={box} history={step ? findHistory(form.approvalHistories, step.stepOrder) : null} />;
+            })}
+            {/* Ô "Người đề nghị" gộp chung 2 chữ ký trên giấy gốc — thêm đường kẻ dọc mảnh để phân tách,
+                tiêu đề ô giữ nguyên "Người đề nghị" như bản in gốc. */}
+            {layout.requester.map(({ slot, box }, index) => {
+                const step = slot === "first" ? firstIntermediate : lastIntermediate;
+                // Chỉ 1 bước trung gian → không lặp lại cùng 1 người ở cả 2 ô.
+                const effectiveStep = slot === "last" && lastIntermediate === firstIntermediate ? undefined : step;
+                return (
+                    <div key={slot} style={{ ...boxStyle(box), borderRight: index === 0 ? "1px solid #000" : undefined }}>
+                        <SignatureCell
+                            box={{ left: 0, top: 0, width: 100, height: 100 }}
+                            history={effectiveStep ? findHistory(form.approvalHistories, effectiveStep.stepOrder) : null}
+                            nameOnly
+                        />
+                    </div>
+                );
+            })}
 
             <div style={nowrapBoxStyle(layout.tenCongDoan)} className="pl-1">
                 {form.departmentNameVn} — {form.groupNameVn}

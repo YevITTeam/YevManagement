@@ -43,6 +43,8 @@ namespace CompanySystem.HostApi.Configurations
 
             // Register IHttpContextAccessor
             services.AddHttpContextAccessor();
+            // MyClaimsTransformation caches its per-request reverse-DNS lookup here (see the class for why).
+            services.AddMemoryCache();
             services.AddScoped<IClaimsTransformation, MyClaimsTransformation>();
 
             // AI Chat -> Ollama typed HttpClient (docs/ai-chat-be-huong-dan.md). Not picked up by the

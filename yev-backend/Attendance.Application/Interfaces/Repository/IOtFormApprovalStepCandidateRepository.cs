@@ -3,7 +3,7 @@ using Shared.Application.Abstractions;
 
 namespace Attendance.Application.Interfaces.Repository
 {
-    public interface IUserApprovalScopeRepository : IGenericRepository<UserApprovalScope>
+    public interface IOtFormApprovalStepCandidateRepository : IGenericRepository<OtFormApprovalStepCandidate>
     {
     }
 }

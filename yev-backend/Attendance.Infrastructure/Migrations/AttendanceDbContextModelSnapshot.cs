@@ -132,12 +132,15 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
-                    b.Property<int>("GroupId")
+                    b.Property<int?>("GroupId")
                         .HasColumnType("int");
 
                     b.Property<bool>("IsDeleted")
@@ -181,6 +184,8 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "Code" }, "IX_Employees_Code")
                         .IsUnique();
+
+                    b.HasIndex(new[] { "DepartmentId" }, "IX_Employees_DepartmentId");
 
                     b.HasIndex(new[] { "GroupId" }, "IX_Employees_GroupId");
 
@@ -318,6 +323,9 @@ namespace Attendance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("ApprovalChainWarning")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("CreatedByFullName")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -329,6 +337,21 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
+
+                    b.Property<string>("DeleteReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedByFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("DeletedByUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("DepartmentId")
                         .HasColumnType("int");
@@ -417,9 +440,6 @@ namespace Attendance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("ApprovalLevel")
-                        .HasColumnType("int");
-
                     b.Property<string>("ApproverFullName")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -435,6 +455,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("OtFormApprovalStepId")
+                        .HasColumnType("int");
+
                     b.Property<int>("OtFormId")
                         .HasColumnType("int");
 
@@ -447,6 +470,8 @@ namespace Attendance.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OtFormApprovalStepId");
 
                     b.HasIndex(new[] { "OtFormId" }, "IX_OtFormApprovalEmailTokens_OtFormId");
 
@@ -470,9 +495,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<DateTime>("ActionAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("ApprovalLevel")
-                        .HasColumnType("int");
-
                     b.Property<string>("ApproverFullName")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -486,6 +508,9 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<int>("OtFormApprovalStepId")
+                        .HasColumnType("int");
+
                     b.Property<int>("OtFormId")
                         .HasColumnType("int");
 
@@ -494,11 +519,97 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("OtFormApprovalStepId");
+
                     b.HasIndex(new[] { "ApproverUserName" }, "IX_OtFormApprovalHistories_ApproverUserName");
 
                     b.HasIndex(new[] { "OtFormId" }, "IX_OtFormApprovalHistories_OtFormId");
 
                     b.ToTable("OtFormApprovalHistories");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalStep", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsResponsibleSnapshot")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("JobTitleCodeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("JobTitleId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("JobTitleNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("OtFormId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresSignatureSnapshot")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TerminalLevelSnapshot")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "JobTitleId" }, "IX_OtFormApprovalSteps_JobTitleId");
+
+                    b.HasIndex(new[] { "OtFormId" }, "IX_OtFormApprovalSteps_OtFormId");
+
+                    b.ToTable("OtFormApprovalSteps");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalStepCandidate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<int>("OtFormApprovalStepId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "EmployeeId" }, "IX_OtFormApprovalStepCandidates_EmployeeId");
+
+                    b.HasIndex(new[] { "OtFormApprovalStepId" }, "IX_OtFormApprovalStepCandidates_OtFormApprovalStepId");
+
+                    b.ToTable("OtFormApprovalStepCandidates");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatch", b =>
@@ -834,40 +945,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("SecondaryPasswords");
                 });
 
-            modelBuilder.Entity("Attendance.Domain.Entities.UserApprovalScope", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ApprovalLevel")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("ScopeId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ScopeType")
-                        .HasColumnType("int");
-
-                    b.Property<string>("UserName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex(new[] { "ScopeType", "ScopeId" }, "IX_UserApprovalScopes_ScopeType_ScopeId");
-
-                    b.HasIndex(new[] { "UserName" }, "IX_UserApprovalScopes_UserName");
-
-                    b.ToTable("UserApprovalScopes");
-                });
-
             modelBuilder.Entity("Attendance.Domain.Entities.UserSignature", b =>
                 {
                     b.Property<int>("Id")
@@ -919,11 +996,16 @@ namespace Attendance.Infrastructure.Migrations
 
             modelBuilder.Entity("Attendance.Domain.Entities.Employee", b =>
                 {
+                    b.HasOne("Attendance.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Employees_Departments_DepartmentId");
+
                     b.HasOne("Attendance.Domain.Entities.Group", "Group")
                         .WithMany("Employees")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("FK_Employees_Groups_GroupId");
 
                     b.HasOne("Attendance.Domain.Entities.JobTitle", "JobTitle")
@@ -931,6 +1013,8 @@ namespace Attendance.Infrastructure.Migrations
                         .HasForeignKey("JobTitleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_Employees_JobTitles_JobTitleId");
+
+                    b.Navigation("Department");
 
                     b.Navigation("Group");
 
@@ -1014,6 +1098,13 @@ namespace Attendance.Infrastructure.Migrations
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalEmailToken", b =>
                 {
+                    b.HasOne("Attendance.Domain.Entities.OtFormApprovalStep", "OtFormApprovalStep")
+                        .WithMany("ApprovalEmailTokens")
+                        .HasForeignKey("OtFormApprovalStepId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormApprovalEmailTokens_OtFormApprovalSteps_OtFormApprovalStepId");
+
                     b.HasOne("Attendance.Domain.Entities.OtForm", "OtForm")
                         .WithMany("OtFormApprovalEmailTokens")
                         .HasForeignKey("OtFormId")
@@ -1022,10 +1113,19 @@ namespace Attendance.Infrastructure.Migrations
                         .HasConstraintName("FK_OtFormApprovalEmailTokens_OtForms_OtFormId");
 
                     b.Navigation("OtForm");
+
+                    b.Navigation("OtFormApprovalStep");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalHistory", b =>
                 {
+                    b.HasOne("Attendance.Domain.Entities.OtFormApprovalStep", "OtFormApprovalStep")
+                        .WithMany("ApprovalHistories")
+                        .HasForeignKey("OtFormApprovalStepId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormApprovalHistories_OtFormApprovalSteps_OtFormApprovalStepId");
+
                     b.HasOne("Attendance.Domain.Entities.OtForm", "OtForm")
                         .WithMany("OtFormApprovalHistories")
                         .HasForeignKey("OtFormId")
@@ -1034,6 +1134,41 @@ namespace Attendance.Infrastructure.Migrations
                         .HasConstraintName("FK_OtFormApprovalHistories_OtForms_OtFormId");
 
                     b.Navigation("OtForm");
+
+                    b.Navigation("OtFormApprovalStep");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalStep", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.JobTitle", "JobTitle")
+                        .WithMany()
+                        .HasForeignKey("JobTitleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormApprovalSteps_JobTitles_JobTitleId");
+
+                    b.HasOne("Attendance.Domain.Entities.OtForm", "OtForm")
+                        .WithMany("ApprovalSteps")
+                        .HasForeignKey("OtFormId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormApprovalSteps_OtForms_OtFormId");
+
+                    b.Navigation("JobTitle");
+
+                    b.Navigation("OtForm");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalStepCandidate", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.OtFormApprovalStep", "OtFormApprovalStep")
+                        .WithMany("Candidates")
+                        .HasForeignKey("OtFormApprovalStepId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormApprovalStepCandidates_OtFormApprovalSteps_OtFormApprovalStepId");
+
+                    b.Navigation("OtFormApprovalStep");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatch", b =>
@@ -1128,6 +1263,8 @@ namespace Attendance.Infrastructure.Migrations
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtForm", b =>
                 {
+                    b.Navigation("ApprovalSteps");
+
                     b.Navigation("OtFormApprovalEmailTokens");
 
                     b.Navigation("OtFormApprovalHistories");
@@ -1135,6 +1272,15 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtFormEmployees");
 
                     b.Navigation("ProcessPart");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalStep", b =>
+                {
+                    b.Navigation("ApprovalEmailTokens");
+
+                    b.Navigation("ApprovalHistories");
+
+                    b.Navigation("Candidates");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatch", b =>

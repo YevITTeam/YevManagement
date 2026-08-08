@@ -5,12 +5,18 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
+import { DepartmentApi } from "@/modules/attendance/api/department.api";
+import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+
+// JobTitleTerminalLevel (docs/attendance-api-fe.md) — 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
+const TERMINAL_LEVEL_NONE = 0;
+const TERMINAL_LEVEL_DEPARTMENT_MANAGER = 1;
 
 export interface EmployeeFormValues {
     code: string;
@@ -19,7 +25,11 @@ export interface EmployeeFormValues {
     userName: string | null;
     monthToDate: number;
     yearToDate: number;
-    groupId: number;
+    // Đúng 1 trong 2 field được điền tuỳ theo Chức vụ (2026-08-08, xem docs §Cây chức vụ):
+    // TerminalLevel=None → groupId bắt buộc; =DepartmentManager (Trưởng phòng) → departmentId bắt
+    // buộc; =WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc) → cả 2 đều null.
+    groupId: number | null;
+    departmentId: number | null;
     jobTitleId: number | null;
 }
 
@@ -39,7 +49,8 @@ const emptyValues: EmployeeFormValues = {
     userName: null,
     monthToDate: 0,
     yearToDate: 0,
-    groupId: 0,
+    groupId: null,
+    departmentId: null,
     jobTitleId: null,
 };
 
@@ -52,6 +63,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     const tCommon = useTranslations("Common");
     const [values, setValues] = useState<EmployeeFormValues>(emptyValues);
     const [groups, setGroups] = useState<GroupDto[]>([]);
+    const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [jobTitles, setJobTitles] = useState<JobTitleDto[]>([]);
     const [usersWithRoles, setUsersWithRoles] = useState<UserDto[]>([]);
     const [showUserSuggestions, setShowUserSuggestions] = useState(false);
@@ -60,6 +72,9 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         if (!isOpen) return;
         GroupApi.getAllGroups()
             .then((data) => setGroups(data))
+            .catch((err) => console.error(err));
+        DepartmentApi.getAllDepartments()
+            .then((data) => setDepartments(data))
             .catch((err) => console.error(err));
         JobTitleApi.getAllJobTitles()
             .then((data) => setJobTitles(data))
@@ -80,6 +95,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                       monthToDate: current.monthToDate,
                       yearToDate: current.yearToDate,
                       groupId: current.groupId,
+                      departmentId: current.departmentId,
                       jobTitleId: current.jobTitleId,
                   }
                 : emptyValues
@@ -88,9 +104,31 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
 
     if (!isOpen) return null;
 
+    const selectedJobTitle = jobTitles.find((jt) => jt.id === values.jobTitleId);
+    const terminalLevel = selectedJobTitle?.terminalLevel ?? TERMINAL_LEVEL_NONE;
+    const needsGroup = terminalLevel === TERMINAL_LEVEL_NONE;
+    const needsDepartment = terminalLevel === TERMINAL_LEVEL_DEPARTMENT_MANAGER;
+    const isCompanyWide = !needsGroup && !needsDepartment;
+
+    const handleJobTitleChange = (value: string) => {
+        const nextJobTitleId = value ? Number(value) : null;
+        const nextJobTitle = jobTitles.find((jt) => jt.id === nextJobTitleId);
+        const nextTerminalLevel = nextJobTitle?.terminalLevel ?? TERMINAL_LEVEL_NONE;
+        // Đổi nhóm Chức vụ (thường/Trưởng phòng/Trưởng Xưởng-Giám đốc) làm giá trị Bộ phận/Phòng ban
+        // cũ không còn hợp lệ — reset để tránh gửi lẫn field sai lên BE.
+        setValues((current) => ({
+            ...current,
+            jobTitleId: nextJobTitleId,
+            groupId: nextTerminalLevel === TERMINAL_LEVEL_NONE ? current.groupId : null,
+            departmentId: nextTerminalLevel === TERMINAL_LEVEL_DEPARTMENT_MANAGER ? current.departmentId : null,
+        }));
+    };
+
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!values.code.trim() || !values.firstName.trim() || !values.lastName.trim() || !values.groupId) return;
+        if (!values.code.trim() || !values.firstName.trim() || !values.lastName.trim()) return;
+        if (needsGroup && !values.groupId) return;
+        if (needsDepartment && !values.departmentId) return;
         onSubmit(values);
     };
 
@@ -203,35 +241,10 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
-                        <select
-                            value={values.groupId || ""}
-                            onChange={(event) => setValues((current) => ({ ...current, groupId: Number(event.target.value) }))}
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        >
-                            <option value="" disabled>
-                                {t("fieldGroupPlaceholder")}
-                            </option>
-                            {groups.map((group) => (
-                                <option key={group.id} value={group.id}>
-                                    {group.groupNameVn}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-
-                    <label className="block">
                         <span className={fieldLabelClassName}>{t("fieldJobTitle")}</span>
                         <select
                             value={values.jobTitleId ?? ""}
-                            onChange={(event) =>
-                                setValues((current) => ({
-                                    ...current,
-                                    jobTitleId: event.target.value ? Number(event.target.value) : null,
-                                }))
-                            }
+                            onChange={(event) => handleJobTitleChange(event.target.value)}
                             disabled={loading}
                             className={fieldClassName}
                         >
@@ -243,6 +256,59 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             ))}
                         </select>
                     </label>
+
+                    {needsGroup && (
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
+                            <select
+                                value={values.groupId ?? ""}
+                                onChange={(event) => setValues((current) => ({ ...current, groupId: event.target.value ? Number(event.target.value) : null }))}
+                                disabled={loading}
+                                required
+                                className={fieldClassName}
+                            >
+                                <option value="" disabled>
+                                    {t("fieldGroupPlaceholder")}
+                                </option>
+                                {groups.map((group) => (
+                                    <option key={group.id} value={group.id}>
+                                        {group.groupNameVn}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    )}
+
+                    {needsDepartment && (
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
+                            <select
+                                value={values.departmentId ?? ""}
+                                onChange={(event) =>
+                                    setValues((current) => ({ ...current, departmentId: event.target.value ? Number(event.target.value) : null }))
+                                }
+                                disabled={loading}
+                                required
+                                className={fieldClassName}
+                            >
+                                <option value="" disabled>
+                                    {t("fieldDepartmentPlaceholder")}
+                                </option>
+                                {departments.map((department) => (
+                                    <option key={department.id} value={department.id}>
+                                        {department.departmentNameVn}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="mt-1.5 text-xs text-[#8a8f94]">{t("fieldDepartmentHint")}</p>
+                        </label>
+                    )}
+
+                    {isCompanyWide && (
+                        <p className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5 text-xs text-[#5e3f3a]">
+                            {t("companyWideHint")}
+                        </p>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         <label className="block">

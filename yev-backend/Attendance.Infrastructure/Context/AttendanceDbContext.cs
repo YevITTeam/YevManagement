@@ -22,7 +22,6 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<OtForm> OtForms { get; set; }
     public virtual DbSet<OtFormEmployee> OtFormEmployees { get; set; }
     public virtual DbSet<ProcessPart> ProcessParts { get; set; }
-    public virtual DbSet<UserApprovalScope> UserApprovalScopes { get; set; }
     public virtual DbSet<OtFormApprovalHistory> OtFormApprovalHistories { get; set; }
     public virtual DbSet<UserSignature> UserSignatures { get; set; }
     public virtual DbSet<PendingSignatureConfirmation> PendingSignatureConfirmations { get; set; }
@@ -34,6 +33,8 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<OtFormBatchEmailToken> OtFormBatchEmailTokens { get; set; }
     public virtual DbSet<JobTitle> JobTitles { get; set; }
     public virtual DbSet<DepartmentApprovalStep> DepartmentApprovalSteps { get; set; }
+    public virtual DbSet<OtFormApprovalStep> OtFormApprovalSteps { get; set; }
+    public virtual DbSet<OtFormApprovalStepCandidate> OtFormApprovalStepCandidates { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -96,6 +97,7 @@ public partial class AttendanceDbContext : DbContext
         {
             entity.HasIndex(e => e.Code, "IX_Employees_Code").IsUnique();
             entity.HasIndex(e => e.GroupId, "IX_Employees_GroupId");
+            entity.HasIndex(e => e.DepartmentId, "IX_Employees_DepartmentId");
             entity.HasIndex(e => e.JobTitleId, "IX_Employees_JobTitleId");
             // Filtered unique index: SQL Server only allows 1 NULL in a regular unique index,
             // so filter IS NOT NULL to let multiple employees without an assigned UserName still be insertable.
@@ -114,6 +116,11 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.GroupId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_Employees_Groups_GroupId");
+
+            entity.HasOne(d => d.Department).WithMany()
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_Employees_Departments_DepartmentId");
 
             entity.HasOne(d => d.JobTitle).WithMany(p => p.Employees)
                 .HasForeignKey(d => d.JobTitleId)
@@ -161,6 +168,9 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.ResponsibleUserName).HasMaxLength(50);
             entity.Property(e => e.SubReason).HasMaxLength(500);
             entity.Property(e => e.TotalHour).HasPrecision(10, 2);
+            entity.Property(e => e.DeletedByUserName).HasMaxLength(100);
+            entity.Property(e => e.DeletedByFullName).HasMaxLength(255);
+            entity.Property(e => e.DeleteReason).HasMaxLength(500);
 
             entity.HasOne(d => d.Group).WithMany(p => p.OtForms)
                 .HasForeignKey(d => d.GroupId)
@@ -222,13 +232,6 @@ public partial class AttendanceDbContext : DbContext
                 .HasConstraintName("FK_ProcessParts_OtForms_OtFormId");
         });
 
-        modelBuilder.Entity<UserApprovalScope>(entity =>
-        {
-            entity.HasIndex(e => new { e.ScopeType, e.ScopeId }, "IX_UserApprovalScopes_ScopeType_ScopeId");
-            entity.HasIndex(e => e.UserName, "IX_UserApprovalScopes_UserName");
-            entity.Property(e => e.UserName).HasMaxLength(100);
-        });
-
         modelBuilder.Entity<OtFormApprovalHistory>(entity =>
         {
             entity.HasIndex(e => e.OtFormId, "IX_OtFormApprovalHistories_OtFormId");
@@ -241,6 +244,11 @@ public partial class AttendanceDbContext : DbContext
             entity.HasOne(d => d.OtForm).WithMany(p => p.OtFormApprovalHistories)
                 .HasForeignKey(d => d.OtFormId)
                 .HasConstraintName("FK_OtFormApprovalHistories_OtForms_OtFormId");
+
+            entity.HasOne(d => d.OtFormApprovalStep).WithMany(p => p.ApprovalHistories)
+                .HasForeignKey(d => d.OtFormApprovalStepId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OtFormApprovalHistories_OtFormApprovalSteps_OtFormApprovalStepId");
         });
 
         modelBuilder.Entity<UserSignature>(entity =>
@@ -269,6 +277,40 @@ public partial class AttendanceDbContext : DbContext
             entity.HasOne(d => d.OtForm).WithMany(p => p.OtFormApprovalEmailTokens)
                 .HasForeignKey(d => d.OtFormId)
                 .HasConstraintName("FK_OtFormApprovalEmailTokens_OtForms_OtFormId");
+
+            entity.HasOne(d => d.OtFormApprovalStep).WithMany(p => p.ApprovalEmailTokens)
+                .HasForeignKey(d => d.OtFormApprovalStepId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OtFormApprovalEmailTokens_OtFormApprovalSteps_OtFormApprovalStepId");
+        });
+
+        modelBuilder.Entity<OtFormApprovalStep>(entity =>
+        {
+            entity.HasIndex(e => e.OtFormId, "IX_OtFormApprovalSteps_OtFormId");
+            entity.HasIndex(e => e.JobTitleId, "IX_OtFormApprovalSteps_JobTitleId");
+            entity.Property(e => e.JobTitleCodeSnapshot).HasMaxLength(50);
+            entity.Property(e => e.JobTitleNameSnapshot).HasMaxLength(150);
+
+            entity.HasOne(d => d.OtForm).WithMany(p => p.ApprovalSteps)
+                .HasForeignKey(d => d.OtFormId)
+                .HasConstraintName("FK_OtFormApprovalSteps_OtForms_OtFormId");
+
+            entity.HasOne(d => d.JobTitle).WithMany()
+                .HasForeignKey(d => d.JobTitleId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OtFormApprovalSteps_JobTitles_JobTitleId");
+        });
+
+        modelBuilder.Entity<OtFormApprovalStepCandidate>(entity =>
+        {
+            entity.HasIndex(e => e.OtFormApprovalStepId, "IX_OtFormApprovalStepCandidates_OtFormApprovalStepId");
+            entity.HasIndex(e => e.EmployeeId, "IX_OtFormApprovalStepCandidates_EmployeeId");
+            entity.Property(e => e.UserName).HasMaxLength(100);
+            entity.Property(e => e.FullName).HasMaxLength(255);
+
+            entity.HasOne(d => d.OtFormApprovalStep).WithMany(p => p.Candidates)
+                .HasForeignKey(d => d.OtFormApprovalStepId)
+                .HasConstraintName("FK_OtFormApprovalStepCandidates_OtFormApprovalSteps_OtFormApprovalStepId");
         });
 
         modelBuilder.Entity<SecondaryPassword>(entity =>

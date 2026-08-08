@@ -5,9 +5,9 @@ using Shared.Infrastructure.Repositories;
 
 namespace Attendance.Infrastructure.Repositories
 {
-    public class UserApprovalScopeRepository : GenericRepository<UserApprovalScope, AttendanceDbContext>, IUserApprovalScopeRepository
+    public class OtFormApprovalStepRepository : GenericRepository<OtFormApprovalStep, AttendanceDbContext>, IOtFormApprovalStepRepository
     {
-        public UserApprovalScopeRepository(AttendanceDbContext dbContext) : base(dbContext)
+        public OtFormApprovalStepRepository(AttendanceDbContext dbContext) : base(dbContext)
         {
         }
     }

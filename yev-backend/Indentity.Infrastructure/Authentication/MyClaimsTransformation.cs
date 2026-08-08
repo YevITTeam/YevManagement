@@ -4,6 +4,7 @@ using Identity.Infrastructure.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Shared.Application.Helper;
 using System.DirectoryServices.AccountManagement;
@@ -17,11 +18,14 @@ namespace Identity.Infrastructure.Authentication
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IMemoryCache _memoryCache;
 
-        public MyClaimsTransformation(IServiceProvider serviceProvider, IHttpContextAccessor httpContextAccessor)
+        public MyClaimsTransformation(
+            IServiceProvider serviceProvider, IHttpContextAccessor httpContextAccessor, IMemoryCache memoryCache)
         {
             _serviceProvider = serviceProvider;
             _httpContextAccessor = httpContextAccessor;
+            _memoryCache = memoryCache;
         }
 
         public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
@@ -39,7 +43,7 @@ namespace Identity.Infrastructure.Authentication
             // DeviceName is now only for reference/display purposes (2026-07-11, changed back —
             // see the note below), no longer used to match a User, so it could be resolved later,
             // but it's still resolved here to set/refresh it on the User found below.
-            string? deviceName = GetClientDeviceName(ipAddress);
+            string? deviceName = await GetClientDeviceNameAsync(ipAddress);
 
             using (var scope = _serviceProvider.CreateScope())
             {
@@ -279,20 +283,46 @@ namespace Identity.Infrastructure.Authentication
             catch { return null; }
         }
 
-        private string? GetClientDeviceName(string? ipAddress)
+        // Reverse DNS cache key prefix + durations. This lookup used to run synchronously and unbounded
+        // on EVERY authenticated request (TransformAsync re-runs on every Bearer call, see the
+        // RolesLoaded check above — the JWT deliberately excludes that claim so permissions stay fresh).
+        // On a client IP with no PTR record (common on an internal network), Dns.GetHostEntry can hang
+        // for several seconds waiting on the OS resolver timeout, single-handedly making EVERY API call
+        // slow (2026-08-08, observed ~4s stall on GET /Auth/me in DevTools Network). Cache the result per
+        // IP so only the first request per cache window pays the DNS round trip, and bound the lookup
+        // itself so a slow/unreachable DNS server can't stall the request past DnsLookupTimeout.
+        private const string DeviceNameCacheKeyPrefix = "ClaimsTransform:DeviceName:";
+        private static readonly TimeSpan DnsLookupTimeout = TimeSpan.FromMilliseconds(500);
+        private static readonly TimeSpan ResolvedNameCacheDuration = TimeSpan.FromHours(6);
+        private static readonly TimeSpan UnresolvedNameCacheDuration = TimeSpan.FromMinutes(15);
+
+        private async Task<string?> GetClientDeviceNameAsync(string? ipAddress)
         {
             if (string.IsNullOrEmpty(ipAddress)) return null;
             if (ipAddress == "::1" || ipAddress == "127.0.0.1")
             {
-                try { return Environment.MachineName; } catch { }
+                try { return Environment.MachineName; } catch { return null; }
             }
+
+            var cacheKey = DeviceNameCacheKeyPrefix + ipAddress;
+            if (_memoryCache.TryGetValue(cacheKey, out string? cachedDeviceName))
+            {
+                return cachedDeviceName;
+            }
+
+            string? deviceName = null;
             try
             {
-                var entry = Dns.GetHostEntry(ipAddress);
-                if (entry != null && !string.IsNullOrEmpty(entry.HostName)) return entry.HostName;
+                using var cts = new CancellationTokenSource(DnsLookupTimeout);
+                var entry = await Dns.GetHostEntryAsync(ipAddress, cts.Token);
+                if (entry != null && !string.IsNullOrEmpty(entry.HostName)) deviceName = entry.HostName;
             }
-            catch { /* Reverse DNS error */ }
-            return null;
+            catch { /* Reverse DNS error/timeout — cache the miss below so we don't retry every request */ }
+
+            // Shorter TTL for a miss so a since-fixed DNS entry (or a newly-assigned IP) self-heals
+            // reasonably fast instead of staying blank for the full 6h success window.
+            _memoryCache.Set(cacheKey, deviceName, deviceName != null ? ResolvedNameCacheDuration : UnresolvedNameCacheDuration);
+            return deviceName;
         }
 
         #endregion

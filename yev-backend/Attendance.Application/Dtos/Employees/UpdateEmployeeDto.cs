@@ -21,8 +21,11 @@ namespace Attendance.Application.Dtos.Employees
 
         public decimal YearToDate { get; set; }
 
-        [Required(ErrorMessage = "Nhóm không được để trống")]
-        public int GroupId { get; set; }
+        // Nullable (2026-08-08) — bắt buộc/cấm tuỳ theo TerminalLevel của JobTitleId, validate ở
+        // EmployeeService.ValidateOrganizationAssignmentAsync (xem docs §Cây chức vụ).
+        public int? GroupId { get; set; }
+
+        public int? DepartmentId { get; set; }
 
         public int? JobTitleId { get; set; }
     }

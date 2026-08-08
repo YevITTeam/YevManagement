@@ -1,6 +1,7 @@
 using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
+using Attendance.Domain.Enums;
 using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
@@ -12,9 +13,18 @@ namespace Attendance.Application.Services
     {
         public EmployeeService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
 
-        public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword)
+        public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId)
         {
-            var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group, x => x.JobTitle!).Where(x => !x.IsDeleted);
+            var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group!, x => x.Department!, x => x.JobTitle!).Where(x => !x.IsDeleted);
+
+            // Khớp cả 2 đường tới Department: trực tiếp (Trưởng phòng, xem Employee.DepartmentId) hoặc
+            // qua Group (nhân viên thường) — Trưởng Xưởng/Giám đốc (cả GroupId lẫn DepartmentId đều
+            // null, dùng chung toàn công ty) sẽ không khớp bộ lọc theo Phòng ban nào cả, đúng ý nghĩa.
+            if (departmentId.HasValue)
+                query = query.Where(x => x.DepartmentId == departmentId.Value || (x.Group != null && x.Group.DepartmentId == departmentId.Value));
+            if (groupId.HasValue)
+                query = query.Where(x => x.GroupId == groupId.Value);
+
             var orderedQuery = query.OrderBy(x => x.Code);
 
             if (!string.IsNullOrWhiteSpace(keyword))
@@ -50,7 +60,9 @@ namespace Attendance.Application.Services
                     ProjectedMonthToDate = x.ProjectedMonthToDate,
                     ProjectedYearToDate = x.ProjectedYearToDate,
                     GroupId = x.GroupId,
-                    GroupNameVn = x.Group.GroupNameVn,
+                    GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    DepartmentId = x.DepartmentId,
+                    DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
                     JobTitleId = x.JobTitleId,
                     JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
                 }
@@ -77,7 +89,9 @@ namespace Attendance.Application.Services
                     ProjectedMonthToDate = x.ProjectedMonthToDate,
                     ProjectedYearToDate = x.ProjectedYearToDate,
                     GroupId = x.GroupId,
-                    GroupNameVn = x.Group.GroupNameVn,
+                    GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    DepartmentId = x.DepartmentId,
+                    DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
                     JobTitleId = x.JobTitleId,
                     JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
                 }
@@ -85,7 +99,9 @@ namespace Attendance.Application.Services
             return items.OrderBy(x => x.Code).ToList();
         }
 
-        // Dùng cho Trưởng nhóm liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm.
+        // Dùng cho Trưởng nhóm liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm. Trưởng
+        // phòng/Trưởng Xưởng/Giám đốc (GroupId null) không bao giờ khớp — đúng ý nghĩa, họ không phải
+        // thành viên của 1 Group cụ thể nào để bị liệt kê ở đây.
         public async Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId)
         {
             var items = await _unitOfWork.Employees.SelectAsync(
@@ -104,7 +120,40 @@ namespace Attendance.Application.Services
                     ProjectedMonthToDate = x.ProjectedMonthToDate,
                     ProjectedYearToDate = x.ProjectedYearToDate,
                     GroupId = x.GroupId,
-                    GroupNameVn = x.Group.GroupNameVn,
+                    GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    DepartmentId = x.DepartmentId,
+                    DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
+                    JobTitleId = x.JobTitleId,
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
+                }
+            );
+            return items.OrderBy(x => x.Code).ToList();
+        }
+
+        // Toàn bộ nhân viên active thuộc Phòng ban (mọi Group con, CỘNG Trưởng phòng gán trực tiếp
+        // DepartmentId) — dùng cho màn "Cây duyệt Phòng ban" (xem ai đang giữ Chức vụ nào trong Phòng
+        // ban để cấu hình/gán nhanh — docs/attendance-module.md §Cây chức vụ).
+        public async Task<List<EmployeeDto>> GetByDepartmentIdAsync(int departmentId)
+        {
+            var items = await _unitOfWork.Employees.SelectAsync(
+                predicate: x => !x.IsDeleted && (x.DepartmentId == departmentId || (x.Group != null && x.Group.DepartmentId == departmentId)),
+                selector: x => new EmployeeDto
+                {
+                    Id = x.Id,
+                    Code = x.Code,
+                    FirstName = x.FirstName,
+                    LastName = x.LastName,
+                    UserName = x.UserName,
+                    MonthToDate = x.MonthToDate,
+                    YearToDate = x.YearToDate,
+                    AccumulationYear = x.AccumulationYear,
+                    AccumulationMonth = x.AccumulationMonth,
+                    ProjectedMonthToDate = x.ProjectedMonthToDate,
+                    ProjectedYearToDate = x.ProjectedYearToDate,
+                    GroupId = x.GroupId,
+                    GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    DepartmentId = x.DepartmentId,
+                    DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
                     JobTitleId = x.JobTitleId,
                     JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
                 }
@@ -114,7 +163,7 @@ namespace Attendance.Application.Services
 
         public async Task<EmployeeDto> GetByIdAsync(int id)
         {
-            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == id, x => x.Group, x => x.JobTitle!);
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, x => x.Group!, x => x.Department!, x => x.JobTitle!);
             employee.OrThrowNotFound("Nhân viên", id);
 
             return new EmployeeDto
@@ -131,7 +180,9 @@ namespace Attendance.Application.Services
                 ProjectedMonthToDate = employee.ProjectedMonthToDate,
                 ProjectedYearToDate = employee.ProjectedYearToDate,
                 GroupId = employee.GroupId,
-                GroupNameVn = employee.Group.GroupNameVn,
+                GroupNameVn = employee.Group?.GroupNameVn,
+                DepartmentId = employee.DepartmentId,
+                DepartmentNameVn = employee.Department?.DepartmentNameVn,
                 JobTitleId = employee.JobTitleId,
                 JobTitleName = employee.JobTitle?.Name
             };
@@ -140,7 +191,7 @@ namespace Attendance.Application.Services
         // Nhân viên tự tra employeeId của chính mình (màn "Lũy kế của tôi") — so khớp Employee.UserName.
         public async Task<EmployeeDto> GetByUserNameAsync(string userName)
         {
-            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted, x => x.Group, x => x.JobTitle!);
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted, x => x.Group!, x => x.Department!, x => x.JobTitle!);
             employee.OrThrowNotFound("Nhân viên (tài khoản chưa được gán cho nhân viên nào)", userName);
 
             return new EmployeeDto
@@ -157,7 +208,9 @@ namespace Attendance.Application.Services
                 ProjectedMonthToDate = employee.ProjectedMonthToDate,
                 ProjectedYearToDate = employee.ProjectedYearToDate,
                 GroupId = employee.GroupId,
-                GroupNameVn = employee.Group.GroupNameVn,
+                GroupNameVn = employee.Group?.GroupNameVn,
+                DepartmentId = employee.DepartmentId,
+                DepartmentNameVn = employee.Department?.DepartmentNameVn,
                 JobTitleId = employee.JobTitleId,
                 JobTitleName = employee.JobTitle?.Name
             };
@@ -165,9 +218,6 @@ namespace Attendance.Application.Services
 
         public async Task<EmployeeDto> CreateAsync(CreateEmployeeDto request)
         {
-            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == request.GroupId && !x.IsDeleted);
-            group.OrThrowNotFound("Nhóm", request.GroupId);
-
             var exists = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Code == request.Code && !x.IsDeleted);
             if (exists != null) throw new DomainException($"Mã nhân viên '{request.Code}' đã tồn tại.");
 
@@ -177,13 +227,7 @@ namespace Attendance.Application.Services
                 if (existsUserName != null) throw new DomainException($"Tài khoản '{request.UserName}' đã được gán cho nhân viên khác.");
             }
 
-            string? jobTitleName = null;
-            if (request.JobTitleId.HasValue)
-            {
-                var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == request.JobTitleId.Value && !x.IsDeleted);
-                jobTitle.OrThrowNotFound("Chức vụ", request.JobTitleId.Value);
-                jobTitleName = jobTitle!.Name;
-            }
+            var (groupId, departmentId) = await ValidateOrganizationAssignmentAsync(request.JobTitleId, request.GroupId, request.DepartmentId);
 
             var now = TimeHelper.GetCurrentUtcTime();
             var newEmployee = new Employee
@@ -196,7 +240,8 @@ namespace Attendance.Application.Services
                 YearToDate = request.YearToDate,
                 AccumulationYear = now.Year,
                 AccumulationMonth = now.Month,
-                GroupId = request.GroupId,
+                GroupId = groupId,
+                DepartmentId = departmentId,
                 JobTitleId = request.JobTitleId,
                 IsDeleted = false
             };
@@ -204,24 +249,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.Employees.AddAsync(newEmployee);
             await _unitOfWork.SaveChangesAsync();
 
-            return new EmployeeDto
-            {
-                Id = newEmployee.Id,
-                Code = newEmployee.Code,
-                FirstName = newEmployee.FirstName,
-                LastName = newEmployee.LastName,
-                UserName = newEmployee.UserName,
-                MonthToDate = newEmployee.MonthToDate,
-                YearToDate = newEmployee.YearToDate,
-                AccumulationYear = newEmployee.AccumulationYear,
-                AccumulationMonth = newEmployee.AccumulationMonth,
-                ProjectedMonthToDate = newEmployee.ProjectedMonthToDate,
-                ProjectedYearToDate = newEmployee.ProjectedYearToDate,
-                GroupId = newEmployee.GroupId,
-                GroupNameVn = group!.GroupNameVn,
-                JobTitleId = newEmployee.JobTitleId,
-                JobTitleName = jobTitleName
-            };
+            return await GetByIdAsync(newEmployee.Id);
         }
 
         public async Task UpdateAsync(UpdateEmployeeDto request)
@@ -241,17 +269,7 @@ namespace Attendance.Application.Services
                 if (existsUserName != null) throw new DomainException($"Tài khoản '{request.UserName}' đã được gán cho nhân viên khác.");
             }
 
-            if (employee.GroupId != request.GroupId)
-            {
-                var group = await _unitOfWork.Groups.GetByIdAsync(request.GroupId);
-                group.OrThrowNotFound("Nhóm", request.GroupId);
-            }
-
-            if (request.JobTitleId.HasValue && request.JobTitleId != employee.JobTitleId)
-            {
-                var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == request.JobTitleId.Value && !x.IsDeleted);
-                jobTitle.OrThrowNotFound("Chức vụ", request.JobTitleId.Value);
-            }
+            var (groupId, departmentId) = await ValidateOrganizationAssignmentAsync(request.JobTitleId, request.GroupId, request.DepartmentId);
 
             var now = TimeHelper.GetCurrentUtcTime();
             employee.Code = request.Code;
@@ -262,7 +280,8 @@ namespace Attendance.Application.Services
             employee.YearToDate = request.YearToDate;
             employee.AccumulationYear = now.Year;
             employee.AccumulationMonth = now.Month;
-            employee.GroupId = request.GroupId;
+            employee.GroupId = groupId;
+            employee.DepartmentId = departmentId;
             employee.JobTitleId = request.JobTitleId;
 
             _unitOfWork.Employees.Update(employee);
@@ -298,6 +317,54 @@ namespace Attendance.Application.Services
 
             _unitOfWork.Employees.Update(employee);
             await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Chốt GroupId/DepartmentId thật sự sẽ lưu, dựa theo TerminalLevel của Chức vụ được chọn
+        // (2026-08-08 — xem docs/docs-be/attendance-module.md §Cây chức vụ):
+        //   - Chưa gán Chức vụ / TerminalLevel=None (nhân viên thường): BẮT BUỘC GroupId, KHÔNG được gửi DepartmentId.
+        //   - TerminalLevel=DepartmentManager (Trưởng phòng): BẮT BUỘC DepartmentId, KHÔNG được gửi GroupId
+        //     (không thuộc Bộ phận cụ thể nào — chỉ quản lý Phòng ban).
+        //   - TerminalLevel=WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc): dùng chung toàn công ty
+        //     — KHÔNG được gửi cả GroupId lẫn DepartmentId.
+        private async Task<(int? GroupId, int? DepartmentId)> ValidateOrganizationAssignmentAsync(int? jobTitleId, int? groupId, int? departmentId)
+        {
+            JobTitle? jobTitle = null;
+            if (jobTitleId.HasValue)
+            {
+                jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == jobTitleId.Value && !x.IsDeleted);
+                jobTitle.OrThrowNotFound("Chức vụ", jobTitleId.Value);
+            }
+
+            var terminalLevel = (JobTitleTerminalLevel)(jobTitle?.TerminalLevel ?? (int)JobTitleTerminalLevel.None);
+
+            switch (terminalLevel)
+            {
+                case JobTitleTerminalLevel.WorkshopManager:
+                case JobTitleTerminalLevel.GeneralDirector:
+                    if (groupId.HasValue || departmentId.HasValue)
+                        throw new DomainException("Trưởng Xưởng/Giám đốc dùng chung toàn công ty — không chọn Bộ phận/Phòng ban.");
+                    return (null, null);
+
+                case JobTitleTerminalLevel.DepartmentManager:
+                    if (groupId.HasValue)
+                        throw new DomainException("Trưởng phòng không thuộc Bộ phận cụ thể nào — chỉ chọn Phòng ban.");
+                    if (!departmentId.HasValue)
+                        throw new DomainException("Trưởng phòng phải chọn Phòng ban quản lý.");
+
+                    var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == departmentId.Value && !x.IsDeleted);
+                    department.OrThrowNotFound("Phòng ban", departmentId.Value);
+                    return (null, departmentId);
+
+                default:
+                    if (departmentId.HasValue)
+                        throw new DomainException("Chỉ Trưởng phòng mới chọn Phòng ban trực tiếp — nhân viên thường chọn Bộ phận.");
+                    if (!groupId.HasValue)
+                        throw new DomainException("Bộ phận không được để trống.");
+
+                    var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == groupId.Value && !x.IsDeleted);
+                    group.OrThrowNotFound("Nhóm", groupId.Value);
+                    return (groupId, null);
+            }
         }
     }
 }

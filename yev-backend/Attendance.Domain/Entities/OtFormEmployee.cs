@@ -48,9 +48,9 @@ public partial class OtFormEmployee
 
     public string? RemovedByFullName { get; set; }
 
-    // ApprovalLevel the remover was acting at when they dropped this person (Submitter/GroupHead/
-    // DepartmentManager/WorkshopManager/GeneralDirector) — stored as int, same convention as
-    // OtFormApprovalHistory.ApprovalLevel.
+    // StepOrder (OtFormApprovalStep) the remover was acting at when they dropped this person
+    // (2026-08-07, Giai đoạn 3.1 — thay cho ApprovalLevel cũ, xem docs/attendance-module.md
+    // §Cây chức vụ). Tên field giữ nguyên "RemovedAtLevel" để không phải đổi FE/DTO đang dùng.
     public int? RemovedAtLevel { get; set; }
 
     public DateTime? RemovedAt { get; set; }

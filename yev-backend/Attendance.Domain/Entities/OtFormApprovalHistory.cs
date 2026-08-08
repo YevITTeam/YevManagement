@@ -9,6 +9,10 @@ public partial class OtFormApprovalHistory
 
     public int OtFormId { get; set; }
 
+    // Bước duyệt (đã snapshot) mà hành động này thuộc về — thay cho ApprovalLevel:int cũ (2026-08-07,
+    // Giai đoạn 3.1). Mọi thông tin "cấp nào" (tên Chức vụ, có bắt ký không...) đọc qua OtFormApprovalStep.
+    public int OtFormApprovalStepId { get; set; }
+
     // Creator/approver — stores the UserName, for the same reason as OtForm.CreatedByUserName.
     public string ApproverUserName { get; set; } = null!;
 
@@ -16,9 +20,6 @@ public partial class OtFormApprovalHistory
     // call across to the Identity API. Null if the account has never had FullName entered by an
     // Admin at create-user time.
     public string? ApproverFullName { get; set; }
-
-    // Stores the Attendance.Domain.Enums.ApprovalLevel enum as an int.
-    public int ApprovalLevel { get; set; }
 
     // Stores the Attendance.Domain.Enums.ApprovalAction enum as an int.
     public int Action { get; set; }
@@ -32,4 +33,6 @@ public partial class OtFormApprovalHistory
     public DateTime ActionAt { get; set; }
 
     public virtual OtForm OtForm { get; set; } = null!;
+
+    public virtual OtFormApprovalStep OtFormApprovalStep { get; set; } = null!;
 }

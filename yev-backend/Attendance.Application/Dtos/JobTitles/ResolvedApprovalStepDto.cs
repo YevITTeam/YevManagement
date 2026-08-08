@@ -3,6 +3,7 @@ namespace Attendance.Application.Dtos.JobTitles
     public class ResolvedApprovalStepDto
     {
         public int StepOrder { get; set; }
+        public int JobTitleId { get; set; }
         public string JobTitleCode { get; set; } = null!;
         public string JobTitleName { get; set; } = null!;
         public int RankOrder { get; set; }

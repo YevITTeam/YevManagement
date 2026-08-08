@@ -7,17 +7,17 @@ import OtFormListPage from "./OtFormListPage";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 
-type OtFormTabKey = "my-forms" | "pending-submissions" | "pending-approvals" | "my-actions" | "my-participations";
+type OtFormTabKey = "my-forms" | "pending-approvals" | "my-actions" | "my-participations";
 
-// docs/attendance-api-fe.md §1.1/§1.3.B (gộp 2026-07-17) — gộp 4 màn danh sách cũ ("Đơn của tôi"/
-// "Chờ tôi ký duyệt"/"Chờ tôi duyệt"/"Đơn đã xử lý") + 1 tab mới "Đơn tôi tham gia" thành 1 màn "Đơn
-// tăng ca" duy nhất. Chỉ gộp ở tầng UI — BE vẫn giữ nguyên 5 API riêng biệt, mỗi tab gọi đúng 1 API
-// (OtFormListPage đã tự làm việc này qua prop `mode`).
+// docs/attendance-api-fe.md §1.1/§1.3.B (gộp 2026-07-17) — gộp các màn danh sách cũ ("Đơn của tôi"/
+// "Chờ tôi duyệt"/"Đơn đã xử lý") + 1 tab "Đơn tôi tham gia" thành 1 màn "Đơn tăng ca" duy nhất. Chỉ
+// gộp ở tầng UI — BE vẫn giữ nguyên các API riêng biệt, mỗi tab gọi đúng 1 API (OtFormListPage đã tự
+// làm việc này qua prop `mode`). Tab "Chờ tôi ký duyệt" (Draft/Submitter cũ) đã dọn hẳn ở Giai đoạn
+// 3.2 (2026-08-08) — khái niệm này không còn tồn tại từ khi Cây chức vụ thay thế Submitter (3.1).
 export default function OtFormTabsPage() {
     const t = useTranslations("Attendance.OtFormTabs");
     const ALL_TABS: { key: OtFormTabKey; label: string }[] = [
         { key: "my-forms", label: t("tabMyForms") },
-        { key: "pending-submissions", label: t("tabPendingSubmissions") },
         { key: "pending-approvals", label: t("tabPendingApprovals") },
         { key: "my-actions", label: t("tabMyActions") },
         { key: "my-participations", label: t("tabMyParticipations") },
@@ -26,13 +26,8 @@ export default function OtFormTabsPage() {
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
 
-    // Từ 2026-08-05, khu vực OT chỉ còn 1 Role trên Identity (không còn Role riêng theo tên "Trưởng
-    // nhóm") nên không còn cách nào tra "user có phải Trưởng nhóm" từ FE — hiện tab này cho mọi người
-    // có OTForm.Create (cùng điều kiện với "my-forms"). Người không có UserApprovalScope(Submitter)
-    // vẫn vào được tab nhưng danh sách rỗng (BE tự lọc), không còn ẩn hẳn tab như trước.
     const visibleTabs = ALL_TABS.filter((tab) => {
         if (tab.key === "my-forms") return canCreate;
-        if (tab.key === "pending-submissions") return canCreate;
         if (tab.key === "pending-approvals") return canApprove;
         return true; // "my-actions"/"my-participations" luôn hiện — chỉ cần OTForm.View để vào được cả màn
     });

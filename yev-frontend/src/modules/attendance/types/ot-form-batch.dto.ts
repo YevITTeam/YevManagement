@@ -1,9 +1,12 @@
-// "Đơn tổng" — gom nhiều OtForm đang chờ đúng cấp Trưởng phòng (status=0 Pending) của cùng 1 Phòng
-// ban, duyệt 1 lần. Schema theo docs/attendance-api-fe.md §Đơn tổng.
+// "Đơn tổng" — gom nhiều OtForm mà bước đang chờ HIỆN TẠI đúng là bước Trưởng phòng
+// (TerminalLevelSnapshot=DepartmentManager, xem OtFormApprovalStepDto) của cùng 1 Phòng ban, duyệt 1
+// lần (2026-08-07, Giai đoạn 3.2 — redesign theo Cây chức vụ). Đơn còn kẹt ở bước trung gian trước đó
+// (SUP/CHIEF...) KHÔNG được gom, vẫn duyệt lẻ tới khi tự nó tới lượt Trưởng phòng. Schema theo
+// docs/attendance-api-fe.md §Đơn tổng.
 
 import type { OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
 
-// OtFormBatchStatus: 0=Pending (đang chờ Trưởng phòng), 1=Processed (đã xử lý).
+// OtFormBatchStatus: 0=Pending (còn đơn chờ xử lý), 1=Processed (đã xử lý xong hoặc tự đóng vì hết đơn hiệu lực).
 export interface OtFormBatchListItemDto {
     id: number;
     departmentId: number;
@@ -37,8 +40,8 @@ export interface OtFormBatchItemDto {
     employees: OtFormEmployeeDto[];
 }
 
-// Chi tiết GET /api/OtFormBatch/{id} (và GET /email-confirm/{token}) — otForms chỉ còn các đơn VẪN
-// CÒN Status==Pending (còn hiệu lực xử lý).
+// Chi tiết GET /api/OtFormBatch/{id} (và GET /email-confirm/{token}) — otForms chỉ còn các đơn mà
+// bước đang chờ hiện tại VẪN CÒN đúng là Trưởng phòng (còn hiệu lực xử lý qua Đơn tổng).
 export interface OtFormBatchDto {
     id: number;
     departmentId: number;

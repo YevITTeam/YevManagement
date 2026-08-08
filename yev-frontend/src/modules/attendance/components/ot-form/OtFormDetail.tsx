@@ -3,20 +3,13 @@
 import { useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
-import { Car, Check, Clock, MessageCircle, Printer, UserX, Utensils, X } from "lucide-react";
+import { Car, Check, Clock, MessageCircle, Printer, Trash2, UserX, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import type { OtFormApprovalHistoryDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
-import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
+import type { OtFormApprovalStepDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
-import {
-    approvalActionLabels,
-    approvalLevelLabels,
-    nextApprovalLevelFromStatus,
-    otFormStatusClasses,
-    otFormStatusLabels,
-} from "@/modules/attendance/types/enums";
+import { approvalActionLabels, otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { calculateHours, formatHours } from "@/modules/attendance/lib/time";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -44,60 +37,33 @@ function formatTime(value: string) {
     return value?.slice(0, 5) ?? "-";
 }
 
-// Thứ tự ký THẬT (không phải thứ tự số enum): Người đề nghị(0) → Trưởng Bộ phận(4, mới 2026-07-17) →
-// Trưởng phòng(1) → Trưởng xưởng(2) → Tổng Giám Đốc(3). approvalLevel trong lịch sử map trực tiếp
-// vào timeline này — xem docs §Đợt 6.
-const TIMELINE_LEVELS = [0, 4, 1, 2, 3];
+type ApprovalStepState = "done" | "current" | "rejected" | "skipped" | "upcoming";
 
-// Class Tailwind tĩnh theo số cấp thật sự áp dụng (3=TH1, 4=TH2, 5=TH3) — phải viết literal để Tailwind
-// JIT quét được, không thể build chuỗi "lg:grid-cols-" + n động.
-const APPROVAL_GRID_LG_COLS: Record<number, string> = {
-    3: "lg:grid-cols-3",
-    4: "lg:grid-cols-4",
-    5: "lg:grid-cols-5",
-};
-
-type ApprovalStepState = "done" | "current" | "rejected" | "upcoming";
-
-interface ApprovalStep {
-    level: number;
+interface ApprovalStepView {
+    step: OtFormApprovalStepDto;
     state: ApprovalStepState;
-    history: OtFormApprovalHistoryDto | null;
+    history: OtFormDto["approvalHistories"][number] | null;
 }
 
-// Danh sách cấp THẬT SỰ áp dụng cho 1 đơn — cắt bớt TIMELINE_LEVELS theo otCase.requiredApprovalLevel
-// (docs §3.4/§1: TH1=1 dừng ở Trưởng phòng, TH2=2 dừng ở Trưởng xưởng, TH3=3 mới tới Tổng Giám Đốc).
-// Trưởng nhóm(0)/Trưởng Bộ phận(4) luôn có mặt (bắt buộc cho mọi Group) nên luôn nằm trong kết quả.
-function applicableApprovalLevels(requiredApprovalLevel: number): number[] {
-    const finalIndex = TIMELINE_LEVELS.indexOf(requiredApprovalLevel);
-    return finalIndex === -1 ? TIMELINE_LEVELS : TIMELINE_LEVELS.slice(0, finalIndex + 1);
+// Chuỗi bước duyệt của 1 đơn ĐÃ được snapshot sẵn ở form.approvalSteps (sắp theo stepOrder, xem
+// docs §Cây chức vụ) — không còn suy từ requiredApprovalLevel/danh sách cấp cố định như trước
+// (2026-08-07, Giai đoạn 3.1). Trạng thái từng bước lấy TRỰC TIẾP từ step.status.
+function buildApprovalSteps(form: OtFormDto): ApprovalStepView[] {
+    const firstPendingOrder = form.approvalSteps.find((s) => s.status === 0)?.stepOrder;
+    return form.approvalSteps.map((step): ApprovalStepView => {
+        const history = form.approvalHistories.find((item) => item.stepOrder === step.stepOrder) ?? null;
+        if (step.status === 2) return { step, history, state: "rejected" };
+        if (step.status === 3) return { step, history, state: "skipped" };
+        if (step.status === 1) return { step, history, state: "done" };
+        return { step, history: null, state: step.stepOrder === firstPendingOrder ? "current" : "upcoming" };
+    });
 }
 
-// Suy trạng thái từng cấp TRỰC TIẾP từ approvalHistories (không dựa vào form.status) — chỉ có tối đa 1
-// cấp "rejected" (BE dừng luồng ngay khi bị từ chối), cấp đầu tiên chưa có lịch sử (và chưa có ai bị
-// từ chối trước đó) là cấp "current" đang chờ xử lý; các cấp sau vẫn coi là "upcoming" dù luồng đã
-// dừng vì bị từ chối (đơn giản hoá — không cần phân biệt riêng "cancelled" cho mục đích hiển thị).
-function buildApprovalSteps(form: OtFormDto, levels: number[]): ApprovalStep[] {
-    let rejectedIndex = -1;
-    const steps = levels.map((level, index): ApprovalStep => {
-        const history = form.approvalHistories.find((item) => item.approvalLevel === level) ?? null;
-        if (history?.action === 2) {
-            rejectedIndex = index;
-            return { level, history, state: "rejected" };
-        }
-        if (history) {
-            return { level, history, state: "done" };
-        }
-        return { level, history: null, state: "upcoming" };
-    });
-
-    const firstUpcomingIndex = steps.findIndex((step) => step.state === "upcoming");
-    return steps.map((step, index) => {
-        if (step.state === "upcoming" && rejectedIndex === -1 && index === firstUpcomingIndex) {
-            return { ...step, state: "current" };
-        }
-        return step;
-    });
+// employee.removedAtLevel giờ lưu StepOrder (đổi ý nghĩa 2026-08-07, xem ot-form.dto.ts) — tra lại
+// tên Chức vụ của bước đó trong chuỗi đã snapshot của CHÍNH đơn này.
+function stepNameByOrder(form: OtFormDto, stepOrder: number | null): string {
+    if (stepOrder === null) return "";
+    return form.approvalSteps.find((s) => s.stepOrder === stepOrder)?.jobTitleNameSnapshot ?? `#${stepOrder}`;
 }
 
 // Ô hiển thị 1 mục trong "Yêu cầu hỗ trợ khác" (ăn uống/xe đưa đón/phòng copy) — badge màu xanh lá khi
@@ -142,16 +108,12 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const router = useRouter();
     const locale = useLocale();
     const [form, setForm] = useState<OtFormDto | null>(null);
-    const [requireSignatureToApprove, setRequireSignatureToApprove] = useState(false);
-    // Mặc định 3 (TGĐ — hiện đủ 5 cấp) khi chưa tải xong/lỗi tải OtCase, để KHÔNG lỡ ẩn mất 1 cấp thật
-    // sự cần thiết (an toàn hơn là lỡ hiện dư 1 cấp không cần).
-    const [requiredApprovalLevel, setRequiredApprovalLevel] = useState(3);
     const [hasMySignature, setHasMySignature] = useState<boolean | null>(null);
     const [hasSecondaryPassword, setHasSecondaryPassword] = useState<boolean | null>(null);
     // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
     const { setting } = useAttendanceSetting();
 
-    const [actionOpen, setActionOpen] = useState<"submit" | "approve" | "reject" | null>(null);
+    const [actionOpen, setActionOpen] = useState<"approve" | "reject" | null>(null);
     const [comment, setComment] = useState("");
     const [secondaryPassword, setSecondaryPassword] = useState("");
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
@@ -164,35 +126,26 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const [removeReason, setRemoveReason] = useState("");
     const [isRemovingEmployee, setIsRemovingEmployee] = useState(false);
 
+    // Admin xoá đơn kẹt vĩnh viễn trong chuỗi duyệt (2026-08-08) — xem docs/attendance-module.md
+    // §Cây chức vụ. BE chặn Completed (đã cộng lũy kế thật); FE ẩn luôn nút cho gọn thay vì để user
+    // bấm rồi mới nhận lỗi 400.
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [deleteReason, setDeleteReason] = useState("");
+    const [isDeletingForm, setIsDeletingForm] = useState(false);
+
     const { isLoading, error, refetch: fetchForm } = useFetchEffect(
-        async () => {
-            const data = await OtFormApi.getOtFormById(id);
-            let requireSignature = false;
-            let approvalLevel = 3;
-            try {
-                const otCase = await OtCaseApi.getOtCaseById(data.otCaseId);
-                requireSignature = otCase.requireSignature;
-                approvalLevel = otCase.requiredApprovalLevel;
-            } catch (err) {
-                console.error(err);
-            }
-            return { data, requireSignature, approvalLevel };
-        },
+        () => OtFormApi.getOtFormById(id),
         [id],
-        (result) => {
-            setForm(result.data);
-            setRequiredApprovalLevel(result.approvalLevel);
-            setRequireSignatureToApprove(result.requireSignature);
-        },
+        (data) => setForm(data),
         t("loadError")
     );
 
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
-    const nextLevel = form ? nextApprovalLevelFromStatus(form.status) : null;
-    const showApprovalActions = canApprove && nextLevel !== null;
-    // Nút "Ký duyệt" (Trưởng nhóm, đợt 4): chỉ hiện khi đơn còn Draft(5) và user có quyền tạo đơn —
-    // đơn giản hoá theo gợi ý docs §1.2 (BE tự chặn 400 nếu user không đúng scope Submitter).
-    const canSubmit = form?.status === 5 && hasPermission(user, "Attendance.OTForm.Create");
+    // Bước đang chờ xử lý — StepOrder nhỏ nhất còn Pending trong chuỗi đã snapshot (xem docs §Cây
+    // chức vụ). null khi đơn đã Hoàn tất/Từ chối hoặc chuỗi rỗng (đơn tự Hoàn tất ngay lúc tạo).
+    const currentStep = form?.approvalSteps.find((s) => s.status === 0) ?? null;
+    const showApprovalActions = canApprove && form?.status === 0 && currentStep !== null;
+    const requireSignatureToApprove = currentStep?.requiresSignatureSnapshot ?? false;
 
     // Nút "Sửa" (docs §1.2): isEditable=true + chính người tạo + có quyền tạo đơn.
     const canEdit =
@@ -200,23 +153,25 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         form?.createdByUserName === user?.userName &&
         hasPermission(user, "Attendance.OTForm.Create");
 
-    // Nút "Loại khỏi đơn" trên từng dòng nhân viên (docs §4.5a, mới 2026-07-30): hiện đúng lúc caller
-    // đang ở đúng cấp có thể ký/duyệt đơn này (canSubmit cho Draft, showApprovalActions cho các cấp
-    // sau) VÀ có permission riêng Attendance.OTForm.RemoveEmployee — permission này KHÔNG cấp cho Role
-    // "Nhân viên" (chỉ tạo đơn, không ký/duyệt) dù họ cũng có canSubmit=false nên thực chất không cần
-    // lọc thêm ở đây, permission check là đủ.
-    const canRemoveEmployee = hasPermission(user, "Attendance.OTForm.RemoveEmployee") && (canSubmit || showApprovalActions);
+    // Nút "Xoá đơn" (Admin only, mới 2026-08-08) — chặn khi đã Completed (status=1, đã cộng lũy kế thật).
+    const canDelete = hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;
 
-    const openAction = (type: "submit" | "approve" | "reject") => {
+    // Nút "Loại khỏi đơn" trên từng dòng nhân viên (docs §4.5a) — hiện đúng lúc caller đang ở đúng
+    // bước có thể duyệt đơn này VÀ có permission riêng Attendance.OTForm.RemoveEmployee — permission
+    // này KHÔNG cấp cho Role "Nhân viên" (chỉ tạo đơn, không duyệt) nên thực chất không cần lọc thêm
+    // ở đây, permission check là đủ.
+    const canRemoveEmployee = hasPermission(user, "Attendance.OTForm.RemoveEmployee") && showApprovalActions;
+
+    const openAction = (type: "approve" | "reject") => {
         setComment("");
         setSecondaryPassword("");
         setActionOpen(type);
-        if (type === "approve" || type === "submit") {
+        if (type === "approve") {
             UserSignatureApi.getMySignature()
                 .then((data) => setHasMySignature(Boolean(data)))
                 .catch(() => setHasMySignature(false));
         }
-        // Mật khẩu cấp 2 áp dụng cho CẢ 3 hành động (submit/approve/reject) — xem
+        // Mật khẩu cấp 2 áp dụng cho CẢ 2 hành động (approve/reject) — xem
         // docs/docs-be/attendance-module.md — Mật khẩu cấp 2.
         SecondaryPasswordApi.getMyStatus()
             .then((data) => setHasSecondaryPassword(data.isRegistered))
@@ -226,33 +181,6 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const closeAction = () => {
         if (isSubmittingAction) return;
         setActionOpen(null);
-    };
-
-    const handleSubmit = async () => {
-        if (hasMySignature === false) {
-            toast.error(t("submitSignatureMissingError"));
-            return;
-        }
-        if (hasSecondaryPassword === false) {
-            toast.error(t("secondaryPasswordMissingError"));
-            return;
-        }
-        if (!secondaryPassword) {
-            toast.error(t("secondaryPasswordRequiredError"));
-            return;
-        }
-        setIsSubmittingAction(true);
-        try {
-            await OtFormApi.submitOtForm(id, { comment: comment.trim() || null, secondaryPassword });
-            toast.success(t("submitSuccess"));
-            setActionOpen(null);
-            await fetchForm();
-        } catch (err) {
-            console.error(err);
-            toast.error(getApiErrorMessage(err, t("submitError")));
-        } finally {
-            setIsSubmittingAction(false);
-        }
     };
 
     const handleApprove = async () => {
@@ -342,6 +270,34 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         }
     };
 
+    const openDeleteModal = () => {
+        setDeleteReason("");
+        setIsDeleteModalOpen(true);
+    };
+
+    const closeDeleteModal = () => {
+        if (isDeletingForm) return;
+        setIsDeleteModalOpen(false);
+    };
+
+    const handleDeleteForm = async () => {
+        if (!deleteReason.trim()) {
+            toast.error(t("deleteReasonRequiredError"));
+            return;
+        }
+        setIsDeletingForm(true);
+        try {
+            await OtFormApi.deleteOtForm(id, { reason: deleteReason.trim() });
+            toast.success(t("deleteSuccess"));
+            router.push({ pathname: "/ot/list" });
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("deleteError")));
+        } finally {
+            setIsDeletingForm(false);
+        }
+    };
+
     if (isLoading) {
         return <div className="py-16 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>;
     }
@@ -350,8 +306,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         return <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>;
     }
 
-    const applicableLevels = applicableApprovalLevels(requiredApprovalLevel);
-    const approvalSteps = buildApprovalSteps(form, applicableLevels);
+    const approvalStepViews = buildApprovalSteps(form);
     // Người đã bị loại khỏi đơn KHÔNG tính vào tổng giờ OT — họ không còn nằm trong đơn được duyệt
     // (docs §4.5a). Vẫn hiện dòng của họ trong bảng bên dưới để giữ dấu vết ai loại/khi nào/vì sao.
     const activeEmployees = form.employees.filter((employee) => !employee.isRemoved);
@@ -395,59 +350,87 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     >
                         {t("printButton")}
                     </button>
+                    {canDelete && (
+                        <button
+                            onClick={openDeleteModal}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#930006] bg-white px-3 py-1.5 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
+                        >
+                            <Trash2 className="h-3.5 w-3.5" /> {t("deleteButton")}
+                        </button>
+                    )}
                 </div>
             </div>
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalProgressTitle")}</h2>
+                {form.approvalChainWarning && (
+                    <div className="mb-4 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-xs text-[#9a5b00]">
+                        {form.approvalChainWarning}
+                    </div>
+                )}
                 <div className="flex overflow-x-auto pb-1">
-                    {approvalSteps.map((step, index) => (
-                        <div key={step.level} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
+                    {approvalStepViews.map((view, index) => (
+                        <div key={view.step.id} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
                             {index > 0 && (
                                 <div
                                     className={`absolute left-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
-                                        approvalSteps[index - 1].state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
+                                        approvalStepViews[index - 1].state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
                                     }`}
                                 />
                             )}
-                            {index < approvalSteps.length - 1 && (
+                            {index < approvalStepViews.length - 1 && (
                                 <div
                                     className={`absolute right-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
-                                        step.state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
+                                        view.state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
                                     }`}
                                 />
                             )}
                             <div
                                 className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
-                                    step.state === "done"
+                                    view.state === "done"
                                         ? "border-emerald-500 bg-emerald-500 text-white"
-                                        : step.state === "rejected"
+                                        : view.state === "rejected"
                                         ? "border-[#930006] bg-[#930006] text-white"
-                                        : step.state === "current"
+                                        : view.state === "current"
                                         ? "border-[#9a5b00] bg-[#fff4e5] text-[#9a5b00]"
                                         : "border-[#e0e3e5] bg-white text-[#9aa0a6]"
                                 }`}
                             >
-                                {step.state === "done" && <Check size={16} />}
-                                {step.state === "rejected" && <X size={16} />}
-                                {step.state === "current" && <Clock size={16} />}
-                                {step.state === "upcoming" && index + 1}
+                                {view.state === "done" && <Check size={16} />}
+                                {view.state === "rejected" && <X size={16} />}
+                                {view.state === "current" && <Clock size={16} />}
+                                {(view.state === "upcoming" || view.state === "skipped") && index + 1}
                             </div>
                             <div
                                 className={`mt-2 text-center text-xs font-semibold ${
-                                    step.state === "upcoming" ? "text-[#9aa0a6]" : "text-[#191c1e]"
+                                    view.state === "upcoming" || view.state === "skipped" ? "text-[#9aa0a6]" : "text-[#191c1e]"
                                 }`}
                             >
-                                {approvalLevelLabels[step.level]}
+                                {view.step.jobTitleNameSnapshot}
                             </div>
-                            {step.history ? (
+                            {view.history ? (
                                 <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
-                                    {step.history.approverFullName ?? step.history.approverUserName}
+                                    {view.history.approverFullName ?? view.history.approverUserName}
                                     <br />
-                                    {formatDateTime(step.history.actionAt)}
+                                    {formatDateTime(view.history.actionAt)}
                                 </div>
-                            ) : step.state === "current" ? (
-                                <div className="mt-0.5 text-center text-[11px] text-[#9a5b00]">{t("waitingShort")}</div>
+                            ) : view.state === "current" ? (
+                                <div
+                                    className="mt-0.5 text-center text-[11px] text-[#9a5b00]"
+                                    title={
+                                        view.step.candidates.length > 1
+                                            ? t("waitingCandidatesTooltip", {
+                                                  names: view.step.candidates.map((c) => c.fullName).join(", "),
+                                              })
+                                            : undefined
+                                    }
+                                >
+                                    {view.step.candidates.length > 1
+                                        ? t("waitingShortMulti", { count: view.step.candidates.length })
+                                        : t("waitingShort")}
+                                </div>
+                            ) : view.state === "skipped" ? (
+                                <div className="mt-0.5 text-center text-[11px] text-[#9aa0a6]">{t("skippedShort")}</div>
                             ) : null}
                         </div>
                     ))}
@@ -586,7 +569,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                             <td colSpan={6} className="px-6 py-3 text-sm text-[#930006]">
                                                 {t("removedInlineNote", {
                                                     name: employee.removedByFullName ?? employee.removedByUserName ?? "",
-                                                    level: employee.removedAtLevel !== null ? approvalLevelLabels[employee.removedAtLevel] : "",
+                                                    level: stepNameByOrder(form, employee.removedAtLevel),
                                                     reason: employee.removeReason ?? "",
                                                 })}
                                                 {employee.removedAt && (
@@ -675,13 +658,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalHistoryTitle")}</h2>
-                <div className={`grid gap-4 md:grid-cols-2 ${APPROVAL_GRID_LG_COLS[applicableLevels.length] ?? "lg:grid-cols-5"}`}>
-                    {applicableLevels.map((level) => {
-                        const history = form.approvalHistories.find((item) => item.approvalLevel === level);
+                <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                    {form.approvalSteps.map((step) => {
+                        const history = form.approvalHistories.find((item) => item.stepOrder === step.stepOrder);
                         return (
-                            <div key={level} className="rounded-lg border border-[#e0e3e5] p-4">
+                            <div key={step.id} className="rounded-lg border border-[#e0e3e5] p-4">
                                 <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {approvalLevelLabels[level]}
+                                    {step.jobTitleNameSnapshot}
                                 </div>
                                 {history ? (
                                     <div className="mt-2 space-y-2">
@@ -708,17 +691,6 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     })}
                 </div>
             </section>
-
-            {canSubmit && (
-                <div className="flex justify-end">
-                    <button
-                        onClick={() => openAction("submit")}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
-                    >
-                        {t("submitButton")}
-                    </button>
-                </div>
-            )}
 
             {showApprovalActions && (
                 <div className="flex justify-end gap-3">
@@ -747,7 +719,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     >
                         <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                             <h3 className="text-lg font-semibold text-[#191c1e]">
-                                {actionOpen === "submit" ? t("modalTitleSubmit") : actionOpen === "approve" ? t("modalTitleApprove") : t("modalTitleReject")}
+                                {actionOpen === "approve" ? t("modalTitleApprove") : t("modalTitleReject")}
                             </h3>
                             <button
                                 onClick={closeAction}
@@ -797,18 +769,6 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 {hasSecondaryPassword === false ? t("secondaryPasswordMissingHint") : t("secondaryPasswordOkHint")}
                             </div>
 
-                            {actionOpen === "submit" && (
-                                <div
-                                    className={`rounded-lg border px-3 py-2 text-xs ${
-                                        hasMySignature === false
-                                            ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                            : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                                    }`}
-                                >
-                                    {hasMySignature === false ? t("submitSignatureMissingHint") : t("submitSignatureOkHint")}
-                                </div>
-                            )}
-
                             {actionOpen === "approve" && (
                                 <div
                                     className={`rounded-lg border px-3 py-2 text-xs ${
@@ -834,14 +794,12 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={actionOpen === "submit" ? handleSubmit : actionOpen === "approve" ? handleApprove : handleReject}
+                                    onClick={actionOpen === "approve" ? handleApprove : handleReject}
                                     disabled={isSubmittingAction}
                                     className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isSubmittingAction
                                         ? tCommon("processing")
-                                        : actionOpen === "submit"
-                                        ? t("confirmSubmit")
                                         : actionOpen === "approve"
                                         ? t("confirmApprove")
                                         : t("confirmReject")}
@@ -904,6 +862,65 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isRemovingEmployee ? tCommon("processing") : t("confirmRemove")}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isDeleteModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+                    <div className="fixed inset-0 bg-black/40" onClick={closeDeleteModal} />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                    >
+                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                            <h3 className="text-lg font-semibold text-[#191c1e]">{t("deleteModalTitle", { id: form.id })}</h3>
+                            <button
+                                onClick={closeDeleteModal}
+                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                aria-label={tCommon("close")}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <p className="text-sm text-[#5e3f3a]">{t("deleteModalDesc")}</p>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("deleteReasonLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <textarea
+                                    value={deleteReason}
+                                    onChange={(event) => setDeleteReason(event.target.value)}
+                                    disabled={isDeletingForm}
+                                    rows={3}
+                                    required
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={closeDeleteModal}
+                                    disabled={isDeletingForm}
+                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {tCommon("cancel")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleDeleteForm}
+                                    disabled={isDeletingForm}
+                                    className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isDeletingForm ? tCommon("processing") : t("confirmDelete")}
                                 </button>
                             </div>
                         </div>

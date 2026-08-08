@@ -59,14 +59,17 @@ export interface OtFormEmployeeDto {
     isRemoved: boolean;
     removedByUserName: string | null;
     removedByFullName: string | null;
+    // StepOrder của bước duyệt đang xử lý lúc bị loại (đổi ý nghĩa 2026-08-07, Giai đoạn 3.1 — trước
+    // đây là ApprovalLevel cũ, giữ nguyên tên field để tương thích).
     removedAtLevel: number | null;
     removedAt: string | null;
     removeReason: string | null;
 }
 
-// GET /api/OtForm/my-create-scopes — §4.0a, mới 2026-07-17. Bộ phận/Phòng ban mà CHÍNH user gọi
-// được phép tạo đơn (suy từ UserApprovalScope(Submitter) hoặc Employee.GroupId). Mảng rỗng = Admin
-// (không giới hạn phạm vi) HOẶC tài khoản chưa được cấu hình gì — FE tự phân biệt 2 case này.
+// GET /api/OtForm/my-create-scopes — §4.0a. Bộ phận/Phòng ban mà CHÍNH user gọi được phép tạo đơn
+// (suy từ Employee.GroupId của chính user — sửa 2026-08-07, Giai đoạn 3.1, bỏ UserApprovalScope).
+// Tối đa 1 phần tử (đúng Group của user). Mảng rỗng = Admin (không giới hạn phạm vi) HOẶC tài khoản
+// chưa liên kết Employee nào — FE tự phân biệt 2 case này.
 export interface MyCreateScopeItemDto {
     groupId: number;
     groupNameVn: string;
@@ -110,9 +113,11 @@ export interface UpdateOtFormDto {
 
 // Rút gọn của OtFormApprovalHistoryDto — có mặt trên cả 5 endpoint danh sách (my-forms/
 // pending-submissions/pending-approvals/my-actions/my-participations), bỏ comment/signatureImage/
-// hasSignature (không cần cho danh sách) — §4.2, mới 2026-07-17.
+// hasSignature (không cần cho danh sách) — §4.2, sửa 2026-08-07 (Giai đoạn 3.1): approvalLevel →
+// stepOrder + jobTitleNameSnapshot (thay cho 5 cấp cố định cũ, xem §Cây chức vụ).
 export interface OtFormApprovalSummaryItemDto {
-    approvalLevel: number;
+    stepOrder: number;
+    jobTitleNameSnapshot: string;
     approverUserName: string;
     approverFullName: string | null;
     action: number;
@@ -135,18 +140,45 @@ export interface OtFormListItemDto {
     status: number;
     isEditable: boolean;
     approvalSummary: OtFormApprovalSummaryItemDto[];
+    // Số người đủ điều kiện xử lý bước đang chờ HIỆN TẠI (0 nếu không còn InApproval) — >1 nghĩa là
+    // "đang chờ 1 trong N người", không phải riêng bạn (2026-08-08, Giai đoạn 3.2).
+    currentStepCandidateCount: number;
 }
 
 // ApprovalAction (docs §2): 0=Submitted, 1=Approved, 2=Rejected.
+// Sửa 2026-08-07 (Giai đoạn 3.1): approvalLevel → stepOrder + jobTitleNameSnapshot.
 export interface OtFormApprovalHistoryDto {
     approverUserName: string;
     approverFullName: string | null;
-    approvalLevel: number;
+    stepOrder: number;
+    jobTitleNameSnapshot: string;
     action: number;
     comment: string | null;
     hasSignature: boolean;
     signatureImage: string | null;
     actionAt: string;
+}
+
+// 1 người đang giữ đúng Chức vụ của bước này trong Phòng ban lúc snapshot (có thể nhiều người/bước).
+export interface OtFormApprovalStepCandidateDto {
+    employeeId: number;
+    userName: string;
+    fullName: string;
+}
+
+// Chuỗi bước duyệt đã snapshot lúc tạo đơn (2026-08-07, Giai đoạn 3.1) — xem OtFormDto.approvalSteps.
+// status: enum OtFormApprovalStepStatus (0=Pending, 1=Approved, 2=Rejected, 3=Skipped).
+// terminalLevelSnapshot: enum JobTitleTerminalLevel (0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector).
+export interface OtFormApprovalStepDto {
+    id: number;
+    stepOrder: number;
+    jobTitleCodeSnapshot: string;
+    jobTitleNameSnapshot: string;
+    requiresSignatureSnapshot: boolean;
+    isResponsibleSnapshot: boolean;
+    terminalLevelSnapshot: number;
+    status: number;
+    candidates: OtFormApprovalStepCandidateDto[];
 }
 
 // Chi tiết GET /api/OtForm/{id} (và GET /OtForm/email-confirm/{token}) — §4.3.
@@ -179,9 +211,13 @@ export interface OtFormDto {
     responsibleUserName: string | null;
     status: number;
     isEditable: boolean;
+    // Cảnh báo suy luận chuỗi lúc tạo đơn (null nếu chuỗi đầy đủ) — hiện banner cảnh báo trên UI nếu có.
+    approvalChainWarning: string | null;
     employees: OtFormEmployeeDto[];
     processPart: ProcessPartDto | null;
     approvalHistories: OtFormApprovalHistoryDto[];
+    // Chuỗi bước duyệt đã snapshot lúc tạo đơn, sắp theo stepOrder.
+    approvalSteps: OtFormApprovalStepDto[];
 }
 
 // Body POST /api/OtForm/{id}/approve — §4.4. Không còn signatureImage (BE tự lấy từ UserSignature/me).
@@ -196,6 +232,12 @@ export interface ApproveOtFormDto {
 export interface RejectOtFormDto {
     comment: string;
     secondaryPassword: string;
+}
+
+// Body POST /api/OtForm/{id}/delete — Admin only (Attendance.OTForm.Delete), 2026-08-08. Xoá đơn kẹt
+// vĩnh viễn trong chuỗi duyệt — BE chặn 400 nếu đơn đã Completed (đã cộng lũy kế thật).
+export interface DeleteOtFormDto {
+    reason: string;
 }
 
 // Body POST /api/OtForm/{id}/employees/remove — §4.5a, mới 2026-07-30, sửa 2026-07-31 (bỏ mật khẩu

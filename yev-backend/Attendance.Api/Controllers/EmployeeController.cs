@@ -18,9 +18,10 @@ namespace Attendance.Api.Controllers
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<EmployeeDto>>>> GetPaged(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null)
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null,
+            [FromQuery] int? departmentId = null, [FromQuery] int? groupId = null)
         {
-            var result = await _employeeService.GetPagedAsync(pageIndex, pageSize, keyword);
+            var result = await _employeeService.GetPagedAsync(pageIndex, pageSize, keyword, departmentId, groupId);
             return Success(result);
         }
 
@@ -40,6 +41,15 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByGroup(int groupId)
         {
             var result = await _employeeService.GetByGroupIdAsync(groupId);
+            return Success(result);
+        }
+
+        // Dùng cho màn "Cây duyệt Phòng ban" — xem ai đang giữ Chức vụ nào trong Phòng ban để gán nhanh.
+        [RequirePermission("Attendance.Employee.View")]
+        [HttpGet("by-department/{departmentId}")]
+        public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByDepartment(int departmentId)
+        {
+            var result = await _employeeService.GetByDepartmentIdAsync(departmentId);
             return Success(result);
         }
 

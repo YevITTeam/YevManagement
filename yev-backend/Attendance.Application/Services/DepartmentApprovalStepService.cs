@@ -1,6 +1,7 @@
 using Attendance.Application.Dtos.DepartmentApprovalSteps;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
+using Attendance.Domain.Enums;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 
@@ -48,11 +49,19 @@ namespace Attendance.Application.Services
             if (request.Steps.Count(x => x.IsResponsible) > 1)
                 throw new DomainException("Chỉ được đánh dấu tối đa 1 bước là \"người chịu trách nhiệm\".");
 
+            var intermediateCount = 0;
             foreach (var item in request.Steps)
             {
                 var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == item.JobTitleId && !x.IsDeleted);
                 jobTitle.OrThrowNotFound("Chức vụ", item.JobTitleId);
+                if (jobTitle!.TerminalLevel == (int)JobTitleTerminalLevel.None) intermediateCount++;
             }
+
+            // Tối đa 2 bước trung gian (TerminalLevel=None, dưới cấp Trưởng phòng) — chốt theo yêu cầu
+            // người dùng (2026-08-08, Giai đoạn 3.2): khớp đúng 2 ô "Người đề nghị" cố định trên giấy in
+            // YEV-22-024 (xem OtFormPrintView.tsx), không có chỗ cho ô thứ 3 trên ảnh nền.
+            if (intermediateCount > 2)
+                throw new DomainException("Chỉ được cấu hình tối đa 2 bước dưới cấp Trưởng phòng (khớp 2 ô \"Người đề nghị\" trên giấy in).");
 
             var existing = await _unitOfWork.DepartmentApprovalSteps.FindAsync(x => x.DepartmentId == departmentId && !x.IsDeleted);
             foreach (var step in existing)

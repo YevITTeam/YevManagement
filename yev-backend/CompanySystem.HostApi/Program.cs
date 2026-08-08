@@ -85,6 +85,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddDIConfig(builder.Configuration);
 
 builder.Services.AddHostedService<DeviceLiquidationBackgroundService>();
+// Redesign xong theo Cây chức vụ (2026-08-07, Giai đoạn 3.2) — xem docs/attendance-module.md §Đơn tổng.
 builder.Services.AddHostedService<OtFormBatchBackgroundService>();
 
 var app = builder.Build();

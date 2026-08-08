@@ -241,9 +241,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         );
     }
 
-    // Chữ ký "Người đề nghị" (đợt 4, 2026-07-16) KHÔNG còn gắn với bước tạo đơn — POST /api/OtForm chỉ
-    // tạo status=Draft chưa ký, chữ ký thật chỉ bắt buộc ở bước Ký duyệt riêng (POST /{id}/submit, màn
-    // "Chờ tôi ký duyệt"). Ở đây chỉ hiện gợi ý mềm, KHÔNG chặn nút Tạo đơn.
+    // Chữ ký không gắn với bước tạo đơn — POST /api/OtForm vào thẳng chuỗi duyệt Cây chức vụ ngay
+    // (2026-08-07, Giai đoạn 3.1), chữ ký thật (nếu bước nào đó yêu cầu) chỉ bắt buộc lúc Duyệt. Ở đây
+    // chỉ hiện gợi ý mềm, KHÔNG chặn nút Tạo đơn.
     const [hasSignature, setHasSignature] = useState<boolean | null>(null);
 
     const [isLoadingInitial, setIsLoadingInitial] = useState(isEditMode);

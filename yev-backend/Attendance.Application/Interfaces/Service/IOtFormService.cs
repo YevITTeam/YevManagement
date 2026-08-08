@@ -12,12 +12,6 @@ namespace Attendance.Application.Interfaces.Service
         Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
 
-        // Đơn Draft đang chờ CHÍNH mình (Trưởng nhóm) ký duyệt — tách riêng khỏi GetPendingApprovalsAsync
-        // vì gate bằng permission Attendance.OTForm.Create, không phải .Approve.
-        Task<PagedResponse<OtFormListItemDto>> GetPendingSubmissionsAsync(
-            string currentUserName, bool isAdmin, int pageIndex, int pageSize,
-            DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
-
         Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
             string approverUserName, int pageIndex, int pageSize,
             DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
@@ -41,9 +35,6 @@ namespace Attendance.Application.Interfaces.Service
         // Mutations
         Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request);
 
-        // Trưởng nhóm ký duyệt "Người đề nghị" — chuyển đơn từ Draft sang Pending (chờ Trưởng phòng).
-        Task<OtFormDto> ApproveSubmitterAsync(int id, string approverUserName, string? approverFullName, bool isAdmin, ApproveOtFormDto request);
-
         Task<OtFormDto> UpdateAsync(int id, string currentUserName, bool isAdmin, UpdateOtFormDto request);
 
         Task ApproveAsync(int id, string approverUserName, string? approverFullName, ApproveOtFormDto request);
@@ -58,13 +49,18 @@ namespace Attendance.Application.Interfaces.Service
         // KHÔNG cần mật khẩu cấp 2 (khác Approve/Reject qua email vẫn giữ) — xem docs/attendance-module.md.
         Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request);
 
+        // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate, không resolve lại được) — soft-delete,
+        // chặn nếu đơn đã Completed (đã cộng lũy kế thật). Xem docs/attendance-module.md §Cây chức vụ.
+        Task DeleteAsync(int id, string deletedByUserName, string? deletedByFullName, DeleteOtFormDto request);
+
         // Kênh bổ sung qua email (link Duyệt/Từ chối, [AllowAnonymous] ở Controller) — token tự nó
         // là thông tin xác thực duy nhất, xem docs/attendance-module.md.
         Task<OtFormDto> GetByEmailTokenAsync(string token);
         Task ApproveByEmailTokenAsync(string token, ApproveOtFormDto request);
         Task RejectByEmailTokenAsync(string token, RejectOtFormDto request);
 
-        // === "Đơn tổng" — xem docs/attendance-module.md §Đơn tổng. ===
+        // === "Đơn tổng" — redesign xong theo Cây chức vụ (2026-08-07, Giai đoạn 3.2, xem
+        // docs/attendance-module.md §Đơn tổng). ===
         Task<PagedResponse<OtFormBatchListItemDto>> GetBatchesAsync(string userName, bool isAdmin, int pageIndex, int pageSize);
         Task<OtFormBatchDto> GetBatchByIdAsync(int id);
         Task<OtFormBatchDto> ProcessBatchAsync(int batchId, string approverUserName, string? approverFullName, ProcessOtFormBatchDto request);

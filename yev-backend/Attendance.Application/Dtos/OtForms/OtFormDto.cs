@@ -36,11 +36,18 @@ namespace Attendance.Application.Dtos.OtForms
         // Enum Attendance.Domain.Enums.OtFormStatus.
         public int Status { get; set; }
 
-        // true when Status == Pending (no approval level has approved yet) — only then can PUT /api/OtForm/{id} be called.
+        // true when Status == InApproval and no step has been approved yet (2026-08-07, Giai đoạn 3.1)
+        // — only then can PUT /api/OtForm/{id} be called.
         public bool IsEditable { get; set; }
+
+        // Cảnh báo suy luận chuỗi lúc tạo đơn (null nếu chuỗi đầy đủ) — xem OtForm.ApprovalChainWarning.
+        public string? ApprovalChainWarning { get; set; }
 
         public List<OtFormEmployeeDto> Employees { get; set; } = new();
         public ProcessPartDto? ProcessPart { get; set; }
         public List<OtFormApprovalHistoryDto> ApprovalHistories { get; set; } = new();
+
+        // Chuỗi bước duyệt đã snapshot lúc tạo đơn, sắp theo StepOrder — xem OtFormApprovalStepDto.
+        public List<OtFormApprovalStepDto> ApprovalSteps { get; set; } = new();
     }
 }

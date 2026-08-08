@@ -17,7 +17,6 @@ namespace Attendance.Infrastructure.Repositories
             IOtFormRepository otForms,
             IOtFormEmployeeRepository otFormEmployees,
             IProcessPartRepository processParts,
-            IUserApprovalScopeRepository userApprovalScopes,
             IOtFormApprovalHistoryRepository otFormApprovalHistories,
             IUserSignatureRepository userSignatures,
             IPendingSignatureConfirmationRepository pendingSignatureConfirmations,
@@ -28,13 +27,17 @@ namespace Attendance.Infrastructure.Repositories
             IOtFormBatchRepository otFormBatches,
             IOtFormBatchEmailTokenRepository otFormBatchEmailTokens,
             IJobTitleRepository jobTitles,
-            IDepartmentApprovalStepRepository departmentApprovalSteps) : base(dbContext)
+            IDepartmentApprovalStepRepository departmentApprovalSteps,
+            IOtFormApprovalStepRepository otFormApprovalSteps,
+            IOtFormApprovalStepCandidateRepository otFormApprovalStepCandidates) : base(dbContext)
         {
             AttendanceSettings = attendanceSettings;
             OtFormBatches = otFormBatches;
             OtFormBatchEmailTokens = otFormBatchEmailTokens;
             JobTitles = jobTitles;
             DepartmentApprovalSteps = departmentApprovalSteps;
+            OtFormApprovalSteps = otFormApprovalSteps;
+            OtFormApprovalStepCandidates = otFormApprovalStepCandidates;
             Departments = departments;
             Groups = groups;
             Reasons = reasons;
@@ -43,7 +46,6 @@ namespace Attendance.Infrastructure.Repositories
             OtForms = otForms;
             OtFormEmployees = otFormEmployees;
             ProcessParts = processParts;
-            UserApprovalScopes = userApprovalScopes;
             OtFormApprovalHistories = otFormApprovalHistories;
             UserSignatures = userSignatures;
             PendingSignatureConfirmations = pendingSignatureConfirmations;
@@ -60,7 +62,6 @@ namespace Attendance.Infrastructure.Repositories
         public IOtFormRepository OtForms { get; }
         public IOtFormEmployeeRepository OtFormEmployees { get; }
         public IProcessPartRepository ProcessParts { get; }
-        public IUserApprovalScopeRepository UserApprovalScopes { get; }
         public IOtFormApprovalHistoryRepository OtFormApprovalHistories { get; }
         public IUserSignatureRepository UserSignatures { get; }
         public IPendingSignatureConfirmationRepository PendingSignatureConfirmations { get; }
@@ -72,5 +73,7 @@ namespace Attendance.Infrastructure.Repositories
         public IOtFormBatchEmailTokenRepository OtFormBatchEmailTokens { get; }
         public IJobTitleRepository JobTitles { get; }
         public IDepartmentApprovalStepRepository DepartmentApprovalSteps { get; }
+        public IOtFormApprovalStepRepository OtFormApprovalSteps { get; }
+        public IOtFormApprovalStepCandidateRepository OtFormApprovalStepCandidates { get; }
     }
 }

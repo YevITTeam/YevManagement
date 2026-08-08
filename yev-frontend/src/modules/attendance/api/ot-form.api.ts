@@ -3,6 +3,7 @@ import type {
     ApproveOtFormDto,
     CheckOtFormOverlapDto,
     CreateOtFormDto,
+    DeleteOtFormDto,
     MyCreateScopeItemDto,
     OtFormDto,
     OtFormListItemDto,
@@ -20,15 +21,14 @@ const ENDPOINTS = {
         checkOverlap: "/OtForm/check-overlap",
         createOtForm: "/OtForm",
         getMyForms: "/OtForm/my-forms",
-        getPendingSubmissions: "/OtForm/pending-submissions",
         getPendingApprovals: "/OtForm/pending-approvals",
         getMyActions: "/OtForm/my-actions",
         getMyParticipations: "/OtForm/my-participations",
         getOtFormById: (id: number) => `/OtForm/${id}`,
         updateOtForm: (id: number) => `/OtForm/${id}`,
-        submitOtForm: (id: number) => `/OtForm/${id}/submit`,
         approveOtForm: (id: number) => `/OtForm/${id}/approve`,
         rejectOtForm: (id: number) => `/OtForm/${id}/reject`,
+        deleteOtForm: (id: number) => `/OtForm/${id}/delete`,
         removeOtFormEmployee: (id: number) => `/OtForm/${id}/employees/remove`,
         emailConfirmGet: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}`,
         emailConfirmApprove: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/approve`,
@@ -41,7 +41,7 @@ export interface GetOtFormListParams {
     pageIndex?: number;
     pageSize?: number;
     // Lọc theo OtForm.date (bao gồm cả 2 đầu mút, chuỗi "yyyy-MM-dd") và status (giá trị enum
-    // OtFormStatus) — cả 3 optional, dùng chung cho cả 5 hàm danh sách bên dưới (2026-08-06).
+    // OtFormStatus) — cả 3 optional, dùng chung cho các hàm danh sách bên dưới (2026-08-06).
     fromDate?: string;
     toDate?: string;
     status?: number;
@@ -86,24 +86,8 @@ export const OtFormApi = {
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
         return response.data;
     },
-    // Đơn Draft đang chờ CHÍNH user gọi (Trưởng nhóm, scope Submitter) ký duyệt — endpoint riêng vì
-    // Role "Trưởng Nhóm" chỉ có permission Create, không có Approve (docs §4.2a).
-    getPendingSubmissions: async (params?: GetOtFormListParams) => {
-        const query = new URLSearchParams();
-        appendOtFormListParams(query, params);
-        const queryString = query.toString();
-        const url = queryString
-            ? `${ENDPOINTS.OT_FORM.getPendingSubmissions}?${queryString}`
-            : ENDPOINTS.OT_FORM.getPendingSubmissions;
-        const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
-        return response.data;
-    },
-    // Trưởng nhóm ký duyệt "Người đề nghị" — Draft → Pending, chữ ký tự lấy từ UserSignature (docs §4.1a).
-    submitOtForm: async (id: number, data: ApproveOtFormDto) => {
-        const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.submitOtForm(id), data);
-        return response.data;
-    },
-    // BE tự lọc theo cấp/scope của user gọi API — FE không truyền tham số lọc cấp (docs §4.2).
+    // BE tự lọc theo bước hiện tại (StepOrder nhỏ nhất còn Pending) mà user gọi API là candidate —
+    // FE không truyền tham số lọc cấp (docs §4.2).
     getPendingApprovals: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
         appendOtFormListParams(query, params);
@@ -144,6 +128,11 @@ export const OtFormApi = {
     },
     rejectOtForm: async (id: number, data: RejectOtFormDto) => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.rejectOtForm(id), data);
+        return response.data;
+    },
+    // Admin xoá đơn kẹt vĩnh viễn trong chuỗi duyệt — chặn ở BE nếu đơn đã Completed (2026-08-08).
+    deleteOtForm: async (id: number, data: DeleteOtFormDto) => {
+        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.deleteOtForm(id), data);
         return response.data;
     },
     // Loại 1 nhân viên khỏi đơn (cấp đang chờ duyệt của đơn) để duyệt được phần còn lại — endpoint

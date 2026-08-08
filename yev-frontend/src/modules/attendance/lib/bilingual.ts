@@ -37,22 +37,11 @@ export function bilingualText(vn: string | null | undefined, jp: string | null |
 // email confirm page must always read "VN / JP" no matter which locale segment (/vi or /ja) the
 // approver happened to open the link in — a next-intl useTranslations() would flip fully to JP on
 // /ja routes instead, so these values are literal bilingual pairs, not translation keys.
-export const approvalLevelLabelsBilingual: Record<number, string> = {
-    0: "Trưởng nhóm / グループ長",
-    1: "Trưởng phòng / 部長",
-    2: "Trưởng xưởng / 工場長",
-    3: "Tổng Giám Đốc / 総経理",
-    4: "Trưởng Bộ phận / 部門長",
-};
-
+// OtFormStatus (redesign 2026-08-07, Giai đoạn 3.1) — rút gọn còn 3 giá trị, xem enums.ts.
 export const otFormStatusLabelsBilingual: Record<number, string> = {
-    0: "Chờ Trưởng phòng duyệt / 部長の承認待ち",
-    1: "Chờ Trưởng xưởng duyệt / 工場長の承認待ち",
-    2: "Chờ Tổng Giám Đốc duyệt / 総経理の承認待ち",
-    3: "Hoàn tất / 完了",
-    4: "Từ chối / 却下",
-    5: "Nháp — chờ Trưởng nhóm ký / 下書き―グループ長の署名待ち",
-    6: "Chờ Trưởng Bộ phận duyệt / 部門長の承認待ち",
+    0: "Đang chờ duyệt / 承認待ち",
+    1: "Hoàn tất / 完了",
+    2: "Từ chối / 却下",
 };
 
 export const approvalActionLabelsBilingual: Record<number, string> = {

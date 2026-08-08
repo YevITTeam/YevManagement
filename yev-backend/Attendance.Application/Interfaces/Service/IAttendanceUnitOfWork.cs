@@ -13,7 +13,6 @@ namespace Attendance.Application.Interfaces.Service
         IOtFormRepository OtForms { get; }
         IOtFormEmployeeRepository OtFormEmployees { get; }
         IProcessPartRepository ProcessParts { get; }
-        IUserApprovalScopeRepository UserApprovalScopes { get; }
         IOtFormApprovalHistoryRepository OtFormApprovalHistories { get; }
         IUserSignatureRepository UserSignatures { get; }
         IPendingSignatureConfirmationRepository PendingSignatureConfirmations { get; }
@@ -25,5 +24,7 @@ namespace Attendance.Application.Interfaces.Service
         IOtFormBatchEmailTokenRepository OtFormBatchEmailTokens { get; }
         IJobTitleRepository JobTitles { get; }
         IDepartmentApprovalStepRepository DepartmentApprovalSteps { get; }
+        IOtFormApprovalStepRepository OtFormApprovalSteps { get; }
+        IOtFormApprovalStepCandidateRepository OtFormApprovalStepCandidates { get; }
     }
 }

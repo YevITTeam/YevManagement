@@ -3,6 +3,7 @@ export interface OtCaseDto {
     code: string;
     description: string | null;
     requireSignature: boolean;
-    // ApprovalLevel (docs/attendance-api-fe.md §2) — chỉ nên chọn 1/2/3, không dùng 0=Submitter.
+    // JobTitleTerminalLevel (docs/attendance-api-fe.md §2) — chỉ 1/2/3 hợp lệ (DepartmentManager/
+    // WorkshopManager/GeneralDirector).
     requiredApprovalLevel: number;
 }

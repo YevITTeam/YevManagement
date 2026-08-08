@@ -55,6 +55,19 @@ public partial class OtForm
 
     public bool IsDeleted { get; set; }
 
+    // Admin xoá đơn thủ công (2026-08-08) — dùng cho đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate ở 1
+    // bước, không có cách resolve lại) vì candidate đã snapshot 1 lần lúc tạo. Chỉ Admin có quyền
+    // (Attendance.OTForm.Delete), chỉ áp dụng cho đơn CHƯA Completed (đơn Completed đã cộng lũy kế thật,
+    // xoá sẽ làm sai số liệu — chặn ở Service). Set cùng lúc với IsDeleted=true, giữ nguyên toàn bộ dữ
+    // liệu đơn (soft-delete, không mất audit trail — xem OtFormEmployee.RemovedAt cùng triết lý).
+    public string? DeletedByUserName { get; set; }
+
+    public string? DeletedByFullName { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
+
+    public string? DeleteReason { get; set; }
+
     // "Đơn tổng" this form was swept into, once it reaches OtFormStatus.Pending (awaiting Department
     // Manager) — null until the daily sweep picks it up (see docs/attendance-module.md — §Đơn tổng).
     public int? OtFormBatchId { get; set; }
@@ -76,4 +89,13 @@ public partial class OtForm
     public virtual ICollection<OtFormApprovalHistory> OtFormApprovalHistories { get; set; } = new List<OtFormApprovalHistory>();
 
     public virtual ICollection<OtFormApprovalEmailToken> OtFormApprovalEmailTokens { get; set; } = new List<OtFormApprovalEmailToken>();
+
+    // Chuỗi bước duyệt đã snapshot lúc tạo đơn (2026-08-07, Giai đoạn 3.1) — xem OtFormApprovalStep.
+    public virtual ICollection<OtFormApprovalStep> ApprovalSteps { get; set; } = new List<OtFormApprovalStep>();
+
+    // Cảnh báo suy luận chuỗi lúc tạo đơn (Phòng ban chưa cấu hình đủ cây duyệt / thiếu người giữ
+    // đúng Chức vụ) — snapshot 1 lần, không tính lại (2026-08-07). Null nếu chuỗi đầy đủ. Không tự
+    // fallback về cơ chế cũ — đơn vẫn được tạo nhưng "kẹt" ở bước không có candidate nào, Admin phải bổ
+    // sung cấu hình rồi mới đi tiếp (xem docs/attendance-module.md §Cây chức vụ, plan §3 quyết định #10).
+    public string? ApprovalChainWarning { get; set; }
 }

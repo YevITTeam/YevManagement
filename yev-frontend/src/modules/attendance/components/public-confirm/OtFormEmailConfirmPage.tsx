@@ -5,15 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { Car, Check, Clock, MessageCircle, Printer, UserX, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
-import type { OtFormApprovalHistoryDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
+import type { OtFormApprovalStepDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
 import { otFormStatusClasses } from "@/modules/attendance/types/enums";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { DEFAULT_ATTENDANCE_SETTING } from "@/modules/attendance/hooks/useAttendanceSetting";
 import {
     approvalActionLabelsBilingual,
-    approvalLevelLabelsBilingual,
     bilingualText,
     bilingualYesNo,
     createBilingualTranslator,
@@ -39,54 +37,31 @@ function formatTime(value: string) {
     return value?.slice(0, 5) ?? "-";
 }
 
-// Thứ tự ký THẬT (không phải thứ tự số enum) — đồng bộ với OtFormDetail.tsx: Người đề nghị(0) →
-// Trưởng Bộ phận(4) → Trưởng phòng(1) → Trưởng xưởng(2) → Tổng Giám Đốc(3).
-const TIMELINE_LEVELS = [0, 4, 1, 2, 3];
+type ApprovalStepState = "done" | "current" | "rejected" | "skipped" | "upcoming";
 
-// Class Tailwind tĩnh theo số cấp thật sự áp dụng (3=TH1, 4=TH2, 5=TH3) — phải viết literal để Tailwind
-// JIT quét được, không thể build chuỗi "lg:grid-cols-" + n động.
-const APPROVAL_GRID_LG_COLS: Record<number, string> = {
-    3: "lg:grid-cols-3",
-    4: "lg:grid-cols-4",
-    5: "lg:grid-cols-5",
-};
-
-type ApprovalStepState = "done" | "current" | "rejected" | "upcoming";
-
-interface ApprovalStep {
-    level: number;
+interface ApprovalStepView {
+    step: OtFormApprovalStepDto;
     state: ApprovalStepState;
-    history: OtFormApprovalHistoryDto | null;
+    history: OtFormDto["approvalHistories"][number] | null;
 }
 
-// Danh sách cấp THẬT SỰ áp dụng cho 1 đơn — cắt bớt TIMELINE_LEVELS theo otCase.requiredApprovalLevel.
-function applicableApprovalLevels(requiredApprovalLevel: number): number[] {
-    const finalIndex = TIMELINE_LEVELS.indexOf(requiredApprovalLevel);
-    return finalIndex === -1 ? TIMELINE_LEVELS : TIMELINE_LEVELS.slice(0, finalIndex + 1);
+// Chuỗi bước duyệt đã snapshot ở form.approvalSteps — đồng bộ với OtFormDetail.tsx (2026-08-07,
+// Giai đoạn 3.1), không còn suy từ danh sách cấp cố định như trước.
+function buildApprovalSteps(form: OtFormDto): ApprovalStepView[] {
+    const firstPendingOrder = form.approvalSteps.find((s) => s.status === 0)?.stepOrder;
+    return form.approvalSteps.map((step): ApprovalStepView => {
+        const history = form.approvalHistories.find((item) => item.stepOrder === step.stepOrder) ?? null;
+        if (step.status === 2) return { step, history, state: "rejected" };
+        if (step.status === 3) return { step, history, state: "skipped" };
+        if (step.status === 1) return { step, history, state: "done" };
+        return { step, history: null, state: step.stepOrder === firstPendingOrder ? "current" : "upcoming" };
+    });
 }
 
-// Suy trạng thái từng cấp trực tiếp từ approvalHistories — xem OtFormDetail.tsx.
-function buildApprovalSteps(form: OtFormDto, levels: number[]): ApprovalStep[] {
-    let rejectedIndex = -1;
-    const steps = levels.map((level, index): ApprovalStep => {
-        const history = form.approvalHistories.find((item) => item.approvalLevel === level) ?? null;
-        if (history?.action === 2) {
-            rejectedIndex = index;
-            return { level, history, state: "rejected" };
-        }
-        if (history) {
-            return { level, history, state: "done" };
-        }
-        return { level, history: null, state: "upcoming" };
-    });
-
-    const firstUpcomingIndex = steps.findIndex((step) => step.state === "upcoming");
-    return steps.map((step, index) => {
-        if (step.state === "upcoming" && rejectedIndex === -1 && index === firstUpcomingIndex) {
-            return { ...step, state: "current" };
-        }
-        return step;
-    });
+// employee.removedAtLevel giờ lưu StepOrder — xem OtFormDetail.tsx.
+function stepNameByOrder(form: OtFormDto, stepOrder: number | null): string {
+    if (stepOrder === null) return "";
+    return form.approvalSteps.find((s) => s.stepOrder === stepOrder)?.jobTitleNameSnapshot ?? `#${stepOrder}`;
 }
 
 // Cùng pattern ProcessPartTile của OtFormDetail.tsx — badge song ngữ xanh lá/xám thay vì text phẳng.
@@ -129,10 +104,6 @@ export default function OtFormEmailConfirmPage() {
     const token = searchParams.get("token") ?? "";
 
     const [form, setForm] = useState<OtFormDto | null>(null);
-    // Mặc định 3 (TGĐ — hiện đủ 5 cấp) khi chưa tải xong/lỗi tải OtCase (vd OtCase yêu cầu đăng nhập
-    // trong khi trang này public) — an toàn hơn là lỡ ẩn mất 1 cấp thật sự cần, xem OtFormDetail.tsx.
-    const [requiredApprovalLevel, setRequiredApprovalLevel] = useState(3);
-
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [actionResult, setActionResult] = useState<"approved" | "rejected" | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
@@ -166,21 +137,10 @@ export default function OtFormEmailConfirmPage() {
             if (!token) {
                 throw new Error(JSON.stringify({ message: tConfirm("missingTokenError") }));
             }
-            const data = await OtFormApi.getOtFormByEmailToken(token);
-            let approvalLevel = 3;
-            try {
-                const otCase = await OtCaseApi.getOtCaseById(data.otCaseId);
-                approvalLevel = otCase.requiredApprovalLevel;
-            } catch (err) {
-                console.error(err);
-            }
-            return { data, approvalLevel };
+            return OtFormApi.getOtFormByEmailToken(token);
         },
         [token],
-        (result) => {
-            setForm(result.data);
-            setRequiredApprovalLevel(result.approvalLevel);
-        },
+        (data) => setForm(data),
         tConfirm("loadError")
     );
 
@@ -299,8 +259,7 @@ export default function OtFormEmailConfirmPage() {
         );
     }
 
-    const applicableLevels = applicableApprovalLevels(requiredApprovalLevel);
-    const approvalSteps = buildApprovalSteps(form, applicableLevels);
+    const approvalStepViews = buildApprovalSteps(form);
     // Người đã bị loại khỏi đơn (docs §4.5a) không tính vào tổng giờ OT hiển thị ở trang xem trước qua
     // email — kênh email KHÔNG có hành động "Loại khỏi đơn" (chỉ có ở trong app), nhưng vẫn phải phản
     // ánh đúng trạng thái đơn hiện tại nếu việc loại người đã xảy ra trước đó qua app.
@@ -331,54 +290,74 @@ export default function OtFormEmailConfirmPage() {
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalProgressTitle")}</h2>
+                {form.approvalChainWarning && (
+                    <div className="mb-4 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-xs text-[#9a5b00]">
+                        {form.approvalChainWarning}
+                    </div>
+                )}
                 <div className="flex overflow-x-auto pb-1">
-                    {approvalSteps.map((step, index) => (
-                        <div key={step.level} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
+                    {approvalStepViews.map((view, index) => (
+                        <div key={view.step.id} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
                             {index > 0 && (
                                 <div
                                     className={`absolute left-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
-                                        approvalSteps[index - 1].state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
+                                        approvalStepViews[index - 1].state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
                                     }`}
                                 />
                             )}
-                            {index < approvalSteps.length - 1 && (
+                            {index < approvalStepViews.length - 1 && (
                                 <div
                                     className={`absolute right-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
-                                        step.state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
+                                        view.state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
                                     }`}
                                 />
                             )}
                             <div
                                 className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
-                                    step.state === "done"
+                                    view.state === "done"
                                         ? "border-emerald-500 bg-emerald-500 text-white"
-                                        : step.state === "rejected"
+                                        : view.state === "rejected"
                                         ? "border-[#930006] bg-[#930006] text-white"
-                                        : step.state === "current"
+                                        : view.state === "current"
                                         ? "border-[#9a5b00] bg-[#fff4e5] text-[#9a5b00]"
                                         : "border-[#e0e3e5] bg-white text-[#9aa0a6]"
                                 }`}
                             >
-                                {step.state === "done" && <Check size={16} />}
-                                {step.state === "rejected" && <X size={16} />}
-                                {step.state === "current" && <Clock size={16} />}
-                                {step.state === "upcoming" && index + 1}
+                                {view.state === "done" && <Check size={16} />}
+                                {view.state === "rejected" && <X size={16} />}
+                                {view.state === "current" && <Clock size={16} />}
+                                {(view.state === "upcoming" || view.state === "skipped") && index + 1}
                             </div>
                             <div
                                 className={`mt-2 text-center text-xs font-semibold ${
-                                    step.state === "upcoming" ? "text-[#9aa0a6]" : "text-[#191c1e]"
+                                    view.state === "upcoming" || view.state === "skipped" ? "text-[#9aa0a6]" : "text-[#191c1e]"
                                 }`}
                             >
-                                {approvalLevelLabelsBilingual[step.level]}
+                                {view.step.jobTitleNameSnapshot}
                             </div>
-                            {step.history ? (
+                            {view.history ? (
                                 <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
-                                    {step.history.approverFullName ?? step.history.approverUserName}
+                                    {view.history.approverFullName ?? view.history.approverUserName}
                                     <br />
-                                    {formatDateTime(step.history.actionAt)}
+                                    {formatDateTime(view.history.actionAt)}
                                 </div>
-                            ) : step.state === "current" ? (
-                                <div className="mt-0.5 text-center text-[11px] text-[#9a5b00]">{t("waitingShort")}</div>
+                            ) : view.state === "current" ? (
+                                <div
+                                    className="mt-0.5 text-center text-[11px] text-[#9a5b00]"
+                                    title={
+                                        view.step.candidates.length > 1
+                                            ? t("waitingCandidatesTooltip", {
+                                                  names: view.step.candidates.map((c) => c.fullName).join(", "),
+                                              })
+                                            : undefined
+                                    }
+                                >
+                                    {view.step.candidates.length > 1
+                                        ? t("waitingShortMulti", { count: view.step.candidates.length })
+                                        : t("waitingShort")}
+                                </div>
+                            ) : view.state === "skipped" ? (
+                                <div className="mt-0.5 text-center text-[11px] text-[#9aa0a6]">{t("skippedShort")}</div>
                             ) : null}
                         </div>
                     ))}
@@ -516,7 +495,7 @@ export default function OtFormEmailConfirmPage() {
                                             <td className="px-6 py-3 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
                                             <td colSpan={!actionResult ? 7 : 6} className="px-6 py-3 text-sm text-[#930006]">
                                                 {removedByLabelBilingual}: {employee.removedByFullName ?? employee.removedByUserName}
-                                                {employee.removedAtLevel !== null && <> ({approvalLevelLabelsBilingual[employee.removedAtLevel]})</>}
+                                                {employee.removedAtLevel !== null && <> ({stepNameByOrder(form, employee.removedAtLevel)})</>}
                                                 {" — "}
                                                 {removedReasonLabelBilingual}: {employee.removeReason}
                                                 {employee.removedAt && <span className="ml-2 text-[#9aa0a6]">({formatDateTime(employee.removedAt)})</span>}
@@ -610,13 +589,13 @@ export default function OtFormEmailConfirmPage() {
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalHistoryTitle")}</h2>
-                <div className={`grid gap-4 md:grid-cols-2 ${APPROVAL_GRID_LG_COLS[applicableLevels.length] ?? "lg:grid-cols-5"}`}>
-                    {applicableLevels.map((level) => {
-                        const history = form.approvalHistories.find((item) => item.approvalLevel === level);
+                <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                    {form.approvalSteps.map((step) => {
+                        const history = form.approvalHistories.find((item) => item.stepOrder === step.stepOrder);
                         return (
-                            <div key={level} className="rounded-lg border border-[#e0e3e5] p-4">
+                            <div key={step.id} className="rounded-lg border border-[#e0e3e5] p-4">
                                 <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {approvalLevelLabelsBilingual[level]}
+                                    {step.jobTitleNameSnapshot}
                                 </div>
                                 {history ? (
                                     <div className="mt-2 space-y-2">

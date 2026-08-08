@@ -8,6 +8,7 @@ const ENDPOINTS = {
         getAllEmployees: "/Employee/all",
         getEmployeeById: (id: number) => `/Employee/${id}`,
         getEmployeesByGroup: (groupId: number) => `/Employee/by-group/${groupId}`,
+        getEmployeesByDepartment: (departmentId: number) => `/Employee/by-department/${departmentId}`,
         getEmployeeByUsername: (userName: string) => `/Employee/by-username/${encodeURIComponent(userName)}`,
         getMe: "/Employee/me",
         adjustAccumulation: (id: number) => `/Employee/${id}/adjust-accumulation`,
@@ -21,8 +22,12 @@ export interface GetEmployeePageNationParams {
     pageIndex?: number;
     pageSize?: number;
     keyword?: string;
+    departmentId?: number;
+    groupId?: number;
 }
 
+// groupId/departmentId (2026-08-08): bắt buộc/cấm tuỳ theo TerminalLevel của jobTitleId — chỉ đúng 1
+// trong 2 field được điền (xem EmployeeForm.tsx + docs/attendance-api-fe.md §Cây chức vụ).
 export interface CreateUpdateEmployeeDto {
     code: string;
     firstName: string;
@@ -30,7 +35,8 @@ export interface CreateUpdateEmployeeDto {
     userName?: string | null;
     monthToDate: number;
     yearToDate: number;
-    groupId: number;
+    groupId: number | null;
+    departmentId: number | null;
     jobTitleId?: number | null;
 }
 
@@ -40,6 +46,8 @@ export const EmployeeApi = {
         if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
         if (params?.pageSize) query.set("PageSize", String(params.pageSize));
         if (params?.keyword) query.set("Keyword", params.keyword);
+        if (params?.departmentId) query.set("DepartmentId", String(params.departmentId));
+        if (params?.groupId) query.set("GroupId", String(params.groupId));
 
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.EMPLOYEE.getEmployeePageNation}?${queryString}` : ENDPOINTS.EMPLOYEE.getEmployeePageNation;
@@ -57,6 +65,12 @@ export const EmployeeApi = {
     // Chọn nhân viên hàng loạt khi lập đơn OT (docs/attendance-api-fe.md §3.5).
     getEmployeesByGroup: async (groupId: number) => {
         const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByGroup(groupId));
+        return response.data;
+    },
+    // Toàn bộ nhân viên active thuộc Phòng ban (mọi Bộ phận con) — dùng ở màn "Cây duyệt Phòng ban"
+    // để xem ai đang giữ Chức vụ nào và gán nhanh Chức vụ ngay tại đó.
+    getEmployeesByDepartment: async (departmentId: number) => {
+        const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByDepartment(departmentId));
         return response.data;
     },
     // Tra Group của 1 userName bất kỳ — gợi ý cho Admin ở màn "Phân quyền duyệt" (docs §3.5). 404 là

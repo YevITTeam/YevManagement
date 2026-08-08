@@ -16,8 +16,13 @@ export interface EmployeeDto {
     // được cả những đơn khác đang treo chưa duyệt.
     projectedMonthToDate: number;
     projectedYearToDate: number;
-    groupId: number;
-    groupNameVn: string;
+    // Nullable (2026-08-08): Trưởng phòng dùng departmentId thay vì groupId (không thuộc Bộ phận cụ
+    // thể nào); Trưởng Xưởng/Giám đốc cả 2 đều null (dùng chung toàn công ty) — xem
+    // docs/attendance-api-fe.md §Cây chức vụ.
+    groupId: number | null;
+    groupNameVn: string | null;
+    departmentId: number | null;
+    departmentNameVn: string | null;
 
     // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán (xem docs/attendance-api-fe.md §Cây chức vụ).
     jobTitleId: number | null;

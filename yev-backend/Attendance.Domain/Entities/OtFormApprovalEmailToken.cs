@@ -14,17 +14,16 @@ public partial class OtFormApprovalEmailToken
     public int OtFormId { get; set; }
 
     // The specific approver this email was sent to — a snapshot at the time the mail was sent, does
-    // not change with the current UserApprovalScope (a form can have multiple people in the same
-    // scope, each with their own token).
+    // not change with the current step candidates (a step can have multiple candidates, each with
+    // their own token).
     public string ApproverUserName { get; set; } = null!;
 
     public string? ApproverFullName { get; set; }
 
-    // Stores the Attendance.Domain.Enums.ApprovalLevel enum as an int — the approval level at the
-    // time the mail was sent (DepartmentManager/WorkshopManager/GeneralDirector). ApproveAsync/RejectAsync
-    // still re-check against the form's current Status, so an old token (form already past that
-    // level) naturally becomes invalid.
-    public int ApprovalLevel { get; set; }
+    // Bước duyệt (đã snapshot) mà email này được gửi cho — thay cho ApprovalLevel:int cũ (2026-08-07,
+    // Giai đoạn 3.1). ApproveAsync/RejectAsync vẫn tự re-check bước hiện tại của đơn, nên token của 1
+    // bước đã bị vượt qua tự động vô hiệu.
+    public int OtFormApprovalStepId { get; set; }
 
     public string Token { get; set; } = null!;
 
@@ -36,4 +35,6 @@ public partial class OtFormApprovalEmailToken
     public DateTime CreatedAt { get; set; }
 
     public virtual OtForm OtForm { get; set; } = null!;
+
+    public virtual OtFormApprovalStep OtFormApprovalStep { get; set; } = null!;
 }

@@ -32,21 +32,8 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Draft forms awaiting sign-off from the CURRENT user (Team Leader) — uses the Create
-        // permission since the Team Leader role does not have Attendance.OTForm.Approve.
-        [RequirePermission("Attendance.OTForm.Create")]
-        [HttpGet("pending-submissions")]
-        public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingSubmissions(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
-            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
-        {
-            var isAdmin = User.IsInRole(AdminRole);
-            var result = await _otFormService.GetPendingSubmissionsAsync(CurrentUserName, isAdmin, pageIndex, pageSize, fromDate, toDate, status);
-            return Success(result);
-        }
-
-        // Forms awaiting approval from the CURRENT user (Department Manager/Workshop Manager/General
-        // Director — all via UserApprovalScope; General Director's scope is ScopeType.All).
+        // Forms awaiting approval from the CURRENT user — "current step" of a form is its Pending
+        // OtFormApprovalStep with the smallest StepOrder (xem GetPendingApprovalsAsync).
         [RequirePermission("Attendance.OTForm.Approve")]
         [HttpGet("pending-approvals")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingApprovals(
@@ -113,30 +100,15 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Create a form — only creates a draft (Draft), NOT YET signed as "Requester". The form
-        // creator is only responsible for data entry; the Team Leader must call POST /{id}/submit
-        // themselves to sign before the form actually enters the flow (see docs/attendance-module.md).
+        // Create a form — tạo xong vào chuỗi duyệt Cây chức vụ NGAY LẬP TỨC, không còn giai đoạn Draft
+        // (2026-08-07, Giai đoạn 3.1, xem docs/attendance-module.md §Cây chức vụ).
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateOtFormDto request)
         {
             var isAdmin = User.IsInRole(AdminRole);
             var result = await _otFormService.CreateAsync(CurrentUserName, CurrentFullName, isAdmin, request);
-            return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công (đang ở trạng thái nháp, chờ Trưởng nhóm ký duyệt).");
-        }
-
-        // Team Leader signs as "Requester" — moves the form from Draft to Pending (awaiting Department
-        // Manager). BE automatically takes the signature from the caller's already-registered
-        // UserSignature. The caller must be assigned a UserApprovalScope (ApprovalLevel=Submitter,
-        // only Role "Trưởng nhóm" can be assigned this) matching the form's group/department, except
-        // Admin bypasses this (see docs/attendance-module.md).
-        [RequirePermission("Attendance.OTForm.Create")]
-        [HttpPost("{id}/submit")]
-        public async Task<ActionResult<ApiResponse<OtFormDto>>> Submit(int id, [FromBody] ApproveOtFormDto request)
-        {
-            var isAdmin = User.IsInRole(AdminRole);
-            var result = await _otFormService.ApproveSubmitterAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
-            return Success(result, "Trưởng nhóm ký duyệt thành công, đơn đã chuyển lên chờ Trưởng phòng.");
+            return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công.");
         }
 
         // Edit the entire form — only the creator, and only while the form is still Draft or Pending
@@ -165,6 +137,17 @@ namespace Attendance.Api.Controllers
         {
             await _otFormService.RejectAsync(id, CurrentUserName, CurrentFullName, request);
             return Success(true, "Từ chối đơn thành công.");
+        }
+
+        // Admin-only — xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate ở 1 bước, không resolve lại
+        // được vì candidate đã snapshot 1 lần lúc tạo). Chặn ở Service nếu đơn đã Completed (đã cộng
+        // lũy kế thật) — xem docs/attendance-module.md §Cây chức vụ.
+        [RequirePermission("Attendance.OTForm.Delete")]
+        [HttpPost("{id}/delete")]
+        public async Task<ActionResult<ApiResponse<bool>>> Delete(int id, [FromBody] DeleteOtFormDto request)
+        {
+            await _otFormService.DeleteAsync(id, CurrentUserName, CurrentFullName, request);
+            return Success(true, "Đã xoá đơn.");
         }
 
         // Drop ONE employee from the form so the rest of it can still be approved, instead of having to
