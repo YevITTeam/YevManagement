@@ -11,5 +11,8 @@ namespace Attendance.Application.Dtos.AttendanceSettings
         public decimal MonthlyOtHourLimit { get; set; }
 
         public decimal YearlyOtHourLimit { get; set; }
+
+        // Giờ hằng ngày OtFormBatchBackgroundService chạy gom "Đơn tổng" gửi Trưởng phòng (giờ VN).
+        public TimeOnly BatchAutoSendTime { get; set; }
     }
 }

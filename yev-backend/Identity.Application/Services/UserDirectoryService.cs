@@ -1,4 +1,5 @@
 using Identity.Application.Interfaces.Service;
+using Identity.Domain.Entities;
 using Shared.Application.Interfaces;
 using Shared.Application.Services;
 
@@ -40,6 +41,49 @@ namespace Identity.Application.Services
 
             var effectiveCodes = basePermissionCodes.Union(grantedCodes).Except(deniedCodes);
             return effectiveCodes.Contains(permissionCode);
+        }
+
+        public async Task SyncAutoGrantedPermissionsAsync(string? userName, IReadOnlyCollection<string> desiredPermissionCodes)
+        {
+            if (string.IsNullOrWhiteSpace(userName)) return;
+
+            var user = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == userName);
+            if (user == null) return; // Chưa có tài khoản Identity — lần sync tiếp theo (khi UserName được gán) sẽ tự cấp.
+
+            var desiredCodes = (desiredPermissionCodes ?? Array.Empty<string>()).ToHashSet();
+            var desiredPermissionIds = desiredCodes.Count == 0
+                ? new HashSet<int>()
+                : (await _unitOfWork.Permissions.FindAsync(p => desiredCodes.Contains(p.Code))).Select(p => p.Id).ToHashSet();
+
+            var existingOverrides = await _unitOfWork.UserPermissions.FindAsync(x => x.UserId == user.Id);
+            var existingPermissionIds = existingOverrides.Select(x => x.PermissionId).ToHashSet();
+
+            // 1) Thu hồi: dòng đang IsAutoGranted=true mà giờ không còn trong desired set nữa.
+            foreach (var existing in existingOverrides)
+            {
+                if (existing.IsAutoGranted && !desiredPermissionIds.Contains(existing.PermissionId))
+                {
+                    _unitOfWork.UserPermissions.Delete(existing);
+                }
+            }
+
+            // 2) Cấp thêm: permission desired mà CHƯA có override nào (manual lẫn auto) — không đụng
+            //    tới permission đã có override (dù đang grant/deny tay, hay đã đúng là auto rồi).
+            foreach (var permissionId in desiredPermissionIds)
+            {
+                if (!existingPermissionIds.Contains(permissionId))
+                {
+                    await _unitOfWork.UserPermissions.AddAsync(new UserPermission
+                    {
+                        UserId = user.Id,
+                        PermissionId = permissionId,
+                        IsGranted = true,
+                        IsAutoGranted = true
+                    });
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
         }
     }
 }

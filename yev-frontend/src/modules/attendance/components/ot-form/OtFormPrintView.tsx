@@ -71,11 +71,12 @@ interface HeaderLayout {
     // level = JobTitleTerminalLevel (1=Trưởng phòng, 2=Trưởng xưởng, 3=Tổng Giám Đốc) — 3 Chức vụ
     // CỐ ĐỊNH, tra đúng bước snapshot của đơn qua findStepByTerminalLevel (xem docs §Cây chức vụ).
     signature: { level: number; box: FieldBox }[];
-    // Ô "Người đề nghị" trên giấy chỉ có 2 chỗ trống, dùng cho bước trung gian ĐẦU và CUỐI (trước khi
-    // tới 3 Chức vụ cố định ở trên). Từ Giai đoạn 3.2 (2026-08-08), số bước trung gian mỗi Phòng ban bị
-    // giới hạn CỨNG tối đa 2 (validate ở DepartmentApprovalStepService.ReplaceAsync + chặn ngay trên UI
-    // DepartmentApprovalStepManager.tsx) CHÍNH LÀ để khớp đúng 2 ô này — không còn là giải pháp tạm,
-    // "đầu"/"cuối" luôn phủ hết toàn bộ bước trung gian thật của đơn (0/1/2 bước), không mất tên ai.
+    // Ô "Người đề nghị" trên giấy chỉ có 2 chỗ trống, dùng cho bước trung gian "Bắt buộc ký" ĐẦU và CUỐI
+    // (trước khi tới 3 Chức vụ cố định ở trên) — KHÔNG phải toàn bộ bước trung gian, xem
+    // FormHeaderFields.intermediateSteps. Số bước trung gian mỗi Nhóm KHÔNG bị giới hạn (có thể có
+    // nhiều bước "Chỉ xác nhận"), chỉ số bước "Bắt buộc ký" bị giới hạn CỨNG 1-2 (validate ở
+    // GroupApprovalStepService.ReplaceAsync + chặn ngay trên UI ApprovalStepManager.tsx) CHÍNH LÀ để
+    // khớp đúng 2 ô này.
     requester: { slot: "first" | "last"; box: FieldBox }[];
     tenCongDoan: FieldBox;
     soLuongNhanVien: FieldBox;
@@ -297,7 +298,12 @@ function nowrapBoxStyle(box: FieldBox): React.CSSProperties {
     };
 }
 
-function SignatureCell({ box, history, nameOnly }: { box: FieldBox; history: OtFormApprovalHistoryDto | null; nameOnly?: boolean }) {
+// Chỉ 4 field thật sự cần để vẽ 1 ô chữ ký — tách khỏi OtFormApprovalHistoryDto đầy đủ để SignatureCell
+// dùng chung được cho cả lịch sử duyệt thật (findHistory) LẪN chữ ký tự ký của người tạo đơn (không có
+// OtFormApprovalHistory tương ứng, xem selfSignDisplay bên dưới).
+type SignatureDisplay = Pick<OtFormApprovalHistoryDto, "approverFullName" | "approverUserName" | "hasSignature" | "signatureImage">;
+
+function SignatureCell({ box, history, nameOnly }: { box: FieldBox; history: SignatureDisplay | null; nameOnly?: boolean }) {
     const displayName = history && (history.approverFullName ?? history.approverUserName);
     return (
         <div
@@ -361,11 +367,28 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
     const nguoiChiuTrachNhiemName =
         responsibleHistory?.approverFullName ?? responsibleHistory?.approverUserName ?? form.createdByFullName ?? form.createdByUserName;
 
-    // Bước trung gian (TerminalLevelSnapshot=None) — tối đa 2 bước/Phòng ban (chốt cứng từ Giai đoạn
-    // 3.2, xem ghi chú ở HeaderLayout.requester phía trên), nên "đầu"/"cuối" luôn đủ chỗ cho cả 2.
-    const intermediateSteps = form.approvalSteps.filter((s) => s.terminalLevelSnapshot === 0);
+    // Bước trung gian ĐƯỢC BẮT BUỘC KÝ (TerminalLevelSnapshot=None và RequiresSignatureSnapshot=true) —
+    // CHỈ những bước này mới có tên in vào ô "Người đề nghị" (2026-08-08, sửa lại cùng ngày: bản đầu lấy
+    // toàn bộ bước trung gian bất kể "Chỉ xác nhận" hay "Bắt buộc ký", trong khi số bước trung gian
+    // KHÔNG còn bị giới hạn — chỉ số bước "Bắt buộc ký" mới giới hạn 1-2, khớp đúng 2 ô cố định trên
+    // giấy in, xem GroupApprovalStepService.ReplaceAsync). "đầu"/"cuối" trong danh sách ĐÃ LỌC này
+    // luôn đủ chỗ cho cả 1-2 người.
+    const intermediateSteps = form.approvalSteps.filter((s) => s.terminalLevelSnapshot === 0 && s.requiresSignatureSnapshot);
     const firstIntermediate = intermediateSteps[0];
     const lastIntermediate = intermediateSteps[intermediateSteps.length - 1];
+
+    // Không còn bước trung gian "Bắt buộc ký" nào (người tạo đã ở cấp cao hơn/bằng mọi bước đó) — chính
+    // người tạo tự ký ô "Người đề nghị" thay, dùng OtForm.CreatorSignatureImage snapshot lúc tạo đơn
+    // (2026-08-08, xem JobTitleApprovalChainService.RequiresCreatorSelfSign). Chỉ điền vào ô ĐẦU, ô sau
+    // để trống — chỉ có 1 người ký trong trường hợp này.
+    const selfSignDisplay: SignatureDisplay | null = form.creatorSignatureImage
+        ? {
+              approverFullName: form.createdByFullName,
+              approverUserName: form.createdByUserName,
+              hasSignature: true,
+              signatureImage: form.creatorSignatureImage,
+          }
+        : null;
 
     return (
         <div className="text-[9pt]">
@@ -379,13 +402,14 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
                 const step = slot === "first" ? firstIntermediate : lastIntermediate;
                 // Chỉ 1 bước trung gian → không lặp lại cùng 1 người ở cả 2 ô.
                 const effectiveStep = slot === "last" && lastIntermediate === firstIntermediate ? undefined : step;
+                const display = effectiveStep
+                    ? findHistory(form.approvalHistories, effectiveStep.stepOrder)
+                    : slot === "first" && intermediateSteps.length === 0
+                    ? selfSignDisplay
+                    : null;
                 return (
                     <div key={slot} style={{ ...boxStyle(box), borderRight: index === 0 ? "1px solid #000" : undefined }}>
-                        <SignatureCell
-                            box={{ left: 0, top: 0, width: 100, height: 100 }}
-                            history={effectiveStep ? findHistory(form.approvalHistories, effectiveStep.stepOrder) : null}
-                            nameOnly
-                        />
+                        <SignatureCell box={{ left: 0, top: 0, width: 100, height: 100 }} history={display} nameOnly />
                     </div>
                 );
             })}
@@ -416,9 +440,31 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
 
             {/* "Không"/mặc định luôn được tick khi mục tương ứng chưa bật (kể cả khi cả đơn không có
                 processPart) — chỉ ô "Có"/"Ăn" mới cần đúng true mới tick, tránh để trống gây hiểu nhầm
-                là "chưa xử lý" (yêu cầu người dùng). */}
-            <div style={boxStyle(layout.checkbox.an)} className="flex items-center justify-center text-[13pt]">
-                {processPart?.isEat ? "✓" : ""}
+                là "chưa xử lý" (yêu cầu người dùng). Khi Ăn=true: KHÔNG tick dấu ✓ nữa, thay bằng 3 dòng
+                số lượng phiếu chính/phụ/sữa (processPart.mainTicketCount/secondaryTicketCount/milkCount,
+                có sẵn trong DB từ migration AddMealTicketCountsToProcessPart nhưng trước đó chưa in ra
+                đâu — yêu cầu người dùng 2026-08-10, xem docs/attendance-otform-pdf-mapping.md §4).
+                justifyContent="flex-end" (không phải "center") để dồn 3 dòng xuống ĐÁY ô — tránh đè lên
+                chữ "Ăn 食べる" in sẵn ngay phía trên ô này trên ảnh nền (yêu cầu người dùng 2026-08-10,
+                trước đó center khiến dòng đầu chạm/đè lên chữ có sẵn). leading-none + gap-0 để 3 dòng
+                chiếm ít chiều cao nhất có thể. */}
+            <div
+                style={{ ...boxStyle(layout.checkbox.an), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", overflow: "hidden" }}
+                className="gap-0 pb-0.5 text-center"
+            >
+                {processPart?.isEat && (
+                    <>
+                        <span style={{ whiteSpace: "nowrap" }} className="text-[7pt] leading-none font-semibold text-black">
+                            {`P.Chính: ${processPart.mainTicketCount}`}
+                        </span>
+                        <span style={{ whiteSpace: "nowrap" }} className="text-[7pt] leading-none font-semibold text-black">
+                            {`P.Phụ: ${processPart.secondaryTicketCount}`}
+                        </span>
+                        <span style={{ whiteSpace: "nowrap" }} className="text-[7pt] leading-none font-semibold text-black">
+                            {`P.Sữa: ${processPart.milkCount}`}
+                        </span>
+                    </>
+                )}
             </div>
             <div style={boxStyle(layout.checkbox.khongAn)} className="flex items-center justify-center text-[13pt]">
                 {!processPart?.isEat ? "✓" : ""}

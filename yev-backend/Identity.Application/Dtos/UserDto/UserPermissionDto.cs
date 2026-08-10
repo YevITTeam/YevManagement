@@ -14,5 +14,11 @@ namespace Identity.Application.Dtos.UserDto
         // true = specifically granted to this user; false = specifically revoked from this user
         // (overrides the permission granted by the user's Role).
         public bool IsGranted { get; set; }
+
+        // true = row was auto-written by JobTitlePermission sync (Attendance), not a manual Admin
+        // grant/deny — FE uses this to show it read-only-ish and exclude it from what gets
+        // resubmitted on save, so a manual save for 1 permission doesn't silently "claim" every
+        // auto-granted permission this user currently has (see UpdateUserPermissionOverridesAsync).
+        public bool IsAutoGranted { get; set; }
     }
 }

@@ -7,7 +7,9 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Quản lý cây duyệt cấu hình tay theo từng Phòng ban (2026-08-06) — xem
+    // Quản lý cây duyệt cấu hình tay theo từng Phòng ban (2026-08-06) — CHỈ chứa 3 cấp duyệt CUỐI
+    // (Manager/Factory Manager/Director, JobTitle.TerminalLevel != None). 3 cấp trung gian dời sang
+    // GroupApprovalStepService theo từng Nhóm (2026-08-08) — xem
     // docs/docs-be/attendance-module.md §Cây chức vụ. Không có Create/Update/Delete từng dòng riêng lẻ,
     // chỉ thay NGUYÊN danh sách 1 lần (khớp UI kiểu "sắp xếp rồi Lưu").
     public class DepartmentApprovalStepService : BaseService<IAttendanceUnitOfWork>, IDepartmentApprovalStepService
@@ -31,7 +33,6 @@ namespace Attendance.Application.Services
                     JobTitleName = x.JobTitle.Name,
                     RankOrder = x.JobTitle.RankOrder,
                     RequiresSignature = x.RequiresSignature,
-                    IsResponsible = x.IsResponsible,
                     TerminalLevel = x.JobTitle.TerminalLevel
                 });
 
@@ -46,22 +47,16 @@ namespace Attendance.Application.Services
             if (request.Steps.Select(x => x.JobTitleId).Distinct().Count() != request.Steps.Count)
                 throw new DomainException("Danh sách bước duyệt không được lặp lại cùng 1 Chức vụ.");
 
-            if (request.Steps.Count(x => x.IsResponsible) > 1)
-                throw new DomainException("Chỉ được đánh dấu tối đa 1 bước là \"người chịu trách nhiệm\".");
-
-            var intermediateCount = 0;
+            // CHỈ nhận Chức vụ cấp cuối (Manager/Factory Manager/Director) — cấp trung gian
+            // (TerminalLevel=None) cấu hình ở phần "Cây duyệt Nhóm" (GroupApprovalStepService), không
+            // còn được thêm vào đây nữa (2026-08-08).
             foreach (var item in request.Steps)
             {
                 var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == item.JobTitleId && !x.IsDeleted);
                 jobTitle.OrThrowNotFound("Chức vụ", item.JobTitleId);
-                if (jobTitle!.TerminalLevel == (int)JobTitleTerminalLevel.None) intermediateCount++;
+                if (jobTitle!.TerminalLevel == (int)JobTitleTerminalLevel.None)
+                    throw new DomainException($"Chức vụ '{jobTitle.Name}' là cấp trung gian — cấu hình ở phần \"Cây duyệt Nhóm\" (màn \"Cây duyệt\"), không thêm vào cây duyệt Bộ phận.");
             }
-
-            // Tối đa 2 bước trung gian (TerminalLevel=None, dưới cấp Trưởng phòng) — chốt theo yêu cầu
-            // người dùng (2026-08-08, Giai đoạn 3.2): khớp đúng 2 ô "Người đề nghị" cố định trên giấy in
-            // YEV-22-024 (xem OtFormPrintView.tsx), không có chỗ cho ô thứ 3 trên ảnh nền.
-            if (intermediateCount > 2)
-                throw new DomainException("Chỉ được cấu hình tối đa 2 bước dưới cấp Trưởng phòng (khớp 2 ô \"Người đề nghị\" trên giấy in).");
 
             var existing = await _unitOfWork.DepartmentApprovalSteps.FindAsync(x => x.DepartmentId == departmentId && !x.IsDeleted);
             foreach (var step in existing)
@@ -76,7 +71,6 @@ namespace Attendance.Application.Services
                     StepOrder = index + 1,
                     JobTitleId = item.JobTitleId,
                     RequiresSignature = item.RequiresSignature,
-                    IsResponsible = item.IsResponsible,
                     IsDeleted = false
                 })
                 .ToList();

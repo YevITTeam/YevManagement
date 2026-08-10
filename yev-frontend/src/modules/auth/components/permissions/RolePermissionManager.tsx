@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Save } from "lucide-react";
+import { ChevronDown, ChevronRight, Save } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import { PermissionApi } from "@/modules/auth/api/permission.api";
@@ -16,6 +16,11 @@ export default function RolePermissionManager() {
     const [moduleGroups, setModuleGroups] = useState<PermissionModuleGroupDto[]>([]);
     const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
     const [selectedPermissionIds, setSelectedPermissionIds] = useState<Set<number>>(new Set());
+
+    // Cây quyền gộp theo thư mục Module > Entity, mặc định đóng hết — mở ra khi bấm (yêu cầu người
+    // dùng 2026-08-10, tránh hiển thị phẳng toàn bộ hàng trăm permission gây rối như trước).
+    const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
+    const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
 
     const [isSaving, setIsSaving] = useState(false);
 
@@ -53,6 +58,24 @@ export default function RolePermissionManager() {
                 if (checked) next.add(permission.id);
                 else next.delete(permission.id);
             }
+            return next;
+        });
+    };
+
+    const toggleModuleExpand = (module: string) => {
+        setExpandedModules((prev) => {
+            const next = new Set(prev);
+            if (next.has(module)) next.delete(module);
+            else next.add(module);
+            return next;
+        });
+    };
+
+    const toggleEntityExpand = (entityKey: string) => {
+        setExpandedEntities((prev) => {
+            const next = new Set(prev);
+            if (next.has(entityKey)) next.delete(entityKey);
+            else next.add(entityKey);
             return next;
         });
     };
@@ -139,62 +162,103 @@ export default function RolePermissionManager() {
                                     const modulePermissions = moduleGroup.entities.flatMap((e) => e.permissions);
                                     const allChecked = modulePermissions.every((p) => selectedPermissionIds.has(p.id));
                                     const someChecked = !allChecked && modulePermissions.some((p) => selectedPermissionIds.has(p.id));
+                                    const checkedCount = modulePermissions.filter((p) => selectedPermissionIds.has(p.id)).length;
+                                    const isModuleExpanded = expandedModules.has(moduleGroup.module);
                                     return (
                                         <div key={moduleGroup.module} className="px-4 py-3">
-                                            <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={allChecked}
-                                                    ref={(el) => {
-                                                        if (el) el.indeterminate = someChecked;
-                                                    }}
-                                                    onChange={(event) => togglePermissionGroup(modulePermissions, event.target.checked)}
-                                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                />
-                                                {moduleGroup.module}
-                                            </label>
-                                            <div className="space-y-2.5 pl-6">
-                                                {moduleGroup.entities.map((entityGroup) => {
-                                                    const entityAllChecked = entityGroup.permissions.every((p) => selectedPermissionIds.has(p.id));
-                                                    const entitySomeChecked =
-                                                        !entityAllChecked && entityGroup.permissions.some((p) => selectedPermissionIds.has(p.id));
-                                                    return (
-                                                        <div key={entityGroup.entity}>
-                                                            <label className="mb-1 flex cursor-pointer items-center gap-2 text-xs font-semibold text-[#191c1e]">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={entityAllChecked}
-                                                                    ref={(el) => {
-                                                                        if (el) el.indeterminate = entitySomeChecked;
-                                                                    }}
-                                                                    onChange={(event) => togglePermissionGroup(entityGroup.permissions, event.target.checked)}
-                                                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                                />
-                                                                {entityGroup.entity}
-                                                            </label>
-                                                            <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 pl-6 sm:grid-cols-2 lg:grid-cols-3">
-                                                                {entityGroup.permissions.map((permission) => (
-                                                                    <label
-                                                                        key={permission.id}
-                                                                        className="flex cursor-pointer items-start gap-2 py-0.5 text-sm text-[#191c1e]"
-                                                                        title={permission.description}
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleModuleExpand(moduleGroup.module)}
+                                                    className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                    aria-label={isModuleExpanded ? "Thu gọn" : "Mở rộng"}
+                                                >
+                                                    {isModuleExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                </button>
+                                                <label className="flex flex-1 cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={allChecked}
+                                                        ref={(el) => {
+                                                            if (el) el.indeterminate = someChecked;
+                                                        }}
+                                                        onChange={(event) => togglePermissionGroup(modulePermissions, event.target.checked)}
+                                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                    />
+                                                    {moduleGroup.module}
+                                                    <span className="font-normal normal-case tracking-normal text-[#8a8f94]">
+                                                        ({checkedCount}/{modulePermissions.length})
+                                                    </span>
+                                                </label>
+                                            </div>
+                                            {isModuleExpanded && (
+                                                <div className="mt-2 space-y-2.5 pl-6">
+                                                    {moduleGroup.entities.map((entityGroup) => {
+                                                        const entityAllChecked = entityGroup.permissions.every((p) => selectedPermissionIds.has(p.id));
+                                                        const entitySomeChecked =
+                                                            !entityAllChecked && entityGroup.permissions.some((p) => selectedPermissionIds.has(p.id));
+                                                        const entityCheckedCount = entityGroup.permissions.filter((p) =>
+                                                            selectedPermissionIds.has(p.id)
+                                                        ).length;
+                                                        const entityKey = `${moduleGroup.module}::${entityGroup.entity}`;
+                                                        const isEntityExpanded = expandedEntities.has(entityKey);
+                                                        return (
+                                                            <div key={entityGroup.entity}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => toggleEntityExpand(entityKey)}
+                                                                        className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                                        aria-label={isEntityExpanded ? "Thu gọn" : "Mở rộng"}
                                                                     >
+                                                                        {isEntityExpanded ? (
+                                                                            <ChevronDown className="h-3.5 w-3.5" />
+                                                                        ) : (
+                                                                            <ChevronRight className="h-3.5 w-3.5" />
+                                                                        )}
+                                                                    </button>
+                                                                    <label className="flex flex-1 cursor-pointer items-center gap-2 text-xs font-semibold text-[#191c1e]">
                                                                         <input
                                                                             type="checkbox"
-                                                                            checked={selectedPermissionIds.has(permission.id)}
-                                                                            onChange={(event) => togglePermission(permission.id, event.target.checked)}
-                                                                            className="mt-0.5 h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                                            checked={entityAllChecked}
+                                                                            ref={(el) => {
+                                                                                if (el) el.indeterminate = entitySomeChecked;
+                                                                            }}
+                                                                            onChange={(event) => togglePermissionGroup(entityGroup.permissions, event.target.checked)}
+                                                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                                                         />
-                                                                        <span>
-                                                                            <span className="block text-[#5e3f3a]">{permission.description}</span>
+                                                                        {entityGroup.entity}
+                                                                        <span className="font-normal text-[#8a8f94]">
+                                                                            ({entityCheckedCount}/{entityGroup.permissions.length})
                                                                         </span>
                                                                     </label>
-                                                                ))}
+                                                                </div>
+                                                                {isEntityExpanded && (
+                                                                    <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1.5 pl-6 sm:grid-cols-2 lg:grid-cols-3">
+                                                                        {entityGroup.permissions.map((permission) => (
+                                                                            <label
+                                                                                key={permission.id}
+                                                                                className="flex cursor-pointer items-start gap-2 py-0.5 text-sm text-[#191c1e]"
+                                                                                title={permission.description}
+                                                                            >
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={selectedPermissionIds.has(permission.id)}
+                                                                                    onChange={(event) => togglePermission(permission.id, event.target.checked)}
+                                                                                    className="mt-0.5 h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                                                />
+                                                                                <span>
+                                                                                    <span className="block text-[#5e3f3a]">{permission.description}</span>
+                                                                                </span>
+                                                                            </label>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })}

@@ -62,8 +62,13 @@
 > - **Ai được duyệt bước nào** = có mặt trong `approvalSteps[].candidates[]` của bước đó, không còn qua
 >   `UserApprovalScope` — bảng Role §1.1 (cột "Phạm vi cấu hình ở đâu") không còn đúng cho `OtForm`,
 >   `UserApprovalScope` giờ là tính năng riêng lẻ/lịch sử (§5).
-> - Cấu hình chuỗi duyệt của từng Phòng ban làm ở màn **"Cây duyệt Phòng ban"** (`/api/DepartmentApprovalStep`,
->   §3.4c), KHÔNG còn làm ở màn "Phân quyền duyệt" (`UserApprovalScope`, §5) như mô tả trong §1.1/§1.2.
+> - Cấu hình chuỗi duyệt làm ở 1 màn **"Cây duyệt"** (`CategoryManagement.tsx`, gộp lại 2026-08-10 —
+>   trước đó là 2 tab riêng), gồm 2 khối theo đúng thứ tự đơn đi qua: khối **"Cây duyệt Nhóm"**
+>   (`/api/GroupApprovalStep`, §3.4c-2 — 3 cấp trung gian Staff/Group Leader/Team Leader) rồi tới khối
+>   **"Cây duyệt Bộ phận"** (`/api/DepartmentApprovalStep`, §3.4c — 3 cấp cuối Manager/Factory
+>   Manager/Director), KHÔNG còn làm ở màn "Phân quyền duyệt" (`UserApprovalScope`, §5) như mô tả
+>   trong §1.1/§1.2. Tab xem trước chuỗi duyệt ("Thử chuỗi duyệt") đã bị bỏ khỏi FE — endpoint BE
+>   `GET /api/JobTitle/resolve-chain` vẫn còn, chỉ không còn UI riêng.
 >
 > Phần còn lại của §1 giữ nguyên làm tư liệu lịch sử (bố cục UI/lý do nghiệp vụ nhiều chỗ vẫn còn giá
 > trị tham khảo, VD cấu trúc màn hình, cách gộp tab) — đọc kỹ phần cảnh báo này trước khi dựng màn mới.
@@ -283,14 +288,13 @@ Giấy tăng ca (Attendance)
 │     └── Đơn tôi tham gia (mới)   [mọi role]  (GET /my-participations, §4.2c)
 ├── Đơn tổng (mới, 2026-08-06)  [có OTForm.Approve]  (GET /api/OtFormBatch/grid-list, §6e — dự phòng cho kênh email)
 ├── Cài đặt chữ ký           [mọi role nghiệp vụ]
-├── Lũy kế của tôi           [nhân viên có Employee.UserName gán sẵn — xem §3.6]
 └── Quản trị (Admin)
     ├── Danh mục (Bộ phận / Nhóm / Lý do / Trường hợp OT / Nhân viên)
     ├── Import nhân sự (Excel)
     └── Phân quyền duyệt
 ```
 > **"Sửa đơn tăng ca" KHÔNG phải menu riêng** — chỉ là nút "Sửa" xuất hiện trong tab "Đơn của tôi"/"Chi tiết đơn" khi `isEditable = true`, mở lại đúng form "Tạo đơn tăng ca" (§1.3.A) với dữ liệu có sẵn.
-> **"Lũy kế của tôi"** không gắn permission Attendance nào (bất kỳ user đăng nhập nào, kể cả không có Role nghiệp vụ) — chỉ hoạt động nếu Admin đã gán `Employee.UserName` = username AD của họ.
+> **"Lũy kế của tôi" đã xoá hẳn (2026-08-08)** — xem §3.6, chỉ Admin còn chỉnh được lũy kế, qua `PUT /Employee/{id}`.
 > **3 trang "Xác nhận cập nhật chữ ký" / "Xác nhận duyệt đơn qua email" / "Xác nhận duyệt đơn tổng qua email" (§6b, §4.6, §6e) KHÔNG nằm trong sơ đồ menu này** — đây là route **public**, chỉ mở qua link trong email, không cần đăng nhập SPA và không hiện trong bất kỳ menu điều hướng nào.
 
 ## 2. Enum dùng chung (gửi/nhận là số `int`, FE tự map label)
@@ -382,26 +386,31 @@ POST/PUT: `code`[Required], `description?`, `requireSignature`(bool), `requiredA
 
 ```jsonc
 // JobTitleDto
-{ "id": 11, "code": "M", "name": "Manager", "rankOrder": 11, "terminalLevel": 1 }
+{ "id": 18, "code": "M", "name": "Manager", "rankOrder": 4, "terminalLevel": 1 }
 ```
 POST/PUT: `code`[Required], `name`[Required], `rankOrder`[Required] (int, số lớn = cấp cao hơn — **chỉ dùng để loại bỏ bước ở cấp ngang/thấp hơn người tạo đơn** khỏi cây duyệt, KHÔNG còn dùng để tự bắc cầu qua mọi cấp đang có người giữ, xem §3.4c), `terminalLevel` (enum `JobTitleTerminalLevel`: `0=None/1=DepartmentManager/2=WorkshopManager/3=GeneralDirector`). Trùng `code` (kể cả bản ghi đã xóa mềm) → 400. Đặt `terminalLevel` khác `0` khi đã có 1 `JobTitle` active khác giữ đúng giá trị đó → 400 (mỗi `TerminalLevel` non-None chỉ 1 chức vụ). Xóa khi còn `Employee.jobTitleId` trỏ tới → 400.
 >
 > `requiresSignature` **không còn nằm ở đây** — 2026-08-07 đã chuyển xuống `DepartmentApprovalStep`
 > (§3.4c), vì cùng 1 Chức vụ có thể cần ký ở Phòng ban này nhưng chỉ cần xác nhận ở Phòng ban khác.
+>
+> **Thu gọn 14→6 dòng seed (2026-08-08, Giai đoạn 4)**: `STAFF`(rank 1)/`GL` Group Leader(2)/`TL` Team
+> Leader(3)/`M` Manager(4, terminalLevel=1)/`FM` Factory Manager(5, terminalLevel=2)/`GM` Director(6,
+> terminalLevel=3) — thay 14 mã cũ. Xem `attendance-module.md` §Giai đoạn 4.
 
-### 3.4c DepartmentApprovalStep (Cây duyệt Phòng ban) — `/api/DepartmentApprovalStep` (mới, 2026-08-06 — Giai đoạn 2b)
+### 3.4c DepartmentApprovalStep (Cây duyệt Bộ phận) — `/api/DepartmentApprovalStep` (mới, 2026-08-06 — Giai đoạn 2b; thu hẹp phạm vi ở Giai đoạn 4)
 
-> Cấu hình TAY danh sách Chức vụ (theo thứ tự) là bước duyệt THẬT của 1 Phòng ban — thay cho việc suy
-> luận tự động qua mọi `RankOrder` đang có người giữ (cách cũ khiến 1 đơn có thể phải qua quá nhiều
-> bước). Phòng ban chưa cấu hình gì → chuỗi duyệt rỗng, `resolve-chain` báo kẹt.
+> Cấu hình TAY danh sách Chức vụ CẤP CUỐI (Manager/Factory Manager/Director, `terminalLevel != 0`) là
+> bước duyệt THẬT của 1 Bộ phận (route/entity vẫn giữ tên `Department` — chỉ nhãn hiển thị FE đổi
+> thành "Bộ phận", xem `attendance-module.md` §Giai đoạn 4 mục 4). **Từ Giai đoạn 4 (2026-08-08) KHÔNG
+> còn chứa cấp trung gian** — 3 cấp dưới Manager (Staff/Group Leader/Team Leader) cấu hình riêng ở
+> `/api/GroupApprovalStep` (§3.4c-2) theo từng Nhóm. Bộ phận chưa cấu hình gì → chuỗi duyệt rỗng,
+> `resolve-chain` báo kẹt.
 
-`GET /by-department/{departmentId}` (`Attendance.DepartmentApprovalStep.View`) → `DepartmentApprovalStepDto[]` đã sắp theo `stepOrder`:
+`GET /by-department/{departmentId}` (`Attendance.DepartmentApprovalStep.View`) → `DepartmentApprovalStepDto[]` đã sắp theo `stepOrder` (không còn field `isResponsible` — xem §3.4c-2):
 ```jsonc
 [
-  { "id": 5, "departmentId": 1, "stepOrder": 1, "jobTitleId": 6, "jobTitleCode": "SUP", "jobTitleName": "Supervisor",
-    "rankOrder": 5, "requiresSignature": false, "isResponsible": false, "terminalLevel": 0 },
-  { "id": 6, "departmentId": 1, "stepOrder": 2, "jobTitleId": 11, "jobTitleCode": "M", "jobTitleName": "Manager",
-    "rankOrder": 11, "requiresSignature": true, "isResponsible": true, "terminalLevel": 1 }
+  { "id": 6, "departmentId": 1, "stepOrder": 1, "jobTitleId": 18, "jobTitleCode": "M", "jobTitleName": "Manager",
+    "rankOrder": 4, "requiresSignature": true, "terminalLevel": 1 }
 ]
 ```
 `PUT /by-department/{departmentId}` (`Attendance.DepartmentApprovalStep.Update`) — **thay NGUYÊN danh sách**, không có Create/Update/Delete từng dòng riêng:
@@ -409,16 +418,55 @@ POST/PUT: `code`[Required], `name`[Required], `rankOrder`[Required] (int, số l
 // Request body — thứ tự phần tử = thứ tự bước duyệt (phần tử đầu = bước 1)
 {
   "steps": [
-    { "jobTitleId": 6, "requiresSignature": false, "isResponsible": false },
-    { "jobTitleId": 11, "requiresSignature": true, "isResponsible": true },
-    { "jobTitleId": 16, "requiresSignature": true, "isResponsible": false },
-    { "jobTitleId": 17, "requiresSignature": true, "isResponsible": false }
+    { "jobTitleId": 18, "requiresSignature": true },
+    { "jobTitleId": 19, "requiresSignature": true },
+    { "jobTitleId": 20, "requiresSignature": true }
   ]
 }
 ```
-Trả về `DepartmentApprovalStepDto[]` mới sau khi thay. Validate: không được lặp lại cùng 1 `jobTitleId` (400), mọi `jobTitleId` phải tồn tại/active (404), **tối đa 1 phần tử** trong `steps` được đặt `isResponsible: true` (400 nếu >1 — có thể để 0). Gửi mảng rỗng `{ "steps": [] }` để xoá hết cây duyệt của Phòng ban đó. `requiresSignature` áp dụng riêng cho BƯỚC này của Phòng ban này (2026-08-07 — xem §3.4b). `isResponsible` (2026-08-07) đánh dấu bước sẽ là "người chịu trách nhiệm" trên form in — **chưa được `OtFormPrintView` nào đọc**, chỉ mới lưu cấu hình + hiện trong `resolve-chain` (§3.4d), chờ Giai đoạn 3 wiring thật.
+Trả về `DepartmentApprovalStepDto[]` mới sau khi thay. Validate: không được lặp lại cùng 1 `jobTitleId`
+(400), mọi `jobTitleId` phải tồn tại/active (404), và **`jobTitleId` phải có `terminalLevel != 0`**
+(400 nếu gửi Chức vụ trung gian — báo cấu hình ở `/api/GroupApprovalStep` thay vào đó, mới Giai đoạn
+4). Gửi mảng rỗng `{ "steps": [] }` để xoá hết cây duyệt của Bộ phận đó. `requiresSignature` áp dụng
+riêng cho BƯỚC này của Bộ phận này (2026-08-07 — xem §3.4b).
 
-### 3.4d Xem trước chuỗi duyệt tự động (Giai đoạn 2, mới 2026-08-06, thuật toán sửa lại ở Giai đoạn 2b)
+### 3.4c-2 GroupApprovalStep (Cây duyệt Nhóm) — `/api/GroupApprovalStep` (mới, 2026-08-08 — Giai đoạn 4)
+
+> Cấu hình TAY danh sách Chức vụ TRUNG GIAN (Staff/Group Leader/Team Leader, `terminalLevel = 0`) là
+> bước duyệt THẬT của 1 Nhóm (route/entity `Group` — nhãn hiển thị FE là "Nhóm", entity `Department`
+> hiển thị "Bộ phận", xem `attendance-module.md` §Giai đoạn 4 mục 4) — mirror hoàn toàn
+> `DepartmentApprovalStep` (§3.4c) nhưng khoá theo `groupId`. Nhóm chưa cấu hình gì → chuỗi duyệt kẹt
+> ngay ở cấp trung gian, `resolve-chain` báo warning. **FE (2026-08-10):** §3.4c và §3.4c-2 hiển thị
+> chung trong 1 tab "Cây duyệt" (`ApprovalStepManager.tsx`) — chọn 1 Bộ phận, rồi cấu hình lần lượt
+> khối Nhóm (trung gian) và khối Bộ phận (cấp cuối) trong cùng màn, không còn 2 tab riêng.
+
+`GET /by-group/{groupId}` (`Attendance.GroupApprovalStep.View`) → `GroupApprovalStepDto[]` đã sắp theo `stepOrder`:
+```jsonc
+[
+  { "id": 1, "groupId": 163, "stepOrder": 1, "jobTitleId": 15, "jobTitleCode": "STAFF", "jobTitleName": "Staff",
+    "rankOrder": 1, "requiresSignature": true, "isResponsible": true, "terminalLevel": 0 },
+  { "id": 2, "groupId": 163, "stepOrder": 2, "jobTitleId": 16, "jobTitleCode": "GL", "jobTitleName": "Group Leader",
+    "rankOrder": 2, "requiresSignature": false, "isResponsible": false, "terminalLevel": 0 }
+]
+```
+`PUT /by-group/{groupId}` (`Attendance.GroupApprovalStep.Update`) — **thay NGUYÊN danh sách**, cùng khuôn §3.4c:
+```jsonc
+{
+  "steps": [
+    { "jobTitleId": 15, "requiresSignature": true, "isResponsible": true },
+    { "jobTitleId": 16, "requiresSignature": false, "isResponsible": false }
+  ]
+}
+```
+Trả về `GroupApprovalStepDto[]` mới sau khi thay. Validate: không lặp `jobTitleId` (400), mọi
+`jobTitleId` tồn tại/active (404), **`terminalLevel` phải = 0** (400 nếu gửi Chức vụ cấp cuối — báo
+cấu hình ở `/api/DepartmentApprovalStep` thay vào đó), **tối đa 1 phần tử** đặt `isResponsible: true`
+(400 nếu >1), và số bước có `requiresSignature: true` phải **từ 1 đến 2** khi `steps` không rỗng (400
+nếu 0 hoặc >2 — khớp đúng 2 ô "Người đề nghị" cố định trên giấy in `YEV-22-024`; validate này dời
+nguyên từ `DepartmentApprovalStep` cũ sang đây ở Giai đoạn 4). Gửi mảng rỗng để xoá hết cây duyệt của
+Nhóm đó.
+
+### 3.4d Xem trước chuỗi duyệt tự động (Giai đoạn 2, mới 2026-08-06, thuật toán sửa lại ở Giai đoạn 2b, ghép Nhóm+Bộ phận ở Giai đoạn 4)
 
 `GET /api/JobTitle/resolve-chain?employeeId=&otCaseId=` (`Attendance.JobTitle.View`, đọc-only, KHÔNG tạo/sửa gì):
 ```jsonc
@@ -426,20 +474,76 @@ Trả về `DepartmentApprovalStepDto[]` mới sau khi thay. Validate: không đ
 {
   "isComplete": true,
   "warning": null,
+  "requiresCreatorSelfSign": false,
   "steps": [
-    { "stepOrder": 1, "jobTitleCode": "M", "jobTitleName": "Manager", "rankOrder": 11,
-      "requiresSignature": true, "isResponsible": true, "terminalLevel": 1,
+    { "stepOrder": 1, "jobTitleCode": "STAFF", "jobTitleName": "Staff", "rankOrder": 1,
+      "requiresSignature": true, "isResponsible": true, "terminalLevel": 0,
+      "candidates": [] },
+    { "stepOrder": 2, "jobTitleCode": "M", "jobTitleName": "Manager", "rankOrder": 4,
+      "requiresSignature": true, "isResponsible": false, "terminalLevel": 1,
       "candidates": [ { "employeeId": 42, "userName": "YEV\\n.van.b", "fullName": "Nguyễn Văn B" } ] }
   ]
 }
 ```
-Thuật toán đọc `DepartmentApprovalStep` của Department người tạo (§3.4c) — **không còn** tự bắc cầu qua
-`JobTitle.RankOrder`. `isComplete=false` (kèm `warning` giải thích) nếu: Department chưa cấu hình cây
-duyệt nào, hoặc cây duyệt không có bước nào khớp đúng `TerminalLevel` cần tới, hoặc 1 bước nào đó chưa
-có ai giữ đúng Chức vụ đó trong Phòng ban — **không** tự fallback về `UserApprovalScope` cũ. `steps=[]`
-+ `isComplete=true` nghĩa là người tạo đã ở cấp bằng/cao hơn cấp duyệt cuối, không cần bước nào.
-**Endpoint này chỉ để xem trước/test** — chưa được `OtFormService` nào gọi tới, chưa ảnh hưởng luồng
-duyệt thật (xem [attendance-module.md §Cây chức vụ](attendance-module.md)).
+Thuật toán (2026-08-08, Giai đoạn 4) đọc `GroupApprovalStep` của Nhóm người tạo TRƯỚC (§3.4c-2, cấp
+trung gian), rồi nối tiếp `DepartmentApprovalStep` của Bộ phận (§3.4c, cấp cuối) SAU — luôn đi hết
+Nhóm rồi mới tới Bộ phận. `isComplete=false` (kèm `warning` giải thích) nếu: Nhóm/Bộ phận chưa cấu
+hình cây duyệt nào, hoặc cây duyệt không có bước nào khớp đúng `TerminalLevel` cần tới, hoặc 1 bước
+nào đó chưa có ai giữ đúng Chức vụ đó trong đúng Nhóm/Bộ phận — **không** tự fallback về
+`UserApprovalScope` cũ (đã xoá hẳn). `steps=[]` + `isComplete=true` nghĩa là người tạo đã ở cấp
+bằng/cao hơn cấp duyệt cuối, không cần bước nào. Endpoint này đã được `OtFormService.CreateAsync` gọi
+tới thật (qua `ResolveChainForCreationAsync`, thêm tham số `groupId` ở Giai đoạn 4) — không còn chỉ để
+test (xem [attendance-module.md §Cây chức vụ](attendance-module.md)). **FE (2026-08-10):** tab xem
+trước "Thử chuỗi duyệt" (`ApprovalChainPreviewPanel.tsx`) đã bị bỏ khỏi màn Danh mục — endpoint này
+giờ chỉ được gọi ngầm bởi `OtFormService.CreateAsync`, không còn UI riêng để test tay qua trình duyệt
+(vẫn gọi được trực tiếp qua Scalar UI `/scalar/v1` nếu cần debug).
+
+### 3.4e JobTitlePermission (Quyền theo Chức vụ) — `/api/JobTitlePermission` (mới, 2026-08-10)
+
+> Cấu hình TAY danh sách permission Identity **tự động cấp** cho MỌI Employee đang giữ 1 Chức vụ (có
+> `UserName` link tài khoản đăng nhập) — mục tiêu: gán Chức vụ xong là có đủ quyền vận hành ngay,
+> không cần Admin làm thêm bước 2 (cấp tay qua "Tuỳ chỉnh quyền", `identity-api-fe.md` §4.8) cho
+> trường hợp thông thường. Chỉ nhận permission thuộc **nhóm "tham gia quy trình"** — 13 mã cố định
+> (`GET /allowed-codes` trả đúng danh sách): `OTForm.{View,Create,Approve,RemoveEmployee}`,
+> `UserSignature.{View,Update}`, `SecondaryPassword.Update`, `{Department,Group,OtCase,Reason,
+> Employee,JobTitle}.View`. **KHÔNG BAO GIỜ** nhận permission nhóm "quản trị" (CRUD danh mục,
+> `Setting.Update`, `AiChat.Use`, `*ApprovalStep.Update`, `JobTitlePermission.*`) — validate cứng ở
+> BE (400 nếu gửi mã ngoài whitelist), tránh lặp lại đúng rủi ro đã loại bỏ khi xoá
+> `UserApprovalScope`: 1 người có thể tự leo thang quyền quản trị chỉ bằng cách đổi Chức vụ cho chính
+> mình.
+
+`GET /by-job-title/{jobTitleId}` (`Attendance.JobTitlePermission.View`) → `JobTitlePermissionDto[]`:
+```jsonc
+[
+  { "id": 1, "jobTitleId": 18, "permissionCode": "Attendance.OTForm.Approve" },
+  { "id": 2, "jobTitleId": 18, "permissionCode": "Attendance.UserSignature.Update" }
+]
+```
+`GET /allowed-codes` (`Attendance.JobTitlePermission.View`) → `string[]` — danh sách mã được phép chọn (FE lọc UI theo đúng danh sách này, không hardcode song song).
+
+`PUT /by-job-title/{jobTitleId}` (`Attendance.JobTitlePermission.Update`) — **thay NGUYÊN danh sách**:
+```jsonc
+// Request body
+{ "permissionCodes": ["Attendance.OTForm.Approve", "Attendance.UserSignature.Update"] }
+```
+Trả về `JobTitlePermissionDto[]` mới. Validate: mọi code phải nằm trong whitelist (400 nếu không).
+Sau khi lưu, **đồng bộ NGAY** cho mọi Employee đang giữ đúng Chức vụ đó (có `UserName`) — không cần
+đợi ai đó động vào Employee của từng người. Gửi `{ "permissionCodes": [] }` để bỏ hết quyền tự động
+cấp của Chức vụ đó (thu hồi lại mọi permission đã tự cấp trước đó cho người giữ Chức vụ này).
+
+**Cơ chế đồng bộ thật** (`Identity.Application/Services/UserDirectoryService.SyncAutoGrantedPermissionsAsync`,
+gọi từ `Attendance.EmployeeService.CreateAsync/UpdateAsync/DeleteAsync` mỗi khi `JobTitleId`/`UserName`
+đổi, và từ `JobTitlePermissionService.ReplaceAsync` khi mapping đổi):
+- Ghi/xoá permission qua `UserPermission.IsAutoGranted=true` (cột mới trên Identity, xem
+  `identity-api-fe.md` §4.8) — phân biệt rõ với permission Admin cấp tay (`IsAutoGranted=false`).
+  Đổi/gỡ Chức vụ của 1 người → permission `IsAutoGranted=true` không còn cần thiết bị **tự thu hồi**;
+  permission Admin cấp tay **không bao giờ** bị đụng tới, dù trùng mã.
+- Employee **chưa có `UserName`** (chưa link tài khoản đăng nhập) → no-op, không có đích để cấp. Khi
+  sau này `UserName` được gán vào Employee đó (dù đã có sẵn Chức vụ từ trước), lần `PUT /api/Employee/{id}`
+  đó tự kích hoạt đồng bộ lại đúng bộ quyền theo Chức vụ hiện tại — không cần thao tác gì thêm.
+- Đổi `UserName` của 1 Employee sang tài khoản khác → permission tự động cấp bị **thu hồi khỏi tài
+  khoản cũ** trước khi cấp cho tài khoản mới (tránh 1 tài khoản Identity giữ mãi quyền của Employee
+  không còn link tới nó).
 
 ### 3.5 Employee (Nhân viên) — `/api/Employee` — thuộc 1 Group HOẶC 1 Department tuỳ Chức vụ
 ```jsonc
@@ -453,7 +557,7 @@ duyệt thật (xem [attendance-module.md §Cây chức vụ](attendance-module.
   "departmentId": null, "departmentNameVn": null,  // MỚI 2026-08-08
   "jobTitleId": 11, "jobTitleName": "Manager" }    // nullable, MỚI 2026-08-06 — xem §3.4b
 ```
-POST/PUT: `code`[Required], `firstName`[Required], `lastName`[Required], `userName?` (optional — gán tài khoản AD để nhân viên tự chỉnh lũy kế, xem §3.6), `monthToDate`, `yearToDate` (decimal, giờ OT lũy kế — dùng để cảnh báo TH3 vượt 25h/tháng hoặc 300h/năm), `groupId?`/`departmentId?`, `jobTitleId?` (optional, MỚI 2026-08-06 — id không tồn tại/đã xóa → 404). Trùng `userName` với nhân viên khác (kể cả đang active) → 400. `projectedMonthToDate`/`projectedYearToDate` là field **chỉ đọc** (response only) — không có trong POST/PUT body.
+POST/PUT: `code`[Required], `firstName`[Required], `lastName`[Required], `userName?` (optional — gán tài khoản AD để liên kết nhân viên với đúng người tạo/duyệt đơn OT, xem §3.5), `monthToDate`, `yearToDate` (decimal, giờ OT lũy kế — dùng để cảnh báo TH3 vượt 25h/tháng hoặc 300h/năm), `groupId?`/`departmentId?`, `jobTitleId?` (optional, MỚI 2026-08-06 — id không tồn tại/đã xóa → 404). Trùng `userName` với nhân viên khác (kể cả đang active) → 400. `projectedMonthToDate`/`projectedYearToDate` là field **chỉ đọc** (response only) — không có trong POST/PUT body.
 
 **`groupId`/`departmentId` — đúng 1 trong 2 (hoặc cả 2 đều bỏ trống), tuỳ `TerminalLevel` của `jobTitleId` (2026-08-08, breaking so với trước — trước đó `groupId` luôn bắt buộc)**, validate ở `EmployeeService.ValidateOrganizationAssignmentAsync`, sai tổ hợp → 400 message cụ thể:
 | `jobTitleId` chưa gán / Chức vụ `TerminalLevel=None` | `TerminalLevel=DepartmentManager` (Trưởng phòng) | `TerminalLevel=WorkshopManager`/`GeneralDirector` (Trưởng Xưởng/Giám đốc) |
@@ -464,9 +568,9 @@ FE `EmployeeForm.tsx` (2026-08-08): chọn **Chức vụ trước**, dropdown B�
 
 **Chọn nhân viên hàng loạt khi lập đơn**: `GET /api/Employee/by-group/{groupId}` → `EmployeeDto[]` toàn bộ nhân viên nhóm đó (Trưởng nhóm tick chọn nhiều người cho `CreateOtFormDto.employees`) — FE dùng **`projectedMonthToDate`/`projectedYearToDate`** (KHÔNG dùng `monthToDate`/`yearToDate`) để cảnh báo hạn mức TH3 ngay lúc chọn (§1.3.A, §3.5b).
 
-**Toàn bộ nhân viên active (mọi Group)**: `GET /api/Employee/all` (`Attendance.Employee.View`, mới 2026-08-06) → `EmployeeDto[]` — dùng cho dropdown/công cụ cần chọn 1 nhân viên bất kỳ không giới hạn theo Group, vd panel "Thử chuỗi duyệt" (§3.4b). Trước đó FE (`EmployeeApi.getAllEmployees()`) đã gọi sẵn route này nhưng BE chưa có action khớp — request rơi vào `GET /{id}` với `id="all"`, trả 400 `"The value 'all' is not valid"`; đã bổ sung action thật.
+**Toàn bộ nhân viên active (mọi Group)**: `GET /api/Employee/all` (`Attendance.Employee.View`, mới 2026-08-06) → `EmployeeDto[]` — dùng cho dropdown/công cụ cần chọn 1 nhân viên bất kỳ không giới hạn theo Group. Trước đó FE (`EmployeeApi.getAllEmployees()`) đã gọi sẵn route này nhưng BE chưa có action khớp — request rơi vào `GET /{id}` với `id="all"`, trả 400 `"The value 'all' is not valid"`; đã bổ sung action thật.
 
-**Toàn bộ nhân viên active thuộc 1 Phòng ban (mọi Group con)**: `GET /api/Employee/by-department/{departmentId}` (`Attendance.Employee.View`, mới 2026-08-07) → `EmployeeDto[]`. Dùng ở màn "Cây duyệt Phòng ban" (`DepartmentApprovalStepManager.tsx`) để: (a) hiện ngay dưới mỗi bước ai đang giữ Chức vụ đó trong Phòng ban, (b) gán nhanh `jobTitleId` cho từng nhân viên ngay tại màn này (gọi lại `PUT /api/Employee/{id}` bình thường, giữ nguyên field khác) — không cần chuyển qua màn "Nhân viên" riêng.
+**Toàn bộ nhân viên active thuộc 1 Phòng ban (mọi Group con)**: `GET /api/Employee/by-department/{departmentId}` (`Attendance.Employee.View`, mới 2026-08-07) → `EmployeeDto[]`. Dùng ở khối "Cây duyệt Bộ phận" trong tab "Cây duyệt" (`ApprovalStepManager.tsx`) để: (a) hiện ngay dưới mỗi bước ai đang giữ Chức vụ đó trong Phòng ban, (b) gán nhanh `jobTitleId` cho từng nhân viên ngay tại màn này (gọi lại `PUT /api/Employee/{id}` bình thường, giữ nguyên field khác) — không cần chuyển qua màn "Nhân viên" riêng.
 
 **Lọc `grid-list` theo Phòng ban/Bộ phận** (mới 2026-08-07): `GET /api/Employee/grid-list?...&DepartmentId=&GroupId=` — 2 query param optional, dùng cho ô lọc trên màn "Nhân viên" để dễ tìm đúng nhóm người cần gán Chức vụ trước khi cấu hình cây duyệt. `DepartmentId` lọc qua `Group.DepartmentId` (không cần biết Group con); `GroupId` lọc chính xác 1 Group; có thể kết hợp cả 2 (thực tế `GroupId` đã đủ hẹp, `DepartmentId` chỉ còn tác dụng lọc thô).
 
@@ -477,27 +581,20 @@ FE `EmployeeForm.tsx` (2026-08-08): chọn **Chức vụ trước**, dropdown B�
 FE dùng field nào ở đâu:
 - **`GET /api/Employee/by-group/{groupId}`** (chọn nhân viên lúc TẠO đơn mới) → dùng `projectedMonthToDate`/`projectedYearToDate`.
 - **`OtFormEmployeeDto.monthToDate`/`yearToDate`** (§4.3, hiện trên 1 đơn cụ thể — chi tiết/sửa/PDF/email) → vẫn 2 tên field cũ, nhưng từ 2026-08-06 là **snapshot lũy kế dự kiến** (không phải thực tế) tại thời điểm tạo đơn, TRƯỚC khi cộng chính đơn đó — không đổi tên field, chỉ đổi nguồn.
-- Màn quản lý nhân viên (`EmployeeList`, "Lũy kế của tôi", `PATCH /adjust-accumulation`) vẫn dùng `monthToDate`/`yearToDate` (thực tế) như cũ — không liên quan tới 1 đơn cụ thể nào.
+- Màn quản lý nhân viên (`EmployeeList`, Admin sửa qua `PUT /Employee/{id}`) vẫn dùng `monthToDate`/`yearToDate` (thực tế) như cũ — không liên quan tới 1 đơn cụ thể nào.
 
-**Tra Group của 1 userName bất kỳ — `GET /api/Employee/by-username/{userName}`** (mới, 2026-07-17, permission `Attendance.Employee.View`): trả về `EmployeeDto` (có `groupId`/`groupNameVn`) của nhân viên có `userName` khớp, 404 nếu chưa được gán. Dùng ở màn Admin **"Phân quyền duyệt"** (§5, §1.3.F) — khi Admin gõ/chọn 1 tài khoản để gán làm Trưởng nhóm, gọi endpoint này để **gợi ý** luôn Bộ phận (Group) họ đang thuộc, đỡ phải tra thủ công ngoài hệ thống rồi mới chọn đúng `scopeId`. **Đây chỉ là gợi ý best-effort, không bắt buộc**: 404 là chuyện bình thường với Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc/Trưởng Bộ phận — các cấp quản lý này không nhất thiết có hồ sơ `Employee` (field `userName` ở Employee vốn chỉ dùng cho nhân viên tự tra lũy kế, §3.6), lúc đó Admin vẫn chọn `scopeId` thủ công từ dropdown Group/Department như bình thường, không phải lỗi.
+**Tra Group của 1 userName bất kỳ — `GET /api/Employee/by-username/{userName}`** (mới, 2026-07-17, permission `Attendance.Employee.View`): trả về `EmployeeDto` (có `groupId`/`groupNameVn`) của nhân viên có `userName` khớp, 404 nếu chưa được gán. Dùng ở màn Admin **"Phân quyền duyệt"** (§5, §1.3.F) — khi Admin gõ/chọn 1 tài khoản để gán làm Trưởng nhóm, gọi endpoint này để **gợi ý** luôn Bộ phận (Group) họ đang thuộc, đỡ phải tra thủ công ngoài hệ thống rồi mới chọn đúng `scopeId`. **Đây chỉ là gợi ý best-effort, không bắt buộc**: 404 là chuyện bình thường với Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc/Trưởng Bộ phận — các cấp quản lý này không nhất thiết có hồ sơ `Employee`, lúc đó Admin vẫn chọn `scopeId` thủ công từ dropdown Group/Department như bình thường, không phải lỗi.
 
-### 3.6 Điều chỉnh lũy kế thủ công — `PATCH /api/Employee/{id}/adjust-accumulation`
+### 3.6 Điều chỉnh lũy kế thủ công — ĐÃ XOÁ (2026-08-08), CHỈ CÒN Admin qua `PUT /Employee/{id}`
 
-Vì không phải ai cũng làm đúng giờ OT đã đăng ký trong form, cần cho phép ghi đè trực tiếp `monthToDate`/`yearToDate` mà không phải đợi có đơn OT mới. Endpoint này **không gắn permission `Attendance.Employee.*`** — chỉ cần đăng nhập (có JWT hợp lệ) là gọi được, quyền hạn được BE tự kiểm tra bên trong:
-- Nếu `Employee.userName` (của chính `id` đang sửa) khớp `username` của người gọi → luôn cho phép (tự chỉnh của chính mình).
-- Nếu người gọi có permission `Attendance.Employee.Update` (hiện chỉ Admin có) → cho phép chỉnh của bất kỳ ai.
-- Ngoài 2 trường hợp trên → 400 "Bạn không có quyền chỉnh lũy kế của nhân viên này."
-
-```jsonc
-// PATCH /api/Employee/100/adjust-accumulation — body AdjustEmployeeAccumulationDto
-{ "monthToDate": 15.0, "yearToDate": 85.0 }   // cả 2 bắt buộc >= 0
-// response: { "isSuccess": true, "data": true, "message": "Cập nhật lũy kế thành công." }
-```
-Sau khi gọi thành công, BE tự stamp `accumulationYear`/`accumulationMonth` = tháng/năm hiện tại — FE nên gọi lại `GET /api/Employee/{id}` (hoặc `GET /api/Employee/me`) để lấy giá trị mới nhất, không tự cộng dồn ở client.
-
-**`GET /api/Employee/me`** — không gắn permission, chỉ cần đăng nhập. Trả `EmployeeDto` của chính user hiện tại (tìm theo `Employee.userName == CurrentUserName`). 404 nếu tài khoản đang đăng nhập chưa được Admin gán `userName` cho nhân viên nào.
-
-**Màn "Lũy kế của tôi"** (mọi user đăng nhập, không cần permission): gọi `GET /api/Employee/me` để lấy `id`+`monthToDate`+`yearToDate` hiện tại, hiện form 2 ô nhập để sửa lại → `PATCH /api/Employee/{id}/adjust-accumulation`. 404 ở bước `me` → ẩn hẳn màn này, hiện thông báo "Tài khoản chưa được gán nhân viên tương ứng, liên hệ Admin".
+Trước đây `PATCH /api/Employee/{id}/adjust-accumulation` + `GET /api/Employee/me` cho phép **chính nhân
+viên tự chỉnh** `monthToDate`/`yearToDate` của mình (màn "Lũy kế của tôi", không gắn permission
+`Attendance.Employee.*`, mọi user đăng nhập đều gọi được). Người dùng chốt bỏ hẳn khả năng tự chỉnh này
+("user không thể tự thay đổi lũy kế của họ được, việc này do Admin đảm nhận") — cả 2 endpoint trên
+**đã xoá hoàn toàn** (404), route FE `/ot/accumulation` + mục sidebar "Lũy kế của tôi" cũng đã gỡ. Muốn
+sửa `monthToDate`/`yearToDate` giờ chỉ còn 1 đường: **Admin** gọi `PUT /api/Employee/{id}`
+(`UpdateEmployeeDto`, `Attendance.Employee.Update`) — field này vốn đã có sẵn trong form Sửa nhân viên
+(§3.5), không cần gọi API riêng.
 
 ### 3.7 Import Excel nhân sự hàng loạt — `/api/EmployeeImport` (Admin, 2026-07-16)
 
@@ -704,6 +801,7 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
   "startTime": "17:30:00", "endTime": "19:30:00", "subReason": null,
   "totalHour": 2.0, "date": "2026-07-15", "numberOfEmployee": 1,
   "createdByUserName": "YEV\\n.van.a", "createdByFullName": "Nguyễn Văn A",
+  "creatorSignatureImage": null,
   "status": 0, "isEditable": true, "approvalChainWarning": null,
   "employees": [
     { "employeeId": 100, "employeeCode": "NV001", "fullName": "Nguyễn Văn A",
@@ -733,6 +831,16 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 - `hasSignature` — cờ tiện dùng để FE quyết định có hiện `<img>` chữ ký hay không **mà không cần** giải mã `signatureImage` trước; `signatureImage` vẫn trả kèm nếu có (base64) để hiện trực tiếp.
 - `approverFullName` — Họ tên hiển thị, snapshot tại đúng thời điểm ký (không đổi theo dù sau này tài khoản đó đổi tên). **Có thể `null`** nếu tài khoản chưa từng có `FullName` trong Identity lúc ký — FE luôn fallback `approverFullName ?? approverUserName` khi hiển thị/in PDF. Áp dụng tương tự cho `createdByFullName ?? createdByUserName` ở cấp đơn.
 - **`approvalChainWarning` (MỚI, 2026-08-07)** — `string | null`. Khác `null` khi chuỗi suy luận lúc tạo đơn bị cắt cụt (Department chưa cấu hình cây duyệt, hoặc thiếu người giữ đúng Chức vụ ở 1 bước) — đơn vẫn được tạo/duyệt tới đâu hay tới đó, FE hiện banner cảnh báo (không phải lỗi chặn hành động).
+- **`creatorSignatureImage` (MỚI, 2026-08-08)** — base64, `null` ở hầu hết đơn. Chỉ khác `null` khi người
+  tạo đơn đã ở cấp cao hơn/bằng MỌI Chức vụ trung gian "Bắt buộc ký" của Phòng ban lúc tạo (không còn ai
+  khác để ký ô "Người đề nghị" thay họ — VD chính họ đã là Section Manager tạo đơn cho nhóm mình) — khi
+  đó BE tự lấy `UserSignature` đã đăng ký sẵn của người tạo snapshot vào đây (chặn tạo đơn 400 nếu chưa
+  đăng ký chữ ký, cùng cơ chế §4.4). `OtFormPrintView.tsx` dùng field này để tự điền ô "Người đề nghị"
+  (chỉ điền vào 1 trong 2 ô) khi không có bước trung gian "Bắt buộc ký" nào trong `approvalSteps[]` —
+  xem [attendance-module.md §Người tạo tự ký ô "Người đề nghị"](attendance-module.md). Field
+  `requesterEmployeeId`/`responsibleEmployeeId` cùng các field liên quan trên `GroupDto`/
+  `CreateOtFormDto`/`OtFormDto` (thiết kế cũ, per-Group, không thuộc Cây chức vụ) **đã xoá hẳn**
+  2026-08-08 — không còn tồn tại trong bất kỳ contract nào ở tài liệu này.
 - **Ô "Tên công đoạn / 工程名" trên form giấy `YEV-22-024` KHÔNG có field tương ứng trong `OtFormDto`** — BE hiện không lưu trường này. FE tự dựng PDF nên **để trống ô này** — `groupNameVn`/`departmentNameVn` là khái niệm khác (Bộ phận/Phòng ban), không nên dùng thay thế.
 - **"Bước đang chờ ai duyệt/ký tiếp"** (đổi 2026-08-07): suy từ `approvalSteps[]` — phần tử đầu tiên có `status=0 Pending` (nếu có) là bước đang chờ, `candidates[]` của bước đó là danh sách người có thể Duyệt/Từ chối. `status==Completed(1)`/`Rejected(2)` ở cấp `OtForm` → hết, ẩn nút Duyệt/Từ chối. KHÔNG còn suy được trực tiếp từ `OtForm.status` như enum cũ (chỉ còn 3 giá trị, không phân biệt "đang chờ ai").
 - `isEditable` (đổi 2026-08-07) = `status == InApproval && !approvalSteps.some(s => s.status === 1 /* Approved */)` — điều kiện CẦN (chưa đủ) để hiện nút "Sửa", xem §1.2 và §4.1b.
@@ -922,7 +1030,8 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
 {
   "mainMealTicketMinHours": 2.5,   // decimal, [Range(0.5, 24)] khi PUT
   "monthlyOtHourLimit": 25,        // decimal, [Range(1, 744)] khi PUT
-  "yearlyOtHourLimit": 300         // decimal, [Range(1, 8784)] khi PUT
+  "yearlyOtHourLimit": 300,        // decimal, [Range(1, 8784)] khi PUT
+  "batchAutoSendTime": "15:00:00"  // TimeOnly "HH:mm:ss", [Required] khi PUT — mới 2026-08-08, xem §6e
 }
 ```
 
@@ -934,9 +1043,9 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
   dụng cho cả `OtFormEmployeeDto.isEligibleForMeal` (BE tính) lẫn `processPart.mainTicketCount`/
   `secondaryTicketCount` (FE tự tính ở `CreateOtFormPage.tsx`, người dùng vẫn sửa tay được — xem §4.1).
 - **`monthlyOtHourLimit`/`yearlyOtHourLimit`** — chỉ ảnh hưởng **hiển thị** (badge/pill đỏ cảnh báo ở
-  `EmployeeList.tsx`, `EmployeeAccumulationPanel.tsx`, `CreateOtFormPage.tsx`, `OtFormDetail.tsx`,
-  `OtFormPrintView.tsx`), **không** chặn tạo/duyệt đơn hay chỉnh lũy kế thủ công
-  (`PATCH /Employee/{id}/adjust-accumulation`, §3.6 vẫn không giới hạn gì).
+  `EmployeeList.tsx`, `CreateOtFormPage.tsx`, `OtFormDetail.tsx`, `OtFormBatchDetail.tsx`,
+  `OtFormPrintView.tsx`), **không** chặn tạo/duyệt đơn hay Admin chỉnh lũy kế thủ công qua
+  `PUT /Employee/{id}` — vẫn không giới hạn gì.
 - **FE cache dùng chung** (`useAttendanceSetting.ts`) — 1 promise cấp module, không gọi lại API mỗi màn
   mount; gọi `invalidateAttendanceSettingCache()` sau khi Admin lưu cấu hình mới để các màn mở sau đó
   thấy ngay, không cần F5 cả trang.
@@ -952,12 +1061,14 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
 > xạ sang model bước động). Đã hoạt động lại bình thường, nav FE đã hiện lại mục "Đơn tổng".
 
 **Lý do**: đơn tăng ca tới đúng bước Trưởng phòng (`OtFormApprovalStep` có `TerminalLevelSnapshot=1`,
-đang `Pending`) trước đây phải duyệt riêng lẻ từng đơn. Mỗi ngày **15:00**, hệ thống tự gom **các đơn
-MỚI, chưa từng vào batch nào** của cùng 1 Phòng ban thành 1 "Đơn tổng", gửi mail cho Trưởng phòng — bấm
-vào duyệt 1 lần là cả loạt được xử lý. Batch cũ chưa xử lý xong (từ ngày trước) được gửi **mail nhắc lại
-mỗi ngày** (không tạo batch mới, không gộp thêm đơn — 1 đơn chỉ thuộc đúng 1 batch). Đơn còn kẹt ở bước
-trung gian (SUP/CHIEF...) trước khi tới Trưởng phòng thì KHÔNG được gom, vẫn duyệt lẻ như bình thường.
-Chi tiết thiết kế BE ở [attendance-module.md §Đơn tổng](attendance-module.md).
+đang `Pending`) trước đây phải duyệt riêng lẻ từng đơn. Mỗi ngày, vào giờ đọc từ
+`AttendanceSetting.batchAutoSendTime` (mặc định **15:00**, Admin tự đổi qua tab Cấu hình — xem §6d),
+hệ thống tự gom **các đơn MỚI, chưa từng vào batch nào** của cùng 1 Phòng ban thành 1 "Đơn tổng", gửi
+mail cho Trưởng phòng — bấm vào duyệt 1 lần là cả loạt được xử lý. Batch cũ chưa xử lý xong (từ ngày
+trước) được gửi **mail nhắc lại mỗi ngày** (không tạo batch mới, không gộp thêm đơn — 1 đơn chỉ thuộc
+đúng 1 batch). Đơn còn kẹt ở bước trung gian (SUP/CHIEF...) trước khi tới Trưởng phòng thì KHÔNG được
+gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
+[attendance-module.md §Đơn tổng](attendance-module.md).
 
 | Method | Route | Permission | Việc gì |
 |---|---|---|---|
@@ -966,6 +1077,7 @@ Chi tiết thiết kế BE ở [attendance-module.md §Đơn tổng](attendance-
 | POST | `/api/OtFormBatch/{id}/approve` | `Attendance.OTForm.Approve` | Duyệt/Từ chối hàng loạt |
 | GET | `/api/OtFormBatch/email-confirm/{token}` | `[AllowAnonymous]` | Chi tiết qua link email |
 | POST | `/api/OtFormBatch/email-confirm/{token}/approve` | `[AllowAnonymous]` | Duyệt/Từ chối qua link email |
+| POST | `/api/OtFormBatch/run-now` | `Attendance.Setting.Update` | Chạy ngay đợt gom hằng ngày, không đợi tới giờ cấu hình (mới 2026-08-08, nút "Gửi ngay" ở tab Cấu hình — dùng khi test/cần gấp; body rỗng, response `data: true`) |
 
 ```jsonc
 // OtFormBatchListItemDto — item của grid-list
@@ -985,13 +1097,23 @@ Chi tiết thiết kế BE ở [attendance-module.md §Đơn tổng](attendance-
     {
       "otFormId": 101, "groupNameVn": "Nhóm 1", "groupNameJp": null,
       "reasonNameVn": "Tăng ca sản xuất gấp", "reasonNameJp": null, "otCaseCode": "TH1",
-      "date": "2026-08-06", "startTime": "17:30:00", "endTime": "20:00:00", "totalHour": 2.5,
+      "date": "2026-08-06", "startTime": "17:30:00", "endTime": "20:00:00", "subReason": null, "totalHour": 2.5,
       "createdByUserName": "nva", "createdByFullName": "Nguyễn Văn A", "numberOfEmployee": 3,
+      "processPart": { "isEat": true, "mainTicketCount": 2, "secondaryTicketCount": 1, "milkCount": 0,
+                        "isTransportation": false, "isUseCopyRoom": false,
+                        "anotherSuggestionVn": null, "anotherSuggestionJp": null },  // null nếu tạo đơn không gửi, xem §4.1
       "employees": [ /* OtFormEmployeeDto[] — chỉ nhân viên ĐANG active, xem §4.3 */ ]
     }
   ]
 }
 ```
+- **`subReason`/`processPart`/`employees[]` đầy đủ (MỚI, 2026-08-08)** — trước đây `OtFormBatchItemDto`
+  chỉ có đủ field để FE render bảng rút gọn (Chọn/Mã NV/Họ tên/Thời gian/Số giờ); Trưởng phòng duyệt
+  hàng loạt qua "Đơn tổng" mà không thấy "Yêu cầu hỗ trợ khác"/lý do chi tiết/lũy kế từng nhân viên như
+  màn Chi tiết đơn thường. Giờ mỗi phần tử `otForms[]` có đủ dữ liệu để FE render lại đúng mức chi tiết
+  của `OtFormDto` (§4.3) — `employees[]` vẫn là `OtFormEmployeeDto` đầy đủ (đã có sẵn từ đầu, gồm cả
+  `monthToDate`/`yearToDate`/`isEligibleForMeal`/`didEat`/`noteVn`/`noteJp`), chỉ thêm mới `subReason`
+  và `processPart` ở cấp đơn.
 
 - **Duyệt hàng loạt** — body `ProcessOtFormBatchDto`:
   ```jsonc
@@ -1025,9 +1147,12 @@ Chi tiết thiết kế BE ở [attendance-module.md §Đơn tổng](attendance-
 |---|---|
 | `/api/Department`, `/api/Reason`, `/api/OtCase`, `/api/JobTitle` | CRUD chuẩn (grid-list, all, {id}, POST, PUT, DELETE) — JobTitle mới 2026-08-06, §3.4b |
 | `/api/JobTitle/resolve-chain?employeeId=&otCaseId=` | Xem trước chuỗi duyệt tự động (đọc-only, mới 2026-08-06, §3.4d) |
-| `/api/DepartmentApprovalStep/by-department/{departmentId}` | GET (xem)/PUT (thay nguyên danh sách) cây duyệt của 1 Phòng ban — mới 2026-08-06, §3.4c. `PUT` validate tối đa 2 bước `terminalLevel=0` (mới 2026-08-08) |
+| `/api/DepartmentApprovalStep/by-department/{departmentId}` | GET (xem)/PUT (thay nguyên danh sách) cây duyệt CẤP CUỐI của 1 Bộ phận — mới 2026-08-06, §3.4c. Từ Giai đoạn 4 (2026-08-08) CHỈ nhận `terminalLevel != 0` |
+| `/api/GroupApprovalStep/by-group/{groupId}` | GET (xem)/PUT (thay nguyên danh sách) cây duyệt CẤP TRUNG GIAN của 1 Nhóm — mới 2026-08-08 (Giai đoạn 4), §3.4c-2. `PUT` validate `terminalLevel=0` + 1-2 bước `requiresSignature` |
+| `/api/JobTitlePermission/by-job-title/{jobTitleId}` | GET (xem)/PUT (thay nguyên danh sách) permission tự động cấp theo 1 Chức vụ — mới 2026-08-10, §3.4e. `PUT` validate mọi code thuộc whitelist "tham gia quy trình" |
+| `/api/JobTitlePermission/allowed-codes` | GET danh sách mã permission được phép chọn ở trên — mới 2026-08-10, §3.4e |
 | `/api/Group` (`?by-department/{id}`) | CRUD + cascading theo Department |
-| `/api/Employee` (`all`, `by-group/{id}`, `by-department/{id}`, `me`, `{id}/adjust-accumulation`) | CRUD + liệt kê toàn bộ/theo Group/theo Department + tự tra/tự chỉnh lũy kế (không cần permission) — `all` mới 2026-08-06, `by-department` mới 2026-08-07 |
+| `/api/Employee` (`all`, `by-group/{id}`, `by-department/{id}`) | CRUD + liệt kê toàn bộ/theo Group/theo Department — `all` mới 2026-08-06, `by-department` mới 2026-08-07. `me`/`{id}/adjust-accumulation` **đã xoá** 2026-08-08, xem §3.6 |
 | `/api/UserSignature` | `me` (GET/PUT), `{userName}` (GET, admin), `confirm/{token}` (GET/POST, public — §6b) |
 | `/api/SecondaryPassword` | `me` (GET/PUT), `confirm/{token}` (GET/POST, public — §6c) |
 | `/api/AttendanceSetting` | GET (mọi tài khoản), PUT (Admin — §6d) |
@@ -1086,11 +1211,6 @@ Tab **"Đơn tôi tham gia"** (**mới**, mọi role kể cả "Nhân viên") �
 
 **Admin — "Phân quyền duyệt"** → gán Role (Identity `update-user-roles`) trước, rồi `POST /api/UserApprovalScope` khai báo phạm vi cho từng Trưởng phòng/Trưởng xưởng (`approvalLevel=1/2`), **Trưởng Bộ phận** (`approvalLevel=4 GroupHead`, **mới 2026-07-17 — BẮT BUỘC gán cho MỌI Group ngay**, không gán thì đơn của Group đó kẹt cứng sau khi Trưởng nhóm ký) **và cho từng người được phép tạo đơn** (`approvalLevel=0 Submitter`) — 1 Group có thể gán nhiều người ở cả `approvalLevel=Submitter` lẫn `GroupHead`. Không có màn sửa — xóa + tạo lại.
 
-**"Lũy kế của tôi"** (mọi user đăng nhập, không cần permission Attendance nào)
-1. `GET /api/Employee/me` — 404 thì ẩn hẳn màn, báo "chưa được gán nhân viên tương ứng".
-2. Hiện `monthToDate`/`yearToDate` hiện tại, form 2 ô nhập để sửa.
-3. Submit → `PATCH /api/Employee/{id}/adjust-accumulation` → gọi lại `GET /me` refresh.
-
 ## 9. Lỗi thường gặp
 
 | Hiện tượng | Nguyên nhân → xử lý |
@@ -1111,8 +1231,6 @@ Tab **"Đơn tôi tham gia"** (**mới**, mọi role kể cả "Nhân viên") �
 | `POST /OtForm` 400 "Giờ kết thúc OT của nhân viên ... phải sau giờ bắt đầu ... và không được vượt quá giờ kết thúc của đơn" | 1 `employees[].endTime` <= `startTime` của đơn hoặc > `endTime` của đơn — FE nên giới hạn input giờ kết thúc từng nhân viên trong khoảng `(startTime, endTime]` của đơn ngay trên UI, không đợi BE trả lỗi |
 | `PUT /OtForm/{id}` 400 "Bạn chỉ có thể sửa đơn do chính mình tạo" | Gọi sửa đơn không phải do mình tạo — chỉ hiện nút "Sửa" khi `createdByUserName == user hiện tại` |
 | `PUT /OtForm/{id}` 400 "Đơn đã được duyệt ít nhất 1 cấp, không thể sửa nữa" | Đơn đã qua cấp duyệt nào đó (`isEditable=false`) — ẩn nút "Sửa" dựa vào field này thay vì tự đoán theo `status` |
-| `PATCH /Employee/{id}/adjust-accumulation` 400 "Bạn không có quyền chỉnh lũy kế của nhân viên này" | `id` không phải nhân viên gắn với `userName` của người gọi, và người gọi cũng không có quyền `Attendance.Employee.Update` — kiểm tra lại `GET /Employee/me` trả về đúng `id` chưa |
-| `GET /Employee/me` trả 404 | Tài khoản đang đăng nhập chưa được Admin gán `Employee.UserName` — yêu cầu Admin cập nhật qua `PUT /api/Employee/{id}` |
 | `GET/POST /UserSignature/confirm/{token}` 404 "Yêu cầu xác nhận chữ ký..." | Token sai/không tồn tại — kiểm tra lại link email, có thể bị copy thiếu ký tự |
 | `POST /UserSignature/confirm/{token}` 400 "Link xác nhận này đã được sử dụng" | Token đã bấm xác nhận trước đó (single-use) — chữ ký đã áp dụng rồi, không cần làm gì thêm |
 | `GET/POST /UserSignature/confirm/{token}` 400 "Link xác nhận đã hết hạn" | Quá 30 phút kể từ lúc `PUT /me` — quay lại app gọi `PUT /me` lại để nhận email mới |

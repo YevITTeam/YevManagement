@@ -13,6 +13,7 @@ export const DEFAULT_ATTENDANCE_SETTING: AttendanceSettingDto = {
     mainMealTicketMinHours: 2,
     monthlyOtHourLimit: 25,
     yearlyOtHourLimit: 300,
+    batchAutoSendTime: "15:00:00",
 };
 
 // Cấu hình này gần như không đổi nhưng lại cần ở RẤT nhiều màn (tạo đơn, chi tiết đơn, danh sách nhân

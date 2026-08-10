@@ -73,11 +73,8 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials()
-              // Trình duyệt mặc định CHỈ cho JS đọc vài header "an toàn" (Content-Type, Content-Length...)
-              // trên response khác origin — phải khai rõ 2 header dưới đây thì FE mới đọc được, dùng cho
-              // endpoint tải file .xlsx: Content-Disposition (tên file gợi ý) và X-Missing-Device-Count
-              // (đối chiếu Tanium, xem DeviceConfigurationImportController.GetMissingDevicesReport).
-              .WithExposedHeaders("Content-Disposition", "X-Missing-Device-Count");
+              .WithExposedHeaders("Content-Disposition", "X-Missing-Device-Count")
+              .SetPreflightMaxAge(TimeSpan.FromHours(24)); ;
     });
 });
 
@@ -100,7 +97,11 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference().AllowAnonymous();
 }
 
-app.UseHttpsRedirection();
+// KHÔNG UseHttpsRedirection: site này chỉ serve HTTP thuần (không có binding HTTPS thật ở IIS —
+// mọi Base URL trong docs đều là http://). Bật middleware này sẽ trả 307 cho MỌI request kể cả
+// preflight OPTIONS, mà theo spec CORS 1 preflight bị redirect coi như thất bại (Chrome báo nhầm
+// thành "No Access-Control-Allow-Origin header" dù whitelist đã đúng) — vì UseCors không bao giờ
+// chạy tới để gắn header (2026-08-08).
 app.UseCors("AllowNextJs");
 
 // Apply forwarded headers before authentication so client IP and scheme are correct

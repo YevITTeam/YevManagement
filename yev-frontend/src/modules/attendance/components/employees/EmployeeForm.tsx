@@ -315,7 +315,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             <span className={fieldLabelClassName}>{t("fieldMonthToDate")}</span>
                             <input
                                 type="number"
-                                step="0.5"
+                                step="0.01"
                                 min={0}
                                 value={values.monthToDate}
                                 onChange={(event) => setValues((current) => ({ ...current, monthToDate: Number(event.target.value) }))}
@@ -327,7 +327,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             <span className={fieldLabelClassName}>{t("fieldYearToDate")}</span>
                             <input
                                 type="number"
-                                step="0.5"
+                                step="0.01"
                                 min={0}
                                 value={values.yearToDate}
                                 onChange={(event) => setValues((current) => ({ ...current, yearToDate: Number(event.target.value) }))}

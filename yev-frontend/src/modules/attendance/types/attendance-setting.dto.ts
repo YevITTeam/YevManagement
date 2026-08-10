@@ -7,6 +7,8 @@ export interface AttendanceSettingDto {
     // Vượt các mốc này thì UI tô đỏ cảnh báo (không chặn tạo/duyệt đơn).
     monthlyOtHourLimit: number;
     yearlyOtHourLimit: number;
+    // TimeOnly "HH:mm:ss" — giờ hằng ngày hệ thống tự gom "Đơn tổng" gửi Trưởng phòng.
+    batchAutoSendTime: string;
 }
 
 // Body PUT /api/AttendanceSetting — cùng shape với AttendanceSettingDto (không có field server tự tính).

@@ -1,16 +1,26 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { Ticket, TrendingUp } from "lucide-react";
+import { Send, Ticket, TrendingUp } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
 import { AttendanceSettingApi } from "@/modules/attendance/api/attendance-setting.api";
+import { OtFormBatchApi } from "@/modules/attendance/api/ot-form-batch.api";
 import type { AttendanceSettingDto } from "@/modules/attendance/types/attendance-setting.dto";
 import { invalidateAttendanceSettingCache } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+
+// TimeOnly BE trả "HH:mm:ss" — input type="time" chỉ nhận/trả "HH:mm". Cắt/ghép ở biên UI, không đổi
+// shape DTO (giữ đúng "HH:mm:ss" khi gửi lại BE).
+function toTimeInputValue(value: string): string {
+    return value.slice(0, 5);
+}
+function fromTimeInputValue(value: string): string {
+    return value.length === 5 ? `${value}:00` : value;
+}
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -29,6 +39,7 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
     const t = useTranslations("Attendance.AttendanceSetting");
     const [values, setValues] = useState<AttendanceSettingDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [isRunningNow, setIsRunningNow] = useState(false);
 
     const { isLoading, refetch: fetchSetting } = useFetchEffect(
         () => AttendanceSettingApi.getSetting(),
@@ -70,6 +81,19 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
         }
     };
 
+    const handleRunNow = async () => {
+        setIsRunningNow(true);
+        try {
+            await OtFormBatchApi.runNow();
+            toast.success(t("runNowSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("runNowError")));
+        } finally {
+            setIsRunningNow(false);
+        }
+    };
+
     if (isLoading || !values) {
         return <div className="py-16 text-center text-sm text-[#5e3f3a]">{isLoading ? t("loading") : null}</div>;
     }
@@ -101,6 +125,43 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                     />
                     <p className="mt-1.5 text-xs text-[#5e3f3a]">{t("fieldMainMealTicketMinHoursHint")}</p>
                 </label>
+            </section>
+
+            <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-2">
+                    <div className="rounded-md bg-[#fff4f2] p-2 text-[#e3000f]">
+                        <Send size={18} />
+                    </div>
+                    <div>
+                        <h2 className="text-sm font-semibold text-[#191c1e]">{t("batchSectionTitle")}</h2>
+                        <p className="text-xs text-[#5e3f3a]">{t("batchSectionDesc")}</p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-end gap-4">
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldBatchAutoSendTime")}</span>
+                        <input
+                            type="time"
+                            value={toTimeInputValue(values.batchAutoSendTime)}
+                            onChange={(event) =>
+                                setValues((current) => current && { ...current, batchAutoSendTime: fromTimeInputValue(event.target.value) })
+                            }
+                            disabled={isSaving}
+                            className={`${fieldClassName} w-36`}
+                        />
+                    </label>
+                    <button
+                        type="button"
+                        onClick={handleRunNow}
+                        disabled={isRunningNow}
+                        className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <Send className="h-3.5 w-3.5" />
+                        {isRunningNow ? t("runNowRunning") : t("runNowButton")}
+                    </button>
+                </div>
+                <p className="text-xs text-[#5e3f3a]">{t("batchSectionHint")}</p>
             </section>
 
             <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">

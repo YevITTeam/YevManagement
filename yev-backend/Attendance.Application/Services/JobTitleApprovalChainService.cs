@@ -8,18 +8,20 @@ namespace Attendance.Application.Services
 {
     // Giai đoạn 2b (2026-08-06) — chuỗi duyệt đọc từ DepartmentApprovalStep (cấu hình TAY theo từng
     // Phòng ban), KHÔNG còn tự bắc cầu qua mọi RankOrder đang có người giữ. Giai đoạn 3.1 (2026-08-07)
-    // wiring thật vào OtFormService.CreateAsync qua ResolveChainForCreationAsync — xem
-    // docs/docs-be/attendance-module.md §Cây chức vụ.
+    // wiring thật vào OtFormService.CreateAsync qua ResolveChainForCreationAsync. Giai đoạn 4
+    // (2026-08-08) — tách cấu hình cấp trung gian (Staff/Group Leader/Team Leader) xuống
+    // GroupApprovalStep theo từng Nhóm, chỉ còn 3 cấp cuối (Manager/Factory Manager/Director) ở
+    // DepartmentApprovalStep theo Bộ phận — xem docs/docs-be/attendance-module.md §Cây chức vụ.
     //
-    // Phạm vi tìm ứng viên mỗi bước (sửa 2026-08-08 — trước đây chỉ GeneralDirector dùng chung toàn
-    // công ty, WorkshopManager vẫn bị lọc theo Department như DepartmentManager, KHÔNG khớp nghiệp vụ
-    // thật: Trưởng Xưởng cũng là 1 người dùng chung cho nhiều Phòng ban, giống Giám đốc):
-    //   - Chức vụ có TerminalLevel = WorkshopManager hoặc GeneralDirector → dùng chung toàn công ty,
-    //     KHÔNG lọc theo Department của người tạo đơn (mirrors ScopeType.All của UserApprovalScope cũ)
-    //   - Chức vụ có TerminalLevel = DepartmentManager hoặc None (cấp trung gian) → chỉ tính người có
-    //     Employee.Group.DepartmentId khớp đúng Department của người tạo đơn. Employee.GroupId chỉ cần
-    //     trỏ tới BẤT KỲ Group nào thuộc đúng Department đó — không cần phản ánh đúng "bộ phận quản lý"
-    //     theo nghĩa thành viên (Trưởng phòng không thuộc bộ phận cụ thể nào).
+    // Phạm vi tìm ứng viên mỗi bước:
+    //   - Chức vụ TerminalLevel=None (Staff/Group Leader/Team Leader, từ GroupApprovalStep) → CHỈ
+    //     tính Employee.GroupId == groupId (đúng Nhóm của người tạo đơn, không lan sang Nhóm khác
+    //     cùng Bộ phận — 2026-08-08, trước đó gộp chung theo cả Bộ phận).
+    //   - Chức vụ TerminalLevel=WorkshopManager/GeneralDirector (Factory Manager/Director) → dùng
+    //     chung toàn công ty, KHÔNG lọc theo Department.
+    //   - Chức vụ TerminalLevel=DepartmentManager (Manager) → chỉ tính người có
+    //     Employee.Group.DepartmentId hoặc Employee.DepartmentId khớp đúng Department của người tạo
+    //     đơn (Trưởng phòng không thuộc Group cụ thể nào, dùng thẳng Employee.DepartmentId).
     public class JobTitleApprovalChainService : BaseService<IAttendanceUnitOfWork>, IJobTitleApprovalChainService
     {
         public JobTitleApprovalChainService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
@@ -33,15 +35,15 @@ namespace Attendance.Application.Services
             if (creator!.JobTitleId is null || creator.JobTitle is null)
                 throw new DomainException($"Nhân viên '{creator.Code}' chưa được gán chức vụ — không thể suy luận chuỗi duyệt.");
 
-            // Người tạo đơn OT phải thuộc 1 Bộ phận thật (GroupId) — Trưởng phòng/Trưởng Xưởng/Giám đốc
+            // Người tạo đơn OT phải thuộc 1 Nhóm thật (GroupId) — Trưởng phòng/Trưởng Xưởng/Giám đốc
             // (2026-08-08, GroupId null) không tạo đơn OT cho chính họ qua luồng này.
             if (creator.Group is null)
-                throw new DomainException($"Nhân viên '{creator.Code}' không thuộc Bộ phận nào (Trưởng phòng/Trưởng Xưởng/Giám đốc) — không áp dụng cho việc tạo đơn OT.");
+                throw new DomainException($"Nhân viên '{creator.Code}' không thuộc Nhóm nào (Trưởng phòng/Trưởng Xưởng/Giám đốc) — không áp dụng cho việc tạo đơn OT.");
 
-            return await ResolveChainCoreAsync(creator.JobTitle.RankOrder, creator.Group.DepartmentId, otCaseId);
+            return await ResolveChainCoreAsync(creator.JobTitle.RankOrder, creator.Group.Id, creator.Group.DepartmentId, otCaseId);
         }
 
-        public async Task<ResolveApprovalChainResultDto> ResolveChainForCreationAsync(int? creatorEmployeeId, int departmentId, int otCaseId)
+        public async Task<ResolveApprovalChainResultDto> ResolveChainForCreationAsync(int? creatorEmployeeId, int groupId, int departmentId, int otCaseId)
         {
             var creatorRank = 0;
 
@@ -53,10 +55,22 @@ namespace Attendance.Application.Services
                     creatorRank = creator.JobTitle.RankOrder;
             }
 
-            return await ResolveChainCoreAsync(creatorRank, departmentId, otCaseId);
+            return await ResolveChainCoreAsync(creatorRank, groupId, departmentId, otCaseId);
         }
 
-        private async Task<ResolveApprovalChainResultDto> ResolveChainCoreAsync(int creatorRank, int departmentId, int otCaseId)
+        private class ConfiguredStepRow
+        {
+            public int StepOrder { get; set; }
+            public int JobTitleId { get; set; }
+            public string JobTitleCode { get; set; } = null!;
+            public string JobTitleName { get; set; } = null!;
+            public int RankOrder { get; set; }
+            public bool RequiresSignature { get; set; }
+            public bool IsResponsible { get; set; }
+            public int TerminalLevel { get; set; }
+        }
+
+        private async Task<ResolveApprovalChainResultDto> ResolveChainCoreAsync(int creatorRank, int groupId, int departmentId, int otCaseId)
         {
             var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otCaseId && !x.IsDeleted);
             otCase.OrThrowNotFound("Trường hợp OT", otCaseId);
@@ -74,39 +88,73 @@ namespace Attendance.Application.Services
                 };
             }
 
-            // Người tạo đã ở cấp bằng/cao hơn cấp duyệt cuối cần tới — không cần bước duyệt nào.
-            if (targetJobTitle.RankOrder <= creatorRank)
-                return new ResolveApprovalChainResultDto { IsComplete = true };
-
-            var configuredSteps = await _unitOfWork.DepartmentApprovalSteps.SelectAsync(
-                predicate: x => x.DepartmentId == departmentId && !x.IsDeleted,
-                selector: x => new
+            // Cấp trung gian (Staff/Group Leader/Team Leader) đọc từ GroupApprovalStep theo groupId,
+            // rồi nối tiếp cấp cuối (Manager/Factory Manager/Director) đọc từ DepartmentApprovalStep
+            // theo departmentId — LUÔN đi hết Nhóm trước rồi mới tới Bộ phận, không xen kẽ theo
+            // StepOrder thô (2 nguồn StepOrder độc lập, không so sánh chéo được).
+            var groupSteps = await _unitOfWork.GroupApprovalSteps.SelectAsync(
+                predicate: x => x.GroupId == groupId && !x.IsDeleted,
+                selector: x => new ConfiguredStepRow
                 {
-                    x.StepOrder,
+                    StepOrder = x.StepOrder,
                     JobTitleId = x.JobTitle.Id,
                     JobTitleCode = x.JobTitle.Code,
                     JobTitleName = x.JobTitle.Name,
-                    x.JobTitle.RankOrder,
-                    x.RequiresSignature,
-                    x.IsResponsible,
-                    x.JobTitle.TerminalLevel
+                    RankOrder = x.JobTitle.RankOrder,
+                    RequiresSignature = x.RequiresSignature,
+                    IsResponsible = x.IsResponsible,
+                    TerminalLevel = x.JobTitle.TerminalLevel
                 });
+
+            var departmentSteps = await _unitOfWork.DepartmentApprovalSteps.SelectAsync(
+                predicate: x => x.DepartmentId == departmentId && !x.IsDeleted,
+                selector: x => new ConfiguredStepRow
+                {
+                    StepOrder = x.StepOrder,
+                    JobTitleId = x.JobTitle.Id,
+                    JobTitleCode = x.JobTitle.Code,
+                    JobTitleName = x.JobTitle.Name,
+                    RankOrder = x.JobTitle.RankOrder,
+                    RequiresSignature = x.RequiresSignature,
+                    IsResponsible = false,
+                    TerminalLevel = x.JobTitle.TerminalLevel
+                });
+
+            var configuredSteps = groupSteps.OrderBy(x => x.StepOrder)
+                .Concat(departmentSteps.OrderBy(x => x.StepOrder))
+                .ToList();
+
+            // Xem ResolveApprovalChainResultDto.RequiresCreatorSelfSign — tính TRƯỚC khi lọc relevantSteps
+            // vì phải so với TOÀN BỘ Chức vụ "Bắt buộc ký" đã cấu hình (kể cả các bước đã bị lọc ra vì
+            // RankOrder <= creatorRank), không phải chỉ các bước còn lại trong chuỗi của đơn này. Tính
+            // được ngay cả khi configuredSteps rỗng (khi đó tự nhiên = false, không có gì để tự ký thay).
+            var configuredSigningIntermediateSteps = configuredSteps
+                .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None && x.RequiresSignature)
+                .ToList();
+            var requiresCreatorSelfSign = creatorRank > 0
+                && configuredSigningIntermediateSteps.Count > 0
+                && configuredSigningIntermediateSteps.All(x => x.RankOrder <= creatorRank);
+
+            // Người tạo đã ở cấp bằng/cao hơn cấp duyệt cuối cần tới — không cần bước duyệt nào (kiểm
+            // tra SAU khi đã tính requiresCreatorSelfSign để đơn hoàn tất ngay vẫn snapshot đúng chữ ký
+            // tự ký của người tạo, không riêng gì trường hợp còn bước tới Trưởng phòng).
+            if (targetJobTitle.RankOrder <= creatorRank)
+                return new ResolveApprovalChainResultDto { IsComplete = true, RequiresCreatorSelfSign = requiresCreatorSelfSign };
 
             if (configuredSteps.Count == 0)
             {
                 return new ResolveApprovalChainResultDto
                 {
                     IsComplete = false,
-                    Warning = "Phòng ban của người tạo đơn chưa được cấu hình cây duyệt (xem màn \"Cây duyệt Phòng ban\")."
+                    Warning = "Nhóm/Bộ phận của người tạo đơn chưa được cấu hình cây duyệt (xem màn \"Cây duyệt\", phần \"Cây duyệt Nhóm\"/\"Cây duyệt Bộ phận\")."
                 };
             }
 
             // Chỉ giữ các bước ở cấp CAO HƠN người tạo (người tạo không tự duyệt đơn của mình), theo
-            // đúng thứ tự StepOrder Admin đã sắp xếp, rồi cắt tại bước đầu tiên chạm đúng cấp duyệt cuối
-            // cần tới — các bước cấu hình sau đó (nếu có) không liên quan tới OtCase này.
+            // đúng thứ tự đã ghép Nhóm→Bộ phận ở trên, rồi cắt tại bước đầu tiên chạm đúng cấp duyệt
+            // cuối cần tới — các bước cấu hình sau đó (nếu có) không liên quan tới OtCase này.
             var relevantSteps = configuredSteps
                 .Where(x => x.RankOrder > creatorRank)
-                .OrderBy(x => x.StepOrder)
                 .ToList();
 
             var cutoffIndex = relevantSteps.FindIndex(x => x.TerminalLevel == targetTerminalLevel);
@@ -121,13 +169,17 @@ namespace Attendance.Application.Services
                 return new ResolveApprovalChainResultDto
                 {
                     IsComplete = false,
-                    Warning = $"Cây duyệt của Phòng ban chưa có bước nào phù hợp để tới '{targetJobTitle.Name}'."
+                    Warning = $"Cây duyệt của Nhóm/Bộ phận chưa có bước nào phù hợp để tới '{targetJobTitle.Name}'.",
+                    RequiresCreatorSelfSign = requiresCreatorSelfSign
                 };
             }
 
+            var intermediateJobTitleIds = relevantSteps
+                .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None)
+                .Select(x => x.JobTitleId)
+                .ToList();
             var deptScopedJobTitleIds = relevantSteps
-                .Where(x => x.TerminalLevel != (int)JobTitleTerminalLevel.WorkshopManager
-                    && x.TerminalLevel != (int)JobTitleTerminalLevel.GeneralDirector)
+                .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager)
                 .Select(x => x.JobTitleId)
                 .ToList();
             var companyWideJobTitleIds = relevantSteps
@@ -136,9 +188,20 @@ namespace Attendance.Application.Services
                 .Select(x => x.JobTitleId)
                 .ToList();
 
+            // Cấp trung gian: CHỈ đúng Nhóm của người tạo đơn (2026-08-08, thắt chặt so với trước —
+            // trước đây lọc theo cả Bộ phận nên lẫn ứng viên giữa các Nhóm không liên quan).
+            var intermediateCandidates = intermediateJobTitleIds.Count == 0
+                ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
+                : (await _unitOfWork.Employees.SelectAsync(
+                    predicate: x => !x.IsDeleted && x.UserName != null && x.GroupId == groupId
+                        && x.JobTitleId != null && intermediateJobTitleIds.Contains(x.JobTitleId.Value),
+                    selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
+                    .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
+                    .ToList();
+
             // Khớp cả 2 đường tới Department: qua Group (nhân viên thường giữ Chức vụ trung gian) hoặc
             // trực tiếp Employee.DepartmentId (Trưởng phòng — TerminalLevel=DepartmentManager, không
-            // thuộc Bộ phận cụ thể nào, xem 2026-08-08).
+            // thuộc Nhóm cụ thể nào).
             var deptCandidates = deptScopedJobTitleIds.Count == 0
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
                 : (await _unitOfWork.Employees.SelectAsync(
@@ -158,7 +221,7 @@ namespace Attendance.Application.Services
                     .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
                     .ToList();
 
-            var allCandidates = deptCandidates.Concat(companyWideCandidates).ToList();
+            var allCandidates = intermediateCandidates.Concat(deptCandidates).Concat(companyWideCandidates).ToList();
 
             var steps = relevantSteps
                 .Select((step, index) => new ResolvedApprovalStepDto
@@ -187,18 +250,19 @@ namespace Attendance.Application.Services
 
             string? warning = null;
             if (!reachesTarget)
-                warning = $"Cây duyệt của Phòng ban chưa cấu hình tới cấp '{targetJobTitle.Name}' — đơn sẽ bị kẹt.";
+                warning = $"Cây duyệt của Nhóm/Bộ phận chưa cấu hình tới cấp '{targetJobTitle.Name}' — đơn sẽ bị kẹt.";
             else if (!isComplete)
             {
                 var missingStepNames = steps.Where(x => x.Candidates.Count == 0).Select(x => x.JobTitleName);
-                warning = $"Chưa có ai giữ Chức vụ: {string.Join(", ", missingStepNames)} trong Phòng ban — đơn sẽ bị kẹt ở (các) bước này.";
+                warning = $"Chưa có ai giữ Chức vụ: {string.Join(", ", missingStepNames)} trong Nhóm/Bộ phận — đơn sẽ bị kẹt ở (các) bước này.";
             }
 
             return new ResolveApprovalChainResultDto
             {
                 IsComplete = isComplete,
                 Steps = steps,
-                Warning = warning
+                Warning = warning,
+                RequiresCreatorSelfSign = requiresCreatorSelfSign
             };
         }
     }

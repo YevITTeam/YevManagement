@@ -4,7 +4,7 @@
 // (SUP/CHIEF...) KHÔNG được gom, vẫn duyệt lẻ tới khi tự nó tới lượt Trưởng phòng. Schema theo
 // docs/attendance-api-fe.md §Đơn tổng.
 
-import type { OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
+import type { OtFormEmployeeDto, ProcessPartDto } from "@/modules/attendance/types/ot-form.dto";
 
 // OtFormBatchStatus: 0=Pending (còn đơn chờ xử lý), 1=Processed (đã xử lý xong hoặc tự đóng vì hết đơn hiệu lực).
 export interface OtFormBatchListItemDto {
@@ -33,10 +33,12 @@ export interface OtFormBatchItemDto {
     date: string;
     startTime: string;
     endTime: string;
+    subReason: string | null;
     totalHour: number;
     createdByUserName: string;
     createdByFullName: string | null;
     numberOfEmployee: number;
+    processPart: ProcessPartDto | null;
     employees: OtFormEmployeeDto[];
 }
 

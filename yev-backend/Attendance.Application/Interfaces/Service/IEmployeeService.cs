@@ -16,8 +16,5 @@ namespace Attendance.Application.Interfaces.Service
         Task<EmployeeDto> CreateAsync(CreateEmployeeDto request);
         Task UpdateAsync(UpdateEmployeeDto request);
         Task DeleteAsync(int id);
-
-        // canAdjustAny=true (permission Attendance.Employee.Update) skips the UserName == currentUserName check.
-        Task AdjustAccumulationAsync(int employeeId, string currentUserName, bool canAdjustAny, AdjustEmployeeAccumulationDto request);
     }
 }

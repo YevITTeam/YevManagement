@@ -10,9 +10,9 @@ namespace Attendance.Application.Dtos.DepartmentApprovalSteps
         public string JobTitleName { get; set; } = null!;
         public int RankOrder { get; set; }
         public bool RequiresSignature { get; set; }
-        public bool IsResponsible { get; set; }
 
-        // Enum Attendance.Domain.Enums.JobTitleTerminalLevel.
+        // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — luôn khác None (Manager/Factory
+        // Manager/Director) cho bước ở đây (2026-08-08 — cấp trung gian dời sang GroupApprovalStep).
         public int TerminalLevel { get; set; }
     }
 }

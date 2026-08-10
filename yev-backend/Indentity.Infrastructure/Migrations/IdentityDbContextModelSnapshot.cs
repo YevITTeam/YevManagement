@@ -144,6 +144,11 @@ namespace Identity.Infrastructure.Migrations
                     b.Property<int>("PermissionId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsAutoGranted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsGranted")
                         .HasColumnType("bit");
 

@@ -8,8 +8,8 @@ import GroupList from "./groups/GroupList";
 import ReasonList from "./reasons/ReasonList";
 import OtCaseList from "./ot-cases/OtCaseList";
 import JobTitleList from "./job-titles/JobTitleList";
-import DepartmentApprovalStepManager from "./job-titles/DepartmentApprovalStepManager";
-import ApprovalChainPreviewPanel from "./job-titles/ApprovalChainPreviewPanel";
+import JobTitlePermissionManager from "./job-titles/JobTitlePermissionManager";
+import ApprovalStepManager from "./job-titles/ApprovalStepManager";
 import EmployeeList from "./employees/EmployeeList";
 import AttendanceSettingPanel from "./settings/AttendanceSettingPanel";
 import type { ListHandle } from "./list-toolbar";
@@ -20,8 +20,8 @@ type CategoryTab =
     | "reasons"
     | "ot-cases"
     | "job-titles"
-    | "department-approval-steps"
-    | "chain-preview"
+    | "job-title-permissions"
+    | "approval-steps"
     | "employees"
     | "settings";
 
@@ -36,18 +36,18 @@ export default function CategoryManagement() {
         { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons") },
         { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases") },
         { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles") },
-        { key: "department-approval-steps", label: t("tabDepartmentApprovalSteps"), addLabel: null },
-        { key: "chain-preview", label: t("tabChainPreview"), addLabel: null },
+        { key: "job-title-permissions", label: t("tabJobTitlePermissions"), addLabel: null },
+        { key: "approval-steps", label: t("tabApprovalSteps"), addLabel: null },
         { key: "employees", label: t("tabEmployees"), addLabel: t("addEmployees") },
         { key: "settings", label: t("tabSettings"), addLabel: null },
     ];
     const [activeTab, setActiveTab] = useState<CategoryTab>("departments");
     // Tab nào đã từng được xem thì mới mount (và giữ mounted luôn sau đó) — chỉ tab "departments"
-    // (mặc định) mount ngay từ đầu. Tránh gọi song song cả 6 API mỗi lần vào màn "Danh mục" trong khi
+    // (mặc định) mount ngay từ đầu. Tránh gọi song song cả 9 API mỗi lần vào màn "Danh mục" trong khi
     // đa số user chỉ xem 1-2 tab/lượt, nhưng vẫn giữ được lợi ích "chuyển tab tức thì, không tải lại"
     // cho những tab đã ghé qua trong phiên này.
     const [visitedTabs, setVisitedTabs] = useState<Set<CategoryTab>>(() => new Set(["departments"]));
-    // Cả 7 tab giờ mounted song song (xem ghi chú bên dưới) nên mỗi tab phải báo loading vào
+    // Cả 9 tab giờ mounted song song (xem ghi chú bên dưới) nên mỗi tab phải báo loading vào
     // đúng slot riêng của nó — nếu dùng chung 1 state boolean, tab nào báo xong (setLoading(false))
     // sau cùng sẽ đè mất trạng thái loading thật của tab đang xem.
     const [loadingByTab, setLoadingByTab] = useState<Record<CategoryTab, boolean>>({
@@ -56,8 +56,8 @@ export default function CategoryManagement() {
         reasons: false,
         "ot-cases": false,
         "job-titles": false,
-        "department-approval-steps": false,
-        "chain-preview": false,
+        "job-title-permissions": false,
+        "approval-steps": false,
         employees: false,
         settings: false,
     });
@@ -68,8 +68,8 @@ export default function CategoryManagement() {
     const reasonRef = useRef<ListHandle>(null);
     const otCaseRef = useRef<ListHandle>(null);
     const jobTitleRef = useRef<ListHandle>(null);
-    const departmentApprovalStepRef = useRef<ListHandle>(null);
-    const chainPreviewRef = useRef<ListHandle>(null);
+    const jobTitlePermissionRef = useRef<ListHandle>(null);
+    const approvalStepRef = useRef<ListHandle>(null);
     const employeeRef = useRef<ListHandle>(null);
     const settingRef = useRef<ListHandle>(null);
 
@@ -79,8 +79,8 @@ export default function CategoryManagement() {
         reasons: reasonRef,
         "ot-cases": otCaseRef,
         "job-titles": jobTitleRef,
-        "department-approval-steps": departmentApprovalStepRef,
-        "chain-preview": chainPreviewRef,
+        "job-title-permissions": jobTitlePermissionRef,
+        "approval-steps": approvalStepRef,
         employees: employeeRef,
         settings: settingRef,
     };
@@ -112,12 +112,12 @@ export default function CategoryManagement() {
         (value: boolean) => setLoadingByTab((current) => ({ ...current, "job-titles": value })),
         []
     );
-    const handleDepartmentApprovalStepLoadingChange = useCallback(
-        (value: boolean) => setLoadingByTab((current) => ({ ...current, "department-approval-steps": value })),
+    const handleJobTitlePermissionLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, "job-title-permissions": value })),
         []
     );
-    const handleChainPreviewLoadingChange = useCallback(
-        (value: boolean) => setLoadingByTab((current) => ({ ...current, "chain-preview": value })),
+    const handleApprovalStepLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, "approval-steps": value })),
         []
     );
     const handleEmployeeLoadingChange = useCallback(
@@ -209,14 +209,14 @@ export default function CategoryManagement() {
                     <JobTitleList ref={jobTitleRef} onLoadingChange={handleJobTitleLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("department-approval-steps") && (
-                <div className={activeTab === "department-approval-steps" ? "" : "hidden"}>
-                    <DepartmentApprovalStepManager ref={departmentApprovalStepRef} onLoadingChange={handleDepartmentApprovalStepLoadingChange} />
+            {visitedTabs.has("job-title-permissions") && (
+                <div className={activeTab === "job-title-permissions" ? "" : "hidden"}>
+                    <JobTitlePermissionManager ref={jobTitlePermissionRef} onLoadingChange={handleJobTitlePermissionLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("chain-preview") && (
-                <div className={activeTab === "chain-preview" ? "" : "hidden"}>
-                    <ApprovalChainPreviewPanel ref={chainPreviewRef} onLoadingChange={handleChainPreviewLoadingChange} />
+            {visitedTabs.has("approval-steps") && (
+                <div className={activeTab === "approval-steps" ? "" : "hidden"}>
+                    <ApprovalStepManager ref={approvalStepRef} onLoadingChange={handleApprovalStepLoadingChange} />
                 </div>
             )}
             {visitedTabs.has("employees") && (

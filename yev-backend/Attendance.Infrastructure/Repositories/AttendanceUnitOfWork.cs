@@ -28,16 +28,20 @@ namespace Attendance.Infrastructure.Repositories
             IOtFormBatchEmailTokenRepository otFormBatchEmailTokens,
             IJobTitleRepository jobTitles,
             IDepartmentApprovalStepRepository departmentApprovalSteps,
+            IGroupApprovalStepRepository groupApprovalSteps,
             IOtFormApprovalStepRepository otFormApprovalSteps,
-            IOtFormApprovalStepCandidateRepository otFormApprovalStepCandidates) : base(dbContext)
+            IOtFormApprovalStepCandidateRepository otFormApprovalStepCandidates,
+            IJobTitlePermissionRepository jobTitlePermissions) : base(dbContext)
         {
             AttendanceSettings = attendanceSettings;
             OtFormBatches = otFormBatches;
             OtFormBatchEmailTokens = otFormBatchEmailTokens;
             JobTitles = jobTitles;
             DepartmentApprovalSteps = departmentApprovalSteps;
+            GroupApprovalSteps = groupApprovalSteps;
             OtFormApprovalSteps = otFormApprovalSteps;
             OtFormApprovalStepCandidates = otFormApprovalStepCandidates;
+            JobTitlePermissions = jobTitlePermissions;
             Departments = departments;
             Groups = groups;
             Reasons = reasons;
@@ -73,7 +77,9 @@ namespace Attendance.Infrastructure.Repositories
         public IOtFormBatchEmailTokenRepository OtFormBatchEmailTokens { get; }
         public IJobTitleRepository JobTitles { get; }
         public IDepartmentApprovalStepRepository DepartmentApprovalSteps { get; }
+        public IGroupApprovalStepRepository GroupApprovalSteps { get; }
         public IOtFormApprovalStepRepository OtFormApprovalSteps { get; }
         public IOtFormApprovalStepCandidateRepository OtFormApprovalStepCandidates { get; }
+        public IJobTitlePermissionRepository JobTitlePermissions { get; }
     }
 }

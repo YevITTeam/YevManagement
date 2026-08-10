@@ -56,7 +56,16 @@ namespace Identity.Infrastructure.Authentication
                 // making the system think it's an "unknown machine" and auto-create a duplicate User
                 // on every login. Trade-off: lost the "per-machine Role" feature of
                 // UserService.CreateUserAsync — now one UserName maps to exactly one User row.
+                // AsSplitQuery(): 3 collection Include riêng biệt (Roles.Permissions, LoginUserIPs,
+                // UserPermissions.Permission) trên CÙNG 1 query mặc định sinh ra 1 câu SQL JOIN nhân chéo
+                // (cartesian explosion) — số dòng trả về = tích số phần tử của cả 3 collection, càng
+                // phình to theo thời gian vì LoginUserIPs tích luỹ vĩnh viễn mỗi IP mới user từng đăng
+                // nhập. Vì hàm này chạy trên MỌI request có Bearer token (xem RolesLoaded ở trên), phần
+                // này từng là nguồn chậm chính còn sót lại sau khi đã cache reverse-DNS (2026-08-08, quan
+                // sát GET /Auth/me mất 1.5s dù DNS đã cache). AsSplitQuery tách thành 3 câu SQL riêng,
+                // đúng khuyến nghị chính thức của EF Core khi Include nhiều collection cùng lúc.
                 var user = await dbContext.Users
+                    .AsSplitQuery()
                     .Include(x => x.Roles).ThenInclude(r => r.Permissions)
                     .Include(x => x.LoginUserIPs)
                     .Include(x => x.UserPermissions).ThenInclude(up => up.Permission)

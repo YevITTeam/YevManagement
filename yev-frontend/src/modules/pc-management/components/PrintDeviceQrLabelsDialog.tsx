@@ -26,6 +26,9 @@ interface PrintDeviceQrLabelsDialogProps {
 
 // Mã thiết bị + số serial LUÔN hiển thị dạng chữ trên tem (không phải field để chọn) — các field còn
 // lại chỉ được NHÉT VÀO nội dung mã QR (hiện ra khi quét bằng điện thoại), không in chữ ra tem.
+// "deviceId" KHÔNG phải field để tick (yêu cầu người dùng 2026-08-10) — luôn nhét vào QR sẵn, cùng
+// nhóm "luôn có" với deviceCode/serialNumber, xem buildQrPayload. "deviceName" NGƯỢC LẠI vẫn là field
+// để tick bình thường (đợt trước lỡ bỏ ra rồi thêm lại đúng ý người dùng).
 type QrEncodedFieldKey = "deviceName" | "deviceTypeName" | "branchName" | "supplierName" | "manager" | "statusText" | "purchaseDate";
 
 // Thứ tự đúng như hợp đồng BE mô tả (docs/asset-api-fe.md §5.4b): tên/loại/xưởng/NCC/người dùng/trạng thái/ngày mua.
@@ -39,8 +42,9 @@ const FIELD_DEFS: { key: QrEncodedFieldKey; label: string }[] = [
     { key: "purchaseDate", label: "Ngày mua" },
 ];
 
-// Mặc định nhét sẵn TẤT CẢ field vào QR — tem vẫn gọn (chỉ mã + serial) mà quét QR ra đủ thông tin.
-const DEFAULT_ENCODED_FIELDS: QrEncodedFieldKey[] = FIELD_DEFS.map((field) => field.key);
+// Mặc định chỉ tích "Tên thiết bị" — deviceCode/serialNumber/deviceId LUÔN có sẵn trong QR (xem
+// buildQrPayload), user tự bật thêm field nào cần.
+const DEFAULT_ENCODED_FIELDS: QrEncodedFieldKey[] = ["deviceName"];
 
 function formatDate(value: string | null) {
     if (!value) return "-";
@@ -68,9 +72,16 @@ function encodedFieldLine(item: DeviceQrLabelDto, key: QrEncodedFieldKey): strin
 }
 
 // FE tự dựng qrPayload: dòng 1 LUÔN là deviceCode (app nội bộ tách dòng 1 để tra cứu), dòng 2 luôn là
-// serial (đã in sẵn trên tem nhưng vẫn nhét vào QR để quét đối chiếu), các dòng sau là field user chọn.
+// serial (đã in sẵn trên tem nhưng vẫn nhét vào QR để quét đối chiếu), dòng 3 luôn là deviceId (không
+// còn field để tick, yêu cầu người dùng 2026-08-10) — các dòng sau là field user chọn thêm (deviceName
+// mặc định đã tích sẵn, xem DEFAULT_ENCODED_FIELDS).
 function buildQrPayload(item: DeviceQrLabelDto, encodedFields: QrEncodedFieldKey[]) {
-    const lines = [item.deviceCode, `SN: ${item.serialNumber ?? "Không có"}`, ...encodedFields.map((key) => encodedFieldLine(item, key))];
+    const lines = [
+        item.deviceCode,
+        `SN: ${item.serialNumber ?? "Không có"}`,
+        `ID: ${item.deviceId}`,
+        ...encodedFields.map((key) => encodedFieldLine(item, key)),
+    ];
     return lines.join("\n");
 }
 

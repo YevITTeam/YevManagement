@@ -1,5 +1,7 @@
-// Cây duyệt cấu hình tay theo từng Phòng ban (2026-08-06) — xem docs/docs-be/attendance-module.md
-// §Cây chức vụ. Quản lý kiểu "thay nguyên danh sách" — không có Create/Update/Delete từng dòng riêng.
+// Cây duyệt cấu hình tay theo từng Bộ phận — CHỈ chứa 3 cấp duyệt CUỐI (Manager/Factory
+// Manager/Director, terminalLevel != 0). 3 cấp trung gian cấu hình ở GroupApprovalStep theo từng
+// Nhóm con thay vì ở đây (2026-08-08) — xem docs/docs-be/attendance-module.md §Cây chức vụ. Quản lý
+// kiểu "thay nguyên danh sách" — không có Create/Update/Delete từng dòng riêng.
 export interface DepartmentApprovalStepDto {
     id: number;
     departmentId: number;
@@ -9,10 +11,8 @@ export interface DepartmentApprovalStepDto {
     jobTitleName: string;
     rankOrder: number;
     requiresSignature: boolean;
-    // "Người chịu trách nhiệm" trên form in — Admin tự đánh dấu tường minh tối đa 1 bước/Phòng ban
-    // (2026-08-07). Chưa wiring vào OtForm thật (xem attendance-module.md §Cây chức vụ).
-    isResponsible: boolean;
-    // JobTitleTerminalLevel — 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
+    // JobTitleTerminalLevel — luôn khác 0 (None) cho bước ở đây: 1=DepartmentManager,
+    // 2=WorkshopManager, 3=GeneralDirector.
     terminalLevel: number;
 }
 
@@ -20,5 +20,4 @@ export interface DepartmentApprovalStepDto {
 export interface ReplaceDepartmentApprovalStepItem {
     jobTitleId: number;
     requiresSignature: boolean;
-    isResponsible: boolean;
 }

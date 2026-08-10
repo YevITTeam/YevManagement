@@ -33,8 +33,10 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<OtFormBatchEmailToken> OtFormBatchEmailTokens { get; set; }
     public virtual DbSet<JobTitle> JobTitles { get; set; }
     public virtual DbSet<DepartmentApprovalStep> DepartmentApprovalSteps { get; set; }
+    public virtual DbSet<GroupApprovalStep> GroupApprovalSteps { get; set; }
     public virtual DbSet<OtFormApprovalStep> OtFormApprovalSteps { get; set; }
     public virtual DbSet<OtFormApprovalStepCandidate> OtFormApprovalStepCandidates { get; set; }
+    public virtual DbSet<JobTitlePermission> JobTitlePermissions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -68,16 +70,6 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_Groups_Departments_DepartmentId");
-
-            entity.HasOne(d => d.RequesterEmployee).WithMany()
-                .HasForeignKey(d => d.RequesterEmployeeId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_Groups_Employees_Requester");
-
-            entity.HasOne(d => d.ResponsibleEmployee).WithMany()
-                .HasForeignKey(d => d.ResponsibleEmployeeId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_Groups_Employees_Responsible");
         });
 
         modelBuilder.Entity<Reason>(entity =>
@@ -151,6 +143,34 @@ public partial class AttendanceDbContext : DbContext
                 .HasConstraintName("FK_DepartmentApprovalSteps_JobTitles_JobTitleId");
         });
 
+        modelBuilder.Entity<GroupApprovalStep>(entity =>
+        {
+            entity.HasIndex(e => e.GroupId, "IX_GroupApprovalSteps_GroupId");
+            entity.HasIndex(e => e.JobTitleId, "IX_GroupApprovalSteps_JobTitleId");
+
+            entity.HasOne(d => d.Group).WithMany(p => p.GroupApprovalSteps)
+                .HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_GroupApprovalSteps_Groups_GroupId");
+
+            entity.HasOne(d => d.JobTitle).WithMany(p => p.GroupApprovalSteps)
+                .HasForeignKey(d => d.JobTitleId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_GroupApprovalSteps_JobTitles_JobTitleId");
+        });
+
+        modelBuilder.Entity<JobTitlePermission>(entity =>
+        {
+            entity.HasIndex(e => e.JobTitleId, "IX_JobTitlePermissions_JobTitleId");
+
+            entity.Property(e => e.PermissionCode).HasMaxLength(200);
+
+            entity.HasOne(d => d.JobTitle).WithMany(p => p.JobTitlePermissions)
+                .HasForeignKey(d => d.JobTitleId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_JobTitlePermissions_JobTitles_JobTitleId");
+        });
+
         modelBuilder.Entity<OtForm>(entity =>
         {
             entity.HasIndex(e => e.GroupId, "IX_OtForms_GroupId");
@@ -162,10 +182,6 @@ public partial class AttendanceDbContext : DbContext
 
             entity.Property(e => e.CreatedByUserName).HasMaxLength(100);
             entity.Property(e => e.CreatedByFullName).HasMaxLength(255);
-            entity.Property(e => e.RequesterFullName).HasMaxLength(100);
-            entity.Property(e => e.RequesterUserName).HasMaxLength(50);
-            entity.Property(e => e.ResponsibleFullName).HasMaxLength(100);
-            entity.Property(e => e.ResponsibleUserName).HasMaxLength(50);
             entity.Property(e => e.SubReason).HasMaxLength(500);
             entity.Property(e => e.TotalHour).HasPrecision(10, 2);
             entity.Property(e => e.DeletedByUserName).HasMaxLength(100);

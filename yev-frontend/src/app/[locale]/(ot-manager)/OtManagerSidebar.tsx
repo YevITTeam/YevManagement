@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, CalendarClock, Layers } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, Layers } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -14,8 +14,7 @@ interface OtNavItem {
     permission?: string;
 }
 
-// Permission theo từng mục — bảng Vai trò → Menu (docs/attendance-api-fe.md §1.1). "Lũy kế của tôi"
-// (otAccumulation) cố ý KHÔNG gắn permission — bất kỳ user đăng nhập nào cũng thấy được (§3.6/§1.4).
+// Permission theo từng mục — bảng Vai trò → Menu (docs/attendance-api-fe.md §1.1).
 const navItems: OtNavItem[] = [
     { key: "otCreate", href: "/ot/create", icon: FilePlus2, permission: "Attendance.OTForm.Create" },
     // Cách khác để tạo đơn — qua hội thoại AI thay vì form tay, kết quả vẫn là 1 đơn Draft y hệt
@@ -45,7 +44,6 @@ const navItems: OtNavItem[] = [
         icon: KeyRound,
         permission: "Attendance.SecondaryPassword.Update",
     },
-    { key: "otAccumulation", href: "/ot/accumulation", icon: CalendarClock },
 ];
 
 export default function OtManagerSidebar() {

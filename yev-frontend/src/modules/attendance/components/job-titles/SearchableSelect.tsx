@@ -7,9 +7,8 @@ const inputClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 // Combobox nhỏ dùng chung trong module job-titles: gõ để lọc, click chọn, Escape/blur để đóng.
-// Không phụ thuộc thư viện ngoài — tách ra từ ApprovalChainPreviewPanel.tsx (2026-08-07) để
-// DepartmentApprovalStepManager.tsx dùng lại cho ô "+ Thêm người giữ" (danh sách nhân viên có thể
-// dài, gõ tìm nhanh hơn cuộn <select> thường nhiều).
+// Không phụ thuộc thư viện ngoài — dùng trong ApprovalStepManager.tsx cho các ô chọn Bộ phận/Nhóm
+// và ô "+ Thêm người giữ" (danh sách có thể dài, gõ tìm nhanh hơn cuộn <select> thường nhiều).
 
 export interface SelectOption {
     value: number;

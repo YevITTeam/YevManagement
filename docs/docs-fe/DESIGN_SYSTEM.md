@@ -234,6 +234,11 @@ outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]
 - **Filter đơn giản** (1 ô + nút tìm): toolbar `border-b border-[#e0e3e5] bg-[#f8fafc] p-4`, input `w-64`, nút "Tìm kiếm" = secondary.
 - **Filter nâng cao** (`DeviceFilterBar`): mỗi field bọc `<label>` + overline; input/select có icon `lucide-react` tuyệt đối trái (`absolute left-3 top-1/2 -translate-y-1/2`, input thêm `pl-9`); nút "Bộ lọc nâng cao" có badge đếm `rounded-full bg-[#e3000f] text-white`; filter đang bật hiện dạng **chip** `rounded-full border bg-[#f8fafc]` kèm nút `X`.
 - **Dữ liệu dropdown** (chi nhánh, loại thiết bị, NCC…) phải gọi API tương ứng trong `useEffect` (có cờ `isCancelled`), **không hard-code**.
+- **Dropdown nhiều item phải có ô tìm kiếm.** `<select>` HTML thường chỉ chấp nhận được khi danh sách
+  ngắn, cố định (vài mục trở xuống — vd 3 Chức vụ cùng cấp). Danh sách có thể dài/tăng theo dữ liệu
+  thật (Bộ phận, Nhóm, Nhân viên, …) **phải** dùng combobox có ô gõ tìm thay vì `<select>` cuộn tay —
+  xem `modules/attendance/components/job-titles/SearchableSelect.tsx` (không phụ thuộc thư viện
+  ngoài, filter theo `searchText` lowercase rộng hơn `label`).
 
 ### 4.4. Table
 

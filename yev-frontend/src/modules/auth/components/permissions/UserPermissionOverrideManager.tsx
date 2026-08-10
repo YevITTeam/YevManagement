@@ -29,7 +29,11 @@ export default function UserPermissionOverrideManager() {
 
     // Baseline quyền theo Role của user đang chọn (suy ra từ override + effective tại thời điểm tải) — không đổi khi user tick chọn trên UI.
     const [roleBaselineIds, setRoleBaselineIds] = useState<Set<number>>(new Set());
-    // Lựa chọn override đang chỉnh trên UI (chưa lưu).
+    // Permission đang được Chức vụ (Attendance) tự động cấp — CHỈ để hiển thị, KHÔNG nằm trong
+    // `choices` (không đi vào payload lưu) trừ khi Admin chủ động bấm đổi (khi đó thao tác tay
+    // "chiếm" luôn dòng đó, xem PermissionService.UpdateUserPermissionOverridesAsync ở BE).
+    const [autoGrantedIds, setAutoGrantedIds] = useState<Set<number>>(new Set());
+    // Lựa chọn override đang chỉnh trên UI (chưa lưu) — chỉ gồm override THỦ CÔNG.
     const [choices, setChoices] = useState<Map<number, OverrideChoice>>(new Map());
 
     const [isSaving, setIsSaving] = useState(false);
@@ -63,6 +67,8 @@ export default function UserPermissionOverrideManager() {
             const overrideByPermissionId = new Map(overrides.map((o) => [o.permissionId, o.isGranted]));
 
             // roleHasAccess = hasOverride ? !isGranted : effectiveHasAccess (không override thì effective = role).
+            // Đúng cho CẢ override thủ công lẫn tự động — "roleHasAccess" luôn nghĩa là "Role một mình
+            // (không tính bất kỳ override nào) có cấp quyền này không", không phụ thuộc nguồn override.
             const baseline = new Set<number>();
             for (const permission of flatPermissions.length > 0 ? flatPermissions : effective) {
                 const override = overrideByPermissionId.get(permission.id);
@@ -70,17 +76,24 @@ export default function UserPermissionOverrideManager() {
                 if (roleHasAccess) baseline.add(permission.id);
             }
 
+            // Tách 2 loại override: tự động theo Chức vụ (chỉ hiển thị, không đưa vào choices để lưu)
+            // và thủ công (đưa vào choices như cũ) — nếu gộp chung, mỗi lần Admin bấm Lưu (dù chỉ sửa
+            // 1 quyền khác) sẽ vô tình gửi lại TOÀN BỘ quyền tự động như thể Admin vừa tự tay cấp,
+            // biến chúng thành override thủ công vĩnh viễn (không còn tự thu hồi được khi đổi Chức vụ).
+            const autoGranted = new Set<number>();
             const nextChoices = new Map<number, OverrideChoice>();
-            overrideByPermissionId.forEach((isGranted, permissionId) => {
-                nextChoices.set(permissionId, isGranted ? "grant" : "deny");
+            overrides.forEach((o) => {
+                if (o.isAutoGranted) autoGranted.add(o.permissionId);
+                else nextChoices.set(o.permissionId, o.isGranted ? "grant" : "deny");
             });
 
-            return { baseline, nextChoices };
+            return { baseline, autoGranted, nextChoices };
         },
         [selectedUserId, flatPermissions],
         (result) => {
             if (!result) return;
             setRoleBaselineIds(result.baseline);
+            setAutoGrantedIds(result.autoGranted);
             setChoices(result.nextChoices);
         },
         "Không thể tải quyền của người dùng này."
@@ -234,8 +247,12 @@ export default function UserPermissionOverrideManager() {
                                                         {entityGroup.permissions.map((permission) => {
                                                             const choice = choices.get(permission.id) ?? "inherit";
                                                             const roleHasAccess = roleBaselineIds.has(permission.id);
+                                                            const isAutoGranted = autoGrantedIds.has(permission.id);
+                                                            // Chưa bị override tay thì hiệu lực = Role HOẶC Chức vụ tự cấp — bấm
+                                                            // "Thu hồi"/"Cấp thêm" sẽ tạo override tay, lúc đó "chiếm" hẳn dòng này
+                                                            // (xem PermissionService.UpdateUserPermissionOverridesAsync).
                                                             const effectiveHasAccess =
-                                                                choice === "grant" ? true : choice === "deny" ? false : roleHasAccess;
+                                                                choice === "grant" ? true : choice === "deny" ? false : roleHasAccess || isAutoGranted;
 
                                                             return (
                                                                 <div
@@ -253,6 +270,14 @@ export default function UserPermissionOverrideManager() {
                                                                         <span className="text-xs text-[#5e3f3a]">
                                                                             ({roleHasAccess ? "có theo Role" : "không có theo Role"})
                                                                         </span>
+                                                                        {isAutoGranted && choice === "inherit" && (
+                                                                            <span
+                                                                                title="Đang được tự động cấp theo Chức vụ hiện tại của người này (Attendance) — đổi/gỡ Chức vụ sẽ tự thu hồi. Bấm Thu hồi/Cấp thêm bên phải để ghi đè tay."
+                                                                                className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700"
+                                                                            >
+                                                                                Tự động (Chức vụ)
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                     <div className="flex flex-shrink-0 overflow-hidden rounded-full border border-[#e0e3e5] text-xs">
                                                                         {(

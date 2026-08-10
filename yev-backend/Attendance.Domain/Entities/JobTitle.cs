@@ -27,4 +27,8 @@ public partial class JobTitle
     public virtual ICollection<Employee> Employees { get; set; } = new List<Employee>();
 
     public virtual ICollection<DepartmentApprovalStep> DepartmentApprovalSteps { get; set; } = new List<DepartmentApprovalStep>();
+
+    public virtual ICollection<GroupApprovalStep> GroupApprovalSteps { get; set; } = new List<GroupApprovalStep>();
+
+    public virtual ICollection<JobTitlePermission> JobTitlePermissions { get; set; } = new List<JobTitlePermission>();
 }

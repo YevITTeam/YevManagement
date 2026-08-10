@@ -28,6 +28,10 @@ export interface UserPermissionOverrideDto {
     module: string;
     description: string;
     isGranted: boolean;
+    // true = dòng này do Attendance (JobTitlePermission) tự động cấp theo Chức vụ đang giữ, KHÔNG
+    // phải Admin cấp tay — FE loại các dòng này khỏi payload PUT để tránh "chiếm" chúng thành override
+    // tay mỗi khi Admin lưu màn này cho lý do khác (2026-08-10, xem UserPermissionOverrideManager.tsx).
+    isAutoGranted: boolean;
 }
 
 // body PUT /api/Permission/user/{userId} — TOÀN BỘ override sau cùng (thay thế hết override cũ).

@@ -65,7 +65,7 @@ Cấu trúc bảng thật trên phiếu (đã dump từng ô qua Word COM để 
 | Copy / コピー | "Có / 有" hoặc "Không / 無" | `processPart.isUseCopyRoom` |
 | Đề nghị khác / その他 | free text | `processPart.anotherSuggestionVn` (+ `anotherSuggestionJp` nếu cần song ngữ) |
 
-> ⚠️ **`processPart.mainTicketCount`/`secondaryTicketCount`/`milkCount` (phiếu chính/phiếu phụ/sữa) — 3 field này ĐÃ có trong DB (migration `AddMealTicketCountsToProcessPart`, 2026-07-16) nhưng KHÔNG tồn tại ô nào tương ứng trên mẫu phiếu `YEV-22-024 (Lần 5)` đã kiểm tra** (đã dump từng cell của bảng "Phần xử lý", chỉ có 4 cột Ăn uống/Xe/Copy/Đề nghị khác, không có ô đếm số phiếu). Khả năng: (a) 3 field này phục vụ 1 phiếu/quy trình khác chưa có trong `docs/`, hoặc (b) mẫu phiếu sẽ được cập nhật lần ban hành tiếp theo để thêm ô này, hoặc (c) 3 field bị thêm nhầm/thừa. **Cần xác nhận lại với người yêu cầu nghiệp vụ trước khi quyết định có in 3 số này ra PDF hay không, in ở đâu.**
+> **Đã chốt (2026-08-10)**: `processPart.mainTicketCount`/`secondaryTicketCount`/`milkCount` (phiếu chính/phiếu phụ/sữa) — 3 field này có trong DB từ trước (migration `AddMealTicketCountsToProcessPart`, 2026-07-16) nhưng KHÔNG có ô riêng nào trên mẫu phiếu `YEV-22-024 (Lần 5)` gốc. Theo yêu cầu người dùng, in đè cả 3 số này ngay **bên trong ô "Ăn / 食べる"** (không có ô riêng trên giấy), chỉ khi `isEat=true` — và khi đó KHÔNG còn tick dấu ✓ nữa, thay hẳn bằng 3 dòng (cỡ chữ nhỏ 6pt vì ô gốc rất hẹp): `P.Chính: {mainTicketCount}`, `P.Phụ: {secondaryTicketCount}`, `P.Sữa: {milkCount}`. Xem `OtFormPrintView.tsx` → `FormHeaderFields`, ô `checkbox.an`.
 
 ## 5. Khối "Danh sách nhân viên làm ngoài giờ / 社員の残業一覧"
 

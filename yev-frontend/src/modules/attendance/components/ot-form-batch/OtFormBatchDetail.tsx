@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { X } from "lucide-react";
+import { Car, Check, MessageCircle, Printer, Utensils, X } from "lucide-react";
 
 import { OtFormBatchApi } from "@/modules/attendance/api/ot-form-batch.api";
 import type { OtFormBatchDto, ProcessOtFormBatchFormDto } from "@/modules/attendance/types/ot-form-batch.dto";
@@ -11,6 +11,7 @@ import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { calculateHours, formatHours } from "@/modules/attendance/lib/time";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { useRouter } from "@/navigation";
 
 function formatDate(value: string) {
@@ -42,10 +43,39 @@ type OtFormBatchDetailProps = { variant: "app"; id: number } | { variant: "email
 // docs/attendance-api-fe.md §Đơn tổng. Mặc định mọi nhân viên/đơn nhỏ đều được Duyệt — Trưởng phòng bỏ
 // chọn từng nhân viên không muốn cho OT, hoặc bấm "Từ chối" cả 1 đơn nhỏ, rồi duyệt 1 lần cho phần còn
 // lại (mỗi đơn nhỏ tiếp tục đúng luồng duyệt hiện có, không đổi gì ở đó).
+// Ô ngắn gọn cho 1 mục "Yêu cầu hỗ trợ khác" — bản rút gọn của ProcessPartTile ở OtFormDetail.tsx, chỉ
+// khác về kích cỡ (nhiều đơn xếp chồng trong 1 batch nên không dùng khung to bằng màn chi tiết đơn lẻ).
+function CompactProcessPartTile({ icon, label, active, activeLabel, inactiveLabel }: {
+    icon: React.ReactNode;
+    label: string;
+    active: boolean;
+    activeLabel: string;
+    inactiveLabel: string;
+}) {
+    return (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs">
+            <span className="flex items-center gap-1.5 text-[#191c1e]">
+                <span className="text-[#5e3f3a]">{icon}</span>
+                {label}
+            </span>
+            <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold ${
+                    active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-[#e0e3e5] bg-white text-[#8a8f94]"
+                }`}
+            >
+                {active ? <Check size={11} /> : <X size={11} />}
+                {active ? activeLabel : inactiveLabel}
+            </span>
+        </div>
+    );
+}
+
 export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
     const t = useTranslations("Attendance.OtFormBatchDetail");
+    const tDetail = useTranslations("Attendance.OtFormDetail");
     const tCommon = useTranslations("Common");
     const router = useRouter();
+    const { setting } = useAttendanceSetting();
 
     const [batch, setBatch] = useState<OtFormBatchDto | null>(null);
     const [decisions, setDecisions] = useState<Record<number, FormDecisionState>>({});
@@ -156,7 +186,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
     const isDone = processedResult || batch.status === 1;
 
     return (
-        <div className="mx-auto max-w-5xl space-y-6">
+        <div className="mx-auto max-w-7xl space-y-6">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{t("titleWithId", { id: batch.id })}</h1>
@@ -199,6 +229,11 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                 {formatTime(form.startTime)}–{formatTime(form.endTime)} · {t("createdByLabel")}:{" "}
                                                 {form.createdByFullName ?? form.createdByUserName}
                                             </div>
+                                            {form.subReason && (
+                                                <div className="mt-0.5 text-xs text-[#5e3f3a]">
+                                                    <span className="font-semibold text-[#191c1e]">{tDetail("subReasonLabel")}:</span> {form.subReason}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex gap-2">
                                             <button
@@ -226,6 +261,57 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                         </div>
                                     </div>
 
+                                    <div className="border-b border-[#e0e3e5] px-6 py-4">
+                                        <div className="mb-2.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                            {tDetail("processPartTitle")}
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                            <CompactProcessPartTile
+                                                icon={<Utensils size={14} />}
+                                                label={tDetail("eatFieldLabel")}
+                                                active={Boolean(form.processPart?.isEat)}
+                                                activeLabel={tDetail("yes")}
+                                                inactiveLabel={tDetail("no")}
+                                            />
+                                            <CompactProcessPartTile
+                                                icon={<Car size={14} />}
+                                                label={tDetail("transportationFieldLabel")}
+                                                active={Boolean(form.processPart?.isTransportation)}
+                                                activeLabel={tDetail("yes")}
+                                                inactiveLabel={tDetail("no")}
+                                            />
+                                            <CompactProcessPartTile
+                                                icon={<Printer size={14} />}
+                                                label={tDetail("copyRoomFieldLabel")}
+                                                active={Boolean(form.processPart?.isUseCopyRoom)}
+                                                activeLabel={tDetail("yes")}
+                                                inactiveLabel={tDetail("no")}
+                                            />
+                                        </div>
+                                        {form.processPart?.isEat && (
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-1 text-xs font-medium text-[#5e3f3a]">
+                                                    {tDetail("mainTicketLabel", { count: form.processPart.mainTicketCount })}
+                                                </span>
+                                                <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-1 text-xs font-medium text-[#5e3f3a]">
+                                                    {tDetail("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}
+                                                </span>
+                                                <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-1 text-xs font-medium text-[#5e3f3a]">
+                                                    {tDetail("milkLabel", { count: form.processPart.milkCount })}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {form.processPart?.anotherSuggestionVn && (
+                                            <div className="mt-2 flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
+                                                <MessageCircle size={14} className="mt-0.5 shrink-0 text-[#5e3f3a]" />
+                                                <span>
+                                                    <span className="font-semibold text-[#191c1e]">{tDetail("anotherSuggestionFieldLabel")}: </span>
+                                                    {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {state.decision === 1 ? (
                                         <div className="px-6 py-4">
                                             <label className="block">
@@ -250,12 +336,19 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                         <th className="px-6 py-2.5">{t("colFullName")}</th>
                                                         <th className="px-6 py-2.5">{t("colTime")}</th>
                                                         <th className="px-6 py-2.5 text-center">{t("colHours")}</th>
+                                                        <th className="px-6 py-2.5 text-center">{tDetail("colMonth")}</th>
+                                                        <th className="px-6 py-2.5 text-center">{tDetail("colYear")}</th>
+                                                        <th className="px-6 py-2.5 text-center">{tDetail("colMeal")}</th>
+                                                        <th className="px-6 py-2.5 text-center">{tDetail("colDidEat")}</th>
+                                                        <th className="px-6 py-2.5">{tDetail("colNote")}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {form.employees.map((employee) => {
                                                         const isExcluded = state.excludedEmployeeIds.has(employee.employeeId);
                                                         const hours = calculateHours(employee.startTime, employee.endTime);
+                                                        const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
+                                                        const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
                                                         return (
                                                             <tr key={employee.employeeId} className={`border-b border-[#f1f5f9] ${isExcluded ? "opacity-50" : ""}`}>
                                                                 <td className="px-6 py-2.5">
@@ -276,6 +369,38 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                                     {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
                                                                 </td>
                                                                 <td className="px-6 py-2.5 text-center text-sm text-[#191c1e]">{formatHours(hours)}</td>
+                                                                <td className={`px-6 py-2.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                                                    {employee.monthToDate}h
+                                                                </td>
+                                                                <td className={`px-6 py-2.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                                                    {employee.yearToDate}h
+                                                                </td>
+                                                                <td className="px-6 py-2.5 text-center text-sm text-[#5e3f3a]">
+                                                                    {employee.isEligibleForMeal ? (
+                                                                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50">
+                                                                            <Check size={13} className="text-emerald-600" />
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-[#9aa0a6]">—</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-2.5 text-center text-sm">
+                                                                    {!employee.isEligibleForMeal ? (
+                                                                        <span className="text-[#9aa0a6]">—</span>
+                                                                    ) : employee.didEat ? (
+                                                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                                                                            <Check size={11} /> {tDetail("didEatYes")}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span
+                                                                            className="inline-flex items-center gap-1 rounded-full border border-[#f5d0a9] bg-[#fff4e5] px-2 py-0.5 text-xs font-semibold text-[#9a5b00]"
+                                                                            title={tDetail("didEatNoHint")}
+                                                                        >
+                                                                            <X size={11} /> {tDetail("didEatNo")}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-2.5 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
                                                             </tr>
                                                         );
                                                     })}

@@ -19,4 +19,9 @@ public partial class AttendanceSetting
 
     // Yearly OT hour limit — same semantics as MonthlyOtHourLimit. Default 300.
     public decimal YearlyOtHourLimit { get; set; }
+
+    // Giờ trong ngày OtFormBatchBackgroundService chạy gom "Đơn tổng" (giờ Việt Nam, khớp
+    // TimeHelper.GetCurrentUtcTime()). Default 15:00 — trước đây hardcode trong background service,
+    // chuyển vào đây để Admin tự đổi không cần build lại (2026-08-08).
+    public TimeOnly BatchAutoSendTime { get; set; }
 }

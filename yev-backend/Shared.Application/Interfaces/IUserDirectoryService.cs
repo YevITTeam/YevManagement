@@ -16,5 +16,18 @@ namespace Shared.Application.Interfaces
         // (`Quản lý tăng ca`), luật "ai được gán quyền duyệt ở cấp nào" không còn tra được theo tên Role
         // nữa, phải tra theo permission (xem docs/attendance-module.md).
         Task<bool> UserHasPermissionAsync(string userName, string permissionCode);
+
+        // Đồng bộ permission "tự động cấp theo Chức vụ" cho 1 UserName (2026-08-10 — xem
+        // docs/docs-be/attendance-module.md §Cây chức vụ, mục "Quyền theo Chức vụ"). Gọi mỗi khi
+        // Attendance.EmployeeService lưu 1 Employee mà JobTitleId/UserName đổi, và mỗi khi
+        // JobTitlePermissionService.ReplaceAsync sửa mapping của 1 Chức vụ.
+        //   - userName null/rỗng hoặc không khớp User nào ở Identity → no-op (nhân viên chưa có tài
+        //     khoản đăng nhập để cấp — khi sau này UserName được gán, lần sync tiếp theo sẽ tự cấp,
+        //     không cần thao tác gì thêm).
+        //   - desiredPermissionCodes RỖNG → thu hồi hết mọi permission đang IsAutoGranted=true của
+        //     user đó (dùng khi gỡ Chức vụ, đổi UserName sang người khác, hoặc xoá Employee).
+        //   - Chỉ ghi/xoá các dòng UserPermission có IsAutoGranted=true — KHÔNG BAO GIỜ đụng tới dòng
+        //     Admin cấp tay qua "Tuỳ chỉnh quyền" (IsAutoGranted=false), dù trùng permission.
+        Task SyncAutoGrantedPermissionsAsync(string? userName, IReadOnlyCollection<string> desiredPermissionCodes);
     }
 }

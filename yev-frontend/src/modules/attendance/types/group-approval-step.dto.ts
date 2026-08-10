@@ -1,0 +1,26 @@
+// Cây duyệt cấu hình tay theo từng Nhóm (2026-08-08) — CHỈ chứa 3 cấp trung gian dưới Manager
+// (Staff/Group Leader/Team Leader, terminalLevel=0/None). 3 cấp cuối vẫn cấu hình ở
+// DepartmentApprovalStep theo Bộ phận — xem docs/docs-be/attendance-module.md §Cây chức vụ. Quản lý
+// kiểu "thay nguyên danh sách" — không có Create/Update/Delete từng dòng riêng (mirror
+// department-approval-step.dto.ts).
+export interface GroupApprovalStepDto {
+    id: number;
+    groupId: number;
+    stepOrder: number;
+    jobTitleId: number;
+    jobTitleCode: string;
+    jobTitleName: string;
+    rankOrder: number;
+    requiresSignature: boolean;
+    // "Người chịu trách nhiệm" trên form in — Admin tự đánh dấu tường minh tối đa 1 bước/Nhóm.
+    isResponsible: boolean;
+    // JobTitleTerminalLevel — luôn = 0 (None) cho bước ở đây.
+    terminalLevel: number;
+}
+
+// Payload PUT /by-group/{groupId} — thứ tự phần tử trong mảng chính là StepOrder.
+export interface ReplaceGroupApprovalStepItem {
+    jobTitleId: number;
+    requiresSignature: boolean;
+    isResponsible: boolean;
+}

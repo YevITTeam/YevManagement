@@ -107,7 +107,8 @@ namespace Identity.Application.Services
                     Code = x.Permission.Code,
                     Module = x.Permission.Module,
                     Description = x.Permission.Description,
-                    IsGranted = x.IsGranted
+                    IsGranted = x.IsGranted,
+                    IsAutoGranted = x.IsAutoGranted
                 }).ToList();
         }
 
@@ -154,30 +155,65 @@ namespace Identity.Application.Services
             if (overlap)
                 throw new DomainException("1 permission không thể vừa cấp thêm vừa thu hồi cùng lúc cho 1 người dùng.");
 
-            var existingOverrides = await _unitOfWork.UserPermissions.FindAsync(x => x.UserId == dto.UserId);
-            foreach (var existing in existingOverrides)
+            // Chỉ xoá phần Admin đã cấp TAY (IsAutoGranted=false) — KHÔNG đụng tới phần Chức vụ tự
+            // cấp (IsAutoGranted=true, xem JobTitlePermission/EmployeeService), nếu không mỗi lần
+            // Admin lưu màn này cho 1 người sẽ vô tình xoá sạch mọi permission do Chức vụ họ đang giữ
+            // tự cấp (FE cũng không gửi những dòng đó lên nữa — xem UserPermissionOverrideManager.tsx).
+            var existingManualOverrides = await _unitOfWork.UserPermissions.FindAsync(x => x.UserId == dto.UserId && !x.IsAutoGranted);
+            foreach (var existing in existingManualOverrides)
             {
                 _unitOfWork.UserPermissions.Delete(existing);
             }
 
+            // Nếu Admin tick tay đúng permission đang IsAutoGranted=true — thao tác tay "chiếm quyền"
+            // dòng đó luôn. SỬA TẠI CHỖ (Update) trên đúng entity đang tracked thay vì Delete rồi Add
+            // 1 entity mới CÙNG khoá chính (UserId, PermissionId) trong cùng 1 SaveChanges — EF Core
+            // không tách được 2 thao tác đó thành DELETE-rồi-INSERT đúng như mong đợi (đã tự kiểm
+            // chứng: IsAutoGranted của dòng cũ "sống sót" qua Add mới, chỉ IsGranted đổi), Update tại
+            // chỗ tránh hẳn việc phải trông cậy vào hành vi đó.
+            var touchedIds = dto.GrantPermissionIds.Concat(dto.DenyPermissionIds).ToHashSet();
+            var existingAutoOverridesBeingClaimed = await _unitOfWork.UserPermissions.FindAsync(
+                x => x.UserId == dto.UserId && x.IsAutoGranted && touchedIds.Contains(x.PermissionId));
+            var claimedByPermissionId = existingAutoOverridesBeingClaimed.ToDictionary(x => x.PermissionId);
+
             foreach (var permissionId in dto.GrantPermissionIds)
             {
-                await _unitOfWork.UserPermissions.AddAsync(new UserPermission
+                if (claimedByPermissionId.TryGetValue(permissionId, out var claimed))
                 {
-                    UserId = dto.UserId,
-                    PermissionId = permissionId,
-                    IsGranted = true
-                });
+                    claimed.IsGranted = true;
+                    claimed.IsAutoGranted = false;
+                    _unitOfWork.UserPermissions.Update(claimed);
+                }
+                else
+                {
+                    await _unitOfWork.UserPermissions.AddAsync(new UserPermission
+                    {
+                        UserId = dto.UserId,
+                        PermissionId = permissionId,
+                        IsGranted = true,
+                        IsAutoGranted = false
+                    });
+                }
             }
 
             foreach (var permissionId in dto.DenyPermissionIds)
             {
-                await _unitOfWork.UserPermissions.AddAsync(new UserPermission
+                if (claimedByPermissionId.TryGetValue(permissionId, out var claimed))
                 {
-                    UserId = dto.UserId,
-                    PermissionId = permissionId,
-                    IsGranted = false
-                });
+                    claimed.IsGranted = false;
+                    claimed.IsAutoGranted = false;
+                    _unitOfWork.UserPermissions.Update(claimed);
+                }
+                else
+                {
+                    await _unitOfWork.UserPermissions.AddAsync(new UserPermission
+                    {
+                        UserId = dto.UserId,
+                        PermissionId = permissionId,
+                        IsGranted = false,
+                        IsAutoGranted = false
+                    });
+                }
             }
 
             await _unitOfWork.SaveChangesAsync();

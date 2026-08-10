@@ -1,5 +1,5 @@
 import { api } from "@/lib/client";
-import type { AdjustEmployeeAccumulationDto, EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -10,8 +10,6 @@ const ENDPOINTS = {
         getEmployeesByGroup: (groupId: number) => `/Employee/by-group/${groupId}`,
         getEmployeesByDepartment: (departmentId: number) => `/Employee/by-department/${departmentId}`,
         getEmployeeByUsername: (userName: string) => `/Employee/by-username/${encodeURIComponent(userName)}`,
-        getMe: "/Employee/me",
-        adjustAccumulation: (id: number) => `/Employee/${id}/adjust-accumulation`,
         createEmployee: "/Employee",
         updateEmployee: (id: number) => `/Employee/${id}`,
         deleteEmployee: (id: number) => `/Employee/${id}`,
@@ -78,16 +76,6 @@ export const EmployeeApi = {
     // caller tự bắt lỗi và coi như "không có gợi ý" thay vì báo lỗi.
     getEmployeeByUsername: async (userName: string) => {
         const response = await api.get<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.getEmployeeByUsername(userName));
-        return response.data;
-    },
-    // Không cần permission — chỉ cần đăng nhập. 404 nếu chưa được Admin gán userName (docs §3.6).
-    getMe: async () => {
-        const response = await api.get<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.getMe);
-        return response.data;
-    },
-    // Không cần permission Attendance.Employee.* — BE tự kiểm tra chính chủ hoặc Attendance.Employee.Update (docs §3.6).
-    adjustAccumulation: async (id: number, data: AdjustEmployeeAccumulationDto) => {
-        const response = await api.patch<ApiResponse<boolean>>(ENDPOINTS.EMPLOYEE.adjustAccumulation(id), data);
         return response.data;
     },
     createEmployee: async (data: CreateUpdateEmployeeDto) => {

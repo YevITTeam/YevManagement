@@ -15,10 +15,15 @@ namespace Attendance.Application.Dtos.OtFormBatches
         public DateOnly Date { get; set; }
         public TimeOnly StartTime { get; set; }
         public TimeOnly EndTime { get; set; }
+        public string? SubReason { get; set; }
         public decimal TotalHour { get; set; }
         public string CreatedByUserName { get; set; } = null!;
         public string? CreatedByFullName { get; set; }
         public int NumberOfEmployee { get; set; }
+
+        // Mới (2026-08-08) — Trưởng phòng cần thấy đủ chi tiết như màn Chi tiết đơn thường để quyết
+        // định Duyệt/Từ chối, không chỉ danh sách nhân viên rút gọn. Null nếu tạo đơn không gửi.
+        public ProcessPartDto? ProcessPart { get; set; }
 
         // Chỉ gồm nhân viên ĐANG active (chưa bị loại) — trùng nguyên tắc numberOfEmployee của OtForm.
         public List<OtFormEmployeeDto> Employees { get; set; } = new();

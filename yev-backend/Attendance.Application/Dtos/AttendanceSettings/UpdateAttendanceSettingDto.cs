@@ -15,5 +15,8 @@ namespace Attendance.Application.Dtos.AttendanceSettings
         [Required(ErrorMessage = "Giới hạn giờ OT trong năm không được để trống")]
         [Range(1, 8784, ErrorMessage = "Giới hạn giờ OT trong năm phải từ 1 đến 8784")]
         public decimal YearlyOtHourLimit { get; set; }
+
+        [Required(ErrorMessage = "Giờ tự động gửi đơn tổng không được để trống")]
+        public TimeOnly BatchAutoSendTime { get; set; }
     }
 }

@@ -225,12 +225,7 @@ namespace Attendance.Application.Services
                 NumberOfEmployee = otForm.NumberOfEmployee,
                 CreatedByUserName = otForm.CreatedByUserName,
                 CreatedByFullName = otForm.CreatedByFullName,
-                RequesterEmployeeId = otForm.RequesterEmployeeId,
-                RequesterFullName = otForm.RequesterFullName,
-                RequesterUserName = otForm.RequesterUserName,
-                ResponsibleEmployeeId = otForm.ResponsibleEmployeeId,
-                ResponsibleFullName = otForm.ResponsibleFullName,
-                ResponsibleUserName = otForm.ResponsibleUserName,
+                CreatorSignatureImage = otForm.CreatorSignatureImage,
                 Status = otForm.Status,
                 IsEditable = isEditable,
                 ApprovalChainWarning = otForm.ApprovalChainWarning,
@@ -317,42 +312,26 @@ namespace Attendance.Application.Services
             await EnsureNoOverlappingOtFormsAsync(
                 validatedEmployees, request.Date, request.StartTime, employeeEndTimes, excludeFormId: null);
 
-            // Lấy thông tin Requester & Responsible mặc định từ Group nếu không truyền từ client — tính
-            // năng KHÁC, không thuộc Cây chức vụ, giữ nguyên hành vi cũ (xem attendance-module.md).
-            int? requesterEmpId = request.RequesterEmployeeId ?? group.RequesterEmployeeId;
-            int? responsibleEmpId = request.ResponsibleEmployeeId ?? group.ResponsibleEmployeeId;
-
-            string? requesterFullName = null;
-            string? requesterUserName = null;
-            if (requesterEmpId.HasValue)
-            {
-                var reqEmp = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == requesterEmpId.Value);
-                if (reqEmp != null)
-                {
-                    requesterFullName = $"{reqEmp.LastName} {reqEmp.FirstName}";
-                    requesterUserName = reqEmp.UserName;
-                }
-            }
-
-            string? responsibleFullName = null;
-            string? responsibleUserName = null;
-            if (responsibleEmpId.HasValue)
-            {
-                var respEmp = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == responsibleEmpId.Value);
-                if (respEmp != null)
-                {
-                    responsibleFullName = $"{respEmp.LastName} {respEmp.FirstName}";
-                    responsibleUserName = respEmp.UserName;
-                }
-            }
-
             // Suy luận chuỗi duyệt tự động qua Cây chức vụ (2026-08-07, Giai đoạn 3.1) — Admin tạo hộ
             // (creatorEmployee null) coi như đứng ở cấp thấp nhất, không loại bước nào khỏi cây duyệt
             // của Department (xem JobTitleApprovalChainService.ResolveChainForCreationAsync). KHÔNG
             // chặn tạo đơn nếu chuỗi không đủ (plan §3 quyết định #10) — đơn vẫn tạo, kẹt ở bước thiếu
             // candidate, ApprovalChainWarning phản ánh rõ cho FE hiển thị cảnh báo.
             var chainResult = await _jobTitleApprovalChainService.ResolveChainForCreationAsync(
-                creatorEmployee?.Id, request.DepartmentId, request.OtCaseId);
+                creatorEmployee?.Id, request.GroupId, request.DepartmentId, request.OtCaseId);
+
+            // Người tạo đã ở cấp cao hơn/bằng MỌI Chức vụ trung gian "Bắt buộc ký" của Phòng ban — không
+            // còn ai khác để ký ô "Người đề nghị" thay họ, nên chính họ tự ký (2026-08-08, theo yêu cầu
+            // người dùng — xem ResolveApprovalChainResultDto.RequiresCreatorSelfSign). Chặn tạo đơn nếu
+            // chưa có chữ ký lưu sẵn, cùng message/cơ chế với ApproveAsync khi bước yêu cầu ký.
+            byte[]? creatorSignatureImage = null;
+            if (chainResult.RequiresCreatorSelfSign)
+            {
+                var creatorSignature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == createdByUserName);
+                if (creatorSignature == null)
+                    throw new DomainException("Bạn đang ở cấp cao nhất trong chuỗi duyệt trung gian của Phòng ban này — đơn cần chữ ký của chính bạn ở ô \"Người đề nghị\". Vui lòng đăng ký chữ ký (PUT /api/UserSignature/me) trước khi tạo đơn.");
+                creatorSignatureImage = creatorSignature.SignatureImage;
+            }
 
             var newOtForm = new OtForm
             {
@@ -368,12 +347,7 @@ namespace Attendance.Application.Services
                 NumberOfEmployee = request.Employees.Count,
                 CreatedByUserName = createdByUserName,
                 CreatedByFullName = createdByFullName,
-                RequesterEmployeeId = requesterEmpId,
-                RequesterFullName = requesterFullName,
-                RequesterUserName = requesterUserName,
-                ResponsibleEmployeeId = responsibleEmpId,
-                ResponsibleFullName = responsibleFullName,
-                ResponsibleUserName = responsibleUserName,
+                CreatorSignatureImage = creatorSignatureImage,
                 // Không còn giai đoạn Draft (2026-08-06 đã chốt) — tạo đơn = vào chuỗi ngay lập tức.
                 // CHỈ hoàn tất ngay khi Steps.Count == 0 VÀ IsComplete == true — tức người tạo đã ở cấp
                 // bằng/cao hơn cấp duyệt cuối (không có bước nào để duyệt). KHÔNG được chỉ xét
@@ -1195,6 +1169,13 @@ namespace Attendance.Application.Services
                     .GroupBy(x => x.OtFormId)
                     .ToDictionary(g => g.Key, g => g.ToList());
 
+            // Trưởng phòng cần thấy "Yêu cầu hỗ trợ khác" (ăn uống/xe đưa đón/phòng copy) như màn Chi
+            // tiết đơn thường — trước đây batch chỉ có bảng nhân viên rút gọn (2026-08-08).
+            var processPartsByFormId = activeFormIds.Count == 0
+                ? new Dictionary<int, ProcessPart>()
+                : (await _unitOfWork.ProcessParts.FindAsync(x => activeFormIds.Contains(x.OtFormId)))
+                    .ToDictionary(x => x.OtFormId);
+
             var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
 
             return new OtFormBatchDto
@@ -1220,10 +1201,22 @@ namespace Attendance.Application.Services
                     Date = f.Date,
                     StartTime = f.StartTime,
                     EndTime = f.EndTime,
+                    SubReason = f.SubReason,
                     TotalHour = f.TotalHour,
                     CreatedByUserName = f.CreatedByUserName,
                     CreatedByFullName = f.CreatedByFullName,
                     NumberOfEmployee = f.NumberOfEmployee,
+                    ProcessPart = !processPartsByFormId.TryGetValue(f.Id, out var pp) ? null : new ProcessPartDto
+                    {
+                        IsEat = pp.IsEat,
+                        MainTicketCount = pp.MainTicketCount,
+                        SecondaryTicketCount = pp.SecondaryTicketCount,
+                        MilkCount = pp.MilkCount,
+                        IsTransportation = pp.IsTransportation,
+                        IsUseCopyRoom = pp.IsUseCopyRoom,
+                        AnotherSuggestionVn = pp.AnotherSuggestionVn,
+                        AnotherSuggestionJp = pp.AnotherSuggestionJp
+                    },
                     Employees = !employeesByFormId.TryGetValue(f.Id, out var emps)
                         ? new List<OtFormEmployeeDto>()
                         : emps.Select(x => new OtFormEmployeeDto

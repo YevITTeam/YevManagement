@@ -81,8 +81,6 @@ export interface MyCreateScopeItemDto {
 export interface CreateOtFormDto {
     groupId: number;
     departmentId: number;
-    requesterEmployeeId?: number | null;
-    responsibleEmployeeId?: number | null;
     reasonId: number;
     otCaseId: number;
     startTime: string;
@@ -203,12 +201,10 @@ export interface OtFormDto {
     numberOfEmployee: number;
     createdByUserName: string;
     createdByFullName: string | null;
-    requesterEmployeeId: number | null;
-    requesterFullName: string | null;
-    requesterUserName: string | null;
-    responsibleEmployeeId: number | null;
-    responsibleFullName: string | null;
-    responsibleUserName: string | null;
+    // base64 — ảnh chữ ký của CHÍNH người tạo đơn, chỉ có giá trị khi người tạo đã ở cấp cao hơn/bằng
+    // mọi Chức vụ trung gian "Bắt buộc ký" của Phòng ban (tự ký ô "Người đề nghị", 2026-08-08). Xem
+    // OtFormPrintView.tsx.
+    creatorSignatureImage: string | null;
     status: number;
     isEditable: boolean;
     // Cảnh báo suy luận chuỗi lúc tạo đơn (null nếu chuỗi đầy đủ) — hiện banner cảnh báo trên UI nếu có.

@@ -14,6 +14,7 @@ const ENDPOINTS = {
         approve: (id: number) => `/OtFormBatch/${id}/approve`,
         emailConfirmGet: (token: string) => `/OtFormBatch/email-confirm/${encodeURIComponent(token)}`,
         emailConfirmApprove: (token: string) => `/OtFormBatch/email-confirm/${encodeURIComponent(token)}/approve`,
+        runNow: "/OtFormBatch/run-now",
     },
 } as const;
 
@@ -47,6 +48,12 @@ export const OtFormBatchApi = {
     },
     approveByEmailToken: async (token: string, data: ProcessOtFormBatchDto) => {
         const response = await api.post<ApiResponse<OtFormBatchDto>>(ENDPOINTS.OT_FORM_BATCH.emailConfirmApprove(token), data);
+        return response.data;
+    },
+    // Chạy ngay đợt gom "Đơn tổng" (bình thường tự chạy theo giờ cấu hình) — dùng khi test/cấp bách.
+    // Cần permission `Attendance.Setting.Update`, FE chỉ hiện nút này trong tab Cấu hình.
+    runNow: async () => {
+        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM_BATCH.runNow);
         return response.data;
     },
 };

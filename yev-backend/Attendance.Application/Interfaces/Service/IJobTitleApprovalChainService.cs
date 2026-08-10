@@ -12,9 +12,10 @@ namespace Attendance.Application.Interfaces.Service
 
         // Bản MỀM dùng bởi OtFormService.CreateAsync (2026-08-07, Giai đoạn 3.1) — KHÔNG ném lỗi nếu
         // creatorEmployeeId null (Admin tạo hộ, không phải Nhân viên của Group đó) hoặc nhân viên chưa
-        // gán Chức vụ: coi như đang ở cấp thấp nhất (không loại bước nào khỏi cây duyệt của Department).
-        // departmentId truyền trực tiếp (không suy ra qua Employee.Group) vì OtFormService đã có sẵn và
-        // đã validate đúng Department của đơn.
-        Task<ResolveApprovalChainResultDto> ResolveChainForCreationAsync(int? creatorEmployeeId, int departmentId, int otCaseId);
+        // gán Chức vụ: coi như đang ở cấp thấp nhất (không loại bước nào khỏi cây duyệt). groupId/
+        // departmentId truyền trực tiếp (không suy ra qua Employee.Group) vì OtFormService đã có sẵn
+        // và đã validate đúng Group/Department của đơn (2026-08-08: thêm groupId — cấp trung gian giờ
+        // đọc từ GroupApprovalStep theo đúng Nhóm thay vì cả Bộ phận).
+        Task<ResolveApprovalChainResultDto> ResolveChainForCreationAsync(int? creatorEmployeeId, int groupId, int departmentId, int otCaseId);
     }
 }

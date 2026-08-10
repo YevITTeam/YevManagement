@@ -74,6 +74,8 @@ public partial class IdentityDbContext : DbContext
         {
             entity.HasKey(e => new { e.UserId, e.PermissionId });
 
+            entity.Property(e => e.IsAutoGranted).HasDefaultValue(false);
+
             entity.HasOne(e => e.User).WithMany(u => u.UserPermissions)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);

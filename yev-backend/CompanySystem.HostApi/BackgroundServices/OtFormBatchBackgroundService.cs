@@ -3,15 +3,19 @@ using Shared.Application.Helper;
 
 namespace CompanySystem.HostApi.BackgroundServices
 {
-    // Runs a daily sweep (fixed 15:00): bundles every OT Form still un-batched and waiting on the
-    // Department Manager (OtFormStatus.Pending) into ONE NEW "Đơn tổng" per Department, and sends a
-    // reminder mail for every batch from a previous day that is still unresolved (see
-    // docs/attendance-module.md — §Đơn tổng). Same daily-delay + scoped-service pattern as
-    // DeviceLiquidationBackgroundService.
+    // Runs a daily sweep (giờ chạy đọc từ AttendanceSetting.BatchAutoSendTime, Admin tự đổi qua màn
+    // Cấu hình — mặc định 15:00, xem AttendanceSettingService.DefaultBatchAutoSendTime): bundles every
+    // OT Form still un-batched and waiting on the Department Manager (OtFormStatus.Pending) into ONE
+    // NEW "Đơn tổng" per Department, and sends a reminder mail for every batch from a previous day
+    // that is still unresolved (see docs/attendance-module.md — §Đơn tổng). Same daily-delay +
+    // scoped-service pattern as DeviceLiquidationBackgroundService.
+    //
+    // Giờ được đọc lại MỖI vòng lặp (không cache) — đổi cấu hình sẽ áp dụng cho lần tính delay TIẾP
+    // THEO (sau khi vòng chờ hiện tại kết thúc), không đánh thức sớm 1 vòng chờ đang Task.Delay dở —
+    // chấp nhận được vì đây là tác vụ chạy 1 lần/ngày, không cần phản hồi tức thời (cần gấp thì dùng
+    // nút "Gửi ngay" ở màn Cấu hình, xem OtFormBatchController.RunNow).
     public class OtFormBatchBackgroundService : BackgroundService
     {
-        private static readonly TimeSpan RunAtTimeOfDay = new(15, 0, 0);
-
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<OtFormBatchBackgroundService> _logger;
 
@@ -27,7 +31,7 @@ namespace CompanySystem.HostApi.BackgroundServices
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                var delay = GetDelayUntilNextRun();
+                var delay = await GetDelayUntilNextRunAsync();
                 try
                 {
                     await Task.Delay(delay, stoppingToken);
@@ -43,10 +47,14 @@ namespace CompanySystem.HostApi.BackgroundServices
             }
         }
 
-        private static TimeSpan GetDelayUntilNextRun()
+        private async Task<TimeSpan> GetDelayUntilNextRunAsync()
         {
+            using var scope = _scopeFactory.CreateScope();
+            var attendanceSettingService = scope.ServiceProvider.GetRequiredService<IAttendanceSettingService>();
+            var runAtTimeOfDay = (await attendanceSettingService.GetBatchAutoSendTimeAsync()).ToTimeSpan();
+
             var now = TimeHelper.GetCurrentUtcTime();
-            var nextRun = now.Date.Add(RunAtTimeOfDay);
+            var nextRun = now.Date.Add(runAtTimeOfDay);
             if (nextRun <= now) nextRun = nextRun.AddDays(1);
             return nextRun - now;
         }

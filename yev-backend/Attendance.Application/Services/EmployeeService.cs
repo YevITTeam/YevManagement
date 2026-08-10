@@ -3,6 +3,7 @@ using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
 using Shared.Application.Helper;
+using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
@@ -11,7 +12,12 @@ namespace Attendance.Application.Services
 {
     public class EmployeeService : BaseService<IAttendanceUnitOfWork>, IEmployeeService
     {
-        public EmployeeService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
+        private readonly IUserDirectoryService _userDirectoryService;
+
+        public EmployeeService(IAttendanceUnitOfWork unitOfWork, IUserDirectoryService userDirectoryService) : base(unitOfWork)
+        {
+            _userDirectoryService = userDirectoryService;
+        }
 
         public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId)
         {
@@ -249,6 +255,8 @@ namespace Attendance.Application.Services
             await _unitOfWork.Employees.AddAsync(newEmployee);
             await _unitOfWork.SaveChangesAsync();
 
+            await SyncJobTitlePermissionsAsync(newEmployee.JobTitleId, newEmployee.UserName);
+
             return await GetByIdAsync(newEmployee.Id);
         }
 
@@ -271,6 +279,10 @@ namespace Attendance.Application.Services
 
             var (groupId, departmentId) = await ValidateOrganizationAssignmentAsync(request.JobTitleId, request.GroupId, request.DepartmentId);
 
+            // Chụp lại UserName CŨ trước khi ghi đè — cần để thu hồi quyền tự động cấp khỏi tài khoản
+            // cũ nếu Employee này vừa được link sang 1 UserName khác (xem SyncJobTitlePermissionsAsync).
+            var oldUserName = employee.UserName;
+
             var now = TimeHelper.GetCurrentUtcTime();
             employee.Code = request.Code;
             employee.FirstName = request.FirstName;
@@ -286,6 +298,14 @@ namespace Attendance.Application.Services
 
             _unitOfWork.Employees.Update(employee);
             await _unitOfWork.SaveChangesAsync();
+
+            // Đổi sang UserName khác (không phải chỉ gỡ) — thu hồi quyền tự động đã cấp khỏi tài khoản
+            // cũ trước, tránh 1 tài khoản Identity giữ mãi quyền của 1 Employee không còn link tới nó.
+            if (!string.IsNullOrWhiteSpace(oldUserName) && oldUserName != employee.UserName)
+            {
+                await _userDirectoryService.SyncAutoGrantedPermissionsAsync(oldUserName, Array.Empty<string>());
+            }
+            await SyncJobTitlePermissionsAsync(employee.JobTitleId, employee.UserName);
         }
 
         public async Task DeleteAsync(int id)
@@ -297,28 +317,32 @@ namespace Attendance.Application.Services
 
             _unitOfWork.Employees.Update(employee);
             await _unitOfWork.SaveChangesAsync();
+
+            // Nhân viên bị xoá (mềm) không còn giữ Chức vụ nào theo nghĩa thực tế — thu hồi hết quyền
+            // tự động đã cấp cho tài khoản Identity link với họ (nếu có).
+            await _userDirectoryService.SyncAutoGrantedPermissionsAsync(employee.UserName, Array.Empty<string>());
+        }
+
+        // Tính lại danh sách permission "tự động cấp theo Chức vụ" cho đúng JobTitleId hiện tại rồi
+        // đồng bộ vào Identity qua IUserDirectoryService — no-op nếu chưa có UserName (chưa link tài
+        // khoản đăng nhập); khi UserName được gán sau này, lần gọi UpdateAsync đó sẽ tự cấp đúng bộ
+        // quyền hiện hành, không cần thao tác gì thêm (xem docs/docs-be/attendance-module.md §Cây
+        // chức vụ, mục "Quyền theo Chức vụ").
+        private async Task SyncJobTitlePermissionsAsync(int? jobTitleId, string? userName)
+        {
+            if (string.IsNullOrWhiteSpace(userName)) return;
+
+            var desiredCodes = jobTitleId.HasValue
+                ? (await _unitOfWork.JobTitlePermissions.FindAsync(x => x.JobTitleId == jobTitleId.Value && !x.IsDeleted))
+                    .Select(x => x.PermissionCode)
+                    .ToList()
+                : new List<string>();
+
+            await _userDirectoryService.SyncAutoGrantedPermissionsAsync(userName, desiredCodes);
         }
 
         // Nhân viên tự chỉnh lũy kế của chính mình (canAdjustAny=false, so khớp UserName), hoặc
         // người có quyền Attendance.Employee.Update chỉnh cho bất kỳ ai (canAdjustAny=true).
-        public async Task AdjustAccumulationAsync(int employeeId, string currentUserName, bool canAdjustAny, AdjustEmployeeAccumulationDto request)
-        {
-            var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
-            employee.OrThrowNotFound("Nhân viên", employeeId);
-
-            if (!canAdjustAny && employee!.UserName != currentUserName)
-                throw new DomainException("Bạn không có quyền chỉnh lũy kế của nhân viên này.");
-
-            var now = TimeHelper.GetCurrentUtcTime();
-            employee!.MonthToDate = request.MonthToDate;
-            employee.YearToDate = request.YearToDate;
-            employee.AccumulationYear = now.Year;
-            employee.AccumulationMonth = now.Month;
-
-            _unitOfWork.Employees.Update(employee);
-            await _unitOfWork.SaveChangesAsync();
-        }
-
         // Chốt GroupId/DepartmentId thật sự sẽ lưu, dựa theo TerminalLevel của Chức vụ được chọn
         // (2026-08-08 — xem docs/docs-be/attendance-module.md §Cây chức vụ):
         //   - Chưa gán Chức vụ / TerminalLevel=None (nhân viên thường): BẮT BUỘC GroupId, KHÔNG được gửi DepartmentId.

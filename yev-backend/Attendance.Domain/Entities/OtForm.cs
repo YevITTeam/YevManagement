@@ -37,17 +37,13 @@ public partial class OtForm
     // OtFormApprovalHistory.ApproverFullName.
     public string? CreatedByFullName { get; set; }
 
-    public int? RequesterEmployeeId { get; set; }
-
-    public string? RequesterFullName { get; set; }
-
-    public string? RequesterUserName { get; set; }
-
-    public int? ResponsibleEmployeeId { get; set; }
-
-    public string? ResponsibleFullName { get; set; }
-
-    public string? ResponsibleUserName { get; set; }
+    // Snapshot ảnh chữ ký của CHÍNH người tạo đơn (từ UserSignature lúc tạo) — chỉ có giá trị khi
+    // JobTitleApprovalChainService đánh giá người tạo đã ở cấp cao hơn/bằng MỌI Chức vụ trung gian
+    // "Bắt buộc ký" đã cấu hình cho Phòng ban (không còn ai khác để ký ô "Người đề nghị" thay họ) —
+    // xem ResolveApprovalChainResultDto.RequiresCreatorSelfSign, OtFormService.CreateAsync (2026-08-08,
+    // theo yêu cầu người dùng). "Người chịu trách nhiệm" dùng chung field này qua fallback
+    // createdByFullName có sẵn ở OtFormPrintView.tsx, không cần field riêng.
+    public byte[]? CreatorSignatureImage { get; set; }
 
     // Stores the Attendance.Domain.Enums.OtFormStatus enum as an int (following the same convention as
     // Asset.Domain.Entities.Device.Status).

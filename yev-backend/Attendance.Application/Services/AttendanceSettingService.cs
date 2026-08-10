@@ -16,6 +16,7 @@ namespace Attendance.Application.Services
         public const decimal DefaultMainMealTicketMinHours = 2m;
         public const decimal DefaultMonthlyOtHourLimit = 25m;
         public const decimal DefaultYearlyOtHourLimit = 300m;
+        public static readonly TimeOnly DefaultBatchAutoSendTime = new(15, 0);
 
         public AttendanceSettingService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
 
@@ -31,6 +32,7 @@ namespace Attendance.Application.Services
             setting.MainMealTicketMinHours = request.MainMealTicketMinHours;
             setting.MonthlyOtHourLimit = request.MonthlyOtHourLimit;
             setting.YearlyOtHourLimit = request.YearlyOtHourLimit;
+            setting.BatchAutoSendTime = request.BatchAutoSendTime;
 
             _unitOfWork.AttendanceSettings.Update(setting);
             await _unitOfWork.SaveChangesAsync();
@@ -44,11 +46,18 @@ namespace Attendance.Application.Services
             return setting.MainMealTicketMinHours;
         }
 
+        public async Task<TimeOnly> GetBatchAutoSendTimeAsync()
+        {
+            var setting = await GetOrCreateSettingEntityAsync();
+            return setting.BatchAutoSendTime;
+        }
+
         private static AttendanceSettingDto ToDto(AttendanceSetting setting) => new()
         {
             MainMealTicketMinHours = setting.MainMealTicketMinHours,
             MonthlyOtHourLimit = setting.MonthlyOtHourLimit,
             YearlyOtHourLimit = setting.YearlyOtHourLimit,
+            BatchAutoSendTime = setting.BatchAutoSendTime,
         };
 
         // Bảng luôn chỉ có đúng 1 dòng (seed ở migration). Tự tạo lại dòng mặc định nếu vì lý do nào đó
@@ -64,6 +73,7 @@ namespace Attendance.Application.Services
                 MainMealTicketMinHours = DefaultMainMealTicketMinHours,
                 MonthlyOtHourLimit = DefaultMonthlyOtHourLimit,
                 YearlyOtHourLimit = DefaultYearlyOtHourLimit,
+                BatchAutoSendTime = DefaultBatchAutoSendTime,
             };
             await _unitOfWork.AttendanceSettings.AddAsync(setting);
             await _unitOfWork.SaveChangesAsync();

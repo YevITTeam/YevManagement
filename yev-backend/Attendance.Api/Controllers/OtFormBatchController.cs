@@ -63,5 +63,17 @@ namespace Attendance.Api.Controllers
             var result = await _otFormService.ProcessBatchByEmailTokenAsync(token, request);
             return Success(result, "Duyệt đơn tổng thành công.");
         }
+
+        // Chạy ngay đợt gom "Đơn tổng" hằng ngày (bình thường tự chạy theo AttendanceSetting.
+        // BatchAutoSendTime, xem OtFormBatchBackgroundService) — dùng khi test hoặc có lý do cấp bách
+        // cần gửi ngay, không đợi tới giờ cấu hình. Cùng quyền với sửa Cấu hình (hành động cấp Admin,
+        // ảnh hưởng toàn bộ Department chứ không riêng 1 đơn).
+        [RequirePermission("Attendance.Setting.Update")]
+        [HttpPost("run-now")]
+        public async Task<ActionResult<ApiResponse<bool>>> RunNow()
+        {
+            await _otFormService.RunDailyBatchSweepAsync();
+            return Success(true, "Đã chạy gom đơn tổng ngay.");
+        }
     }
 }

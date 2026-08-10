@@ -224,7 +224,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             {t("importExcel")}
                         </button>
                     </div>
-                    <div className="text-sm text-[#5e3f3a]">
+                    <div className="shrink-0 whitespace-nowrap text-sm text-[#5e3f3a]">
                         {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
                     </div>
                 </div>
