@@ -107,6 +107,11 @@ export default function PcManagerSidebar() {
             <Link
               key={item.key}
               href={item.href}
+              // KHÔNG bật prefetch: output "export" + routing [locale] khiến URL RSC payload
+              // Next.js tự sinh lúc runtime không khớp file tĩnh đã export ra (out/) → mọi
+              // prefetch đều 301 rồi 404 hàng loạt, không tăng tốc mà còn chiếm connection pool
+              // của trình duyệt (2026-08-11, xem Network tab lúc bật thử — toàn bộ *._PAGE_.txt
+              // đều lỗi). Nếu định bật lại, phải verify bằng ảnh Network thật trước.
               prefetch={false}
               title={t(item.key)}
               className={`flex min-w-0 items-center gap-3 border-l-4 py-3 text-sm font-medium transition ${collapsed ? "justify-center px-0" : "px-5"

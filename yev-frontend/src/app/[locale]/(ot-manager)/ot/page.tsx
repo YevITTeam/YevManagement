@@ -46,6 +46,7 @@ export default function OtHomePage() {
                     <Link
                         key={tile.link}
                         href={tile.link}
+                        // KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11).
                         prefetch={false}
                         className="group rounded-2xl border border-[#e0e3e5] bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#e3000f] hover:shadow-md"
                     >

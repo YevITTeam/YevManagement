@@ -236,6 +236,7 @@ export default function DeviceReport() {
                     </button>
                     <Link
                         href="/pc"
+                        // KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11).
                         prefetch={false}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                     >

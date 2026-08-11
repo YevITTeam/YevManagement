@@ -16,7 +16,28 @@ namespace Attendance.Application.Services
     {
         public DepartmentApprovalStepService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
 
-        public async Task<List<DepartmentApprovalStepDto>> GetByDepartmentAsync(int departmentId)
+        // Admin xem/sửa được mọi Bộ phận; không phải Admin thì phải có tên trong
+        // DepartmentApprovalStepCoordinators của ĐÚNG Bộ phận này (gán tay bởi Admin — xem
+        // docs/docs-be/attendance-module.md §Cây chức vụ, mục "Người phụ trách Cây duyệt"). KHÔNG suy
+        // luận theo Chức vụ (Trưởng phòng không tự động có quyền — thực tế việc này thường giao cho
+        // người khác phụ trách).
+        private async Task EnsureCanManageDepartmentAsync(string userName, bool isAdmin, int departmentId)
+        {
+            if (isAdmin) return;
+
+            var isCoordinator = (await _unitOfWork.DepartmentApprovalStepCoordinators.FindAsync(
+                x => x.DepartmentId == departmentId && x.Employee.UserName == userName && !x.IsDeleted)).Count > 0;
+            if (!isCoordinator)
+                throw new DomainException("Bạn không được phân công phụ trách Cây duyệt của Bộ phận này.");
+        }
+
+        public async Task<List<DepartmentApprovalStepDto>> GetByDepartmentAsync(string userName, bool isAdmin, int departmentId)
+        {
+            await EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId);
+            return await GetByDepartmentCoreAsync(departmentId);
+        }
+
+        private async Task<List<DepartmentApprovalStepDto>> GetByDepartmentCoreAsync(int departmentId)
         {
             var department = await _unitOfWork.Departments.GetByIdAsync(departmentId);
             department.OrThrowNotFound("Phòng ban", departmentId);
@@ -39,8 +60,10 @@ namespace Attendance.Application.Services
             return steps.OrderBy(x => x.StepOrder).ToList();
         }
 
-        public async Task<List<DepartmentApprovalStepDto>> ReplaceAsync(int departmentId, ReplaceDepartmentApprovalStepsDto request)
+        public async Task<List<DepartmentApprovalStepDto>> ReplaceAsync(string userName, bool isAdmin, int departmentId, ReplaceDepartmentApprovalStepsDto request)
         {
+            await EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId);
+
             var department = await _unitOfWork.Departments.GetByIdAsync(departmentId);
             department.OrThrowNotFound("Phòng ban", departmentId);
 
@@ -50,9 +73,13 @@ namespace Attendance.Application.Services
             // CHỈ nhận Chức vụ cấp cuối (Manager/Factory Manager/Director) — cấp trung gian
             // (TerminalLevel=None) cấu hình ở phần "Cây duyệt Nhóm" (GroupApprovalStepService), không
             // còn được thêm vào đây nữa (2026-08-08).
+            // Batch-fetch JobTitle theo Id thay vì query từng bước trong vòng lặp (2026-08-11).
+            var jobTitleIds = request.Steps.Select(x => x.JobTitleId).ToHashSet();
+            var jobTitlesById = (await _unitOfWork.JobTitles.FindAsync(x => jobTitleIds.Contains(x.Id) && !x.IsDeleted))
+                .ToDictionary(x => x.Id);
             foreach (var item in request.Steps)
             {
-                var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == item.JobTitleId && !x.IsDeleted);
+                var jobTitle = jobTitlesById.GetValueOrDefault(item.JobTitleId);
                 jobTitle.OrThrowNotFound("Chức vụ", item.JobTitleId);
                 if (jobTitle!.TerminalLevel == (int)JobTitleTerminalLevel.None)
                     throw new DomainException($"Chức vụ '{jobTitle.Name}' là cấp trung gian — cấu hình ở phần \"Cây duyệt Nhóm\" (màn \"Cây duyệt\"), không thêm vào cây duyệt Bộ phận.");
@@ -78,7 +105,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.DepartmentApprovalSteps.AddRangeAsync(newSteps);
             await _unitOfWork.SaveChangesAsync();
 
-            return await GetByDepartmentAsync(departmentId);
+            return await GetByDepartmentCoreAsync(departmentId);
         }
     }
 }

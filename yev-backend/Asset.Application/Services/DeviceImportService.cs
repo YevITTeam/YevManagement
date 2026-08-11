@@ -267,6 +267,18 @@ namespace Asset.Application.Services
             var duplicatedOldCodesInFile = FindDuplicates(rawRows, r => r.OldDeviceCode);
             var duplicatedSerialsInFile = FindDuplicates(rawRows, r => r.SerialNumber);
 
+            // Batch-fetch device-exists-by-code thay vì query từng dòng (file import có thể lên tới hàng
+            // trăm dòng) — KHÔNG lọc !IsDeleted, giữ đúng hành vi cũ (unique index của DeviceCode là
+            // global, bản ghi xoá mềm vẫn giữ chỗ mã đó — xem CLAUDE.md §3.4 mục 7).
+            var candidateCodes = rawRows
+                .Select(r => r.DeviceCode?.Trim())
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var devicesByCode = (await _unitOfWork.Devices.FindAsync(x => candidateCodes.Contains(x.DeviceCode)))
+                .GroupBy(x => x.DeviceCode, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
             var result = new List<DeviceImportRowDto>();
 
             foreach (var row in rawRows)
@@ -289,7 +301,7 @@ namespace Asset.Application.Services
 
                     // Not filtered by IsDeleted on purpose: the unique index on DeviceCode is global,
                     // so a soft-deleted device still owns the code and blocks the row.
-                    var existingDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == deviceCode);
+                    var existingDevice = devicesByCode.GetValueOrDefault(deviceCode);
                     if (existingDevice != null)
                     {
                         if (existingDevice.IsDeleted)

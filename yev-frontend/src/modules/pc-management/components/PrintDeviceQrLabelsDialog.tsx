@@ -85,13 +85,25 @@ function buildQrPayload(item: DeviceQrLabelDto, encodedFields: QrEncodedFieldKey
     return lines.join("\n");
 }
 
-function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, string> | null) {
-    const labels = items
-        .map((item) => {
-            const qrDataUrl = qrDataUrls?.get(item.deviceId);
-            const qrHtml = qrDataUrl ? `<img class="qr" width="220" height="220" src="${qrDataUrl}" alt="QR" />` : "";
+type PrintMode = "a4" | "zebra";
 
-            return `
+// Khổ decal đúng theo cấu hình đã IN THÀNH CÔNG thực tế trên máy IT phòng (ZebraDesigner
+// "test.btw" → Page Setup: Page 10.60 x 3.30cm, 1 hàng x 2 cột, mỗi tem (Item) 5.20 x 3.10cm; driver
+// ZDesigner ZD230 khai Custom stock Width 10cm / Height 3cm, Media type "Continuous labels", Rotation
+// 0° Portrait). Đây là số đo đã verify được trên máy thật — thay cho ước lượng 4x2in ban đầu (SAI, lấy
+// nhầm từ giá trị mặc định của driver chứ chưa phải khổ decal thật). Chốt với người dùng 2026-08-11.
+// Nếu đổi khổ decal, sửa các hằng số cm dưới đây.
+const ZEBRA_LABELS_PER_ROW = 2;
+const ZEBRA_PAGE_WIDTH_CM = 10.6;
+const ZEBRA_PAGE_HEIGHT_CM = 3.3;
+const ZEBRA_LABEL_WIDTH_CM = 5.2;
+const ZEBRA_LABEL_HEIGHT_CM = 3.1;
+const ZEBRA_ROW_GAP_CM = ZEBRA_PAGE_WIDTH_CM - ZEBRA_LABEL_WIDTH_CM * ZEBRA_LABELS_PER_ROW;
+
+function buildA4LabelHtml(item: DeviceQrLabelDto, qrDataUrls: Map<number, string> | null) {
+    const qrDataUrl = qrDataUrls?.get(item.deviceId);
+    const qrHtml = qrDataUrl ? `<img class="qr" src="${qrDataUrl}" alt="QR" />` : "";
+    return `
       <div class="label${qrDataUrls ? " with-qr" : ""}">
         ${qrHtml}
         <div class="text">
@@ -99,8 +111,77 @@ function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, str
           <div class="serial">SN: ${escapeHtml(item.serialNumber ?? "Không có")}</div>
         </div>
       </div>`;
-        })
-        .join("");
+}
+
+// Tem Zebra 5.2 x 3.1cm (bề ngang), đủ chỗ xếp ngang QR trái + chữ phải như người dùng đã chọn ban
+// đầu (giả định "gần vuông 2x2in" trước đó là SAI vì đo nhầm khổ tổng — xem hằng số ở trên).
+function buildZebraLabelHtml(item: DeviceQrLabelDto, qrDataUrls: Map<number, string> | null) {
+    const qrDataUrl = qrDataUrls?.get(item.deviceId);
+    const qrHtml = qrDataUrl ? `<img class="qr" src="${qrDataUrl}" alt="QR" />` : "";
+    return `
+      <div class="label">
+        ${qrHtml}
+        <div class="text">
+          <div class="code">${escapeHtml(item.deviceCode)}</div>
+          <div class="serial">SN: ${escapeHtml(item.serialNumber ?? "Không có")}</div>
+        </div>
+      </div>`;
+}
+
+// Zebra in TỪNG LẦN FEED = 1 hàng gồm 2 tem cạnh nhau trên khổ decal cắt sẵn — không có khái niệm
+// "nhiều tem/trang" kiểu giấy A4. @page phải khớp CHÍNH XÁC kích thước 1 lần feed (margin 0, mỗi
+// hàng 2 tem = 1 page riêng), nếu không driver/trình duyệt sẽ tự co kéo nội dung → lệch, tràn, xoay
+// ngang (xem tem in lỗi khi setup ban đầu). Chế độ A4 giữ nguyên layout lưới nhiều cột cũ.
+function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, string> | null, printMode: PrintMode) {
+    if (printMode === "zebra") {
+        const rows: string[] = [];
+        for (let i = 0; i < items.length; i += ZEBRA_LABELS_PER_ROW) {
+            const rowItems = items.slice(i, i + ZEBRA_LABELS_PER_ROW);
+            rows.push(`<div class="row">${rowItems.map((item) => buildZebraLabelHtml(item, qrDataUrls)).join("")}</div>`);
+        }
+
+        return `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>In tem QR thiết bị</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Times New Roman", Times, Georgia, serif; color: #191c1e; }
+    @page { size: ${ZEBRA_PAGE_WIDTH_CM}cm ${ZEBRA_PAGE_HEIGHT_CM}cm; margin: 0; }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: ${ZEBRA_PAGE_WIDTH_CM}cm;
+      height: ${ZEBRA_PAGE_HEIGHT_CM}cm;
+      gap: ${ZEBRA_ROW_GAP_CM}cm;
+      page-break-after: always;
+    }
+    .row:last-child { page-break-after: auto; }
+    .label {
+      width: ${ZEBRA_LABEL_WIDTH_CM}cm;
+      height: ${ZEBRA_LABEL_HEIGHT_CM}cm;
+      padding: 0.15cm 0.2cm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.2cm;
+      text-align: left;
+    }
+    .qr { width: 1.8cm; height: 1.8cm; flex: none; }
+    .text { max-width: 2.8cm; overflow: hidden; }
+    .code { font-size: 14px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .serial { font-size: 11px; font-weight: 700; color: #555; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+</head>
+<body>
+  <div class="sheet">${rows.join("")}</div>
+</body>
+</html>`;
+    }
+
+    const labels = items.map((item) => buildA4LabelHtml(item, qrDataUrls)).join("");
 
     return `<!doctype html>
 <html lang="vi">
@@ -158,11 +239,13 @@ export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }
     const [labels, setLabels] = useState<DeviceQrLabelDto[]>([]);
     const [encodedFields, setEncodedFields] = useState<Set<QrEncodedFieldKey>>(new Set(DEFAULT_ENCODED_FIELDS));
     const [includeQr, setIncludeQr] = useState(true);
+    const [printMode, setPrintMode] = useState<PrintMode>("zebra");
     const [isPrinting, setIsPrinting] = useState(false);
 
     useDialogReset(isOpen, null, () => {
         setEncodedFields(new Set(DEFAULT_ENCODED_FIELDS));
         setIncludeQr(true);
+        setPrintMode("zebra");
     });
 
     const idsKey = isOpen ? deviceIds.join(",") : "";
@@ -195,7 +278,7 @@ export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }
             if (includeQr) {
                 const entries = await Promise.all(
                     labels.map(async (item) => {
-                        const dataUrl = await QRCode.toDataURL(buildQrPayload(item, orderedFields), { margin: 1, width: 220 });
+                        const dataUrl = await QRCode.toDataURL(buildQrPayload(item, orderedFields), { margin: 1, width: 320 });
                         return [item.deviceId, dataUrl] as const;
                     })
                 );
@@ -208,7 +291,7 @@ export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }
                 return;
             }
 
-            printWindow.document.write(buildQrPrintHtml(labels, qrDataUrls));
+            printWindow.document.write(buildQrPrintHtml(labels, qrDataUrls, printMode));
             printWindow.document.close();
             await waitForImagesToLoad(printWindow.document);
 
@@ -272,6 +355,40 @@ export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }
                         <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                     ) : (
                         <div className="space-y-5">
+                            <div>
+                                <div className="mb-2 text-sm font-semibold text-[#191c1e]">Khổ in</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <label
+                                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                                            printMode === "zebra" ? "border-[#e3000f] bg-[#fff4f2] text-[#191c1e]" : "border-[#e0e3e5] text-[#5e3f3a]"
+                                        }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="print-mode"
+                                            checked={printMode === "zebra"}
+                                            onChange={() => setPrintMode("zebra")}
+                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                        />
+                                        Máy in tem Zebra (mỗi tem {ZEBRA_LABEL_WIDTH_CM}×{ZEBRA_LABEL_HEIGHT_CM}cm, {ZEBRA_LABELS_PER_ROW} tem/lần in)
+                                    </label>
+                                    <label
+                                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                                            printMode === "a4" ? "border-[#e3000f] bg-[#fff4f2] text-[#191c1e]" : "border-[#e0e3e5] text-[#5e3f3a]"
+                                        }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="print-mode"
+                                            checked={printMode === "a4"}
+                                            onChange={() => setPrintMode("a4")}
+                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                        />
+                                        Giấy A4 (nhiều tem/trang)
+                                    </label>
+                                </div>
+                            </div>
+
                             <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-[#191c1e]">
                                 <input
                                     type="checkbox"

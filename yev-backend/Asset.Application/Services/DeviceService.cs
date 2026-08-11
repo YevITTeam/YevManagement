@@ -756,9 +756,13 @@ namespace Asset.Application.Services
             if (ipAddressIds.Distinct().Count() != ipAddressIds.Count)
                 throw new DomainException("Danh sách địa chỉ IP có ID bị trùng lặp.");
 
+            // Batch-fetch thay vì query từng IP trong vòng lặp (2026-08-11).
+            var idsSet = ipAddressIds.ToHashSet();
+            var ipsById = (await _unitOfWork.IpAddresses.FindAsync(x => idsSet.Contains(x.Id))).ToDictionary(x => x.Id);
+
             foreach (var ipId in ipAddressIds)
             {
-                var ip = (await _unitOfWork.IpAddresses.GetByIdAsync(ipId)).OrThrowNotFound("Địa chỉ IP", ipId);
+                var ip = ipsById.GetValueOrDefault(ipId).OrThrowNotFound("Địa chỉ IP", ipId);
                 if (ip!.Status != (int)IpAddressStatus.Available)
                     throw new DomainException($"Địa chỉ IP '{ip.IpAddress1}' đã được sử dụng, vui lòng chọn IP khác.");
                 result.Add(ip);
@@ -785,15 +789,23 @@ namespace Asset.Application.Services
                 _unitOfWork.IpAddresses.Update(ip);
             }
 
-            foreach (var ipId in requestedIpAddressIds.Where(id => !currentIds.Contains(id)))
+            var newIpIds = requestedIpAddressIds.Where(id => !currentIds.Contains(id)).ToList();
+            if (newIpIds.Count > 0)
             {
-                var ip = (await _unitOfWork.IpAddresses.GetByIdAsync(ipId)).OrThrowNotFound("Địa chỉ IP", ipId);
-                if (ip!.Status != (int)IpAddressStatus.Available)
-                    throw new DomainException($"Địa chỉ IP '{ip.IpAddress1}' đã được sử dụng, vui lòng chọn IP khác.");
+                // Batch-fetch thay vì query từng IP trong vòng lặp (2026-08-11).
+                var newIdsSet = newIpIds.ToHashSet();
+                var newIpsById = (await _unitOfWork.IpAddresses.FindAsync(x => newIdsSet.Contains(x.Id))).ToDictionary(x => x.Id);
 
-                ip.DeviceId = deviceId;
-                ip.Status = (int)IpAddressStatus.Assigned;
-                _unitOfWork.IpAddresses.Update(ip);
+                foreach (var ipId in newIpIds)
+                {
+                    var ip = newIpsById.GetValueOrDefault(ipId).OrThrowNotFound("Địa chỉ IP", ipId);
+                    if (ip!.Status != (int)IpAddressStatus.Available)
+                        throw new DomainException($"Địa chỉ IP '{ip.IpAddress1}' đã được sử dụng, vui lòng chọn IP khác.");
+
+                    ip.DeviceId = deviceId;
+                    ip.Status = (int)IpAddressStatus.Assigned;
+                    _unitOfWork.IpAddresses.Update(ip);
+                }
             }
         }
 

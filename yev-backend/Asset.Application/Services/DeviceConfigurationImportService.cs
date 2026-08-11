@@ -314,6 +314,39 @@ namespace Asset.Application.Services
                 .Select(g => g.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+            // Batch-fetch device/IP/serial lookups thay vì query từng dòng: file Tanium export có thể
+            // lên tới hàng nghìn dòng, mỗi dòng trước đây bắn 3 query riêng (device theo mã, IP theo
+            // taniumIp, device theo serial) → hàng nghìn round-trip DB tuần tự (2026-08-11, xem
+            // CLAUDE.md §hiệu năng). Gom về 3 query duy nhất bằng `Contains` (SQL IN), dựng Dictionary
+            // để tra trong bộ nhớ — kết quả nghiệp vụ giữ nguyên (collation SQL vẫn không phân biệt
+            // hoa/thường như query cũ, GroupBy...First giữ đúng 1 bản ghi/khoá khi trùng mã ngoài ý muốn).
+            var candidateCodes = rawRows
+                .Select(r => ParseComputerName(r.ComputerName ?? string.Empty).Code)
+                .Where(c => c != null)
+                .Select(c => c!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var devicesByCode = (await _unitOfWork.Devices.FindAsync(x => candidateCodes.Contains(x.DeviceCode) && !x.IsDeleted))
+                .GroupBy(x => x.DeviceCode, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            var candidateIps = rawRows
+                .Select(r => r.TaniumIpAddress?.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var ipsByAddress = (await _unitOfWork.IpAddresses.FindAsync(x => candidateIps.Contains(x.IpAddress1) && !x.IsDeleted))
+                .GroupBy(x => x.IpAddress1, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            var candidateSerials = rawRows
+                .Select(r => r.SerialNumber?.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var devicesBySerial = (await _unitOfWork.Devices.FindAsync(x => candidateSerials.Contains(x.SerialNumber!)))
+                .GroupBy(x => x.SerialNumber!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
             var result = new List<DeviceConfigurationImportRowDto>();
             var outOfScopeSkippedCount = 0;
 
@@ -339,7 +372,7 @@ namespace Asset.Application.Services
                 if (duplicatedCodesInFile.Contains(parsedCode))
                     errors.Add($"Mã thiết bị '{parsedCode}' bị lặp lại nhiều dòng trong file.");
 
-                var device = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == parsedCode && !x.IsDeleted);
+                var device = devicesByCode.GetValueOrDefault(parsedCode);
                 if (device == null) errors.Add($"Không tìm thấy thiết bị có mã '{parsedCode}'.");
                 else resolvedDeviceId = device.Id;
 
@@ -355,7 +388,7 @@ namespace Asset.Application.Services
                 var taniumIp = row.TaniumIpAddress?.Trim();
                 if (!string.IsNullOrWhiteSpace(taniumIp) && !errors.Any(e => e.StartsWith("Dòng bị lỗi Tanium")))
                 {
-                    var ipAddress = await _unitOfWork.IpAddresses.FirstOrDefaultAsync(x => x.IpAddress1 == taniumIp && !x.IsDeleted);
+                    var ipAddress = ipsByAddress.GetValueOrDefault(taniumIp);
                     if (ipAddress == null)
                     {
                         warnings.Add($"Không tìm thấy địa chỉ IP '{taniumIp}' trong hệ thống — sẽ không cập nhật IP cho thiết bị này.");
@@ -374,7 +407,7 @@ namespace Asset.Application.Services
                 var serialNumber = row.SerialNumber?.Trim();
                 if (!string.IsNullOrWhiteSpace(serialNumber) && !errors.Any(e => e.StartsWith("Dòng bị lỗi Tanium")))
                 {
-                    var deviceOwningSerial = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.SerialNumber == serialNumber);
+                    var deviceOwningSerial = devicesBySerial.GetValueOrDefault(serialNumber);
                     if (duplicatedSerialsInFile.Contains(serialNumber))
                     {
                         warnings.Add($"Số Serial '{serialNumber}' bị lặp lại nhiều dòng trong file — sẽ không cập nhật serial cho thiết bị này.");

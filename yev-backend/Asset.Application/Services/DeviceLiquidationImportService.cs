@@ -48,11 +48,24 @@ namespace Asset.Application.Services
             await _unitOfWork.BeginTransactionAsync();
             try
             {
+                // Batch-fetch device/IP/email theo danh sách deviceId thay vì 3 query/dòng trong vòng
+                // lặp (2026-08-11) — cùng lý do các import khác, số dòng liquidation có thể khá lớn.
+                var deviceIds = validRows.Select(r => r.ResolvedDeviceId!.Value).ToHashSet();
+                var devicesById = (await _unitOfWork.Devices.FindAsync(x => deviceIds.Contains(x.Id)))
+                    .ToDictionary(x => x.Id);
+                var ipsByDeviceId = (await _unitOfWork.IpAddresses.FindAsync(
+                        x => x.DeviceId.HasValue && deviceIds.Contains(x.DeviceId.Value) && !x.IsDeleted))
+                    .GroupBy(x => x.DeviceId!.Value)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+                var emailsByDeviceId = (await _unitOfWork.DeviceEmails.FindAsync(x => deviceIds.Contains(x.DeviceId) && !x.IsDeleted))
+                    .GroupBy(x => x.DeviceId)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
                 foreach (var row in validRows)
                 {
                     var deviceId = row.ResolvedDeviceId!.Value;
 
-                    var device = await _unitOfWork.Devices.GetByIdAsync(deviceId);
+                    var device = devicesById.GetValueOrDefault(deviceId);
                     // A concurrent change could have moved it out of PendingLiquidation between the
                     // re-validation query and here — re-check to keep the invariant, skip if so.
                     if (device == null || device.Status != (int)DeviceStatus.PendingLiquidation)
@@ -72,7 +85,7 @@ namespace Asset.Application.Services
 
                     // Same cleanup as DeviceService.DeleteAsync: a liquidated device no longer holds
                     // any IP, and its emails are hidden.
-                    var assignedIps = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted);
+                    var assignedIps = ipsByDeviceId.GetValueOrDefault(deviceId) ?? new List<Asset.Domain.Entities.IpAddress>();
                     foreach (var ip in assignedIps)
                     {
                         ip.DeviceId = null;
@@ -81,7 +94,7 @@ namespace Asset.Application.Services
                         result.ReleasedIpCount++;
                     }
 
-                    var emails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted);
+                    var emails = emailsByDeviceId.GetValueOrDefault(deviceId) ?? new List<Asset.Domain.Entities.DeviceEmail>();
                     foreach (var email in emails)
                     {
                         email.IsDeleted = true;
@@ -114,6 +127,17 @@ namespace Asset.Application.Services
                 .Select(g => g.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+            // Batch-fetch device theo mã thay vì query từng dòng (2026-08-11, cùng lý do với
+            // DeviceImportService/DeviceConfigurationImportService — file import có thể nhiều dòng).
+            var candidateCodes = rawRows
+                .Select(r => r.DeviceCode?.Trim())
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var devicesByCode = (await _unitOfWork.Devices.FindAsync(x => candidateCodes.Contains(x.DeviceCode) && !x.IsDeleted))
+                .GroupBy(x => x.DeviceCode, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
             var result = new List<DeviceLiquidationImportRowDto>();
 
             foreach (var row in rawRows)
@@ -134,7 +158,7 @@ namespace Asset.Application.Services
                     if (duplicatedCodesInFile.Contains(deviceCode))
                         errors.Add($"Mã máy '{deviceCode}' bị lặp lại nhiều dòng trong file.");
 
-                    var device = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == deviceCode && !x.IsDeleted);
+                    var device = devicesByCode.GetValueOrDefault(deviceCode);
                     if (device == null)
                     {
                         errors.Add($"Không tìm thấy thiết bị có mã '{deviceCode}'.");

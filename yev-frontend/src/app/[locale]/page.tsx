@@ -95,6 +95,8 @@ export default function Home() {
               <Link
                 key={index}
                 href={item.link}
+                // KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11): output
+                // "export" + routing [locale] làm URL RSC payload prefetch luôn 404.
                 prefetch={false}
                 className={cardClasses}
               >

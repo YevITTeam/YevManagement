@@ -17,7 +17,27 @@ namespace Attendance.Application.Services
     {
         public GroupApprovalStepService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
 
-        public async Task<List<GroupApprovalStepDto>> GetByGroupAsync(int groupId)
+        // Admin xem/sửa được mọi Nhóm; không phải Admin thì phải có tên trong
+        // GroupApprovalStepCoordinators của ĐÚNG Nhóm này (gán tay bởi Admin, TÁCH BIỆT hoàn toàn với
+        // DepartmentApprovalStepCoordinator — phụ trách Bộ phận không tự động phụ trách Nhóm con) —
+        // xem docs/docs-be/attendance-module.md §Cây chức vụ, mục "Người phụ trách Cây duyệt".
+        private async Task EnsureCanManageGroupAsync(string userName, bool isAdmin, int groupId)
+        {
+            if (isAdmin) return;
+
+            var isCoordinator = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                x => x.GroupId == groupId && x.Employee.UserName == userName && !x.IsDeleted)).Count > 0;
+            if (!isCoordinator)
+                throw new DomainException("Bạn không được phân công phụ trách Cây duyệt của Nhóm này.");
+        }
+
+        public async Task<List<GroupApprovalStepDto>> GetByGroupAsync(string userName, bool isAdmin, int groupId)
+        {
+            await EnsureCanManageGroupAsync(userName, isAdmin, groupId);
+            return await GetByGroupCoreAsync(groupId);
+        }
+
+        private async Task<List<GroupApprovalStepDto>> GetByGroupCoreAsync(int groupId)
         {
             var group = await _unitOfWork.Groups.GetByIdAsync(groupId);
             group.OrThrowNotFound("Nhóm", groupId);
@@ -41,8 +61,10 @@ namespace Attendance.Application.Services
             return steps.OrderBy(x => x.StepOrder).ToList();
         }
 
-        public async Task<List<GroupApprovalStepDto>> ReplaceAsync(int groupId, ReplaceGroupApprovalStepsDto request)
+        public async Task<List<GroupApprovalStepDto>> ReplaceAsync(string userName, bool isAdmin, int groupId, ReplaceGroupApprovalStepsDto request)
         {
+            await EnsureCanManageGroupAsync(userName, isAdmin, groupId);
+
             var group = await _unitOfWork.Groups.GetByIdAsync(groupId);
             group.OrThrowNotFound("Nhóm", groupId);
 
@@ -52,10 +74,15 @@ namespace Attendance.Application.Services
             if (request.Steps.Count(x => x.IsResponsible) > 1)
                 throw new DomainException("Chỉ được đánh dấu tối đa 1 bước là \"người chịu trách nhiệm\".");
 
+            // Batch-fetch JobTitle theo Id thay vì query từng bước trong vòng lặp (2026-08-11).
+            var jobTitleIds = request.Steps.Select(x => x.JobTitleId).ToHashSet();
+            var jobTitlesById = (await _unitOfWork.JobTitles.FindAsync(x => jobTitleIds.Contains(x.Id) && !x.IsDeleted))
+                .ToDictionary(x => x.Id);
+
             var signingCount = 0;
             foreach (var item in request.Steps)
             {
-                var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == item.JobTitleId && !x.IsDeleted);
+                var jobTitle = jobTitlesById.GetValueOrDefault(item.JobTitleId);
                 jobTitle.OrThrowNotFound("Chức vụ", item.JobTitleId);
                 if (jobTitle!.TerminalLevel != (int)JobTitleTerminalLevel.None)
                     throw new DomainException($"Chức vụ '{jobTitle.Name}' là cấp duyệt cuối — cấu hình ở phần \"Cây duyệt Bộ phận\" (màn \"Cây duyệt\"), không thêm vào cây duyệt Nhóm.");
@@ -89,7 +116,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.GroupApprovalSteps.AddRangeAsync(newSteps);
             await _unitOfWork.SaveChangesAsync();
 
-            return await GetByGroupAsync(groupId);
+            return await GetByGroupCoreAsync(groupId);
         }
     }
 }

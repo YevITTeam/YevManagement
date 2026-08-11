@@ -4,45 +4,56 @@ import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
 import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, Layers } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
-import { hasPermission } from "@/modules/auth/lib/permissions";
+import { hasAnyPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 
 interface OtNavItem {
     key: string;
     href: string;
     icon: typeof FilePlus2;
-    permission?: string;
+    // Có 1 TRONG các permission này là thấy mục — mảng 1 phần tử cho hầu hết mục, nhiều phần tử khi
+    // có thêm diện phụ trách riêng (xem "otCategories").
+    permissions?: string[];
 }
 
 // Permission theo từng mục — bảng Vai trò → Menu (docs/attendance-api-fe.md §1.1).
 const navItems: OtNavItem[] = [
-    { key: "otCreate", href: "/ot/create", icon: FilePlus2, permission: "Attendance.OTForm.Create" },
+    { key: "otCreate", href: "/ot/create", icon: FilePlus2, permissions: ["Attendance.OTForm.Create"] },
     // Cách khác để tạo đơn — qua hội thoại AI thay vì form tay, kết quả vẫn là 1 đơn Draft y hệt
     // (xem docs/docs-be/attendance-aichat-be-huong-dan.md). Permission riêng vì đây là tool ghi dữ
     // liệu đầu tiên của tính năng AI Chat, cố tình tách khỏi Attendance.OTForm.Create để kiểm soát
     // rollout độc lập.
-    { key: "otAiChat", href: "/ot/ai-chat", icon: Bot, permission: "Attendance.AiChat.Use" },
+    { key: "otAiChat", href: "/ot/ai-chat", icon: Bot, permissions: ["Attendance.AiChat.Use"] },
     // Gộp 2026-07-17: "Đơn của tôi"/"Chờ tôi ký duyệt"/"Chờ tôi duyệt"/"Đơn đã xử lý"/"Đơn tôi tham
     // gia" giờ là 5 tab trong CÙNG 1 màn — permission gate ở đây chỉ cần OTForm.View (điều kiện chung
     // nhỏ nhất, đủ cho mọi Role nghiệp vụ); từng tab bên trong tự ẩn/hiện theo permission chi tiết hơn
     // (xem OtFormTabsPage.tsx). Route /ot/list (không phải /ot/forms) — /ot/forms đã đổi thành màn
     // "Chi tiết đơn" qua query string ?id= (static export, xem ot/forms/page.tsx).
-    { key: "otForms", href: "/ot/list", icon: ClipboardList, permission: "Attendance.OTForm.View" },
+    { key: "otForms", href: "/ot/list", icon: ClipboardList, permissions: ["Attendance.OTForm.View"] },
     // "Đơn tổng" — gom đơn đang đúng bước Trưởng phòng (TerminalLevel=DepartmentManager) của cùng 1
     // Phòng ban để duyệt 1 lần. Đã redesign theo Cây chức vụ ở Giai đoạn 3.2 (2026-08-07, xem
     // docs/attendance-module.md §Đơn tổng).
-    { key: "otBatches", href: "/ot/batches", icon: Layers, permission: "Attendance.OTForm.Approve" },
+    { key: "otBatches", href: "/ot/batches", icon: Layers, permissions: ["Attendance.OTForm.Approve"] },
     // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này —
     // dùng .Create (không phải .View) vì đợt 2026-07-17 đã cấp thêm Department.View/Group.View/... cho
     // Role Trưởng Nhóm/Nhân viên (chỉ để load dropdown lúc tạo đơn), gate bằng .View sẽ lộ nhầm mục
-    // quản trị cho 2 role này dù họ không có quyền CRUD gì trong đó.
-    { key: "otCategories", href: "/ot/categories", icon: FolderCog, permission: "Attendance.Department.Create" },
-    { key: "otSignature", href: "/ot/signature", icon: PenTool, permission: "Attendance.UserSignature.Update" },
+    // quản trị cho 2 role này dù họ không có quyền CRUD gì trong đó. Thêm 2 quyền
+    // *ApprovalStep.Update (2026-08-11) — Người phụ trách Cây duyệt (được gán tay qua
+    // DepartmentApprovalStepCoordinator/GroupApprovalStepCoordinator, xem
+    // docs/docs-be/attendance-module.md §Cây chức vụ) không phải Admin nhưng vẫn cần thấy mục này để
+    // vào tab "Cây duyệt" tự cấu hình đơn vị mình phụ trách.
+    {
+        key: "otCategories",
+        href: "/ot/categories",
+        icon: FolderCog,
+        permissions: ["Attendance.Department.Create", "Attendance.DepartmentApprovalStep.Update", "Attendance.GroupApprovalStep.Update"],
+    },
+    { key: "otSignature", href: "/ot/signature", icon: PenTool, permissions: ["Attendance.UserSignature.Update"] },
     {
         key: "otSecondaryPassword",
         href: "/ot/secondary-password",
         icon: KeyRound,
-        permission: "Attendance.SecondaryPassword.Update",
+        permissions: ["Attendance.SecondaryPassword.Update"],
     },
 ];
 
@@ -98,13 +109,16 @@ export default function OtManagerSidebar() {
                 scroll container nên không thể bị cuộn ngang nữa. */}
             <nav className="mt-8 flex-1 overflow-y-auto overflow-x-clip">
                 {navItems
-                    .filter((item) => !item.permission || hasPermission(user, item.permission))
+                    .filter((item) => !item.permissions || hasAnyPermission(user, item.permissions))
                     .map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                         return (
                             <Link
                                 key={item.key}
                                 href={item.href}
+                                // KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11):
+                                // output "export" + routing [locale] làm URL RSC payload prefetch
+                                // luôn 404, chỉ tổ tốn connection pool trình duyệt.
                                 prefetch={false}
                                 title={t(item.key)}
                                 className={`flex min-w-0 items-center gap-3 border-l-4 py-3 text-sm font-medium transition ${collapsed ? "justify-center px-0" : "px-5"
