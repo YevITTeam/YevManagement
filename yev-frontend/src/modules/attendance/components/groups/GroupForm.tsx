@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 export interface GroupFormValues {
@@ -64,6 +65,12 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
 
     if (!isOpen) return null;
 
+    const departmentOptions: SelectOption[] = departments.map((d) => ({
+        value: d.id,
+        label: d.departmentNameVn,
+        searchText: d.departmentNameVn.toLowerCase(),
+    }));
+
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
         if (!values.departmentId || !values.groupCode.trim() || !values.groupNameVn.trim()) return;
@@ -97,22 +104,13 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
                         <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
-                        <select
+                        <SearchableSelect
+                            options={departmentOptions}
                             value={values.departmentId || ""}
-                            onChange={(event) => setValues((current) => ({ ...current, departmentId: Number(event.target.value) }))}
+                            onChange={(v) => setValues((current) => ({ ...current, departmentId: v === "" ? 0 : v }))}
+                            placeholder={t("fieldDepartmentPlaceholder")}
                             disabled={loading}
-                            required
-                            className={fieldClassName}
-                        >
-                            <option value="" disabled>
-                                {t("fieldDepartmentPlaceholder")}
-                            </option>
-                            {departments.map((department) => (
-                                <option key={department.id} value={department.id}>
-                                    {department.departmentNameVn}
-                                </option>
-                            ))}
-                        </select>
+                        />
                     </label>
 
                     <label className="block">

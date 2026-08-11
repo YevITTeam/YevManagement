@@ -8,6 +8,7 @@ namespace Attendance.Api.Controllers
 {
     public class GroupApprovalStepController : BaseController
     {
+        private const string AdminRole = "Admin";
         private readonly IGroupApprovalStepService _groupApprovalStepService;
 
         public GroupApprovalStepController(IGroupApprovalStepService groupApprovalStepService)
@@ -19,7 +20,7 @@ namespace Attendance.Api.Controllers
         [HttpGet("by-group/{groupId}")]
         public async Task<ActionResult<ApiResponse<List<GroupApprovalStepDto>>>> GetByGroup(int groupId)
         {
-            var result = await _groupApprovalStepService.GetByGroupAsync(groupId);
+            var result = await _groupApprovalStepService.GetByGroupAsync(CurrentUserName, User.IsInRole(AdminRole), groupId);
             return Success(result);
         }
 
@@ -28,7 +29,7 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<List<GroupApprovalStepDto>>>> Replace(
             int groupId, [FromBody] ReplaceGroupApprovalStepsDto request)
         {
-            var result = await _groupApprovalStepService.ReplaceAsync(groupId, request);
+            var result = await _groupApprovalStepService.ReplaceAsync(CurrentUserName, User.IsInRole(AdminRole), groupId, request);
             return Success(result, "Cập nhật cây duyệt thành công.");
         }
     }

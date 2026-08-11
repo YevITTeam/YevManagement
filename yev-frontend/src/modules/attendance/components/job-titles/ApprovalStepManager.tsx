@@ -7,19 +7,25 @@ import { Check, GripVertical, Plus, Star, Trash2, X } from "lucide-react";
 
 import { DepartmentApprovalStepApi } from "@/modules/attendance/api/department-approval-step.api";
 import { GroupApprovalStepApi } from "@/modules/attendance/api/group-approval-step.api";
+import { DepartmentApprovalStepCoordinatorApi } from "@/modules/attendance/api/department-approval-step-coordinator.api";
+import { GroupApprovalStepCoordinatorApi } from "@/modules/attendance/api/group-approval-step-coordinator.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { DepartmentApprovalStepDto } from "@/modules/attendance/types/department-approval-step.dto";
 import type { GroupApprovalStepDto } from "@/modules/attendance/types/group-approval-step.dto";
+import type { DepartmentApprovalStepCoordinatorDto } from "@/modules/attendance/types/department-approval-step-coordinator.dto";
+import type { GroupApprovalStepCoordinatorDto } from "@/modules/attendance/types/group-approval-step-coordinator.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
-import { SearchableSelect, type SelectOption } from "./SearchableSelect";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { useDragReorder } from "./useDragReorder";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
@@ -39,6 +45,13 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 ) {
     const tDept = useTranslations("Attendance.DepartmentApprovalStep");
     const tGroup = useTranslations("Attendance.GroupApprovalStep");
+    const { user } = useAuth();
+    // Chỉ Admin (hoặc người được cấp riêng — không xảy ra trong thực tế) mới quản lý ĐƯỢC danh sách
+    // Người phụ trách — bản thân 1 Người phụ trách khi mở màn này (được cho vào từ 2026-08-11 qua
+    // sidebar, xem OtManagerSidebar.tsx) không có 2 permission *Coordinator.View nên PHẢI ẩn hẳn khối
+    // này đi, nếu không sẽ gọi API và bị 403.
+    const canManageDeptCoordinators = hasPermission(user, "Attendance.DepartmentApprovalStepCoordinator.View");
+    const canManageGroupCoordinators = hasPermission(user, "Attendance.GroupApprovalStepCoordinator.View");
 
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [groups, setGroups] = useState<GroupDto[]>([]);
@@ -57,6 +70,10 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [isLoadingDeptEmployees, setIsLoadingDeptEmployees] = useState(false);
     const [assigningDeptEmployeeId, setAssigningDeptEmployeeId] = useState<number | null>(null);
     const [addingDeptHolderByJobTitle, setAddingDeptHolderByJobTitle] = useState<Record<number, number | "">>({});
+    const [deptCoordinators, setDeptCoordinators] = useState<DepartmentApprovalStepCoordinatorDto[]>([]);
+    const [isLoadingDeptCoordinators, setIsLoadingDeptCoordinators] = useState(false);
+    const [isSavingDeptCoordinators, setIsSavingDeptCoordinators] = useState(false);
+    const [addingDeptCoordinatorEmployeeId, setAddingDeptCoordinatorEmployeeId] = useState<number | "">("");
 
     // ── Khối cấp trung gian (Nhóm) ───────────────────────────────────────────
     const [groupId, setGroupId] = useState<number | "">("");
@@ -69,6 +86,10 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [isLoadingGroupEmployees, setIsLoadingGroupEmployees] = useState(false);
     const [assigningGroupEmployeeId, setAssigningGroupEmployeeId] = useState<number | null>(null);
     const [addingGroupHolderByJobTitle, setAddingGroupHolderByJobTitle] = useState<Record<number, number | "">>({});
+    const [groupCoordinators, setGroupCoordinators] = useState<GroupApprovalStepCoordinatorDto[]>([]);
+    const [isLoadingGroupCoordinators, setIsLoadingGroupCoordinators] = useState(false);
+    const [isSavingGroupCoordinators, setIsSavingGroupCoordinators] = useState(false);
+    const [addingGroupCoordinatorEmployeeId, setAddingGroupCoordinatorEmployeeId] = useState<number | "">("");
 
     useEffect(() => {
         setIsLoadingOptions(true);
@@ -118,6 +139,18 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             .finally(() => setIsLoadingDeptEmployees(false));
     };
 
+    const fetchDeptCoordinators = (targetDepartmentId: number) => {
+        if (!canManageDeptCoordinators) return;
+        setIsLoadingDeptCoordinators(true);
+        DepartmentApprovalStepCoordinatorApi.getByDepartment(targetDepartmentId)
+            .then((data) => setDeptCoordinators(data))
+            .catch((err) => {
+                console.error(err);
+                toast.error(getApiErrorMessage(err, tDept("loadCoordinatorsError")));
+            })
+            .finally(() => setIsLoadingDeptCoordinators(false));
+    };
+
     const fetchGroupSteps = (targetGroupId: number) => {
         setIsLoadingGroupSteps(true);
         GroupApprovalStepApi.getByGroup(targetGroupId)
@@ -143,15 +176,29 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             .finally(() => setIsLoadingGroupEmployees(false));
     };
 
+    const fetchGroupCoordinators = (targetGroupId: number) => {
+        if (!canManageGroupCoordinators) return;
+        setIsLoadingGroupCoordinators(true);
+        GroupApprovalStepCoordinatorApi.getByGroup(targetGroupId)
+            .then((data) => setGroupCoordinators(data))
+            .catch((err) => {
+                console.error(err);
+                toast.error(getApiErrorMessage(err, tGroup("loadCoordinatorsError")));
+            })
+            .finally(() => setIsLoadingGroupCoordinators(false));
+    };
+
     useImperativeHandle(ref, () => ({
         refresh: () => {
             if (typeof departmentId === "number") {
                 fetchDeptSteps(departmentId);
                 fetchDeptEmployees(departmentId);
+                fetchDeptCoordinators(departmentId);
             }
             if (typeof groupId === "number") {
                 fetchGroupSteps(groupId);
                 fetchGroupEmployees(groupId);
+                fetchGroupCoordinators(groupId);
             }
         },
         openCreate: () => {},
@@ -161,17 +208,20 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setDepartmentId(value);
         setDeptSteps([]);
         setDeptEmployees([]);
+        setDeptCoordinators([]);
         setAddingDeptJobTitleId("");
         setIsDeptDirty(false);
         // Đổi Bộ phận thì Nhóm đang chọn (nếu có) không còn thuộc Bộ phận này nữa — reset luôn.
         setGroupId("");
         setGroupSteps([]);
         setGroupEmployees([]);
+        setGroupCoordinators([]);
         setAddingGroupJobTitleId("");
         setIsGroupDirty(false);
         if (typeof value === "number") {
             fetchDeptSteps(value);
             fetchDeptEmployees(value);
+            fetchDeptCoordinators(value);
         }
     };
 
@@ -179,61 +229,39 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setGroupId(value);
         setGroupSteps([]);
         setGroupEmployees([]);
+        setGroupCoordinators([]);
         setAddingGroupJobTitleId("");
         setIsGroupDirty(false);
         if (typeof value === "number") {
             fetchGroupSteps(value);
             fetchGroupEmployees(value);
+            fetchGroupCoordinators(value);
         }
     };
 
-    // Gán nhanh Chức vụ CẤP CUỐI ngay tại khối Bộ phận — dùng lại PUT /api/Employee/{id}. Tự tính
-    // lại groupId/departmentId theo TerminalLevel của Chức vụ MỚI (không pass-through nguyên giá trị
-    // cũ) — nếu không, gán 1 người đang có Nhóm thật sang Trưởng phòng/Trưởng Xưởng/Giám đốc (hoặc
-    // ngược lại) sẽ luôn bị BE từ chối 400 vì lẫn field tổ chức cũ.
+    // Gán nhanh Chức vụ CẤP CUỐI ngay tại khối Bộ phận — dùng endpoint riêng
+    // `PUT /api/Employee/{id}/department-job-title` (2026-08-11c, KHÔNG còn dùng
+    // `EmployeeApi.updateEmployee` nữa) để Người phụ trách Cây duyệt (không chỉ Admin) cũng gán được,
+    // chỉ trong phạm vi Bộ phận họ phụ trách — BE tự tính lại groupId/departmentId theo TerminalLevel
+    // của Chức vụ mới và tự chặn sai phạm vi, FE chỉ gửi jobTitleId. Vẫn giữ pre-check
+    // "assignNeedsGroupError" ở FE để tránh 1 vòng gọi API cho lỗi đã biết trước.
     const handleAssignDeptJobTitle = async (employee: EmployeeDto, jobTitleId: number | "") => {
+        if (typeof departmentId !== "number") return;
         const nextJobTitleId = jobTitleId === "" ? null : jobTitleId;
         const nextJobTitle = deptJobTitles.find((jt) => jt.id === nextJobTitleId);
         const nextTerminalLevel = nextJobTitle?.terminalLevel ?? 0;
 
-        let nextGroupId = employee.groupId;
-        let nextDepartmentId = employee.departmentId;
-
-        if (nextTerminalLevel === 1) {
-            // DepartmentManager (Trưởng phòng) — gán đúng Bộ phận đang xem trên màn này, không thuộc Nhóm nào.
-            nextGroupId = null;
-            nextDepartmentId = typeof departmentId === "number" ? departmentId : null;
-        } else if (nextTerminalLevel === 2 || nextTerminalLevel === 3) {
-            // WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc) — dùng chung toàn công ty.
-            nextGroupId = null;
-            nextDepartmentId = null;
-        } else if (employee.groupId === null) {
+        if (nextTerminalLevel === 0 && employee.groupId === null) {
             // Đang là Trưởng phòng/Trưởng Xưởng/Giám đốc (không có Nhóm thật), muốn bỏ hẳn Chức vụ cấp
-            // cuối — màn này không đủ thông tin để tự chọn đúng Nhóm, phải sửa qua form Nhân viên đầy đủ.
+            // cuối — màn này không đủ thông tin để tự chọn đúng Nhóm, phải nhờ Admin sửa qua form Nhân viên.
             toast.error(tDept("assignNeedsGroupError"));
             return;
         }
 
         setAssigningDeptEmployeeId(employee.id);
         try {
-            await EmployeeApi.updateEmployee(employee.id, {
-                code: employee.code,
-                firstName: employee.firstName,
-                lastName: employee.lastName,
-                userName: employee.userName,
-                monthToDate: employee.monthToDate,
-                yearToDate: employee.yearToDate,
-                groupId: nextGroupId,
-                departmentId: nextDepartmentId,
-                jobTitleId: nextJobTitleId,
-            });
-            setDeptEmployees((current) =>
-                current.map((e) =>
-                    e.id === employee.id
-                        ? { ...e, jobTitleId: nextJobTitleId, jobTitleName: nextJobTitle?.name ?? null, groupId: nextGroupId, departmentId: nextDepartmentId }
-                        : e
-                )
-            );
+            const updated = await EmployeeApi.assignDepartmentJobTitle(employee.id, departmentId, nextJobTitleId);
+            setDeptEmployees((current) => current.map((e) => (e.id === employee.id ? updated : e)));
             toast.success(tDept("assignSuccess"));
         } catch (err) {
             console.error(err);
@@ -243,31 +271,17 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
-    // Gán nhanh Chức vụ TRUNG GIAN ngay tại khối Nhóm. Khác khối Bộ phận: Chức vụ ở đây luôn
-    // TerminalLevel=None nên KHÔNG cần tính lại groupId/departmentId — nhân viên vẫn giữ nguyên Nhóm
-    // hiện tại, chỉ đổi jobTitleId.
+    // Gán nhanh Chức vụ TRUNG GIAN ngay tại khối Nhóm — `PUT /api/Employee/{id}/group-job-title`
+    // (2026-08-11c). Chức vụ ở đây luôn TerminalLevel=None nên BE giữ nguyên groupId/departmentId,
+    // chỉ đổi jobTitleId.
     const handleAssignGroupJobTitle = async (employee: EmployeeDto, jobTitleId: number | "") => {
+        if (typeof groupId !== "number") return;
         const nextJobTitleId = jobTitleId === "" ? null : jobTitleId;
-        const nextJobTitle = groupJobTitles.find((jt) => jt.id === nextJobTitleId);
 
         setAssigningGroupEmployeeId(employee.id);
         try {
-            await EmployeeApi.updateEmployee(employee.id, {
-                code: employee.code,
-                firstName: employee.firstName,
-                lastName: employee.lastName,
-                userName: employee.userName,
-                monthToDate: employee.monthToDate,
-                yearToDate: employee.yearToDate,
-                groupId: employee.groupId,
-                departmentId: employee.departmentId,
-                jobTitleId: nextJobTitleId,
-            });
-            setGroupEmployees((current) =>
-                current.map((e) =>
-                    e.id === employee.id ? { ...e, jobTitleId: nextJobTitleId, jobTitleName: nextJobTitle?.name ?? null } : e
-                )
-            );
+            const updated = await EmployeeApi.assignGroupJobTitle(employee.id, groupId, nextJobTitleId);
+            setGroupEmployees((current) => current.map((e) => (e.id === employee.id ? updated : e)));
             toast.success(tGroup("assignSuccess"));
         } catch (err) {
             console.error(err);
@@ -294,6 +308,103 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         await handleAssignGroupJobTitle(employee, jobTitleId);
         setAddingGroupHolderByJobTitle((current) => ({ ...current, [jobTitleId]: "" }));
     };
+
+    // ── Người phụ trách Cây duyệt — gán tay, KHÔNG suy luận theo Chức vụ (2026-08-11, sửa 2026-08-11b:
+    // CHỈ chọn được trong số nhân viên đang thuộc ĐÚNG Bộ phận/Nhóm đang xem — xem
+    // docs/docs-be/attendance-module.md §Cây chức vụ, mục "Người phụ trách Cây duyệt"). Tái dùng
+    // deptEmployees/groupEmployees (đã tải sẵn cho khối "holdersLabel" ở dưới) làm nguồn cho picker —
+    // không gọi thêm API nào khác. Employee CHƯA liên kết tài khoản đăng nhập (userName=null) vẫn
+    // chọn được — quyền tương ứng chỉ có hiệu lực sau khi Admin liên kết tài khoản cho họ (tự động,
+    // xem EmployeeService.SyncAutoGrantedPermissionsCoreAsync ở BE).
+    const handleAddDeptCoordinator = async (employeeId: number | "") => {
+        setAddingDeptCoordinatorEmployeeId(employeeId);
+        if (employeeId === "" || typeof departmentId !== "number") return;
+        const employee = deptEmployees.find((e) => e.id === employeeId);
+        if (!employee || deptCoordinators.some((c) => c.employeeId === employee.id)) {
+            setAddingDeptCoordinatorEmployeeId("");
+            return;
+        }
+        setIsSavingDeptCoordinators(true);
+        try {
+            const nextEmployeeIds = [...deptCoordinators.map((c) => c.employeeId), employee.id];
+            const data = await DepartmentApprovalStepCoordinatorApi.replaceByDepartment(departmentId, { employeeIds: nextEmployeeIds });
+            setDeptCoordinators(data);
+            toast.success(tDept("saveCoordinatorSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, tDept("saveCoordinatorError")));
+        } finally {
+            setIsSavingDeptCoordinators(false);
+            setAddingDeptCoordinatorEmployeeId("");
+        }
+    };
+
+    const handleRemoveDeptCoordinator = async (employeeId: number) => {
+        if (typeof departmentId !== "number") return;
+        setIsSavingDeptCoordinators(true);
+        try {
+            const nextEmployeeIds = deptCoordinators.filter((c) => c.employeeId !== employeeId).map((c) => c.employeeId);
+            const data = await DepartmentApprovalStepCoordinatorApi.replaceByDepartment(departmentId, { employeeIds: nextEmployeeIds });
+            setDeptCoordinators(data);
+            toast.success(tDept("saveCoordinatorSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, tDept("saveCoordinatorError")));
+        } finally {
+            setIsSavingDeptCoordinators(false);
+        }
+    };
+
+    const handleAddGroupCoordinator = async (employeeId: number | "") => {
+        setAddingGroupCoordinatorEmployeeId(employeeId);
+        if (employeeId === "" || typeof groupId !== "number") return;
+        const employee = groupEmployees.find((e) => e.id === employeeId);
+        if (!employee || groupCoordinators.some((c) => c.employeeId === employee.id)) {
+            setAddingGroupCoordinatorEmployeeId("");
+            return;
+        }
+        setIsSavingGroupCoordinators(true);
+        try {
+            const nextEmployeeIds = [...groupCoordinators.map((c) => c.employeeId), employee.id];
+            const data = await GroupApprovalStepCoordinatorApi.replaceByGroup(groupId, { employeeIds: nextEmployeeIds });
+            setGroupCoordinators(data);
+            toast.success(tGroup("saveCoordinatorSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, tGroup("saveCoordinatorError")));
+        } finally {
+            setIsSavingGroupCoordinators(false);
+            setAddingGroupCoordinatorEmployeeId("");
+        }
+    };
+
+    const handleRemoveGroupCoordinator = async (employeeId: number) => {
+        if (typeof groupId !== "number") return;
+        setIsSavingGroupCoordinators(true);
+        try {
+            const nextEmployeeIds = groupCoordinators.filter((c) => c.employeeId !== employeeId).map((c) => c.employeeId);
+            const data = await GroupApprovalStepCoordinatorApi.replaceByGroup(groupId, { employeeIds: nextEmployeeIds });
+            setGroupCoordinators(data);
+            toast.success(tGroup("saveCoordinatorSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, tGroup("saveCoordinatorError")));
+        } finally {
+            setIsSavingGroupCoordinators(false);
+        }
+    };
+
+    // Options cho picker "Người phụ trách" — nguồn từ pool nhân viên (đã lọc theo đúng Bộ phận/Nhóm ở
+    // BE khi tải), bớt người đã có mặt trong danh sách phụ trách hiện tại. Đánh dấu rõ nhân viên CHƯA
+    // liên kết tài khoản đăng nhập để Admin biết quyền sẽ chưa có hiệu lực ngay.
+    const buildCoordinatorOptions = (pool: EmployeeDto[], excludeEmployeeIds: Set<number>): SelectOption[] =>
+        pool
+            .filter((e) => !excludeEmployeeIds.has(e.id))
+            .map((e) => ({
+                value: e.id,
+                label: `${e.lastName} ${e.firstName} (${e.code})${e.userName ? "" : ` — ${tDept("coordinatorNotLinked")}`}`,
+                searchText: [e.lastName, e.firstName, `${e.firstName} ${e.lastName}`, e.code].join(" ").toLowerCase(),
+            }));
 
     const buildHolderOptions = (pool: EmployeeDto[], jobTitleId: number): SelectOption[] =>
         pool
@@ -507,6 +618,66 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                             <p className="text-sm italic text-[#8a8f94]">{tGroup("chooseGroupHint")}</p>
                         )}
 
+                        {typeof groupId === "number" && canManageGroupCoordinators && (
+                            <div className="space-y-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
+                                <div className="space-y-0.5">
+                                    <span className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                        {tGroup("coordinatorsTitle")}
+                                    </span>
+                                    <p className="text-xs text-[#8a8f94]">{tGroup("coordinatorsHint")}</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="text-xs font-semibold text-[#8a8f94]">{tGroup("coordinatorsLabel")}</span>
+                                    {isLoadingGroupCoordinators ? (
+                                        <span className="text-xs text-[#8a8f94]">{tGroup("loadingCoordinators")}</span>
+                                    ) : (
+                                        <>
+                                            {groupCoordinators.length === 0 ? (
+                                                <span className="text-xs italic text-[#8a8f94]">{tGroup("noCoordinators")}</span>
+                                            ) : (
+                                                groupCoordinators.map((coordinator) => (
+                                                    <span
+                                                        key={coordinator.employeeId}
+                                                        className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-white py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
+                                                    >
+                                                        {coordinator.fullName} ({coordinator.employeeCode})
+                                                        {!coordinator.userName && (
+                                                            <span className="text-[#9a5b00]" title={tGroup("coordinatorNotLinkedHint")}>
+                                                                — {tGroup("coordinatorNotLinked")}
+                                                            </span>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveGroupCoordinator(coordinator.employeeId)}
+                                                            disabled={isSavingGroupCoordinators}
+                                                            title={tGroup("removeCoordinatorHint")}
+                                                            aria-label={tGroup("removeCoordinatorHint")}
+                                                            className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
+                                                        >
+                                                            <X size={10} />
+                                                        </button>
+                                                    </span>
+                                                ))
+                                            )}
+                                            <div className="w-56 shrink-0">
+                                                <SearchableSelect
+                                                    options={buildCoordinatorOptions(
+                                                        groupEmployees,
+                                                        new Set(groupCoordinators.map((c) => c.employeeId))
+                                                    )}
+                                                    value={addingGroupCoordinatorEmployeeId}
+                                                    onChange={handleAddGroupCoordinator}
+                                                    placeholder={tGroup("addCoordinatorPlaceholder")}
+                                                    disabled={isSavingGroupCoordinators || isLoadingGroupEmployees}
+                                                    triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {typeof groupId === "number" && (
                             isLoadingGroupSteps ? (
                                 <p className="text-sm text-[#5e3f3a]">{tGroup("loadingSteps")}</p>
@@ -679,6 +850,66 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                             <h3 className={sectionTitleClassName}>{tDept("sectionTitle")}</h3>
                             <p className="text-sm text-[#5e3f3a]">{tDept("description")}</p>
                         </div>
+
+                        {canManageDeptCoordinators && (
+                        <div className="space-y-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
+                            <div className="space-y-0.5">
+                                <span className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {tDept("coordinatorsTitle")}
+                                </span>
+                                <p className="text-xs text-[#8a8f94]">{tDept("coordinatorsHint")}</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-xs font-semibold text-[#8a8f94]">{tDept("coordinatorsLabel")}</span>
+                                {isLoadingDeptCoordinators ? (
+                                    <span className="text-xs text-[#8a8f94]">{tDept("loadingCoordinators")}</span>
+                                ) : (
+                                    <>
+                                        {deptCoordinators.length === 0 ? (
+                                            <span className="text-xs italic text-[#8a8f94]">{tDept("noCoordinators")}</span>
+                                        ) : (
+                                            deptCoordinators.map((coordinator) => (
+                                                <span
+                                                    key={coordinator.employeeId}
+                                                    className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-white py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
+                                                >
+                                                    {coordinator.fullName} ({coordinator.employeeCode})
+                                                    {!coordinator.userName && (
+                                                        <span className="text-[#9a5b00]" title={tDept("coordinatorNotLinkedHint")}>
+                                                            — {tDept("coordinatorNotLinked")}
+                                                        </span>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveDeptCoordinator(coordinator.employeeId)}
+                                                        disabled={isSavingDeptCoordinators}
+                                                        title={tDept("removeCoordinatorHint")}
+                                                        aria-label={tDept("removeCoordinatorHint")}
+                                                        className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
+                                                    >
+                                                        <X size={10} />
+                                                    </button>
+                                                </span>
+                                            ))
+                                        )}
+                                        <div className="w-56 shrink-0">
+                                            <SearchableSelect
+                                                options={buildCoordinatorOptions(
+                                                    deptEmployees,
+                                                    new Set(deptCoordinators.map((c) => c.employeeId))
+                                                )}
+                                                value={addingDeptCoordinatorEmployeeId}
+                                                onChange={handleAddDeptCoordinator}
+                                                placeholder={tDept("addCoordinatorPlaceholder")}
+                                                disabled={isSavingDeptCoordinators || isLoadingDeptEmployees}
+                                                triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        )}
 
                         {isLoadingDeptSteps ? (
                             <p className="text-sm text-[#5e3f3a]">{tDept("loadingSteps")}</p>

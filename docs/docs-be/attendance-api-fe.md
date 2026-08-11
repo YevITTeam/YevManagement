@@ -406,6 +406,11 @@ POST/PUT: `code`[Required], `name`[Required], `rankOrder`[Required] (int, số l
 > `/api/GroupApprovalStep` (§3.4c-2) theo từng Nhóm. Bộ phận chưa cấu hình gì → chuỗi duyệt rỗng,
 > `resolve-chain` báo kẹt.
 
+> **Scope-check (2026-08-11):** cả `GET`/`PUT` giờ còn kiểm tra thêm phạm vi — Admin (Role `Admin`)
+> luôn xem/sửa được mọi Bộ phận; người khác (dù có permission) chỉ xem/sửa được ĐÚNG Bộ phận họ được
+> Admin gán làm "Người phụ trách" (xem §3.4c-3) — sai Bộ phận thì 400 dù đúng quyền. Đây là điểm khác
+> so với hành vi cũ (chỉ kiểm tra permission phẳng, không giới hạn phạm vi).
+
 `GET /by-department/{departmentId}` (`Attendance.DepartmentApprovalStep.View`) → `DepartmentApprovalStepDto[]` đã sắp theo `stepOrder` (không còn field `isResponsible` — xem §3.4c-2):
 ```jsonc
 [
@@ -440,6 +445,10 @@ riêng cho BƯỚC này của Bộ phận này (2026-08-07 — xem §3.4b).
 > chung trong 1 tab "Cây duyệt" (`ApprovalStepManager.tsx`) — chọn 1 Bộ phận, rồi cấu hình lần lượt
 > khối Nhóm (trung gian) và khối Bộ phận (cấp cuối) trong cùng màn, không còn 2 tab riêng.
 
+> **Scope-check (2026-08-11):** mirror §3.4c — Admin xem/sửa mọi Nhóm; người khác chỉ xem/sửa được
+> ĐÚNG Nhóm họ được gán "Người phụ trách" (§3.4c-3), **tách biệt hoàn toàn** với phụ trách Bộ phận
+> (phụ trách Bộ phận KHÔNG tự động phụ trách Nhóm con, phải gán riêng).
+
 `GET /by-group/{groupId}` (`Attendance.GroupApprovalStep.View`) → `GroupApprovalStepDto[]` đã sắp theo `stepOrder`:
 ```jsonc
 [
@@ -465,6 +474,79 @@ cấu hình ở `/api/DepartmentApprovalStep` thay vào đó), **tối đa 1 ph�
 nếu 0 hoặc >2 — khớp đúng 2 ô "Người đề nghị" cố định trên giấy in `YEV-22-024`; validate này dời
 nguyên từ `DepartmentApprovalStep` cũ sang đây ở Giai đoạn 4). Gửi mảng rỗng để xoá hết cây duyệt của
 Nhóm đó.
+
+### 3.4c-3 Người phụ trách Cây duyệt — `/api/DepartmentApprovalStepCoordinator`, `/api/GroupApprovalStepCoordinator` (mới, 2026-08-11; sửa 2026-08-11b: khoá theo `employeeId`, quyền tự động cấp)
+
+> Cho phép Admin **gán tay** 1 hoặc nhiều người phụ trách cấu hình Cây duyệt của 1 Bộ phận/Nhóm cụ
+> thể, để họ tự sửa được §3.4c/§3.4c-2 mà **không cần** quyền Admin toàn công ty — giải quyết vấn đề
+> Admin phải tự tay cấu hình cây duyệt cho MỌI Bộ phận/Nhóm. **KHÔNG suy luận theo Chức vụ** (Trưởng
+> phòng/Group Leader/Team Leader không tự động có quyền) — vẫn là gán tay tường minh, nhưng **CHỈ**
+> chọn được trong số Employee đang thuộc ĐÚNG Bộ phận/Nhóm đó (trực tiếp hoặc qua Group con, cho Bộ
+> phận). 2 API tách biệt hoàn toàn (mirror nhau), không có nesting: gán phụ trách Bộ phận KHÔNG tự
+> động phụ trách Nhóm con.
+>
+> **Chỉ Admin sửa được BẢNG GÁN này** (`Attendance.DepartmentApprovalStepCoordinator.Update`/
+> `Attendance.GroupApprovalStepCoordinator.Update` — chỉ seed cho Role `Admin`, xem
+> `Indentity.Infrastructure/Migrations/…_AddApprovalStepCoordinatorPermissions.cs`) — bảng này chỉ trả
+> lời câu hỏi "ai được làm người phụ trách", không phải quyền thao tác Cây duyệt thật.
+>
+> **Quyền thao tác THẬT (2026-08-11b) — TỰ ĐỘNG, không còn bước cấp tay:** ngay khi `PUT` (thêm hoặc
+> gỡ 1 Employee khỏi bảng gán), BE tự tính lại và đồng bộ bộ quyền
+> `Attendance.DepartmentApprovalStep.{View,Update}` (hoặc `GroupApprovalStep.{View,Update}` cho phía
+> Nhóm) + `Department.View`/`Group.View`/`JobTitle.View`/`Employee.View` cho tài khoản Identity liên
+> kết với Employee đó (qua `Employee.UserName`), dùng đúng cơ chế "tự động cấp theo Chức vụ" đã có ở
+> §Giai đoạn 6 (`IUserDirectoryService.SyncAutoGrantedPermissionsAsync`, đánh dấu
+> `UserPermission.IsAutoGranted=true` — Admin cấp tay qua "Tuỳ chỉnh quyền" vẫn không bị đụng, xem
+> §Giai đoạn 6). Nếu Employee được gán CHƯA có `UserName` (chưa liên kết tài khoản đăng nhập — xem
+> `employee-api-fe.md`/`Employee.userName` nullable), việc cấp quyền **tạm hoãn**: không lỗi, không
+> cảnh báo, chỉ đơn giản là chưa ai được cấp gì — khi Admin liên kết `UserName` cho Employee đó sau
+> này (qua `PUT /api/Employee/{id}`), quyền tự bật lên ngay lập tức, không cần thao tác gì ở đây nữa.
+> **Không** đưa 2 permission `*ApprovalStep.Update` vào `JobTitlePermissionWhitelist` — cơ chế tự động
+> cấp ở đây đi qua 1 nguồn RIÊNG (`ApprovalStepCoordinatorPermissions`, hardcode cố định trong BE,
+> không phải chuỗi Admin tự nhập) để không tái tạo rủi ro tự leo thang quyền đã loại bỏ khi xoá
+> `UserApprovalScope`.
+
+`GET /by-department/{departmentId}` (`Attendance.DepartmentApprovalStepCoordinator.View`) → `DepartmentApprovalStepCoordinatorDto[]`:
+```jsonc
+[
+  { "id": 3, "departmentId": 1, "employeeId": 3370, "employeeCode": "N-30479",
+    "fullName": "Nguyễn Văn A", "userName": "YEV\\n.van.a" }
+]
+```
+`userName: null` = Employee này CHƯA liên kết tài khoản đăng nhập — quyền chưa có hiệu lực (xem trên).
+
+`PUT /by-department/{departmentId}` (`Attendance.DepartmentApprovalStepCoordinator.Update`) — **thay NGUYÊN danh sách**:
+```jsonc
+{ "employeeIds": [3370, 3412] }
+```
+Validate: mọi `employeeId` phải khớp Employee active đang thuộc ĐÚNG Bộ phận này (400 nếu có 1 phần tử
+sai đơn vị hoặc không tồn tại). Gửi mảng rỗng để bỏ hết người phụ trách của Bộ phận đó (đồng thời thu
+hồi quyền tự động đã cấp cho những Employee vừa bị gỡ).
+
+`GET /by-group/{groupId}` / `PUT /by-group/{groupId}` (`Attendance.GroupApprovalStepCoordinator.View`/`.Update`) → `GroupApprovalStepCoordinatorDto[]`, payload `{ "employeeIds": [...] }` — mirror hoàn toàn khối trên, khoá theo `groupId` (Employee phải có `groupId` đúng bằng Nhóm này).
+
+**FE:** quản lý ngay trong tab "Cây duyệt" (`ApprovalStepManager.tsx`) — mỗi khối Nhóm/Bộ phận có thêm
+1 ô "Người phụ trách" (chip + ô gõ tìm chọn nhân viên, nguồn dữ liệu TÁI DÙNG `deptEmployees`/
+`groupEmployees` đã tải sẵn cho khối "Đang giữ" Chức vụ — không gọi thêm API, áp dụng ngay không cần
+nút Lưu riêng). Khối này chỉ hiện với người có quyền `*Coordinator.View` (Admin) — ẩn hẳn với 1 Người
+phụ trách bình thường mở màn qua sidebar, tránh gọi nhầm API họ không có quyền. Mục menu "Danh mục"
+(sidebar `OtManagerSidebar.tsx`) đã mở thêm điều kiện hiện — trước đây chỉ `Attendance.Department.Create`
+(Admin), giờ thêm `Attendance.DepartmentApprovalStep.Update`/`Attendance.GroupApprovalStep.Update` để
+Người phụ trách (không phải Admin) cũng thấy được mục vào tab Cây duyệt.
+
+> **Gán Chức vụ CÓ PHẠM VI (2026-08-11c) — `PUT /api/Employee/{id}/department-job-title?departmentId=`
+> / `PUT /api/Employee/{id}/group-job-title?groupId=`**, body `{ "jobTitleId": number | null }`
+> (`null` = gỡ Chức vụ). Đây là cách Người phụ trách gán Chức vụ cho nhân viên ở khối "Đang giữ" trong
+> cùng tab Cây duyệt — TÁCH RIÊNG khỏi `PUT /api/Employee/{id}` (sửa toàn bộ hồ sơ, vẫn chỉ Admin qua
+> `Attendance.Employee.Update`, không đổi). 2 endpoint mới gate bằng CHÍNH quyền cây duyệt của đơn vị
+> đó (`Attendance.DepartmentApprovalStep.Update`/`Attendance.GroupApprovalStep.Update` — Người phụ
+> trách đã tự động có, xem trên) — Admin cũng dùng chung 2 endpoint này (không còn gọi
+> `updateEmployee` full-profile cho thao tác quick-assign nữa). BE tự kiểm tra Employee phải thuộc
+> đúng Bộ phận/Nhóm trong URL và (nếu không phải Admin) người gọi phải có tên trong bảng gán tương
+> ứng; **non-Admin không được gán Chức vụ Trưởng Xưởng/Giám đốc** (2 cấp dùng chung toàn công ty, vượt
+> phạm vi 1 Bộ phận — chỉ Admin mới thăng được, dù có đủ 2 quyền `*ApprovalStep.Update`). BE tự tính
+> lại `groupId`/`departmentId` theo `TerminalLevel` của Chức vụ mới, FE không gửi 2 field này. Trả về
+> `EmployeeDto` mới sau khi gán.
 
 ### 3.4d Xem trước chuỗi duyệt tự động (Giai đoạn 2, mới 2026-08-06, thuật toán sửa lại ở Giai đoạn 2b, ghép Nhóm+Bộ phận ở Giai đoạn 4)
 
@@ -1149,6 +1231,10 @@ gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
 | `/api/JobTitle/resolve-chain?employeeId=&otCaseId=` | Xem trước chuỗi duyệt tự động (đọc-only, mới 2026-08-06, §3.4d) |
 | `/api/DepartmentApprovalStep/by-department/{departmentId}` | GET (xem)/PUT (thay nguyên danh sách) cây duyệt CẤP CUỐI của 1 Bộ phận — mới 2026-08-06, §3.4c. Từ Giai đoạn 4 (2026-08-08) CHỈ nhận `terminalLevel != 0` |
 | `/api/GroupApprovalStep/by-group/{groupId}` | GET (xem)/PUT (thay nguyên danh sách) cây duyệt CẤP TRUNG GIAN của 1 Nhóm — mới 2026-08-08 (Giai đoạn 4), §3.4c-2. `PUT` validate `terminalLevel=0` + 1-2 bước `requiresSignature` |
+| `/api/DepartmentApprovalStepCoordinator/by-department/{departmentId}` | GET/PUT (thay nguyên danh sách) người phụ trách cấu hình Cây duyệt của 1 Bộ phận — mới 2026-08-11 (sửa 2026-08-11b: `employeeIds` thay `userNames`), §3.4c-3. Chỉ Admin sửa được bảng gán này |
+| `/api/GroupApprovalStepCoordinator/by-group/{groupId}` | GET/PUT (thay nguyên danh sách) người phụ trách cấu hình Cây duyệt của 1 Nhóm — mới 2026-08-11 (sửa 2026-08-11b), §3.4c-3. Chỉ Admin sửa được bảng gán này |
+| `/api/Employee/{id}/department-job-title?departmentId=` | PUT gán/gỡ Chức vụ CẤP CUỐI có phạm vi — mới 2026-08-11c, §3.4c-3. Gate bằng `DepartmentApprovalStep.Update` (Người phụ trách gọi được, chỉ trong Bộ phận mình phụ trách) |
+| `/api/Employee/{id}/group-job-title?groupId=` | PUT gán/gỡ Chức vụ TRUNG GIAN có phạm vi — mới 2026-08-11c, §3.4c-3. Gate bằng `GroupApprovalStep.Update` (Người phụ trách gọi được, chỉ trong Nhóm mình phụ trách) |
 | `/api/JobTitlePermission/by-job-title/{jobTitleId}` | GET (xem)/PUT (thay nguyên danh sách) permission tự động cấp theo 1 Chức vụ — mới 2026-08-10, §3.4e. `PUT` validate mọi code thuộc whitelist "tham gia quy trình" |
 | `/api/JobTitlePermission/allowed-codes` | GET danh sách mã permission được phép chọn ở trên — mới 2026-08-10, §3.4e |
 | `/api/Group` (`?by-department/{id}`) | CRUD + cascading theo Department |

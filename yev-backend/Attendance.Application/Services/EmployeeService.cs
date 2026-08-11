@@ -1,5 +1,6 @@
 using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Interfaces.Service;
+using Attendance.Domain.Constants;
 using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
 using Shared.Application.Helper;
@@ -255,7 +256,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.Employees.AddAsync(newEmployee);
             await _unitOfWork.SaveChangesAsync();
 
-            await SyncJobTitlePermissionsAsync(newEmployee.JobTitleId, newEmployee.UserName);
+            await SyncAutoGrantedPermissionsCoreAsync(newEmployee);
 
             return await GetByIdAsync(newEmployee.Id);
         }
@@ -305,7 +306,7 @@ namespace Attendance.Application.Services
             {
                 await _userDirectoryService.SyncAutoGrantedPermissionsAsync(oldUserName, Array.Empty<string>());
             }
-            await SyncJobTitlePermissionsAsync(employee.JobTitleId, employee.UserName);
+            await SyncAutoGrantedPermissionsCoreAsync(employee);
         }
 
         public async Task DeleteAsync(int id)
@@ -323,22 +324,146 @@ namespace Attendance.Application.Services
             await _userDirectoryService.SyncAutoGrantedPermissionsAsync(employee.UserName, Array.Empty<string>());
         }
 
-        // Tính lại danh sách permission "tự động cấp theo Chức vụ" cho đúng JobTitleId hiện tại rồi
-        // đồng bộ vào Identity qua IUserDirectoryService — no-op nếu chưa có UserName (chưa link tài
-        // khoản đăng nhập); khi UserName được gán sau này, lần gọi UpdateAsync đó sẽ tự cấp đúng bộ
-        // quyền hiện hành, không cần thao tác gì thêm (xem docs/docs-be/attendance-module.md §Cây
-        // chức vụ, mục "Quyền theo Chức vụ").
-        private async Task SyncJobTitlePermissionsAsync(int? jobTitleId, string? userName)
+        // Tính lại TOÀN BỘ permission "tự động cấp" hiện hành cho 1 Employee — gộp CHUNG 2 nguồn
+        // (theo Chức vụ + theo vai trò "Người phụ trách Cây duyệt") trong CÙNG 1 lần gọi
+        // IUserDirectoryService.SyncAutoGrantedPermissionsAsync, vì hàm đó THAY NGUYÊN danh sách
+        // permission IsAutoGranted=true của user — gọi tách rời theo từng nguồn sẽ khiến nguồn gọi
+        // sau xoá mất permission do nguồn kia vừa cấp. No-op nếu chưa có UserName (chưa liên kết tài
+        // khoản đăng nhập); khi UserName được gán sau này, lần UpdateAsync đó sẽ tự cấp đúng bộ quyền
+        // hiện hành, không cần thao tác gì thêm (xem docs/docs-be/attendance-module.md §Cây chức vụ,
+        // mục "Quyền theo Chức vụ" và "Người phụ trách Cây duyệt").
+        private async Task SyncAutoGrantedPermissionsCoreAsync(Employee employee)
         {
-            if (string.IsNullOrWhiteSpace(userName)) return;
+            if (string.IsNullOrWhiteSpace(employee.UserName)) return;
 
-            var desiredCodes = jobTitleId.HasValue
-                ? (await _unitOfWork.JobTitlePermissions.FindAsync(x => x.JobTitleId == jobTitleId.Value && !x.IsDeleted))
+            var jobTitleCodes = employee.JobTitleId.HasValue
+                ? (await _unitOfWork.JobTitlePermissions.FindAsync(x => x.JobTitleId == employee.JobTitleId.Value && !x.IsDeleted))
                     .Select(x => x.PermissionCode)
-                    .ToList()
-                : new List<string>();
+                : Enumerable.Empty<string>();
 
-            await _userDirectoryService.SyncAutoGrantedPermissionsAsync(userName, desiredCodes);
+            var isDeptCoordinator = (await _unitOfWork.DepartmentApprovalStepCoordinators.FindAsync(
+                x => x.EmployeeId == employee.Id && !x.IsDeleted)).Count > 0;
+            var isGroupCoordinator = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                x => x.EmployeeId == employee.Id && !x.IsDeleted)).Count > 0;
+
+            var coordinatorCodes = new List<string>();
+            if (isDeptCoordinator || isGroupCoordinator)
+                coordinatorCodes.AddRange(ApprovalStepCoordinatorPermissions.BaseViewCodes);
+            if (isDeptCoordinator)
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.DepartmentUpdateCode);
+            if (isGroupCoordinator)
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.GroupUpdateCode);
+
+            var desiredCodes = jobTitleCodes.Union(coordinatorCodes).Distinct().ToList();
+            await _userDirectoryService.SyncAutoGrantedPermissionsAsync(employee.UserName, desiredCodes);
+        }
+
+        public async Task SyncAutoGrantedPermissionsForEmployeeAsync(int employeeId)
+        {
+            var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
+            if (employee == null) return;
+            await SyncAutoGrantedPermissionsCoreAsync(employee);
+        }
+
+        public async Task<EmployeeDto> AssignDepartmentJobTitleAsync(string userName, bool isAdmin, int employeeId, int departmentId, int? jobTitleId)
+        {
+            var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
+            employee.OrThrowNotFound("Nhân viên", employeeId);
+
+            // Employee phải đang thuộc ĐÚNG Bộ phận đang thao tác (trực tiếp, hoặc qua Group con) —
+            // không "mượn" nhân viên Bộ phận khác qua endpoint này dù có quyền phụ trách Bộ phận A.
+            var belongsToDepartment = employee!.DepartmentId == departmentId ||
+                (employee.GroupId.HasValue &&
+                    (await _unitOfWork.Groups.GetByIdAsync(employee.GroupId.Value)) is Group g && g.DepartmentId == departmentId);
+            if (!belongsToDepartment)
+                throw new DomainException("Nhân viên này không thuộc Bộ phận đang thao tác.");
+
+            if (!isAdmin)
+            {
+                var isCoordinator = (await _unitOfWork.DepartmentApprovalStepCoordinators.FindAsync(
+                    x => x.DepartmentId == departmentId && x.Employee.UserName == userName && !x.IsDeleted)).Count > 0;
+                if (!isCoordinator)
+                    throw new DomainException("Bạn không được phân công phụ trách Bộ phận này.");
+            }
+
+            JobTitle? jobTitle = null;
+            if (jobTitleId.HasValue)
+            {
+                jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == jobTitleId.Value && !x.IsDeleted);
+                jobTitle.OrThrowNotFound("Chức vụ", jobTitleId.Value);
+            }
+            var terminalLevel = (JobTitleTerminalLevel)(jobTitle?.TerminalLevel ?? (int)JobTitleTerminalLevel.None);
+
+            // Trưởng Xưởng/Giám đốc dùng chung toàn công ty — vượt phạm vi 1 Bộ phận, chỉ Admin mới
+            // được thăng lên 2 cấp này qua đây (Người phụ trách chỉ quản lý ĐÚNG Bộ phận mình phụ trách).
+            if (!isAdmin && (terminalLevel == JobTitleTerminalLevel.WorkshopManager || terminalLevel == JobTitleTerminalLevel.GeneralDirector))
+                throw new DomainException("Chỉ Admin mới được gán Chức vụ Trưởng Xưởng/Giám đốc.");
+
+            int? nextGroupId = employee.GroupId;
+            int? nextDepartmentId = employee.DepartmentId;
+
+            switch (terminalLevel)
+            {
+                case JobTitleTerminalLevel.DepartmentManager:
+                    nextGroupId = null;
+                    nextDepartmentId = departmentId;
+                    break;
+                case JobTitleTerminalLevel.WorkshopManager:
+                case JobTitleTerminalLevel.GeneralDirector:
+                    nextGroupId = null;
+                    nextDepartmentId = null;
+                    break;
+                default:
+                    if (employee.GroupId == null)
+                        throw new DomainException("Người này hiện không thuộc Nhóm nào — hãy nhờ Admin sửa qua màn Nhân viên.");
+                    break; // Chức vụ trung gian/gỡ chức vụ — giữ nguyên Group/Department hiện tại.
+            }
+
+            employee.JobTitleId = jobTitleId;
+            employee.GroupId = nextGroupId;
+            employee.DepartmentId = nextDepartmentId;
+
+            _unitOfWork.Employees.Update(employee);
+            await _unitOfWork.SaveChangesAsync();
+
+            await SyncAutoGrantedPermissionsCoreAsync(employee);
+
+            return await GetByIdAsync(employee.Id);
+        }
+
+        public async Task<EmployeeDto> AssignGroupJobTitleAsync(string userName, bool isAdmin, int employeeId, int groupId, int? jobTitleId)
+        {
+            var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
+            employee.OrThrowNotFound("Nhân viên", employeeId);
+
+            if (employee!.GroupId != groupId)
+                throw new DomainException("Nhân viên này không thuộc Nhóm đang thao tác.");
+
+            if (!isAdmin)
+            {
+                var isCoordinator = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                    x => x.GroupId == groupId && x.Employee.UserName == userName && !x.IsDeleted)).Count > 0;
+                if (!isCoordinator)
+                    throw new DomainException("Bạn không được phân công phụ trách Nhóm này.");
+            }
+
+            if (jobTitleId.HasValue)
+            {
+                var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Id == jobTitleId.Value && !x.IsDeleted);
+                jobTitle.OrThrowNotFound("Chức vụ", jobTitleId.Value);
+                if (jobTitle!.TerminalLevel != (int)JobTitleTerminalLevel.None)
+                    throw new DomainException("Chỉ được gán Chức vụ cấp trung gian (Staff/Group Leader/Team Leader) ở khối Nhóm.");
+            }
+
+            // GroupId/DepartmentId giữ nguyên — Chức vụ cấp trung gian không đổi tổ chức của Employee.
+            employee.JobTitleId = jobTitleId;
+
+            _unitOfWork.Employees.Update(employee);
+            await _unitOfWork.SaveChangesAsync();
+
+            await SyncAutoGrantedPermissionsCoreAsync(employee);
+
+            return await GetByIdAsync(employee.Id);
         }
 
         // Nhân viên tự chỉnh lũy kế của chính mình (canAdjustAny=false, so khớp UserName), hoặc

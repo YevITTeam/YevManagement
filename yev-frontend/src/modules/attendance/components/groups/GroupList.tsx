@@ -9,6 +9,7 @@ import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import GroupForm, { type GroupFormValues } from "./GroupForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -171,6 +172,12 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
         }
     };
 
+    const departmentOptions: SelectOption[] = departments.map((d) => ({
+        value: d.id,
+        label: d.departmentNameVn,
+        searchText: d.departmentNameVn.toLowerCase(),
+    }));
+
     return (
         <div className="space-y-4">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
@@ -183,21 +190,16 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             placeholder={t("searchPlaceholder")}
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
-                        <select
-                            value={departmentFilter}
-                            onChange={(event) => {
+                        <SearchableSelect
+                            options={departmentOptions}
+                            value={departmentFilter === "" ? "" : Number(departmentFilter)}
+                            onChange={(v) => {
                                 setPageIndex(1);
-                                setDepartmentFilter(event.target.value);
+                                setDepartmentFilter(v === "" ? "" : String(v));
                             }}
-                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">{t("allDepartments")}</option>
-                            {departments.map((department) => (
-                                <option key={department.id} value={department.id}>
-                                    {department.departmentNameVn}
-                                </option>
-                            ))}
-                        </select>
+                            placeholder={t("allDepartments")}
+                            triggerClassName="h-10 w-56 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}

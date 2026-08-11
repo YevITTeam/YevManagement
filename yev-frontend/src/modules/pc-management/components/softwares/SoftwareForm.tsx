@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import type { SoftwareDto } from "@/modules/pc-management/types/software.dto";
 import type { SoftwareGroupDto } from "@/modules/pc-management/types/software-group.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 export interface SoftwareFormValues {
     softwareCode: string;
@@ -125,22 +126,13 @@ export default function SoftwareForm({ isOpen, mode, initial, groups, loading = 
 
                     <label className="block">
                         <span className={fieldLabelClassName}>Nhóm phần mềm</span>
-                        <select
-                            value={values.softwareGroupId}
-                            onChange={(event) => handleChange("softwareGroupId", event.target.value)}
+                        <SearchableSelect
+                            options={groups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
+                            value={values.softwareGroupId === "" ? "" : Number(values.softwareGroupId)}
+                            onChange={(v) => handleChange("softwareGroupId", v === "" ? "" : String(v))}
+                            placeholder="-- Chọn nhóm phần mềm --"
                             disabled={loading}
-                            required
-                            className={fieldClassName}
-                        >
-                            <option value="" disabled>
-                                -- Chọn nhóm phần mềm --
-                            </option>
-                            {groups.map((group) => (
-                                <option key={group.id} value={group.id}>
-                                    {group.groupName}
-                                </option>
-                            ))}
-                        </select>
+                        />
                     </label>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

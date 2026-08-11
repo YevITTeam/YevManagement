@@ -7,6 +7,7 @@ import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -109,6 +110,13 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     const needsGroup = terminalLevel === TERMINAL_LEVEL_NONE;
     const needsDepartment = terminalLevel === TERMINAL_LEVEL_DEPARTMENT_MANAGER;
     const isCompanyWide = !needsGroup && !needsDepartment;
+
+    const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.groupNameVn, searchText: g.groupNameVn.toLowerCase() }));
+    const departmentOptions: SelectOption[] = departments.map((d) => ({
+        value: d.id,
+        label: d.departmentNameVn,
+        searchText: d.departmentNameVn.toLowerCase(),
+    }));
 
     const handleJobTitleChange = (value: string) => {
         const nextJobTitleId = value ? Number(value) : null;
@@ -260,46 +268,26 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                     {needsGroup && (
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
-                            <select
+                            <SearchableSelect
+                                options={groupOptions}
                                 value={values.groupId ?? ""}
-                                onChange={(event) => setValues((current) => ({ ...current, groupId: event.target.value ? Number(event.target.value) : null }))}
+                                onChange={(v) => setValues((current) => ({ ...current, groupId: v === "" ? null : v }))}
+                                placeholder={t("fieldGroupPlaceholder")}
                                 disabled={loading}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    {t("fieldGroupPlaceholder")}
-                                </option>
-                                {groups.map((group) => (
-                                    <option key={group.id} value={group.id}>
-                                        {group.groupNameVn}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
                     )}
 
                     {needsDepartment && (
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
-                            <select
+                            <SearchableSelect
+                                options={departmentOptions}
                                 value={values.departmentId ?? ""}
-                                onChange={(event) =>
-                                    setValues((current) => ({ ...current, departmentId: event.target.value ? Number(event.target.value) : null }))
-                                }
+                                onChange={(v) => setValues((current) => ({ ...current, departmentId: v === "" ? null : v }))}
+                                placeholder={t("fieldDepartmentPlaceholder")}
                                 disabled={loading}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    {t("fieldDepartmentPlaceholder")}
-                                </option>
-                                {departments.map((department) => (
-                                    <option key={department.id} value={department.id}>
-                                        {department.departmentNameVn}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                             <p className="mt-1.5 text-xs text-[#8a8f94]">{t("fieldDepartmentHint")}</p>
                         </label>
                     )}

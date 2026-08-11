@@ -24,6 +24,7 @@ import type {
     ProcessPartDto,
     UpdateOtFormEmployeeTimeDto,
 } from "@/modules/attendance/types/ot-form.dto";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -502,15 +503,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }));
     };
 
-    const handleDepartmentChange = (value: string) => {
-        setDepartmentId(value ? Number(value) : null);
+    const handleDepartmentChange = (nextId: number | "") => {
+        setDepartmentId(nextId === "" ? null : nextId);
         setGroupId(null);
         setSelectedEmployeeIds([]);
         setEmployeeOverrides({});
     };
 
-    const handleGroupChange = (value: string) => {
-        setGroupId(value ? Number(value) : null);
+    const handleGroupChange = (nextId: number | "") => {
+        setGroupId(nextId === "" ? null : nextId);
         setSelectedEmployeeIds([]);
         setEmployeeOverrides({});
     };
@@ -652,62 +653,35 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
-                            <select
+                            <SearchableSelect
+                                options={visibleDepartments.map((d) => ({ value: d.id, label: d.label, searchText: d.label.toLowerCase() }))}
                                 value={departmentId ?? ""}
-                                onChange={(event) => handleDepartmentChange(event.target.value)}
+                                onChange={handleDepartmentChange}
+                                placeholder={t("fieldDepartmentPlaceholder")}
                                 disabled={isSubmitting || isScopeLocked || isEditMode}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    {t("fieldDepartmentPlaceholder")}
-                                </option>
-                                {visibleDepartments.map((department) => (
-                                    <option key={department.id} value={department.id}>
-                                        {department.label}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
-                            <select
+                            <SearchableSelect
+                                options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
                                 value={groupId ?? ""}
-                                onChange={(event) => handleGroupChange(event.target.value)}
+                                onChange={handleGroupChange}
+                                placeholder={departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
                                 disabled={isSubmitting || isScopeLocked || !departmentId || isEditMode}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    {departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
-                                </option>
-                                {visibleGroups.map((group) => (
-                                    <option key={group.id} value={group.id}>
-                                        {group.label}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldReason")}</span>
-                            <select
+                            <SearchableSelect
+                                options={reasons.map((r) => ({ value: r.id, label: r.reasonNameVn, searchText: r.reasonNameVn.toLowerCase() }))}
                                 value={reasonId ?? ""}
-                                onChange={(event) => setReasonId(event.target.value ? Number(event.target.value) : null)}
+                                onChange={(v) => setReasonId(v === "" ? null : v)}
+                                placeholder={t("fieldReasonPlaceholder")}
                                 disabled={isSubmitting || isEditMode}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    {t("fieldReasonPlaceholder")}
-                                </option>
-                                {reasons.map((reason) => (
-                                    <option key={reason.id} value={reason.id}>
-                                        {reason.reasonNameVn}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
 
                         <label className="block">

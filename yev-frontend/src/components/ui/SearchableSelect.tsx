@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
 
 const inputClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// Combobox nhỏ dùng chung trong module job-titles: gõ để lọc, click chọn, Escape/blur để đóng.
-// Không phụ thuộc thư viện ngoài — dùng trong ApprovalStepManager.tsx cho các ô chọn Bộ phận/Nhóm
-// và ô "+ Thêm người giữ" (danh sách có thể dài, gõ tìm nhanh hơn cuộn <select> thường nhiều).
+// Combobox dùng chung toàn app (2026-08-10, chuyển từ modules/attendance/components/job-titles/ ra
+// đây vì ngày càng nhiều màn cần): gõ để lọc, click chọn, Escape/blur để đóng. Không phụ thuộc thư
+// viện ngoài. Dùng cho các dropdown chọn master data có thể nhiều lựa chọn (Bộ phận/Nhóm/Chi
+// nhánh/Loại thiết bị/NCC/Lý do...) — KHÔNG dùng cho enum cố định ít lựa chọn (trạng thái, có/không...),
+// bắt gõ tìm cho danh sách 2-3 mục chỉ gây phiền, ngược lại với mục đích cải thiện UX (yêu cầu người
+// dùng 2026-08-10, xem docs/docs-fe/DESIGN_SYSTEM.md §4.3).
 
 export interface SelectOption {
     value: number;
@@ -33,6 +36,7 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const listboxId = useId();
 
     // Đóng khi click ra ngoài
     useEffect(() => {
@@ -73,6 +77,7 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
             <div
                 role="combobox"
                 aria-expanded={isOpen}
+                aria-controls={listboxId}
                 className={`${triggerClassName ?? inputClassName} flex cursor-pointer items-center ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
                 onClick={open}
                 onKeyDown={(e) => {
@@ -117,7 +122,7 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
                     )}
 
                     {/* Danh sách */}
-                    <ul className="max-h-52 overflow-y-auto">
+                    <ul id={listboxId} role="listbox" className="max-h-52 overflow-y-auto">
                         {filtered.length === 0 ? (
                             <li className="px-3 py-4 text-center text-sm text-[#8a8f94]">
                                 Không tìm thấy kết quả

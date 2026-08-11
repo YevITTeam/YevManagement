@@ -10,6 +10,7 @@ import { DeviceGroupApi } from "@/modules/pc-management/api/device-group.api";
 import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
 import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 export interface DeviceFilters {
     deviceCode: string;
@@ -211,19 +212,14 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 Chi nhánh
                             </span>
                             <div className="relative">
-                                <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <select
-                                    value={filters.branch}
-                                    onChange={(event) => handleChange("branch", event.target.value)}
-                                    className={fieldWithIconClassName}
-                                >
-                                    <option value="">Tất cả chi nhánh</option>
-                                    {branches.map((branch) => (
-                                        <option key={branch.id} value={branch.id}>
-                                            {branch.branchName}
-                                        </option>
-                                    ))}
-                                </select>
+                                <Building2 className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <SearchableSelect
+                                    options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
+                                    value={filters.branch === "" ? "" : Number(filters.branch)}
+                                    onChange={(v) => handleChange("branch", v === "" ? "" : String(v))}
+                                    placeholder="Tất cả chi nhánh"
+                                    triggerClassName={fieldWithIconClassName}
+                                />
                             </div>
                         </label>
 
@@ -311,19 +307,14 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 Loại thiết bị
                             </span>
                             <div className="relative">
-                                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <select
-                                    value={filters.deviceType}
-                                    onChange={(event) => handleChange("deviceType", event.target.value)}
-                                    className={fieldWithIconClassName}
-                                >
-                                    <option value="">Tất cả loại</option>
-                                    {deviceTypes.map((deviceType) => (
-                                        <option key={deviceType.id} value={deviceType.id}>
-                                            {deviceType.typeName}
-                                        </option>
-                                    ))}
-                                </select>
+                                <Tag className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <SearchableSelect
+                                    options={deviceTypes.map((dt) => ({ value: dt.id, label: dt.typeName, searchText: dt.typeName.toLowerCase() }))}
+                                    value={filters.deviceType === "" ? "" : Number(filters.deviceType)}
+                                    onChange={(v) => handleChange("deviceType", v === "" ? "" : String(v))}
+                                    placeholder="Tất cả loại"
+                                    triggerClassName={fieldWithIconClassName}
+                                />
                             </div>
                         </label>
 
@@ -422,19 +413,14 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 Nhóm
                             </span>
                             <div className="relative">
-                                <Layers className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <select
-                                    value={filters.groupId}
-                                    onChange={(event) => handleChange("groupId", event.target.value)}
-                                    className={fieldWithIconClassName}
-                                >
-                                    <option value="">Tất cả nhóm</option>
-                                    {deviceGroups.map((group) => (
-                                        <option key={group.id} value={group.id}>
-                                            {group.groupName}
-                                        </option>
-                                    ))}
-                                </select>
+                                <Layers className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <SearchableSelect
+                                    options={deviceGroups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
+                                    value={filters.groupId === "" ? "" : Number(filters.groupId)}
+                                    onChange={(v) => handleChange("groupId", v === "" ? "" : String(v))}
+                                    placeholder="Tất cả nhóm"
+                                    triggerClassName={fieldWithIconClassName}
+                                />
                             </div>
                         </label>
 
@@ -444,19 +430,14 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 Bộ phận
                             </span>
                             <div className="relative">
-                                <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <select
-                                    value={filters.departmentId}
-                                    onChange={(event) => handleChange("departmentId", event.target.value)}
-                                    className={fieldWithIconClassName}
-                                >
-                                    <option value="">Tất cả bộ phận</option>
-                                    {deviceDepartments.map((department) => (
-                                        <option key={department.id} value={department.id}>
-                                            {department.departmentName}
-                                        </option>
-                                    ))}
-                                </select>
+                                <Users className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
+                                <SearchableSelect
+                                    options={deviceDepartments.map((d) => ({ value: d.id, label: d.departmentName, searchText: d.departmentName.toLowerCase() }))}
+                                    value={filters.departmentId === "" ? "" : Number(filters.departmentId)}
+                                    onChange={(v) => handleChange("departmentId", v === "" ? "" : String(v))}
+                                    placeholder="Tất cả bộ phận"
+                                    triggerClassName={fieldWithIconClassName}
+                                />
                             </div>
                         </label>
                     </div>

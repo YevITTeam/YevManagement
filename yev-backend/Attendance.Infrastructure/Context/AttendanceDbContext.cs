@@ -37,6 +37,8 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<OtFormApprovalStep> OtFormApprovalSteps { get; set; }
     public virtual DbSet<OtFormApprovalStepCandidate> OtFormApprovalStepCandidates { get; set; }
     public virtual DbSet<JobTitlePermission> JobTitlePermissions { get; set; }
+    public virtual DbSet<DepartmentApprovalStepCoordinator> DepartmentApprovalStepCoordinators { get; set; }
+    public virtual DbSet<GroupApprovalStepCoordinator> GroupApprovalStepCoordinators { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -169,6 +171,38 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.JobTitleId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_JobTitlePermissions_JobTitles_JobTitleId");
+        });
+
+        modelBuilder.Entity<DepartmentApprovalStepCoordinator>(entity =>
+        {
+            entity.HasIndex(e => e.DepartmentId, "IX_DepartmentApprovalStepCoordinators_DepartmentId");
+            entity.HasIndex(e => e.EmployeeId, "IX_DepartmentApprovalStepCoordinators_EmployeeId");
+
+            entity.HasOne(d => d.Department).WithMany(p => p.DepartmentApprovalStepCoordinators)
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_DepartmentApprovalStepCoordinators_Departments_DepartmentId");
+
+            entity.HasOne(d => d.Employee).WithMany()
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_DepartmentApprovalStepCoordinators_Employees_EmployeeId");
+        });
+
+        modelBuilder.Entity<GroupApprovalStepCoordinator>(entity =>
+        {
+            entity.HasIndex(e => e.GroupId, "IX_GroupApprovalStepCoordinators_GroupId");
+            entity.HasIndex(e => e.EmployeeId, "IX_GroupApprovalStepCoordinators_EmployeeId");
+
+            entity.HasOne(d => d.Group).WithMany(p => p.GroupApprovalStepCoordinators)
+                .HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_GroupApprovalStepCoordinators_Groups_GroupId");
+
+            entity.HasOne(d => d.Employee).WithMany()
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_GroupApprovalStepCoordinators_Employees_EmployeeId");
         });
 
         modelBuilder.Entity<OtForm>(entity =>

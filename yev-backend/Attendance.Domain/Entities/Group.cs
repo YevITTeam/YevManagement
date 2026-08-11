@@ -23,4 +23,6 @@ public partial class Group
     public virtual ICollection<Employee> Employees { get; set; } = new List<Employee>();
 
     public virtual ICollection<GroupApprovalStep> GroupApprovalSteps { get; set; } = new List<GroupApprovalStep>();
+
+    public virtual ICollection<GroupApprovalStepCoordinator> GroupApprovalStepCoordinators { get; set; } = new List<GroupApprovalStepCoordinator>();
 }

@@ -15,6 +15,7 @@ import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 interface DeviceListReportPrintDialogProps {
     isOpen: boolean;
@@ -172,36 +173,24 @@ export default function DeviceListReportPrintDialog({ isOpen, onClose }: DeviceL
                         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                             Loại thiết bị
                         </span>
-                        <select
-                            value={deviceTypeId}
-                            onChange={(event) => setDeviceTypeId(event.target.value)}
-                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">Tất cả loại</option>
-                            {deviceTypes.map((deviceType) => (
-                                <option key={deviceType.id} value={deviceType.id}>
-                                    {deviceType.typeName}
-                                </option>
-                            ))}
-                        </select>
+                        <SearchableSelect
+                            options={deviceTypes.map((dt) => ({ value: dt.id, label: dt.typeName, searchText: dt.typeName.toLowerCase() }))}
+                            value={deviceTypeId === "" ? "" : Number(deviceTypeId)}
+                            onChange={(v) => setDeviceTypeId(v === "" ? "" : String(v))}
+                            placeholder="Tất cả loại"
+                        />
                     </label>
 
                     <label className="block">
                         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                             Chi nhánh
                         </span>
-                        <select
-                            value={branchId}
-                            onChange={(event) => setBranchId(event.target.value)}
-                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">Toàn công ty</option>
-                            {branches.map((branch) => (
-                                <option key={branch.id} value={branch.id}>
-                                    {branch.branchName}
-                                </option>
-                            ))}
-                        </select>
+                        <SearchableSelect
+                            options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
+                            value={branchId === "" ? "" : Number(branchId)}
+                            onChange={(v) => setBranchId(v === "" ? "" : String(v))}
+                            placeholder="Toàn công ty"
+                        />
                     </label>
 
                     <label className="block">

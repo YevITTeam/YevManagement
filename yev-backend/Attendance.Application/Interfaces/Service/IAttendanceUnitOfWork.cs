@@ -25,6 +25,8 @@ namespace Attendance.Application.Interfaces.Service
         IJobTitleRepository JobTitles { get; }
         IDepartmentApprovalStepRepository DepartmentApprovalSteps { get; }
         IGroupApprovalStepRepository GroupApprovalSteps { get; }
+        IDepartmentApprovalStepCoordinatorRepository DepartmentApprovalStepCoordinators { get; }
+        IGroupApprovalStepCoordinatorRepository GroupApprovalStepCoordinators { get; }
         IOtFormApprovalStepRepository OtFormApprovalSteps { get; }
         IOtFormApprovalStepCandidateRepository OtFormApprovalStepCandidates { get; }
         IJobTitlePermissionRepository JobTitlePermissions { get; }

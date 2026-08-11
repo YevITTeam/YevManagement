@@ -238,7 +238,19 @@
       "removeHolderHint": "この人のこの役職を解除する（即座に反映）",
       "assignSuccess": "役職を更新しました",
       "assignError": "役職の更新に失敗しました",
-      "assignNeedsGroupError": "この方は部長/工場長/取締役です（特定のグループに所属していません）— この画面ではグループを自動選択できません。社員画面で編集してください。"
+      "assignNeedsGroupError": "この方は部長/工場長/取締役です（特定のグループに所属していません）— この画面ではグループを自動選択できません。社員画面で編集してください。",
+      "coordinatorsTitle": "この部署の承認チェーン担当者",
+      "coordinatorsHint": "この部署に所属する社員(直属、またはグループ経由)の中からのみ選択できます。ここに追加された人はこの画面から部署レベルの承認チェーンを編集できるようになります — 対応する権限は自動的に付与/取り消しされ、「権限のカスタマイズ」画面での追加操作は不要です。",
+      "coordinatorsLabel": "現在の担当者:",
+      "noCoordinators": "この部署にはまだ担当者が設定されていません",
+      "loadingCoordinators": "読み込み中...",
+      "loadCoordinatorsError": "担当者一覧を読み込めませんでした。",
+      "addCoordinatorPlaceholder": "+ 担当者を追加...",
+      "removeCoordinatorHint": "この人を担当者リストから削除する（即座に反映）",
+      "saveCoordinatorSuccess": "担当者を更新しました",
+      "saveCoordinatorError": "担当者の更新に失敗しました",
+      "coordinatorNotLinked": "アカウント未連携",
+      "coordinatorNotLinkedHint": "この社員はまだログインアカウントが連携されていません(社員画面でUserName未設定) — Adminがアカウントを連携すると、承認チェーン操作権限は自動的に有効になります。"
     },
     "GroupApprovalStep": {
       "sectionTitle": "中間ステップ（グループ単位）",
@@ -274,7 +286,19 @@
       "addHolderPlaceholder": "+ 担当者を追加...",
       "removeHolderHint": "この人のこの役職を解除する（即座に反映）",
       "assignSuccess": "役職を更新しました",
-      "assignError": "役職の更新に失敗しました"
+      "assignError": "役職の更新に失敗しました",
+      "coordinatorsTitle": "このグループの承認チェーン担当者",
+      "coordinatorsHint": "このグループに所属する社員の中からのみ選択できます。ここに追加された人はこの画面からグループレベルの承認チェーンを編集できるようになります — 対応する権限は自動的に付与/取り消しされ、「権限のカスタマイズ」画面での追加操作は不要です。部署担当者とは別管理で、自動継承されません。",
+      "coordinatorsLabel": "現在の担当者:",
+      "noCoordinators": "このグループにはまだ担当者が設定されていません",
+      "loadingCoordinators": "読み込み中...",
+      "loadCoordinatorsError": "担当者一覧を読み込めませんでした。",
+      "addCoordinatorPlaceholder": "+ 担当者を追加...",
+      "removeCoordinatorHint": "この人を担当者リストから削除する（即座に反映）",
+      "saveCoordinatorSuccess": "担当者を更新しました",
+      "saveCoordinatorError": "担当者の更新に失敗しました",
+      "coordinatorNotLinked": "アカウント未連携",
+      "coordinatorNotLinkedHint": "この社員はまだログインアカウントが連携されていません — 上の部署セクションの説明を参照してください。"
     },
     "Employee": {
       "searchPlaceholder": "社員コードまたは氏名で検索...",

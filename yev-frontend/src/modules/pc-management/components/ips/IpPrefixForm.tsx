@@ -6,6 +6,7 @@ import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import type { IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 export interface IpPrefixFormValues {
     prefix: string;
@@ -214,23 +215,13 @@ export default function IpPrefixForm({ isOpen, mode, initial, loading = false, o
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Chi nhánh</span>
-                            <select
+                            <SearchableSelect
+                                options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
                                 value={values.branchId || ""}
-                                onChange={(event) => handleChange("branchId", Number(event.target.value))}
+                                onChange={(v) => handleChange("branchId", v === "" ? 0 : v)}
+                                placeholder="Chọn chi nhánh..."
                                 disabled={loading}
-                                autoFocus={mode === "edit"}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    Chọn chi nhánh...
-                                </option>
-                                {branches.map((branch) => (
-                                    <option key={branch.id} value={branch.id}>
-                                        {branch.branchName}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
                     </div>
 

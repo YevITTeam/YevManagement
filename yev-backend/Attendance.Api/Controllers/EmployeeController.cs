@@ -8,6 +8,7 @@ namespace Attendance.Api.Controllers
 {
     public class EmployeeController : BaseController
     {
+        private const string AdminRole = "Admin";
         private readonly IEmployeeService _employeeService;
 
         public EmployeeController(IEmployeeService employeeService)
@@ -97,6 +98,29 @@ namespace Attendance.Api.Controllers
         {
             await _employeeService.DeleteAsync(id);
             return Success(true, "Xóa nhân viên thành công.");
+        }
+
+        // Gán/gỡ Chức vụ CÓ PHẠM VI (2026-08-11c) — dùng chung permission với chính cây duyệt của đơn
+        // vị đó (Người phụ trách Cây duyệt đã tự động có quyền này, xem
+        // EmployeeService.SyncAutoGrantedPermissionsCoreAsync), KHÔNG cần Attendance.Employee.Update
+        // (quyền đó chỉ dành cho sửa hồ sơ đầy đủ qua PUT /{id}, vẫn giữ nguyên chỉ Admin). Service tự
+        // kiểm tra non-Admin chỉ thao tác được đúng Bộ phận mình phụ trách.
+        [RequirePermission("Attendance.DepartmentApprovalStep.Update")]
+        [HttpPut("{id}/department-job-title")]
+        public async Task<ActionResult<ApiResponse<EmployeeDto>>> AssignDepartmentJobTitle(
+            int id, [FromQuery] int departmentId, [FromBody] AssignEmployeeJobTitleDto request)
+        {
+            var result = await _employeeService.AssignDepartmentJobTitleAsync(CurrentUserName, User.IsInRole(AdminRole), id, departmentId, request.JobTitleId);
+            return Success(result, "Cập nhật chức vụ thành công.");
+        }
+
+        [RequirePermission("Attendance.GroupApprovalStep.Update")]
+        [HttpPut("{id}/group-job-title")]
+        public async Task<ActionResult<ApiResponse<EmployeeDto>>> AssignGroupJobTitle(
+            int id, [FromQuery] int groupId, [FromBody] AssignEmployeeJobTitleDto request)
+        {
+            var result = await _employeeService.AssignGroupJobTitleAsync(CurrentUserName, User.IsInRole(AdminRole), id, groupId, request.JobTitleId);
+            return Success(result, "Cập nhật chức vụ thành công.");
         }
     }
 }

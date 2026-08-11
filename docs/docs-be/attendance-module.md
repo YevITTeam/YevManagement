@@ -1370,10 +1370,143 @@ nhận lại còn đúng 5 Role: `Admin`, `Basic`, `Quản lý Hợp Đồng`, `
    - Admin tick tay đúng permission đang auto (Thu hồi) → dòng chuyển `IsAutoGranted=0` đúng như thiết
      kế (sau khi sửa bug Delete+Add trùng khoá ở trên).
 
+#### §Giai đoạn 7 — Người phụ trách Cây duyệt: phân quyền cấu hình theo Bộ phận/Nhóm (2026-08-11)
+
+**Bối cảnh:** §3.4c/§3.4c-2 (Cây duyệt Bộ phận/Nhóm) trước đây chỉ Admin sửa được — quyền
+`Attendance.DepartmentApprovalStep.Update`/`GroupApprovalStep.Update` là quyền PHẲNG, không giới hạn
+phạm vi (ai có quyền này sửa được cây duyệt của TẤT CẢ Bộ phận/Nhóm). Với công ty nhiều Bộ phận/Nhóm,
+Admin phải tự tay cấu hình hết, tốn thời gian/công sức — người dùng muốn giao việc này cho người khác
+phụ trách theo từng đơn vị.
+
+**Quyết định kiến trúc đã chốt (qua trao đổi 2026-08-11):**
+- **KHÔNG suy luận theo Chức vụ** (khác hẳn hướng ban đầu) — dù Chức vụ Manager/Group Leader/Team
+  Leader trông giống "người đứng đầu" đúng Bộ phận/Nhóm, thực tế người giữ chức vụ cao ít khi trực
+  tiếp ngồi cấu hình cây duyệt, việc này thường giao cho 1 người khác phụ trách. Vì vậy **gán tay
+  tường minh** — Admin chỉ định đích danh người phụ trách.
+- **Tách biệt hoàn toàn Bộ phận và Nhóm** — phụ trách Bộ phận KHÔNG tự động phụ trách Nhóm con bên
+  trong, phải gán riêng nếu cần. Đơn giản, tường minh, không suy luận ngầm theo cấu trúc tổ chức.
+- **Không đưa vào `JobTitlePermissionWhitelist`** — nếu để `*ApprovalStep.Update` tự động cấp theo
+  Chức vụ thì tái tạo đúng rủi ro tự leo thang quyền quản trị đã loại bỏ khi xoá `UserApprovalScope`
+  (xem comment trong `JobTitlePermissionWhitelist.cs`).
+
+**Sửa 2026-08-11b (theo phản hồi thêm của người dùng, cùng ngày)** — 2 điểm bản đầu (2026-08-11) chưa
+đúng ý:
+- **Chỉ chọn được Employee đang thuộc ĐÚNG Bộ phận/Nhóm đó** (trước đó cho chọn BẤT KỲ tài khoản
+  Identity nào, không giới hạn) — khoá bảng gán theo `EmployeeId` (FK) thay vì `UserName` (chuỗi tự
+  do), validate ở `*CoordinatorService.ReplaceAsync` bằng đúng điều kiện khớp Department đã dùng ở
+  `EmployeeService.GetPagedAsync` (`Employee.DepartmentId == departmentId ||
+  (Employee.GroupId != null && Employee.Group.DepartmentId == departmentId)` cho Bộ phận;
+  `Employee.GroupId == groupId` cho Nhóm).
+- **Employee CHƯA liên kết tài khoản đăng nhập (`UserName == null`) vẫn gán được** — quyền thô
+  (`*ApprovalStep.{View,Update}` + `Department.View`/`Group.View`/`JobTitle.View`/`Employee.View`)
+  giờ **TỰ ĐỘNG cấp/thu hồi**, không còn bước Admin cấp tay qua "Tuỳ chỉnh quyền" như bản đầu — nếu
+  Employee đó chưa có `UserName`, việc cấp quyền tạm hoãn tới khi Admin liên kết tài khoản cho họ (qua
+  màn Nhân viên, `EmployeeService.UpdateAsync`), lúc đó tự có hiệu lực ngay, không cần thao tác gì
+  thêm. Đây CHÍNH LÀ cơ chế "tự động cấp permission theo Chức vụ" đã có ở §Giai đoạn 6
+  (`IUserDirectoryService.SyncAutoGrantedPermissionsAsync`), mở rộng thêm 1 NGUỒN nữa (vai trò Người
+  phụ trách) cùng đi qua 1 hàm gộp DUY NHẤT — xem mục 3 dưới.
+
+1. **2 entity mới** (Attendance, mirror `JobTitlePermission` — quản lý kiểu "thay nguyên danh sách",
+   không Create/Update/Delete từng dòng riêng):
+   - `DepartmentApprovalStepCoordinator`: `Id`, `DepartmentId` (FK), `EmployeeId` (FK →
+     `Employees.Id`), `IsDeleted`.
+   - `GroupApprovalStepCoordinator`: mirror, khoá theo `GroupId`.
+   - 1 Bộ phận/Nhóm có thể có nhiều người phụ trách (dự phòng/chia việc); 1 Employee có thể phụ trách
+     nhiều Bộ phận/Nhóm; PHẢI thuộc đúng đơn vị đó (xem "Sửa 2026-08-11b" ở trên).
+
+2. **Service** (`DepartmentApprovalStepCoordinatorService`/`GroupApprovalStepCoordinatorService`) —
+   không còn phụ thuộc `IUserDirectoryService` (không cần kiểm tra tài khoản Identity nữa — hiển thị
+   `FullName`/`EmployeeCode` lấy thẳng từ `Employee`, `UserName` pass-through nullable).
+   `ReplaceAsync` validate mọi `EmployeeId` gửi lên phải khớp Employee active thuộc đúng đơn vị (400
+   `DomainException` nếu không), rồi gọi `IEmployeeService.SyncAutoGrantedPermissionsForEmployeeAsync`
+   cho HỢP của tập Employee cũ + mới (thêm lẫn bị gỡ) để quyền có hiệu lực ngay.
+
+3. **`ApprovalStepCoordinatorPermissions`** (`Attendance.Domain/Constants/`, mirror
+   `JobTitlePermissionWhitelist` nhưng KHÔNG phải whitelist do Admin chọn — là hằng số CỐ ĐỊNH, không
+   qua validate whitelist vì không có rủi ro Admin tự nhập chuỗi tuỳ ý):
+   `BaseViewCodes` (`Department.View`/`Group.View`/`JobTitle.View`/`Employee.View`/
+   `DepartmentApprovalStep.View`/`GroupApprovalStep.View` — cấp cho BẤT KỲ ai phụ trách ít nhất 1 Bộ
+   phận HOẶC 1 Nhóm, vì màn "Cây duyệt" là 1 màn hợp nhất cả 2 khối, đọc thiếu bên nào cũng lỗi khi
+   tải) + `DepartmentUpdateCode`/`GroupUpdateCode` (chỉ cấp đúng phía đang phụ trách).
+   `EmployeeService.SyncAutoGrantedPermissionsCoreAsync(employee)` — hàm GỘP DUY NHẤT tính lại toàn bộ
+   permission tự động cấp (theo Chức vụ + theo vai trò Người phụ trách) rồi gọi 1 LẦN
+   `IUserDirectoryService.SyncAutoGrantedPermissionsAsync` (hàm này THAY NGUYÊN danh sách
+   `IsAutoGranted=true` của user — gọi tách rời theo từng nguồn sẽ khiến nguồn gọi sau xoá mất
+   permission nguồn kia vừa cấp, đã sửa `JobTitlePermissionService.ReplaceAsync` gọi qua
+   `IEmployeeService.SyncAutoGrantedPermissionsForEmployeeAsync` thay vì gọi thẳng
+   `IUserDirectoryService` như trước, để không bị lỗi này).
+
+4. **Scope-check trong `DepartmentApprovalStepService`/`GroupApprovalStepService`** (§3.4c/§3.4c-2,
+   sửa CHỮ KÝ HÀM — thêm `userName`/`isAdmin`, mirror pattern `isAdmin` bypass đã có ở
+   `OtFormController`/`EmployeeService.RemoveEmployeeCoreAsync`): `EnsureCanManageDepartmentAsync`/
+   `EnsureCanManageGroupAsync` — Admin (`User.IsInRole("Admin")`) bỏ qua kiểm tra; người khác phải có
+   dòng trong bảng gán ứng với ĐÚNG `departmentId`/`groupId` đang thao tác (so khớp qua
+   `Employee.UserName == userName`, không phải cột trực tiếp trên bảng gán nữa — xem mục 1), sai thì
+   `DomainException` dù có quyền thô. Áp dụng cho CẢ `GetBy*Async` (xem) lẫn `ReplaceAsync` (sửa) —
+   người phụ trách Bộ phận A không xem/sửa được cây duyệt Bộ phận B dù cùng có quyền
+   `DepartmentApprovalStep.Update`.
+
+5. **Permission mới** (Identity, migration `AddApprovalStepCoordinatorPermissions`) — 4 mã:
+   `Attendance.DepartmentApprovalStepCoordinator.{View,Update}`,
+   `Attendance.GroupApprovalStepCoordinator.{View,Update}`, seed CHỈ cho Role đang giữ
+   `Attendance.Department.Create` (thực tế chỉ Admin) — quản lý BẢNG GÁN (ai được làm người phụ trách)
+   luôn là việc của Admin, không delegate được; KHÁC với quyền thao tác Cây duyệt thật
+   (`*ApprovalStep.{View,Update}`) — quyền đó mới là phần tự động cấp cho người phụ trách (mục 3).
+
+6. **FE**: `ApprovalStepManager.tsx` (tab "Cây duyệt") có khối "Người phụ trách" ngay trong mỗi phần
+   Bộ phận/Nhóm — chip hiển thị người đang phụ trách (kèm nhãn "chưa liên kết tài khoản" nếu
+   `Employee.UserName == null`) + ô `SearchableSelect` gõ tìm thêm, nguồn dữ liệu là
+   `deptEmployees`/`groupEmployees` (đã tải sẵn cho khối "Đang giữ" Chức vụ ngay bên dưới — TÁI DÙNG,
+   không gọi thêm API), áp dụng ngay không cần nút Lưu riêng. Khối này chỉ hiện với người có quyền
+   `*Coordinator.View` (Admin) — 1 Người phụ trách bình thường (không phải Admin) mở màn này (được vào
+   qua sidebar từ mục 7 dưới) sẽ KHÔNG thấy khối này, tránh gọi API `*Coordinator.View` mà họ không có
+   quyền (403). Sidebar (`OtManagerSidebar.tsx`) — mục "Danh mục" trước đây chỉ hiện với
+   `Attendance.Department.Create` (Admin), giờ `permissions` là MẢNG (đổi `hasPermission`→
+   `hasAnyPermission`), thêm `DepartmentApprovalStep.Update`/`GroupApprovalStep.Update` làm điều kiện
+   thay thế — người phụ trách (không phải Admin) mới thấy được mục để vào tab Cây duyệt.
+
+7. **Checklist khi Admin gán 1 người làm phụ trách** — GIỜ CHỈ CÒN 1 BƯỚC (khác bản đầu 2026-08-11):
+   thêm họ (chọn trong đúng danh sách nhân viên của Bộ phận/Nhóm) vào danh sách phụ trách ở màn Cây
+   duyệt, khối "Người phụ trách" — quyền thao tác tự động có hiệu lực ngay nếu họ đã liên kết tài
+   khoản đăng nhập, hoặc tự có hiệu lực ngay khi Admin liên kết tài khoản cho họ sau đó (không cần
+   thao tác thêm ở "Tuỳ chỉnh quyền").
+
+8. **Gán Chức vụ CÓ PHẠM VI cho nhân viên trong đơn vị mình phụ trách (2026-08-11c)** — người dùng yêu
+   cầu thêm: Người phụ trách cũng cần tự gán được Chức vụ cho nhân viên, nhưng CHỈ trong đúng Bộ
+   phận/Nhóm họ phụ trách (không phải toàn quyền `Attendance.Employee.Update`, quyền đó vẫn giữ nguyên
+   chỉ Admin — sửa được TOÀN BỘ hồ sơ mọi nhân viên qua màn Nhân viên đầy đủ). Giải pháp: 2 action MỚI
+   tách riêng khỏi `PUT /api/Employee/{id}` (`UpdateAsync`, không đổi):
+   - `PUT /api/Employee/{id}/department-job-title?departmentId=` — gán Chức vụ CẤP CUỐI, gate bằng
+     CHÍNH `Attendance.DepartmentApprovalStep.Update` (đã tự động cấp cho Người phụ trách Bộ phận, xem
+     mục 3) thay vì `Employee.Update`. `EmployeeService.AssignDepartmentJobTitleAsync` tự kiểm tra: (a)
+     Employee đang thao tác PHẢI thuộc đúng `departmentId` (trực tiếp hoặc qua Group con) — không
+     "mượn" nhân viên Bộ phận khác; (b) non-Admin PHẢI có tên trong `DepartmentApprovalStepCoordinators`
+     của đúng `departmentId` đó; (c) non-Admin KHÔNG được gán Chức vụ Trưởng Xưởng/Giám đốc
+     (`TerminalLevel` = WorkshopManager/GeneralDirector — 2 cấp này dùng chung TOÀN CÔNG TY, vượt hẳn
+     phạm vi 1 Bộ phận, chỉ Admin mới thăng được). BE tự tính lại `GroupId`/`DepartmentId` theo
+     `TerminalLevel` của Chức vụ mới (không nhận trực tiếp từ client) — mirror logic đã có ở FE trước
+     đây (`handleAssignDeptJobTitle`), giờ dời xuống BE làm nguồn chân lý.
+   - `PUT /api/Employee/{id}/group-job-title?groupId=` — gán Chức vụ TRUNG GIAN, gate bằng
+     `Attendance.GroupApprovalStep.Update`. `AssignGroupJobTitleAsync` kiểm tra Employee phải có đúng
+     `GroupId` này, non-Admin phải có tên trong `GroupApprovalStepCoordinators` của đúng `groupId`,
+     Chức vụ gửi lên phải `TerminalLevel = None`. Không đổi `GroupId`/`DepartmentId` (Chức vụ trung
+     gian không đổi tổ chức).
+   - Cả 2 gọi lại `SyncAutoGrantedPermissionsCoreAsync` sau khi lưu (JobTitle đổi → permission tự động
+     theo Chức vụ có thể đổi theo). FE (`ApprovalStepManager.tsx`) đổi 2 handler quick-assign sang gọi
+     endpoint mới thay vì `EmployeeApi.updateEmployee` full-profile, không còn tự tính
+     `nextGroupId`/`nextDepartmentId` ở FE nữa (BE làm, tránh 2 nguồn logic lệch nhau).
+
+**Chưa verify sống** (khác với Giai đoạn 6) — do khối lượng thay đổi lớn trong 1 lượt, mới dừng ở build
+sạch + apply migration lên DB thật (bảo toàn đúng 1 dòng test có sẵn ở `GroupApprovalStepCoordinators`,
+map `UserName`→`EmployeeId` qua `Employees.UserName` trùng khớp) + xác nhận permission seed đúng qua
+SQL. Nên test tay qua UI thật (gán 1 người phụ trách test CHƯA liên kết tài khoản, xác nhận quyền CHƯA
+có hiệu lực; sau đó liên kết `UserName` cho họ qua màn Nhân viên, xác nhận quyền tự bật lên; tự đăng
+nhập tài khoản đó, thử sửa đúng/sai Bộ phận) trước khi coi tính năng này là ổn định.
+
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.
-- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`) → `AddAttendanceSetting` (2026-08-01, bảng `AttendanceSettings` 1 dòng, seed `(2.5, 25, 300)` — xem §Cấu hình phiếu ăn & giới hạn lũy kế) → `AddOtFormBatch` (2026-08-06, bảng `OtFormBatches`/`OtFormBatchEmailTokens` — xem §Đơn tổng) → `AddProjectedAccumulationToEmployee` (2026-08-06, 4 cột `Projected*` trên `Employees` — xem §Lũy kế dự kiến) → `AddJobTitle` (2026-08-06, bảng `JobTitles` + cột `Employees.JobTitleId` + seed 14 chức vụ — xem §Cây chức vụ) → `AddRequesterResponsible` (2026-08-06, cột `Requester*`/`Responsible*` trên `Group`/`OtForm` — tính năng KHÁC, không thuộc Cây chức vụ; **DB thật đã có sẵn schema này từ trước** do ai đó áp dụng tay ngoài EF, migration được **stamp thẳng vào `__EFMigrationsHistory` chứ không chạy lại DDL**, xem ghi chú cuối §Cây chức vụ Giai đoạn 2b) → `AddDepartmentApprovalStep` (2026-08-06, bảng `DepartmentApprovalSteps`, không seed dữ liệu — xem §Cây chức vụ Giai đoạn 2b) → `MoveRequiresSignatureToDepartmentApprovalStep` (2026-08-07, `DropColumn JobTitles.RequiresSignature` + `AddColumn DepartmentApprovalSteps.RequiresSignature` — xem §Cây chức vụ Giai đoạn 2c) → `AddIsResponsibleToDepartmentApprovalStep` (2026-08-07, `AddColumn DepartmentApprovalSteps.IsResponsible` — xem §Cây chức vụ Giai đoạn 2d) → `GiaiDoan3JobTitleApprovalStepWiring` (2026-08-07, rename `ApprovalLevel→OtFormApprovalStepId` trên `OtFormApprovalHistories`/`OtFormApprovalEmailTokens`, `AddColumn OtForms.ApprovalChainWarning`, `CreateTable OtFormApprovalSteps`/`OtFormApprovalStepCandidates` — xem §Cây chức vụ Giai đoạn 3.1) → `RemoveUserApprovalScope` (2026-08-08, Giai đoạn 3.2, `DropTable UserApprovalScopes` — xoá hẳn feature orphaned, xem §Cây chức vụ Giai đoạn 3.2 mục 4) → `AddOtFormDeleteFields` (2026-08-08, `AddColumn` 4 cột `Deleted*`/`DeleteReason` trên `OtForms` — xem §Xoá đơn kẹt vĩnh viễn) → `MakeEmployeeGroupNullableAddDepartment` (2026-08-08, `AlterColumn Employees.GroupId NULL` + `AddColumn Employees.DepartmentId` + FK + index — xem §Gán tổ chức theo Chức vụ) → `AddBatchAutoSendTimeToAttendanceSetting` (2026-08-08, `AddColumn AttendanceSettings.BatchAutoSendTime:TimeOnly` default `15:00:00` — xem §Đơn tổng) → `RemoveOldRequesterResponsibleAddCreatorSignature` (2026-08-08, `DropColumn` toàn bộ `Requester*`/`Responsible*` trên `Groups`/`OtForms` + FK liên quan, `AddColumn OtForms.CreatorSignatureImage:byte[]?` — xem §Người tạo tự ký ô "Người đề nghị") → `AddGroupApprovalStepRemoveDeptResponsible` (2026-08-08, `CreateTable GroupApprovalSteps` + `DropColumn DepartmentApprovalSteps.IsResponsible` — xem §Giai đoạn 4) → `SimplifyJobTitleTo6Levels` (2026-08-08, xoá toàn bộ dữ liệu đơn OT + cấu hình cây duyệt cũ, reset `Employees.JobTitleId=NULL`, thu gọn `JobTitles` 14→6 dòng — xem §Giai đoạn 4) → `AddJobTitlePermission` (2026-08-10, `CreateTable JobTitlePermissions` — xem §Giai đoạn 6). Tất cả đã `database update`/stamp vào `YevOTManagement` (permission Identity tương ứng `AddJobTitlePermissions`/`AddDepartmentApprovalStepPermissions`/`AddGroupApprovalStepPermissions`/`AddJobTitlePermissionPermissions` cũng đã apply vào `YevIdentityManagement`, cùng `AddIsAutoGrantedToUserPermission` — `AddColumn UserPermissions.IsAutoGranted` — xem §Giai đoạn 6). Đã xác nhận lại 2026-08-08 qua `__EFMigrationsHistory` trên DB thật: `GiaiDoan3JobTitleApprovalStepWiring` đứng đầu danh sách migration đã apply — dòng cảnh báo "CHƯA apply" trước đây đã lỗi thời, xoá bỏ.
-- Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed), `AddSecondaryPasswordPermission` (2026-07-30, seed `Attendance.SecondaryPassword.Update`), `AddOtFormRemoveEmployeePermission` (2026-07-30, seed `Attendance.OTForm.RemoveEmployee` — xem §Loại nhân viên khỏi đơn), `AddAttendanceSettingPermission` (2026-08-01, seed `Attendance.Setting.Update` — xem §Cấu hình phiếu ăn & giới hạn lũy kế), `RemoveUserApprovalScopePermissions` (2026-08-08, xoá 3 permission `Attendance.UserApprovalScope.View/Create/Delete` + `RolePermissions` liên quan), `AddOtFormDeletePermission` (2026-08-08, seed `Attendance.OTForm.Delete`, chỉ gán Admin — xem §Xoá đơn kẹt vĩnh viễn), `AddGroupApprovalStepPermissions` (2026-08-08, seed `Attendance.GroupApprovalStep.View/Update` — xem §Giai đoạn 4), `AddIsAutoGrantedToUserPermission` (2026-08-10, `AddColumn UserPermissions.IsAutoGranted` — xem §Giai đoạn 6), `AddJobTitlePermissionPermissions` (2026-08-10, seed `Attendance.JobTitlePermission.View/Update` — xem §Giai đoạn 6), và `RemoveNhanVienRole` (2026-08-10, xoá Role legacy `Nhân viên` — 0 người giữ, xác nhận trước khi xoá, xem §Giai đoạn 6) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
+- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`) → `AddAttendanceSetting` (2026-08-01, bảng `AttendanceSettings` 1 dòng, seed `(2.5, 25, 300)` — xem §Cấu hình phiếu ăn & giới hạn lũy kế) → `AddOtFormBatch` (2026-08-06, bảng `OtFormBatches`/`OtFormBatchEmailTokens` — xem §Đơn tổng) → `AddProjectedAccumulationToEmployee` (2026-08-06, 4 cột `Projected*` trên `Employees` — xem §Lũy kế dự kiến) → `AddJobTitle` (2026-08-06, bảng `JobTitles` + cột `Employees.JobTitleId` + seed 14 chức vụ — xem §Cây chức vụ) → `AddRequesterResponsible` (2026-08-06, cột `Requester*`/`Responsible*` trên `Group`/`OtForm` — tính năng KHÁC, không thuộc Cây chức vụ; **DB thật đã có sẵn schema này từ trước** do ai đó áp dụng tay ngoài EF, migration được **stamp thẳng vào `__EFMigrationsHistory` chứ không chạy lại DDL**, xem ghi chú cuối §Cây chức vụ Giai đoạn 2b) → `AddDepartmentApprovalStep` (2026-08-06, bảng `DepartmentApprovalSteps`, không seed dữ liệu — xem §Cây chức vụ Giai đoạn 2b) → `MoveRequiresSignatureToDepartmentApprovalStep` (2026-08-07, `DropColumn JobTitles.RequiresSignature` + `AddColumn DepartmentApprovalSteps.RequiresSignature` — xem §Cây chức vụ Giai đoạn 2c) → `AddIsResponsibleToDepartmentApprovalStep` (2026-08-07, `AddColumn DepartmentApprovalSteps.IsResponsible` — xem §Cây chức vụ Giai đoạn 2d) → `GiaiDoan3JobTitleApprovalStepWiring` (2026-08-07, rename `ApprovalLevel→OtFormApprovalStepId` trên `OtFormApprovalHistories`/`OtFormApprovalEmailTokens`, `AddColumn OtForms.ApprovalChainWarning`, `CreateTable OtFormApprovalSteps`/`OtFormApprovalStepCandidates` — xem §Cây chức vụ Giai đoạn 3.1) → `RemoveUserApprovalScope` (2026-08-08, Giai đoạn 3.2, `DropTable UserApprovalScopes` — xoá hẳn feature orphaned, xem §Cây chức vụ Giai đoạn 3.2 mục 4) → `AddOtFormDeleteFields` (2026-08-08, `AddColumn` 4 cột `Deleted*`/`DeleteReason` trên `OtForms` — xem §Xoá đơn kẹt vĩnh viễn) → `MakeEmployeeGroupNullableAddDepartment` (2026-08-08, `AlterColumn Employees.GroupId NULL` + `AddColumn Employees.DepartmentId` + FK + index — xem §Gán tổ chức theo Chức vụ) → `AddBatchAutoSendTimeToAttendanceSetting` (2026-08-08, `AddColumn AttendanceSettings.BatchAutoSendTime:TimeOnly` default `15:00:00` — xem §Đơn tổng) → `RemoveOldRequesterResponsibleAddCreatorSignature` (2026-08-08, `DropColumn` toàn bộ `Requester*`/`Responsible*` trên `Groups`/`OtForms` + FK liên quan, `AddColumn OtForms.CreatorSignatureImage:byte[]?` — xem §Người tạo tự ký ô "Người đề nghị") → `AddGroupApprovalStepRemoveDeptResponsible` (2026-08-08, `CreateTable GroupApprovalSteps` + `DropColumn DepartmentApprovalSteps.IsResponsible` — xem §Giai đoạn 4) → `SimplifyJobTitleTo6Levels` (2026-08-08, xoá toàn bộ dữ liệu đơn OT + cấu hình cây duyệt cũ, reset `Employees.JobTitleId=NULL`, thu gọn `JobTitles` 14→6 dòng — xem §Giai đoạn 4) → `AddJobTitlePermission` (2026-08-10, `CreateTable JobTitlePermissions` — xem §Giai đoạn 6) → `AddApprovalStepCoordinators` (2026-08-11, `CreateTable DepartmentApprovalStepCoordinators`/`GroupApprovalStepCoordinators` — xem §Giai đoạn 7) → `ChangeApprovalStepCoordinatorsToEmployeeId` (2026-08-11b, đổi khoá 2 bảng trên từ `UserName` sang `EmployeeId` FK, MAP dữ liệu cũ qua `Employees.UserName` trùng khớp trước khi xoá cột — xem §Giai đoạn 7, mục "Sửa 2026-08-11b"). Tất cả đã `database update`/stamp vào `YevOTManagement` (permission Identity tương ứng `AddJobTitlePermissions`/`AddDepartmentApprovalStepPermissions`/`AddGroupApprovalStepPermissions`/`AddJobTitlePermissionPermissions`/`AddApprovalStepCoordinatorPermissions` cũng đã apply vào `YevIdentityManagement`, cùng `AddIsAutoGrantedToUserPermission` — `AddColumn UserPermissions.IsAutoGranted` — xem §Giai đoạn 6). Đã xác nhận lại 2026-08-08 qua `__EFMigrationsHistory` trên DB thật: `GiaiDoan3JobTitleApprovalStepWiring` đứng đầu danh sách migration đã apply — dòng cảnh báo "CHƯA apply" trước đây đã lỗi thời, xoá bỏ.
+- Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed), `AddSecondaryPasswordPermission` (2026-07-30, seed `Attendance.SecondaryPassword.Update`), `AddOtFormRemoveEmployeePermission` (2026-07-30, seed `Attendance.OTForm.RemoveEmployee` — xem §Loại nhân viên khỏi đơn), `AddAttendanceSettingPermission` (2026-08-01, seed `Attendance.Setting.Update` — xem §Cấu hình phiếu ăn & giới hạn lũy kế), `RemoveUserApprovalScopePermissions` (2026-08-08, xoá 3 permission `Attendance.UserApprovalScope.View/Create/Delete` + `RolePermissions` liên quan), `AddOtFormDeletePermission` (2026-08-08, seed `Attendance.OTForm.Delete`, chỉ gán Admin — xem §Xoá đơn kẹt vĩnh viễn), `AddGroupApprovalStepPermissions` (2026-08-08, seed `Attendance.GroupApprovalStep.View/Update` — xem §Giai đoạn 4), `AddIsAutoGrantedToUserPermission` (2026-08-10, `AddColumn UserPermissions.IsAutoGranted` — xem §Giai đoạn 6), `AddJobTitlePermissionPermissions` (2026-08-10, seed `Attendance.JobTitlePermission.View/Update` — xem §Giai đoạn 6), `RemoveNhanVienRole` (2026-08-10, xoá Role legacy `Nhân viên` — 0 người giữ, xác nhận trước khi xoá, xem §Giai đoạn 6), và `AddApprovalStepCoordinatorPermissions` (2026-08-11, seed `Attendance.DepartmentApprovalStepCoordinator.{View,Update}`/`Attendance.GroupApprovalStepCoordinator.{View,Update}`, chỉ gán Admin — xem §Giai đoạn 7) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
 
 ## 1. Cấu trúc code đã có
 

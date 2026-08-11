@@ -1,0 +1,20 @@
+# Bi mat production - KHONG BAO GIO de lot vao layer image (mount rieng luc docker run/compose).
+**/appsettings.json
+**/appsettings.*.json
+
+# BE
+**/bin/
+**/obj/
+yev-backend/publish_backend/
+yev-backend/**/logs/
+_Release/
+
+# FE
+**/node_modules/
+**/.next/
+yev-frontend/.env*
+
+# Chung
+.git/
+.vs/
+*.user

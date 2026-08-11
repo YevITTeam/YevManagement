@@ -2,7 +2,6 @@ using Attendance.Application.Dtos.JobTitlePermissions;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Constants;
 using Attendance.Domain.Entities;
-using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 
@@ -13,11 +12,11 @@ namespace Attendance.Application.Services
     // riêng. Xem docs/docs-be/attendance-module.md §Cây chức vụ, mục "Quyền theo Chức vụ".
     public class JobTitlePermissionService : BaseService<IAttendanceUnitOfWork>, IJobTitlePermissionService
     {
-        private readonly IUserDirectoryService _userDirectoryService;
+        private readonly IEmployeeService _employeeService;
 
-        public JobTitlePermissionService(IAttendanceUnitOfWork unitOfWork, IUserDirectoryService userDirectoryService) : base(unitOfWork)
+        public JobTitlePermissionService(IAttendanceUnitOfWork unitOfWork, IEmployeeService employeeService) : base(unitOfWork)
         {
-            _userDirectoryService = userDirectoryService;
+            _employeeService = employeeService;
         }
 
         public List<string> GetAllowedPermissionCodes() => JobTitlePermissionWhitelist.AllowedCodes.OrderBy(x => x).ToList();
@@ -67,11 +66,14 @@ namespace Attendance.Application.Services
             await _unitOfWork.SaveChangesAsync();
 
             // Sửa mapping có hiệu lực NGAY cho mọi nhân viên đang giữ đúng Chức vụ này (có UserName) —
-            // không cần đợi ai đó động vào Employee của từng người mới đồng bộ lại.
+            // không cần đợi ai đó động vào Employee của từng người mới đồng bộ lại. Gọi qua
+            // IEmployeeService (không tự gọi thẳng IUserDirectoryService ở đây nữa) để gộp CHUNG với
+            // permission tự động cấp theo vai trò "Người phụ trách Cây duyệt" nếu người đó cũng đang
+            // giữ vai trò đó — xem EmployeeService.SyncAutoGrantedPermissionsCoreAsync.
             var employees = await _unitOfWork.Employees.FindAsync(x => x.JobTitleId == jobTitleId && !x.IsDeleted && x.UserName != null);
             foreach (var employee in employees)
             {
-                await _userDirectoryService.SyncAutoGrantedPermissionsAsync(employee.UserName, codes);
+                await _employeeService.SyncAutoGrantedPermissionsForEmployeeAsync(employee.Id);
             }
 
             return await GetByJobTitleAsync(jobTitleId);

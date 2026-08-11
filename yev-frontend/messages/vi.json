@@ -238,7 +238,19 @@
       "removeHolderHint": "Bỏ chức vụ này của người này (áp dụng ngay)",
       "assignSuccess": "Đã cập nhật chức vụ",
       "assignError": "Cập nhật chức vụ thất bại",
-      "assignNeedsGroupError": "Người này đang là Trưởng phòng/Trưởng Xưởng/Giám đốc (không thuộc Nhóm cụ thể) — không thể tự chọn lại Nhóm ở màn này, hãy sửa qua màn Nhân viên."
+      "assignNeedsGroupError": "Người này đang là Trưởng phòng/Trưởng Xưởng/Giám đốc (không thuộc Nhóm cụ thể) — không thể tự chọn lại Nhóm ở màn này, hãy sửa qua màn Nhân viên.",
+      "coordinatorsTitle": "Người phụ trách Cây duyệt Bộ phận này",
+      "coordinatorsHint": "Chỉ chọn được trong số nhân viên đang thuộc Bộ phận này (trực tiếp hoặc qua Nhóm con). Người được thêm vào đây sẽ tự sửa được cây duyệt cấp Bộ phận ở màn này — quyền tương ứng được TỰ ĐỘNG cấp/thu hồi, không cần thao tác gì thêm ở màn Tuỳ chỉnh quyền.",
+      "coordinatorsLabel": "Đang phụ trách:",
+      "noCoordinators": "Chưa gán ai phụ trách Bộ phận này",
+      "loadingCoordinators": "Đang tải...",
+      "loadCoordinatorsError": "Không thể tải danh sách người phụ trách.",
+      "addCoordinatorPlaceholder": "+ Thêm người phụ trách...",
+      "removeCoordinatorHint": "Gỡ người này khỏi danh sách phụ trách (áp dụng ngay)",
+      "saveCoordinatorSuccess": "Đã cập nhật người phụ trách",
+      "saveCoordinatorError": "Cập nhật người phụ trách thất bại",
+      "coordinatorNotLinked": "chưa liên kết tài khoản",
+      "coordinatorNotLinkedHint": "Nhân viên này chưa liên kết tài khoản đăng nhập (chưa gán UserName ở màn Nhân viên) — quyền thao tác Cây duyệt sẽ tự có hiệu lực ngay khi Admin liên kết tài khoản cho họ."
     },
     "GroupApprovalStep": {
       "sectionTitle": "Cấp trung gian (theo Nhóm)",
@@ -274,7 +286,19 @@
       "addHolderPlaceholder": "+ Thêm người giữ...",
       "removeHolderHint": "Bỏ chức vụ này của người này (áp dụng ngay)",
       "assignSuccess": "Đã cập nhật chức vụ",
-      "assignError": "Cập nhật chức vụ thất bại"
+      "assignError": "Cập nhật chức vụ thất bại",
+      "coordinatorsTitle": "Người phụ trách Cây duyệt Nhóm này",
+      "coordinatorsHint": "Chỉ chọn được trong số nhân viên đang thuộc đúng Nhóm này. Người được thêm vào đây sẽ tự sửa được cây duyệt cấp Nhóm ở màn này — quyền tương ứng được TỰ ĐỘNG cấp/thu hồi, không cần thao tác gì thêm ở màn Tuỳ chỉnh quyền. TÁCH BIỆT với người phụ trách Bộ phận — không tự động kế thừa.",
+      "coordinatorsLabel": "Đang phụ trách:",
+      "noCoordinators": "Chưa gán ai phụ trách Nhóm này",
+      "loadingCoordinators": "Đang tải...",
+      "loadCoordinatorsError": "Không thể tải danh sách người phụ trách.",
+      "addCoordinatorPlaceholder": "+ Thêm người phụ trách...",
+      "removeCoordinatorHint": "Gỡ người này khỏi danh sách phụ trách (áp dụng ngay)",
+      "saveCoordinatorSuccess": "Đã cập nhật người phụ trách",
+      "saveCoordinatorError": "Cập nhật người phụ trách thất bại",
+      "coordinatorNotLinked": "chưa liên kết tài khoản",
+      "coordinatorNotLinkedHint": "Nhân viên này chưa liên kết tài khoản đăng nhập — xem ghi chú tương tự ở khối Bộ phận phía dưới."
     },
     "Employee": {
       "searchPlaceholder": "Tìm theo mã hoặc tên nhân viên...",

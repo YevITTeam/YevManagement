@@ -11,6 +11,7 @@ import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
 import EmployeeImportDialog from "./EmployeeImportDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
@@ -63,8 +64,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
             .catch((err) => console.error(err));
     }, []);
 
-    const handleSelectDepartment = (value: string) => {
-        const nextId = value ? Number(value) : "";
+    const handleSelectDepartment = (nextId: number | "") => {
         setDepartmentId(nextId);
         setGroupId("");
         setPageIndex(1);
@@ -79,10 +79,21 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         }
     };
 
-    const handleSelectGroup = (value: string) => {
-        setGroupId(value ? Number(value) : "");
+    const handleSelectGroup = (nextId: number | "") => {
+        setGroupId(nextId);
         setPageIndex(1);
     };
+
+    const departmentOptions: SelectOption[] = departments.map((d) => ({
+        value: d.id,
+        label: d.departmentNameVn,
+        searchText: d.departmentNameVn.toLowerCase(),
+    }));
+    const groupOptions: SelectOption[] = groups.map((g) => ({
+        value: g.id,
+        label: g.groupNameVn,
+        searchText: g.groupNameVn.toLowerCase(),
+    }));
 
     const { isLoading, error, refetch: fetchEmployees } = useFetchEffect(
         () =>
@@ -193,30 +204,20 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         >
                             {tCommon("search")}
                         </button>
-                        <select
+                        <SearchableSelect
+                            options={departmentOptions}
                             value={departmentId}
-                            onChange={(event) => handleSelectDepartment(event.target.value)}
-                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">{t("filterDepartmentPlaceholder")}</option>
-                            {departments.map((department) => (
-                                <option key={department.id} value={department.id}>
-                                    {department.departmentNameVn}
-                                </option>
-                            ))}
-                        </select>
-                        <select
+                            onChange={handleSelectDepartment}
+                            placeholder={t("filterDepartmentPlaceholder")}
+                            triggerClassName="h-10 w-56 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
+                        <SearchableSelect
+                            options={groupOptions}
                             value={groupId}
-                            onChange={(event) => handleSelectGroup(event.target.value)}
-                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">{t("filterGroupPlaceholder")}</option>
-                            {groups.map((group) => (
-                                <option key={group.id} value={group.id}>
-                                    {group.groupNameVn}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={handleSelectGroup}
+                            placeholder={t("filterGroupPlaceholder")}
+                            triggerClassName="h-10 w-56 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
                         <button
                             onClick={() => setImportOpen(true)}
                             className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"

@@ -16,6 +16,7 @@ import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-d
 import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
 import type { DeviceEmailInputDto, DeviceGetDto, DeviceIpAddressDto } from "@/modules/pc-management/types/device.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 export interface DeviceFormValues {
     deviceCode: string;
@@ -293,101 +294,61 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Loại thiết bị</span>
-                            <select
+                            <SearchableSelect
+                                options={deviceTypes.map((type) => ({ value: type.id, label: type.typeName, searchText: type.typeName.toLowerCase() }))}
                                 value={values.deviceTypeId || ""}
-                                onChange={(event) => handleChange("deviceTypeId", Number(event.target.value))}
+                                onChange={(v) => handleChange("deviceTypeId", v === "" ? 0 : v)}
+                                placeholder="Chọn loại thiết bị..."
                                 disabled={loading}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    Chọn loại thiết bị...
-                                </option>
-                                {deviceTypes.map((type) => (
-                                    <option key={type.id} value={type.id}>
-                                        {type.typeName}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Nhà cung cấp</span>
-                            <select
+                            <SearchableSelect
+                                options={suppliers.map((s) => ({ value: s.id, label: s.supplierName, searchText: s.supplierName.toLowerCase() }))}
                                 value={values.supplierId || ""}
-                                onChange={(event) => handleChange("supplierId", Number(event.target.value))}
+                                onChange={(v) => handleChange("supplierId", v === "" ? 0 : v)}
+                                placeholder="Chọn nhà cung cấp..."
                                 disabled={loading}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    Chọn nhà cung cấp...
-                                </option>
-                                {suppliers.map((supplier) => (
-                                    <option key={supplier.id} value={supplier.id}>
-                                        {supplier.supplierName}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Chi nhánh</span>
-                            <select
+                            <SearchableSelect
+                                options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
                                 value={values.branchId || ""}
-                                onChange={(event) => handleChange("branchId", Number(event.target.value))}
+                                onChange={(v) => handleChange("branchId", v === "" ? 0 : v)}
+                                placeholder="Chọn chi nhánh..."
                                 disabled={loading}
-                                required
-                                className={fieldClassName}
-                            >
-                                <option value="" disabled>
-                                    Chọn chi nhánh...
-                                </option>
-                                {branches.map((branch) => (
-                                    <option key={branch.id} value={branch.id}>
-                                        {branch.branchName}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Bộ phận</span>
-                            <select
+                            <SearchableSelect
+                                options={deviceDepartments.map((d) => ({ value: d.id, label: d.departmentName, searchText: d.departmentName.toLowerCase() }))}
                                 value={values.departmentId ?? ""}
-                                onChange={(event) => {
-                                    const newDepartmentId = event.target.value ? Number(event.target.value) : null;
+                                onChange={(v) => {
                                     // Đổi Bộ phận thì phải xoá lựa chọn Nhóm hiện tại — Nhóm thuộc Bộ phận cũ
                                     // gần như chắc chắn không hợp lệ với Bộ phận mới (docs/asset-api-fe.md §2.1).
-                                    setValues((current) => ({ ...current, departmentId: newDepartmentId, groupId: null }));
+                                    setValues((current) => ({ ...current, departmentId: v === "" ? null : v, groupId: null }));
                                 }}
+                                placeholder="Không gán bộ phận"
                                 disabled={loading}
-                                className={fieldClassName}
-                            >
-                                <option value="">Không gán bộ phận</option>
-                                {deviceDepartments.map((department) => (
-                                    <option key={department.id} value={department.id}>
-                                        {department.departmentName}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Nhóm</span>
-                            <select
+                            <SearchableSelect
+                                options={deviceGroups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
                                 value={values.groupId ?? ""}
-                                onChange={(event) => handleChange("groupId", event.target.value ? Number(event.target.value) : null)}
+                                onChange={(v) => handleChange("groupId", v === "" ? null : v)}
+                                placeholder={values.departmentId ? "Không gán nhóm" : "Chọn Bộ phận trước..."}
                                 disabled={loading || !values.departmentId}
-                                className={fieldClassName}
-                            >
-                                <option value="">{values.departmentId ? "Không gán nhóm" : "Chọn Bộ phận trước..."}</option>
-                                {deviceGroups.map((group) => (
-                                    <option key={group.id} value={group.id}>
-                                        {group.groupName}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </label>
 
                         <label className="block">

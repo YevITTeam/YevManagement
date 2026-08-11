@@ -9,6 +9,7 @@ import { DeviceGroupApi } from "@/modules/pc-management/api/device-group.api";
 import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
 import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import DeviceGroupForm, { type DeviceGroupFormValues } from "./DeviceGroupForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -127,6 +128,12 @@ export default function DeviceGroupList() {
         }
     };
 
+    const departmentOptions: SelectOption[] = departments.map((d) => ({
+        value: d.id,
+        label: d.departmentName,
+        searchText: d.departmentName.toLowerCase(),
+    }));
+
     return (
         <div className="space-y-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -162,21 +169,16 @@ export default function DeviceGroupList() {
                             placeholder={t("searchPlaceholder")}
                             className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
-                        <select
-                            value={departmentFilter}
-                            onChange={(event) => {
+                        <SearchableSelect
+                            options={departmentOptions}
+                            value={departmentFilter === "" ? "" : Number(departmentFilter)}
+                            onChange={(v) => {
                                 setPageIndex(1);
-                                setDepartmentFilter(event.target.value);
+                                setDepartmentFilter(v === "" ? "" : String(v));
                             }}
-                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">{t("allDepartmentsOption")}</option>
-                            {departments.map((department) => (
-                                <option key={department.id} value={department.id}>
-                                    {department.departmentName}
-                                </option>
-                            ))}
-                        </select>
+                            placeholder={t("allDepartmentsOption")}
+                            triggerClassName="h-10 w-56 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}

@@ -4,7 +4,8 @@ namespace Attendance.Application.Interfaces.Service
 {
     public interface IGroupApprovalStepService
     {
-        Task<List<GroupApprovalStepDto>> GetByGroupAsync(int groupId);
-        Task<List<GroupApprovalStepDto>> ReplaceAsync(int groupId, ReplaceGroupApprovalStepsDto request);
+        // userName/isAdmin dùng để scope-check (2026-08-11) — mirror IDepartmentApprovalStepService.
+        Task<List<GroupApprovalStepDto>> GetByGroupAsync(string userName, bool isAdmin, int groupId);
+        Task<List<GroupApprovalStepDto>> ReplaceAsync(string userName, bool isAdmin, int groupId, ReplaceGroupApprovalStepsDto request);
     }
 }

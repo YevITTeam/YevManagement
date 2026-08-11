@@ -7,6 +7,7 @@ import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-departme
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 
 export interface DeviceGroupFormValues {
     departmentId: number;
@@ -53,6 +54,12 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
 
     if (!isOpen) return null;
 
+    const departmentOptions: SelectOption[] = departments.map((d) => ({
+        value: d.id,
+        label: d.departmentName,
+        searchText: d.departmentName.toLowerCase(),
+    }));
+
     const handleChange = (field: keyof DeviceGroupFormValues, value: string | number) => {
         setValues((current) => ({ ...current, [field]: value }));
     };
@@ -90,22 +97,13 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
                         <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
-                        <select
+                        <SearchableSelect
+                            options={departmentOptions}
                             value={values.departmentId || ""}
-                            onChange={(event) => handleChange("departmentId", Number(event.target.value))}
+                            onChange={(v) => handleChange("departmentId", v === "" ? 0 : v)}
+                            placeholder={t("fieldDepartmentPlaceholder")}
                             disabled={loading}
-                            required
-                            className={fieldClassName}
-                        >
-                            <option value="" disabled>
-                                {t("fieldDepartmentPlaceholder")}
-                            </option>
-                            {departments.map((department) => (
-                                <option key={department.id} value={department.id}>
-                                    {department.departmentName}
-                                </option>
-                            ))}
-                        </select>
+                        />
                     </label>
 
                     <label className="block">

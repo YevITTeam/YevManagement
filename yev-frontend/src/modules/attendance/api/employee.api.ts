@@ -13,6 +13,8 @@ const ENDPOINTS = {
         createEmployee: "/Employee",
         updateEmployee: (id: number) => `/Employee/${id}`,
         deleteEmployee: (id: number) => `/Employee/${id}`,
+        assignDepartmentJobTitle: (id: number, departmentId: number) => `/Employee/${id}/department-job-title?departmentId=${departmentId}`,
+        assignGroupJobTitle: (id: number, groupId: number) => `/Employee/${id}/group-job-title?groupId=${groupId}`,
     },
 } as const;
 
@@ -88,6 +90,19 @@ export const EmployeeApi = {
     },
     deleteEmployee: async (id: number) => {
         const response = await api.delete<ApiResponse<void>>(ENDPOINTS.EMPLOYEE.deleteEmployee(id));
+        return response.data;
+    },
+    // Gán/gỡ Chức vụ CÓ PHẠM VI (2026-08-11c) — dùng chung permission với chính cây duyệt của đơn vị đó
+    // (Attendance.DepartmentApprovalStep.Update/GroupApprovalStep.Update), KHÔNG cần Attendance.Employee.Update
+    // — Người phụ trách Cây duyệt (không phải Admin) gọi được, BE tự chặn nếu Employee không thuộc
+    // đúng Bộ phận/Nhóm họ phụ trách. BE tự tính lại groupId/departmentId theo Chức vụ mới, FE chỉ gửi
+    // jobTitleId (null = gỡ chức vụ).
+    assignDepartmentJobTitle: async (id: number, departmentId: number, jobTitleId: number | null) => {
+        const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.assignDepartmentJobTitle(id, departmentId), { jobTitleId });
+        return response.data;
+    },
+    assignGroupJobTitle: async (id: number, groupId: number, jobTitleId: number | null) => {
+        const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.assignGroupJobTitle(id, groupId), { jobTitleId });
         return response.data;
     },
 };

@@ -235,10 +235,14 @@ outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]
 - **Filter nâng cao** (`DeviceFilterBar`): mỗi field bọc `<label>` + overline; input/select có icon `lucide-react` tuyệt đối trái (`absolute left-3 top-1/2 -translate-y-1/2`, input thêm `pl-9`); nút "Bộ lọc nâng cao" có badge đếm `rounded-full bg-[#e3000f] text-white`; filter đang bật hiện dạng **chip** `rounded-full border bg-[#f8fafc]` kèm nút `X`.
 - **Dữ liệu dropdown** (chi nhánh, loại thiết bị, NCC…) phải gọi API tương ứng trong `useEffect` (có cờ `isCancelled`), **không hard-code**.
 - **Dropdown nhiều item phải có ô tìm kiếm.** `<select>` HTML thường chỉ chấp nhận được khi danh sách
-  ngắn, cố định (vài mục trở xuống — vd 3 Chức vụ cùng cấp). Danh sách có thể dài/tăng theo dữ liệu
-  thật (Bộ phận, Nhóm, Nhân viên, …) **phải** dùng combobox có ô gõ tìm thay vì `<select>` cuộn tay —
-  xem `modules/attendance/components/job-titles/SearchableSelect.tsx` (không phụ thuộc thư viện
-  ngoài, filter theo `searchText` lowercase rộng hơn `label`).
+  ngắn, cố định (vài mục trở xuống — vd 3 Chức vụ cùng cấp, enum trạng thái/có-không). Danh sách có
+  thể dài/tăng theo dữ liệu thật (Bộ phận, Nhóm, Chi nhánh, Loại thiết bị, NCC, Lý do, Nhóm phần
+  mềm, …) **phải** dùng combobox có ô gõ tìm thay vì `<select>` cuộn tay — dùng
+  `components/ui/SearchableSelect.tsx` (dùng chung toàn app từ 2026-08-10, không phụ thuộc thư viện
+  ngoài, filter theo `searchText` lowercase rộng hơn `label`). Props: `options: SelectOption[]`
+  (`{value, label, searchText}`), `value: number | ""`, `onChange`, `placeholder`,
+  `disabled?`, `triggerClassName?` (mặc định `h-10 w-full`, truyền riêng nếu cần icon trái/`pl-9`
+  hoặc width khác — xem `DeviceFilterBar.tsx`).
 
 ### 4.4. Table
 
