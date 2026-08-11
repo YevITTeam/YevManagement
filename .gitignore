@@ -94,6 +94,14 @@ appsettings.json
 appsettings.*.json
 
 ## -------------------------------------------------------------------
+## DEPLOY / PUBLISH ARTIFACTS — kết quả build/publish, sinh lại được từ source bằng
+## `dotnet publish` (BE) / `pnpm build` (FE), KHÔNG nên track vì đổi (hash nhị phân) mỗi lần
+## build dù code không đổi gì, gây phình lịch sử + quá nhiều file mỗi lần push (2026-08-11).
+## -------------------------------------------------------------------
+/yev-backend/publish_backend/
+/_Release/
+
+## -------------------------------------------------------------------
 ## IDE / OS (Visual Studio Code, Mac, Windows)
 ## -------------------------------------------------------------------
 .vscode/*
