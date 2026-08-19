@@ -61,7 +61,9 @@ export default function ImportDeviceConfigurationDialog({
         () => DeviceTypeApi.getAllDeviceTypes(),
         [],
         (data) => setDeviceTypes(data),
-        "Không thể tải danh sách loại thiết bị."
+        "Không thể tải danh sách loại thiết bị.",
+        undefined,
+        "device-types-all"
     );
 
     useEffect(() => {

@@ -155,9 +155,10 @@ cảnh báo ở đầu §Business Logic (chuỗi bước giờ động theo Cây
 - **Số lượng phiếu ăn theo loại** (2026-07-16, migration `AddMealTicketCountsToProcessPart`): khi
   `IsEat = true`, người lập đơn nhập thêm 3 số lượng — `MainTicketCount` (phiếu chính),
   `SecondaryTicketCount` (phiếu phụ), `MilkCount` (sữa). Cả 3 đều **chung cho cả đơn** (không phải
-  per-employee). BE không validate tổng 3 số này phải khớp `NumberOfEmployee` hay `IsEligibleForMeal`,
-  không tự tính — **FE mới là nơi tự tính** `MainTicketCount`/`SecondaryTicketCount` (xem §Cấu hình
-  phiếu ăn & giới hạn lũy kế), `MilkCount` luôn nhập tay 100%.
+  per-employee). `MilkCount` luôn nhập tay 100%, BE không đụng tới. `MainTicketCount`/
+  `SecondaryTicketCount`: FE tự tính gợi ý lúc **Tạo đơn** (xem §Cấu hình phiếu ăn & giới hạn lũy kế);
+  từ **2026-08-18**, BE cũng **tự tính lại 2 số này** mỗi khi danh sách/`DidEat` của nhân viên trong
+  đơn đổi SAU lúc tạo — xem §Đồng bộ phiếu ăn khi sửa đơn/loại nhân viên.
 
 ### §Cấu hình phiếu ăn & giới hạn lũy kế (2026-08-01)
 **Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): 2 nhóm quy tắc
@@ -177,7 +178,8 @@ FE) nay gộp thành 1 bảng cấu hình Admin tự sửa được, không cầ
 **Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): nhân viên đủ
 ngưỡng nhận phiếu ăn (`IsEligibleForMeal`) mà **không ăn** thì được cộng bù **30 phút** vào lũy kế
 tháng/năm — khác hẳn `ProcessPart.IsEat`/`MainTicketCount` hiện có (cờ + số lượng **chung cho cả đơn**,
-nhập tay, không theo từng người) — giữ nguyên `ProcessPart`, không đụng gì.
+nhập tay, không theo từng người). Ban đầu (2026-08-06) `ProcessPart` không bị đụng tới khi đổi
+`DidEat` — đã sửa lại, xem §Đồng bộ phiếu ăn khi sửa đơn/loại nhân viên bên dưới.
 
 - **Entity**: `OtFormEmployee.DidEat: bool` (mới, default `false`) — chỉ có ý nghĩa khi giờ OT thực tế
   của người đó `>= AttendanceSetting.MainMealTicketMinHours` (dùng CHUNG ngưỡng với việc chia phiếu
@@ -209,7 +211,24 @@ nhập tay, không theo từng người) — giữ nguyên `ProcessPart`, không
   không cần suất, họ đã được cộng bù 30 phút lũy kế thay vào đó); người đủ ngưỡng và có ăn → phiếu chính;
   người dưới ngưỡng (chưa có ô "Có ăn" để tự khai) → vẫn mặc định phiếu phụ như cũ.
 
-**Thiết kế BE** (mirror `Asset.Domain.Entities.AssetSetting` — bảng cấu hình 1 dòng, xem
+### §Đồng bộ phiếu ăn khi sửa đơn/loại nhân viên (2026-08-18)
+
+**Vấn đề**: quy tắc tự tính `MainTicketCount`/`SecondaryTicketCount` ở trên (mục "Số phiếu tự tính
+cũng loại người 'Không ăn'") **chỉ chạy ở FE lúc Tạo đơn**. `ProcessPart` sau đó bị đóng băng — 2 chỗ
+làm số liệu lệch thực tế mà không ai cập nhật lại:
+1. Sửa đơn trước khi Trưởng phòng duyệt (`OtFormService.UpdateAsync`, đổi `EndTime`/`DidEat` từng
+   người) — đổi "Có ăn" của 1 người không kéo theo đổi số phiếu.
+2. Cấp duyệt loại người khỏi đơn (`RemoveEmployeeCoreAsync`, `POST /{id}/employees/remove`) — người bị
+   loại vẫn còn bị tính trong `MainTicketCount`/`SecondaryTicketCount` dù đã không còn tăng ca nữa.
+
+**Sửa**: thêm `OtFormService.CalculateMealTicketCounts` (hàm thuần, mirror đúng quy tắc FE ở
+`CreateOtFormPage.tsx`: OT thực tế — CHƯA cộng bù 0.5h — `>= MainMealTicketMinHours` + `DidEat=true` →
++1 phiếu chính; `>= ngưỡng` + `DidEat=false` → không tính; `< ngưỡng` → luôn +1 phiếu phụ) và
+`RecalculateMealTicketCountsAsync` (ghi kết quả vào `ProcessPart.MainTicketCount`/`SecondaryTicketCount`
+của đúng đơn đó — no-op nếu đơn chưa từng có `ProcessPart`, tức chưa từng bật "Ăn uống" lúc tạo).
+Gọi lại hàm này ở **CHÍNH XÁC 2 nơi** liệt kê ở trên, sau khi danh sách nhân viên active/`DidEat` đã
+cập nhật xong nhưng trước `SaveChangesAsync()`. `MilkCount` không đụng tới — vẫn 100% nhập tay, không
+có cách nào tự suy luận số sữa từ danh sách nhân viên. (mirror `Asset.Domain.Entities.AssetSetting` — bảng cấu hình 1 dòng, xem
 `asset-module.md`):
 - Entity mới `AttendanceSetting { Id, MainMealTicketMinHours:decimal(5,2), MonthlyOtHourLimit:decimal(10,2), YearlyOtHourLimit:decimal(10,2) }`
   — bảng `AttendanceSettings` LUÔN đúng 1 dòng (migration `AddAttendanceSetting` seed sẵn
@@ -509,7 +528,9 @@ người đó rồi vẫn ký/duyệt được phần còn lại.
   giống `ApproveSubmitterAsync`, TGĐ bypass scope giống `ApproveAsync`).
 - **KHÔNG đổi `OtForm.Status`** — chỉ đánh dấu `IsRemoved` trên đúng 1 `OtFormEmployee`, cập nhật lại
   `OtForm.NumberOfEmployee = count(!IsRemoved)`, `SaveChangesAsync()`. Đơn tiếp tục chờ đúng cấp hiện tại
-  tự bấm Duyệt/Ký như luồng cũ.
+  tự bấm Duyệt/Ký như luồng cũ. **(2026-08-18)** cùng lúc đó cũng tính lại
+  `ProcessPart.MainTicketCount`/`SecondaryTicketCount` theo danh sách nhân viên còn active — xem
+  §Đồng bộ phiếu ăn khi sửa đơn/loại nhân viên.
 - **Validate 400**: nhân viên không có trong đơn; đã bị loại từ trước; đơn chỉ còn ≤1 người chưa bị loại
   (loại nốt người cuối = Từ chối cả đơn, dùng `RejectAsync` thay thế, không cho đơn trống nhân viên);
   đơn đã `Completed`/`Rejected`; sai cấp/scope (cùng lỗi §Business Logic — Chữ ký các cấp duyệt).
@@ -1503,9 +1524,91 @@ SQL. Nên test tay qua UI thật (gán 1 người phụ trách test CHƯA liên 
 có hiệu lực; sau đó liên kết `UserName` cho họ qua màn Nhân viên, xác nhận quyền tự bật lên; tự đăng
 nhập tài khoản đó, thử sửa đúng/sai Bộ phận) trước khi coi tính năng này là ổn định.
 
+#### §Giai đoạn 8 — Lịch sử lũy kế theo tháng/năm + reset dữ liệu demo (2026-08-11d)
+
+**Bối cảnh:** `Employee.MonthToDate`/`YearToDate` (+ `ProjectedMonthToDate`/`ProjectedYearToDate`) chỉ
+là bộ đếm SỐNG, bị ghi đè về 0 mỗi khi rollover sang tháng/năm mới (`AccumulateEmployeeHoursAsync`,
+`ApplyProjectedRollover`) — không có nơi nào lưu lại lịch sử giờ cộng dồn theo từng tháng đã qua.
+Người dùng cần: (a) reset lũy kế về 0 phục vụ demo, và (b) tra cứu lại lũy kế theo tháng/năm — tính
+năng hoàn toàn MỚI, chưa từng tồn tại dưới bất kỳ hình thức nào.
+
+**Quyết định kiến trúc đã chốt:**
+- Ledger **aggregate theo tháng** (`EmployeeAccumulationHistory`, 1 dòng/`(EmployeeId, Year, Month)`),
+  KHÔNG line-item theo từng đơn — khớp đúng nhu cầu đọc (bảng 12 dòng Tháng|Giờ), khớp đúng bản chất
+  `MonthToDate`/`YearToDate` hiện tại (vốn đã là bộ đếm thuần, không traceability về nguồn đơn) — ledger
+  chỉ thêm chiều THỜI GIAN, không cam kết thêm khả năng truy vết-về-đơn hệ thống chưa từng có.
+- Ghi dần từ khi entity ra đời (append-only, mirror `OtFormApprovalHistory` — KHÔNG có `IsDeleted`),
+  KHÔNG backfill dữ liệu cũ.
+- Người xem: Admin + bất kỳ ai giữ `Attendance.OTForm.Approve`, nhưng CHỈ trong phạm vi nhân viên
+  thuộc đơn vị mình (Nhóm/Bộ phận) — phạm vi suy theo ĐÚNG vị trí Cây chức vụ của người gọi (KHÁC hẳn
+  bảng Người phụ trách Cây duyệt ở §Giai đoạn 7 — đó là uỷ quyền cấu hình cây duyệt, còn đây là phạm vi
+  xem/duyệt theo đúng cấp bậc thật họ đang giữ, vì `OTForm.Approve` vốn đã gắn với JobTitle qua
+  `JobTitlePermissionWhitelist`).
+
+1. **`EmployeeAccumulationHistory`** (entity mới, `Attendance.Domain/Entities/`) — `Id`, `EmployeeId`
+   (FK Restrict → `Employees`), `Year`, `Month`, `TotalHours` (decimal 10,2). Unique index
+   `(EmployeeId, Year, Month)`. Repository/UnitOfWork wiring đúng khuôn `JobTitlePermission`. Migration
+   `AddEmployeeAccumulationHistory` — `CreateTable` sạch, không cần data migration (bảng mới hoàn
+   toàn). Đã `database update` lên `YevOTManagement`.
+
+2. **Ghi ledger — `OtFormService.AccumulateEmployeeHoursAsync`** (KHÔNG phải
+   `ApplyProjectedDelta`/`ApplyProjectedRollover` — 2 cơ chế đó dành cho lũy kế DỰ KIẾN, hoàn toàn tách
+   biệt, đã xác minh lại kỹ trước khi code vì đây là điểm dễ nhầm nhất). Hàm này chỉ có ĐÚNG 2 call
+   site, cả 2 đều là chuyển trạng thái THẬT sang `Completed`: `CreateAsync` (đơn Hoàn tất ngay lúc tạo
+   — chuỗi duyệt rỗng) và `ApproveAsync` (hết bước Pending). Batch-fetch dòng ledger đã có TRƯỚC vòng
+   lặp (tránh N+1) — chỉ cần khoá theo `EmployeeId` (không cần thêm Year/Month vào key tra cứu) vì
+   INVARIANT: trong 1 lần gọi, mọi nhân viên xử lý đều thuộc CHUNG đúng 1 `OtForm` nên dùng chung đúng 1
+   `otForm.Date`. Trong vòng lặp: cộng dồn vào dòng ledger có sẵn hoặc tạo dòng mới, SONG SONG với logic
+   `MonthToDate`/`YearToDate` cũ (không đổi gì logic cũ).
+
+3. **DTO** (`Attendance.Application/Dtos/EmployeeAccumulationHistories/`):
+   `EmployeeAccumulationHistoryDto { Month, TotalHours }`,
+   `EmployeeAccumulationHistoryYearDto { EmployeeId, EmployeeCode, EmployeeFullName, Year, Months (12
+   phần tử, tháng trống = 0 — điền ở Service, KHÔNG lưu dòng rỗng trong DB), YearTotalHours (=
+   Sum(Months) — với năm CŨ đã rollover đây là NGUỒN DUY NHẤT biết tổng năm đó, vì `YearToDate` chỉ còn
+   phản ánh năm hiện tại; với năm hiện tại giá trị này luôn khớp `Employee.YearToDate`, cùng 1 điểm ghi
+   — dùng làm phép kiểm tra chéo lúc test tay) }`.
+
+4. **`EmployeeService` — 2 method mới** (không tạo service riêng):
+   - `GetInScopeAsync(callerUserName, isAdmin, pageIndex, pageSize, keyword)` → `PagedResponse<EmployeeDto>`.
+   - `GetAccumulationHistoryAsync(callerUserName, isAdmin, employeeId, year)` → `EmployeeAccumulationHistoryYearDto`.
+   Logic phạm vi (code MỚI, KHÔNG tái dùng nguyên xi hàm có sẵn nào — chỉ cùng tinh thần resolve
+   "Employee của người gọi" đã có ở `EnsureCanCreateOrEditForScopeAsync`):
+   - Admin → không giới hạn.
+   - `caller.JobTitle.TerminalLevel ∈ {WorkshopManager, GeneralDirector}` (Trưởng Xưởng/Giám đốc) →
+     toàn công ty.
+   - `caller.DepartmentId` có giá trị (Manager) → nhân viên có `DepartmentId` trùng, hoặc
+     `Group.DepartmentId` trùng.
+   - Còn lại (Staff/Group Leader/Team Leader, cấp Nhóm, hoặc chưa gán Chức vụ — vẫn bắt buộc có
+     `GroupId` theo `ValidateOrganizationAssignmentAsync`) → chỉ nhân viên có `GroupId` trùng.
+   - Người gọi chưa liên kết Employee (`UserName` không khớp ai) → `DomainException` từ chối.
+
+5. **`EmployeeController` — 2 action mới**, gate bằng `Attendance.OTForm.Approve` (KHÔNG phải
+   `Attendance.Employee.View`) — permission có sẵn, KHÔNG cần migration Identity nào:
+   - `GET /api/Employee/in-my-scope?pageIndex=&pageSize=&keyword=` — route literal đứng cùng cấp
+     `{id}`, ASP.NET Core tự ưu tiên segment tường minh hơn param (đã có tiền lệ tương tự `all`, không
+     đụng `GetById`). Đây là cách DUY NHẤT để người chỉ giữ `OTForm.Approve` (không có `Employee.View`)
+     tự liệt kê được nhân viên trong phạm vi mình — mọi action khác trên `EmployeeController` đều gate
+     `Employee.View`.
+   - `GET /api/Employee/{id}/accumulation-history?year=` → `EmployeeAccumulationHistoryYearDto`.
+
+6. **FE**: `AccumulationHistoryTable.tsx` (bảng 12 tháng thuần, tái dùng công thức badge đỏ đã có ở
+   `EmployeeList.tsx` so với `AttendanceSetting.monthlyOtHourLimit`/`yearlyOtHourLimit`) +
+   `AccumulationHistoryModal.tsx` (modal chọn năm + gọi API, dùng CHUNG ở cả 3 điểm vào) — nút "Xem
+   lịch sử lũy kế" trong `EmployeeList.tsx` (Admin), icon cạnh cột Lũy kế năm trong `OtFormDetail.tsx`
+   (ẩn/hiện theo `canApprove`), và màn mới `AccumulationLookupPage.tsx` (route `/ot/accumulation`, gọi
+   `GET /in-my-scope` để tự tìm nhân viên trong phạm vi, không cần mở sẵn 1 đơn). Sidebar thêm mục "Lũy
+   kế nhân viên" cùng điều kiện quyền với "Đơn tổng" (`Attendance.OTForm.Approve`).
+
+**Chưa verify sống** (build + migration đã áp lên DB thật, smoke test xác nhận API vẫn boot sạch và
+pipeline Auth/RBAC không bị ảnh hưởng — nhưng chưa test tay luồng thật: tạo 1 đơn demo → duyệt tới Hoàn
+tất → xác nhận `MonthToDate`/`YearToDate` VÀ `GET .../accumulation-history?year=` cùng ra đúng số; gọi
+`GET /in-my-scope` bằng tài khoản chỉ có `OTForm.Approve` xác nhận không 403 và đúng phạm vi; gọi thử
+tài khoản khác Nhóm/Bộ phận xác nhận bị từ chối). Nên làm trước khi coi ổn định.
+
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.
-- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`) → `AddAttendanceSetting` (2026-08-01, bảng `AttendanceSettings` 1 dòng, seed `(2.5, 25, 300)` — xem §Cấu hình phiếu ăn & giới hạn lũy kế) → `AddOtFormBatch` (2026-08-06, bảng `OtFormBatches`/`OtFormBatchEmailTokens` — xem §Đơn tổng) → `AddProjectedAccumulationToEmployee` (2026-08-06, 4 cột `Projected*` trên `Employees` — xem §Lũy kế dự kiến) → `AddJobTitle` (2026-08-06, bảng `JobTitles` + cột `Employees.JobTitleId` + seed 14 chức vụ — xem §Cây chức vụ) → `AddRequesterResponsible` (2026-08-06, cột `Requester*`/`Responsible*` trên `Group`/`OtForm` — tính năng KHÁC, không thuộc Cây chức vụ; **DB thật đã có sẵn schema này từ trước** do ai đó áp dụng tay ngoài EF, migration được **stamp thẳng vào `__EFMigrationsHistory` chứ không chạy lại DDL**, xem ghi chú cuối §Cây chức vụ Giai đoạn 2b) → `AddDepartmentApprovalStep` (2026-08-06, bảng `DepartmentApprovalSteps`, không seed dữ liệu — xem §Cây chức vụ Giai đoạn 2b) → `MoveRequiresSignatureToDepartmentApprovalStep` (2026-08-07, `DropColumn JobTitles.RequiresSignature` + `AddColumn DepartmentApprovalSteps.RequiresSignature` — xem §Cây chức vụ Giai đoạn 2c) → `AddIsResponsibleToDepartmentApprovalStep` (2026-08-07, `AddColumn DepartmentApprovalSteps.IsResponsible` — xem §Cây chức vụ Giai đoạn 2d) → `GiaiDoan3JobTitleApprovalStepWiring` (2026-08-07, rename `ApprovalLevel→OtFormApprovalStepId` trên `OtFormApprovalHistories`/`OtFormApprovalEmailTokens`, `AddColumn OtForms.ApprovalChainWarning`, `CreateTable OtFormApprovalSteps`/`OtFormApprovalStepCandidates` — xem §Cây chức vụ Giai đoạn 3.1) → `RemoveUserApprovalScope` (2026-08-08, Giai đoạn 3.2, `DropTable UserApprovalScopes` — xoá hẳn feature orphaned, xem §Cây chức vụ Giai đoạn 3.2 mục 4) → `AddOtFormDeleteFields` (2026-08-08, `AddColumn` 4 cột `Deleted*`/`DeleteReason` trên `OtForms` — xem §Xoá đơn kẹt vĩnh viễn) → `MakeEmployeeGroupNullableAddDepartment` (2026-08-08, `AlterColumn Employees.GroupId NULL` + `AddColumn Employees.DepartmentId` + FK + index — xem §Gán tổ chức theo Chức vụ) → `AddBatchAutoSendTimeToAttendanceSetting` (2026-08-08, `AddColumn AttendanceSettings.BatchAutoSendTime:TimeOnly` default `15:00:00` — xem §Đơn tổng) → `RemoveOldRequesterResponsibleAddCreatorSignature` (2026-08-08, `DropColumn` toàn bộ `Requester*`/`Responsible*` trên `Groups`/`OtForms` + FK liên quan, `AddColumn OtForms.CreatorSignatureImage:byte[]?` — xem §Người tạo tự ký ô "Người đề nghị") → `AddGroupApprovalStepRemoveDeptResponsible` (2026-08-08, `CreateTable GroupApprovalSteps` + `DropColumn DepartmentApprovalSteps.IsResponsible` — xem §Giai đoạn 4) → `SimplifyJobTitleTo6Levels` (2026-08-08, xoá toàn bộ dữ liệu đơn OT + cấu hình cây duyệt cũ, reset `Employees.JobTitleId=NULL`, thu gọn `JobTitles` 14→6 dòng — xem §Giai đoạn 4) → `AddJobTitlePermission` (2026-08-10, `CreateTable JobTitlePermissions` — xem §Giai đoạn 6) → `AddApprovalStepCoordinators` (2026-08-11, `CreateTable DepartmentApprovalStepCoordinators`/`GroupApprovalStepCoordinators` — xem §Giai đoạn 7) → `ChangeApprovalStepCoordinatorsToEmployeeId` (2026-08-11b, đổi khoá 2 bảng trên từ `UserName` sang `EmployeeId` FK, MAP dữ liệu cũ qua `Employees.UserName` trùng khớp trước khi xoá cột — xem §Giai đoạn 7, mục "Sửa 2026-08-11b"). Tất cả đã `database update`/stamp vào `YevOTManagement` (permission Identity tương ứng `AddJobTitlePermissions`/`AddDepartmentApprovalStepPermissions`/`AddGroupApprovalStepPermissions`/`AddJobTitlePermissionPermissions`/`AddApprovalStepCoordinatorPermissions` cũng đã apply vào `YevIdentityManagement`, cùng `AddIsAutoGrantedToUserPermission` — `AddColumn UserPermissions.IsAutoGranted` — xem §Giai đoạn 6). Đã xác nhận lại 2026-08-08 qua `__EFMigrationsHistory` trên DB thật: `GiaiDoan3JobTitleApprovalStepWiring` đứng đầu danh sách migration đã apply — dòng cảnh báo "CHƯA apply" trước đây đã lỗi thời, xoá bỏ.
+- Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`) → `AddAttendanceSetting` (2026-08-01, bảng `AttendanceSettings` 1 dòng, seed `(2.5, 25, 300)` — xem §Cấu hình phiếu ăn & giới hạn lũy kế) → `AddOtFormBatch` (2026-08-06, bảng `OtFormBatches`/`OtFormBatchEmailTokens` — xem §Đơn tổng) → `AddProjectedAccumulationToEmployee` (2026-08-06, 4 cột `Projected*` trên `Employees` — xem §Lũy kế dự kiến) → `AddJobTitle` (2026-08-06, bảng `JobTitles` + cột `Employees.JobTitleId` + seed 14 chức vụ — xem §Cây chức vụ) → `AddRequesterResponsible` (2026-08-06, cột `Requester*`/`Responsible*` trên `Group`/`OtForm` — tính năng KHÁC, không thuộc Cây chức vụ; **DB thật đã có sẵn schema này từ trước** do ai đó áp dụng tay ngoài EF, migration được **stamp thẳng vào `__EFMigrationsHistory` chứ không chạy lại DDL**, xem ghi chú cuối §Cây chức vụ Giai đoạn 2b) → `AddDepartmentApprovalStep` (2026-08-06, bảng `DepartmentApprovalSteps`, không seed dữ liệu — xem §Cây chức vụ Giai đoạn 2b) → `MoveRequiresSignatureToDepartmentApprovalStep` (2026-08-07, `DropColumn JobTitles.RequiresSignature` + `AddColumn DepartmentApprovalSteps.RequiresSignature` — xem §Cây chức vụ Giai đoạn 2c) → `AddIsResponsibleToDepartmentApprovalStep` (2026-08-07, `AddColumn DepartmentApprovalSteps.IsResponsible` — xem §Cây chức vụ Giai đoạn 2d) → `GiaiDoan3JobTitleApprovalStepWiring` (2026-08-07, rename `ApprovalLevel→OtFormApprovalStepId` trên `OtFormApprovalHistories`/`OtFormApprovalEmailTokens`, `AddColumn OtForms.ApprovalChainWarning`, `CreateTable OtFormApprovalSteps`/`OtFormApprovalStepCandidates` — xem §Cây chức vụ Giai đoạn 3.1) → `RemoveUserApprovalScope` (2026-08-08, Giai đoạn 3.2, `DropTable UserApprovalScopes` — xoá hẳn feature orphaned, xem §Cây chức vụ Giai đoạn 3.2 mục 4) → `AddOtFormDeleteFields` (2026-08-08, `AddColumn` 4 cột `Deleted*`/`DeleteReason` trên `OtForms` — xem §Xoá đơn kẹt vĩnh viễn) → `MakeEmployeeGroupNullableAddDepartment` (2026-08-08, `AlterColumn Employees.GroupId NULL` + `AddColumn Employees.DepartmentId` + FK + index — xem §Gán tổ chức theo Chức vụ) → `AddBatchAutoSendTimeToAttendanceSetting` (2026-08-08, `AddColumn AttendanceSettings.BatchAutoSendTime:TimeOnly` default `15:00:00` — xem §Đơn tổng) → `RemoveOldRequesterResponsibleAddCreatorSignature` (2026-08-08, `DropColumn` toàn bộ `Requester*`/`Responsible*` trên `Groups`/`OtForms` + FK liên quan, `AddColumn OtForms.CreatorSignatureImage:byte[]?` — xem §Người tạo tự ký ô "Người đề nghị") → `AddGroupApprovalStepRemoveDeptResponsible` (2026-08-08, `CreateTable GroupApprovalSteps` + `DropColumn DepartmentApprovalSteps.IsResponsible` — xem §Giai đoạn 4) → `SimplifyJobTitleTo6Levels` (2026-08-08, xoá toàn bộ dữ liệu đơn OT + cấu hình cây duyệt cũ, reset `Employees.JobTitleId=NULL`, thu gọn `JobTitles` 14→6 dòng — xem §Giai đoạn 4) → `AddJobTitlePermission` (2026-08-10, `CreateTable JobTitlePermissions` — xem §Giai đoạn 6) → `AddApprovalStepCoordinators` (2026-08-11, `CreateTable DepartmentApprovalStepCoordinators`/`GroupApprovalStepCoordinators` — xem §Giai đoạn 7) → `ChangeApprovalStepCoordinatorsToEmployeeId` (2026-08-11b, đổi khoá 2 bảng trên từ `UserName` sang `EmployeeId` FK, MAP dữ liệu cũ qua `Employees.UserName` trùng khớp trước khi xoá cột — xem §Giai đoạn 7, mục "Sửa 2026-08-11b") → `AddEmployeeAccumulationHistory` (2026-08-11d, `CreateTable EmployeeAccumulationHistories` — xem §Giai đoạn 8). Tất cả đã `database update`/stamp vào `YevOTManagement` (permission Identity tương ứng `AddJobTitlePermissions`/`AddDepartmentApprovalStepPermissions`/`AddGroupApprovalStepPermissions`/`AddJobTitlePermissionPermissions`/`AddApprovalStepCoordinatorPermissions` cũng đã apply vào `YevIdentityManagement`, cùng `AddIsAutoGrantedToUserPermission` — `AddColumn UserPermissions.IsAutoGranted` — xem §Giai đoạn 6). Đã xác nhận lại 2026-08-08 qua `__EFMigrationsHistory` trên DB thật: `GiaiDoan3JobTitleApprovalStepWiring` đứng đầu danh sách migration đã apply — dòng cảnh báo "CHƯA apply" trước đây đã lỗi thời, xoá bỏ.
 - Do nhiều DbContext trong solution, mọi lệnh `dotnet ef` cho module này phải thêm `--context AttendanceDbContext`. Riêng migration `AddEmailToUser` (thêm `Users.Email`), `AddAttendancePermissionsAndRoles` (seed Permission/Role), `AddCategoryViewPermissionsToTruongGroup` (2026-07-17, vá lỗ hổng thiếu 4 permission View danh mục cho Role Trưởng nhóm — xem §Permission & Role đã seed), `AddSecondaryPasswordPermission` (2026-07-30, seed `Attendance.SecondaryPassword.Update`), `AddOtFormRemoveEmployeePermission` (2026-07-30, seed `Attendance.OTForm.RemoveEmployee` — xem §Loại nhân viên khỏi đơn), `AddAttendanceSettingPermission` (2026-08-01, seed `Attendance.Setting.Update` — xem §Cấu hình phiếu ăn & giới hạn lũy kế), `RemoveUserApprovalScopePermissions` (2026-08-08, xoá 3 permission `Attendance.UserApprovalScope.View/Create/Delete` + `RolePermissions` liên quan), `AddOtFormDeletePermission` (2026-08-08, seed `Attendance.OTForm.Delete`, chỉ gán Admin — xem §Xoá đơn kẹt vĩnh viễn), `AddGroupApprovalStepPermissions` (2026-08-08, seed `Attendance.GroupApprovalStep.View/Update` — xem §Giai đoạn 4), `AddIsAutoGrantedToUserPermission` (2026-08-10, `AddColumn UserPermissions.IsAutoGranted` — xem §Giai đoạn 6), `AddJobTitlePermissionPermissions` (2026-08-10, seed `Attendance.JobTitlePermission.View/Update` — xem §Giai đoạn 6), `RemoveNhanVienRole` (2026-08-10, xoá Role legacy `Nhân viên` — 0 người giữ, xác nhận trước khi xoá, xem §Giai đoạn 6), và `AddApprovalStepCoordinatorPermissions` (2026-08-11, seed `Attendance.DepartmentApprovalStepCoordinator.{View,Update}`/`Attendance.GroupApprovalStepCoordinator.{View,Update}`, chỉ gán Admin — xem §Giai đoạn 7) nằm ở DB **Identity** (`Indentity.Infrastructure`, `--context IdentityDbContext`), không phải Attendance.
 
 ## 1. Cấu trúc code đã có

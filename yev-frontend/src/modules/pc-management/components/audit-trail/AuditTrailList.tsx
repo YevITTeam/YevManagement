@@ -73,7 +73,8 @@ export default function AuditTrailList() {
             setHasPreviousPage(result.hasPreviousPage);
         },
         "Không thể tải lịch sử thao tác.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "audit-trail"
     );
 
     const handleSearch = () => {

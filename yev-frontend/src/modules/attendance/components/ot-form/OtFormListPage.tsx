@@ -135,7 +135,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "ot-forms"
     );
 
     const handleSearch = () => {

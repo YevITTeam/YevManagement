@@ -14,6 +14,7 @@ import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
 import EmployeeImportDialog from "./EmployeeImportDialog";
+import AccumulationHistoryModal from "./AccumulationHistoryModal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
@@ -50,6 +51,9 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
 
     const [deletingEmployee, setDeletingEmployee] = useState<EmployeeDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Xem lịch sử lũy kế theo tháng/năm (2026-08-11d) — modal dùng chung, xem AccumulationHistoryModal.tsx.
+    const [historyEmployee, setHistoryEmployee] = useState<EmployeeDto | null>(null);
 
     const [importOpen, setImportOpen] = useState(false);
     // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
@@ -113,7 +117,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "employees"
     );
 
     useEffect(() => {
@@ -304,6 +309,13 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     <td className="px-4 py-3 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button
+                                                onClick={() => setHistoryEmployee(employee)}
+                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                title={t("viewAccumulationHistory")}
+                                            >
+                                                {t("viewAccumulationHistory")}
+                                            </button>
+                                            <button
                                                 onClick={() => openEditForm(employee)}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
                                                 title={tCommon("edit")}
@@ -377,6 +389,14 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     if (!isDeleting) setDeletingEmployee(null);
                 }}
             />
+
+            {historyEmployee && (
+                <AccumulationHistoryModal
+                    employeeId={historyEmployee.id}
+                    employeeLabel={`${historyEmployee.lastName} ${historyEmployee.firstName} (${historyEmployee.code})`}
+                    onClose={() => setHistoryEmployee(null)}
+                />
+            )}
         </div>
     );
 });

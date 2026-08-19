@@ -44,7 +44,8 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
         [],
         (result) => setAllSoftwares(result),
         "Không thể tải danh sách phần mềm.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "softwares"
     );
 
     useEffect(() => {

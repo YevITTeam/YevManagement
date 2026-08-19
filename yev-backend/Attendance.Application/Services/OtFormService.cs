@@ -560,6 +560,8 @@ namespace Attendance.Application.Services
                 ApplyProjectedDelta(employeesById[item.EmployeeId], otForm.Date, newHours - oldHours);
             }
 
+            await RecalculateMealTicketCountsAsync(otForm.Id, activeEmployees, mainMealTicketMinHours);
+
             await _unitOfWork.SaveChangesAsync();
 
             return await GetByIdAsync(otForm.Id);
@@ -764,15 +766,19 @@ namespace Attendance.Application.Services
             target.RemoveReason = reason;
             _unitOfWork.OtFormEmployees.Update(target);
 
+            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+
             var removedEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId);
             if (removedEmployee != null)
             {
-                var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
                 var hours = CalculateOtHours(target.StartTime, target.EndTime, target.DidEat, mainMealTicketMinHours);
                 ApplyProjectedDelta(removedEmployee, otForm.Date, -hours);
             }
 
-            otForm.NumberOfEmployee = otForm.OtFormEmployees.Count(x => !x.IsRemoved);
+            var remainingActiveEmployees = otForm.OtFormEmployees.Where(x => !x.IsRemoved).ToList();
+            await RecalculateMealTicketCountsAsync(otForm.Id, remainingActiveEmployees, mainMealTicketMinHours);
+
+            otForm.NumberOfEmployee = remainingActiveEmployees.Count;
             _unitOfWork.OtForms.Update(otForm);
 
             await _unitOfWork.SaveChangesAsync();
@@ -998,12 +1004,65 @@ namespace Attendance.Application.Services
             return hours;
         }
 
+        // Cùng quy tắc tự tính phiếu ăn với FE (CreateOtFormPage.tsx §mealTicketCounts): OT thực tế
+        // (chưa cộng bù 30p) >= ngưỡng + Có ăn -> 1 phiếu Chính; >= ngưỡng + Không ăn -> không tính
+        // phiếu nào; < ngưỡng -> luôn 1 phiếu Phụ (chưa có ô "Có ăn" để tự khai). Sữa vẫn luôn nhập tay,
+        // không đụng tới ở đây.
+        private static (int Main, int Secondary) CalculateMealTicketCounts(
+            IEnumerable<OtFormEmployee> activeEmployees, decimal mainMealTicketMinHours)
+        {
+            var main = 0;
+            var secondary = 0;
+
+            foreach (var employee in activeEmployees)
+            {
+                var rawHours = (decimal)(employee.EndTime - employee.StartTime).TotalHours;
+                if (rawHours >= mainMealTicketMinHours)
+                {
+                    if (employee.DidEat) main++;
+                }
+                else
+                {
+                    secondary++;
+                }
+            }
+
+            return (main, secondary);
+        }
+
+        // Gọi lại sau bất kỳ thay đổi nào tới danh sách/DidEat của nhân viên trong đơn SAU lúc tạo
+        // (sửa thực tích, loại người khỏi đơn) để phiếu ăn không bị lệch với thực tế — chỉ đụng tới
+        // MainTicketCount/SecondaryTicketCount, giữ nguyên MilkCount (luôn nhập tay). Không làm gì nếu
+        // đơn chưa từng bật "Ăn uống" lúc tạo (không có ProcessPart).
+        private async Task RecalculateMealTicketCountsAsync(
+            int otFormId, IEnumerable<OtFormEmployee> activeEmployees, decimal mainMealTicketMinHours)
+        {
+            var processPart = await _unitOfWork.ProcessParts.FirstOrDefaultAsync(x => x.OtFormId == otFormId);
+            if (processPart == null) return;
+
+            var (main, secondary) = CalculateMealTicketCounts(activeEmployees, mainMealTicketMinHours);
+            processPart.MainTicketCount = main;
+            processPart.SecondaryTicketCount = secondary;
+            _unitOfWork.ProcessParts.Update(processPart);
+        }
+
         private async Task AccumulateEmployeeHoursAsync(OtForm otForm)
         {
             var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
 
             var otFormEmployees = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
                 x => x.OtFormId == otForm.Id && !x.IsRemoved, x => x.Employee);
+
+            // Ledger lịch sử lũy kế theo tháng (2026-08-11d, xem EmployeeAccumulationHistory) — batch-fetch
+            // dòng đã có sẵn TRƯỚC vòng lặp để tránh N+1 (đúng tinh thần perf fix đã có trong repo). Chỉ
+            // cần khoá theo EmployeeId (không cần thêm Year/Month vào key tra cứu) vì INVARIANT: trong 1
+            // lần gọi hàm này, MỌI nhân viên xử lý đều thuộc CHUNG đúng 1 OtForm nên dùng chung đúng 1
+            // otForm.Date — cả 2 call site (CreateAsync khi đơn Hoàn tất ngay lúc tạo, ApproveAsync khi
+            // hết bước Pending) đều truyền vào đúng 1 OtForm duy nhất.
+            var employeeIds = otFormEmployees.Select(x => x.EmployeeId).ToList();
+            var existingLedgerRows = (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
+                x => employeeIds.Contains(x.EmployeeId) && x.Year == otForm.Date.Year && x.Month == otForm.Date.Month))
+                .ToDictionary(x => x.EmployeeId);
 
             foreach (var otFormEmployee in otFormEmployees)
             {
@@ -1027,6 +1086,24 @@ namespace Attendance.Application.Services
                 employee.YearToDate += hours;
 
                 _unitOfWork.Employees.Update(employee);
+
+                // Ghi song song vào ledger — CỘNG DỒN vào dòng đã có (nhiều đơn Hoàn tất cùng tháng),
+                // hoặc tạo dòng mới nếu đây là lần đầu tháng đó có giờ.
+                if (existingLedgerRows.TryGetValue(otFormEmployee.EmployeeId, out var ledgerRow))
+                {
+                    ledgerRow.TotalHours += hours;
+                    _unitOfWork.EmployeeAccumulationHistories.Update(ledgerRow);
+                }
+                else
+                {
+                    await _unitOfWork.EmployeeAccumulationHistories.AddAsync(new EmployeeAccumulationHistory
+                    {
+                        EmployeeId = otFormEmployee.EmployeeId,
+                        Year = otForm.Date.Year,
+                        Month = otForm.Date.Month,
+                        TotalHours = hours
+                    });
+                }
             }
         }
 

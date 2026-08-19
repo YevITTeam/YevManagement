@@ -49,7 +49,8 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "job-titles"
     );
 
     useEffect(() => {

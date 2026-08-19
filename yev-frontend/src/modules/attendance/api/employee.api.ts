@@ -1,5 +1,6 @@
 import { api } from "@/lib/client";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import type { EmployeeAccumulationHistoryYearDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -15,6 +16,8 @@ const ENDPOINTS = {
         deleteEmployee: (id: number) => `/Employee/${id}`,
         assignDepartmentJobTitle: (id: number, departmentId: number) => `/Employee/${id}/department-job-title?departmentId=${departmentId}`,
         assignGroupJobTitle: (id: number, groupId: number) => `/Employee/${id}/group-job-title?groupId=${groupId}`,
+        getInMyScope: "/Employee/in-my-scope",
+        getAccumulationHistory: (id: number, year: number) => `/Employee/${id}/accumulation-history?year=${year}`,
     },
 } as const;
 
@@ -24,6 +27,14 @@ export interface GetEmployeePageNationParams {
     keyword?: string;
     departmentId?: number;
     groupId?: number;
+}
+
+// Params cho GET /in-my-scope — không có departmentId/groupId (phạm vi tự suy theo Cây chức vụ của
+// người gọi ở BE, không phải filter tự chọn như GetEmployeePageNationParams).
+export interface GetEmployeeInMyScopeParams {
+    pageIndex?: number;
+    pageSize?: number;
+    keyword?: string;
 }
 
 // groupId/departmentId (2026-08-08): bắt buộc/cấm tuỳ theo TerminalLevel của jobTitleId — chỉ đúng 1
@@ -103,6 +114,23 @@ export const EmployeeApi = {
     },
     assignGroupJobTitle: async (id: number, groupId: number, jobTitleId: number | null) => {
         const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.assignGroupJobTitle(id, groupId), { jobTitleId });
+        return response.data;
+    },
+    // Nhân viên trong phạm vi quản lý của người GIỮ QUYỀN DUYỆT (Attendance.OTForm.Approve) — KHÔNG
+    // cần Attendance.Employee.View. Dùng cho màn "Lũy kế nhân viên" tra cứu (2026-08-11d).
+    getInMyScope: async (params?: GetEmployeeInMyScopeParams) => {
+        const query = new URLSearchParams();
+        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
+        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        if (params?.keyword) query.set("Keyword", params.keyword);
+
+        const queryString = query.toString();
+        const url = queryString ? `${ENDPOINTS.EMPLOYEE.getInMyScope}?${queryString}` : ENDPOINTS.EMPLOYEE.getInMyScope;
+        const response = await api.get<ApiResponseWithPageNation<EmployeeDto>>(url);
+        return response.data;
+    },
+    getAccumulationHistory: async (id: number, year: number) => {
+        const response = await api.get<ApiResponse<EmployeeAccumulationHistoryYearDto>>(ENDPOINTS.EMPLOYEE.getAccumulationHistory(id, year));
         return response.data;
     },
 };

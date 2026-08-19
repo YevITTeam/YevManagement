@@ -1,0 +1,166 @@
+"use client";
+
+import { useState } from "react";
+import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
+import { History, Inbox } from "lucide-react";
+
+import { EmployeeApi } from "@/modules/attendance/api/employee.api";
+import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import AccumulationHistoryModal from "./AccumulationHistoryModal";
+
+const PAGE_SIZE = 10;
+
+// Màn "Lũy kế nhân viên" (2026-08-11d, route /ot/accumulation) — cho người GIỮ QUYỀN DUYỆT
+// (Attendance.OTForm.Approve) tra cứu lịch sử lũy kế mà KHÔNG cần mở sẵn 1 đơn tăng ca như ở
+// OtFormDetail.tsx. Danh sách nhân viên gọi GET /Employee/in-my-scope — tự giới hạn theo phạm vi Cây
+// chức vụ của người gọi ở BE, không có ô chọn Bộ phận/Nhóm tay như màn Nhân viên (Admin) vì phạm vi đã
+// cố định theo đúng cấp bậc người đó đang giữ.
+export default function AccumulationLookupPage() {
+    const t = useTranslations("Attendance.AccumulationHistory");
+    const tCommon = useTranslations("Common");
+
+    const [keyword, setKeyword] = useState("");
+    const [appliedKeyword, setAppliedKeyword] = useState("");
+    const [pageIndex, setPageIndex] = useState(1);
+    const [employees, setEmployees] = useState<EmployeeDto[]>([]);
+    const [totalCount, setTotalCount] = useState(0);
+    const [hasNextPage, setHasNextPage] = useState(false);
+    const [hasPreviousPage, setHasPreviousPage] = useState(false);
+    const [selectedEmployee, setSelectedEmployee] = useState<EmployeeDto | null>(null);
+
+    // Đổi từ khoá tìm thì về lại trang 1 — so sánh snapshot ngay trong render thay vì dùng effect
+    // (xem CLAUDE.md "Reset state khi 1 giá trị đổi").
+    const [prevAppliedKeyword, setPrevAppliedKeyword] = useState(appliedKeyword);
+    if (prevAppliedKeyword !== appliedKeyword) {
+        setPrevAppliedKeyword(appliedKeyword);
+        setPageIndex(1);
+    }
+
+    const { isLoading, error } = useFetchEffect(
+        () => EmployeeApi.getInMyScope({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
+        [pageIndex, appliedKeyword],
+        (result) => {
+            setEmployees(result.data);
+            setTotalCount(result.totalCount);
+            setHasNextPage(result.hasNextPage);
+            setHasPreviousPage(result.hasPreviousPage);
+        },
+        t("loadEmployeesError"),
+        (message) => toast.error(message)
+    );
+
+    const handleSearch = () => setAppliedKeyword(keyword.trim());
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("pageTitle")}</h1>
+                <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("pageDescription")}</p>
+            </div>
+
+            <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-wrap gap-2">
+                        <input
+                            value={keyword}
+                            onChange={(event) => setKeyword(event.target.value)}
+                            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
+                            placeholder={t("searchPlaceholder")}
+                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
+                        <button
+                            onClick={handleSearch}
+                            disabled={isLoading}
+                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        >
+                            {tCommon("search")}
+                        </button>
+                    </div>
+                    <div className="shrink-0 whitespace-nowrap text-sm text-[#5e3f3a]">
+                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
+                    </div>
+                </div>
+
+                {error && (
+                    <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
+                )}
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse text-left">
+                        <thead>
+                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                                <th className="px-4 py-2.5">{t("colCode")}</th>
+                                <th className="px-4 py-2.5">{t("colFullName")}</th>
+                                <th className="px-4 py-2.5">{t("colOrgUnit")}</th>
+                                <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {!isLoading && employees.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="px-4 py-12">
+                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
+                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
+                                            {t("noEmployees")}
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                            {employees.map((employee) => (
+                                <tr key={employee.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">
+                                        {employee.lastName} {employee.firstName}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">
+                                        {employee.groupNameVn ?? employee.departmentNameVn ?? (
+                                            <span className="text-xs italic text-[#8a8f94]">{t("orgUnitCompanyWide")}</span>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-sm">
+                                        <button
+                                            onClick={() => setSelectedEmployee(employee)}
+                                            className="cursor-pointer inline-flex items-center gap-1.5 font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                            title={t("viewButtonLabel")}
+                                        >
+                                            <History className="h-3.5 w-3.5" />
+                                            {t("viewButtonLabel")}
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+                    <button
+                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+                        disabled={!hasPreviousPage || isLoading}
+                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
+                    >
+                        {tCommon("prevPage")}
+                    </button>
+                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">{pageIndex}</div>
+                    <button
+                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+                        disabled={!hasNextPage || isLoading}
+                        onClick={() => setPageIndex((current) => current + 1)}
+                    >
+                        {tCommon("nextPage")}
+                    </button>
+                </div>
+            </section>
+
+            {selectedEmployee && (
+                <AccumulationHistoryModal
+                    employeeId={selectedEmployee.id}
+                    employeeLabel={`${selectedEmployee.lastName} ${selectedEmployee.firstName} (${selectedEmployee.code})`}
+                    onClose={() => setSelectedEmployee(null)}
+                />
+            )}
+        </div>
+    );
+}

@@ -208,7 +208,9 @@ export default function DeviceList() {
       setHasNextPage(result.hasNextPage);
       setHasPreviousPage(result.hasPreviousPage);
     },
-    "Không thể tải danh sách thiết bị."
+    "Không thể tải danh sách thiết bị.",
+    undefined,
+    "devices"
   );
 
   // Danh sách hiển thị đổi trang/lọc thì bỏ chọn để tránh giữ id không còn hiển thị.

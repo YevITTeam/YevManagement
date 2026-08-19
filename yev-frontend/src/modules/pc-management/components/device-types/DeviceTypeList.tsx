@@ -47,7 +47,8 @@ export default function DeviceTypeList() {
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "device-types"
     );
 
     const handleSearch = () => {

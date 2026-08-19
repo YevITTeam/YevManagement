@@ -47,7 +47,8 @@ export default function BranchList() {
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "branches"
     );
 
     const handleSearch = () => {

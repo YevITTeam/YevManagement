@@ -1,3 +1,4 @@
+using Attendance.Application.Dtos.EmployeeAccumulationHistories;
 using Attendance.Application.Dtos.Employees;
 using Shared.Application.Wrapper;
 
@@ -6,6 +7,13 @@ namespace Attendance.Application.Interfaces.Service
     public interface IEmployeeService
     {
         Task<PagedResponse<EmployeeDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId);
+
+        // Nhân viên trong phạm vi quản lý của người GIỮ QUYỀN DUYỆT (không nhất thiết có Employee.View)
+        // — dùng cho màn "Lũy kế nhân viên" tra cứu. Xem chi tiết phạm vi ở EmployeeService.GetInScopeAsync.
+        Task<PagedResponse<EmployeeDto>> GetInScopeAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword);
+
+        // Lịch sử lũy kế 12 tháng của 1 năm — cùng phạm vi truy cập với GetInScopeAsync.
+        Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, int year);
         Task<List<EmployeeDto>> GetAllActiveAsync();
         Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId);
         // Toàn bộ nhân viên active thuộc Phòng ban (mọi Group con) — dùng cho màn "Cây duyệt Phòng ban"

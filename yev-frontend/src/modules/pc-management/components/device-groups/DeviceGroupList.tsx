@@ -59,7 +59,8 @@ export default function DeviceGroupList() {
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "device-groups"
     );
 
     useEffect(() => {

@@ -224,6 +224,35 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("Employees");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.EmployeeAccumulationHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("TotalHours")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "EmployeeId", "Year", "Month" }, "IX_EmployeeAccumulationHistories_EmployeeId_Year_Month")
+                        .IsUnique();
+
+                    b.ToTable("EmployeeAccumulationHistories");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.Group", b =>
                 {
                     b.Property<int>("Id")
@@ -1126,6 +1155,18 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("JobTitle");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.EmployeeAccumulationHistory", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Employee", "Employee")
+                        .WithMany("EmployeeAccumulationHistories")
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_EmployeeAccumulationHistories_Employees_EmployeeId");
+
+                    b.Navigation("Employee");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.Group", b =>
                 {
                     b.HasOne("Attendance.Domain.Entities.Department", "Department")
@@ -1384,6 +1425,8 @@ namespace Attendance.Infrastructure.Migrations
 
             modelBuilder.Entity("Attendance.Domain.Entities.Employee", b =>
                 {
+                    b.Navigation("EmployeeAccumulationHistories");
+
                     b.Navigation("OtFormEmployees");
                 });
 

@@ -48,7 +48,8 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "reasons"
     );
 
     useEffect(() => {

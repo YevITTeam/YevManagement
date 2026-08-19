@@ -23,7 +23,8 @@ export default function DeviceTransferHistoryPanel({ deviceId }: DeviceTransferH
         [deviceId],
         (result) => setHistory(result),
         "Không thể tải lịch sử chuyển máy.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "device-transfer-history"
     );
 
     return (

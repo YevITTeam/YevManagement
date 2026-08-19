@@ -254,7 +254,8 @@ export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }
         [idsKey],
         (data) => setLabels(data),
         "Không thể tải dữ liệu in tem QR.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "device-qr-labels"
     );
 
     if (!isOpen) return null;

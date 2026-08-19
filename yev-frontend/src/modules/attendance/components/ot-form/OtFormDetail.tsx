@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
-import { Car, Check, Clock, MessageCircle, Printer, Trash2, UserX, Utensils, X } from "lucide-react";
+import { Car, Check, Clock, History, MessageCircle, Printer, Trash2, UserX, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalStepDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
@@ -18,6 +18,7 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useRouter, getPathname } from "@/navigation";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
+import AccumulationHistoryModal from "@/modules/attendance/components/employees/AccumulationHistoryModal";
 
 interface OtFormDetailProps {
     id: number;
@@ -133,11 +134,17 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const [deleteReason, setDeleteReason] = useState("");
     const [isDeletingForm, setIsDeletingForm] = useState(false);
 
+    // Xem lịch sử lũy kế theo tháng/năm của 1 nhân viên trong đơn (2026-08-11d) — chỉ người có quyền
+    // duyệt mới thấy nút này (xem canApprove bên dưới), modal dùng chung với EmployeeList.tsx.
+    const [historyEmployee, setHistoryEmployee] = useState<OtFormEmployeeDto | null>(null);
+
     const { isLoading, error, refetch: fetchForm } = useFetchEffect(
         () => OtFormApi.getOtFormById(id),
         [id],
         (data) => setForm(data),
-        t("loadError")
+        t("loadError"),
+        undefined,
+        "ot-form-detail"
     );
 
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
@@ -605,7 +612,20 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                             {employee.monthToDate}h
                                         </td>
                                         <td className={`px-6 py-3 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
-                                            {employee.yearToDate}h
+                                            <span className="inline-flex items-center gap-1">
+                                                {employee.yearToDate}h
+                                                {canApprove && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setHistoryEmployee(employee)}
+                                                        title={t("viewAccumulationHistoryHint")}
+                                                        aria-label={t("viewAccumulationHistoryHint")}
+                                                        className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                    >
+                                                        <History className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-3 text-center text-sm text-[#5e3f3a]">
                                             {employee.isEligibleForMeal ? (
@@ -926,6 +946,14 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {historyEmployee && (
+                <AccumulationHistoryModal
+                    employeeId={historyEmployee.employeeId}
+                    employeeLabel={`${historyEmployee.fullName} (${historyEmployee.employeeCode})`}
+                    onClose={() => setHistoryEmployee(null)}
+                />
             )}
         </div>
     );

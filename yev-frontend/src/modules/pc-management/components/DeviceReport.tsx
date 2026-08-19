@@ -180,7 +180,8 @@ export default function DeviceReport() {
         [],
         (result) => setSummary(result),
         "Không thể tải dữ liệu báo cáo thiết bị.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "device-report-summary"
     );
 
     const statusRows: StatusDonutRow[] = statusMeta.map((status) => ({

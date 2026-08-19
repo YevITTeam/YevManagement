@@ -61,7 +61,8 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
             setHasPreviousPage(result.hasPreviousPage);
         },
         "Không thể tải danh sách địa chỉ IP.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "ip-addresses"
     );
 
     useEffect(() => {

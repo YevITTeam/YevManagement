@@ -1,3 +1,4 @@
+using Attendance.Application.Dtos.EmployeeAccumulationHistories;
 using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Constants;
@@ -166,6 +167,149 @@ namespace Attendance.Application.Services
                 }
             );
             return items.OrderBy(x => x.Code).ToList();
+        }
+
+        // Nhân viên trong phạm vi quản lý của người GIỮ QUYỀN DUYỆT (Attendance.OTForm.Approve, không
+        // nhất thiết có Attendance.Employee.View) — dùng cho màn "Lũy kế nhân viên" tra cứu (2026-08-11d,
+        // xem docs/docs-be/attendance-module.md §Lịch sử lũy kế). Phạm vi suy theo ĐÚNG vị trí Cây chức
+        // vụ của người gọi (KHÁC bảng Người phụ trách Cây duyệt — đó là uỷ quyền cấu hình cây duyệt,
+        // còn đây là phạm vi xem/duyệt theo đúng cấp bậc thật họ đang giữ):
+        //   - Admin: không giới hạn.
+        //   - TerminalLevel=WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc): toàn công ty.
+        //   - Có DepartmentId (Manager): nhân viên có DepartmentId trùng, hoặc Group.DepartmentId trùng.
+        //   - Còn lại (Staff/Group Leader/Team Leader, cấp Nhóm): chỉ nhân viên có GroupId trùng.
+        public async Task<PagedResponse<EmployeeDto>> GetInScopeAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword)
+        {
+            var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group!, x => x.Department!, x => x.JobTitle!).Where(x => !x.IsDeleted);
+
+            if (!isAdmin)
+            {
+                var caller = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == callerUserName && !x.IsDeleted, x => x.JobTitle!);
+                if (caller == null)
+                    throw new DomainException("Tài khoản của bạn chưa liên kết với hồ sơ Nhân viên nào.");
+
+                var callerTerminalLevel = (JobTitleTerminalLevel)(caller.JobTitle?.TerminalLevel ?? (int)JobTitleTerminalLevel.None);
+
+                if (callerTerminalLevel == JobTitleTerminalLevel.WorkshopManager || callerTerminalLevel == JobTitleTerminalLevel.GeneralDirector)
+                {
+                    // Toàn công ty — không lọc thêm.
+                }
+                else if (caller.DepartmentId.HasValue)
+                {
+                    var departmentId = caller.DepartmentId.Value;
+                    query = query.Where(x => x.DepartmentId == departmentId || (x.Group != null && x.Group.DepartmentId == departmentId));
+                }
+                else if (caller.GroupId.HasValue)
+                {
+                    var groupId = caller.GroupId.Value;
+                    query = query.Where(x => x.GroupId == groupId);
+                }
+                else
+                {
+                    throw new DomainException("Tài khoản của bạn chưa được gán Nhóm/Bộ phận nào.");
+                }
+            }
+
+            var orderedQuery = query.OrderBy(x => x.Code);
+
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                query = query.Where(x =>
+                    x.Code.Contains(keyword) ||
+                    x.FirstName.Contains(keyword) ||
+                    x.LastName.Contains(keyword) ||
+                    (x.LastName + " " + x.FirstName).Contains(keyword));
+                orderedQuery = query.OrderBy(x => x.Code == keyword ? 0 : 1).ThenBy(x => x.Code);
+            }
+
+            return await _unitOfWork.Employees.ToPagedResponseAsync(
+                orderedQuery,
+                pageIndex,
+                pageSize,
+                x => new EmployeeDto
+                {
+                    Id = x.Id,
+                    Code = x.Code,
+                    FirstName = x.FirstName,
+                    LastName = x.LastName,
+                    UserName = x.UserName,
+                    MonthToDate = x.MonthToDate,
+                    YearToDate = x.YearToDate,
+                    AccumulationYear = x.AccumulationYear,
+                    AccumulationMonth = x.AccumulationMonth,
+                    ProjectedMonthToDate = x.ProjectedMonthToDate,
+                    ProjectedYearToDate = x.ProjectedYearToDate,
+                    GroupId = x.GroupId,
+                    GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    DepartmentId = x.DepartmentId,
+                    DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
+                    JobTitleId = x.JobTitleId,
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
+                }
+            );
+        }
+
+        // Lịch sử lũy kế 12 tháng của 1 năm cho 1 Employee — đọc từ EmployeeAccumulationHistory (ledger
+        // append-only, ghi dần từ 2026-08-11d, KHÔNG có dữ liệu trước đó). Cùng phạm vi truy cập với
+        // GetInScopeAsync (EnsureInAccumulationScopeAsync dùng chung logic suy phạm vi theo Cây chức vụ).
+        public async Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, int year)
+        {
+            var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
+            employee.OrThrowNotFound("Nhân viên", employeeId);
+
+            if (!isAdmin)
+                await EnsureInAccumulationScopeAsync(callerUserName, employee!);
+
+            var rows = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(x => x.EmployeeId == employeeId && x.Year == year);
+            var hoursByMonth = rows.ToDictionary(x => x.Month, x => x.TotalHours);
+
+            var months = new List<EmployeeAccumulationHistoryDto>();
+            decimal yearTotal = 0;
+            for (var month = 1; month <= 12; month++)
+            {
+                var hours = hoursByMonth.GetValueOrDefault(month, 0m);
+                months.Add(new EmployeeAccumulationHistoryDto { Month = month, TotalHours = hours });
+                yearTotal += hours;
+            }
+
+            return new EmployeeAccumulationHistoryYearDto
+            {
+                EmployeeId = employee!.Id,
+                EmployeeCode = employee.Code,
+                EmployeeFullName = $"{employee.LastName} {employee.FirstName}",
+                Year = year,
+                Months = months,
+                YearTotalHours = yearTotal
+            };
+        }
+
+        // Mirror logic phạm vi ở GetInScopeAsync nhưng cho ĐÚNG 1 Employee mục tiêu (đã biết trước) —
+        // tách riêng vì GetInScopeAsync lọc cả danh sách qua IQueryable, còn ở đây chỉ cần so trực tiếp.
+        private async Task EnsureInAccumulationScopeAsync(string callerUserName, Employee targetEmployee)
+        {
+            var caller = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == callerUserName && !x.IsDeleted, x => x.JobTitle!);
+            if (caller == null)
+                throw new DomainException("Tài khoản của bạn chưa liên kết với hồ sơ Nhân viên nào.");
+
+            var callerTerminalLevel = (JobTitleTerminalLevel)(caller.JobTitle?.TerminalLevel ?? (int)JobTitleTerminalLevel.None);
+            if (callerTerminalLevel == JobTitleTerminalLevel.WorkshopManager || callerTerminalLevel == JobTitleTerminalLevel.GeneralDirector)
+                return;
+
+            if (caller.DepartmentId.HasValue)
+            {
+                var targetDepartmentId = targetEmployee.DepartmentId;
+                if (targetDepartmentId == null && targetEmployee.GroupId.HasValue)
+                {
+                    var targetGroup = await _unitOfWork.Groups.GetByIdAsync(targetEmployee.GroupId.Value);
+                    targetDepartmentId = targetGroup?.DepartmentId;
+                }
+                if (targetDepartmentId == caller.DepartmentId) return;
+                throw new DomainException("Bạn chỉ được xem lũy kế của nhân viên thuộc Bộ phận mình quản lý.");
+            }
+
+            if (caller.GroupId.HasValue && targetEmployee.GroupId == caller.GroupId) return;
+
+            throw new DomainException("Bạn chỉ được xem lũy kế của nhân viên thuộc Nhóm mình quản lý.");
         }
 
         public async Task<EmployeeDto> GetByIdAsync(int id)

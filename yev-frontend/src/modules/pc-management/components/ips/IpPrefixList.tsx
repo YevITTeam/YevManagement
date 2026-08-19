@@ -43,7 +43,8 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
             setHasPreviousPage(result.hasPreviousPage);
         },
         "Không thể tải danh sách dải mạng.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "ip-prefixes"
     );
 
     useEffect(() => {

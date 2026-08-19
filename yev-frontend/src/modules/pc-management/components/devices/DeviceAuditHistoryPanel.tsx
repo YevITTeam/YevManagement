@@ -26,7 +26,9 @@ export default function DeviceAuditHistoryPanel({ deviceId }: DeviceAuditHistory
         () => AuditTrailApi.getAuditTrailByRecord("Device", deviceId),
         [deviceId],
         (data) => setRows(data),
-        "Không thể tải lịch sử thao tác."
+        "Không thể tải lịch sử thao tác.",
+        undefined,
+        "device-audit-history"
     );
 
     if (isLoading) {

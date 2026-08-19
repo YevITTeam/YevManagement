@@ -48,7 +48,8 @@ const DepartmentList = forwardRef<ListHandle, ListToolbarProps>(function Departm
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "departments"
     );
 
     useEffect(() => {

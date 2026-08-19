@@ -46,7 +46,8 @@ export default function SupplierList() {
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "suppliers"
     );
 
     const handleSearch = () => {

@@ -27,7 +27,8 @@ export default function UserSignaturePanel() {
         [],
         (data) => setSignature(data),
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "user-signature"
     );
 
     const handleSave = async () => {

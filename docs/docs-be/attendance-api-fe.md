@@ -667,6 +667,52 @@ FE dùng field nào ở đâu:
 
 **Tra Group của 1 userName bất kỳ — `GET /api/Employee/by-username/{userName}`** (mới, 2026-07-17, permission `Attendance.Employee.View`): trả về `EmployeeDto` (có `groupId`/`groupNameVn`) của nhân viên có `userName` khớp, 404 nếu chưa được gán. Dùng ở màn Admin **"Phân quyền duyệt"** (§5, §1.3.F) — khi Admin gõ/chọn 1 tài khoản để gán làm Trưởng nhóm, gọi endpoint này để **gợi ý** luôn Bộ phận (Group) họ đang thuộc, đỡ phải tra thủ công ngoài hệ thống rồi mới chọn đúng `scopeId`. **Đây chỉ là gợi ý best-effort, không bắt buộc**: 404 là chuyện bình thường với Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc/Trưởng Bộ phận — các cấp quản lý này không nhất thiết có hồ sơ `Employee`, lúc đó Admin vẫn chọn `scopeId` thủ công từ dropdown Group/Department như bình thường, không phải lỗi.
 
+### 3.5c Lịch sử lũy kế theo tháng/năm (mới, 2026-08-11d)
+
+> Tính năng hoàn toàn MỚI — `monthToDate`/`yearToDate` chỉ là bộ đếm SỐNG, bị ghi đè về 0 mỗi khi
+> rollover sang tháng/năm mới nên không giữ được lịch sử tháng đã qua. Ledger mới
+> (`EmployeeAccumulationHistory`) ghi dần từ thời điểm này trở đi — **KHÔNG có dữ liệu trước đó, không
+> backfill**. Gate bằng `Attendance.OTForm.Approve` (KHÔNG phải `Attendance.Employee.View`) — Admin +
+> bất kỳ ai giữ quyền duyệt đều xem được, nhưng người không phải Admin CHỈ xem được nhân viên trong
+> phạm vi mình quản lý (suy theo ĐÚNG vị trí Cây chức vụ của người gọi, xem dưới).
+
+`GET /api/Employee/in-my-scope?pageIndex=&pageSize=&keyword=` (`Attendance.OTForm.Approve`) →
+`PagedResponse<EmployeeDto>` — danh sách nhân viên trong phạm vi người gọi, dùng để tự tìm 1 nhân viên
+mà KHÔNG cần `Attendance.Employee.View` (mọi action đọc khác trên `EmployeeController` đều gate quyền
+đó). Phạm vi:
+- Admin → không giới hạn.
+- Người gọi có `JobTitle.TerminalLevel` = WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc) →
+  toàn công ty.
+- Người gọi có `DepartmentId` (Manager) → nhân viên có `DepartmentId` trùng, hoặc `Group.DepartmentId` trùng.
+- Còn lại (Staff/Group Leader/Team Leader, cấp Nhóm) → chỉ nhân viên có `GroupId` trùng.
+- Người gọi chưa liên kết Employee (`UserName` không khớp ai) → 400.
+
+`GET /api/Employee/{id}/accumulation-history?year=2026` (`Attendance.OTForm.Approve`, cùng phạm vi
+trên) → `EmployeeAccumulationHistoryYearDto`:
+```jsonc
+{
+  "employeeId": 42, "employeeCode": "N-30479", "employeeFullName": "Phan Nguyễn Mạnh Cường",
+  "year": 2026,
+  "months": [
+    { "month": 1, "totalHours": 0 },
+    { "month": 2, "totalHours": 12.5 }
+    // ... luôn đủ 12 phần tử, tháng chưa có đơn Hoàn tất nào = totalHours 0
+  ],
+  "yearTotalHours": 12.5
+}
+```
+`yearTotalHours` = tổng `months[].totalHours` — với năm CŨ (đã rollover) đây là **nguồn DUY NHẤT** để
+biết tổng giờ cả năm đó, vì `Employee.yearToDate` chỉ còn phản ánh năm hiện tại. Với năm hiện tại, giá
+trị này luôn khớp `Employee.yearToDate` (cùng 1 điểm ghi — `OtFormService.AccumulateEmployeeHoursAsync`).
+Sai đơn vị (khác Nhóm/Bộ phận người gọi quản lý) → 400.
+
+**FE:** `AccumulationHistoryTable.tsx` (bảng 12 tháng, tô đỏ theo `AttendanceSetting.monthlyOtHourLimit`/
+`yearlyOtHourLimit` giống `EmployeeList.tsx`) + `AccumulationHistoryModal.tsx` (modal chọn năm, dùng
+chung ở cả 3 nơi) — nút trong `EmployeeList.tsx` (Admin), icon cạnh cột Lũy kế năm trong
+`OtFormDetail.tsx` (theo `canApprove`), và màn mới `/ot/accumulation` (`AccumulationLookupPage.tsx`,
+gọi `GET /in-my-scope` tự tìm nhân viên, không cần mở sẵn 1 đơn) — sidebar mục "Lũy kế nhân viên", cùng
+điều kiện quyền với "Đơn tổng".
+
 ### 3.6 Điều chỉnh lũy kế thủ công — ĐÃ XOÁ (2026-08-08), CHỈ CÒN Admin qua `PUT /Employee/{id}`
 
 Trước đây `PATCH /api/Employee/{id}/adjust-accumulation` + `GET /api/Employee/me` cho phép **chính nhân
@@ -1235,6 +1281,8 @@ gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
 | `/api/GroupApprovalStepCoordinator/by-group/{groupId}` | GET/PUT (thay nguyên danh sách) người phụ trách cấu hình Cây duyệt của 1 Nhóm — mới 2026-08-11 (sửa 2026-08-11b), §3.4c-3. Chỉ Admin sửa được bảng gán này |
 | `/api/Employee/{id}/department-job-title?departmentId=` | PUT gán/gỡ Chức vụ CẤP CUỐI có phạm vi — mới 2026-08-11c, §3.4c-3. Gate bằng `DepartmentApprovalStep.Update` (Người phụ trách gọi được, chỉ trong Bộ phận mình phụ trách) |
 | `/api/Employee/{id}/group-job-title?groupId=` | PUT gán/gỡ Chức vụ TRUNG GIAN có phạm vi — mới 2026-08-11c, §3.4c-3. Gate bằng `GroupApprovalStep.Update` (Người phụ trách gọi được, chỉ trong Nhóm mình phụ trách) |
+| `/api/Employee/in-my-scope` | GET nhân viên trong phạm vi Cây chức vụ của người gọi — mới 2026-08-11d, §3.5c. Gate `OTForm.Approve`, KHÔNG cần `Employee.View` |
+| `/api/Employee/{id}/accumulation-history?year=` | GET lịch sử lũy kế 12 tháng của 1 năm — mới 2026-08-11d, §3.5c. Gate `OTForm.Approve`, cùng phạm vi trên |
 | `/api/JobTitlePermission/by-job-title/{jobTitleId}` | GET (xem)/PUT (thay nguyên danh sách) permission tự động cấp theo 1 Chức vụ — mới 2026-08-10, §3.4e. `PUT` validate mọi code thuộc whitelist "tham gia quy trình" |
 | `/api/JobTitlePermission/allowed-codes` | GET danh sách mã permission được phép chọn ở trên — mới 2026-08-10, §3.4e |
 | `/api/Group` (`?by-department/{id}`) | CRUD + cascading theo Department |

@@ -45,7 +45,9 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
         () => DeviceApi.getDeviceDetailById(deviceId),
         [deviceId],
         (result) => setDetail(result),
-        "Không thể tải chi tiết thiết bị."
+        "Không thể tải chi tiết thiết bị.",
+        undefined,
+        "device-detail"
     );
 
     const handleSubmitForm = async (values: DeviceFormValues) => {

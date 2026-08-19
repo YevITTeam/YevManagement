@@ -46,7 +46,9 @@ export default function UserPermissionOverrideManager() {
             setModuleGroups(permissionsData);
             if (usersData.length > 0) setSelectedUserId(usersData[0].id);
         },
-        "Không thể tải danh sách người dùng / quyền."
+        "Không thể tải danh sách người dùng / quyền.",
+        undefined,
+        "user-permission-base"
     );
 
     // Danh sách phẳng tất cả permission, suy ra từ cây Module > Entity — dùng để tính baseline theo Role.
@@ -96,7 +98,9 @@ export default function UserPermissionOverrideManager() {
             setAutoGrantedIds(result.autoGranted);
             setChoices(result.nextChoices);
         },
-        "Không thể tải quyền của người dùng này."
+        "Không thể tải quyền của người dùng này.",
+        undefined,
+        "user-permission-overrides"
     );
 
     const filteredUsers = useMemo(() => {

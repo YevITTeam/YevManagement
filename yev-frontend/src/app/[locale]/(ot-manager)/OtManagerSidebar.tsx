@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, Layers } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList, FolderCog, History, PenTool, KeyRound, PanelLeftClose, Layers } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -34,6 +34,10 @@ const navItems: OtNavItem[] = [
     // Phòng ban để duyệt 1 lần. Đã redesign theo Cây chức vụ ở Giai đoạn 3.2 (2026-08-07, xem
     // docs/attendance-module.md §Đơn tổng).
     { key: "otBatches", href: "/ot/batches", icon: Layers, permissions: ["Attendance.OTForm.Approve"] },
+    // "Lũy kế nhân viên" (2026-08-11d) — tra cứu lịch sử lũy kế theo tháng/năm, không cần mở sẵn 1 đơn
+    // như ở OtFormDetail.tsx. Cùng điều kiện quyền với "Đơn tổng" (OTForm.Approve) — BE tự giới hạn
+    // danh sách nhân viên theo phạm vi Cây chức vụ của người gọi (xem GET /Employee/in-my-scope).
+    { key: "otAccumulation", href: "/ot/accumulation", icon: History, permissions: ["Attendance.OTForm.Approve"] },
     // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này —
     // dùng .Create (không phải .View) vì đợt 2026-07-17 đã cấp thêm Department.View/Group.View/... cho
     // Role Trưởng Nhóm/Nhân viên (chỉ để load dropdown lúc tạo đơn), gate bằng .View sẽ lộ nhầm mục

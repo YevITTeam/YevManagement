@@ -1,3 +1,4 @@
+using Attendance.Application.Dtos.EmployeeAccumulationHistories;
 using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Mvc;
@@ -59,6 +60,28 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<EmployeeDto>>> GetById(int id)
         {
             var result = await _employeeService.GetByIdAsync(id);
+            return Success(result);
+        }
+
+        // Gate bằng OTForm.Approve (KHÔNG phải Employee.View) — người chỉ giữ quyền duyệt không có
+        // Employee.View sẽ bị 403 ở mọi action khác trên controller này; đây là cách DUY NHẤT để họ tự
+        // liệt kê được nhân viên trong phạm vi mình (Cây chức vụ), phục vụ màn "Lũy kế nhân viên"
+        // (2026-08-11d). Route literal "in-my-scope" đứng trước {id} — ASP.NET Core tự ưu tiên segment
+        // tường minh hơn param nên không đụng route GetById (đã có tiền lệ tương tự với "all").
+        [RequirePermission("Attendance.OTForm.Approve")]
+        [HttpGet("in-my-scope")]
+        public async Task<ActionResult<ApiResponse<PagedResponse<EmployeeDto>>>> GetInMyScope(
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null)
+        {
+            var result = await _employeeService.GetInScopeAsync(CurrentUserName, User.IsInRole(AdminRole), pageIndex, pageSize, keyword);
+            return Success(result);
+        }
+
+        [RequirePermission("Attendance.OTForm.Approve")]
+        [HttpGet("{id}/accumulation-history")]
+        public async Task<ActionResult<ApiResponse<EmployeeAccumulationHistoryYearDto>>> GetAccumulationHistory(int id, [FromQuery] int year)
+        {
+            var result = await _employeeService.GetAccumulationHistoryAsync(CurrentUserName, User.IsInRole(AdminRole), id, year);
             return Success(result);
         }
 

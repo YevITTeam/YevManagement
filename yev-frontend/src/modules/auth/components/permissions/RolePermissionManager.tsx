@@ -32,14 +32,18 @@ export default function RolePermissionManager() {
             setModuleGroups(permissionsData);
             if (rolesData.length > 0) setSelectedRoleId(rolesData[0].id);
         },
-        "Không thể tải danh sách vai trò / quyền."
+        "Không thể tải danh sách vai trò / quyền.",
+        undefined,
+        "role-permission-base"
     );
 
     const { isLoading: isLoadingRolePermissions } = useFetchEffect(
         () => (selectedRoleId === null ? Promise.resolve([]) : PermissionApi.getByRole(selectedRoleId)),
         [selectedRoleId],
         (rolePermissions) => setSelectedPermissionIds(new Set(rolePermissions.map((p) => p.id))),
-        "Không thể tải quyền của vai trò này."
+        "Không thể tải quyền của vai trò này.",
+        undefined,
+        "role-permissions-by-role"
     );
 
     const togglePermission = (permissionId: number, checked: boolean) => {

@@ -28,7 +28,8 @@ export default function SecondaryPasswordPanel() {
         [],
         (data) => setStatus(data),
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "secondary-password-status"
     );
 
     const handleSave = async () => {

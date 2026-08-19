@@ -39,6 +39,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<JobTitlePermission> JobTitlePermissions { get; set; }
     public virtual DbSet<DepartmentApprovalStepCoordinator> DepartmentApprovalStepCoordinators { get; set; }
     public virtual DbSet<GroupApprovalStepCoordinator> GroupApprovalStepCoordinators { get; set; }
+    public virtual DbSet<EmployeeAccumulationHistory> EmployeeAccumulationHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -203,6 +204,18 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.EmployeeId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_GroupApprovalStepCoordinators_Employees_EmployeeId");
+        });
+
+        modelBuilder.Entity<EmployeeAccumulationHistory>(entity =>
+        {
+            entity.HasIndex(e => new { e.EmployeeId, e.Year, e.Month }, "IX_EmployeeAccumulationHistories_EmployeeId_Year_Month").IsUnique();
+
+            entity.Property(e => e.TotalHours).HasPrecision(10, 2);
+
+            entity.HasOne(d => d.Employee).WithMany(p => p.EmployeeAccumulationHistories)
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_EmployeeAccumulationHistories_Employees_EmployeeId");
         });
 
         modelBuilder.Entity<OtForm>(entity =>

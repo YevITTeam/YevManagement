@@ -51,7 +51,8 @@ export default function ScheduleBoard() {
       setDirty(false);
     },
     "Không thể tải lịch trình.",
-    (message) => toast.error(message)
+    (message) => toast.error(message),
+    "schedule-board"
   );
 
   // Cảnh báo khi rời trang mà còn thay đổi chưa lưu.

@@ -52,7 +52,8 @@ export default function DeviceDepartmentList() {
             setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "device-departments"
     );
 
     const handleSearch = () => {

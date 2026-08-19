@@ -24,7 +24,8 @@ export default function AssetSettingPanel() {
         [],
         (data) => setLiquidationAfterMonths(data.liquidationAfterMonths),
         "Không thể tải cấu hình.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "asset-setting"
     );
 
     const handleSubmit = async (event: React.FormEvent) => {

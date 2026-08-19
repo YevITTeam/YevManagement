@@ -46,7 +46,8 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
         [],
         (data) => setValues(data),
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "attendance-setting-panel"
     );
 
     useEffect(() => {

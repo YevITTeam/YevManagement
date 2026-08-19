@@ -94,7 +94,8 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
             if (result.safePageIndex !== pageIndex) setPageIndex(result.safePageIndex);
         },
         t("loadError"),
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "groups"
     );
 
     useEffect(() => {

@@ -118,14 +118,18 @@ export default function DeviceConfigurationPanel({ deviceId, deviceCode, configu
         () => (configuration ? DeviceConfigurationApi.getInitialConfiguration(configuration.id) : Promise.resolve(null)),
         [configuration?.id],
         (data) => setInitialSnapshot(data),
-        "Không thể tải cấu hình ban đầu."
+        "Không thể tải cấu hình ban đầu.",
+        undefined,
+        "device-config-initial"
     );
 
     const { isLoading: isLoadingHistory } = useFetchEffect(
         () => (configuration ? DeviceConfigurationApi.getConfigurationHistory(configuration.id) : Promise.resolve([])),
         [configuration?.id],
         (data) => setHistory(data),
-        "Không thể tải lịch sử sửa chữa."
+        "Không thể tải lịch sử sửa chữa.",
+        undefined,
+        "device-config-history"
     );
 
     const handleChange = (field: keyof DeviceComponentFields, value: string) => {

@@ -25,7 +25,8 @@ export default function RoleList() {
         [],
         (data) => setRoles(data),
         "Không thể tải danh sách vai trò",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "roles"
     );
 
     const filteredRoles = useMemo(() => {

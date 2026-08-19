@@ -270,10 +270,13 @@ export default function OtFormEmailConfirmPage() {
     );
 
     return (
-        // max-w-7xl (1280px) — khớp đúng chiều rộng khung app đã đăng nhập (`(ot-manager)/layout.tsx`
-        // dùng max-w-[1280px]), trước đây max-w-4xl (896px) làm bảng danh sách nhân viên (7 cột, kể cả
-        // cột "Số giờ" mới thêm) bị bó hẹp, tiêu đề cột phải xuống 2 dòng, giờ OT hiển thị chật.
-        <div className="mx-auto max-w-7xl space-y-6 px-4 py-8">
+        // max-w-[1600px] — trang này là route public độc lập (xac-nhan-don/page.tsx), KHÔNG nằm
+        // trong (ot-manager)/layout.tsx nên không bị ràng buộc max-w-[1280px] của khung app đã đăng
+        // nhập. Trước đây từng khớp 1280px (max-w-7xl) theo khung app, nhưng bảng danh sách nhân viên
+        // (9 cột: mã NV, họ tên, thời gian, số giờ, lũy kế tháng/năm, phiếu ăn, có ăn, ghi chú) vẫn bị
+        // chật ở 1280px trên màn hình rộng — họ tên và badge "Có ăn / 食事あり" xuống dòng, rớt chữ.
+        // Nới rộng thêm vì trang mở trực tiếp từ email, không cần khớp bố cục app.
+        <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{t("titleWithId", { id: form.id })}</h1>
@@ -523,8 +526,8 @@ export default function OtFormEmailConfirmPage() {
                                                 {employee.employeeCode}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-3 text-sm font-medium text-[#191c1e]">{employee.fullName}</td>
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">
+                                        <td className="px-6 py-3 text-sm font-medium whitespace-nowrap text-[#191c1e]">{employee.fullName}</td>
+                                        <td className="px-6 py-3 text-sm whitespace-nowrap text-[#5e3f3a]">
                                             {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
                                         </td>
                                         <td className="px-6 py-3 text-center text-sm">

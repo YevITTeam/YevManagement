@@ -43,7 +43,8 @@ const SoftwareGroupList = forwardRef<ListHandle, ListToolbarProps>(function Soft
             setHasPreviousPage(result.hasPreviousPage);
         },
         "Không thể tải danh sách nhóm phần mềm.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "software-groups"
     );
 
     useEffect(() => {

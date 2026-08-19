@@ -67,7 +67,8 @@ export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, 
             setNewItemDetails({});
         },
         "Không thể tải danh sách phần mềm.",
-        (message) => toast.error(message)
+        (message) => toast.error(message),
+        "device-software-picker"
     );
 
     const togglePrioritySort = () => {
