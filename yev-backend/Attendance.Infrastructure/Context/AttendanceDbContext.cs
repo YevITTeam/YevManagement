@@ -102,10 +102,6 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.FirstName).HasMaxLength(150);
             entity.Property(e => e.LastName).HasMaxLength(150);
             entity.Property(e => e.UserName).HasMaxLength(100);
-            entity.Property(e => e.MonthToDate).HasPrecision(10, 2);
-            entity.Property(e => e.YearToDate).HasPrecision(10, 2);
-            entity.Property(e => e.ProjectedMonthToDate).HasPrecision(10, 2);
-            entity.Property(e => e.ProjectedYearToDate).HasPrecision(10, 2);
 
             entity.HasOne(d => d.Group).WithMany(p => p.Employees)
                 .HasForeignKey(d => d.GroupId)

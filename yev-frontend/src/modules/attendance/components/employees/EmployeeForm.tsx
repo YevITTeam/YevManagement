@@ -24,8 +24,6 @@ export interface EmployeeFormValues {
     firstName: string;
     lastName: string;
     userName: string | null;
-    monthToDate: number;
-    yearToDate: number;
     // Đúng 1 trong 2 field được điền tuỳ theo Chức vụ (2026-08-08, xem docs §Cây chức vụ):
     // TerminalLevel=None → groupId bắt buộc; =DepartmentManager (Trưởng phòng) → departmentId bắt
     // buộc; =WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc) → cả 2 đều null.
@@ -48,8 +46,6 @@ const emptyValues: EmployeeFormValues = {
     firstName: "",
     lastName: "",
     userName: null,
-    monthToDate: 0,
-    yearToDate: 0,
     groupId: null,
     departmentId: null,
     jobTitleId: null,
@@ -93,8 +89,6 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                       firstName: current.firstName,
                       lastName: current.lastName,
                       userName: current.userName,
-                      monthToDate: current.monthToDate,
-                      yearToDate: current.yearToDate,
                       groupId: current.groupId,
                       departmentId: current.departmentId,
                       jobTitleId: current.jobTitleId,
@@ -297,33 +291,6 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             {t("companyWideHint")}
                         </p>
                     )}
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldMonthToDate")}</span>
-                            <input
-                                type="number"
-                                step="0.01"
-                                min={0}
-                                value={values.monthToDate}
-                                onChange={(event) => setValues((current) => ({ ...current, monthToDate: Number(event.target.value) }))}
-                                disabled={loading}
-                                className={fieldClassName}
-                            />
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldYearToDate")}</span>
-                            <input
-                                type="number"
-                                step="0.01"
-                                min={0}
-                                value={values.yearToDate}
-                                onChange={(event) => setValues((current) => ({ ...current, yearToDate: Number(event.target.value) }))}
-                                disabled={loading}
-                                className={fieldClassName}
-                            />
-                        </label>
-                    </div>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

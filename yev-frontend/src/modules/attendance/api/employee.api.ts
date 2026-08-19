@@ -8,7 +8,7 @@ const ENDPOINTS = {
         getEmployeePageNation: "/Employee/grid-list",
         getAllEmployees: "/Employee/all",
         getEmployeeById: (id: number) => `/Employee/${id}`,
-        getEmployeesByGroup: (groupId: number) => `/Employee/by-group/${groupId}`,
+        getEmployeesByGroup: (groupId: number, date?: string) => `/Employee/by-group/${groupId}${date ? `?date=${date}` : ""}`,
         getEmployeesByDepartment: (departmentId: number) => `/Employee/by-department/${departmentId}`,
         getEmployeeByUsername: (userName: string) => `/Employee/by-username/${encodeURIComponent(userName)}`,
         createEmployee: "/Employee",
@@ -44,8 +44,6 @@ export interface CreateUpdateEmployeeDto {
     firstName: string;
     lastName: string;
     userName?: string | null;
-    monthToDate: number;
-    yearToDate: number;
     groupId: number | null;
     departmentId: number | null;
     jobTitleId?: number | null;
@@ -73,9 +71,11 @@ export const EmployeeApi = {
         const response = await api.get<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.getEmployeeById(id));
         return response.data;
     },
-    // Chọn nhân viên hàng loạt khi lập đơn OT (docs/attendance-api-fe.md §3.5).
-    getEmployeesByGroup: async (groupId: number) => {
-        const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByGroup(groupId));
+    // Chọn nhân viên hàng loạt khi lập đơn OT (docs/attendance-api-fe.md §3.5). date = ngày trên đơn
+    // đang tạo (YYYY-MM-DD) — để lũy kế Dự kiến (projectedMonthToDate/YearToDate) scope đúng tháng/năm
+    // của đơn đó thay vì hôm nay thực tế (2026-08-19, xem docs §Lũy kế Dự kiến). Bỏ trống = hôm nay.
+    getEmployeesByGroup: async (groupId: number, date?: string) => {
+        const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByGroup(groupId, date));
         return response.data;
     },
     // Toàn bộ nhân viên active thuộc Phòng ban (mọi Bộ phận con) — dùng ở màn "Cây duyệt Phòng ban"

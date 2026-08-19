@@ -632,14 +632,22 @@ gọi từ `Attendance.EmployeeService.CreateAsync/UpdateAsync/DeleteAsync` mỗ
 // EmployeeDto
 { "id": 100, "code": "NV001", "firstName": "Nguyễn Văn", "lastName": "A",
   "userName": "YEV\\n.van.a",                     // nullable — tài khoản AD của chính nhân viên (nếu có)
-  "monthToDate": 12.5, "yearToDate": 80.0,
-  "accumulationYear": 2026, "accumulationMonth": 7, // tháng/năm mà monthToDate/yearToDate đang phản ánh
-  "projectedMonthToDate": 14.5, "projectedYearToDate": 82.0, // MỚI 2026-08-06, xem §3.5b — dự kiến
+  "monthToDate": 12.5, "yearToDate": 80.0,         // lũy kế THẬT — BE tính lúc đọc, xem §3.5a
+  "projectedMonthToDate": 0, "projectedYearToDate": 0, // lũy kế DỰ KIẾN — CHỈ có ý nghĩa ở by-group, xem §3.5b
   "groupId": 5, "groupNameVn": "Nhóm 1",           // cả 2 nullable từ 2026-08-08, xem ngay dưới
   "departmentId": null, "departmentNameVn": null,  // MỚI 2026-08-08
   "jobTitleId": 11, "jobTitleName": "Manager" }    // nullable, MỚI 2026-08-06 — xem §3.4b
 ```
-POST/PUT: `code`[Required], `firstName`[Required], `lastName`[Required], `userName?` (optional — gán tài khoản AD để liên kết nhân viên với đúng người tạo/duyệt đơn OT, xem §3.5), `monthToDate`, `yearToDate` (decimal, giờ OT lũy kế — dùng để cảnh báo TH3 vượt 25h/tháng hoặc 300h/năm), `groupId?`/`departmentId?`, `jobTitleId?` (optional, MỚI 2026-08-06 — id không tồn tại/đã xóa → 404). Trùng `userName` với nhân viên khác (kể cả đang active) → 400. `projectedMonthToDate`/`projectedYearToDate` là field **chỉ đọc** (response only) — không có trong POST/PUT body.
+POST/PUT: `code`[Required], `firstName`[Required], `lastName`[Required], `userName?` (optional — gán tài khoản AD để liên kết nhân viên với đúng người tạo/duyệt đơn OT, xem §3.5), `groupId?`/`departmentId?`, `jobTitleId?` (optional, MỚI 2026-08-06 — id không tồn tại/đã xóa → 404). Trùng `userName` với nhân viên khác (kể cả đang active) → 400. `monthToDate`/`yearToDate`/`projectedMonthToDate`/`projectedYearToDate` là field **chỉ đọc** (response only) — **không còn trong POST/PUT body nữa** (2026-08-19, xem §3.6 — bỏ hẳn khả năng chỉnh tay).
+
+### 3.5a Lũy kế THẬT — `monthToDate`/`yearToDate` (REDESIGN 2026-08-19)
+
+Không còn lưu trên `Employee` — BE tính trực tiếp từ ledger (`EmployeeAccumulationHistory`) mỗi lần trả
+`EmployeeDto`, luôn scope theo **năm/tháng THỰC TẾ hôm nay** (không phải ngày trên bất kỳ đơn nào). Hệ
+quả FE cần biết: 1 đơn ghi ngày tương lai, dù đã `Completed` từ trước, chỉ "hiện" vào `monthToDate`/
+`yearToDate` khi lịch thực tế đã tới đúng tháng đó — không có gì để FE code thêm, chỉ cần biết số này
+luôn đúng-theo-hôm-nay chứ không phải "theo lần Hoàn tất gần nhất" như bản cũ. Chi tiết thiết kế/lý do
+đổi xem [attendance-module.md §Lũy kế — bỏ cache trên Employee, tính lúc đọc](attendance-module.md).
 
 **`groupId`/`departmentId` — đúng 1 trong 2 (hoặc cả 2 đều bỏ trống), tuỳ `TerminalLevel` của `jobTitleId` (2026-08-08, breaking so với trước — trước đó `groupId` luôn bắt buộc)**, validate ở `EmployeeService.ValidateOrganizationAssignmentAsync`, sai tổ hợp → 400 message cụ thể:
 | `jobTitleId` chưa gán / Chức vụ `TerminalLevel=None` | `TerminalLevel=DepartmentManager` (Trưởng phòng) | `TerminalLevel=WorkshopManager`/`GeneralDirector` (Trưởng Xưởng/Giám đốc) |
@@ -648,7 +656,7 @@ POST/PUT: `code`[Required], `firstName`[Required], `lastName`[Required], `userNa
 
 FE `EmployeeForm.tsx` (2026-08-08): chọn **Chức vụ trước**, dropdown Bộ phận/Phòng ban hiện đúng 1 trong 2 (hoặc ẩn cả 2 kèm ghi chú "dùng chung toàn công ty") theo `JobTitleDto.terminalLevel` của lựa chọn — đổi Chức vụ giữa 3 nhóm tự reset field cũ.
 
-**Chọn nhân viên hàng loạt khi lập đơn**: `GET /api/Employee/by-group/{groupId}` → `EmployeeDto[]` toàn bộ nhân viên nhóm đó (Trưởng nhóm tick chọn nhiều người cho `CreateOtFormDto.employees`) — FE dùng **`projectedMonthToDate`/`projectedYearToDate`** (KHÔNG dùng `monthToDate`/`yearToDate`) để cảnh báo hạn mức TH3 ngay lúc chọn (§1.3.A, §3.5b).
+**Chọn nhân viên hàng loạt khi lập đơn**: `GET /api/Employee/by-group/{groupId}?date=2026-08-01` → `EmployeeDto[]` toàn bộ nhân viên nhóm đó (Trưởng nhóm tick chọn nhiều người cho `CreateOtFormDto.employees`) — FE dùng **`projectedMonthToDate`/`projectedYearToDate`** (KHÔNG dùng `monthToDate`/`yearToDate`) để cảnh báo hạn mức TH3 ngay lúc chọn (§1.3.A, §3.5b). `date` query param (optional, mặc định hôm nay thực tế nếu bỏ trống) = **ngày trên đơn đang tạo** — BẮT BUỘC truyền để Dự kiến scope đúng tháng/năm của đơn đó (2026-08-19); FE phải gọi lại endpoint này mỗi khi người dùng đổi ngày trên form.
 
 **Toàn bộ nhân viên active (mọi Group)**: `GET /api/Employee/all` (`Attendance.Employee.View`, mới 2026-08-06) → `EmployeeDto[]` — dùng cho dropdown/công cụ cần chọn 1 nhân viên bất kỳ không giới hạn theo Group. Trước đó FE (`EmployeeApi.getAllEmployees()`) đã gọi sẵn route này nhưng BE chưa có action khớp — request rơi vào `GET /{id}` với `id="all"`, trả 400 `"The value 'all' is not valid"`; đã bổ sung action thật.
 
@@ -656,14 +664,14 @@ FE `EmployeeForm.tsx` (2026-08-08): chọn **Chức vụ trước**, dropdown B�
 
 **Lọc `grid-list` theo Phòng ban/Bộ phận** (mới 2026-08-07): `GET /api/Employee/grid-list?...&DepartmentId=&GroupId=` — 2 query param optional, dùng cho ô lọc trên màn "Nhân viên" để dễ tìm đúng nhóm người cần gán Chức vụ trước khi cấu hình cây duyệt. `DepartmentId` lọc qua `Group.DepartmentId` (không cần biết Group con); `GroupId` lọc chính xác 1 Group; có thể kết hợp cả 2 (thực tế `GroupId` đã đủ hẹp, `DepartmentId` chỉ còn tác dụng lọc thô).
 
-### 3.5b Lũy kế DỰ KIẾN — `projectedMonthToDate`/`projectedYearToDate` (2026-08-06)
+### 3.5b Lũy kế DỰ KIẾN — `projectedMonthToDate`/`projectedYearToDate` (2026-08-06, REDESIGN 2026-08-19)
 
-`monthToDate`/`yearToDate` chỉ cộng khi đơn OT đạt `Completed` (xem [attendance-module.md §Lũy kế tháng/năm](attendance-module.md)) — nên nếu nhân viên đang có 1 đơn khác chưa được duyệt xong, hạn mức không phản ánh được phần đó, dễ gây trường hợp tạo 2 đơn cùng lúc mà đơn nào cũng không thấy cảnh báo vượt hạn mức. `projectedMonthToDate`/`projectedYearToDate` giải quyết việc này: cộng ngay khi đơn được **tạo** (bất kể đơn đang ở trạng thái chưa duyệt nào), trừ lại khi đơn bị **Rejected** hoặc khi 1 người bị **loại khỏi đơn**, điều chỉnh chênh lệch khi sửa "thực tích"/DidEat trước khi Trưởng phòng duyệt. Chi tiết cơ chế xem [attendance-module.md §Lũy kế dự kiến](attendance-module.md).
+`monthToDate`/`yearToDate` chỉ cộng khi đơn OT đạt `Completed` (xem [attendance-module.md §Lũy kế tháng/năm](attendance-module.md)) — nên nếu nhân viên đang có 1 đơn khác chưa được duyệt xong, hạn mức không phản ánh được phần đó, dễ gây trường hợp tạo 2 đơn cùng lúc mà đơn nào cũng không thấy cảnh báo vượt hạn mức. `projectedMonthToDate`/`projectedYearToDate` giải quyết việc này: tính = thực tế + mọi đơn khác của người đó còn hiệu lực (`!IsRemoved && Status != Rejected && !IsDeleted`) rơi vào **đúng tháng/năm của `date` query param** (không phải hôm nay thực tế) — **không lưu ở đâu cả, BE tính trực tiếp mỗi lần gọi** từ 2026-08-19 (trước đó là bộ đếm cộng/trừ dần trên `Employee`, đã bỏ — xem [attendance-module.md §Lũy kế dự kiến](attendance-module.md)).
 
 FE dùng field nào ở đâu:
-- **`GET /api/Employee/by-group/{groupId}`** (chọn nhân viên lúc TẠO đơn mới) → dùng `projectedMonthToDate`/`projectedYearToDate`.
-- **`OtFormEmployeeDto.monthToDate`/`yearToDate`** (§4.3, hiện trên 1 đơn cụ thể — chi tiết/sửa/PDF/email) → vẫn 2 tên field cũ, nhưng từ 2026-08-06 là **snapshot lũy kế dự kiến** (không phải thực tế) tại thời điểm tạo đơn, TRƯỚC khi cộng chính đơn đó — không đổi tên field, chỉ đổi nguồn.
-- Màn quản lý nhân viên (`EmployeeList`, Admin sửa qua `PUT /Employee/{id}`) vẫn dùng `monthToDate`/`yearToDate` (thực tế) như cũ — không liên quan tới 1 đơn cụ thể nào.
+- **`GET /api/Employee/by-group/{groupId}?date=`** (chọn nhân viên lúc TẠO đơn mới) → dùng `projectedMonthToDate`/`projectedYearToDate`, **BẮT BUỘC truyền `date`** = ngày trên đơn đang tạo (§3.5). Đây là **nguồn DUY NHẤT** trả 2 field này có ý nghĩa — mọi endpoint `EmployeeDto` khác trả về `0`.
+- **`OtFormEmployeeDto.monthToDate`/`yearToDate`** (§4.3, hiện trên 1 đơn cụ thể — chi tiết/sửa/PDF/email) → vẫn 2 tên field cũ, vẫn là **snapshot lũy kế dự kiến** tại thời điểm tạo đơn, TRƯỚC khi cộng chính đơn đó (không đổi từ 2026-08-06) — không đổi tên field, chỉ đổi cách BE tính ra số để chụp.
+- Màn quản lý nhân viên (`EmployeeList`, Admin) dùng `monthToDate`/`yearToDate` (thực tế, §3.5a) — không liên quan tới 1 đơn cụ thể nào, và Admin **không còn sửa tay được nữa** (§3.6).
 
 **Tra Group của 1 userName bất kỳ — `GET /api/Employee/by-username/{userName}`** (mới, 2026-07-17, permission `Attendance.Employee.View`): trả về `EmployeeDto` (có `groupId`/`groupNameVn`) của nhân viên có `userName` khớp, 404 nếu chưa được gán. Dùng ở màn Admin **"Phân quyền duyệt"** (§5, §1.3.F) — khi Admin gõ/chọn 1 tài khoản để gán làm Trưởng nhóm, gọi endpoint này để **gợi ý** luôn Bộ phận (Group) họ đang thuộc, đỡ phải tra thủ công ngoài hệ thống rồi mới chọn đúng `scopeId`. **Đây chỉ là gợi ý best-effort, không bắt buộc**: 404 là chuyện bình thường với Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc/Trưởng Bộ phận — các cấp quản lý này không nhất thiết có hồ sơ `Employee`, lúc đó Admin vẫn chọn `scopeId` thủ công từ dropdown Group/Department như bình thường, không phải lỗi.
 
@@ -701,10 +709,11 @@ trên) → `EmployeeAccumulationHistoryYearDto`:
   "yearTotalHours": 12.5
 }
 ```
-`yearTotalHours` = tổng `months[].totalHours` — với năm CŨ (đã rollover) đây là **nguồn DUY NHẤT** để
-biết tổng giờ cả năm đó, vì `Employee.yearToDate` chỉ còn phản ánh năm hiện tại. Với năm hiện tại, giá
-trị này luôn khớp `Employee.yearToDate` (cùng 1 điểm ghi — `OtFormService.AccumulateEmployeeHoursAsync`).
-Sai đơn vị (khác Nhóm/Bộ phận người gọi quản lý) → 400.
+`yearTotalHours` = tổng `months[].totalHours` — LUÔN cộng đủ 12 tháng của năm được chọn (kể cả tháng
+tương lai, nếu đã có đơn `Completed` dán ngày tháng đó — ledger ghi ngay không đợi tới đúng tháng).
+KHÔNG nhầm với `EmployeeDto.yearToDate` (§3.5a, năm hiện tại) — field đó chỉ cộng tới **đúng tháng thực
+tế hôm nay**, nên nếu có 1 đơn tương lai đã `Completed` sớm, `yearTotalHours` (năm hiện tại) sẽ **lớn
+hơn** `yearToDate` cho tới khi lịch thực tế bắt kịp. Sai đơn vị (khác Nhóm/Bộ phận người gọi quản lý) → 400.
 
 **FE:** `AccumulationHistoryTable.tsx` (bảng 12 tháng, tô đỏ theo `AttendanceSetting.monthlyOtHourLimit`/
 `yearlyOtHourLimit` giống `EmployeeList.tsx`) + `AccumulationHistoryModal.tsx` (modal chọn năm, dùng
@@ -713,16 +722,21 @@ chung ở cả 3 nơi) — nút trong `EmployeeList.tsx` (Admin), icon cạnh c�
 gọi `GET /in-my-scope` tự tìm nhân viên, không cần mở sẵn 1 đơn) — sidebar mục "Lũy kế nhân viên", cùng
 điều kiện quyền với "Đơn tổng".
 
-### 3.6 Điều chỉnh lũy kế thủ công — ĐÃ XOÁ (2026-08-08), CHỈ CÒN Admin qua `PUT /Employee/{id}`
+### 3.6 Điều chỉnh lũy kế thủ công — ĐÃ XOÁ HOÀN TOÀN (2026-08-08 → 2026-08-19)
 
 Trước đây `PATCH /api/Employee/{id}/adjust-accumulation` + `GET /api/Employee/me` cho phép **chính nhân
-viên tự chỉnh** `monthToDate`/`yearToDate` của mình (màn "Lũy kế của tôi", không gắn permission
-`Attendance.Employee.*`, mọi user đăng nhập đều gọi được). Người dùng chốt bỏ hẳn khả năng tự chỉnh này
-("user không thể tự thay đổi lũy kế của họ được, việc này do Admin đảm nhận") — cả 2 endpoint trên
-**đã xoá hoàn toàn** (404), route FE `/ot/accumulation` + mục sidebar "Lũy kế của tôi" cũng đã gỡ. Muốn
-sửa `monthToDate`/`yearToDate` giờ chỉ còn 1 đường: **Admin** gọi `PUT /api/Employee/{id}`
-(`UpdateEmployeeDto`, `Attendance.Employee.Update`) — field này vốn đã có sẵn trong form Sửa nhân viên
-(§3.5), không cần gọi API riêng.
+viên tự chỉnh** `monthToDate`/`yearToDate` của mình (màn "Lũy kế của tôi") — đã xoá 2026-08-08 (người
+dùng chốt "user không thể tự thay đổi lũy kế của họ được, việc này do Admin đảm nhận"), lúc đó vẫn còn
+cho **Admin** chỉnh qua `PUT /api/Employee/{id}` (`UpdateEmployeeDto.monthToDate/yearToDate`).
+
+**2026-08-19: bỏ nốt luôn cả đường Admin** — `monthToDate`/`yearToDate` không còn là cột lưu trên
+`Employee` nữa (tính lúc đọc từ ledger, xem §3.5a), nên **không còn field nào để chỉnh tay cả**.
+`CreateEmployeeDto`/`UpdateEmployeeDto` không còn `monthToDate`/`yearToDate` — gửi lên sẽ bị BE bỏ qua
+(không phải lỗi 400, chỉ đơn giản là DTO không còn field đó, gửi thừa cũng không sao). Lý do: (1) sửa
+tay không ghi lại vào ledger nên sẽ lệch với tra cứu lịch sử (§3.5c) — "hiện tại" ra số đã sửa, "tra
+cứu tháng đó" vẫn ra số ledger gốc; (2) lý do gốc của tính năng này (nhập liệu lũy kế cũ khi ledger
+chưa tồn tại) không còn áp dụng sau đợt reset dữ liệu demo (xem attendance-module.md §DB). Muốn sửa sai
+số liệu giờ chỉ còn cách sửa thẳng dữ liệu OT gốc (đơn/`OtFormEmployee`) khiến ledger tự tính lại đúng.
 
 ### 3.7 Import Excel nhân sự hàng loạt — `/api/EmployeeImport` (Admin, 2026-07-16)
 

@@ -113,7 +113,6 @@ namespace Attendance.Application.Services
                     : (await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && employeeCodesToUpdate.Contains(x.Code)))
                         .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
 
-                var now = TimeHelper.GetCurrentUtcTime();
                 foreach (var row in validRows)
                 {
                     int? resolvedGroupId = newGroupsByCode.TryGetValue(row.GroupCode!, out var newGroupEntity)
@@ -127,10 +126,6 @@ namespace Attendance.Application.Services
                             Code = row.EmployeeCode!,
                             FirstName = row.ResolvedFirstName!,
                             LastName = row.ResolvedLastName!,
-                            MonthToDate = 0,
-                            YearToDate = 0,
-                            AccumulationYear = now.Year,
-                            AccumulationMonth = now.Month,
                             IsDeleted = false
                         };
 

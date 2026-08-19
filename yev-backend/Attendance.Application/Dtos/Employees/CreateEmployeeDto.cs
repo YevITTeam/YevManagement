@@ -17,10 +17,6 @@ namespace Attendance.Application.Dtos.Employees
         // adjust their own accumulation later (see Attendance.OTForm/Employee adjust-accumulation).
         public string? UserName { get; set; }
 
-        public decimal MonthToDate { get; set; }
-
-        public decimal YearToDate { get; set; }
-
         // Nullable (2026-08-08) — bắt buộc/cấm tuỳ theo TerminalLevel của JobTitleId, validate ở
         // EmployeeService.ValidateOrganizationAssignmentAsync (xem docs §Cây chức vụ).
         public int? GroupId { get; set; }

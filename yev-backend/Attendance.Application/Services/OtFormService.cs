@@ -304,7 +304,6 @@ namespace Attendance.Application.Services
             var creatorEmployee = await EnsureCanCreateOrEditForScopeAsync(createdByUserName, isAdmin, request.GroupId);
 
             var validatedEmployees = await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
-            var employeeById = validatedEmployees.ToDictionary(x => x.Id);
 
             // Kiểm tra trùng giờ tăng ca — 1 nhân viên không được xuất hiện trong 2 đơn tăng ca có
             // giờ chồng chéo trong cùng 1 ngày. Chỉ xét các đơn chưa bị xóa và chưa bị từ chối.
@@ -368,18 +367,16 @@ namespace Attendance.Application.Services
 
             var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
 
+            // Chụp lại Dự kiến "trước khi thêm đơn này" — query CHƯA thấy đơn đang tạo (chưa
+            // AddAsync/SaveChanges), nên tự nhiên đúng nghĩa "trước" (2026-08-19). Fetch 1 lượt cho CẢ
+            // đơn (batch) thay vì từng người, tránh N+1 khi đơn có nhiều nhân viên.
+            var projectedByEmployee = await ComputeProjectedHoursBatchAsync(
+                request.Employees.Select(x => x.EmployeeId), request.Date, mainMealTicketMinHours);
+
             foreach (var item in request.Employees)
             {
-                var employee = employeeById[item.EmployeeId];
-
-                ApplyProjectedRollover(employee, request.Date);
-                var projectedMonthBefore = employee.ProjectedMonthToDate;
-                var projectedYearBefore = employee.ProjectedYearToDate;
-
-                var hours = CalculateOtHours(request.StartTime, item.EndTime, item.DidEat, mainMealTicketMinHours);
-                employee.ProjectedMonthToDate += hours;
-                employee.ProjectedYearToDate += hours;
-                _unitOfWork.Employees.Update(employee);
+                var (projectedMonthBefore, projectedYearBefore) =
+                    projectedByEmployee.TryGetValue(item.EmployeeId, out var projected) ? projected : (0m, 0m);
 
                 await _unitOfWork.OtFormEmployees.AddAsync(new OtFormEmployee
                 {
@@ -550,14 +547,9 @@ namespace Attendance.Application.Services
             foreach (var item in request.Employees)
             {
                 var existing = activeByEmployeeId[item.EmployeeId];
-                var oldHours = CalculateOtHours(existing.StartTime, existing.EndTime, existing.DidEat, mainMealTicketMinHours);
-
                 existing.EndTime = item.EndTime;
                 existing.DidEat = item.DidEat;
                 _unitOfWork.OtFormEmployees.Update(existing);
-
-                var newHours = CalculateOtHours(existing.StartTime, existing.EndTime, existing.DidEat, mainMealTicketMinHours);
-                ApplyProjectedDelta(employeesById[item.EmployeeId], otForm.Date, newHours - oldHours);
             }
 
             await RecalculateMealTicketCountsAsync(otForm.Id, activeEmployees, mainMealTicketMinHours);
@@ -680,8 +672,6 @@ namespace Attendance.Application.Services
             otForm.Status = (int)OtFormStatus.Rejected;
             _unitOfWork.OtForms.Update(otForm);
 
-            await ReverseProjectedAccumulationAsync(otForm);
-
             await _unitOfWork.SaveChangesAsync();
         }
 
@@ -702,10 +692,10 @@ namespace Attendance.Application.Services
 
         // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate ở 1 bước, không có cách resolve lại
         // vì candidate đã snapshot 1 lần lúc tạo — xem docs/attendance-module.md §Cây chức vụ). Chặn
-        // Completed vì đơn đó đã cộng lũy kế THẬT (MonthToDate/YearToDate) — xoá sẽ làm sai số liệu đã
-        // dùng cho lương, không thể tự động đảo ngược an toàn. InApproval/Rejected chỉ có lũy kế DỰ KIẾN
-        // (Projected*) — đảo ngược được, nhưng CHỈ khi còn InApproval (Rejected đã tự đảo ở RejectAsync
-        // rồi, đảo lần 2 sẽ trừ sai số).
+        // Completed vì đơn đó đã cộng lũy kế THẬT (ghi vào ledger EmployeeAccumulationHistory) — xoá sẽ
+        // làm sai số liệu đã dùng cho lương, không thể tự động đảo ngược an toàn. InApproval/Rejected
+        // chỉ có lũy kế DỰ KIẾN (2026-08-19: không còn lưu ở đâu, tính lúc đọc) nên không cần đảo ngược
+        // gì cả khi xoá — lần đọc tiếp theo tự động không còn thấy đơn này nữa (đã IsDeleted).
         public async Task DeleteAsync(int id, string deletedByUserName, string? deletedByFullName, DeleteOtFormDto request)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
@@ -713,9 +703,6 @@ namespace Attendance.Application.Services
 
             if (otForm!.Status == (int)OtFormStatus.Completed)
                 throw new DomainException("Đơn đã hoàn tất (đã cộng lũy kế) không thể xoá.");
-
-            if (otForm.Status == (int)OtFormStatus.InApproval)
-                await ReverseProjectedAccumulationAsync(otForm);
 
             otForm.IsDeleted = true;
             otForm.DeletedByUserName = deletedByUserName;
@@ -767,13 +754,6 @@ namespace Attendance.Application.Services
             _unitOfWork.OtFormEmployees.Update(target);
 
             var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
-
-            var removedEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId);
-            if (removedEmployee != null)
-            {
-                var hours = CalculateOtHours(target.StartTime, target.EndTime, target.DidEat, mainMealTicketMinHours);
-                ApplyProjectedDelta(removedEmployee, otForm.Date, -hours);
-            }
 
             var remainingActiveEmployees = otForm.OtFormEmployees.Where(x => !x.IsRemoved).ToList();
             await RecalculateMealTicketCountsAsync(otForm.Id, remainingActiveEmployees, mainMealTicketMinHours);
@@ -1046,19 +1026,22 @@ namespace Attendance.Application.Services
             _unitOfWork.ProcessParts.Update(processPart);
         }
 
+        // Lũy kế THẬT không còn lưu trên Employee (2026-08-19) — hàm này giờ CHỈ ghi ledger
+        // (EmployeeAccumulationHistory), nguồn chân lý DUY NHẤT cho lũy kế thật. EmployeeService tự
+        // tính MonthToDate/YearToDate lúc đọc bằng cách sum ledger theo đúng tháng/năm THỰC TẾ hiện tại
+        // — nên 1 đơn dán ngày tương lai chỉ "hiện" ra khi tới đúng tháng đó, không cộng sớm dù
+        // Completed từ trước (xem docs/docs-be/attendance-module.md §Lũy kế).
         private async Task AccumulateEmployeeHoursAsync(OtForm otForm)
         {
             var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
 
-            var otFormEmployees = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
-                x => x.OtFormId == otForm.Id && !x.IsRemoved, x => x.Employee);
+            var otFormEmployees = await _unitOfWork.OtFormEmployees.FindAsync(x => x.OtFormId == otForm.Id && !x.IsRemoved);
 
-            // Ledger lịch sử lũy kế theo tháng (2026-08-11d, xem EmployeeAccumulationHistory) — batch-fetch
-            // dòng đã có sẵn TRƯỚC vòng lặp để tránh N+1 (đúng tinh thần perf fix đã có trong repo). Chỉ
-            // cần khoá theo EmployeeId (không cần thêm Year/Month vào key tra cứu) vì INVARIANT: trong 1
-            // lần gọi hàm này, MỌI nhân viên xử lý đều thuộc CHUNG đúng 1 OtForm nên dùng chung đúng 1
-            // otForm.Date — cả 2 call site (CreateAsync khi đơn Hoàn tất ngay lúc tạo, ApproveAsync khi
-            // hết bước Pending) đều truyền vào đúng 1 OtForm duy nhất.
+            // Batch-fetch dòng ledger đã có sẵn TRƯỚC vòng lặp để tránh N+1. Chỉ cần khoá theo EmployeeId
+            // (không cần thêm Year/Month vào key tra cứu) vì INVARIANT: trong 1 lần gọi hàm này, MỌI
+            // nhân viên xử lý đều thuộc CHUNG đúng 1 OtForm nên dùng chung đúng 1 otForm.Date — cả 2 call
+            // site (CreateAsync khi đơn Hoàn tất ngay lúc tạo, ApproveAsync khi hết bước Pending) đều
+            // truyền vào đúng 1 OtForm duy nhất.
             var employeeIds = otFormEmployees.Select(x => x.EmployeeId).ToList();
             var existingLedgerRows = (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
                 x => employeeIds.Contains(x.EmployeeId) && x.Year == otForm.Date.Year && x.Month == otForm.Date.Month))
@@ -1066,29 +1049,8 @@ namespace Attendance.Application.Services
 
             foreach (var otFormEmployee in otFormEmployees)
             {
-                var employee = otFormEmployee.Employee;
                 var hours = CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mainMealTicketMinHours);
 
-                if (employee.AccumulationYear != otForm.Date.Year)
-                {
-                    employee.YearToDate = 0;
-                    employee.AccumulationYear = otForm.Date.Year;
-                    employee.MonthToDate = 0;
-                    employee.AccumulationMonth = otForm.Date.Month;
-                }
-                else if (employee.AccumulationMonth != otForm.Date.Month)
-                {
-                    employee.MonthToDate = 0;
-                    employee.AccumulationMonth = otForm.Date.Month;
-                }
-
-                employee.MonthToDate += hours;
-                employee.YearToDate += hours;
-
-                _unitOfWork.Employees.Update(employee);
-
-                // Ghi song song vào ledger — CỘNG DỒN vào dòng đã có (nhiều đơn Hoàn tất cùng tháng),
-                // hoặc tạo dòng mới nếu đây là lần đầu tháng đó có giờ.
                 if (existingLedgerRows.TryGetValue(otFormEmployee.EmployeeId, out var ledgerRow))
                 {
                     ledgerRow.TotalHours += hours;
@@ -1107,47 +1069,34 @@ namespace Attendance.Application.Services
             }
         }
 
-        // === Lũy kế DỰ KIẾN (2026-08-06) — xem Employee.ProjectedMonthToDate/YearToDate ===
-
-        private static void ApplyProjectedRollover(Employee employee, DateOnly formDate)
+        // === Lũy kế DỰ KIẾN (2026-08-06, tính-lúc-đọc từ 2026-08-19, batch từ 2026-08-19b) ===
+        //
+        // Không còn lưu trên Employee — tính trực tiếp từ OtFormEmployee/OtForm mỗi khi cần (ở đây: lúc
+        // snapshot vào OtFormEmployee.MonthToDate/YearToDate khi tạo đơn mới). Scope theo targetDate =
+        // NGÀY TRÊN ĐƠN đang xét (không phải hôm nay thực tế) — khớp đúng ý nghĩa "đã có bao nhiêu giờ
+        // Dự kiến của ĐÚNG tháng mà đơn này rơi vào". !IsRemoved + Status != Rejected + !IsDeleted =
+        // đơn còn "đang treo" (kể cả Completed — vẫn tính, xem docs/attendance-module.md §Lũy kế Dự kiến).
+        //
+        // Nhận CẢ DANH SÁCH employeeId, fetch 1 lượt duy nhất (mirror batch-fetch ledger đã có ở
+        // AccumulateEmployeeHoursAsync) — tránh N+1 khi đơn có nhiều người (CreateAsync trước đây gọi
+        // hàm này riêng cho từng người trong vòng lặp, N nhân viên = N query).
+        private async Task<Dictionary<int, (decimal Month, decimal Year)>> ComputeProjectedHoursBatchAsync(
+            IEnumerable<int> employeeIds, DateOnly targetDate, decimal mainMealTicketMinHours)
         {
-            if (employee.ProjectedAccumulationYear != formDate.Year)
-            {
-                employee.ProjectedYearToDate = 0;
-                employee.ProjectedAccumulationYear = formDate.Year;
-                employee.ProjectedMonthToDate = 0;
-                employee.ProjectedAccumulationMonth = formDate.Month;
-            }
-            else if (employee.ProjectedAccumulationMonth != formDate.Month)
-            {
-                employee.ProjectedMonthToDate = 0;
-                employee.ProjectedAccumulationMonth = formDate.Month;
-            }
-        }
+            var employeeIdList = employeeIds.Distinct().ToList();
 
-        private void ApplyProjectedDelta(Employee employee, DateOnly formDate, decimal deltaHours)
-        {
-            if (deltaHours == 0) return;
+            var rows = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
+                x => employeeIdList.Contains(x.EmployeeId) && !x.IsRemoved && x.OtForm.Status != (int)OtFormStatus.Rejected
+                     && !x.OtForm.IsDeleted && x.OtForm.Date.Year == targetDate.Year,
+                x => x.OtForm);
 
-            ApplyProjectedRollover(employee, formDate);
-            employee.ProjectedMonthToDate += deltaHours;
-            employee.ProjectedYearToDate += deltaHours;
-
-            _unitOfWork.Employees.Update(employee);
-        }
-
-        private async Task ReverseProjectedAccumulationAsync(OtForm otForm)
-        {
-            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
-
-            var otFormEmployees = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
-                x => x.OtFormId == otForm.Id && !x.IsRemoved, x => x.Employee);
-
-            foreach (var otFormEmployee in otFormEmployees)
-            {
-                var hours = CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mainMealTicketMinHours);
-                ApplyProjectedDelta(otFormEmployee.Employee, otForm.Date, -hours);
-            }
+            return rows.GroupBy(x => x.EmployeeId).ToDictionary(
+                g => g.Key,
+                g => (
+                    Month: g.Where(x => x.OtForm.Date.Month == targetDate.Month)
+                        .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mainMealTicketMinHours)),
+                    Year: g.Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mainMealTicketMinHours))
+                ));
         }
 
         // === "Đơn tổng" — REDESIGN theo Cây chức vụ (2026-08-07, Giai đoạn 3.2) ===

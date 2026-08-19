@@ -37,12 +37,15 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Trưởng nhóm dùng liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm.
+        // Trưởng nhóm dùng liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm. date = ngày trên
+        // đơn đang tạo (FE gửi kèm để lũy kế Dự kiến scope đúng tháng/năm của đơn đó, không phải hôm
+        // nay thực tế — xem docs/docs-be/attendance-module.md §Lũy kế Dự kiến); bỏ trống = mặc định
+        // hôm nay thực tế.
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("by-group/{groupId}")]
-        public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByGroup(int groupId)
+        public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByGroup(int groupId, [FromQuery] DateOnly? date = null)
         {
-            var result = await _employeeService.GetByGroupIdAsync(groupId);
+            var result = await _employeeService.GetByGroupIdAsync(groupId, date);
             return Success(result);
         }
 

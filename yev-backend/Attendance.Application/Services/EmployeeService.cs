@@ -15,14 +15,30 @@ namespace Attendance.Application.Services
     public class EmployeeService : BaseService<IAttendanceUnitOfWork>, IEmployeeService
     {
         private readonly IUserDirectoryService _userDirectoryService;
+        private readonly IAttendanceSettingService _attendanceSettingService;
 
-        public EmployeeService(IAttendanceUnitOfWork unitOfWork, IUserDirectoryService userDirectoryService) : base(unitOfWork)
+        public EmployeeService(
+            IAttendanceUnitOfWork unitOfWork, IUserDirectoryService userDirectoryService, IAttendanceSettingService attendanceSettingService)
+            : base(unitOfWork)
         {
             _userDirectoryService = userDirectoryService;
+            _attendanceSettingService = attendanceSettingService;
+        }
+
+        // Lũy kế THẬT không còn lưu trên Employee (2026-08-19) — tính trực tiếp từ
+        // EmployeeAccumulationHistory (ledger) ngay trong projection (EF dịch được thành subquery),
+        // luôn scope theo năm/tháng THỰC TẾ hôm nay (không phải ngày trên bất kỳ đơn nào) — mỗi hàm đọc
+        // bên dưới tự lấy `todayYear`/`todayMonth` qua GetTodayYearMonth() rồi lặp lại công thức
+        // (không gộp thành 1 Expression dùng chung được vì EF không hỗ trợ Invoke composed expression).
+        private static (int Year, int Month) GetTodayYearMonth()
+        {
+            var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
+            return (today.Year, today.Month);
         }
 
         public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId)
         {
+            var (todayYear, todayMonth) = GetTodayYearMonth();
             var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group!, x => x.Department!, x => x.JobTitle!).Where(x => !x.IsDeleted);
 
             // Khớp cả 2 đường tới Department: trực tiếp (Trưởng phòng, xem Employee.DepartmentId) hoặc
@@ -61,12 +77,8 @@ namespace Attendance.Application.Services
                     FirstName = x.FirstName,
                     LastName = x.LastName,
                     UserName = x.UserName,
-                    MonthToDate = x.MonthToDate,
-                    YearToDate = x.YearToDate,
-                    AccumulationYear = x.AccumulationYear,
-                    AccumulationMonth = x.AccumulationMonth,
-                    ProjectedMonthToDate = x.ProjectedMonthToDate,
-                    ProjectedYearToDate = x.ProjectedYearToDate,
+                    MonthToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month == todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
+                    YearToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
                     DepartmentId = x.DepartmentId,
@@ -81,6 +93,7 @@ namespace Attendance.Application.Services
         // kỳ, vd JobTitle "Thử chuỗi duyệt" (docs/docs-be/attendance-module.md §Cây chức vụ).
         public async Task<List<EmployeeDto>> GetAllActiveAsync()
         {
+            var (todayYear, todayMonth) = GetTodayYearMonth();
             var items = await _unitOfWork.Employees.SelectAsync(
                 predicate: x => !x.IsDeleted,
                 selector: x => new EmployeeDto
@@ -90,12 +103,8 @@ namespace Attendance.Application.Services
                     FirstName = x.FirstName,
                     LastName = x.LastName,
                     UserName = x.UserName,
-                    MonthToDate = x.MonthToDate,
-                    YearToDate = x.YearToDate,
-                    AccumulationYear = x.AccumulationYear,
-                    AccumulationMonth = x.AccumulationMonth,
-                    ProjectedMonthToDate = x.ProjectedMonthToDate,
-                    ProjectedYearToDate = x.ProjectedYearToDate,
+                    MonthToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month == todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
+                    YearToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
                     DepartmentId = x.DepartmentId,
@@ -110,8 +119,14 @@ namespace Attendance.Application.Services
         // Dùng cho Trưởng nhóm liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm. Trưởng
         // phòng/Trưởng Xưởng/Giám đốc (GroupId null) không bao giờ khớp — đúng ý nghĩa, họ không phải
         // thành viên của 1 Group cụ thể nào để bị liệt kê ở đây.
-        public async Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId)
+        // targetDate = ngày trên đơn OT ĐANG TẠO (mặc định hôm nay thực tế nếu FE chưa chọn ngày) —
+        // Projected CHỈ có ý nghĩa scope theo đúng tháng/năm của targetDate, KHÁC HẲN MonthToDate/
+        // YearToDate thật ở trên (luôn theo hôm nay thực tế) — xem docs/docs-be/attendance-module.md
+        // §Lũy kế Dự kiến. Ví dụ: đang tạo đơn cho ngày 1/8 dù hôm nay 27/7 thì phải thấy Dự kiến của
+        // đúng tháng 8, không phải tháng 7.
+        public async Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId, DateOnly? targetDate = null)
         {
+            var (todayYear, todayMonth) = GetTodayYearMonth();
             var items = await _unitOfWork.Employees.SelectAsync(
                 predicate: x => !x.IsDeleted && x.GroupId == groupId,
                 selector: x => new EmployeeDto
@@ -121,12 +136,8 @@ namespace Attendance.Application.Services
                     FirstName = x.FirstName,
                     LastName = x.LastName,
                     UserName = x.UserName,
-                    MonthToDate = x.MonthToDate,
-                    YearToDate = x.YearToDate,
-                    AccumulationYear = x.AccumulationYear,
-                    AccumulationMonth = x.AccumulationMonth,
-                    ProjectedMonthToDate = x.ProjectedMonthToDate,
-                    ProjectedYearToDate = x.ProjectedYearToDate,
+                    MonthToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month == todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
+                    YearToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
                     DepartmentId = x.DepartmentId,
@@ -135,7 +146,41 @@ namespace Attendance.Application.Services
                     JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
                 }
             );
+
+            var target = targetDate ?? DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
+            var employeeIds = items.Select(x => x.Id).ToList();
+            if (employeeIds.Count > 0)
+            {
+                var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+
+                // !IsRemoved + Status != Rejected + !IsDeleted = đơn còn "đang treo" (kể cả Completed —
+                // vẫn tính vào Dự kiến, xem Employee.cs cũ/docs §Lũy kế Dự kiến). Chỉ lấy đúng năm của
+                // targetDate rồi lọc tháng ở C# để 1 lượt query dùng được cho cả MonthToDate lẫn YearToDate.
+                var pendingRows = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
+                    x => employeeIds.Contains(x.EmployeeId) && !x.IsRemoved && x.OtForm.Status != (int)OtFormStatus.Rejected
+                         && !x.OtForm.IsDeleted && x.OtForm.Date.Year == target.Year,
+                    x => x.OtForm);
+
+                var rowsByEmployee = pendingRows.GroupBy(x => x.EmployeeId).ToDictionary(g => g.Key, g => g.ToList());
+                foreach (var item in items)
+                {
+                    if (!rowsByEmployee.TryGetValue(item.Id, out var rows)) continue;
+                    item.ProjectedMonthToDate = rows.Where(x => x.OtForm.Date.Month == target.Month)
+                        .Sum(x => CalculateProjectedHours(x, mainMealTicketMinHours));
+                    item.ProjectedYearToDate = rows.Sum(x => CalculateProjectedHours(x, mainMealTicketMinHours));
+                }
+            }
+
             return items.OrderBy(x => x.Code).ToList();
+        }
+
+        // Mirror OtFormService.CalculateOtHours (+30 phút nếu đủ ngưỡng phiếu ăn mà không ăn) — không
+        // gọi chéo sang OtFormService, mỗi service tự chứa logic tính giờ của mình.
+        private static decimal CalculateProjectedHours(OtFormEmployee row, decimal mainMealTicketMinHours)
+        {
+            var hours = (decimal)(row.EndTime - row.StartTime).TotalHours;
+            if (hours >= mainMealTicketMinHours && !row.DidEat) hours += 0.5m;
+            return hours;
         }
 
         // Toàn bộ nhân viên active thuộc Phòng ban (mọi Group con, CỘNG Trưởng phòng gán trực tiếp
@@ -143,6 +188,7 @@ namespace Attendance.Application.Services
         // ban để cấu hình/gán nhanh — docs/attendance-module.md §Cây chức vụ).
         public async Task<List<EmployeeDto>> GetByDepartmentIdAsync(int departmentId)
         {
+            var (todayYear, todayMonth) = GetTodayYearMonth();
             var items = await _unitOfWork.Employees.SelectAsync(
                 predicate: x => !x.IsDeleted && (x.DepartmentId == departmentId || (x.Group != null && x.Group.DepartmentId == departmentId)),
                 selector: x => new EmployeeDto
@@ -152,12 +198,8 @@ namespace Attendance.Application.Services
                     FirstName = x.FirstName,
                     LastName = x.LastName,
                     UserName = x.UserName,
-                    MonthToDate = x.MonthToDate,
-                    YearToDate = x.YearToDate,
-                    AccumulationYear = x.AccumulationYear,
-                    AccumulationMonth = x.AccumulationMonth,
-                    ProjectedMonthToDate = x.ProjectedMonthToDate,
-                    ProjectedYearToDate = x.ProjectedYearToDate,
+                    MonthToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month == todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
+                    YearToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
                     DepartmentId = x.DepartmentId,
@@ -180,6 +222,7 @@ namespace Attendance.Application.Services
         //   - Còn lại (Staff/Group Leader/Team Leader, cấp Nhóm): chỉ nhân viên có GroupId trùng.
         public async Task<PagedResponse<EmployeeDto>> GetInScopeAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword)
         {
+            var (todayYear, todayMonth) = GetTodayYearMonth();
             var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group!, x => x.Department!, x => x.JobTitle!).Where(x => !x.IsDeleted);
 
             if (!isAdmin)
@@ -233,12 +276,8 @@ namespace Attendance.Application.Services
                     FirstName = x.FirstName,
                     LastName = x.LastName,
                     UserName = x.UserName,
-                    MonthToDate = x.MonthToDate,
-                    YearToDate = x.YearToDate,
-                    AccumulationYear = x.AccumulationYear,
-                    AccumulationMonth = x.AccumulationMonth,
-                    ProjectedMonthToDate = x.ProjectedMonthToDate,
-                    ProjectedYearToDate = x.ProjectedYearToDate,
+                    MonthToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month == todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
+                    YearToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
                     DepartmentId = x.DepartmentId,
@@ -312,10 +351,23 @@ namespace Attendance.Application.Services
             throw new DomainException("Bạn chỉ được xem lũy kế của nhân viên thuộc Nhóm mình quản lý.");
         }
 
+        // Lũy kế THẬT của 1 Employee, tính từ ledger, scope theo năm/tháng THỰC TẾ hôm nay — dùng cho
+        // GetByIdAsync/GetByUserNameAsync (chỉ 1 người nên query trực tiếp, không cần EF dịch subquery
+        // như các hàm liệt kê nhiều dòng ở trên).
+        private async Task<(decimal MonthToDate, decimal YearToDate)> GetRealAccumulationAsync(int employeeId)
+        {
+            var (todayYear, todayMonth) = GetTodayYearMonth();
+            var rows = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
+                x => x.EmployeeId == employeeId && x.Year == todayYear && x.Month <= todayMonth);
+            return (rows.Where(x => x.Month == todayMonth).Sum(x => x.TotalHours), rows.Sum(x => x.TotalHours));
+        }
+
         public async Task<EmployeeDto> GetByIdAsync(int id)
         {
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, x => x.Group!, x => x.Department!, x => x.JobTitle!);
             employee.OrThrowNotFound("Nhân viên", id);
+
+            var (monthToDate, yearToDate) = await GetRealAccumulationAsync(id);
 
             return new EmployeeDto
             {
@@ -324,12 +376,8 @@ namespace Attendance.Application.Services
                 FirstName = employee.FirstName,
                 LastName = employee.LastName,
                 UserName = employee.UserName,
-                MonthToDate = employee.MonthToDate,
-                YearToDate = employee.YearToDate,
-                AccumulationYear = employee.AccumulationYear,
-                AccumulationMonth = employee.AccumulationMonth,
-                ProjectedMonthToDate = employee.ProjectedMonthToDate,
-                ProjectedYearToDate = employee.ProjectedYearToDate,
+                MonthToDate = monthToDate,
+                YearToDate = yearToDate,
                 GroupId = employee.GroupId,
                 GroupNameVn = employee.Group?.GroupNameVn,
                 DepartmentId = employee.DepartmentId,
@@ -345,6 +393,8 @@ namespace Attendance.Application.Services
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted, x => x.Group!, x => x.Department!, x => x.JobTitle!);
             employee.OrThrowNotFound("Nhân viên (tài khoản chưa được gán cho nhân viên nào)", userName);
 
+            var (monthToDate, yearToDate) = await GetRealAccumulationAsync(employee!.Id);
+
             return new EmployeeDto
             {
                 Id = employee!.Id,
@@ -352,12 +402,8 @@ namespace Attendance.Application.Services
                 FirstName = employee.FirstName,
                 LastName = employee.LastName,
                 UserName = employee.UserName,
-                MonthToDate = employee.MonthToDate,
-                YearToDate = employee.YearToDate,
-                AccumulationYear = employee.AccumulationYear,
-                AccumulationMonth = employee.AccumulationMonth,
-                ProjectedMonthToDate = employee.ProjectedMonthToDate,
-                ProjectedYearToDate = employee.ProjectedYearToDate,
+                MonthToDate = monthToDate,
+                YearToDate = yearToDate,
                 GroupId = employee.GroupId,
                 GroupNameVn = employee.Group?.GroupNameVn,
                 DepartmentId = employee.DepartmentId,
@@ -380,17 +426,12 @@ namespace Attendance.Application.Services
 
             var (groupId, departmentId) = await ValidateOrganizationAssignmentAsync(request.JobTitleId, request.GroupId, request.DepartmentId);
 
-            var now = TimeHelper.GetCurrentUtcTime();
             var newEmployee = new Employee
             {
                 Code = request.Code,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 UserName = request.UserName,
-                MonthToDate = request.MonthToDate,
-                YearToDate = request.YearToDate,
-                AccumulationYear = now.Year,
-                AccumulationMonth = now.Month,
                 GroupId = groupId,
                 DepartmentId = departmentId,
                 JobTitleId = request.JobTitleId,
@@ -428,15 +469,10 @@ namespace Attendance.Application.Services
             // cũ nếu Employee này vừa được link sang 1 UserName khác (xem SyncJobTitlePermissionsAsync).
             var oldUserName = employee.UserName;
 
-            var now = TimeHelper.GetCurrentUtcTime();
             employee.Code = request.Code;
             employee.FirstName = request.FirstName;
             employee.LastName = request.LastName;
             employee.UserName = request.UserName;
-            employee.MonthToDate = request.MonthToDate;
-            employee.YearToDate = request.YearToDate;
-            employee.AccumulationYear = now.Year;
-            employee.AccumulationMonth = now.Month;
             employee.GroupId = groupId;
             employee.DepartmentId = departmentId;
             employee.JobTitleId = request.JobTitleId;

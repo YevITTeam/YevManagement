@@ -6,15 +6,14 @@ export interface EmployeeDto {
     // Tài khoản AD của chính nhân viên (nullable) — dùng để liên kết người tạo đơn OT với đúng Employee
     // (docs §3.5).
     userName: string | null;
-    // Giờ OT lũy kế (docs/attendance-api-fe.md §3.5) — dùng cảnh báo TH3 vượt 25h/tháng hoặc 300h/năm.
+    // Giờ OT lũy kế THẬT (docs/attendance-api-fe.md §3.5) — BE tính trực tiếp từ ledger theo đúng
+    // tháng/năm THỰC TẾ hôm nay mỗi lần đọc, không lưu cache nữa (2026-08-19). Dùng cảnh báo vượt
+    // 25h/tháng hoặc 300h/năm.
     monthToDate: number;
     yearToDate: number;
-    // Tháng/năm mà monthToDate/yearToDate đang phản ánh — BE tự stamp, rollover tự động theo tháng/năm.
-    accumulationYear: number;
-    accumulationMonth: number;
     // Lũy kế DỰ KIẾN = thực tế + các đơn khác đang chờ duyệt (chưa Completed/Rejected) của người này
-    // (2026-08-06) — dùng cảnh báo hạn mức lúc TẠO đơn mới thay cho monthToDate/yearToDate, để thấy
-    // được cả những đơn khác đang treo chưa duyệt.
+    // (2026-08-06) — dùng cảnh báo hạn mức lúc TẠO đơn mới thay cho monthToDate/yearToDate. CHỈ có ý
+    // nghĩa khi lấy từ getEmployeesByGroup (scope theo ngày trên đơn đang tạo) — nơi khác trả về 0.
     projectedMonthToDate: number;
     projectedYearToDate: number;
     // Nullable (2026-08-08): Trưởng phòng dùng departmentId thay vì groupId (không thuộc Bộ phận cụ

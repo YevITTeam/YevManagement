@@ -19,7 +19,7 @@ Danh mục (master data, đều có `IsDeleted`):
 | `Group` | `GroupCode`(unique), `GroupNameVn`, `GroupNameJp?`, `DepartmentId`(FK, **1 Department - N Group**, theo pattern `Asset.Domain.Entities.DeviceGroup.DepartmentId`) | Có |
 | `Reason` | `ReasonNameVn`, `ReasonNameJp?` | Có |
 | `OtCase` | `Code`(unique), `Description?`, `RequireSignature:bool`, `RequiredApprovalLevel:int` (2026-08-07: đọc như enum **`JobTitleTerminalLevel`** — `DepartmentManager/WorkshopManager/GeneralDirector` — thay vì `ApprovalLevel` cũ, xem §Cây chức vụ Giai đoạn 3.1; giá trị int 1/2/3 trùng nhau giữa 2 enum nên KHÔNG cần migration đổi kiểu cột) | Không |
-| `Employee` | `Code`(unique), `FirstName`, `LastName`, `UserName:string?`(unique filtered — tài khoản AD của chính nhân viên, nullable), `MonthToDate:decimal(10,2)`, `YearToDate:decimal(10,2)`, `AccumulationYear:int`, `AccumulationMonth:int`, `ProjectedMonthToDate:decimal(10,2)`, `ProjectedYearToDate:decimal(10,2)`, `ProjectedAccumulationYear:int`, `ProjectedAccumulationMonth:int`, `GroupId:int?`(FK, **nullable từ 2026-08-08**), `DepartmentId:int?`(FK, **mới 2026-08-08**), `JobTitleId:int?`(FK, nullable — xem §Cây chức vụ) | Tên riêng — không dịch. `Projected*` xem §Lũy kế dự kiến. `GroupId`/`DepartmentId` xem §Cây chức vụ — Gán tổ chức theo Chức vụ (2026-08-08) ngay dưới. |
+| `Employee` | `Code`(unique), `FirstName`, `LastName`, `UserName:string?`(unique filtered — tài khoản AD của chính nhân viên, nullable), `GroupId:int?`(FK, **nullable từ 2026-08-08**), `DepartmentId:int?`(FK, **mới 2026-08-08**), `JobTitleId:int?`(FK, nullable — xem §Cây chức vụ) | Tên riêng — không dịch. **Không còn cột lũy kế nào** (2026-08-19, xem §Lũy kế — bỏ cache trên Employee, tính lúc đọc) — `MonthToDate`/`YearToDate`/`AccumulationYear`/`AccumulationMonth`/`Projected*` đã bị xoá, tính trực tiếp từ `EmployeeAccumulationHistory`/`OtFormEmployee` mỗi lần đọc. `GroupId`/`DepartmentId` xem §Cây chức vụ — Gán tổ chức theo Chức vụ (2026-08-08) ngay dưới. |
 | `JobTitle` | `Code`(unique), `Name`, `RankOrder:int` (CapDo, số lớn = cao hơn — chỉ dùng loại bỏ bước ngang/thấp hơn người tạo, KHÔNG dùng bắc cầu tự động), `TerminalLevel:int` (enum `JobTitleTerminalLevel` — `None/DepartmentManager/WorkshopManager/GeneralDirector`, tối đa 1 JobTitle active/giá trị non-None) | Tên riêng — không dịch. Master data cho cây chức vụ (2026-08-06), xem §Cây chức vụ. **Thu gọn còn 6 dòng seed (2026-08-08, Giai đoạn 4)**: `STAFF/GL/TL/M/FM/GM` (Staff/Group Leader/Team Leader/Manager/Factory Manager/Director), thay 14 dòng cũ — xem §Giai đoạn 4. |
 | `DepartmentApprovalStep` | `DepartmentId`(FK), `StepOrder:int`, `JobTitleId`(FK), `RequiresSignature:bool` | Không FK song ngữ. Cây duyệt cấu hình TAY cho từng Phòng ban (2026-08-06, Giai đoạn 2b), xem §Cây chức vụ. **Từ Giai đoạn 4 (2026-08-08) CHỈ còn chứa 3 cấp CUỐI** (Manager/Factory Manager/Director, `TerminalLevel != None`) — cấp trung gian dời sang `GroupApprovalStep`; cột `IsResponsible` đã bỏ (dời sang `GroupApprovalStep`). Không có unique index — Admin tự đảm bảo không lặp `JobTitleId` khi thay danh sách (validate ở Service, không phải DB). `RequiresSignature` chuyển từ `JobTitle` xuống đây (2026-08-07, Giai đoạn 2c). |
 | `GroupApprovalStep` | `GroupId`(FK), `StepOrder:int`, `JobTitleId`(FK), `RequiresSignature:bool`, `IsResponsible:bool` | Không FK song ngữ. **Mới (2026-08-08, Giai đoạn 4)** — mirror `DepartmentApprovalStep` nhưng khoá theo `GroupId`, CHỈ chứa 3 cấp TRUNG GIAN (Staff/Group Leader/Team Leader, `TerminalLevel=None`). Số bước KHÔNG giới hạn tổng số — chỉ số bước có `RequiresSignature=true` phải **từ 1 đến 2** khi đang lưu 1 cây duyệt không rỗng (validate ở `GroupApprovalStepService.ReplaceAsync`, dời nguyên từ `DepartmentApprovalStepService` cũ) — khớp đúng 2 ô "Người đề nghị" cố định trên giấy in `YEV-22-024`. `IsResponsible` tối đa 1 bước/Group được đặt `true`. Xem §Giai đoạn 4. |
@@ -30,10 +30,11 @@ Danh mục (master data, đều có `IsDeleted`):
 >
 > **Đã đổi `UserId:int` → `UserName:string`** trên `OtForm.CreatedByUserName`, `OtFormApprovalHistory.ApproverUserName`, `UserApprovalScope.UserName`, `UserSignature.UserName` (2026-07-14, migration `RenameUserIdToUserName`): JWT không có claim UserId dạng số, chỉ có `UserName` (`User.Identity.Name` — claim `ClaimTypes.Name` do `MyClaimsTransformation` nạp). Theo đúng convention `Asset.Domain.Models.AuditTrail.ChangedBy` (string) đã có sẵn trong codebase.
 >
-> **Thêm `Employee.UserName`, `AccumulationYear`, `AccumulationMonth`; `OtForm.CreatedByFullName`** (2026-07-16, migration `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName`):
-> - `Employee.UserName` (nullable, unique filtered index `WHERE UserName IS NOT NULL`) — map nhân viên với tài khoản AD của chính họ, dùng cho tự chỉnh lũy kế (xem §Business Logic — Điều chỉnh lũy kế thủ công).
-> - `Employee.AccumulationYear`/`AccumulationMonth` — tháng/năm mà `MonthToDate`/`YearToDate` đang phản ánh, dùng để tự động rollover về 0 khi có đơn Completed rơi vào tháng/năm mới (xem `OtFormService.AccumulateEmployeeHoursAsync`). Data migration set 2 cột này = tháng/năm hiện tại cho toàn bộ nhân viên có sẵn (tránh mất lũy kế đã nhập tay trước đó).
+> **Thêm `Employee.UserName`; `OtForm.CreatedByFullName`** (2026-07-16, migration `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName`):
+> - `Employee.UserName` (nullable, unique filtered index `WHERE UserName IS NOT NULL`) — map nhân viên với tài khoản AD của chính họ.
 > - `OtForm.CreatedByFullName` (nullable) — snapshot claim `FullName` lúc tạo đơn, cùng pattern với `OtFormApprovalHistory.ApproverFullName`, để mọi nơi hiển thị (list `my-forms`/`pending-approvals`, chi tiết đơn) luôn ra được **tên người dùng** thay vì `UserName` thô (yêu cầu 2026-07-16: "dữ liệu hiển thị lúc nào cũng phải là tên người dùng").
+> - Migration này ban đầu cũng thêm `AccumulationYear`/`AccumulationMonth` — cả 2 (và toàn bộ cột lũy kế
+>   khác thêm sau đó) đã bị **xoá lại 2026-08-19**, xem §Lũy kế — bỏ cache trên Employee, tính lúc đọc.
 
 Nghiệp vụ OT Form:
 | Entity | Thuộc tính chính | Quan hệ | Ghi chú |
@@ -132,19 +133,35 @@ cảnh báo ở đầu §Business Logic (chuỗi bước giờ động theo Cây
   - **`EnsureCanCreateOrEditForScopeAsync` vẫn giữ** nhưng gọi với `otForm.GroupId`/`otForm.DepartmentId` (giá trị hiện có, không đổi được nữa) thay vì `request.GroupId`/`request.DepartmentId` — vẫn re-check quyền scope của người sửa chưa bị Admin thu hồi kể từ lúc tạo đơn, dù bản thân Group/Department không còn đổi được.
   - **FE (`CreateOtFormPage.tsx`)**: khi `isEditMode`, mọi field ở khối "Thông tin đơn" (select/date/giờ/lý do chi tiết) và cả checkbox/input "Yêu cầu hỗ trợ khác" đều `disabled`, kèm badge "Đã khoá..." ở góc phải tiêu đề khối. Bảng nhân viên đổi hẳn sang bảng CỐ ĐỊNH riêng cho Sửa đơn (nguồn dữ liệu `editEmployees` lấy thẳng từ `data.employees.filter(!isRemoved)` lúc tải đơn, KHÔNG phải `groupEmployees` chọn theo Nhóm dùng lúc Tạo mới) — không có ô tick, không có cột Ghi chú, chỉ còn cột "Giờ kết thúc" sửa được. Người bị loại (`isRemoved`) bị lọc khỏi danh sách sửa (đưa vào sẽ bị BE từ chối vì không còn trong `activeEmployeeIds`).
 
-### §Lũy kế tháng/năm — cộng khi Completed, rollover tự động, chỉnh thủ công (2026-07-16)
-- **Thời điểm cộng**: CHỈ khi đơn đạt `Completed` (đi hết luồng duyệt theo `otCase.requiredApprovalLevel`) — `OtFormService.ApproveAsync` gọi `AccumulateEmployeeHoursAsync` ngay sau khi xác định `nextStatus == Completed`, trong cùng `SaveChangesAsync`. Đơn `Rejected` hoặc dừng ở cấp trung gian thì KHÔNG cộng gì — tránh phải rollback nếu đơn bị từ chối giữa chừng.
-- **Số giờ cộng** = `OtFormEmployee.EndTime - OtFormEmployee.StartTime` (giờ OT thực tế đã đăng ký của từng người trong đơn đó), cộng vào cả `MonthToDate` và `YearToDate` của `Employee` tương ứng. Từ 2026-08-06: nếu số giờ này `>= AttendanceSetting.MainMealTicketMinHours` và `OtFormEmployee.DidEat = false` thì cộng thêm **0.5h (30 phút)** trước khi cộng vào lũy kế — xem §Có ăn hay không theo từng nhân viên.
-- **Rollover tự động theo `OtForm.Date`**: so `Date.Year`/`Date.Month` của đơn với `Employee.AccumulationYear`/`AccumulationMonth` hiện tại — khác năm thì reset cả `YearToDate` và `MonthToDate` về 0 trước khi cộng; cùng năm nhưng khác tháng thì chỉ reset `MonthToDate`. Sau đó luôn stamp lại `AccumulationYear`/`AccumulationMonth` = năm/tháng của đơn.
-- **Điều chỉnh lũy kế thủ công — CHỈ Admin (đổi 2026-08-08)**: trước đây có `PATCH /api/Employee/{id}/adjust-accumulation` self-service (chính nhân viên tự chỉnh lũy kế của mình qua màn "Lũy kế của tôi", không gắn `[RequirePermission]`) — người dùng chốt bỏ hẳn cơ chế tự chỉnh này ("user không thể tự thay đổi lũy kế của họ được, việc này do Admin đảm nhận"). Đã xoá hoàn toàn: endpoint `PATCH /Employee/{id}/adjust-accumulation`, `GET /Employee/me`, `EmployeeService.AdjustAccumulationAsync`, DTO `AdjustEmployeeAccumulationDto`, route FE `/ot/accumulation` + component `EmployeeAccumulationPanel.tsx` + mục sidebar "Lũy kế của tôi". Admin giờ chỉnh `MonthToDate`/`YearToDate` **qua đúng `PUT /api/Employee/{id}` (`UpdateEmployeeDto`)** — field này vốn đã có sẵn trong form Sửa nhân viên (`Attendance.Employee.Update`), không cần endpoint riêng.
+### §Lũy kế tháng/năm — cộng khi Completed, tính lúc đọc từ ledger (2026-07-16, REDESIGN 2026-08-19)
+> Bản 2026-07-16→2026-08-08 (lưu `MonthToDate`/`YearToDate`/`AccumulationYear`/`AccumulationMonth` trực
+> tiếp trên `Employee`, rollover theo `OtForm.Date`, Admin chỉnh tay qua `PUT /Employee/{id}`) đã **THAY
+> THẾ HOÀN TOÀN** — xem §Lũy kế — bỏ cache trên Employee, tính lúc đọc bên dưới để hiểu lý do và thiết
+> kế mới. 4 cột đó đã bị **xoá khỏi bảng `Employees`** (migration `RemoveEmployeeAccumulationColumns`),
+> Admin **không còn** chỉnh tay được lũy kế nữa.
+- **Thời điểm cộng vào ledger**: CHỈ khi đơn đạt `Completed` — `OtFormService.AccumulateEmployeeHoursAsync`
+  (gọi từ `CreateAsync` khi chuỗi duyệt rỗng và từ `ApproveAsync` khi hết bước Pending cuối) ghi/cộng
+  dồn vào `EmployeeAccumulationHistory` theo đúng `(EmployeeId, OtForm.Date.Year, OtForm.Date.Month)`.
+  Đơn `Rejected` hoặc dừng ở cấp trung gian thì KHÔNG ghi gì.
+- **Số giờ cộng** = `OtFormEmployee.EndTime - OtFormEmployee.StartTime`, cộng thêm **0.5h (30 phút)** nếu
+  đủ ngưỡng phiếu ăn mà `DidEat = false` (không đổi so với bản cũ — xem §Có ăn hay không theo từng nhân viên).
+- **`MonthToDate`/`YearToDate` không còn lưu ở đâu** — `EmployeeService` tính trực tiếp từ ledger mỗi
+  lần đọc, luôn scope theo năm/tháng **THỰC TẾ hôm nay** (không phải ngày trên bất kỳ đơn nào) — 1 đơn
+  ghi ngày tương lai chỉ "hiện" ra khi tới đúng tháng đó, không cộng sớm dù đã `Completed` từ trước.
 
-### §Lũy kế hiển thị trên đơn — snapshot đóng băng, KHÔNG join sống (2026-07-21)
-- **Bug đã sửa**: `OtFormService.GetByIdAsync` trước đây map `OtFormEmployeeDto.MonthToDate/YearToDate` trực tiếp từ `x.Employee.MonthToDate/YearToDate` (join sống tới `Employee` hiện tại) — nên xem lại đơn cũ luôn ra lũy kế **hiện tại**, không phải lũy kế **tại thời điểm lập đơn** (đơn càng cũ, giá trị hiển thị càng sai vì `Employee.MonthToDate/YearToDate` đã bị cộng dồn thêm bởi các đơn khác kể từ đó).
-- **Cách sửa**: thêm cột `OtFormEmployee.MonthToDate`/`YearToDate` (decimal(10,2), migration `AddAccumulationSnapshotToOtFormEmployee`, đã apply DB) — snapshot đóng băng giá trị `Employee.MonthToDate/YearToDate` **tại đúng thời điểm dòng `OtFormEmployee` được thêm vào đơn**, cùng nguyên tắc snapshot đã dùng cho `OtFormApprovalHistory.SignatureImage`/`ApproverFullName`.
-  - `CreateAsync`: snapshot lúc tạo đơn (dùng lại `List<Employee>` mà `ValidateEmployeesAsync` đã trả về, không query thêm).
-  - `UpdateAsync` **không còn thêm/bớt nhân viên** (giới hạn lại 2026-07-31, xem §Sửa đơn khi đang Draft/Pending) nên không còn nhánh "nhân viên mới thêm lúc sửa" — snapshot `MonthToDate`/`YearToDate` chỉ còn được ghi 1 lần duy nhất lúc `CreateAsync`, không đổi khi sửa `EndTime`.
-  - `GetByIdAsync` giờ đọc `x.MonthToDate`/`x.YearToDate` từ chính `OtFormEmployee`, không còn `x.Employee.MonthToDate/YearToDate`.
-- **Giới hạn dữ liệu cũ**: các `OtFormEmployee` đã tồn tại từ trước migration này có `MonthToDate`/`YearToDate` = `0` (default cột mới, không có cách khôi phục lại giá trị lịch sử vì trước đây chưa từng lưu) — chỉ đơn tạo/sửa **sau** khi apply migration mới có snapshot đúng.
+### §Lũy kế hiển thị trên đơn — snapshot đóng băng, KHÔNG join sống (2026-07-21, nguồn đổi 2026-08-06/2026-08-19)
+- **Ý tưởng gốc** (vẫn đúng, chưa đổi): `OtFormEmployee.MonthToDate`/`YearToDate` (decimal(10,2)) là
+  snapshot đóng băng **tại đúng thời điểm dòng `OtFormEmployee` được thêm vào đơn** — cùng nguyên tắc
+  snapshot dùng cho `OtFormApprovalHistory.SignatureImage`/`ApproverFullName` — để xem lại đơn cũ luôn
+  ra đúng số liệu lúc lập đơn, không bị lệch theo lũy kế đã đổi khác đi sau đó.
+- **Nguồn để chụp đã đổi 2 lần**: ban đầu (2026-07-21) chụp lũy kế THẬT `Employee.MonthToDate/YearToDate`
+  lúc đó → đổi (2026-08-06) sang chụp lũy kế **DỰ KIẾN** `Employee.ProjectedMonthToDate/YearToDate` (lý
+  do: xem §Lũy kế dự kiến) → đổi tiếp (2026-08-19, cùng đợt bỏ hẳn cache trên `Employee`) sang gọi
+  `OtFormService.ComputeProjectedHoursBatchAsync(...)` tính trực tiếp — vẫn đúng nghĩa "Dự kiến trước khi
+  cộng chính đơn này", chỉ đổi cách lấy con số, KHÔNG đổi field/tên cột. `GetByIdAsync` luôn đọc thẳng
+  `x.MonthToDate`/`x.YearToDate` từ `OtFormEmployee` (không join `Employee`) — không đổi qua các lần trên.
+- **Giới hạn dữ liệu cũ**: các `OtFormEmployee` tạo trước migration `AddAccumulationSnapshotToOtFormEmployee`
+  (2026-07-21) có `MonthToDate`/`YearToDate` = `0`, không có cách khôi phục lại lịch sử.
 
 ### §Phiếu ăn — ngưỡng giờ OT (2026-07-16, ngưỡng đưa vào cấu hình + tự tính ở FE 2026-08-01)
 - Nhân viên đủ điều kiện phiếu ăn khi giờ OT thực tế **>= ngưỡng cấu hình** (`(EndTime - StartTime) >=
@@ -275,57 +292,76 @@ có cách nào tự suy luận số sữa từ danh sách nhân viên. (mirror `
   `invalidateAttendanceSettingCache()`. Tab này không có bảng/nút "Thêm mới" nên `CategoryManagement.tsx`
   ẩn nút đó khi `addLabel == null`.
 
-### §Lũy kế dự kiến — cảnh báo cả những đơn khác đang chờ duyệt (2026-08-06)
+### §Lũy kế dự kiến — cảnh báo cả những đơn khác đang chờ duyệt (2026-08-06, REDESIGN 2026-08-19)
 
-**Vấn đề người dùng nêu**: `Employee.MonthToDate`/`YearToDate` chỉ cộng khi đơn đạt `Completed`
-(xem §Lũy kế tháng/năm) — nên nếu nhân viên A đang có đơn #1 (ngày 3) chờ duyệt, lúc lập đơn #2
-cho cùng A, mọi màn cảnh báo hạn mức đều so với `MonthToDate` CHƯA cộng đơn #1 → không cảnh báo,
-dù cả 2 đơn cộng lại đã vượt hạn mức. Bản chất: hệ thống "mù" trước các đơn khác đang treo.
+**Vấn đề người dùng nêu**: `MonthToDate`/`YearToDate` chỉ cộng khi đơn đạt `Completed` (xem §Lũy kế
+tháng/năm) — nên nếu nhân viên A đang có đơn #1 (ngày 3) chờ duyệt, lúc lập đơn #2 cho cùng A, mọi
+màn cảnh báo hạn mức đều so với lũy kế CHƯA cộng đơn #1 → không cảnh báo, dù cả 2 đơn cộng lại đã
+vượt hạn mức. Bản chất: hệ thống "mù" trước các đơn khác đang treo.
 
-**Giải pháp** (chốt qua trao đổi trước khi code, CLAUDE.md §2 luật 2): thêm 2 cột lũy kế **DỰ KIẾN**
-trên `Employee` — cộng ngay khi đơn được TẠO (bất kể đơn đang ở trạng thái chưa duyệt nào: Draft,
-PendingGroupHead, Pending, ApprovedByDepartment, ApprovedByWorkshop), trừ lại khi đơn bị **Rejected**
-hoặc khi 1 người bị **loại khỏi đơn** (`RemoveEmployeeAsync`), điều chỉnh đúng phần chênh lệch khi
-sửa "thực tích"/`DidEat` trước khi Trưởng phòng duyệt (`UpdateAsync`). Cột lũy kế **thực tế**
-(`MonthToDate`/`YearToDate`) giữ nguyên hành vi cũ, không đụng gì.
+> Bản 2026-08-06 (lưu `Employee.ProjectedMonthToDate`/`YearToDate` + mốc rollover riêng, cộng/trừ dần
+> qua `ApplyProjectedRollover`/`ApplyProjectedDelta`/`ReverseProjectedAccumulationAsync`) đã **THAY THẾ
+> HOÀN TOÀN** — xem §Lũy kế — bỏ cache trên Employee, tính lúc đọc bên dưới. 4 cột đó đã bị **xoá khỏi
+> `Employees`** cùng đợt với `MonthToDate`/`YearToDate` thật (`RemoveEmployeeAccumulationColumns`).
 
-- **Entity**: `Employee.ProjectedMonthToDate`/`ProjectedYearToDate` (decimal(10,2)) + mốc rollover
-  RIÊNG `ProjectedAccumulationYear`/`ProjectedAccumulationMonth` (KHÔNG dùng chung
-  `AccumulationYear`/`AccumulationMonth` của lũy kế thực tế — lũy kế dự kiến có thể bị trừ ngược sau
-  khi cộng, còn thực tế thì chỉ cộng 1 chiều, không bao giờ bị đảo ngược). Migration
-  `AddProjectedAccumulationToEmployee`, default `0` cho cả 4 cột — **không backfill dữ liệu cũ**
-  (các đơn đang chờ duyệt từ trước khi apply migration sẽ không có trong lũy kế dự kiến cho tới khi
-  chúng được sửa/loại người/từ chối lần đầu sau migration; đơn mới tạo sau migration luôn đúng).
-- **Công thức số giờ** dùng CHUNG 1 hàm `OtFormService.CalculateOtHours(startTime, endTime, didEat,
-  mainMealTicketMinHours)` cho cả lũy kế thực tế lẫn dự kiến — gồm cả phần +30 phút không ăn
-  (§Có ăn hay không) — để 2 loại lũy kế luôn nhất quán công thức.
-- **4 điểm cộng/trừ** (`OtFormService`):
-  - `CreateAsync` — mỗi nhân viên trong đơn: `ApplyProjectedRollover` rồi `+= hours`.
-  - `UpdateAsync` (sửa "thực tích"/DidEat trước khi Trưởng phòng duyệt) — tính `oldHours` (từ giá trị
-    cũ) và `newHours` (từ giá trị mới), `ApplyProjectedDelta(employee, otForm.Date, newHours - oldHours)`.
-  - `RemoveEmployeeCoreAsync` (loại 1 người khỏi đơn, đơn vẫn tiếp tục chạy cho người còn lại) —
-    trừ đúng phần giờ của riêng người bị loại, KHÔNG đụng phần của những người còn lại trong đơn.
-  - `RejectAsync` (`ReverseProjectedAccumulationAsync`) — trừ lại toàn bộ giờ đã reserve lúc tạo cho
-    những người còn active trong đơn (người đã bị loại trước đó thì phần của họ đã được trả lại từ
-    lúc bị loại rồi, không trừ lần 2).
-  - Khi đơn tới `Completed`: KHÔNG đụng gì tới lũy kế dự kiến (đã được cộng sẵn từ lúc tạo) — chỉ lũy
-    kế thực tế mới cộng thêm ở bước này, độc lập hoàn toàn với dự kiến.
-- **Giới hạn đã biết**: nếu 1 đơn bị Reject/loại người SAU KHI lũy kế dự kiến của nhân viên đó đã
-  rollover sang tháng mới (đơn treo cả tháng trời chưa ai xử lý), phần trừ sẽ rơi vào lũy kế dự kiến
-  của tháng mới thay vì tháng đơn đó thuộc về — chấp nhận được vì đơn OT thực tế luôn xử lý trong vài
-  ngày, không phải hàng tháng.
-- **`OtFormEmployee.MonthToDate`/`YearToDate` đổi nguồn snapshot** (không đổi tên field) — từ
-  "lũy kế THỰC TẾ lúc tạo đơn" (§Lũy kế hiển thị trên đơn) sang **"lũy kế DỰ KIẾN lúc tạo đơn, TRƯỚC
-  khi cộng chính đơn đó"** — nên các màn đọc field này (`OtFormDetail.tsx`, `OtFormEmailConfirmPage.tsx`,
-  `OtFormPrintView.tsx`, và bảng "sửa đơn" trong `CreateOtFormPage.tsx`) tự động phản ánh đúng, không
-  cần sửa gì ở FE cho các màn này.
-- **`EmployeeDto` thêm `ProjectedMonthToDate`/`ProjectedYearToDate`** (map trong `EmployeeService`,
-  mọi hàm trả `EmployeeDto`) — `CreateOtFormPage.tsx` phần chọn nhân viên MỚI (bảng `groupEmployees`,
-  nguồn `GET /api/Employee/by-group/{groupId}`) đổi từ `employee.monthToDate`/`yearToDate` sang
-  `employee.projectedMonthToDate`/`projectedYearToDate` để cảnh báo đúng. `EmployeeList.tsx`/
-  `EmployeeAccumulationPanel.tsx` (màn quản lý nhân viên, không gắn với 1 đơn cụ thể) **giữ nguyên**
-  dùng lũy kế thực tế — theo đúng phạm vi đã chốt.
+**Thiết kế mới**: không lưu ở đâu cả — tính trực tiếp từ `OtFormEmployee`/`OtForm` mỗi lần cần, dùng
+CHUNG công thức `OtFormService.CalculateOtHours` với lũy kế thật. Điều kiện "đơn còn tính vào Dự kiến":
+`!IsRemoved && OtForm.Status != Rejected && !OtForm.IsDeleted` (Completed VẪN tính — khác lũy kế thật,
+Dự kiến là "tổng mọi đơn hợp lệ đang/đã claim giờ của người này", không chỉ đơn đã xong).
+
+- **Khác biệt quan trọng với lũy kế thật**: lũy kế thật luôn scope theo **năm/tháng THỰC TẾ hôm nay**;
+  Dự kiến scope theo **`targetDate`** truyền vào — CHỖ DUY NHẤT đang dùng Dự kiến (bảng chọn nhân viên
+  ở màn Tạo đơn) truyền `targetDate = Date` của chính đơn đang tạo, KHÔNG phải hôm nay thực tế — để
+  đúng ý nghĩa "nếu thêm người này vào đơn đang tạo (dù đơn đó cho tháng nào), họ có vượt hạn mức của
+  đúng tháng đó không". Đang tạo đơn cho ngày 1/8 dù hôm nay 27/7 vẫn phải thấy Dự kiến của tháng 8.
+- **`OtFormService.ComputeProjectedHoursBatchAsync(employeeIds, targetDate, mainMealTicketMinHours)`**
+  — hàm duy nhất tính Dự kiến ở BE, nhận CẢ DANH SÁCH `employeeId` fetch 1 lượt (mirror batch-fetch
+  ledger đã có ở `AccumulateEmployeeHoursAsync` — tránh N+1 khi đơn có nhiều người, 2026-08-19b), dùng
+  trong `CreateAsync` để chụp snapshot vào `OtFormEmployee.MonthToDate`/`YearToDate` (giá trị "đã có bao
+  nhiêu Dự kiến của đúng tháng đơn này, TRƯỚC khi cộng chính đơn này" — query chạy trước khi `AddAsync`
+  đơn mới nên tự nhiên không tự đếm chính nó).
+- **`EmployeeService.GetByGroupIdAsync(groupId, targetDate?)`** — nguồn duy nhất trả `EmployeeDto.
+  ProjectedMonthToDate/YearToDate` có ý nghĩa (mặc định `targetDate` = hôm nay thực tế nếu bỏ trống);
+  mọi hàm `EmployeeDto` khác (`GetPagedAsync`, `GetByIdAsync`...) để 2 field này mặc định `0`, không
+  dùng tới. Query bằng cách fetch thẳng `OtFormEmployee` (không dịch qua EF LINQ subquery như lũy kế
+  thật, vì công thức có `TimeOnly` trừ + điều kiện — an toàn hơn khi tính tay trong C#), gom theo
+  `EmployeeId` rồi tính `CalculateProjectedHours` (mirror `CalculateOtHours`, viết lại trong
+  `EmployeeService` vì không gọi chéo sang `OtFormService`).
+- **`GET /Employee/by-group/{groupId}?date=YYYY-MM-DD`** — FE (`CreateOtFormPage.tsx`) truyền `date`
+  state hiện tại (ngày trên đơn đang tạo) mỗi lần gọi, và gọi lại effect khi `date` đổi để badge luôn
+  đúng tháng đang chọn.
+- Không còn cần bất kỳ điểm "cộng/trừ" nào ở `CreateAsync`/`UpdateAsync`(sửa thực tích)/`RejectAsync`/
+  `DeleteAsync`/`RemoveEmployeeCoreAsync` nữa — chỉ `CreateAsync` còn gọi `ComputeProjectedHoursBatchAsync`
+  (để lấy snapshot), các nơi còn lại không đụng gì tới Dự kiến cả vì không còn state nào để cập nhật.
 - Xem hợp đồng field chi tiết ở [attendance-api-fe.md §3.5b](attendance-api-fe.md).
+
+### §Lũy kế — bỏ cache trên Employee, tính lúc đọc (2026-08-19)
+
+**Bug phát hiện được** (trace qua kịch bản người dùng nêu): rollover cũ so `OtForm.Date` với
+`Employee.AccumulationYear/Month` (mốc "kỳ của lần xử lý gần nhất") — nếu 1 đơn ngày TƯƠNG LAI được xử
+lý xong TRƯỚC 1 đơn ngày gần hơn (VD tạo/duyệt đơn 1/8 trước, rồi mới xử lý đơn 29/7 trong khi hôm nay
+vẫn là 27/7), mốc rollover bị đẩy sang tháng 8 rồi lại kéo về tháng 7 — `MonthToDate` bị **reset mất**
+giá trị hợp lệ của lần trước thay vì cộng dồn đúng. Gốc rễ: mốc rollover dựa theo **ngày trên đơn được
+xử lý gần nhất**, không phải **ngày thực tế hôm nay**.
+
+**Yêu cầu chốt lại** (CLAUDE.md §2 luật 2): (1) 1 đơn ghi ngày tương lai, dù được duyệt xong sớm, chỉ
+được cộng vào lũy kế THẬT khi lịch thực tế đã tới đúng tháng đó — "chỉ là họ đăng ký trước thôi"; (2)
+Dự kiến áp dụng luật y hệt; (3) sau khi thấy tính năng "Admin chỉnh tay `MonthToDate`/`YearToDate`"
+(§Lũy kế tháng/năm bản cũ) không thể tồn tại song song với ledger mà không mất tính nhất quán (chỉnh
+tay không ghi lại vào ledger → tra cứu lịch sử tháng đó vẫn ra số CHƯA sửa, còn "hiện tại" thì ra số
+ĐÃ sửa — lệch nhau), và lý do gốc của tính năng đó (nhập liệu lũy kế cũ khi ledger chưa tồn tại) không
+còn áp dụng sau đợt reset dữ liệu demo (§DB), người dùng chốt **bỏ hẳn** tính năng chỉnh tay.
+
+**Kết quả**: cả lũy kế THẬT lẫn DỰ KIẾN đều **không còn lưu trạng thái nào trên `Employee`** — bảng
+`Employees` không còn cột lũy kế nào cả (8 cột `MonthToDate`/`YearToDate`/`AccumulationYear`/
+`AccumulationMonth`/`Projected*4` bị xoá, migration `RemoveEmployeeAccumulationColumns`). Nguồn chân
+lý duy nhất còn lại: `EmployeeAccumulationHistory` (ledger, cho lũy kế THẬT — xem §Lũy kế tháng/năm) và
+`OtFormEmployee`/`OtForm` (cho lũy kế DỰ KIẾN — xem §Lũy kế dự kiến), cả 2 đều tính trực tiếp lúc đọc,
+không cache. Hệ quả tích cực: hết luôn bug thứ tự xử lý (ledger cộng dồn theo đúng `(Year, Month)` của
+từng đơn, không phụ thuộc thứ tự xử lý) — không cần sửa gì thêm để vá riêng bug đó.
+
+`CreateEmployeeDto`/`UpdateEmployeeDto` không còn field `MonthToDate`/`YearToDate` — form Sửa Nhân viên
+(`EmployeeForm.tsx`) bỏ hẳn 2 ô nhập lũy kế.
 
 ### §Song ngữ Vn/Jp trên OtFormDto — hiển thị cho Trưởng phòng/Trưởng Bộ phận xem trước khi duyệt (2026-07-29)
 - **Lý do**: `Group.GroupNameJp`/`Department.DepartmentNameJp`/`Reason.ReasonNameJp` (và `OtFormEmployee.NoteJp`/`ProcessPart.AnotherSuggestionJp` đã có sẵn từ trước) tồn tại trong DB nhưng `OtFormDto`/`OtFormListItemDto` trước đây chỉ trả field `*Vn` — 2 màn xem trước khi duyệt (`OtFormDetail.tsx` trong app, `OtFormEmailConfirmPage.tsx` public qua link email) chỉ hiện tiếng Việt dù master data đã có sẵn bản dịch tiếng Nhật.
@@ -1053,23 +1089,24 @@ không có cơ chế resolve lại. Approve/Reject không có bypass Admin (khá
 - `POST /api/OtForm/{id}/delete`, body `{ reason }` (`[Required]`) — `[RequirePermission("Attendance.OTForm.Delete")]`,
   permission mới **CHỈ gán cho Admin** (migration `AddOtFormDeletePermission`, piggyback trên
   `Attendance.Department.Create` như `AddAttendanceSettingPermission`).
-- **Chặn nếu `Status=Completed`** (400) — đơn đó đã cộng lũy kế THẬT (`Employee.MonthToDate/YearToDate`),
-  xoá sẽ làm sai số liệu đã dùng cho lương, không tự động đảo ngược an toàn được. Chỉ xoá được đơn
-  `InApproval` (đúng use-case kẹt vĩnh viễn) hoặc `Rejected`.
+- **Chặn nếu `Status=Completed`** (400) — đơn đó đã cộng lũy kế THẬT vào ledger
+  (`EmployeeAccumulationHistory`), xoá sẽ làm sai số liệu đã dùng cho lương, không tự động đảo ngược an
+  toàn được. Chỉ xoá được đơn `InApproval` (đúng use-case kẹt vĩnh viễn) hoặc `Rejected`.
 - Soft-delete (`IsDeleted=true`) — giữ nguyên toàn bộ dữ liệu đơn để audit, set thêm
   `DeletedByUserName/DeletedByFullName/DeletedAt/DeleteReason` trên `OtForm` (cùng triết lý với
   `OtFormEmployee.RemovedAt*`). `Status` giữ nguyên giá trị cũ, không đổi.
-- Nếu đơn đang `InApproval`, gọi lại `ReverseProjectedAccumulationAsync` (method có sẵn, dùng chung với
-  `RejectAsync`) để đảo ngược lũy kế DỰ KIẾN (`Employee.ProjectedMonthToDate/YearToDate`) đã cộng lúc
-  tạo — **không gọi lại nếu đơn đã `Rejected`** (đã tự đảo ở `RejectAsync` rồi, đảo lần 2 sẽ trừ sai).
+- **(2026-08-19)** Không còn bước "đảo ngược lũy kế Dự kiến" nào nữa — Dự kiến không lưu ở đâu cả, tính
+  lại từ `OtFormEmployee`/`OtForm` mỗi lần cần (xem §Lũy kế dự kiến); đơn vừa `IsDeleted=true` tự động
+  không còn được tính vào Dự kiến ở lần đọc kế tiếp (điều kiện lọc có `!OtForm.IsDeleted`), không cần
+  code gì thêm ở `DeleteAsync`.
 - Migration `AddOtFormDeleteFields` (Attendance DB) — `AddColumn` 4 cột trên `OtForms`.
 - FE: nút "Xoá đơn" (icon `Trash2`, viền đỏ) ở `OtFormDetail.tsx`, chỉ hiện khi có permission **và**
   `status !== Completed` (ẩn sẵn thay vì để user bấm rồi mới nhận lỗi 400) — modal xác nhận bắt buộc
   nhập lý do, thành công thì điều hướng về `/ot/list` (đơn đã xoá không còn xem được qua `GET /{id}`).
 - Đã verify sống qua API thật (2026-08-08): tạo 1 đơn test → xoá thiếu `reason` → 400 đúng message; xoá
-  có `reason` → thành công, `GET /{id}` sau đó trả 404; DB xác nhận `IsDeleted=1` + đủ 4 field audit;
-  `Employee.ProjectedMonthToDate/YearToDate` không bị lệch sau chu trình tạo→xoá. Permission xác nhận
-  chỉ Role `Admin` được gán.
+  có `reason` → thành công, `GET /{id}` sau đó trả 404; DB xác nhận `IsDeleted=1` + đủ 4 field audit.
+  Permission xác nhận chỉ Role `Admin` được gán. **Chưa verify lại** phần lũy kế Dự kiến sau đợt
+  REDESIGN 2026-08-19 (xem §Lũy kế — bỏ cache trên Employee, tính lúc đọc).
 
 #### §Gán tổ chức theo Chức vụ — Trưởng phòng/Trưởng Xưởng/Giám đốc (2026-08-08)
 
@@ -1525,6 +1562,11 @@ có hiệu lực; sau đó liên kết `UserName` cho họ qua màn Nhân viên,
 nhập tài khoản đó, thử sửa đúng/sai Bộ phận) trước khi coi tính năng này là ổn định.
 
 #### §Giai đoạn 8 — Lịch sử lũy kế theo tháng/năm + reset dữ liệu demo (2026-08-11d)
+
+> **Cập nhật 2026-08-19**: mô tả bên dưới ("ghi ledger SONG SONG với `MonthToDate`/`YearToDate` cũ")
+> đúng tại thời điểm viết (2026-08-11d) nhưng đã lỗi thời — `MonthToDate`/`YearToDate`/`Projected*` đã
+> bị xoá khỏi `Employee` hoàn toàn, ledger giờ là nguồn DUY NHẤT cho lũy kế thật (không còn "song song"
+> với gì cả). Xem §Lũy kế — bỏ cache trên Employee, tính lúc đọc để biết thiết kế hiện hành.
 
 **Bối cảnh:** `Employee.MonthToDate`/`YearToDate` (+ `ProjectedMonthToDate`/`ProjectedYearToDate`) chỉ
 là bộ đếm SỐNG, bị ghi đè về 0 mỗi khi rollover sang tháng/năm mới (`AccumulateEmployeeHoursAsync`,

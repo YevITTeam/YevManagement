@@ -147,12 +147,6 @@ namespace Attendance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("AccumulationMonth")
-                        .HasColumnType("int");
-
-                    b.Property<int>("AccumulationYear")
-                        .HasColumnType("int");
-
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -180,31 +174,9 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
-                    b.Property<decimal>("MonthToDate")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
-                    b.Property<int>("ProjectedAccumulationMonth")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ProjectedAccumulationYear")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("ProjectedMonthToDate")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
-                    b.Property<decimal>("ProjectedYearToDate")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
                     b.Property<string>("UserName")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
-
-                    b.Property<decimal>("YearToDate")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
 
                     b.HasKey("Id");
 

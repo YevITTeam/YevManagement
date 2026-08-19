@@ -15,7 +15,10 @@ namespace Attendance.Application.Interfaces.Service
         // Lịch sử lũy kế 12 tháng của 1 năm — cùng phạm vi truy cập với GetInScopeAsync.
         Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, int year);
         Task<List<EmployeeDto>> GetAllActiveAsync();
-        Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId);
+
+        // targetDate = ngày trên đơn OT đang tạo — Dự kiến (ProjectedMonthToDate/YearToDate) scope theo
+        // đúng tháng/năm của targetDate, không phải hôm nay thực tế (mặc định hôm nay nếu bỏ trống).
+        Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId, DateOnly? targetDate = null);
         // Toàn bộ nhân viên active thuộc Phòng ban (mọi Group con) — dùng cho màn "Cây duyệt Phòng ban"
         // để xem ai đang giữ Chức vụ nào và gán nhanh Chức vụ ngay tại đó.
         Task<List<EmployeeDto>> GetByDepartmentIdAsync(int departmentId);

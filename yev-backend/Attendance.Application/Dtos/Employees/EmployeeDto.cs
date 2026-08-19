@@ -10,16 +10,16 @@ namespace Attendance.Application.Dtos.Employees
         // The employee's own AD account (nullable) — used to adjust their own accumulation.
         public string? UserName { get; set; }
 
+        // Lũy kế THẬT tính tới tháng/năm thực tế hiện tại — tính trực tiếp từ EmployeeAccumulationHistory
+        // (ledger) mỗi lần đọc, KHÔNG lưu trên Employee nữa (2026-08-19, xem
+        // docs/docs-be/attendance-module.md §Lũy kế — bỏ cache trên Employee).
         public decimal MonthToDate { get; set; }
         public decimal YearToDate { get; set; }
 
-        // Month/year that MonthToDate/YearToDate currently reflect (see Employee.AccumulationYear/Month).
-        public int AccumulationYear { get; set; }
-        public int AccumulationMonth { get; set; }
-
         // Lũy kế DỰ KIẾN — thực tế + các đơn khác đang chờ duyệt (chưa Completed/Rejected) của người
-        // này (xem Employee.ProjectedMonthToDate/YearToDate). FE dùng 2 field này để cảnh báo hạn mức
-        // lúc TẠO đơn mới, thay vì MonthToDate/YearToDate (chỉ phản ánh phần đã duyệt xong).
+        // này, tính trực tiếp từ OtFormEmployee/OtForm (không lưu ở đâu cả). CHỈ được set có ý nghĩa bởi
+        // EmployeeService.GetByGroupIdAsync (màn Tạo đơn OT, scope theo NGÀY TRÊN ĐƠN đang tạo, không
+        // phải hôm nay thực tế) — mọi endpoint khác để mặc định 0, không dùng tới field này.
         public decimal ProjectedMonthToDate { get; set; }
         public decimal ProjectedYearToDate { get; set; }
 

@@ -386,10 +386,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         // Sửa đơn không cần tải toàn bộ nhân viên trong Nhóm — danh sách để sửa lấy thẳng từ đơn
         // (editEmployees), không cho chọn thêm người mới nữa.
         if (!groupId || isEditMode) return;
-        EmployeeApi.getEmployeesByGroup(groupId)
+        // Truyền kèm `date` (ngày trên đơn đang tạo) — Dự kiến hiển thị ở bảng chọn nhân viên phải scope
+        // đúng theo tháng/năm của đơn NÀY, không phải hôm nay thực tế (2026-08-19, xem docs §Lũy kế Dự
+        // kiến); đổi ngày phải tải lại để badge cập nhật đúng tháng mới.
+        EmployeeApi.getEmployeesByGroup(groupId, date || undefined)
             .then(setGroupEmployees)
             .catch((err) => console.error(err));
-    }, [groupId, isEditMode]);
+    }, [groupId, isEditMode, date]);
 
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
 
