@@ -108,9 +108,7 @@ namespace Attendance.Application.Services
         // Đơn đang chờ CHÍNH người gọi duyệt — "bước đang chờ xử lý" của 1 đơn là bước Pending có
         // StepOrder NHỎ NHẤT (các bước Pending StepOrder lớn hơn chưa tới lượt, chưa hiển thị cho ai —
         // xem OtFormApprovalStep). 2026-08-07, Giai đoạn 3.1 — thay thế hoàn toàn UserApprovalScope cũ.
-        public async Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
-            string approverUserName, int pageIndex, int pageSize,
-            DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
+        private async Task<List<int>> GetMyCurrentPendingFormIdsAsync(string approverUserName)
         {
             var pendingSteps = await _unitOfWork.OtFormApprovalSteps.SelectAsync(
                 predicate: s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Pending,
@@ -121,19 +119,37 @@ namespace Attendance.Application.Services
                 .Select(g => g.OrderBy(s => s.StepOrder).First().Id)
                 .ToHashSet();
 
-            var myCurrentFormIds = (await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
+            return (await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
                 predicate: c => c.UserName == approverUserName,
                 selector: c => new { c.OtFormApprovalStepId, c.OtFormApprovalStep.OtFormId }))
                 .Where(c => currentStepIds.Contains(c.OtFormApprovalStepId))
                 .Select(c => c.OtFormId)
                 .Distinct()
                 .ToList();
+        }
+
+        public async Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
+            string approverUserName, int pageIndex, int pageSize,
+            DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
+        {
+            var myCurrentFormIds = await GetMyCurrentPendingFormIdsAsync(approverUserName);
 
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && x.Status == (int)OtFormStatus.InApproval && myCurrentFormIds.Contains(x.Id));
             query = ApplyListFilters(query, fromDate, toDate, status).OrderBy(x => x.Date);
 
             return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
+        }
+
+        // Đếm nhanh cho badge sidebar FE — không phân trang/không map DTO, chỉ COUNT (2026-08-19).
+        public async Task<int> GetPendingApprovalsCountAsync(string approverUserName)
+        {
+            var myCurrentFormIds = await GetMyCurrentPendingFormIdsAsync(approverUserName);
+            if (myCurrentFormIds.Count == 0) return 0;
+
+            return await _unitOfWork.OtForms.CountAsync(
+                _unitOfWork.OtForms.GetQueryable(false),
+                x => !x.IsDeleted && x.Status == (int)OtFormStatus.InApproval && myCurrentFormIds.Contains(x.Id));
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(

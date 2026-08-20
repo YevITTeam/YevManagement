@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import OtFormListPage from "./OtFormListPage";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
+import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
 
 type OtFormTabKey = "my-forms" | "pending-approvals" | "my-actions" | "my-participations";
 
@@ -25,6 +26,8 @@ export default function OtFormTabsPage() {
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
+    // Badge số đơn "Chờ tôi duyệt" ngay trên tab — dùng chung hook với badge sidebar (2026-08-19).
+    const pendingApprovalsCount = usePendingApprovalsCount(canApprove);
 
     const visibleTabs = ALL_TABS.filter((tab) => {
         if (tab.key === "my-forms") return canCreate;
@@ -62,17 +65,23 @@ export default function OtFormTabsPage() {
             <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">
                 {visibleTabs.map((tab) => {
                     const isActive = activeTab === tab.key;
+                    const badgeCount = tab.key === "pending-approvals" ? pendingApprovalsCount : 0;
                     return (
                         <button
                             key={tab.key}
                             onClick={() => selectTab(tab.key)}
-                            className={`cursor-pointer border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+                            className={`cursor-pointer flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
                                 isActive
                                     ? "border-[#e3000f] text-[#191c1e]"
                                     : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
                             }`}
                         >
                             {tab.label}
+                            {badgeCount > 0 && (
+                                <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#e3000f] px-1.5 text-xs font-semibold text-white">
+                                    {badgeCount > 99 ? "99+" : badgeCount}
+                                </span>
+                            )}
                         </button>
                     );
                 })}

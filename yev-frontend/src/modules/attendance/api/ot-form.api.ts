@@ -22,6 +22,7 @@ const ENDPOINTS = {
         createOtForm: "/OtForm",
         getMyForms: "/OtForm/my-forms",
         getPendingApprovals: "/OtForm/pending-approvals",
+        getPendingApprovalsCount: "/OtForm/pending-approvals/count",
         getMyActions: "/OtForm/my-actions",
         getMyParticipations: "/OtForm/my-participations",
         getOtFormById: (id: number) => `/OtForm/${id}`,
@@ -94,6 +95,12 @@ export const OtFormApi = {
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.OT_FORM.getPendingApprovals}?${queryString}` : ENDPOINTS.OT_FORM.getPendingApprovals;
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
+        return response.data;
+    },
+    // Đếm nhanh số đơn đang chờ CHÍNH user gọi duyệt — dùng cho badge sidebar (2026-08-19), không
+    // phân trang/không tải danh sách, chỉ 1 số nguyên.
+    getPendingApprovalsCount: async () => {
+        const response = await api.get<ApiResponse<number>>(ENDPOINTS.OT_FORM.getPendingApprovalsCount);
         return response.data;
     },
     // Lịch sử đơn CHÍNH user gọi đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 Role,

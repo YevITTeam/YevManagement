@@ -4,8 +4,9 @@ import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
 import { Bot, FilePlus2, ClipboardList, FolderCog, History, PenTool, KeyRound, PanelLeftClose, Layers } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
-import { hasAnyPermission } from "@/modules/auth/lib/permissions";
+import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
+import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
 
 interface OtNavItem {
     key: string;
@@ -66,6 +67,9 @@ export default function OtManagerSidebar() {
     const pathname = usePathname() || "";
     const { user } = useAuth();
     const { collapsed, toggle } = useSidebarCollapse();
+    // Badge số đơn "Chờ tôi duyệt" trên mục "Đơn tăng ca" (otForms) — chỉ gọi API khi user có quyền
+    // duyệt, tự poll mỗi 60s (usePendingApprovalsCount).
+    const pendingApprovalsCount = usePendingApprovalsCount(hasPermission(user, "Attendance.OTForm.Approve"));
 
     return (
         <aside
@@ -116,6 +120,7 @@ export default function OtManagerSidebar() {
                     .filter((item) => !item.permissions || hasAnyPermission(user, item.permissions))
                     .map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                        const badgeCount = item.key === "otForms" ? pendingApprovalsCount : 0;
                         return (
                             <Link
                                 key={item.key}
@@ -124,15 +129,25 @@ export default function OtManagerSidebar() {
                                 // output "export" + routing [locale] làm URL RSC payload prefetch
                                 // luôn 404, chỉ tổ tốn connection pool trình duyệt.
                                 prefetch={false}
-                                title={t(item.key)}
+                                title={badgeCount > 0 ? `${t(item.key)} (${badgeCount})` : t(item.key)}
                                 className={`flex min-w-0 items-center gap-3 border-l-4 py-3 text-sm font-medium transition ${collapsed ? "justify-center px-0" : "px-5"
                                     } ${isActive
                                         ? "border-[#e3000f] bg-[#eceef0] text-[#191c1e]"
                                         : "border-transparent text-[#5e3f3a] hover:bg-[#eceef0] hover:text-[#191c1e]"
                                     }`}
                             >
-                                <item.icon size={18} className={`shrink-0 ${isActive ? "text-[#e3000f]" : "text-[#5e3f3a]"}`} />
+                                <span className="relative shrink-0">
+                                    <item.icon size={18} className={isActive ? "text-[#e3000f]" : "text-[#5e3f3a]"} />
+                                    {badgeCount > 0 && collapsed && (
+                                        <span className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 rounded-full bg-[#e3000f]" />
+                                    )}
+                                </span>
                                 {!collapsed && <span className="truncate">{t(item.key)}</span>}
+                                {!collapsed && badgeCount > 0 && (
+                                    <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#e3000f] px-1.5 text-xs font-semibold text-white">
+                                        {badgeCount > 99 ? "99+" : badgeCount}
+                                    </span>
+                                )}
                             </Link>
                         );
                     })}
