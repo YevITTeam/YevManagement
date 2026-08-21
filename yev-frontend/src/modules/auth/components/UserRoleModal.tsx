@@ -7,6 +7,7 @@ import type { UserDto, RoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleSelectModal from "./RoleSelectModal";
 import CreateUserDialog from "./CreateUserDialog";
+import EditUserDialog from "./EditUserDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -27,6 +28,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [roleFilter, setRoleFilter] = useState<number | "">("");
     const [openRoleModalUserId, setOpenRoleModalUserId] = useState<number | null>(null);
     const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<UserDto | null>(null);
     const [savingUserId, setSavingUserId] = useState<number | null>(null);
     const [deletingUser, setDeletingUser] = useState<UserDto | null>(null);
     const [isDeletingUser, setIsDeletingUser] = useState(false);
@@ -71,6 +73,8 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const canCreateUser = hasPermission(currentUser, "Identity.User.Create");
     // DELETE /api/Auth/delete-user/{userId} — cùng quy ước đặt tên permission với delete-role (Identity.Role.Delete).
     const canDeleteUser = hasPermission(currentUser, "Identity.User.Delete");
+    // PUT /api/Auth/update-user-fullname — CHỈ sửa tên hiển thị, không sửa được userName Windows.
+    const canUpdateFullName = hasPermission(currentUser, "Identity.User.UpdateFullName");
 
     const filteredUsers = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
@@ -212,21 +216,27 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                         </div>
                     </div>
 
-                    {/* Table Header */}
-                    <div className="hidden border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a] md:grid md:grid-cols-[1.4fr_1.2fr_0.8fr]">
-                        <div>Người dùng</div>
-                        <div>Vai trò</div>
-                        <div className="text-right">Thao tác</div>
-                    </div>
+                    {/* Danh sách dài (nhiều user) → cuộn RIÊNG trong khung này (Table Header sticky bên
+                        trên), không cuộn cả trang — khớp pattern TABLE_MAX_HEIGHT_PX ở DeviceList.tsx.
+                        max-h cố định bằng px (không phải vh/dvh) nên không tái phát bẫy "2 thanh cuộn
+                        chồng nhau" ở DESIGN_SYSTEM.md §3 (bẫy đó chỉ xảy ra khi 1 layout con tự khai lại
+                        chiều cao theo viewport). */}
+                    <div className="max-h-[640px] overflow-y-auto">
+                        {/* Table Header */}
+                        <div className="sticky top-0 z-10 hidden border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a] md:grid md:grid-cols-[1.4fr_1.2fr_0.8fr]">
+                            <div>Người dùng</div>
+                            <div>Vai trò</div>
+                            <div className="text-right">Thao tác</div>
+                        </div>
 
-                    {/* Table Body */}
-                    <div className="divide-y divide-[#e0e3e5]">
-                        {filteredUsers.length === 0 ? (
-                            <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">
-                                Không tìm thấy người dùng phù hợp.
-                            </div>
-                        ) : (
-                            filteredUsers.map((user) => {
+                        {/* Table Body */}
+                        <div className="divide-y divide-[#e0e3e5]">
+                            {filteredUsers.length === 0 ? (
+                                <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">
+                                    Không tìm thấy người dùng phù hợp.
+                                </div>
+                            ) : (
+                                filteredUsers.map((user) => {
                                 const isSelf = currentUser?.userName === user.userName;
                                 const isDisabled = isSelf || !canUpdateUserRoles;
                                 const currentSelectedIds = selectedRolesMap[user.id] || [];
@@ -281,7 +291,15 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                             </button>
                                         </div>
 
-                                        <div className="flex items-center justify-end">
+                                        <div className="flex items-center justify-end gap-3">
+                                            <button
+                                                onClick={() => setEditingUser(user)}
+                                                disabled={!canUpdateFullName}
+                                                title="Sửa họ tên hiển thị"
+                                                className="cursor-pointer text-sm font-semibold text-[#191c1e] transition hover:text-[#e3000f] disabled:cursor-not-allowed disabled:text-[#5e3f3a] disabled:opacity-60"
+                                            >
+                                                Sửa
+                                            </button>
                                             <button
                                                 onClick={() => setDeletingUser(user)}
                                                 disabled={isSelf || !canDeleteUser}
@@ -294,7 +312,8 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                     </div>
                                 );
                             })
-                        )}
+                            )}
+                        </div>
                     </div>
                 </section>
             )}
@@ -319,6 +338,16 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                 onClose={() => setIsCreateUserOpen(false)}
                 onCreated={() => {
                     setIsCreateUserOpen(false);
+                    void fetchData();
+                }}
+            />
+
+            <EditUserDialog
+                isOpen={editingUser !== null}
+                user={editingUser}
+                onClose={() => setEditingUser(null)}
+                onUpdated={() => {
+                    setEditingUser(null);
                     void fetchData();
                 }}
             />

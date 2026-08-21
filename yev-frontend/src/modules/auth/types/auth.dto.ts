@@ -40,6 +40,13 @@ export interface CreateUserDto {
   roleIds?: number[];
 }
 
+// Body cho PUT /api/Auth/update-user-fullname — Admin CHỈ sửa được tên hiển thị (FullName) của 1 user
+// đã tồn tại; tên đăng nhập Windows (userName) và deviceName không sửa được qua endpoint này.
+export interface UpdateUserFullNameDto {
+  userId: number;
+  fullName: string;
+}
+
 // Response gốc của POST /api/Auth/windows-login (docs/identity-api-fe.md §2.2)
 export interface WindowsLoginResponseDto {
   user: UserDto;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Cpu, FileText, Notebook, CalendarClock } from "lucide-react";
+import { Cpu, FileText, Notebook, CalendarClock, MessagesSquare } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -30,25 +30,33 @@ export default function Home() {
       visible: false,
     },
     {
-      title: t("contractsTitle"),
-      desc: t("contractsDesc"),
-     
-      link: "http://10.45.1.49:9000", 
-      icon: <FileText className="w-8 h-8" />,
-      visible: true,
-      isExternal: true, // Thêm cờ này để nhận diện link ngoài
-    },
-    {
       title: t("overtimeTitle"),
       desc: t("overtimeDesc"),
       link: "/ot",
       icon: <Notebook className="w-8 h-8" />,
       visible: canManageOt,
     },
+    {
+      title: t("contractsTitle"),
+      desc: t("contractsDesc"),
+
+      link: "http://10.45.1.49:9000",
+      icon: <FileText className="w-8 h-8" />,
+      visible: true,
+      isExternal: true,
+    },
+    {
+      title: t("chatTitle"),
+      desc: t("chatDesc"),
+      link: "https://intra.yev.vn/",
+      icon: <MessagesSquare className="w-8 h-8" />,
+      visible: true,
+      isExternal: true,
+    }
   ].filter((item) => item.visible);
 
   return (
-    <div className="min-h-[80vh] bg-[#f8fafc] px-6 py-10">  
+    <div className="min-h-[80vh] bg-[#f8fafc] px-6 py-10">
       <div className="mx-auto flex max-w-6xl flex-col gap-8">
         <div className="rounded-2xl border border-[#e0e3e5] bg-white p-8 shadow-sm">
           <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">{t("eyebrow")}</p>
@@ -61,7 +69,7 @@ export default function Home() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           {menuItems.map((item, index) => {
             const cardClasses = "group rounded-2xl border border-[#e0e3e5] bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#e3000f] hover:shadow-md block";
-            
+
             // Tách phần nội dung thẻ ra để tái sử dụng
             const CardContent = () => (
               <>

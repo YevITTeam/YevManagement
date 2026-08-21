@@ -26,6 +26,7 @@ Fluent (`IdentityDbContext.OnModelCreating`):
 | `LoginResponseDto` | `User:UserDto, Token:string`. |
 | `RoleDto` | `Id/RoleName/Description?` (dùng cả input+output). `UpdateRoleDto`: `RoleName/Description?`. |
 | `UpdateUserRolesDto` | `UserId, RoleIds:List<int>`. |
+| `UpdateUserFullNameDto` | `UserId, FullName[Required, ≤100]` — sửa CHỈ tên hiển thị (§5.5). |
 | `CreateUserDto` | `UserName[Required], DeviceName?, FullName?, RoleIds:List<int>?` (§5.1). |
 | `PermissionDto` | `Id/Code/Module/Description?` (output-only). |
 | `PermissionModuleGroupDto` / `PermissionEntityGroupDto` | Nhóm 2 cấp Module > Entity (Entity = đoạn giữa của Code) — cho `GET /api/Permission/all`. |
@@ -39,7 +40,7 @@ Fluent (`IdentityDbContext.OnModelCreating`):
 ## 4. Services
 | Service | Method |
 |---|---|
-| `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync(roleId?)` (lọc theo Role qua `Roles.Any(r => r.Id == roleId)` khi có, 2026-07-16), `UpdateUserRolesAsync`, `CreateUserAsync` (§5.1), `DeleteUserAsync` (§5.2, **xóa cứng**) |
+| `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync(roleId?)` (lọc theo Role qua `Roles.Any(r => r.Id == roleId)` khi có, 2026-07-16), `UpdateUserRolesAsync`, `CreateUserAsync` (§5.1), `UpdateUserFullNameAsync` (§5.5), `DeleteUserAsync` (§5.2, **xóa cứng**) |
 | `RoleService` | CRUD role (`Create` ném `DomainException` nếu trùng tên; xóa = soft-delete). ⚠️ `GetRoleByIdAsync` **không check null** → NRE nếu id sai (nên `.OrThrowNotFound`) |
 | `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` — JWT HS256, hạn `JwtSettings:ExpiryMinutes`. Loại `RolesLoaded` + claim do JWT tự sinh (`exp/nbf/iat/iss/aud/jti`, nếu không token gia hạn sẽ có `aud`/`exp` trùng → không validate được); `Role`/`Permission` **chỉ lấy từ identity `DbRoles`** rồi `DistinctBy` — xem §5 |
 | `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync`, `UpdateRolePermissionsAsync` (clear+add lại), `GetUserPermissionOverridesAsync`, `GetEffectivePermissionsForUserAsync`, `UpdateUserPermissionOverridesAsync` (§9.1) |
@@ -105,7 +106,10 @@ Admin tạo trước User cho người **chưa từng đăng nhập Windows**. L
 `POST /api/Auth/create-user` (`Identity.User.Create`, seed migration `AddIdentityUserCreatePermission`) — `CreateUserDto`. `CreateUserAsync` chặn trùng `UserName` + validate `RoleIds` tồn tại `!IsDeleted`. **Bất biến: 1 `UserName` = đúng 1 dòng User.**
 
 ### 5.2. Xóa User (xóa CỨNG)
-`DELETE /api/Auth/delete-user/{userId}` (`Identity.User.Delete`, seed migration `AddUserDeleteAndAssetSettingPermissions`). `User` không có `IsDeleted` → xóa cứng, cascade DB tự dọn `UserRoles`/`LoginUserIPs`/`UserPermissions`. Đánh đổi: `UserName` login lại sau xóa → tạo mới với `"Basic"`, mất override cũ (có chủ đích). Chưa có API **sửa** User.
+`DELETE /api/Auth/delete-user/{userId}` (`Identity.User.Delete`, seed migration `AddUserDeleteAndAssetSettingPermissions`). `User` không có `IsDeleted` → xóa cứng, cascade DB tự dọn `UserRoles`/`LoginUserIPs`/`UserPermissions`. Đánh đổi: `UserName` login lại sau xóa → tạo mới với `"Basic"`, mất override cũ (có chủ đích).
+
+### 5.5. Sửa tên hiển thị User *(2026-08-21)*
+`PUT /api/Auth/update-user-fullname` (`Identity.User.UpdateFullName`, seed migration `AddIdentityUserUpdateFullNamePermission`) — body `UpdateUserFullNameDto { UserId, FullName[Required] }`. `UserService.UpdateUserFullNameAsync` chỉ ghi đè `FullName`; **`UserName` (định danh đăng nhập Windows) và `DeviceName` không sửa được qua endpoint này** — có chủ đích, vì `UserName` là khóa khớp duy nhất lúc login (§5). 404 nếu `UserId` sai.
 
 ## 6. API Endpoints
 ### `AuthController` — `/api/Auth`
@@ -117,6 +121,7 @@ Admin tạo trước User cho người **chưa từng đăng nhập Windows**. L
 | POST | `create-user` | `Identity.User.Create` |
 | GET | `get-all-users-with-roles` | `Identity.User.View` |
 | POST | `update-user-roles` | `Identity.User.UpdateRoles` |
+| PUT | `update-user-fullname` | `Identity.User.UpdateFullName` |
 | DELETE | `delete-user/{userId}` | `Identity.User.Delete` |
 | GET | `get-all-roles` | `Identity.Role.View` |
 | POST | `create-role` | `Identity.Role.Create` |
@@ -169,7 +174,7 @@ Mỗi action ↔ 1 mã `Module.Entity.Action`. Role sở hữu tập Permission 
 | `Asset.TransferHistory` | View, Create |
 | `Asset.Setting` | View, Update |
 | `Asset.AuditTrail` | View (seed migration `AddAssetAuditTrailPermission`, 2026-07-16 — **CHƯA apply**) |
-| `Identity.User` | View, UpdateRoles, UpdatePermissions, Create, Delete |
+| `Identity.User` | View, UpdateRoles, UpdatePermissions, UpdateFullName, Create, Delete |
 | `Identity.Role` | View, Create, Update, Delete |
 | `Identity.Permission` | View |
 
