@@ -786,6 +786,7 @@ Pattern **Preview → Confirm** (giống hệt import Device bên module Asset �
 | POST | `/api/OtForm` | `Attendance.OTForm.Create` | Tạo đơn — vào chuỗi duyệt Cây chức vụ **ngay lập tức** (`status=InApproval`, hoặc `Completed` nếu chuỗi rỗng), không còn Draft (§4.1) |
 | GET | `/api/OtForm/my-forms?pageIndex=&pageSize=` | `Attendance.OTForm.View` | Đơn do **chính mình** tạo |
 | GET | `/api/OtForm/pending-approvals?pageIndex=&pageSize=` | `Attendance.OTForm.Approve` | Đơn đang **chờ chính mình** xử lý — tự lọc theo bước hiện tại (`Status=Pending`, `StepOrder` nhỏ nhất) có mặt trong `Candidates`; mỗi item có `currentStepCandidateCount` (§4.2, mới 2026-08-08) |
+| GET | `/api/OtForm/pending-approvals/count` | `Attendance.OTForm.Approve` | Đếm nhanh cho badge sidebar (mới 2026-08-19) — trả về `data:int`, cùng logic lọc "bước hiện tại" với `pending-approvals` nhưng KHÔNG phân trang/không map DTO danh sách. Xem §4.2d. |
 | GET | `/api/OtForm/my-actions?pageIndex=&pageSize=` | `Attendance.OTForm.View` | Lịch sử đơn **chính mình đã xử lý** (Ký/Duyệt/Từ chối) ở bất kỳ bước nào (§4.2b) |
 | GET | `/api/OtForm/{id}` | `Attendance.OTForm.View` | Chi tiết đầy đủ 1 đơn, gồm `approvalSteps[]` (mới) |
 | PUT | `/api/OtForm/{id}` | `Attendance.OTForm.Create` | Sửa đơn — chỉ còn giờ kết thúc từng nhân viên, chỉ chính người tạo, chỉ khi `status=InApproval` VÀ chưa bước nào `Approved` (§4.1b) |
@@ -919,6 +920,13 @@ FE: `OtFormApi.get*({ pageIndex, pageSize, fromDate, toDate, status })` (`ot-for
 - `isEditable` (đổi 2026-08-07) = `status == InApproval && !approvalSteps.some(Approved)`, tính độc lập với người xem — ở `pending-approvals`, 1 đơn `InApproval` vẫn có `isEditable=true` nhưng KHÔNG có nghĩa người duyệt hiện tại sửa được (chỉ chính người tạo mới sửa). FE chỉ hiện nút "Sửa" khi **cả 3 điều kiện**: `isEditable=true` **và** `createdByUserName == user hiện tại` **và** có permission `OTForm.Create` — tức thực tế nút này chỉ có ý nghĩa ở tab "Đơn của tôi" (`my-forms`).
 - **`approvalSummary`** — mảng rút gọn từng lần Ký/Duyệt/Từ chối đã xảy ra trên đơn (sắp theo `actionAt` tăng dần), có mặt trên **cả 5 endpoint danh sách**. Cùng shape với `approvalHistories` ở §4.3 nhưng bỏ `comment`/`signatureImage`/`hasSignature`. FE dùng field này để hiện ngay "đã được ai duyệt" trên từng dòng danh sách — danh sách **không** có tên bước đang chờ tiếp theo (field đó chỉ có ở chi tiết đơn qua `approvalSteps[]`, §4.3), FE hiện dòng "Đang chờ duyệt" chung chung khi `status==InApproval`.
 - **`groupNameJp`/`departmentNameJp` (mới, 2026-07-29)** — song ngữ Việt/Nhật lấy thẳng từ `Group.GroupNameJp`/`Department.DepartmentNameJp` (nullable, `null` nếu master data chưa nhập tiếng Nhật). FE hiện dạng `"{Vn} / {Jp}"` khi có Jp, chỉ hiện Vn nếu không (xem `bilingualText` ở `modules/attendance/lib/bilingual.ts`).
+
+### 4.2d `GET /api/OtForm/pending-approvals/count` — Đếm badge sidebar (mới, 2026-08-19)
+Trả về `ApiResponse<int>` (`data` là số nguyên, KHÔNG bọc `PagedResponse`) — số đơn đang chờ CHÍNH
+user gọi API duyệt, đúng bằng số dòng sẽ trả về nếu gọi `pending-approvals` không kèm `fromDate`/
+`toDate`/`status`. Không phân trang, không map `OtFormListItemDto` — chỉ 1 `COUNT` SQL, dùng để hiển
+thị số trên badge sidebar mục "Đơn tăng ca" (FE: `OtManagerSidebar.tsx` qua hook
+`usePendingApprovalsCount`, tự poll lại mỗi 60 giây, chỉ gọi khi user có `Attendance.OTForm.Approve`).
 
 ### 4.2c `GET /api/OtForm/my-participations` — Đơn tôi có tên trong danh sách tăng ca (mới, 2026-07-17)
 Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác hẳn: trả về **mọi đơn mà chính user gọi API được liệt kê là nhân viên tăng ca** (`OtFormEmployee`), **bất kể có phải người tạo/ký/duyệt đơn đó hay không**.

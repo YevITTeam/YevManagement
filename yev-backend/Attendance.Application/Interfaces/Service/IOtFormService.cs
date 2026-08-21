@@ -16,6 +16,10 @@ namespace Attendance.Application.Interfaces.Service
             string approverUserName, int pageIndex, int pageSize,
             DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
 
+        // Đếm nhanh cho badge sidebar FE — cùng logic lọc "bước hiện tại" với GetPendingApprovalsAsync
+        // nhưng không phân trang/không map DTO (2026-08-19).
+        Task<int> GetPendingApprovalsCountAsync(string approverUserName);
+
         // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 vai trò
         // (Trưởng nhóm/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc), gate bằng Attendance.OTForm.View.
         Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(

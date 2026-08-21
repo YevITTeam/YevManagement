@@ -44,6 +44,15 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
+        // Đếm nhanh cho badge sidebar FE — xem OtFormService.GetPendingApprovalsCountAsync.
+        [RequirePermission("Attendance.OTForm.Approve")]
+        [HttpGet("pending-approvals/count")]
+        public async Task<ActionResult<ApiResponse<int>>> GetPendingApprovalsCount()
+        {
+            var result = await _otFormService.GetPendingApprovalsCountAsync(CurrentUserName);
+            return Success(result);
+        }
+
         // History of forms the CURRENT user has Signed/Approved/Rejected (any level) — shared by all 4
         // roles since they all already have Attendance.OTForm.View. Different from my-forms (only
         // shows SELF-CREATED forms) and pending-* (only shows forms NOT YET processed) — this is where

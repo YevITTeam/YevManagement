@@ -25,6 +25,10 @@ namespace Attendance.Application.Dtos.OtForms
         // Snapshot of the creator's full name — FE always prefers displaying this field, falling back to CreatedByUserName if null.
         public string? CreatedByFullName { get; set; }
 
+        // Thời điểm tạo đơn (UTC) — FE dùng làm "thời gian ký" cho trường hợp tự ký (creatorSignatureImage
+        // không có OtFormApprovalHistory riêng để lấy actionAt). Xem OtForm.CreatedAt.
+        public DateTime CreatedAt { get; set; }
+
         // Ảnh chữ ký của chính người tạo đơn — chỉ có giá trị khi người tạo đã ở cấp cao hơn/bằng mọi
         // Chức vụ trung gian "Bắt buộc ký" của Phòng ban (tự ký ô "Người đề nghị" thay vì chờ ai khác).
         // Serialize tự động thành base64 string (System.Text.Json mặc định cho byte[]) — xem OtForm.
