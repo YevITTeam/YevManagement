@@ -201,6 +201,9 @@ export interface OtFormDto {
     numberOfEmployee: number;
     createdByUserName: string;
     createdByFullName: string | null;
+    // Thời điểm tạo đơn (UTC, ISO) — dùng làm "thời gian ký" khi in cho trường hợp tự ký
+    // (creatorSignatureImage không có OtFormApprovalHistory riêng để lấy actionAt), 2026-08-20.
+    createdAt: string;
     // base64 — ảnh chữ ký của CHÍNH người tạo đơn, chỉ có giá trị khi người tạo đã ở cấp cao hơn/bằng
     // mọi Chức vụ trung gian "Bắt buộc ký" của Phòng ban (tự ký ô "Người đề nghị", 2026-08-08). Xem
     // OtFormPrintView.tsx.

@@ -430,6 +430,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<string>("ApprovalChainWarning")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("CreatedByFullName")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");

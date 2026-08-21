@@ -25,6 +25,15 @@ function formatTime(value: string) {
     return value?.slice(0, 5) ?? "-";
 }
 
+// Thời gian ký in dưới mỗi chữ ký (2026-08-20, yêu cầu người dùng) — "dd/mm/yyyy hh:mm".
+function formatDateTime(value: string | null | undefined) {
+    if (!value) return null;
+    const d = new Date(value);
+    const datePart = d.toLocaleDateString("vi-VN");
+    const timePart = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+    return `${datePart} ${timePart}`;
+}
+
 // Tra lịch sử ký/duyệt theo StepOrder (2026-08-07, Giai đoạn 3.1) — trước đây tra theo ApprovalLevel
 // cố định, nay chuỗi bước là động theo Cây chức vụ, xem docs §Cây chức vụ.
 function findHistory(histories: OtFormApprovalHistoryDto[], stepOrder: number) {
@@ -301,26 +310,52 @@ function nowrapBoxStyle(box: FieldBox): React.CSSProperties {
 // Chỉ 4 field thật sự cần để vẽ 1 ô chữ ký — tách khỏi OtFormApprovalHistoryDto đầy đủ để SignatureCell
 // dùng chung được cho cả lịch sử duyệt thật (findHistory) LẪN chữ ký tự ký của người tạo đơn (không có
 // OtFormApprovalHistory tương ứng, xem selfSignDisplay bên dưới).
-type SignatureDisplay = Pick<OtFormApprovalHistoryDto, "approverFullName" | "approverUserName" | "hasSignature" | "signatureImage">;
+type SignatureDisplay = Pick<OtFormApprovalHistoryDto, "approverFullName" | "approverUserName" | "hasSignature" | "signatureImage" | "actionAt">;
 
 function SignatureCell({ box, history, nameOnly }: { box: FieldBox; history: SignatureDisplay | null; nameOnly?: boolean }) {
     const displayName = history && (history.approverFullName ?? history.approverUserName);
+    const signedAt = history ? formatDateTime(history.actionAt) : null;
+    // Thời gian ký nằm ở 1 dải RIÊNG cố định ở đáy ô (absolute, tách khỏi flex ảnh+tên) — trước đó gộp
+    // chung 1 cột flex khiến ảnh chữ ký bị co/đè lên khi tổng chiều cao 3 dòng vượt quá ô nhỏ trên giấy
+    // in, cắt mất nét chữ ký (2026-08-20, lỗi người dùng báo). Tách riêng để ảnh+tên luôn giữ đúng tỉ lệ
+    // như trước khi thêm thời gian ký, chỉ nhường đúng dải đáy cho dòng giờ.
     return (
-        <div
-            style={{ ...boxStyle(box), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden" }}
-            className="gap-0.5 text-center"
-        >
-            {history?.hasSignature && history.signatureImage ? (
-                // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với overlay fluid ở đây
-                <img
-                    src={`data:image/png;base64,${history.signatureImage}`}
-                    alt={`Chữ ký ${displayName}`}
-                    className="max-h-[60%] object-contain"
-                />
-            ) : null}
-            {history && (
-                <div style={{ whiteSpace: "nowrap" }} className="text-[8pt] leading-tight text-black">
-                    {nameOnly ? getGivenName(displayName) : displayName}
+        <div style={{ ...boxStyle(box), overflow: "hidden" }} className="relative text-center">
+            <div
+                style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    bottom: signedAt ? "14%" : 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    overflow: "hidden",
+                }}
+                className="gap-0"
+            >
+                {history?.hasSignature && history.signatureImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với overlay fluid ở đây
+                    <img
+                        src={`data:image/png;base64,${history.signatureImage}`}
+                        alt={`Chữ ký ${displayName}`}
+                        className="max-h-[80%] object-contain"
+                    />
+                ) : null}
+                {history && (
+                    <div style={{ whiteSpace: "nowrap" }} className="text-[7pt] leading-none text-black">
+                        {nameOnly ? getGivenName(displayName) : displayName}
+                    </div>
+                )}
+            </div>
+            {signedAt && (
+                <div
+                    style={{ position: "absolute", left: 0, right: 0, bottom: 0, whiteSpace: "nowrap" }}
+                    className="text-[5.5pt] leading-none text-black"
+                >
+                    {signedAt}
                 </div>
             )}
         </div>
@@ -387,6 +422,8 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
               approverUserName: form.createdByUserName,
               hasSignature: true,
               signatureImage: form.creatorSignatureImage,
+              // Không có OtFormApprovalHistory riêng cho tự ký — dùng thời điểm tạo đơn làm "thời gian ký".
+              actionAt: form.createdAt,
           }
         : null;
 
@@ -521,13 +558,13 @@ function EmployeeRowFields({
                         </div>
                         <div
                             style={{ ...nowrapBoxStyle(columnBox(layout.columns.thang, row)), justifyContent: "center" }}
-                            className={isMonthOverLimit ? "font-bold text-[#930006]" : ""}
+                            className={isMonthOverLimit ? "font-bold text-[#930006] underline" : ""}
                         >
                             {employee.monthToDate}
                         </div>
                         <div
                             style={{ ...nowrapBoxStyle(columnBox(layout.columns.nam, row)), justifyContent: "center" }}
-                            className={isYearOverLimit ? "font-bold text-[#930006]" : ""}
+                            className={isYearOverLimit ? "font-bold text-[#930006] underline" : ""}
                         >
                             {employee.yearToDate}
                         </div>

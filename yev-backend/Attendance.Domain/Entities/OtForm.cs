@@ -37,6 +37,11 @@ public partial class OtForm
     // OtFormApprovalHistory.ApproverFullName.
     public string? CreatedByFullName { get; set; }
 
+    // Thời điểm tạo đơn (UTC) — dùng làm "thời gian ký" hiển thị trên bản in cho trường hợp tự ký
+    // (CreatorSignatureImage, không có OtFormApprovalHistory tương ứng để lấy ActionAt) — xem
+    // OtFormPrintView.tsx SignatureCell (2026-08-20).
+    public DateTime CreatedAt { get; set; }
+
     // Snapshot ảnh chữ ký của CHÍNH người tạo đơn (từ UserSignature lúc tạo) — chỉ có giá trị khi
     // JobTitleApprovalChainService đánh giá người tạo đã ở cấp cao hơn/bằng MỌI Chức vụ trung gian
     // "Bắt buộc ký" đã cấu hình cho Phòng ban (không còn ai khác để ký ô "Người đề nghị" thay họ) —

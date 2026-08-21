@@ -242,7 +242,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                            <tr className="whitespace-nowrap border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
                                 <th className="px-4 py-2.5">{t("colCode")}</th>
                                 <th className="px-4 py-2.5">{t("colFullName")}</th>
                                 <th className="px-4 py-2.5">{t("colUserName")}</th>
@@ -274,7 +274,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                             : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
                                     }`;
                                 return (
-                                <tr key={employee.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                <tr key={employee.id} className="whitespace-nowrap border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
                                     <td className="px-4 py-3 text-sm text-[#5e3f3a]">
                                         {employee.lastName} {employee.firstName}

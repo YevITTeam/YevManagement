@@ -33,6 +33,7 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form).
 | Module Asset (BE) | [docs/docs-be/asset-module.md](docs/docs-be/asset-module.md) |
 | Module Identity (BE) | [docs/docs-be/identity-module.md](docs/docs-be/identity-module.md) |
 | Module Attendance (BE) | [docs/docs-be/attendance-module.md](docs/docs-be/attendance-module.md) |
+| **Module Workflow (BE)** — form builder động + duyệt nhiều cấp | [docs/docs-be/workflow-module.md](docs/docs-be/workflow-module.md) + sơ đồ [docs/workflow-erd.drawio](docs/workflow-erd.drawio) |
 | **Gọi API từ FE** (bất kỳ module nào) | hợp đồng API tương ứng: [asset-api-fe.md](docs/docs-be/asset-api-fe.md) · [identity-api-fe.md](docs/docs-be/identity-api-fe.md) · [attendance-api-fe.md](docs/docs-be/attendance-api-fe.md) |
 | Viết file `*.api.ts` / `*.dto.ts` mới | [docs/docs-fe/huong-dan-viet-api-fe.md](docs/docs-fe/huong-dan-viet-api-fe.md) |
 | Dựng / sửa UI | [docs/docs-fe/DESIGN_SYSTEM.md](docs/docs-fe/DESIGN_SYSTEM.md) |
@@ -120,6 +121,7 @@ Luật vàng phụ thuộc: **Domain không phụ thuộc gì. Application khôn
 | Identity | `YevIdentityManagement` | Production. User/Role/Permission, Windows login → JWT. |
 | Asset | `YevPCManagement` | Đang phát triển. Device/Branch/Supplier/DeviceType/Software/IpAddress/TransferHistory/AuditTrail, import Excel, report, AI Chat. |
 | Attendance | (xem `attendance-module.md`) | Đã có code. OT Form: duyệt nhiều cấp + phạm vi tổ chức + chữ ký + gửi email. |
+| Workflow | `YevWorkflowManagement` | **Mới có thiết kế (25 bảng), chưa có code/migration/project.** Form builder động + duyệt nhiều cấp theo mô hình POWER EGG. **Cố ý ĐỘC LẬP với Attendance** dù trùng 7 nhóm bảng — xem `workflow-module.md §1`. |
 
 ### 3.4 Chuẩn code BE (BẮT BUỘC — chi tiết ở `architecture-core.md`)
 

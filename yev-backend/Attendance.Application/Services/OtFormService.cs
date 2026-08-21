@@ -241,6 +241,7 @@ namespace Attendance.Application.Services
                 NumberOfEmployee = otForm.NumberOfEmployee,
                 CreatedByUserName = otForm.CreatedByUserName,
                 CreatedByFullName = otForm.CreatedByFullName,
+                CreatedAt = otForm.CreatedAt,
                 CreatorSignatureImage = otForm.CreatorSignatureImage,
                 Status = otForm.Status,
                 IsEditable = isEditable,
@@ -362,6 +363,7 @@ namespace Attendance.Application.Services
                 NumberOfEmployee = request.Employees.Count,
                 CreatedByUserName = createdByUserName,
                 CreatedByFullName = createdByFullName,
+                CreatedAt = TimeHelper.GetCurrentUtcTime(),
                 CreatorSignatureImage = creatorSignatureImage,
                 // Không còn giai đoạn Draft (2026-08-06 đã chốt) — tạo đơn = vào chuỗi ngay lập tức.
                 // CHỈ hoàn tất ngay khi Steps.Count == 0 VÀ IsComplete == true — tức người tạo đã ở cấp
