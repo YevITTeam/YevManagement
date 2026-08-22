@@ -19,5 +19,11 @@ namespace Asset.Application.Dtos.AiChat
         // (`gemma4:e2b` reports "thinking" in its Ollama capability list), so true is a real request,
         // not a no-op — just ~7x slower per docs §3's measurement.
         public bool? Think { get; set; }
+
+        // Optional (2026-08-22) — current FE UI locale ("vi" | "ja") from next-intl, sent so the
+        // default system prompt answers in the same language as the UI. Omitted/anything other than
+        // "ja" -> Vietnamese (unchanged default behavior). Ignored entirely when the caller supplies
+        // a custom SystemPrompt.
+        public string? Locale { get; set; }
     }
 }

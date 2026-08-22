@@ -514,9 +514,19 @@ thiết ngay ở bản đầu.
   (`MAX_TOOL_ROUNDS`, `toolCallsBox`...) — chỉ còn gọi 1 lần endpoint BE, đọc stream, cập nhật UI;
   `toolsUsed` lấy trực tiếp từ dòng `{"type":"tool", ...}` BE gửi về.
 
-## 9. System prompt mặc định (copy nguyên văn từ `AiChatService.DefaultSystemPrompt` — nguồn xác thực
-là code, cập nhật lần cuối 2026-07-29 khi thêm mục "KHÔNG BỊA KẾT QUẢ TRA CỨU" ở §14)
+## 9. System prompt mặc định (copy nguyên văn từ `AiChatService.BuildDefaultSystemPrompt` — nguồn xác
+thực là code, cập nhật lần cuối 2026-08-22 khi QUY TẮC NGÔN NGỮ chuyển sang phụ thuộc locale FE)
 
+`BuildDefaultSystemPrompt(request.Locale)` ghép `PersonaIntro + (QUY TẮC NGÔN NGỮ theo locale) +
+PromptBody`. `request.Locale` là locale UI hiện tại của FE (`"vi"` | `"ja"`, next-intl
+`useLocale()`, xem `asset-api-fe.md §7c`) — locale `"ja"` chọn đoạn QUY TẮC NGÔN NGỮ tiếng Nhật
+bên dưới, mọi giá trị khác (kể cả `null`/bỏ trống) chọn đoạn tiếng Việt. `DefaultSystemPrompt`
+(hằng số cũ, luôn tiếng Việt) vẫn còn để tương thích ngược nhưng không còn được `AiChatService`
+dùng trực tiếp. Toàn bộ phần còn lại của prompt (`PromptBody`) giữ nguyên tiếng Việt bất kể locale
+— đây là hướng dẫn NÓI VỚI model, không phải nội dung model xuất ra cho người dùng, nên không cần
+dịch.
+
+Bản tiếng Việt (locale mặc định / `"vi"`):
 ```
 Bạn là trợ lý AI nội bộ của công ty. QUY TẮC NGÔN NGỮ (quan trọng nhất, luôn tuân theo): LUÔN
 LUÔN trả lời bằng tiếng Việt, kể cả khi người dùng hỏi bằng ngôn ngữ khác hoặc dữ liệu tool trả
@@ -524,7 +534,20 @@ về có chứa ngôn ngữ khác (Anh, Trung, Nhật...) — tuyệt đối kh�
 lời. Ngoại lệ DUY NHẤT: khi người dùng yêu cầu RÕ RÀNG dịch một đoạn văn bản sang ngôn ngữ khác,
 khi đó hãy dịch chính xác đúng sang ngôn ngữ được yêu cầu, văn phong lịch sự, chỉ trả về nội
 dung dịch.
+```
 
+Bản tiếng Nhật (locale `"ja"`, thay thế đúng đoạn QUY TẮC NGÔN NGỮ ở trên, phần còn lại giữ
+nguyên tiếng Việt):
+```
+言語ルール(最も重要、常に従うこと): ユーザーが別の言語で質問した場合や、tool の結果に別の
+言語(英語、中国語、ベトナム語など)が含まれている場合でも、常に日本語で回答してください —
+回答に他の言語を混在させることは絶対に禁止です。唯一の例外: ユーザーが明示的に、ある文章を
+別の言語に翻訳するよう求めた場合のみ、要求された言語に正確かつ丁寧な文体で翻訳し、翻訳内容の
+みを返してください。
+```
+
+Phần thân prompt còn lại (giống nhau ở cả 2 locale):
+```
 QUY TẮC TRA CỨU: khi người dùng hỏi thông tin thiết bị (chi tiết máy, cấu hình, phần mềm đã
 cài, lịch sử chuyển giao/thay đổi, IP), hoặc thông tin chi nhánh, nhà cung cấp, loại/nhóm/bộ
 phận thiết bị, PHẢI dùng tool tra cứu phù hợp để lấy dữ liệu thật, không tự bịa số liệu. Nếu câu
@@ -564,10 +587,28 @@ sắp có kết quả, và không được tự bịa số liệu để hoàn th
 chắc, hãy gọi lại tool cần thiết ngay trong lượt hiện tại thay vì suy đoán.
 ```
 
-Nguồn: hằng số `AiChatService.DefaultSystemPrompt` (`Asset.Application/Services/AiChatService.cs`) —
+**Reinforcement riêng cho locale `"ja"`** (`StreamChatAsync`, ngay trước khi append tin nhắn
+`user`, chỉ khi `SystemPrompt` không được override): kiểm chứng thực tế 2026-08-22 bằng debug log +
+gọi trực tiếp endpoint (không qua FE) cho thấy dù QUY TẮC NGÔN NGỮ tiếng Nhật đã nằm đúng trong
+system prompt, model `gemma4:e2b` vẫn trả lời tiếng Việt — persona line + toàn bộ `PromptBody` phía
+sau đều tiếng Việt nên model nhỏ chỉ pattern-match theo đa số. Fix: chèn thêm 1 tin nhắn `system`
+ngắn ngay sát trước tin nhắn `user` (gần vị trí model thực sự sinh câu trả lời hơn, hiệu quả hơn hẳn
+so với rule nằm ở đầu 1 prompt dài):
+```
+重要: 次の返信は必ず日本語で書いてください。ベトナム語や英語は一切使用しないでください。
+```
+Đã test lại cả 2 trường hợp sau khi thêm: hỏi thường (không cần tool) và hỏi cần gọi tool
+(`get_ip_prefix_usage`) — cả 2 đều trả lời tiếng Nhật đúng; `locale: "vi"`/bỏ trống vẫn trả lời
+tiếng Việt như cũ (không có regression). Model đôi lúc còn giữ nguyên vài cụm tiếng Việt trong câu
+hỏi gốc (vd lặp lại "Dải IP 10.45.1" thay vì dịch) — đây là giới hạn chất lượng model nhỏ, không
+phải lỗi kiến trúc (xem note cuối §10).
+
+Nguồn: `AiChatService.BuildDefaultSystemPrompt` (`Asset.Application/Services/AiChatService.cs`) —
 đây là bản đã lên BE thật, KHÔNG còn phải `DEFAULT_SYSTEM_PROMPT` ở `ChatBox.tsx` (file đó đã xoá
-khỏi FE khi chuyển sang BE, xem §8). FE có thể gửi `systemPrompt` khác qua request (mục 7) để override,
-nhưng hiện `AiChatBox.tsx` không có UI cho việc này (đã bỏ khi redesign 2026-07-27, xem §11).
+khỏi FE khi chuyển sang BE, xem §8). FE có thể gửi `systemPrompt` khác qua request (mục 7) để override
+(khi đó `locale` bị bỏ qua hoàn toàn), nhưng hiện `AiChatBox.tsx` không có UI cho việc này (đã bỏ khi
+redesign 2026-07-27, xem §11) — `AiChatBox.tsx` chỉ gửi `locale` (từ `useLocale()`) để BE chọn đúng
+đoạn QUY TẮC NGÔN NGỮ.
 
 ## 10. Việc chưa cần làm ngay (ghi nhận để làm sau, không nằm trong phạm vi bản đầu)
 

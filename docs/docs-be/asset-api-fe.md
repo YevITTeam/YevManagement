@@ -391,7 +391,8 @@ Content-Type: application/json
     { "role": "assistant", "content": "..." }
   ],
   "systemPrompt": null,                     // optional — null/bỏ trống thì BE dùng prompt mặc định (§9 tài liệu trên)
-  "think": false                            // optional, 2026-07-27 — null/bỏ trống = false (mặc định nhanh, ~2-3s). true = model suy luận sâu hơn trước khi trả lời (~15-20s, xem ai-chat-be-huong-dan.md §3/§11)
+  "think": false,                           // optional, 2026-07-27 — null/bỏ trống = false (mặc định nhanh, ~2-3s). true = model suy luận sâu hơn trước khi trả lời (~15-20s, xem ai-chat-be-huong-dan.md §3/§11)
+  "locale": "vi"                            // optional, 2026-08-22 — locale UI hiện tại của FE ("vi" | "ja", lấy từ next-intl `useLocale()`). BE dùng để chọn ngôn ngữ trả lời trong prompt mặc định — khác "ja" (kể cả null/bỏ trống) → tiếng Việt. Bị BỎ QUA nếu `systemPrompt` đã được truyền tuỳ chỉnh.
 }
 ```
 `message` là `[Required]` — thiếu/rỗng → **400** theo format `ValidationProblemDetails` chuẩn của `[ApiController]` (khác `ApiResponse<T>` các API còn lại, vì lỗi này xảy ra TRƯỚC khi bắt đầu stream).
