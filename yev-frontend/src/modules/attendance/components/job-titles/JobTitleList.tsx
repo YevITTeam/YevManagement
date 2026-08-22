@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Inbox } from "lucide-react";
+import { GripVertical, Inbox } from "lucide-react";
 
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { useDragReorder } from "./useDragReorder";
 
 const PAGE_SIZE = 20;
 
@@ -38,6 +39,15 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
     const [deletingJobTitle, setDeletingJobTitle] = useState<JobTitleDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
+    // Kéo-thả đổi Cấp độ (RankOrder) — chỉ có ý nghĩa khi đang xem ĐỦ toàn bộ chức vụ active trên 1
+    // trang (không lọc từ khoá, không phân trang), vì lưu thứ tự gửi lên BE nguyên bộ Id đang hiển thị
+    // (xem JobTitleApi.reorderJobTitles/JobTitleService.ReorderAsync — BE validate khớp đúng tập hợp
+    // đang có). Kéo xong CHƯA lưu ngay — đánh dấu dirty, người dùng bấm "Lưu thứ tự" mới gọi API, cùng
+    // pattern với ApprovalStepManager.tsx (isDeptDirty/isGroupDirty).
+    const canReorder = !appliedKeyword && !hasPreviousPage && !hasNextPage && jobTitles.length > 1;
+    const [isOrderDirty, setIsOrderDirty] = useState(false);
+    const [isSavingOrder, setIsSavingOrder] = useState(false);
+
     const { isLoading, error, refetch: fetchJobTitles } = useFetchEffect(
         () => JobTitleApi.getJobTitlePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
         [pageIndex, appliedKeyword],
@@ -47,11 +57,34 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
             setTotalPages(result.totalPages);
             setHasNextPage(result.hasNextPage);
             setHasPreviousPage(result.hasPreviousPage);
+            setIsOrderDirty(false);
         },
         t("loadError"),
         (message) => toast.error(message),
         "job-titles"
     );
+
+    const handleReorderRows = (next: JobTitleDto[]) => {
+        setJobTitles(next);
+        setIsOrderDirty(true);
+    };
+    const drag = useDragReorder(jobTitles, handleReorderRows, (jt) => jt.id);
+
+    const handleSaveOrder = async () => {
+        setIsSavingOrder(true);
+        try {
+            const data = await JobTitleApi.reorderJobTitles(jobTitles.map((jt) => jt.id));
+            setJobTitles(data);
+            setIsOrderDirty(false);
+            toast.success(t("reorderSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("reorderError")));
+            await fetchJobTitles();
+        } finally {
+            setIsSavingOrder(false);
+        }
+    };
 
     useEffect(() => {
         onLoadingChange?.(isLoading);
@@ -142,8 +175,19 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                             {tCommon("search")}
                         </button>
                     </div>
-                    <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: jobTitles.length, total: totalCount })}
+                    <div className="flex items-center gap-3">
+                        <div className="text-sm text-[#5e3f3a]">
+                            {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: jobTitles.length, total: totalCount })}
+                        </div>
+                        {isOrderDirty && (
+                            <button
+                                onClick={handleSaveOrder}
+                                disabled={isSavingOrder}
+                                className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {isSavingOrder ? t("savingOrder") : t("saveOrderButton")}
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -151,10 +195,15 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
+                {!canReorder && jobTitles.length > 1 && (
+                    <div className="border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-2 text-xs text-[#8a8f94]">{t("dragDisabledHint")}</div>
+                )}
+
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                                <th className="w-10 px-2 py-2.5" />
                                 <th className="px-4 py-2.5">{t("colCode")}</th>
                                 <th className="px-4 py-2.5">{t("colName")}</th>
                                 <th className="px-4 py-2.5">{t("colRankOrder")}</th>
@@ -165,7 +214,7 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                         <tbody>
                             {!isLoading && jobTitles.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-12">
+                                    <td colSpan={6} className="px-4 py-12">
                                         <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                             <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                             {t("noData")}
@@ -173,11 +222,30 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                                     </td>
                                 </tr>
                             )}
-                            {jobTitles.map((jobTitle) => (
-                                <tr key={jobTitle.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                            {jobTitles.map((jobTitle, index) => (
+                                <tr
+                                    key={jobTitle.id}
+                                    ref={drag.registerNode(jobTitle.id)}
+                                    draggable={canReorder}
+                                    onDragStart={canReorder ? drag.handleDragStart(index) : undefined}
+                                    onDragOver={canReorder ? drag.handleDragOver(index) : undefined}
+                                    onDragEnd={canReorder ? drag.handleDragEnd : undefined}
+                                    className={`border-b border-[#f1f5f9] transition-colors ${
+                                        drag.dragIndex === index ? "z-10 bg-[#fff4f2] shadow-lg" : "hover:bg-[#f8fafc]"
+                                    }`}
+                                >
+                                    <td className="px-2 py-3 text-center">
+                                        <span
+                                            title={canReorder ? t("dragHandleLabel") : t("dragDisabledHint")}
+                                            aria-label={t("dragHandleLabel")}
+                                            className={`inline-flex ${canReorder ? "cursor-grab text-[#8a8f94] active:cursor-grabbing" : "cursor-not-allowed text-[#d7dbe0]"}`}
+                                        >
+                                            <GripVertical className="h-4 w-4" />
+                                        </span>
+                                    </td>
                                     <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{jobTitle.code}</td>
                                     <td className="px-4 py-3 text-sm text-[#5e3f3a]">{jobTitle.name}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{jobTitle.rankOrder}</td>
+                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{index + 1}</td>
                                     <td className="px-4 py-3 text-sm">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
                                             {jobTitleTerminalLevelLabels[jobTitle.terminalLevel] ?? jobTitle.terminalLevel}

@@ -182,7 +182,7 @@
       "fieldCodePlaceholder": "役職コードを入力してください...",
       "fieldName": "役職名",
       "fieldNamePlaceholder": "例：Manager",
-      "fieldRankOrder": "階級（数値が大きいほど上位）",
+      "rankOrderAutoAppendHint": "新しい役職は一覧の最後に追加されます — 一覧表でドラッグして階級（順序）を調整してください。",
       "fieldTerminalLevel": "最終承認レベル",
       "saving": "保存中...",
       "createSubmit": "作成",
@@ -195,7 +195,13 @@
       "updateError": "役職の更新に失敗しました",
       "deleteSuccess": "役職を削除しました",
       "deleteError": "役職の削除に失敗しました",
-      "loadError": "役職一覧を読み込めませんでした。"
+      "loadError": "役職一覧を読み込めませんでした。",
+      "dragHandleLabel": "ドラッグして階級を変更",
+      "dragDisabledHint": "全件表示中のみ並び替えできます — 検索キーワードを消し、ページングがない状態にしてください。",
+      "saveOrderButton": "並び順を保存",
+      "savingOrder": "並び順を保存中...",
+      "reorderSuccess": "階級の並び順を更新しました",
+      "reorderError": "階級の並び順の更新に失敗しました"
     },
     "JobTitlePermission": {
       "description": "役職を1つ選択し、その役職を持つ全員(ログインアカウントと連携済みの人)に自動的に付与する権限にチェックを入れます — 「業務プロセス参加」系の権限(承認/署名/マスタ参照)のみで、管理系権限は含みません。役職の変更・解除を行うと、この自動付与分の権限は自動的に取り消されます(「権限のカスタマイズ」画面で手動付与した権限には影響しません)。",

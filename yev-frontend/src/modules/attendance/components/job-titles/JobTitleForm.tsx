@@ -10,7 +10,6 @@ import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 export interface JobTitleFormValues {
     code: string;
     name: string;
-    rankOrder: number;
     terminalLevel: number;
 }
 
@@ -25,7 +24,7 @@ interface JobTitleFormProps {
 
 const terminalLevelOptions = [0, 1, 2, 3];
 
-const emptyValues: JobTitleFormValues = { code: "", name: "", rankOrder: 1, terminalLevel: 0 };
+const emptyValues: JobTitleFormValues = { code: "", name: "", terminalLevel: 0 };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -42,7 +41,6 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                 ? {
                       code: current.code,
                       name: current.name,
-                      rankOrder: current.rankOrder,
                       terminalLevel: current.terminalLevel,
                   }
                 : emptyValues
@@ -53,7 +51,7 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!values.code.trim() || !values.name.trim() || !values.rankOrder) return;
+        if (!values.code.trim() || !values.name.trim()) return;
         onSubmit(values);
     };
 
@@ -107,18 +105,11 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                         />
                     </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldRankOrder")}</span>
-                        <input
-                            type="number"
-                            min={1}
-                            value={values.rankOrder}
-                            onChange={(event) => setValues((current) => ({ ...current, rankOrder: Number(event.target.value) }))}
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                    {mode === "create" && (
+                        <p className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
+                            {t("rankOrderAutoAppendHint")}
+                        </p>
+                    )}
 
                     <label className="block">
                         <span className={fieldLabelClassName}>{t("fieldTerminalLevel")}</span>

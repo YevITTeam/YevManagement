@@ -182,7 +182,7 @@
       "fieldCodePlaceholder": "Nhập mã chức vụ...",
       "fieldName": "Tên chức vụ",
       "fieldNamePlaceholder": "VD: Manager",
-      "fieldRankOrder": "Cấp độ (số càng lớn càng cao)",
+      "rankOrderAutoAppendHint": "Chức vụ mới sẽ được xếp cuối danh sách — kéo-thả ở bảng danh sách để chỉnh lại vị trí (Cấp độ).",
       "fieldTerminalLevel": "Cấp duyệt cuối",
       "saving": "Đang lưu...",
       "createSubmit": "Tạo mới",
@@ -195,7 +195,13 @@
       "updateError": "Cập nhật chức vụ thất bại",
       "deleteSuccess": "Xoá chức vụ thành công",
       "deleteError": "Xoá chức vụ thất bại",
-      "loadError": "Không thể tải danh sách chức vụ."
+      "loadError": "Không thể tải danh sách chức vụ.",
+      "dragHandleLabel": "Kéo để đổi Cấp độ",
+      "dragDisabledHint": "Chỉ sắp xếp được khi xem toàn bộ danh sách — xoá từ khoá tìm kiếm và bỏ phân trang trước.",
+      "saveOrderButton": "Lưu thứ tự",
+      "savingOrder": "Đang lưu thứ tự...",
+      "reorderSuccess": "Đã cập nhật thứ tự Cấp độ",
+      "reorderError": "Cập nhật thứ tự Cấp độ thất bại"
     },
     "JobTitlePermission": {
       "description": "Chọn 1 Chức vụ, tick những quyền sẽ TỰ ĐỘNG cấp cho mọi người đang giữ Chức vụ đó (đã liên kết tài khoản đăng nhập) — chỉ gồm nhóm quyền \"tham gia quy trình\" (duyệt/ký/xem danh mục), không có quyền quản trị. Đổi/gỡ Chức vụ của 1 người sẽ tự thu hồi đúng phần quyền này, không đụng quyền Admin đã cấp tay riêng ở màn \"Tuỳ chỉnh quyền\".",

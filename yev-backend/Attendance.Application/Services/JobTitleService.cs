@@ -73,11 +73,17 @@ namespace Attendance.Application.Services
 
             await ThrowIfTerminalLevelTaken(request.TerminalLevel, null);
 
+            // Cấp độ (RankOrder) không còn nhập tay — chức vụ mới luôn xếp cuối danh sách hiện có, vị
+            // trí thật được chỉnh sau đó bằng kéo-thả (ReorderAsync) để tránh phải tự tay dồn số các
+            // chức vụ khác khi cần chèn vào giữa.
+            var activeJobTitles = await _unitOfWork.JobTitles.SelectAsync(x => !x.IsDeleted, x => x);
+            var nextRankOrder = activeJobTitles.Count == 0 ? 1 : activeJobTitles.Max(x => x.RankOrder) + 1;
+
             var newJobTitle = new JobTitle
             {
                 Code = request.Code,
                 Name = request.Name,
-                RankOrder = request.RankOrder,
+                RankOrder = nextRankOrder,
                 TerminalLevel = request.TerminalLevel,
                 IsDeleted = false
             };
@@ -97,13 +103,36 @@ namespace Attendance.Application.Services
 
             await ThrowIfTerminalLevelTaken(request.TerminalLevel, request.Id);
 
+            // RankOrder KHÔNG đụng tới ở đây nữa — chỉ đổi qua ReorderAsync (kéo-thả).
             jobTitle.Code = request.Code;
             jobTitle.Name = request.Name;
-            jobTitle.RankOrder = request.RankOrder;
             jobTitle.TerminalLevel = request.TerminalLevel;
 
             _unitOfWork.JobTitles.Update(jobTitle);
             await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Kéo-thả xong FE gửi lên TOÀN BỘ Id chức vụ active theo đúng thứ tự mới — validate khớp đúng
+        // tập hợp đang có (tránh lệch dữ liệu nếu 1 người khác vừa thêm/xoá chức vụ trong lúc kéo),
+        // rồi gán lại RankOrder = 1..N tuần tự theo thứ tự đó.
+        public async Task<List<JobTitleDto>> ReorderAsync(List<int> jobTitleIds)
+        {
+            var activeJobTitles = await _unitOfWork.JobTitles.SelectAsync(x => !x.IsDeleted, x => x);
+
+            if (jobTitleIds.Count != activeJobTitles.Count || !jobTitleIds.ToHashSet().SetEquals(activeJobTitles.Select(x => x.Id)))
+                throw new DomainException("Danh sách sắp xếp không khớp với danh sách chức vụ hiện tại — vui lòng tải lại trang.");
+
+            var byId = activeJobTitles.ToDictionary(x => x.Id);
+            for (var i = 0; i < jobTitleIds.Count; i++)
+            {
+                var jobTitle = byId[jobTitleIds[i]];
+                jobTitle.RankOrder = i + 1;
+                _unitOfWork.JobTitles.Update(jobTitle);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            return jobTitleIds.Select(id => ToDto(byId[id])).ToList();
         }
 
         public async Task DeleteAsync(int id)

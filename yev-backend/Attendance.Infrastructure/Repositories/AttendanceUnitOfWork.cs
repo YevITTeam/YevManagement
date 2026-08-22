@@ -34,9 +34,15 @@ namespace Attendance.Infrastructure.Repositories
             IJobTitlePermissionRepository jobTitlePermissions,
             IDepartmentApprovalStepCoordinatorRepository departmentApprovalStepCoordinators,
             IGroupApprovalStepCoordinatorRepository groupApprovalStepCoordinators,
-            IEmployeeAccumulationHistoryRepository employeeAccumulationHistories) : base(dbContext)
+            IEmployeeAccumulationHistoryRepository employeeAccumulationHistories,
+            IProductionLineRepository productionLines,
+            IProductionShiftTeamRepository productionShiftTeams,
+            IProductionTeamRepository productionTeams) : base(dbContext)
         {
             EmployeeAccumulationHistories = employeeAccumulationHistories;
+            ProductionLines = productionLines;
+            ProductionShiftTeams = productionShiftTeams;
+            ProductionTeams = productionTeams;
             AttendanceSettings = attendanceSettings;
             OtFormBatches = otFormBatches;
             OtFormBatchEmailTokens = otFormBatchEmailTokens;
@@ -90,5 +96,8 @@ namespace Attendance.Infrastructure.Repositories
         public IDepartmentApprovalStepCoordinatorRepository DepartmentApprovalStepCoordinators { get; }
         public IGroupApprovalStepCoordinatorRepository GroupApprovalStepCoordinators { get; }
         public IEmployeeAccumulationHistoryRepository EmployeeAccumulationHistories { get; }
+        public IProductionLineRepository ProductionLines { get; }
+        public IProductionShiftTeamRepository ProductionShiftTeams { get; }
+        public IProductionTeamRepository ProductionTeams { get; }
     }
 }

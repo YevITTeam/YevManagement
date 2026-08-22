@@ -31,5 +31,8 @@ namespace Attendance.Application.Interfaces.Service
         IOtFormApprovalStepCandidateRepository OtFormApprovalStepCandidates { get; }
         IJobTitlePermissionRepository JobTitlePermissions { get; }
         IEmployeeAccumulationHistoryRepository EmployeeAccumulationHistories { get; }
+        IProductionLineRepository ProductionLines { get; }
+        IProductionShiftTeamRepository ProductionShiftTeams { get; }
+        IProductionTeamRepository ProductionTeams { get; }
     }
 }

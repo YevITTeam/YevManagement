@@ -40,6 +40,9 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<DepartmentApprovalStepCoordinator> DepartmentApprovalStepCoordinators { get; set; }
     public virtual DbSet<GroupApprovalStepCoordinator> GroupApprovalStepCoordinators { get; set; }
     public virtual DbSet<EmployeeAccumulationHistory> EmployeeAccumulationHistories { get; set; }
+    public virtual DbSet<ProductionLine> ProductionLines { get; set; }
+    public virtual DbSet<ProductionShiftTeam> ProductionShiftTeams { get; set; }
+    public virtual DbSet<ProductionTeam> ProductionTeams { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -416,6 +419,29 @@ public partial class AttendanceDbContext : DbContext
             entity.HasOne(d => d.OtFormBatch).WithMany(p => p.OtFormBatchEmailTokens)
                 .HasForeignKey(d => d.OtFormBatchId)
                 .HasConstraintName("FK_OtFormBatchEmailTokens_OtFormBatches_OtFormBatchId");
+        });
+
+        modelBuilder.Entity<ProductionLine>(entity =>
+        {
+            entity.Property(e => e.LineCode).HasMaxLength(50);
+            entity.Property(e => e.CongDoan).HasMaxLength(50);
+
+            entity.HasOne(d => d.Team).WithMany(p => p.ProductionLines)
+                .HasForeignKey(d => d.TeamId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionLines_ProductionTeams_TeamId");
+        });
+
+        modelBuilder.Entity<ProductionTeam>(entity =>
+        {
+            entity.Property(e => e.Code).HasMaxLength(20);
+            entity.Property(e => e.NameVn).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<ProductionShiftTeam>(entity =>
+        {
+            entity.Property(e => e.Code).HasMaxLength(20);
+            entity.Property(e => e.NameVn).HasMaxLength(100);
         });
 
         OnModelCreatingPartial(modelBuilder);

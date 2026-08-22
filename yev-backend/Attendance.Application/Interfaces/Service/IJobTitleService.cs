@@ -11,5 +11,6 @@ namespace Attendance.Application.Interfaces.Service
         Task<JobTitleDto> CreateAsync(CreateJobTitleDto request);
         Task UpdateAsync(UpdateJobTitleDto request);
         Task DeleteAsync(int id);
+        Task<List<JobTitleDto>> ReorderAsync(List<int> jobTitleIds);
     }
 }

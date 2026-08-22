@@ -10,6 +10,7 @@ const ENDPOINTS = {
         createJobTitle: "/JobTitle",
         updateJobTitle: (id: number) => `/JobTitle/${id}`,
         deleteJobTitle: (id: number) => `/JobTitle/${id}`,
+        reorderJobTitles: "/JobTitle/reorder",
         resolveChain: "/JobTitle/resolve-chain",
     },
 } as const;
@@ -40,16 +41,23 @@ export const JobTitleApi = {
         const response = await api.get<ApiResponse<JobTitleDto>>(ENDPOINTS.JOB_TITLE.getJobTitleById(id));
         return response.data;
     },
-    createJobTitle: async (data: Omit<JobTitleDto, "id">) => {
+    // rankOrder không còn nhập tay — BE tự gán khi tạo (xếp cuối), chỉnh vị trí qua reorderJobTitles.
+    createJobTitle: async (data: Omit<JobTitleDto, "id" | "rankOrder">) => {
         const response = await api.post<ApiResponse<JobTitleDto>>(ENDPOINTS.JOB_TITLE.createJobTitle, data);
         return response.data;
     },
-    updateJobTitle: async (id: number, data: Partial<JobTitleDto>) => {
+    updateJobTitle: async (id: number, data: Omit<Partial<JobTitleDto>, "rankOrder">) => {
         const response = await api.put<ApiResponse<JobTitleDto>>(ENDPOINTS.JOB_TITLE.updateJobTitle(id), { id, ...data });
         return response.data;
     },
     deleteJobTitle: async (id: number) => {
         const response = await api.delete<ApiResponse<void>>(ENDPOINTS.JOB_TITLE.deleteJobTitle(id));
+        return response.data;
+    },
+    // jobTitleIds: TOÀN BỘ id chức vụ active theo đúng thứ tự mới sau khi kéo-thả (không phải danh
+    // sách con) — BE validate khớp đúng tập hợp đang có rồi gán lại rankOrder = 1..N tuần tự.
+    reorderJobTitles: async (jobTitleIds: number[]) => {
+        const response = await api.put<ApiResponse<JobTitleDto[]>>(ENDPOINTS.JOB_TITLE.reorderJobTitles, { jobTitleIds });
         return response.data;
     },
     resolveChain: async (employeeId: number, otCaseId: number) => {

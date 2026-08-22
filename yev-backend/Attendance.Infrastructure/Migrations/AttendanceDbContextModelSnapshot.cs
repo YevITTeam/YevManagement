@@ -979,6 +979,86 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("ProcessParts");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CongDoan")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LineCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamId");
+
+                    b.ToTable("ProductionLines");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionShiftTeam", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("NameVn")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ProductionShiftTeams");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionTeam", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("NameVn")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ProductionTeams");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.Reason", b =>
                 {
                     b.Property<int>("Id")
@@ -1387,6 +1467,18 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtForm");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionLine", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.ProductionTeam", "Team")
+                        .WithMany("ProductionLines")
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionLines_ProductionTeams_TeamId");
+
+                    b.Navigation("Team");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.Department", b =>
                 {
                     b.Navigation("DepartmentApprovalStepCoordinators");
@@ -1459,6 +1551,11 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtFormBatchEmailTokens");
 
                     b.Navigation("OtForms");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionTeam", b =>
+                {
+                    b.Navigation("ProductionLines");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Reason", b =>
