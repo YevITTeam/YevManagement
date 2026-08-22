@@ -803,7 +803,9 @@
     "overtimeTitle": "Quản lý tăng ca",
     "overtimeDesc": "Đăng ký hoặc phê duyệt tăng ca",
     "reportsTitle": "Báo cáo thống kê",
-    "reportsDesc": "Xem số liệu tổng quan"
+    "reportsDesc": "Xem số liệu tổng quan",
+    "chatTitle": "Chat nội bộ",
+    "chatDesc": "Giao tiếp với đồng nghiệp"
   },
   "Asset": {
     "Branch": {

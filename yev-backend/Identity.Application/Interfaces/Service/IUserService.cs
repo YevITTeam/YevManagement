@@ -11,6 +11,7 @@ namespace Identity.Application.Interfaces.Service
         Task<List<UserDto>> GetAllUsersAsync(int? roleId = null);
         Task UpdateUserRolesAsync(UpdateUserRolesDto request);
         Task<UserDto> CreateUserAsync(CreateUserDto request);
+        Task<UserDto> UpdateUserFullNameAsync(UpdateUserFullNameDto request);
         Task DeleteUserAsync(int userId);
     }
 }

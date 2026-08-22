@@ -146,6 +146,29 @@ namespace Identity.Application.Services
             };
         }
 
+        // Admin edits ONLY the display name here — UserName (Windows login identity) and DeviceName
+        // must stay untouched, since UserName is the sole match key used at login (MyClaimsTransformation §5).
+        public async Task<UserDto> UpdateUserFullNameAsync(UpdateUserFullNameDto request)
+        {
+            var user = await _unitOfWork.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, u => u.Roles);
+            user.OrThrowNotFound("Người dùng", request.UserId);
+
+            user!.FullName = request.FullName.Trim();
+
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            return new UserDto
+            {
+                Id = user.Id,
+                UserName = user.UserName,
+                FullName = user.FullName,
+                DeviceName = user.DeviceName,
+                Email = user.Email,
+                Roles = user.Roles.Select(r => r.RoleName).ToList()
+            };
+        }
+
         // Hard delete: permanently removes the User from the DB (this entity has no IsDeleted).
         // UserRoles/LoginUserIPs/UserPermissions cascade automatically at the DB level. If this
         // UserName logs in via Windows again, MyClaimsTransformation will create a new User with

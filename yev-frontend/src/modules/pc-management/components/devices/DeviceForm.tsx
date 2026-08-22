@@ -502,7 +502,24 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                                 </li>
                                             ))}
                                         {availableIps.filter((ip) => !values.ipAddressIds.includes(ip.id)).length === 0 && (
-                                            <li className="px-3 py-2 text-[#9aa0a6]">Không tìm thấy IP trống</li>
+                                            <li className="px-3 py-2 text-[#5e3f3a]">
+                                                {(() => {
+                                                    const trimmedSearch = ipSearch.trim();
+                                                    const isFullIpFormat = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(trimmedSearch);
+                                                    const alreadyAddedToThisDevice = selectedIps.some((ip) => ip.ipAddress === trimmedSearch);
+                                                    if (alreadyAddedToThisDevice) {
+                                                        return `IP ${trimmedSearch} đã được thêm vào thiết bị này rồi.`;
+                                                    }
+                                                    // `/available` chỉ trả IP status "Chưa sử dụng" (docs/asset-api-fe.md §4.2) — gõ đủ 4
+                                                    // octet mà không ra kết quả nghĩa là IP đó đang gán cho thiết bị khác/dùng ngoài hoặc
+                                                    // không tồn tại trong hệ thống, KHÔNG PHẢI lỗi tìm kiếm — làm rõ để tránh hiểu lầm
+                                                    // "không gán được IP".
+                                                    if (isFullIpFormat) {
+                                                        return `IP ${trimmedSearch} không có trong danh sách IP trống — có thể IP này đang được sử dụng cho thiết bị khác hoặc không tồn tại trong hệ thống.`;
+                                                    }
+                                                    return "Không tìm thấy IP trống";
+                                                })()}
+                                            </li>
                                         )}
                                     </ul>
                                 </div>

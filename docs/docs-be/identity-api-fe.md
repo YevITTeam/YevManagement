@@ -8,6 +8,7 @@
 - **Cập nhật 2026-07-16**: `UserDto` thêm `email` (nullable, tự resolve từ AD, không tự nhập/sửa được) — trả về ở `windows-login` (mục 2) và `get-all-users-with-roles` (mục 4.1). Phục vụ tính năng gửi email xác nhận cập nhật chữ ký/duyệt đơn ở module Attendance.
 
 - **Cập nhật 2026-08-01**: thêm `GET /api/Auth/me` (mục 2b) — lấy lại hồ sơ + **gia hạn JWT bằng chính token đang có**, không cần handshake Negotiate. FE chỉ gọi `windows-login` khi **chưa có** token.
+- **Cập nhật 2026-08-21**: thêm `PUT /api/Auth/update-user-fullname` (mục 4.2b) — Admin sửa **CHỈ** tên hiển thị của 1 user đã tồn tại (`userName`/`deviceName` vẫn không sửa được qua API nào).
 
 ## 1. Auth
 | Endpoint | Cơ chế |
@@ -108,6 +109,7 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
 
 - **4.1 `GET /api/Auth/get-all-users-with-roles?roleId=`** (`Identity.User.View`) → `[{id, userName, fullName, deviceName, email, roles:[]}]` (`email` mới 2026-07-16, xem mục 2 — hữu ích để Admin kiểm tra AD có resolve đúng mail cho user hay chưa trước khi họ báo "không nhận được email xác nhận"). `roleId` optional (mới 2026-07-16) — lọc user thuộc Role đó; không truyền → trả toàn bộ. Không phân trang. Lưu ý danh sách này **không trả `permissions`** (khác `windows-login`) — luôn là mảng rỗng nếu FE cố đọc.
 - **4.2 `POST /api/Auth/update-user-roles`** (`Identity.User.UpdateRoles`) — body `{userId, roleIds:[1,2]}`. `roleIds` = **toàn bộ** danh sách cuối (gửi thiếu = gỡ role đó).
+- **4.2b `PUT /api/Auth/update-user-fullname`** (`Identity.User.UpdateFullName`, mới 2026-08-21) — body `{userId, fullName}`. Sửa **CHỈ** tên hiển thị (`fullName`) của 1 user đã tồn tại — **không** có cách sửa `userName` (định danh đăng nhập Windows) hay `deviceName` qua API nào cả, có chủ đích (khớp login chỉ theo `userName` suông, xem mục 2). 400 nếu `fullName` rỗng, 404 nếu `userId` sai. Response `data` = `UserDto` đã cập nhật.
 - **4.3 `GET /api/Auth/get-all-roles`** (`Identity.Role.View`) → `[{id, roleName, description}]`.
 - **4.4 `POST /api/Auth/create-role`** (`Identity.Role.Create`) — `{roleName, description}`, 400 nếu trống/trùng.
 - **4.5 `PUT /api/Auth/update-role/{roleId}`** (`Identity.Role.Update`) — `{roleName, description}`, 400 nếu roleId sai.
@@ -131,6 +133,7 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
 | POST | `/api/Auth/create-user` | `Identity.User.Create` |
 | GET | `/api/Auth/get-all-users-with-roles` | `Identity.User.View` |
 | POST | `/api/Auth/update-user-roles` | `Identity.User.UpdateRoles` |
+| PUT | `/api/Auth/update-user-fullname` | `Identity.User.UpdateFullName` |
 | GET | `/api/Auth/get-all-roles` | `Identity.Role.View` |
 | POST | `/api/Auth/create-role` | `Identity.Role.Create` |
 | PUT | `/api/Auth/update-role/{roleId}` | `Identity.Role.Update` |

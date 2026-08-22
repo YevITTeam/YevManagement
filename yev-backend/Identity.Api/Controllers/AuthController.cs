@@ -165,6 +165,27 @@ namespace Identity.Api.Controllers
             }
         }
 
+        // Admin edits ONLY the display name (FullName). UserName (Windows login identity) and DeviceName
+        // are not editable here — see UserService.UpdateUserFullNameAsync.
+        [RequirePermission("Identity.User.UpdateFullName")]
+        [HttpPut("update-user-fullname")]
+        public async Task<ActionResult<ApiResponse<UserDto>>> UpdateUserFullName([FromBody] UpdateUserFullNameDto request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.FullName))
+            {
+                return Fail<UserDto>("Họ tên không được để trống.");
+            }
+            try
+            {
+                var updatedUser = await _service.UpdateUserFullNameAsync(request);
+                return Success(updatedUser, "Cập nhật họ tên thành công!");
+            }
+            catch (Exception ex)
+            {
+                return Fail<UserDto>($"Cập nhật họ tên thất bại: {ex.Message}");
+            }
+        }
+
         [RequirePermission("Identity.User.Delete")]
         [HttpDelete("delete-user/{userId}")]
         public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(int userId)

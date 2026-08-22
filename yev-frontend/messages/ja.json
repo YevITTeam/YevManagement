@@ -802,7 +802,9 @@
     "overtimeTitle": "残業管理",
     "overtimeDesc": "残業の申請・承認",
     "reportsTitle": "統計レポート",
-    "reportsDesc": "概要データを表示"
+    "reportsDesc": "概要データを表示",
+    "chatTitle": "チャット",
+    "chatDesc": "同僚との連絡"
   },
   "Asset": {
     "Branch": {

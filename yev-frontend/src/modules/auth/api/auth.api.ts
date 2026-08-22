@@ -1,5 +1,5 @@
 import { api, getAuthToken, passwordLogin as requestPasswordLogin, windowsLogin as requestWindowsLogin } from "@/lib/client";
-import type { UserDto, RoleDto, WindowsLoginResponseDto, LoginRequestDto, CreateUserDto } from "@/modules/auth/types/auth.dto";
+import type { UserDto, RoleDto, WindowsLoginResponseDto, LoginRequestDto, CreateUserDto, UpdateUserFullNameDto } from "@/modules/auth/types/auth.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
@@ -10,6 +10,7 @@ const ENDPOINTS = {
     createUser: "/Auth/create-user",
     getAllUsersWithRoles: "/Auth/get-all-users-with-roles",
     updateUserRoles: "/Auth/update-user-roles",
+    updateUserFullName: "/Auth/update-user-fullname",
     getAllRoles: "/Auth/get-all-roles",
     createRole: "/Auth/create-role",
     updateRole: (roleId: number) => `/Auth/update-role/${roleId}`,
@@ -80,6 +81,12 @@ export const AuthApi = {
   },
   updateUserRoles: async ({ userId, roleIds }: { userId: number; roleIds: number[] }) => {
     const response = await api.post<ApiResponse<null>>(ENDPOINTS.AUTH.updateUserRoles, { userId, roleIds });
+    return response.data;
+  },
+
+  // Sửa CHỈ tên hiển thị (FullName) — không sửa được userName/deviceName (docs/identity-api-fe.md §4).
+  updateUserFullName: async ({ userId, fullName }: UpdateUserFullNameDto) => {
+    const response = await api.put<ApiResponse<UserDto>>(ENDPOINTS.AUTH.updateUserFullName, { userId, fullName });
     return response.data;
   },
 
