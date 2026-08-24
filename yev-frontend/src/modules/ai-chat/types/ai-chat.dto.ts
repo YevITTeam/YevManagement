@@ -15,6 +15,8 @@ export interface AiChatRequestDto {
     systemPrompt?: string | null;
     /** Bỏ trống/null = false (mặc định nhanh hơn). true = bật suy luận sâu (chậm hơn nhiều). */
     think?: boolean;
+    /** UI locale hiện tại ("vi" | "ja") — BE dùng để trả lời đúng ngôn ngữ đang xem (bỏ qua nếu có systemPrompt tuỳ chỉnh). */
+    locale?: string;
 }
 
 // 5 dạng dòng NDJSON BE trả về. Field không áp dụng cho `type` đó bị LƯỢC khỏi JSON (không phải

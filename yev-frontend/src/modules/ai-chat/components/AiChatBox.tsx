@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLocale } from "next-intl";
 import { toast } from "react-toastify";
 import {
     Bot,
@@ -73,6 +74,7 @@ const formatTime = (timestamp?: number) =>
 export default function AiChatBox() {
     const { user } = useAuth();
     const canViewDevice = hasPermission(user, "Asset.Device.View");
+    const locale = useLocale();
 
     const [messages, setMessages] = useState<ChatBubble[]>([]);
     const [input, setInput] = useState("");
@@ -123,7 +125,7 @@ export default function AiChatBox() {
 
         try {
             const response = await AiChatApi.streamChat(
-                { message: trimmed, history, think: thinkEnabled },
+                { message: trimmed, history, think: thinkEnabled, locale },
                 controller.signal
             );
 

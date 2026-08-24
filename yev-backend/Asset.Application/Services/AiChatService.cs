@@ -20,13 +20,27 @@ namespace Asset.Application.Services
         // implementation. Configurable via AiChatSettings:MaxToolRounds for tuning without a rebuild.
         private const int DefaultMaxToolRounds = 3;
 
-        public const string DefaultSystemPrompt =
-            "Bạn là trợ lý AI nội bộ của công ty. QUY TẮC NGÔN NGỮ (quan trọng nhất, luôn tuân theo): LUÔN " +
+        private const string PersonaIntro = "Bạn là trợ lý AI nội bộ của công ty. ";
+
+        // Language rule branches on the FE UI locale (request.Locale, §StreamChatAsync) — everything
+        // else in the prompt stays Vietnamese regardless, since it's an instruction TO the model, not
+        // part of what the model outputs to the user.
+        private const string LanguageRuleVi =
+            "QUY TẮC NGÔN NGỮ (quan trọng nhất, luôn tuân theo): LUÔN " +
             "LUÔN trả lời bằng tiếng Việt, kể cả khi người dùng hỏi bằng ngôn ngữ khác hoặc dữ liệu tool trả " +
             "về có chứa ngôn ngữ khác (Anh, Trung, Nhật...) — tuyệt đối không chêm ngôn ngữ khác vào câu trả " +
             "lời. Ngoại lệ DUY NHẤT: khi người dùng yêu cầu RÕ RÀNG dịch một đoạn văn bản sang ngôn ngữ khác, " +
             "khi đó hãy dịch chính xác đúng sang ngôn ngữ được yêu cầu, văn phong lịch sự, chỉ trả về nội " +
-            "dung dịch.\n\n" +
+            "dung dịch.\n\n";
+
+        private const string LanguageRuleJa =
+            "言語ルール(最も重要、常に従うこと): ユーザーが別の言語で質問した場合や、tool の結果に別の " +
+            "言語(英語、中国語、ベトナム語など)が含まれている場合でも、常に日本語で回答してください — " +
+            "回答に他の言語を混在させることは絶対に禁止です。唯一の例外: ユーザーが明示的に、ある文章を " +
+            "別の言語に翻訳するよう求めた場合のみ、要求された言語に正確かつ丁寧な文体で翻訳し、翻訳内容の " +
+            "みを返してください。\n\n";
+
+        private const string PromptBody =
             "PHẠM VI HỖ TRỢ (chỉ đúng 2 nhóm việc, ngoài ra hãy nói thẳng là chưa hỗ trợ): (1) TRA CỨU " +
             "THIẾT BỊ — tìm máy theo bất kỳ tiêu chí nào (mã máy, người quản lý, IP, email, nhà cung cấp, " +
             "số serial, ghi chú, ngày mua, CHI NHÁNH, nhóm, bộ phận, trạng thái, máy thuê ngoài, có dùng " +
@@ -89,6 +103,14 @@ namespace Asset.Application.Services
             "sắp có kết quả, và không được tự bịa số liệu để hoàn thành những gì đã nói trước đó — nếu không " +
             "chắc, hãy gọi lại tool cần thiết ngay trong lượt hiện tại thay vì suy đoán.";
 
+        // Kept for backward compatibility (Vietnamese default, matches pre-2026-08-22 behavior) — use
+        // BuildDefaultSystemPrompt(locale) for the locale-aware version.
+        public const string DefaultSystemPrompt = PersonaIntro + LanguageRuleVi + PromptBody;
+
+        // locale = FE UI locale (next-intl, "vi" | "ja"). Anything other than "ja" (null, "vi", unknown) -> Vietnamese.
+        public static string BuildDefaultSystemPrompt(string? locale) =>
+            PersonaIntro + (string.Equals(locale, "ja", StringComparison.OrdinalIgnoreCase) ? LanguageRuleJa : LanguageRuleVi) + PromptBody;
+
         // Matches an assistant reply that promises to look something up ("tôi sẽ tra cứu ngay bây giờ",
         // "để tôi kiểm tra", "xin chờ trong giây lát"...) without actually calling a tool — see the
         // unfulfilled-promise guard below and docs/ai-chat-be-huong-dan.md §14.
@@ -134,7 +156,9 @@ namespace Asset.Application.Services
                 new()
                 {
                     Role = "system",
-                    Content = string.IsNullOrWhiteSpace(request.SystemPrompt) ? DefaultSystemPrompt : request.SystemPrompt
+                    Content = string.IsNullOrWhiteSpace(request.SystemPrompt)
+                        ? BuildDefaultSystemPrompt(request.Locale)
+                        : request.SystemPrompt
                 }
             };
             foreach (var historyMessage in request.History)
@@ -161,6 +185,25 @@ namespace Asset.Application.Services
                               "CHƯA từng xảy ra. Nếu câu hỏi hiện tại của người dùng liên quan tới việc tra " +
                               "cứu này, PHẢI gọi tool phù hợp NGAY trong lượt trả lời này, TUYỆT ĐỐI không " +
                               "giả định là đã có kết quả hay bịa số liệu."
+                });
+            }
+
+            // Reinforce the language rule right before the user's turn when locale is "ja" — the small
+            // local model (gemma4:e2b) otherwise defaults back to Vietnamese despite the language rule
+            // in the system prompt (verified 2026-08-22: request.Locale correctly reaches here and the
+            // Japanese rule IS in the built prompt, but with ~90 lines of Vietnamese PromptBody right
+            // after it and a Vietnamese persona line right before it, the model just pattern-matches to
+            // Vietnamese). A short reminder placed immediately before the user message — closer to
+            // where the model actually generates — is far more reliable for this model than a rule
+            // buried at the top of a long system prompt. Skipped when the caller supplies a custom
+            // SystemPrompt (locale is ignored entirely in that case, same as BuildDefaultSystemPrompt).
+            if (string.IsNullOrWhiteSpace(request.SystemPrompt) &&
+                string.Equals(request.Locale, "ja", StringComparison.OrdinalIgnoreCase))
+            {
+                messages.Add(new OllamaMessageWire
+                {
+                    Role = "system",
+                    Content = "重要: 次の返信は必ず日本語で書いてください。ベトナム語や英語は一切使用しないでください。"
                 });
             }
 
