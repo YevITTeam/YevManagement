@@ -82,6 +82,9 @@ builder.Services.AddCors(options =>
 // Configure dependency injection for Identity and Asset modules
 builder.Services.AddDIConfig(builder.Configuration);
 
+// Bật lại (2026-08-22) nhưng đổi việc: không còn tự chuyển trạng thái Device
+// PendingUse/InUse -> PendingLiquidation -> Liquidated nữa (chuyển trạng thái giờ chỉ còn thao
+// tác thủ công hoặc import thanh lý hàng loạt) — job chỉ còn tự soft-delete Device đang Liquidated.
 builder.Services.AddHostedService<DeviceLiquidationBackgroundService>();
 // Redesign xong theo Cây chức vụ (2026-08-07, Giai đoạn 3.2) — xem docs/attendance-module.md §Đơn tổng.
 builder.Services.AddHostedService<OtFormBatchBackgroundService>();

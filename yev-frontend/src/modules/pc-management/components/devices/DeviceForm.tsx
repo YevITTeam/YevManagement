@@ -174,6 +174,18 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
 
     if (!isOpen) return null;
 
+    const isLiquidationStatus = values.status === 2 || values.status === 3;
+
+    const handleStatusChange = (nextStatus: number) => {
+        handleChange("status", nextStatus);
+        if (nextStatus === 2 || nextStatus === 3) {
+            // BE tự gỡ hết IP khi máy chuyển Chờ thanh lý/Đã thanh lý (docs/asset-module.md §1.15) —
+            // đồng bộ luôn ở FE để không hiển thị IP đã chọn nhưng thực ra sẽ không được lưu.
+            setSelectedIps([]);
+            handleChange("ipAddressIds", []);
+        }
+    };
+
     const handleAddIp = (ip: DeviceIpAddressDto) => {
         if (values.ipAddressIds.includes(ip.id)) {
             setIpDropdownOpen(false);
@@ -404,7 +416,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                             <span className={fieldLabelClassName}>Trạng thái</span>
                             <select
                                 value={values.status}
-                                onChange={(event) => handleChange("status", Number(event.target.value))}
+                                onChange={(event) => handleStatusChange(Number(event.target.value))}
                                 disabled={loading}
                                 className={fieldClassName}
                             >
@@ -441,7 +453,11 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
 
                     <div className="block" ref={ipPickerRef}>
                         <span className={fieldLabelClassName}>Địa chỉ IP</span>
-                        {selectedIps.length > 0 && (
+                        {isLiquidationStatus ? (
+                            <p className="text-xs text-[#8a8f94]">
+                                Thiết bị Chờ thanh lý/Đã thanh lý không giữ địa chỉ IP — hệ thống tự gỡ để cấp cho thiết bị khác.
+                            </p>
+                        ) : selectedIps.length > 0 && (
                             <div className="mb-2 flex flex-wrap gap-2">
                                 {selectedIps.map((ip) => (
                                     <span
@@ -463,17 +479,19 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                             </div>
                         )}
                         <div className="relative">
-                            <button
-                                type="button"
-                                onClick={() => !loading && setIpDropdownOpen((open) => !open)}
-                                disabled={loading}
-                                className={`${fieldClassName} flex items-center justify-between text-left`}
-                            >
-                                <span className="text-[#9aa0a6]">+ Thêm địa chỉ IP...</span>
-                                <ChevronDown className="h-4 w-4 shrink-0 text-[#5e3f3a]" />
-                            </button>
+                            {!isLiquidationStatus && (
+                                <button
+                                    type="button"
+                                    onClick={() => !loading && setIpDropdownOpen((open) => !open)}
+                                    disabled={loading}
+                                    className={`${fieldClassName} flex items-center justify-between text-left`}
+                                >
+                                    <span className="text-[#9aa0a6]">+ Thêm địa chỉ IP...</span>
+                                    <ChevronDown className="h-4 w-4 shrink-0 text-[#5e3f3a]" />
+                                </button>
+                            )}
 
-                            {ipDropdownOpen && (
+                            {ipDropdownOpen && !isLiquidationStatus && (
                                 <div className="absolute left-0 right-0 z-70 mt-1 rounded-lg border border-[#e0e3e5] bg-white shadow-xl">
                                     <div className="border-b border-[#e0e3e5] p-2">
                                         <div className="flex items-center gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-2.5">

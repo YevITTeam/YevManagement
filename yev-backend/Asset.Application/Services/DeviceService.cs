@@ -484,11 +484,20 @@ namespace Asset.Application.Services
             await _unitOfWork.Devices.AddAsync(newDevice);
             await _unitOfWork.SaveChangesAsync();
 
-            foreach (var ip in ipAddresses)
+            // Máy tạo thẳng ở trạng thái Chờ thanh lý/Đã thanh lý coi như không dùng -> không gán IP
+            // dù request có gửi kèm, để IP đó vẫn Available cho máy khác (2026-08-22).
+            if (IsLiquidationStatus(newDevice.Status))
             {
-                ip.DeviceId = newDevice.Id;
-                ip.Status = (int)IpAddressStatus.Assigned;
-                _unitOfWork.IpAddresses.Update(ip);
+                ipAddresses = new List<IpAddress>();
+            }
+            else
+            {
+                foreach (var ip in ipAddresses)
+                {
+                    ip.DeviceId = newDevice.Id;
+                    ip.Status = (int)IpAddressStatus.Assigned;
+                    _unitOfWork.IpAddresses.Update(ip);
+                }
             }
 
             var emails = new List<DeviceEmail>();
@@ -542,7 +551,10 @@ namespace Asset.Application.Services
 
             await ValidateSuggestedNewDeviceIdAsync(request.SuggestedNewDeviceId, currentDeviceId: device!.Id);
 
-            await SyncIpAddressesAsync(device.Id, request.IpAddressIds);
+            if (IsLiquidationStatus(request.Status))
+                await ReleaseAllIpsAsync(device.Id);
+            else
+                await SyncIpAddressesAsync(device.Id, request.IpAddressIds);
             await SyncEmailsAsync(device.Id, request.Emails);
 
             device.DeviceCode = request.DeviceCode;
@@ -655,19 +667,13 @@ namespace Asset.Application.Services
         {
             var device = (await _unitOfWork.Devices.GetByIdAsync(id)).OrThrowNotFound("Thiết bị", id);
 
-            if (device.Status != (int)DeviceStatus.PendingLiquidation)
-                throw new DomainException("Chỉ có thể xóa thiết bị đang chờ thanh lý.");
+            if (device.Status != (int)DeviceStatus.Liquidated)
+                throw new DomainException("Chỉ có thể xóa thiết bị đã thanh lý.");
 
             device.IsDeleted = true;
             _unitOfWork.Devices.Update(device);
 
-            var assignedIps = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
-            foreach (var ip in assignedIps)
-            {
-                ip.DeviceId = null;
-                ip.Status = (int)IpAddressStatus.Available;
-                _unitOfWork.IpAddresses.Update(ip);
-            }
+            await ReleaseAllIpsAsync(id);
 
             var emails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
             foreach (var email in emails)
@@ -683,9 +689,10 @@ namespace Asset.Application.Services
         // mechanism as DeleteAsync above, only difference is accepting multiple Ids at once; avoids
         // hitting TransferHistory's foreign key constraint since soft delete only sets IsDeleted=true,
         // without touching the primary key). Only allows deleting devices currently in the
-        // PendingLiquidation state — devices not yet in or already past this state would lose real
-        // in-use data if deleted by mistake. An Id not found or not in the pending-liquidation state is
-        // skipped (SkippedDevices), without blocking the whole batch.
+        // Liquidated state (2026-08-22: was PendingLiquidation — a device still pending liquidation
+        // may still be in real use or reverted, only a fully liquidated device is safe to delete). An
+        // Id not found or not in the liquidated state is skipped (SkippedDevices), without blocking
+        // the whole batch.
         public async Task<BulkDeleteDeviceResultDto> BulkDeleteAsync(List<int> ids)
         {
             var requestedIds = ids.Distinct().ToList();
@@ -702,18 +709,18 @@ namespace Asset.Application.Services
                 result.SkippedDevices.Add(new BulkDeleteSkippedDeviceDto { Id = id, DeviceCode = "?", Reason = "Không tìm thấy thiết bị." });
             }
 
-            var notPendingLiquidation = devices.Where(x => x.Status != (int)DeviceStatus.PendingLiquidation).ToList();
-            foreach (var device in notPendingLiquidation)
+            var notLiquidated = devices.Where(x => x.Status != (int)DeviceStatus.Liquidated).ToList();
+            foreach (var device in notLiquidated)
             {
                 result.SkippedDevices.Add(new BulkDeleteSkippedDeviceDto
                 {
                     Id = device.Id,
                     DeviceCode = device.DeviceCode,
-                    Reason = "Chỉ có thể xóa thiết bị đang chờ thanh lý."
+                    Reason = "Chỉ có thể xóa thiết bị đã thanh lý."
                 });
             }
 
-            var deletableDevices = devices.Where(x => x.Status == (int)DeviceStatus.PendingLiquidation).ToList();
+            var deletableDevices = devices.Where(x => x.Status == (int)DeviceStatus.Liquidated).ToList();
             if (deletableDevices.Count == 0)
                 return result;
 
@@ -808,6 +815,24 @@ namespace Asset.Application.Services
                 }
             }
         }
+
+        // Releases every IpAddress currently assigned to a Device back to Available (DeviceId=null).
+        // Used whenever a Device moves into PendingLiquidation/Liquidated: these statuses mean the
+        // device is no longer in active use, so its Ips must be freed for other devices regardless of
+        // what the caller submitted (2026-08-22).
+        private async Task ReleaseAllIpsAsync(int deviceId)
+        {
+            var assignedIps = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted);
+            foreach (var ip in assignedIps)
+            {
+                ip.DeviceId = null;
+                ip.Status = (int)IpAddressStatus.Available;
+                _unitOfWork.IpAddresses.Update(ip);
+            }
+        }
+
+        private static bool IsLiquidationStatus(int status) =>
+            status == (int)DeviceStatus.PendingLiquidation || status == (int)DeviceStatus.Liquidated;
 
         // Reconciles a Device's emails with the requested list, matched by trimmed/case-insensitive
         // Email text (input items have no Id): entries missing from the request are soft-deleted,

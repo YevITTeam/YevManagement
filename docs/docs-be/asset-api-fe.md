@@ -171,9 +171,10 @@ Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ 
   "suggestedNewDeviceId":null }  // Id máy MỚI thay chính device này (import tự set, xem 5.10)
 ```
 > **KHÔNG gửi `expirationDate`** (server tự tính). `ipAddressIds` chứa Id không `Available`/trùng → 400. `serialNumber` trùng (kể cả soft-deleted) → 400. `emails` không unique. `suggestedNewDeviceId` phải tồn tại `!IsDeleted` (404), không tự trỏ mình (400, chỉ PUT). `groupId`/`departmentId` tồn tại `!IsDeleted` (404); gửi `groupId` bắt buộc `departmentId` cha đúng (400).
+> **`status` là `PendingLiquidation(2)`/`Liquidated(3)`** (2026-08-22): `ipAddressIds` gửi lên bị **bỏ qua**, server không gán IP nào cho máy — máy Chờ thanh lý/Đã thanh lý không giữ IP.
 
 ### 5.6 `PUT /{id}` — body giống Create + `id` khớp URL (sai → 400). Diff:
-- `ipAddressIds`: bỏ khỏi mảng → gỡ về `Available`; thêm mới → phải `Available` → `Assigned`; giữ → không đụng. `[]` → gỡ hết.
+- `ipAddressIds`: bỏ khỏi mảng → gỡ về `Available`; thêm mới → phải `Available` → `Assigned`; giữ → không đụng. `[]` → gỡ hết. **Nếu `status` là `PendingLiquidation(2)`/`Liquidated(3)`** (2026-08-22): bỏ qua `ipAddressIds` gửi lên, server tự **gỡ hết** IP đang gắn thay vì sync theo danh sách.
 - `emails`: khớp `email` (trim/case-insensitive) → giữ `id`+update `note`; mới → thêm; mất → soft-delete.
 
 ### 5.7 `DELETE /{id}` — soft-delete, gỡ IP về `Available`. **Không** tự xóa Config/Software.
@@ -432,7 +433,7 @@ Content-Type: application/json
 | `/api/AuditTrail` | `grid-list` (filter+phân trang), `record?tableName=&recordId=`. Chỉ đọc, ghi tự động ở BE |
 | `/api/AiChat` | `stream`(POST, NDJSON, 7c) — trợ lý AI tra cứu, thay thế hoàn toàn cách gọi thẳng Ollama cũ ở FE |
 
-`DELETE /api/Device/{id}` và `bulk-delete` (`POST /api/Device/bulk-delete`, `{ ids:[] }`, permission `Asset.Device.Delete`): xóa mềm, **chỉ** thiết bị `PendingLiquidation(2)` "Chờ thanh lý"; `DELETE {id}` trả lỗi 400 nếu sai trạng thái, `bulk-delete` bỏ qua và trả kết quả `{ deletedCount, skippedDevices:[{id,deviceCode,reason}] }`.
+`DELETE /api/Device/{id}` và `bulk-delete` (`POST /api/Device/bulk-delete`, `{ ids:[] }`, permission `Asset.Device.Delete`): xóa mềm, **chỉ** thiết bị `Liquidated(3)` "Đã thanh lý" (2026-08-22, đổi từ `PendingLiquidation(2)`); `DELETE {id}` trả lỗi 400 nếu sai trạng thái, `bulk-delete` bỏ qua và trả kết quả `{ deletedCount, skippedDevices:[{id,deviceCode,reason}] }`.
 
 ## 9. Checklist FE màn "Chi tiết thiết bị"
 1. `GET /api/Device/{id}/detail` — 1 lần lấy đủ Device + Configuration(null?) + Software.

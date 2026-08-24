@@ -30,6 +30,9 @@ namespace Asset.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("LastAutoDeleteRunAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("LiquidationAfterMonths")
                         .HasColumnType("int");
 

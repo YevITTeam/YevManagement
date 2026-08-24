@@ -165,18 +165,22 @@ Chỉ CRUD cơ bản + 6 field chung (`Maker/Model/PowerAdapter/WirelessCard/Nic
 - **`GroupCode` unique trong 1 Bộ phận** (index `IX_Nhoms_BoPhanId_MaNhom`): 2 Bộ phận có thể cùng mã `"OF"`. Check trùng theo `(DepartmentId, GroupCode)`, lỗi kèm tên Bộ phận.
 - **Cascading dropdown**: `GET /api/DeviceGroup/all?departmentId=` (+ `grid-list?departmentId=`), optional. FE: chọn Bộ phận trước, đổi Bộ phận → xóa lựa chọn Nhóm.
 
-### 1.15. Xóa Device (đơn + hàng loạt) — xóa MỀM, chỉ `PendingLiquidation`
-Cả `DELETE /api/Device/{id}` (`DeleteAsync`) và `POST /api/Device/bulk-delete` (`BulkDeleteDeviceRequestDto{Ids}`, `BulkDeleteAsync`) — permission `Asset.Device.Delete` — **chỉ cho xóa thiết bị đang `PendingLiquidation(2)`** (Chờ thanh lý); trạng thái khác → `DELETE` đơn ném `DomainException("Chỉ có thể xóa thiết bị đang chờ thanh lý.")`, bulk bỏ qua (`SkippedDevices`).
-Cơ chế xóa mềm dùng chung: set `IsDeleted = true` + gỡ hết `IpAddress` đang gắn (`DeviceId = null`, `Status = Available`) + soft-delete `DeviceEmail`. Bulk gộp theo `deletableIds` rồi 1 Save; kết quả `BulkDeleteDeviceResultDto{DeletedCount, SkippedDevices:[{Id,DeviceCode,Reason}]}` (`Reason`="Không tìm thấy thiết bị."/"Chỉ có thể xóa thiết bị đang chờ thanh lý.").
+### 1.15. Xóa Device (đơn + hàng loạt) — xóa MỀM, chỉ `Liquidated`
+Cả `DELETE /api/Device/{id}` (`DeleteAsync`) và `POST /api/Device/bulk-delete` (`BulkDeleteDeviceRequestDto{Ids}`, `BulkDeleteAsync`) — permission `Asset.Device.Delete` — **chỉ cho xóa thiết bị đang `Liquidated(3)`** (Đã thanh lý — 2026-08-22, đổi từ `PendingLiquidation(2)` vì máy chờ thanh lý vẫn có thể còn dùng/hoàn tác, chỉ máy đã hoàn tất quy trình thanh lý mới an toàn để xóa); trạng thái khác → `DELETE` đơn ném `DomainException("Chỉ có thể xóa thiết bị đã thanh lý.")`, bulk bỏ qua (`SkippedDevices`).
+Cơ chế xóa mềm dùng chung: set `IsDeleted = true` + gỡ hết `IpAddress` đang gắn (`DeviceId = null`, `Status = Available`) + soft-delete `DeviceEmail`. Bulk gộp theo `deletableIds` rồi 1 Save; kết quả `BulkDeleteDeviceResultDto{DeletedCount, SkippedDevices:[{Id,DeviceCode,Reason}]}` (`Reason`="Không tìm thấy thiết bị."/"Chỉ có thể xóa thiết bị đã thanh lý.").
 > Xóa mềm (không cứng) vì `TransferHistory.OldDeviceId`/`NewDeviceId` FK bắt buộc (không nullable) — xóa cứng Device từng chuyển máy sẽ vi phạm FK.
 
-### 1.16. `AssetSetting` + tự chuyển "Chờ thanh lý → Đã thanh lý"
+### 1.16. `AssetSetting` + tự động xóa mềm Device đã thanh lý (định kỳ theo tháng, cấu hình được)
 Bảng `AssetSettings` (seed 1 dòng `Id=1, LiquidationAfterMonths=2`) — cấu hình runtime. `AssetSettingService` tự "get-or-create" nếu bảng trống.
-- `GET /api/AssetSetting` (`Asset.Setting.View`) / `PUT /api/AssetSetting` (`Asset.Setting.Update`, `UpdateAssetSettingDto{LiquidationAfterMonths[Range(1,120)]}`) — thao tác 1 dòng, không Id trên route.
-- **`DeviceLiquidationBackgroundService`** (`HostApi/BackgroundServices/`, `AddHostedService`) chạy **1 lần/ngày** (00:30 theo `TimeHelper.GetCurrentUtcTime()`), scope riêng:
-  1. Device `PendingUse(0)`/`InUse(1)`, `!IsDeleted`, `ExpirationDate < hôm nay` → `PendingLiquidation(2)`.
-  2. Device `PendingLiquidation(2)`, `ExpirationDate.AddMonths(LiquidationAfterMonths) < hôm nay` → `Liquidated(3)`. **Mốc tính từ `ExpirationDate`** (không phải lúc vào trạng thái chờ).
-  3. 1 Save cho cả 2 bước. Lỗi log qua `ILogger`, không crash, thử lại hôm sau.
+- `GET /api/AssetSetting` (`Asset.Setting.View`) / `PUT /api/AssetSetting` (`Asset.Setting.Update`, `UpdateAssetSettingDto{LiquidationAfterMonths[Range(1,120)]}`) — thao tác 1 dòng, không Id trên route. **`LiquidationAfterMonths` đổi nghĩa (2026-08-22)**: không còn là "số tháng chờ trước khi tự thanh lý" (tính năng đó đã bỏ, xem dưới) mà là **số tháng giữa 2 lần chạy job tự động xóa** mô tả bên dưới. `AssetSettingDto` trả cho FE chỉ có field này — `LastAutoDeleteRunAt` (xem dưới) là bookkeeping nội bộ, **không** expose qua API.
+- **`DeviceLiquidationBackgroundService`** (`HostApi/BackgroundServices/`, `AddHostedService`) — vòng lặp ngoài vẫn **kiểm tra mỗi ngày** (00:30 theo `TimeHelper.GetCurrentUtcTime()`), nhưng **thân job chỉ thật sự chạy khi đến hạn** (2026-08-22, theo yêu cầu người dùng — thay hẳn "1 lần/ngày" bằng chu kỳ tháng cấu hình được):
+  1. Đọc entity `AssetSetting` trực tiếp qua `unitOfWork.AssetSettings` (không qua `IAssetSettingService`, vì cần cả field nội bộ `LastAutoDeleteRunAt`). Không có dòng nào (lẽ ra không xảy ra vì đã seed) → log warning, bỏ qua lượt.
+  2. **Tính hạn**: đến hạn nếu `LastAutoDeleteRunAt == null` (chưa chạy lần nào → chạy ngay) **hoặc** `LastAutoDeleteRunAt.AddMonths(LiquidationAfterMonths) <= hôm nay`. Chưa đến hạn → bỏ qua lượt, không làm gì.
+  3. Đến hạn: quét mọi Device `Status == Liquidated(3)` và `!IsDeleted` (không điều kiện chờ nào khác — đủ điều kiện ngay khi vào `Liquidated`), với mỗi Device tìm được set `IsDeleted = true` + dọn dẹp giống hệt `DeviceService.DeleteAsync` (gỡ hết `IpAddress` đang gắn về `Available`, soft-delete `DeviceEmail`). Không có Device nào cũng tính là "đã chạy".
+  4. Set `LastAutoDeleteRunAt = hôm nay` rồi 1 Save (cả Device/IP/Email lẫn AssetSetting). Lỗi log qua `ILogger`, không crash, thử lại hôm sau (không set `LastAutoDeleteRunAt` nên hạn giữ nguyên).
+- Bỏ hẳn tính năng tự chuyển trạng thái `PendingUse/InUse → PendingLiquidation → Liquidated` (dùng `ExpirationDate` cũ) — chuyển trạng thái giờ chỉ còn thao tác thủ công (`DeviceService.UpdateAsync`) hoặc import thanh lý hàng loạt (§1.10b).
+
+**Chuyển trạng thái thủ công cũng áp dụng cùng luật** (2026-08-22): `DeviceService.UpdateAsync` — nếu `request.Status` là `PendingLiquidation(2)`/`Liquidated(3)`, **bỏ qua** `IpAddressIds` gửi lên, ép gỡ hết IP hiện gắn (không sync theo danh sách IP người dùng chọn); `CreateAsync` tạo máy thẳng ở 1 trong 2 trạng thái này cũng **không gán** IP dù request có gửi kèm. Trạng thái khác (`PendingUse`/`InUse`) giữ hành vi sync IP như cũ.
 
 ### 1.10b. Import thanh lý hàng loạt — `/api/DeviceLiquidationImport` (`preview`/`confirm`, 2026-07-23)
 Import file **1 cột `Mã máy` (MQL)**, dòng 1 header (`.xlsx`/`.csv`, dùng chung `CsvFileHelper`/ClosedXML) để chuyển hàng loạt Device sang `Liquidated(3)`. Service/Controller riêng, 2 bước như các import khác. `DeviceLiquidationImportService : BaseService` (không cần `DeviceService`, thao tác thẳng qua `_unitOfWork`).

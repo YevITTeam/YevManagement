@@ -12,9 +12,9 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// GET/PUT /api/AssetSetting — cấu hình chung module Asset: thiết bị hết hạn sử dụng chuyển "Chờ
-// thanh lý" NGAY (không phụ thuộc cấu hình này); sau bao nhiêu tháng kể từ ngày hết hạn mà thiết bị
-// vẫn ở "Chờ thanh lý" thì hệ thống mới tự động chuyển tiếp sang "Đã thanh lý" (DeviceLiquidationBackgroundService).
+// GET/PUT /api/AssetSetting — cấu hình chung module Asset: số tháng giữa 2 lần chạy job tự động
+// xóa mềm thiết bị "Đã thanh lý" (DeviceLiquidationBackgroundService, kiểm tra hàng ngày lúc 00:30
+// nhưng chỉ thật sự chạy khi đủ số tháng cấu hình kể từ lần chạy trước, 2026-08-22).
 export default function AssetSettingPanel() {
     const [isSaving, setIsSaving] = useState(false);
     const [liquidationAfterMonths, setLiquidationAfterMonths] = useState<number>(1);
@@ -55,12 +55,12 @@ export default function AssetSettingPanel() {
             </div>
 
             <section className="max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="text-base font-semibold text-[#191c1e]">Tự động chuyển trạng thái thanh lý</h2>
+                <h2 className="text-base font-semibold text-[#191c1e]">Tự động xóa thiết bị đã thanh lý</h2>
                 <p className="mt-1 text-sm text-[#5e3f3a]">
-                    Khi thiết bị hết hạn sử dụng (Hết hạn = Ngày mua + Số tháng khấu hao), hệ thống tự động chuyển
-                    trạng thái sang <strong>&quot;Chờ thanh lý&quot;</strong> ngay lập tức. Sau đó, nếu thiết bị vẫn ở
-                    &quot;Chờ thanh lý&quot; quá <strong>số tháng cấu hình bên dưới</strong> (tính từ ngày hết hạn), hệ
-                    thống sẽ tự động chuyển tiếp sang <strong>&quot;Đã thanh lý&quot;</strong>.
+                    Hệ thống định kỳ tự động xóa mềm các thiết bị đang ở trạng thái{" "}
+                    <strong>&quot;Đã thanh lý&quot;</strong> (kèm gỡ IP, ẩn email — giống thao tác xóa thủ công). Job
+                    kiểm tra mỗi ngày lúc 00:30 nhưng chỉ thật sự chạy khi đã đủ{" "}
+                    <strong>số tháng cấu hình bên dưới</strong> kể từ lần chạy gần nhất.
                 </p>
 
                 {isLoading ? (
@@ -68,7 +68,7 @@ export default function AssetSettingPanel() {
                 ) : (
                     <form onSubmit={handleSubmit} className="mt-6 flex flex-wrap items-end gap-4">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Số tháng &quot;Chờ thanh lý&quot; trước khi tự thanh lý (kể từ ngày hết hạn)</span>
+                            <span className={fieldLabelClassName}>Số tháng giữa 2 lần tự động xóa</span>
                             <input
                                 type="number"
                                 min={1}
