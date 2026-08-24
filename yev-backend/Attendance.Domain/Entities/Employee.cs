@@ -44,4 +44,6 @@ public partial class Employee
     public virtual ICollection<OtFormEmployee> OtFormEmployees { get; set; } = new List<OtFormEmployee>();
 
     public virtual ICollection<EmployeeAccumulationHistory> EmployeeAccumulationHistories { get; set; } = new List<EmployeeAccumulationHistory>();
+
+    public virtual ICollection<ProductionEmployee> ProductionEmployees { get; set; } = new List<ProductionEmployee>();
 }

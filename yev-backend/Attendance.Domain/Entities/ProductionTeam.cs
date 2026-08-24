@@ -16,4 +16,6 @@ public partial class ProductionTeam
     public bool IsDeleted { get; set; }
 
     public virtual ICollection<ProductionLine> ProductionLines { get; set; } = new List<ProductionLine>();
+
+    public virtual ICollection<ProductionEmployee> ProductionEmployees { get; set; } = new List<ProductionEmployee>();
 }

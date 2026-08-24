@@ -43,6 +43,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<ProductionLine> ProductionLines { get; set; }
     public virtual DbSet<ProductionShiftTeam> ProductionShiftTeams { get; set; }
     public virtual DbSet<ProductionTeam> ProductionTeams { get; set; }
+    public virtual DbSet<ProductionEmployee> ProductionEmployees { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -442,6 +443,40 @@ public partial class AttendanceDbContext : DbContext
         {
             entity.Property(e => e.Code).HasMaxLength(20);
             entity.Property(e => e.NameVn).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<ProductionEmployee>(entity =>
+        {
+            entity.Property(e => e.EmployeeCode).HasMaxLength(50);
+            entity.Property(e => e.LastNameSnapshot).HasMaxLength(150);
+            entity.Property(e => e.FirstNameSnapshot).HasMaxLength(150);
+            entity.Property(e => e.CongDoan).HasMaxLength(50);
+            entity.Property(e => e.TaskName).HasMaxLength(255);
+            entity.Property(e => e.BlockCode).HasMaxLength(50);
+            entity.Property(e => e.TeamCode).HasMaxLength(20);
+            entity.Property(e => e.ShiftTeamCode).HasMaxLength(20);
+
+            entity.HasIndex(e => e.EmployeeCode).IsUnique();
+
+            entity.HasOne(d => d.ProductionLine).WithMany(p => p.ProductionEmployees)
+                .HasForeignKey(d => d.ProductionLineId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionEmployees_ProductionLines_ProductionLineId");
+
+            entity.HasOne(d => d.Team).WithMany(p => p.ProductionEmployees)
+                .HasForeignKey(d => d.TeamId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionEmployees_ProductionTeams_TeamId");
+
+            entity.HasOne(d => d.ShiftTeam).WithMany(p => p.ProductionEmployees)
+                .HasForeignKey(d => d.ShiftTeamId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionEmployees_ProductionShiftTeams_ShiftTeamId");
+
+            entity.HasOne(d => d.Employee).WithMany(p => p.ProductionEmployees)
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionEmployees_Employees_EmployeeId");
         });
 
         OnModelCreatingPartial(modelBuilder);

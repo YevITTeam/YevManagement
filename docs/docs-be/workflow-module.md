@@ -583,7 +583,7 @@ RequestAction      : Submit=1, Approve=2, Reject=3, SendBack=4, Cancel=5,
 
 ---
 
-## 5. Luật nghiệp vụ
+## 5. Luật nghiệp vụ & quy ước kỹ thuật
 
 ### 5.1 Nộp đơn — thứ tự bắt buộc
 
@@ -714,6 +714,67 @@ phụ thuộc `devicePixelRatio`. Dùng CSS print thì chữ là vector và ng�
 
 FE cần lo: `break-inside: avoid` cho từng nhóm ô và từng dòng chữ ký, `@page { size: A4; margin: … }`.
 
+### 5.8 Quy ước `DataJson` — BẮT BUỘC theo đúng bảng này
+
+`DataJson` là **object phẳng**, khoá = `FormFields.FieldKey`. Không lồng nhau, không mảng ở cấp gốc.
+
+**Mọi field có trong schema đều phải có mặt trong `DataJson`.** Chưa nhập thì để `null`, KHÔNG bỏ
+khoá. Nhờ vậy schema và dữ liệu luôn đối chiếu được 1-1, và biết phân biệt "chưa nhập" với
+"field mới thêm sau khi đơn đã nộp".
+
+| `FieldDataType` | Kiểu JSON | Định dạng | Ví dụ |
+|---|---|---|---|
+| `Text`, `TextArea` | string | | `"Mua máy in"` |
+| `Number` | **number** | số nguyên | `15` |
+| `Decimal` | **number** | thập phân, dấu chấm | `4500000.50` |
+| `Date` | string | `yyyy-MM-dd` | `"2026-08-20"` |
+| `DateTime` | string | ISO-8601 kèm offset | `"2026-08-20T14:30:00+07:00"` |
+| `Time` | string | `HH:mm` | `"17:30"` |
+| `Dropdown`, `Radio` | string | giá trị (không phải nhãn) | `"KHAC"` |
+| `Checkbox` | boolean | | `true` |
+| `MultiSelect` | array of string | | `["A","B"]` |
+| `Employee` | object | snapshot 3 khoá | `{"id":42,"code":"NV0123","name":"Nguyễn Văn A"}` |
+| `OrgUnit` | object | snapshot 3 khoá | `{"id":7,"code":"KT","name":"Phòng Kế toán"}` |
+| `Label` | — | **không lưu** | chỉ hiển thị |
+
+Bốn luật đi kèm, vi phạm là hỏng ngầm:
+
+1. **`Number`/`Decimal` lưu dạng số JSON, KHÔNG lưu chuỗi.** `FormRoutes` so sánh khoảng số trực tiếp
+   trên giá trị này (§5.2) — lưu chuỗi thì `"1000000" < "9"` theo thứ tự chữ cái và chọn sai nhánh.
+   BE parse bằng `CultureInfo.InvariantCulture`.
+2. **`Date` lưu chuỗi `yyyy-MM-dd`, KHÔNG lưu `DateTime`.** Ngày trên đơn là ngày theo lịch, không có
+   giờ. Lưu `DateTime` rồi parse ở múi giờ khác sẽ lệch mất một ngày.
+3. **`Dropdown`/`Radio`/`MultiSelect` lưu *giá trị*, không lưu *nhãn*.** Nhãn nằm ở `OptionsJson` và
+   đã được snapshot trong `FormSchemaJson` — đổi nhãn về sau không làm sai đơn cũ.
+4. **`Employee`/`OrgUnit` lưu snapshot đủ 3 khoá, do BE điền.** FE chỉ gửi `id`; BE tra ra `code` và
+   `name` rồi ghi cả ba. Xem lại đơn cũ vẫn ra đúng tên tại thời điểm nộp, kể cả người đã nghỉ việc
+   hoặc đổi tên. Không tin `name` FE gửi lên.
+
+### 5.9 Index bắt buộc
+
+Ngoài UNIQUE/PK đã nêu ở §3. Ba màn hình chính là nguồn tải nặng nhất, index dưới đây bám đúng chúng:
+
+| Bảng | Index | Phục vụ |
+|---|---|---|
+| `WorkflowRequests` | `(CreatedByEmployeeId, Status, CreatedAt DESC)` | màn "Đơn của tôi" |
+| `WorkflowRequests` | `(FormDefinitionId, Status)` | lọc theo loại đơn |
+| `WorkflowRequestSteps` | `(Status, WorkflowRequestId)` | tìm bước đang chờ xử lý |
+| `WorkflowRequestStepParticipants` | `(EmployeeId, ParticipantRole)` | màn "Chờ tôi duyệt" và "Tôi xem được" |
+| `WorkflowRequestHistories` | `(WorkflowRequestId, ActionAt)` | timeline lịch sử |
+| `WorkflowAttachments` | `(WorkflowRequestId)` | |
+| **`EmployeeOrgUnits`** | **`(OrgUnitId, JobTitleId)`** | **resolve người duyệt theo chức danh (§5.5)** — chạy cho mọi bước, mọi lần nộp đơn |
+| `EmployeeOrgUnits` | `(EmployeeId)` | tra đơn vị của một người |
+| `OrgUnits` | `(ParentId)` | duyệt cây |
+| `FormFields` | `(FormDefinitionId, SortOrder)` | dựng form |
+| `FormFieldConditions` | `(TargetFieldId)` | đánh giá điều kiện |
+
+### 5.10 Đặt tên trong DB
+
+`YevWorkflowManagement` là **DB mới hoàn toàn**, KHÔNG scaffold từ hệ cũ — nên **không** áp quy ước
+tên constraint tiếng Việt ở CLAUDE.md §3.5 (thứ chỉ dành cho bảng kế thừa như `PK_ThietBis`).
+Dùng tên tiếng Anh chuẩn EF Core: `PK_OrgUnits`, `FK_OrgUnits_OrgLevels_OrgLevelId`,
+`IX_EmployeeOrgUnits_OrgUnitId_JobTitleId`.
+
 ---
 
 ## 6. API dự kiến
@@ -819,3 +880,4 @@ loại đơn cộng hai giao diện designer (form và luồng duyệt) — hãy
 | 2026-08-20 | **Module độc lập với Attendance**, tách phần chung sau khi ổn định (§1.1–1.3) |
 | 2026-08-20 | **In = layout form trên màn hình**, không mô phỏng mẫu giấy (§1.5, §5.7) |
 | 2026-08-20 | Bỏ `OrgUnitScope = ApplicantAncestor` (§1.6); thêm `FormCategoryCoordinators` |
+| 2026-08-20 | Chốt quy ước `DataJson` (§5.8), index bắt buộc (§5.9), đặt tên DB kiểu EF chuẩn (§5.10) — gỡ 3 chỗ hở cuối trước khi scaffold |

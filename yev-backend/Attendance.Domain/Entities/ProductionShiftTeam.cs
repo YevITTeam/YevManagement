@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Attendance.Domain.Entities;
 
 // Reference data for khối chuyền (Chế tạo): Nhóm = shift-color grouping (Green/Orange/Blue/HC),
@@ -13,4 +15,6 @@ public partial class ProductionShiftTeam
     public string? NameVn { get; set; }
 
     public bool IsDeleted { get; set; }
+
+    public virtual ICollection<ProductionEmployee> ProductionEmployees { get; set; } = new List<ProductionEmployee>();
 }

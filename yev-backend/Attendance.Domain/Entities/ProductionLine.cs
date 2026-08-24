@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Attendance.Domain.Entities;
 
 // Reference data for khối chuyền (Chế tạo), imported from Thong_Tin_Line_Team.xlsx.
@@ -18,4 +20,6 @@ public partial class ProductionLine
     public bool IsDeleted { get; set; }
 
     public virtual ProductionTeam Team { get; set; } = null!;
+
+    public virtual ICollection<ProductionEmployee> ProductionEmployees { get; set; } = new List<ProductionEmployee>();
 }
