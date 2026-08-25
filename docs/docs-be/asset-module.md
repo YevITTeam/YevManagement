@@ -59,6 +59,17 @@ Server tự derive: gán→`2`+DeviceId; gỡ→`0`+null. `IpAddressService.Upda
 ### 1.4. `Device.Status` — enum `DeviceStatus`
 `0=PendingUse`, `1=InUse`, `2=PendingLiquidation`, `3=Liquidated`.
 
+### 1.4b. Đổi trạng thái Device tự động gỡ Ip/Software (2026-08-25, quyết định người dùng)
+Một Device chỉ được coi là "đang giữ" Ip/Software khi thật sự `InUse`. `DeviceService.UpdateAsync` so `Status` cũ/mới để tự gỡ, **bỏ qua** `IpAddressIds` gửi kèm trong các trường hợp này:
+- **`Status` mới = `PendingLiquidation`/`Liquidated`** (`IsLiquidationStatus`) → `ReleaseAllIpsAsync` (Ip về `Available`, `DeviceId=null`, đã có từ trước) **+ `ReleaseAllSoftwareAsync`** (xóa cứng toàn bộ `DeviceSoftware` của Device — mới thêm).
+- **`Status` cũ = `InUse` và `Status` mới = `PendingUse`** (máy ngừng dùng, chưa gán lại) → chỉ `ReleaseAllIpsAsync`, **giữ nguyên Software** (còn dùng lại khi máy `InUse` trở lại).
+- Trường hợp khác (kể cả `PendingLiquidation`→`PendingUse` revert) → `SyncIpAddressesAsync` như cũ.
+
+`DeviceLiquidationImportService.ConfirmAsync` (§1.10b, `PendingLiquidation`→`Liquidated`) cũng gỡ Software (`ReleasedSoftwareCount` mới thêm vào `DeviceLiquidationImportConfirmResultDto`) — chủ yếu là lưới an toàn vì Device đáng lẽ đã được gỡ Software từ lúc vào `PendingLiquidation` qua `UpdateAsync` ở trên.
+
+**Chặn tận gốc ở `DeviceSoftwareService` (2026-08-25, vá lỗ hổng phát hiện ngay sau khi thêm §1.4b)**: `IsLiquidationStatus` chuyển thành extension method dùng chung (`DeviceStatusExtensions.IsLiquidationStatus(this int)`, `Asset.Domain.Enums`) thay vì private method riêng trong `DeviceService`. `DeviceSoftwareService.CreateAsync`/`SyncAsync` (khi `Items.Count > 0`) đọc `Device.Status` trước, ném `DomainException` nếu `IsLiquidationStatus` — vì trước đó `/api/DeviceSoftware` không biết gì về `Device.Status`, gắn phần mềm cho máy đang "Chờ thanh lý" xong bị `ReleaseAllSoftwareAsync` xóa mất ngay lần Save Device kế tiếp (kể cả không đổi Status). `SyncAsync` vẫn cho phép gửi `Items` rỗng (dọn sạch) khi máy đang liquidation. FE `DeviceSoftwarePanel.tsx` disable nút "Cập nhật phần mềm" + hiện cảnh báo khi `deviceStatus` là 2/3 (chặn ở UI trước, BE vẫn là nguồn chân lý).
+`DeviceService.DeleteAsync`/`BulkDeleteAsync` (chỉ xóa mềm máy `Liquidated`) cũng gọi thêm `ReleaseAllSoftwareAsync`/dọn `DeviceSoftware` hàng loạt — lưới an toàn cho máy đã ở `PendingLiquidation`/`Liquidated` **từ trước** khi có §1.4b (còn sót `DeviceSoftware` chưa gỡ), tránh để lại bản ghi mồ côi trỏ tới Device đã `IsDeleted`.
+
 ### 1.5. `Device.ExpirationDate` — field tính
 Server luôn set `= PurchaseDate.AddMonths(DepreciationMonths)` trong Create/Update. DTO **không nhận** từ client (chỉ nhận `DepreciationMonths`).
 
@@ -185,9 +196,9 @@ Bảng `AssetSettings` (seed 1 dòng `Id=1, LiquidationAfterMonths=2`) — cấu
 ### 1.10b. Import thanh lý hàng loạt — `/api/DeviceLiquidationImport` (`preview`/`confirm`, 2026-07-23)
 Import file **1 cột `Mã máy` (MQL)**, dòng 1 header (`.xlsx`/`.csv`, dùng chung `CsvFileHelper`/ClosedXML) để chuyển hàng loạt Device sang `Liquidated(3)`. Service/Controller riêng, 2 bước như các import khác. `DeviceLiquidationImportService : BaseService` (không cần `DeviceService`, thao tác thẳng qua `_unitOfWork`).
 - **Luật trạng thái nguồn** (quyết định người dùng): **CHỈ** máy đang `PendingLiquidation(2)` mới thanh lý được. Máy đã `Liquidated(3)` → lỗi "đã được thanh lý trước đó"; trạng thái khác (`PendingUse`/`InUse`) → lỗi "...đang ở trạng thái 'X', chỉ thanh lý được thiết bị đang 'Chờ thanh lý'." (text từ `DeviceStatusExtensions`). Không tìm thấy mã / đã soft-delete / trùng mã trong file → lỗi dòng.
-- **Kèm dọn dẹp giống `DeviceService.DeleteAsync`**: máy thanh lý coi như không còn dùng → **gỡ hết IP** (`DeviceId=null`, `Status=Available`, đếm `ReleasedIpCount`) + **soft-delete `DeviceEmail`**. (Khác `DeleteAsync`: KHÔNG set `IsDeleted` — máy vẫn còn để tra cứu, chỉ đổi `Status`.)
+- **Kèm dọn dẹp giống `DeviceService.DeleteAsync`**: máy thanh lý coi như không còn dùng → **gỡ hết IP** (`DeviceId=null`, `Status=Available`, đếm `ReleasedIpCount`) + **soft-delete `DeviceEmail`** + **xóa cứng hết `DeviceSoftware`** (đếm `ReleasedSoftwareCount`, §1.4b, 2026-08-25). (Khác `DeleteAsync`: KHÔNG set `IsDeleted` — máy vẫn còn để tra cứu, chỉ đổi `Status`.)
 - **Preview** (chỉ đọc): trả `DeviceLiquidationImportPreviewResultDto{Rows, TotalRows, ValidRows, InvalidRows}`, mỗi row có `ResolvedDeviceId?`/`CurrentStatus?`/`CurrentStatusText?`/`IsValid`/`Errors`.
-- **Confirm** (`ConfirmDeviceLiquidationImportDto{Rows}` field thô): **validate lại từ đầu**, dòng lỗi **BỎ QUA không chặn batch** (`SkippedRows`), dòng hợp lệ thanh lý trong 1 transaction. Có **re-check trong vòng lặp** (`device.Status != PendingLiquidation` sau khi load lại) phòng đổi trạng thái đồng thời. Kết quả `DeviceLiquidationImportConfirmResultDto{LiquidatedCount, LiquidatedDeviceIds, ReleasedIpCount, SkippedCount, SkippedRows}`.
+- **Confirm** (`ConfirmDeviceLiquidationImportDto{Rows}` field thô): **validate lại từ đầu**, dòng lỗi **BỎ QUA không chặn batch** (`SkippedRows`), dòng hợp lệ thanh lý trong 1 transaction. Có **re-check trong vòng lặp** (`device.Status != PendingLiquidation` sau khi load lại) phòng đổi trạng thái đồng thời. Kết quả `DeviceLiquidationImportConfirmResultDto{LiquidatedCount, LiquidatedDeviceIds, ReleasedIpCount, ReleasedSoftwareCount, SkippedCount, SkippedRows}`.
 - **Permission**: dùng lại `Asset.Device.Update` (đổi trạng thái, không phải tạo/xóa → không seed permission mới).
 
 ### 1.16. In mã QR thiết bị — `POST /api/Device/qr-labels` (2026-07-23)

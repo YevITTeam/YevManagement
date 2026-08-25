@@ -64,6 +64,13 @@ export interface OtFormEmployeeDto {
     removedAtLevel: number | null;
     removedAt: string | null;
     removeReason: string | null;
+    // Snapshot ProductionEmployee lúc thêm vào đơn — chỉ có giá trị khi OtFormDto.isProductionForm =
+    // true (đơn "theo chuyền"), null cho đơn "theo Nhóm" (2026-08-24).
+    congDoanSnapshot: string | null;
+    taskNameSnapshot: string | null;
+    blockCodeSnapshot: string | null;
+    teamCodeSnapshot: string | null;
+    shiftTeamCodeSnapshot: string | null;
 }
 
 // GET /api/OtForm/my-create-scopes — §4.0a. Bộ phận/Phòng ban mà CHÍNH user gọi được phép tạo đơn
@@ -78,8 +85,11 @@ export interface MyCreateScopeItemDto {
 }
 
 // Body POST /api/OtForm — §4.1. Không còn field chữ ký (BE tự lấy từ UserSignature/me).
+// groupId/isProductionForm (2026-08-24): đơn "theo Nhóm" (mặc định) bắt buộc groupId, isProductionForm
+// = false; đơn "theo chuyền" (Chế tạo) groupId = null, isProductionForm = true — xem CreateOtFormPage.tsx.
 export interface CreateOtFormDto {
-    groupId: number;
+    groupId: number | null;
+    isProductionForm: boolean;
     departmentId: number;
     reasonId: number;
     otCaseId: number;
@@ -125,8 +135,10 @@ export interface OtFormApprovalSummaryItemDto {
 // Item bảng my-forms / pending-approvals — §4.2.
 export interface OtFormListItemDto {
     id: number;
-    groupNameVn: string;
+    // Null khi đơn "theo chuyền" (isProductionForm = true) — 2026-08-24.
+    groupNameVn: string | null;
     groupNameJp: string | null;
+    isProductionForm: boolean;
     departmentNameVn: string;
     departmentNameJp: string | null;
     otCaseCode: string;
@@ -182,9 +194,11 @@ export interface OtFormApprovalStepDto {
 // Chi tiết GET /api/OtForm/{id} (và GET /OtForm/email-confirm/{token}) — §4.3.
 export interface OtFormDto {
     id: number;
-    groupId: number;
-    groupNameVn: string;
+    // Null khi đơn "theo chuyền" (isProductionForm = true) — 2026-08-24, xem OtForm.GroupId.
+    groupId: number | null;
+    groupNameVn: string | null;
     groupNameJp: string | null;
+    isProductionForm: boolean;
     departmentId: number;
     departmentNameVn: string;
     departmentNameJp: string | null;

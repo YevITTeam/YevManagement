@@ -7,7 +7,16 @@ public partial class OtForm
 {
     public int Id { get; set; }
 
-    public int GroupId { get; set; }
+    // Nullable khi IsProductionForm = true (đơn "theo chuyền", Chế tạo) — đơn loại này không gắn 1
+    // Group cố định (Employee.GroupId của người tạo/người tham gia có thể khác nhau, xem
+    // ProductionApprovalStep) — 2026-08-24. Đơn "theo Nhóm" (văn phòng, IsProductionForm = false)
+    // vẫn bắt buộc có GroupId như trước.
+    public int? GroupId { get; set; }
+
+    // true = đơn tạo theo chế độ "chuyền" (chọn người qua ProductionEmployee, không qua Group cố
+    // định) — quyết định tường minh, KHÔNG suy ngầm từ GroupId == null, để mọi nơi đọc dữ liệu (báo
+    // cáo, in PDF, danh sách đơn...) biết chắc loại đơn mà không cần đoán qua giá trị null.
+    public bool IsProductionForm { get; set; }
 
     public int DepartmentId { get; set; }
 
@@ -73,7 +82,7 @@ public partial class OtForm
     // Manager) — null until the daily sweep picks it up (see docs/attendance-module.md — §Đơn tổng).
     public int? OtFormBatchId { get; set; }
 
-    public virtual Group Group { get; set; } = null!;
+    public virtual Group? Group { get; set; }
 
     public virtual Department Department { get; set; } = null!;
 

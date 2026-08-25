@@ -20,4 +20,10 @@ public static class DeviceStatusExtensions
         => Enum.IsDefined(typeof(DeviceStatus), status)
             ? ((DeviceStatus)status).GetDisplayText()
             : UnknownText;
+
+    // A Device only holds a live Ip/installed Software while PendingUse/InUse; these 2 statuses mean
+    // it is no longer in (or headed for) active use, so DeviceService and DeviceSoftwareService both
+    // gate on this (2026-08-25).
+    public static bool IsLiquidationStatus(this int status) =>
+        status == (int)DeviceStatus.PendingLiquidation || status == (int)DeviceStatus.Liquidated;
 }

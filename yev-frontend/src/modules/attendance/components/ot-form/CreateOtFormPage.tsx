@@ -16,6 +16,8 @@ import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
+import type { ProductionEmployeeSearchItemDto, ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type {
     MyCreateScopeItemDto,
@@ -30,6 +32,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -193,11 +196,25 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // khoản Nhân viên/Trưởng nhóm chưa được cấu hình gì — trường hợp đó phải chặn hẳn màn này).
     const isUnrestrictedAdmin = hasPermission(user, "Attendance.Department.Create");
 
+    // "Theo Nhóm" (mặc định, hiện tại) hay "Theo chuyền" (Chế tạo, 2026-08-24) — chỉ chọn được lúc TẠO
+    // MỚI, đơn đã tạo giữ nguyên chế độ ban đầu (isProductionForm trả về từ BE, không đổi được khi sửa).
+    const [formMode, setFormMode] = useState<"group" | "production">("group");
+
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [reasons, setReasons] = useState<ReasonDto[]>([]);
     const [otCases, setOtCases] = useState<OtCaseDto[]>([]);
     const [groupEmployees, setGroupEmployees] = useState<EmployeeDto[]>([]);
+
+    // ── Theo chuyền: bộ lọc + kết quả tìm kiếm ProductionEmployee ────────────
+    const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
+    const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
+    const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
+    const [productionLineId, setProductionLineId] = useState<number | "">("");
+    const [productionTeamId, setProductionTeamId] = useState<number | "">("");
+    const [productionShiftTeamId, setProductionShiftTeamId] = useState<number | "">("");
+    const [productionKeyword, setProductionKeyword] = useState("");
+    const [productionResults, setProductionResults] = useState<ProductionEmployeeSearchItemDto[]>([]);
 
     const [departmentId, setDepartmentId] = useState<number | null>(null);
     const [groupId, setGroupId] = useState<number | null>(null);
@@ -262,7 +279,65 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
         ReasonApi.getAllReasons().then(setReasons).catch((err) => console.error(err));
         OtCaseApi.getAllOtCases().then(setOtCases).catch((err) => console.error(err));
+        ProductionEmployeeApi.getTeamOptions().then(setTeamOptions).catch((err) => console.error(err));
     }, []);
+
+    // Chọn lại Team → Line đang chọn (nếu có) có thể không còn thuộc Team mới, reset về rỗng — so
+    // sánh snapshot ngay trong render, không dùng effect để setState (CLAUDE.md §4.5).
+    const [prevProductionTeamId, setPrevProductionTeamId] = useState(productionTeamId);
+    if (prevProductionTeamId !== productionTeamId) {
+        setPrevProductionTeamId(productionTeamId);
+        setProductionLineId("");
+    }
+
+    // Line = con thật của Team (ProductionLine.TeamId là FK, xem ProductionLine.cs) — tải lại danh
+    // sách Line mỗi khi đổi Team để chỉ hiện đúng các Line thuộc Team đó (2026-08-25). Team đang chọn
+    // rỗng → BE trả về TOÀN BỘ Line (không lọc).
+    useFetchEffect(
+        () => ProductionEmployeeApi.getLineOptions(productionTeamId === "" ? undefined : productionTeamId),
+        [productionTeamId],
+        setLineOptions,
+        "Không thể tải danh sách Line."
+    );
+
+    // Nhóm ca KHÔNG phải con của Line/Team (1 Line có thể thuộc nhiều Nhóm ca — xem BE
+    // ProductionShiftTeam.cs) nên không cascade theo FK như Line được — thay vào đó suy ra TỪ DỮ LIỆU
+    // THẬT: chỉ hiện Nhóm ca nào thực sự có người trong đúng Line/Team đang lọc (2026-08-25, yêu cầu
+    // người dùng). Đổi Line/Team → Nhóm ca đang chọn có thể không còn hợp lệ, reset về rỗng — so sánh
+    // snapshot ngay trong render (CLAUDE.md §4.5).
+    const shiftTeamFilterKey = `${productionLineId}|${productionTeamId}`;
+    const [prevShiftTeamFilterKey, setPrevShiftTeamFilterKey] = useState(shiftTeamFilterKey);
+    if (prevShiftTeamFilterKey !== shiftTeamFilterKey) {
+        setPrevShiftTeamFilterKey(shiftTeamFilterKey);
+        setProductionShiftTeamId("");
+    }
+
+    useFetchEffect(
+        () =>
+            ProductionEmployeeApi.getShiftTeamOptions(
+                productionLineId === "" ? undefined : productionLineId,
+                productionTeamId === "" ? undefined : productionTeamId
+            ),
+        [productionLineId, productionTeamId],
+        setShiftTeamOptions,
+        "Không thể tải danh sách Nhóm ca."
+    );
+
+    // Tìm kiếm ProductionEmployee theo bộ lọc — chỉ chạy khi đang ở chế độ "Theo chuyền" lúc Tạo mới.
+    useFetchEffect(
+        () =>
+            formMode === "production" && !isEditMode
+                ? ProductionEmployeeApi.search({
+                      productionLineId: productionLineId === "" ? undefined : productionLineId,
+                      teamId: productionTeamId === "" ? undefined : productionTeamId,
+                      shiftTeamId: productionShiftTeamId === "" ? undefined : productionShiftTeamId,
+                      keyword: productionKeyword.trim() || undefined,
+                  })
+                : Promise.resolve([]),
+        [formMode, isEditMode, productionLineId, productionTeamId, productionShiftTeamId, productionKeyword],
+        setProductionResults,
+        t("productionSearchError")
+    );
 
     useEffect(() => {
         OtFormApi.getMyCreateScopes()
@@ -284,8 +359,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // Chỉ khoá cứng dropdown lúc Tạo mới — Sửa đơn vẫn cho đổi Bộ phận/Phòng ban trong phạm vi (docs §4.1b).
     const isScopeLocked = !isEditMode && isScopeRestricted && createScopes!.length === 1;
     // Mảng rỗng mà KHÔNG phải Admin → tài khoản chưa được cấp quyền tạo đơn cho Bộ phận nào — chặn hẳn
-    // màn "Tạo đơn tăng ca" thay vì cho vào form rồi chọn linh tinh rồi nhận lỗi 400 (docs §4.0a).
-    const isBlockedNoScope = !isEditMode && createScopes !== null && createScopes.length === 0 && !isUnrestrictedAdmin;
+    // màn "Tạo đơn tăng ca" thay vì cho vào form rồi chọn linh tinh rồi nhận lỗi 400 (docs §4.0a). CHỈ
+    // áp dụng cho chế độ "Theo Nhóm" — "Theo chuyền" không cần createScopes (2026-08-24, xem
+    // OtFormService.CreateProductionFormAsync: Admin hoặc chính người có tên trong đơn, không cần Group).
+    const isBlockedNoScope =
+        !isEditMode && formMode === "group" && createScopes !== null && createScopes.length === 0 && !isUnrestrictedAdmin;
 
     const visibleDepartments = useMemo(() => {
         if (!isScopeRestricted) return departments.map((d) => ({ id: d.id, label: d.departmentNameVn }));
@@ -519,12 +597,23 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         setEmployeeOverrides({});
     };
 
+    const handleModeChange = (nextMode: "group" | "production") => {
+        setFormMode(nextMode);
+        setGroupId(null);
+        setSelectedEmployeeIds([]);
+        setEmployeeOverrides({});
+    };
+
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
 
         // Sửa đơn: mọi field khác đã bị khoá disabled từ trước (không đổi được), chỉ còn kiểm tra có
-        // ít nhất 1 người. Tạo mới: vẫn cần đủ các field bắt buộc như cũ.
-        if (!isEditMode && (!groupId || !departmentId || !reasonId || !otCaseId || !date || !startTime || !endTime)) {
+        // ít nhất 1 người. Tạo mới: vẫn cần đủ các field bắt buộc như cũ — groupId CHỈ bắt buộc ở chế
+        // độ "Theo Nhóm" (2026-08-24, "Theo chuyền" không có Group cố định).
+        if (
+            !isEditMode &&
+            ((formMode === "group" && !groupId) || !departmentId || !reasonId || !otCaseId || !date || !startTime || !endTime)
+        ) {
             toast.error(t("requiredFieldsError"));
             return;
         }
@@ -568,7 +657,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
                 }));
                 result = await OtFormApi.createOtForm({
-                    groupId: groupId!,
+                    groupId: formMode === "production" ? null : groupId!,
+                    isProductionForm: formMode === "production",
                     departmentId: departmentId!,
                     reasonId: reasonId!,
                     otCaseId: otCaseId!,
@@ -643,6 +733,25 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 </div>
             )}
 
+            {!isEditMode && (
+                <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">
+                    {(["group", "production"] as const).map((mode) => (
+                        <button
+                            key={mode}
+                            type="button"
+                            onClick={() => handleModeChange(mode)}
+                            className={`cursor-pointer border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+                                formMode === mode
+                                    ? "border-[#e3000f] text-[#191c1e]"
+                                    : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
+                            }`}
+                        >
+                            {mode === "group" ? t("modeGroupLabel") : t("modeProductionLabel")}
+                        </button>
+                    ))}
+                </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
                 <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                     <div className="flex items-center justify-between gap-2">
@@ -665,16 +774,18 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             />
                         </label>
 
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
-                            <SearchableSelect
-                                options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
-                                value={groupId ?? ""}
-                                onChange={handleGroupChange}
-                                placeholder={departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
-                                disabled={isSubmitting || isScopeLocked || !departmentId || isEditMode}
-                            />
-                        </label>
+                        {formMode === "group" && (
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
+                                <SearchableSelect
+                                    options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
+                                    value={groupId ?? ""}
+                                    onChange={handleGroupChange}
+                                    placeholder={departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
+                                    disabled={isSubmitting || isScopeLocked || !departmentId || isEditMode}
+                                />
+                            </label>
+                        )}
 
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldReason")}</span>
@@ -830,6 +941,144 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     })}
                                 </tbody>
                             </table>
+                        </div>
+                    ) : formMode === "production" ? (
+                        <div className="space-y-4">
+                            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                                <SearchableSelect
+                                    options={lineOptions.map((option) => ({
+                                        value: option.id,
+                                        label: option.nameVn || option.code,
+                                        searchText: `${option.code} ${option.nameVn ?? ""}`.toLowerCase(),
+                                    }))}
+                                    value={productionLineId}
+                                    onChange={(v) => setProductionLineId(v)}
+                                    placeholder={t("productionFilterLinePlaceholder")}
+                                />
+                                <select
+                                    value={productionTeamId}
+                                    onChange={(event) => setProductionTeamId(event.target.value ? Number(event.target.value) : "")}
+                                    className={fieldClassName}
+                                >
+                                    <option value="">{t("productionFilterTeamPlaceholder")}</option>
+                                    {teamOptions.map((option) => (
+                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={productionShiftTeamId}
+                                    onChange={(event) => setProductionShiftTeamId(event.target.value ? Number(event.target.value) : "")}
+                                    className={fieldClassName}
+                                >
+                                    <option value="">{t("productionFilterShiftTeamPlaceholder")}</option>
+                                    {shiftTeamOptions.map((option) => (
+                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
+                                    ))}
+                                </select>
+                                <input
+                                    value={productionKeyword}
+                                    onChange={(event) => setProductionKeyword(event.target.value)}
+                                    placeholder={t("productionFilterKeywordPlaceholder")}
+                                    className={fieldClassName}
+                                />
+                            </div>
+
+                            {productionResults.length === 0 ? (
+                                <p className="text-sm text-[#5e3f3a]">{t("noProductionResults")}</p>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full border-collapse text-left">
+                                        <thead>
+                                            <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                                <th className="w-10 px-3 py-2"></th>
+                                                <th className="px-3 py-2">{t("colEmployeeCode")}</th>
+                                                <th className="px-3 py-2">{t("colFullName")}</th>
+                                                <th className="px-3 py-2">{t("colBlockCode")}</th>
+                                                <th className="px-3 py-2">{t("colCongDoan")}</th>
+                                                <th className="px-3 py-2">{t("colShiftTeam")}</th>
+                                                <th className="px-3 py-2">{t("colEndTime")}</th>
+                                                <th className="px-3 py-2">{t("colDidEat")}</th>
+                                                <th className="px-3 py-2">{t("colNote")}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {productionResults.map((item) => {
+                                                const checked = selectedEmployeeIds.includes(item.employeeId);
+                                                const currentEndTime = employeeOverrides[item.employeeId]?.endTime ?? endTime;
+                                                const isEligibleForMeal =
+                                                    computeTotalHour(startTime, currentEndTime) >= setting.mainMealTicketMinHours;
+                                                return (
+                                                    <tr
+                                                        key={item.employeeId}
+                                                        className={`border-b border-[#f1f5f9] transition-colors ${checked ? "bg-[#f8fafc]" : "hover:bg-[#f8fafc]"}`}
+                                                    >
+                                                        <td className="px-3 py-2 align-top">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={checked}
+                                                                onChange={() => toggleEmployee(item.employeeId)}
+                                                                disabled={isSubmitting}
+                                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
+                                                        <td className="px-3 py-2 align-top text-sm">
+                                                            <span className={overlappingEmployeeIds.includes(item.employeeId) ? "line-through text-[#930006]" : "text-[#191c1e]"}>
+                                                                {item.fullName}
+                                                            </span>
+                                                            {item.isLeader && (
+                                                                <span className="ml-1.5 inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-1.5 py-0.5 text-[10px] font-semibold text-[#5e3f3a]">
+                                                                    {t("leaderBadge")}
+                                                                </span>
+                                                            )}
+                                                            {overlappingEmployeeIds.includes(item.employeeId) && (
+                                                                <div className="mt-1 text-xs font-semibold text-[#930006]">
+                                                                    {t("colOverlapWarning")}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.blockCode || "—"}</td>
+                                                        <td className="px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.congDoan || "—"}</td>
+                                                        <td className="px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.shiftTeamNameVn || item.shiftTeamCode || "—"}</td>
+                                                        <td className="px-3 py-2 align-top">
+                                                            <TimePicker24h
+                                                                value={currentEndTime}
+                                                                onChange={(value) => handleEmployeeOverrideChange(item.employeeId, "endTime", value)}
+                                                                disabled={isSubmitting || !checked}
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2 align-top">
+                                                            {isEligibleForMeal ? (
+                                                                <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={employeeOverrides[item.employeeId]?.didEat ?? mealServiceActive}
+                                                                        onChange={(event) => handleEmployeeDidEatChange(item.employeeId, event.target.checked)}
+                                                                        disabled={isSubmitting || !checked}
+                                                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                                    />
+                                                                    {t("didEatLabel")}
+                                                                </label>
+                                                            ) : (
+                                                                <span className="text-sm text-[#8a8f94]">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-3 py-2 align-top">
+                                                            <input
+                                                                value={employeeOverrides[item.employeeId]?.noteVn ?? ""}
+                                                                onChange={(event) => handleEmployeeOverrideChange(item.employeeId, "noteVn", event.target.value)}
+                                                                placeholder={t("notePlaceholder")}
+                                                                disabled={isSubmitting || !checked}
+                                                                className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
                     ) : !groupId ? (
                         <p className="text-sm text-[#5e3f3a]">{t("chooseGroupFirstHint")}</p>

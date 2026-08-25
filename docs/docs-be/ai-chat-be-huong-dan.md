@@ -45,6 +45,42 @@
 > `AiChatToolDefinitions.Tools.DeepClone()` ở call site. Hành vi/API bên ngoài (endpoint
 > `POST /api/AiChat/stream`, hợp đồng NDJSON) **không đổi gì** — đã regression-test lại bằng
 > `dotnet build` + gọi thật `POST /api/AiChat/stream`, trả lời đúng như trước khi refactor.
+>
+> **Cập nhật 2026-08-24 — chuyển AI server từ Ollama sang LM Studio (endpoint `http://10.45.6.70:1234/v1`,
+> OpenAI-compatible `/v1/chat/completions`), kèm 🔴 BLOCKER thật đang chặn tool-calling:**
+> - Code đã chuyển xong: `IOllamaChatClient`/`OllamaChatClient`/`OllamaWireModels.cs` → đổi tên thành
+>   `ILlmChatClient`/`LmStudioChatClient`/`ChatWireModels.cs` (`Shared.Application`/
+>   `Shared.Infrastructure`). Model id thật (dò qua `GET /v1/models`): `google/gemma-4-e4b` (cấu hình
+>   `AiChatSettings:Model`, appsettings). Base URL đổi key thành `AiChatSettings:LmStudioBaseUrl`.
+> - **Khác biệt giao thức quan trọng so với Ollama (đã xử lý trong `LmStudioChatClient`):** response
+>   là SSE OpenAI-style (`data: {...}` mỗi dòng, kết thúc `data: [DONE]`), KHÔNG còn là NDJSON thô của
+>   Ollama; `tool_calls[].function.arguments` là **JSON-ENCODED STRING** (Ollama gửi object) và được
+>   **stream rời rạc theo `index`** qua nhiều chunk — phải tự gộp trước khi parse; mỗi tool call có
+>   thêm `id`, phải echo lại qua `tool_call_id` ở message `"tool"` phản hồi (OpenAI spec — LM Studio
+>   thực tế vẫn chấp nhận thiếu, nhưng làm đúng chuẩn cho chắc). Không có field `"think"` — LM Studio
+>   dùng `"reasoning_effort"`: đo thực tế trên `google/gemma-4-e4b` (2026-08-24) `"none"` ~50s/0
+>   reasoning tokens vs `"high"` ~86s/317 reasoning tokens cho cùng 1 câu hỏi — cùng tỉ lệ ~7x như
+>   Ollama's `think`, nên map `think:false → "none"`, `think:true → "high"`.
+> - Đã thêm xử lý **named SSE event lỗi** (`event: error` + dòng `data:` kèm chi tiết) — LM Studio
+>   dùng dạng này cho lỗi engine nội bộ, khác hẳn 1 dòng `chat.completion.chunk` bình thường;
+>   `LmStudioChatClient` giờ `throw DomainException` ngay khi gặp, để orchestrator báo lỗi thật cho
+>   FE thay vì im lặng trả về `{"type":"done"}` rỗng (bug đã gặp thực tế trong lúc test, xem blocker
+>   dưới đây).
+> - 🔴 **BLOCKER (2026-08-24, CHƯA XONG, chặn cả 2 chat AI — Asset lẫn Attendance):** gọi
+>   `/v1/chat/completions` kèm `tools` cho model `google/gemma-4-e4b` trên server LM Studio thật
+>   (`10.45.6.70:1234`) **luôn fail sau đúng ~5 phút** (`event: error`, message
+>   `"Engine protocol predict request failed: fetch failed"`). Đã cô lập bằng `curl` gọi THẲNG LM
+>   Studio (không qua BE, không qua app) — same lỗi, same ~5 phút — nên chắc chắn là vấn đề phía LM
+>   Studio, không phải bug ở `LmStudioChatClient`. Đã bisect: **chỉ cần 1 tool duy nhất
+>   `search_devices`** (schema 17 property) cũng đủ trigger lỗi này; 1 tool rất đơn giản (1 property
+>   string, vd `get_weather` demo) thì chạy được trong ~1-2 giây bình thường — nên nhiều khả năng là
+>   LM Studio's request/engine timeout khi compile grammar ràng buộc structured-output cho schema đủ
+>   phức tạp, KHÔNG phải do prompt dài (đã test cả với `systemPrompt` rút gọn, vẫn fail y hệt ở mốc
+>   ~5 phút). Cần người quản trị LM Studio kiểm tra log server thật trên `10.45.6.70` (log riêng của
+>   LM Studio, không phải log BE) để biết nguyên nhân sâu hơn (timeout cấu hình được? bug bản LM
+>   Studio đang chạy? thiếu tài nguyên?). **Cho tới khi việc này được xử lý ở phía LM Studio, cả AI
+>   Chat Asset (7 tool) lẫn AI Chat Attendance (nhiều tool, có tool ghi `create_ot_form_draft`) sẽ
+>   luôn treo ~5 phút rồi báo lỗi** — code BE đã đúng, đang chờ hạ tầng.
 
 > Hướng dẫn cho đội BE (.NET) triển khai lại phần "Chat với AI" đang chạy tạm ở FE
 > (`src/modules/ai-chat/`) thành 1 endpoint BE thật. Đọc kèm [asset-api-fe.md](asset-api-fe.md)

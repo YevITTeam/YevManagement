@@ -4,8 +4,11 @@ namespace Attendance.Application.Dtos.OtForms
 {
     public class CreateOtFormDto
     {
-        [Required(ErrorMessage = "Nhóm không được để trống")]
-        public int GroupId { get; set; }
+        // Bắt buộc khi IsProductionForm = false (đơn "theo Nhóm"); phải để trống khi = true (đơn
+        // "theo chuyền" — xem OtFormService.CreateAsync, OtForm.GroupId).
+        public int? GroupId { get; set; }
+
+        public bool IsProductionForm { get; set; }
 
         [Required(ErrorMessage = "Bộ phận không được để trống")]
         public int DepartmentId { get; set; }

@@ -33,6 +33,7 @@ export interface DeviceLiquidationImportConfirmResultDto {
     liquidatedCount: number;
     liquidatedDeviceIds: number[];
     releasedIpCount: number;
+    releasedSoftwareCount: number;
     skippedCount: number;
     skippedRows: DeviceLiquidationImportSkippedRowDto[];
 }

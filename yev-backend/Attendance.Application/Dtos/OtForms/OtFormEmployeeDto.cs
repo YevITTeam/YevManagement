@@ -35,5 +35,13 @@ namespace Attendance.Application.Dtos.OtForms
         public int? RemovedAtLevel { get; set; }
         public DateTime? RemovedAt { get; set; }
         public string? RemoveReason { get; set; }
+
+        // Snapshot ProductionEmployee lúc thêm vào đơn — chỉ có giá trị khi OtForm.IsProductionForm =
+        // true (đơn "theo chuyền"), null cho đơn "theo Nhóm" — xem OtFormEmployee.CongDoanSnapshot.
+        public string? CongDoanSnapshot { get; set; }
+        public string? TaskNameSnapshot { get; set; }
+        public string? BlockCodeSnapshot { get; set; }
+        public string? TeamCodeSnapshot { get; set; }
+        public string? ShiftTeamCodeSnapshot { get; set; }
     }
 }

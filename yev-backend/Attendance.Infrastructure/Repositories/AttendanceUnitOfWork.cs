@@ -38,13 +38,15 @@ namespace Attendance.Infrastructure.Repositories
             IProductionLineRepository productionLines,
             IProductionShiftTeamRepository productionShiftTeams,
             IProductionTeamRepository productionTeams,
-            IProductionEmployeeRepository productionEmployees) : base(dbContext)
+            IProductionEmployeeRepository productionEmployees,
+            IProductionApprovalStepRepository productionApprovalSteps) : base(dbContext)
         {
             EmployeeAccumulationHistories = employeeAccumulationHistories;
             ProductionLines = productionLines;
             ProductionShiftTeams = productionShiftTeams;
             ProductionTeams = productionTeams;
             ProductionEmployees = productionEmployees;
+            ProductionApprovalSteps = productionApprovalSteps;
             AttendanceSettings = attendanceSettings;
             OtFormBatches = otFormBatches;
             OtFormBatchEmailTokens = otFormBatchEmailTokens;
@@ -102,5 +104,6 @@ namespace Attendance.Infrastructure.Repositories
         public IProductionShiftTeamRepository ProductionShiftTeams { get; }
         public IProductionTeamRepository ProductionTeams { get; }
         public IProductionEmployeeRepository ProductionEmployees { get; }
+        public IProductionApprovalStepRepository ProductionApprovalSteps { get; }
     }
 }

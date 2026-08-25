@@ -27,8 +27,9 @@ namespace Attendance.Application.Services
         private static readonly Expression<Func<OtForm, OtFormListItemDto>> ToListItemDto = x => new OtFormListItemDto
         {
             Id = x.Id,
-            GroupNameVn = x.Group.GroupNameVn,
-            GroupNameJp = x.Group.GroupNameJp,
+            GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+            GroupNameJp = x.Group != null ? x.Group.GroupNameJp : null,
+            IsProductionForm = x.IsProductionForm,
             DepartmentNameVn = x.Department.DepartmentNameVn,
             DepartmentNameJp = x.Department.DepartmentNameJp,
             OtCaseCode = x.OtCase.Code,
@@ -98,7 +99,7 @@ namespace Attendance.Application.Services
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
         {
-            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
+            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && x.CreatedByUserName == userName);
             query = ApplyListFilters(query, fromDate, toDate, status).OrderByDescending(x => x.Id);
 
@@ -134,7 +135,7 @@ namespace Attendance.Application.Services
         {
             var myCurrentFormIds = await GetMyCurrentPendingFormIdsAsync(approverUserName);
 
-            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
+            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && x.Status == (int)OtFormStatus.InApproval && myCurrentFormIds.Contains(x.Id));
             query = ApplyListFilters(query, fromDate, toDate, status).OrderBy(x => x.Date);
 
@@ -159,7 +160,7 @@ namespace Attendance.Application.Services
                 h => h.ApproverUserName == userName, h => h.OtFormId);
             var distinctFormIds = actedFormIds.Distinct().ToList();
 
-            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
+            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id));
             query = ApplyListFilters(query, fromDate, toDate, status).OrderByDescending(x => x.Id);
 
@@ -177,7 +178,7 @@ namespace Attendance.Application.Services
                 x => x.EmployeeId == employee.Id, x => x.OtFormId);
             var distinctFormIds = participatedFormIds.Distinct().ToList();
 
-            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group, x => x.Department, x => x.OtCase)
+            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id));
             query = ApplyListFilters(query, fromDate, toDate, status).OrderByDescending(x => x.Id);
 
@@ -187,7 +188,7 @@ namespace Attendance.Application.Services
         public async Task<OtFormDto> GetByIdAsync(int id)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted,
-                x => x.Group, x => x.Department, x => x.Reason, x => x.OtCase);
+                x => x.Group!, x => x.Department, x => x.Reason, x => x.OtCase);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
 
             var employees = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
@@ -223,8 +224,9 @@ namespace Attendance.Application.Services
             {
                 Id = otForm.Id,
                 GroupId = otForm.GroupId,
-                GroupNameVn = otForm.Group.GroupNameVn,
-                GroupNameJp = otForm.Group.GroupNameJp,
+                GroupNameVn = otForm.Group?.GroupNameVn,
+                GroupNameJp = otForm.Group?.GroupNameJp,
+                IsProductionForm = otForm.IsProductionForm,
                 DepartmentId = otForm.DepartmentId,
                 DepartmentNameVn = otForm.Department.DepartmentNameVn,
                 DepartmentNameJp = otForm.Department.DepartmentNameJp,
@@ -264,7 +266,12 @@ namespace Attendance.Application.Services
                     RemovedByFullName = x.RemovedByFullName,
                     RemovedAtLevel = x.RemovedAtLevel,
                     RemovedAt = x.RemovedAt,
-                    RemoveReason = x.RemoveReason
+                    RemoveReason = x.RemoveReason,
+                    CongDoanSnapshot = x.CongDoanSnapshot,
+                    TaskNameSnapshot = x.TaskNameSnapshot,
+                    BlockCodeSnapshot = x.BlockCodeSnapshot,
+                    TeamCodeSnapshot = x.TeamCodeSnapshot,
+                    ShiftTeamCodeSnapshot = x.ShiftTeamCodeSnapshot
                 }).ToList(),
                 ProcessPart = processPart == null ? null : new ProcessPartDto
                 {
@@ -300,8 +307,15 @@ namespace Attendance.Application.Services
 
         public async Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
         {
-            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == request.GroupId && !x.IsDeleted);
-            group.OrThrowNotFound("Nhóm", request.GroupId);
+            if (request.IsProductionForm)
+                return await CreateProductionFormAsync(createdByUserName, createdByFullName, isAdmin, request);
+
+            if (!request.GroupId.HasValue)
+                throw new DomainException("Đơn theo Nhóm phải chọn Nhóm.");
+            var groupId = request.GroupId.Value;
+
+            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == groupId && !x.IsDeleted);
+            group.OrThrowNotFound("Nhóm", groupId);
 
             var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == request.DepartmentId && !x.IsDeleted);
             department.OrThrowNotFound("Bộ phận", request.DepartmentId);
@@ -318,9 +332,9 @@ namespace Attendance.Application.Services
             // Ai được tạo đơn cho Group này — CHỈ nhân viên thuộc đúng Group đó, hoặc Admin (2026-08-07,
             // Giai đoạn 3.1 — thay cho UserApprovalScope(Submitter) cũ). creatorEmployee (nếu có) cũng
             // chính là "người tạo" dùng để suy luận chuỗi duyệt Cây chức vụ bên dưới.
-            var creatorEmployee = await EnsureCanCreateOrEditForScopeAsync(createdByUserName, isAdmin, request.GroupId);
+            var creatorEmployee = await EnsureCanCreateOrEditForScopeAsync(createdByUserName, isAdmin, groupId);
 
-            var validatedEmployees = await ValidateEmployeesAsync(request.GroupId, request.StartTime, request.EndTime, request.Employees);
+            var validatedEmployees = await ValidateEmployeesAsync(groupId, request.StartTime, request.EndTime, request.Employees);
 
             // Kiểm tra trùng giờ tăng ca — 1 nhân viên không được xuất hiện trong 2 đơn tăng ca có
             // giờ chồng chéo trong cùng 1 ngày. Chỉ xét các đơn chưa bị xóa và chưa bị từ chối.
@@ -334,24 +348,14 @@ namespace Attendance.Application.Services
             // chặn tạo đơn nếu chuỗi không đủ (plan §3 quyết định #10) — đơn vẫn tạo, kẹt ở bước thiếu
             // candidate, ApprovalChainWarning phản ánh rõ cho FE hiển thị cảnh báo.
             var chainResult = await _jobTitleApprovalChainService.ResolveChainForCreationAsync(
-                creatorEmployee?.Id, request.GroupId, request.DepartmentId, request.OtCaseId);
+                creatorEmployee?.Id, groupId, request.DepartmentId, request.OtCaseId);
 
-            // Người tạo đã ở cấp cao hơn/bằng MỌI Chức vụ trung gian "Bắt buộc ký" của Phòng ban — không
-            // còn ai khác để ký ô "Người đề nghị" thay họ, nên chính họ tự ký (2026-08-08, theo yêu cầu
-            // người dùng — xem ResolveApprovalChainResultDto.RequiresCreatorSelfSign). Chặn tạo đơn nếu
-            // chưa có chữ ký lưu sẵn, cùng message/cơ chế với ApproveAsync khi bước yêu cầu ký.
-            byte[]? creatorSignatureImage = null;
-            if (chainResult.RequiresCreatorSelfSign)
-            {
-                var creatorSignature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == createdByUserName);
-                if (creatorSignature == null)
-                    throw new DomainException("Bạn đang ở cấp cao nhất trong chuỗi duyệt trung gian của Phòng ban này — đơn cần chữ ký của chính bạn ở ô \"Người đề nghị\". Vui lòng đăng ký chữ ký (PUT /api/UserSignature/me) trước khi tạo đơn.");
-                creatorSignatureImage = creatorSignature.SignatureImage;
-            }
+            var creatorSignatureImage = await ResolveCreatorSelfSignAsync(createdByUserName, chainResult);
 
             var newOtForm = new OtForm
             {
-                GroupId = request.GroupId,
+                GroupId = groupId,
+                IsProductionForm = false,
                 DepartmentId = request.DepartmentId,
                 ReasonId = request.ReasonId,
                 OtCaseId = request.OtCaseId,
@@ -381,6 +385,103 @@ namespace Attendance.Application.Services
                 IsDeleted = false
             };
 
+            return await FinalizeCreateAsync(newOtForm, request, chainResult, productionEmployeesByEmployeeId: null);
+        }
+
+        // Đơn "theo chuyền" (OtForm.IsProductionForm = true, 2026-08-24) — chọn nhân viên qua
+        // ProductionEmployee thay vì theo Group cố định, xem docs/docs-be/attendance-module.md
+        // §Đơn theo chuyền. Không có Group để check "ai được tạo đơn cho Group này" như Mode A — thay
+        // bằng: Admin luôn được tạo, người thường phải là 1 trong chính những người có tên trong đơn.
+        private async Task<OtFormDto> CreateProductionFormAsync(
+            string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
+        {
+            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == request.DepartmentId && !x.IsDeleted);
+            department.OrThrowNotFound("Bộ phận", request.DepartmentId);
+
+            var reason = await _unitOfWork.Reasons.FirstOrDefaultAsync(x => x.Id == request.ReasonId && !x.IsDeleted);
+            reason.OrThrowNotFound("Lý do", request.ReasonId);
+
+            var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == request.OtCaseId && !x.IsDeleted);
+            otCase.OrThrowNotFound("Trường hợp OT", request.OtCaseId);
+
+            Employee? creatorEmployee = null;
+            if (!isAdmin)
+            {
+                creatorEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(
+                    x => x.UserName == createdByUserName && !x.IsDeleted, x => x.JobTitle!);
+                if (creatorEmployee == null)
+                    throw new DomainException("Tài khoản chưa liên kết với nhân viên nào. Liên hệ Admin nếu tài khoản chưa liên kết đúng nhân viên.");
+                if (!request.Employees.Any(x => x.EmployeeId == creatorEmployee.Id))
+                    throw new DomainException("Bạn chỉ được tạo đơn có chính bạn trong danh sách nhân viên.");
+            }
+
+            var employeeIds = request.Employees.Select(x => x.EmployeeId).ToList();
+            var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
+
+            var employeeEndTimes = request.Employees.ToDictionary(x => x.EmployeeId, x => x.EndTime);
+            await EnsureNoOverlappingOtFormsAsync(
+                validatedEmployees, request.Date, request.StartTime, employeeEndTimes, excludeFormId: null);
+
+            var chainResult = await _jobTitleApprovalChainService.ResolveChainForProductionCreationAsync(
+                creatorEmployee?.Id, request.DepartmentId, employeeIds, request.OtCaseId);
+
+            var creatorSignatureImage = await ResolveCreatorSelfSignAsync(createdByUserName, chainResult);
+
+            var newOtForm = new OtForm
+            {
+                GroupId = null,
+                IsProductionForm = true,
+                DepartmentId = request.DepartmentId,
+                ReasonId = request.ReasonId,
+                OtCaseId = request.OtCaseId,
+                StartTime = request.StartTime,
+                EndTime = request.EndTime,
+                SubReason = request.SubReason,
+                TotalHour = request.TotalHour,
+                Date = request.Date,
+                NumberOfEmployee = request.Employees.Count,
+                CreatedByUserName = createdByUserName,
+                CreatedByFullName = createdByFullName,
+                CreatedAt = TimeHelper.GetCurrentUtcTime(),
+                CreatorSignatureImage = creatorSignatureImage,
+                Status = (chainResult.Steps.Count == 0 && chainResult.IsComplete)
+                    ? (int)OtFormStatus.Completed
+                    : (int)OtFormStatus.InApproval,
+                ApprovalChainWarning = chainResult.Warning,
+                IsDeleted = false
+            };
+
+            // ProductionEmployee đổi hàng ngày — chụp lại đúng trạng thái LÚC tạo đơn thành snapshot
+            // trên OtFormEmployee (xem OtFormEmployee.CongDoanSnapshot), không đọc lại sau này.
+            var productionEmployeesByEmployeeId = (await _unitOfWork.ProductionEmployees.FindAsync(
+                x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted))
+                .ToDictionary(x => x.EmployeeId!.Value);
+
+            return await FinalizeCreateAsync(newOtForm, request, chainResult, productionEmployeesByEmployeeId);
+        }
+
+        // Người tạo đã ở cấp cao hơn/bằng MỌI Chức vụ trung gian "Bắt buộc ký" — không còn ai khác để
+        // ký ô "Người đề nghị" thay họ, nên chính họ tự ký (2026-08-08, theo yêu cầu người dùng — xem
+        // ResolveApprovalChainResultDto.RequiresCreatorSelfSign). Chặn tạo đơn nếu chưa có chữ ký lưu
+        // sẵn, cùng message/cơ chế với ApproveAsync khi bước yêu cầu ký. Dùng chung cho cả 2 kiểu tạo
+        // đơn (theo Nhóm/theo chuyền, 2026-08-24).
+        private async Task<byte[]?> ResolveCreatorSelfSignAsync(string createdByUserName, ResolveApprovalChainResultDto chainResult)
+        {
+            if (!chainResult.RequiresCreatorSelfSign) return null;
+
+            var creatorSignature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == createdByUserName);
+            if (creatorSignature == null)
+                throw new DomainException("Bạn đang ở cấp cao nhất trong chuỗi duyệt trung gian — đơn cần chữ ký của chính bạn ở ô \"Người đề nghị\". Vui lòng đăng ký chữ ký (PUT /api/UserSignature/me) trước khi tạo đơn.");
+            return creatorSignature.SignatureImage;
+        }
+
+        // Phần đuôi dùng chung cho cả 2 kiểu tạo đơn (2026-08-24) — thêm OtForm/OtFormEmployee(kèm
+        // snapshot ProductionEmployee nếu có)/ProcessPart/chuỗi bước duyệt, lưu, rồi cộng luỹ kế ngay
+        // nếu Completed hoặc báo email cho bước đầu tiên nếu còn InApproval.
+        private async Task<OtFormDto> FinalizeCreateAsync(
+            OtForm newOtForm, CreateOtFormDto request, ResolveApprovalChainResultDto chainResult,
+            Dictionary<int, ProductionEmployee>? productionEmployeesByEmployeeId)
+        {
             await _unitOfWork.OtForms.AddAsync(newOtForm);
 
             var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
@@ -395,6 +496,8 @@ namespace Attendance.Application.Services
             {
                 var (projectedMonthBefore, projectedYearBefore) =
                     projectedByEmployee.TryGetValue(item.EmployeeId, out var projected) ? projected : (0m, 0m);
+                ProductionEmployee? pe = null;
+                productionEmployeesByEmployeeId?.TryGetValue(item.EmployeeId, out pe);
 
                 await _unitOfWork.OtFormEmployees.AddAsync(new OtFormEmployee
                 {
@@ -406,7 +509,12 @@ namespace Attendance.Application.Services
                     NoteVn = item.NoteVn,
                     NoteJp = item.NoteJp,
                     MonthToDate = projectedMonthBefore,
-                    YearToDate = projectedYearBefore
+                    YearToDate = projectedYearBefore,
+                    CongDoanSnapshot = pe?.CongDoan,
+                    TaskNameSnapshot = pe?.TaskName,
+                    BlockCodeSnapshot = pe?.BlockCode,
+                    TeamCodeSnapshot = pe?.TeamCode,
+                    ShiftTeamCodeSnapshot = pe?.ShiftTeamCode
                 });
             }
 
@@ -531,7 +639,11 @@ namespace Attendance.Application.Services
             if (otForm.Status != (int)OtFormStatus.InApproval || hasApprovedStep)
                 throw new DomainException("Đơn đã có bước duyệt được xử lý, không thể sửa nữa.");
 
-            await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, otForm.GroupId);
+            // Đơn "theo chuyền" (GroupId null) chưa có scope kiểu Group để kiểm lại — dòng 527-528 phía
+            // trên đã chặn chỉ chính người tạo mới sửa được, tạm đủ cho tới khi thiết kế quyền sửa đơn
+            // chuyền đầy đủ (Giai đoạn 5, chưa làm — xem OtForm.IsProductionForm).
+            if (otForm.GroupId.HasValue)
+                await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, otForm.GroupId.Value);
 
             var activeEmployees = otForm.OtFormEmployees.Where(x => !x.IsRemoved).ToList();
             var activeEmployeeIds = activeEmployees.Select(x => x.EmployeeId).ToHashSet();
@@ -904,16 +1016,22 @@ namespace Attendance.Application.Services
         }
 
         private async Task<List<Employee>> ValidateEmployeesAsync(
-            int groupId, TimeOnly formStartTime, TimeOnly formEndTime, List<CreateOtFormEmployeeItemDto> items)
+            int? groupId, TimeOnly formStartTime, TimeOnly formEndTime, List<CreateOtFormEmployeeItemDto> items)
         {
             var employeeIds = items.Select(x => x.EmployeeId).ToList();
             var employees = await _unitOfWork.Employees.FindAsync(x => employeeIds.Contains(x.Id) && !x.IsDeleted);
             if (employees.Count != employeeIds.Distinct().Count())
                 throw new DomainException("Có nhân viên không tồn tại hoặc đã bị xóa trong danh sách.");
 
-            var wrongGroupEmployee = employees.FirstOrDefault(x => x.GroupId != groupId);
-            if (wrongGroupEmployee != null)
-                throw new DomainException($"Nhân viên '{wrongGroupEmployee.Code}' không thuộc nhóm đã chọn.");
+            // groupId null = đơn "theo chuyền" (OtForm.IsProductionForm = true) — không có Group cố
+            // định để đối chiếu, bỏ qua check này (xem JobTitleApprovalChainService.
+            // ResolveChainForProductionCreationAsync — phạm vi Group/Line suy tự động theo từng bước).
+            if (groupId.HasValue)
+            {
+                var wrongGroupEmployee = employees.FirstOrDefault(x => x.GroupId != groupId);
+                if (wrongGroupEmployee != null)
+                    throw new DomainException($"Nhân viên '{wrongGroupEmployee.Code}' không thuộc nhóm đã chọn.");
+            }
 
             var employeeById = employees.ToDictionary(x => x.Id);
             foreach (var item in items)
@@ -1203,7 +1321,7 @@ namespace Attendance.Application.Services
             var otForms = activeFormIds.Count == 0
                 ? new List<OtForm>()
                 : (await _unitOfWork.OtForms.FindWithIncludesAsync(
-                    x => activeFormIds.Contains(x.Id), x => x.Group, x => x.Reason, x => x.OtCase))
+                    x => activeFormIds.Contains(x.Id), x => x.Group!, x => x.Reason, x => x.OtCase))
                     .OrderBy(x => x.Id).ToList();
 
             var employeesByFormId = activeFormIds.Count == 0
@@ -1237,8 +1355,9 @@ namespace Attendance.Application.Services
                 OtForms = otForms.Select(f => new OtFormBatchItemDto
                 {
                     OtFormId = f.Id,
-                    GroupNameVn = f.Group.GroupNameVn,
-                    GroupNameJp = f.Group.GroupNameJp,
+                    GroupNameVn = f.Group != null ? f.Group.GroupNameVn : null,
+                    GroupNameJp = f.Group != null ? f.Group.GroupNameJp : null,
+                    IsProductionForm = f.IsProductionForm,
                     ReasonNameVn = f.Reason.ReasonNameVn,
                     ReasonNameJp = f.Reason.ReasonNameJp,
                     OtCaseCode = f.OtCase.Code,
@@ -1281,7 +1400,12 @@ namespace Attendance.Application.Services
                             RemovedByFullName = x.RemovedByFullName,
                             RemovedAtLevel = x.RemovedAtLevel,
                             RemovedAt = x.RemovedAt,
-                            RemoveReason = x.RemoveReason
+                            RemoveReason = x.RemoveReason,
+                            CongDoanSnapshot = x.CongDoanSnapshot,
+                            TaskNameSnapshot = x.TaskNameSnapshot,
+                            BlockCodeSnapshot = x.BlockCodeSnapshot,
+                            TeamCodeSnapshot = x.TeamCodeSnapshot,
+                            ShiftTeamCodeSnapshot = x.ShiftTeamCodeSnapshot
                         }).ToList()
                 }).ToList()
             };

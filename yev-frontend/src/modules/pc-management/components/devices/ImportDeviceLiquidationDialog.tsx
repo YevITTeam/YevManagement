@@ -164,6 +164,7 @@ export default function ImportDeviceLiquidationDialog({
                         <div className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm">
                             <span className="font-semibold text-[#16a34a]">Đã thanh lý {result.liquidatedCount} thiết bị</span>
                             <span className="text-[#5e3f3a]">Đã gỡ IP: {result.releasedIpCount}</span>
+                            <span className="text-[#5e3f3a]">Đã gỡ phần mềm: {result.releasedSoftwareCount}</span>
                             <span className={allSkippedRows.length > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 Bỏ qua (lỗi): {allSkippedRows.length}
                             </span>

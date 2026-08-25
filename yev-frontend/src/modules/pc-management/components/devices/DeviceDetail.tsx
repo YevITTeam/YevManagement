@@ -237,7 +237,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                 />
             )}
             {activeTab === "software" && (
-                <DeviceSoftwarePanel deviceId={device.id} softwares={detail.softwares} onChanged={fetchDetail} />
+                <DeviceSoftwarePanel deviceId={device.id} deviceStatus={device.status} softwares={detail.softwares} onChanged={fetchDetail} />
             )}
             {activeTab === "transfer-history" && <DeviceTransferHistoryPanel deviceId={device.id} />}
             {activeTab === "audit-history" && canViewAuditTrail && <DeviceAuditHistoryPanel deviceId={device.id} />}

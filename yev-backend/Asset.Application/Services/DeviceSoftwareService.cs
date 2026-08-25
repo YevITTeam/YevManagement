@@ -1,6 +1,7 @@
 ﻿using Asset.Application.Dtos.DeviceSoftwares;
 using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
+using Asset.Domain.Enums;
 using Shared.Application.Abstractions;
 using Shared.Application.Helper;
 using Shared.Application.Services;
@@ -36,6 +37,14 @@ namespace Asset.Application.Services
 
         public async Task<DeviceSoftwareDto> CreateAsync(CreateDeviceSoftwareDto request)
         {
+            var device = (await _unitOfWork.Devices.GetByIdAsync(request.DeviceId)).OrThrowNotFound("Thiết bị", request.DeviceId);
+
+            // A Device only holds installed Software while PendingUse/InUse — DeviceService auto-wipes
+            // it on entering PendingLiquidation/Liquidated, so allowing an install here would just get
+            // silently deleted on the device's next unrelated Save (2026-08-25).
+            if (device!.Status.IsLiquidationStatus())
+                throw new DomainException($"Thiết bị đang ở trạng thái '{device.Status.GetDeviceStatusText()}', không thể cài đặt thêm phần mềm.");
+
             var exists = await _unitOfWork.DeviceSoftwares.FirstOrDefaultAsync(
                 x => x.DeviceId == request.DeviceId && x.SoftwareId == request.SoftwareId);
 
@@ -116,6 +125,11 @@ namespace Asset.Application.Services
         public async Task<List<DeviceSoftwareDto>> SyncAsync(SyncDeviceSoftwareDto request)
         {
             var device = (await _unitOfWork.Devices.GetByIdAsync(request.DeviceId)).OrThrowNotFound("Thiết bị", request.DeviceId);
+
+            // Same gate as CreateAsync — allow clearing the list (Items empty, e.g. re-syncing a device
+            // that just entered PendingLiquidation) but not attaching Software while in that state.
+            if (device!.Status.IsLiquidationStatus() && request.Items.Count > 0)
+                throw new DomainException($"Thiết bị đang ở trạng thái '{device.Status.GetDeviceStatusText()}', không thể cài đặt thêm phần mềm.");
 
             if (request.Items.Select(x => x.SoftwareId).Distinct().Count() != request.Items.Count)
                 throw new DomainException("Danh sách phần mềm chọn bị trùng lặp.");

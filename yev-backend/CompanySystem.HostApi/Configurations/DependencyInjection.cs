@@ -47,23 +47,31 @@ namespace CompanySystem.HostApi.Configurations
             services.AddMemoryCache();
             services.AddScoped<IClaimsTransformation, MyClaimsTransformation>();
 
-            // AI Chat -> Ollama typed HttpClient (docs/ai-chat-be-huong-dan.md). Not picked up by the
+            // AI Chat -> LM Studio typed HttpClient (docs/ai-chat-be-huong-dan.md). Not picked up by the
             // Scrutor scan above (class name ends in "Client", not Repository/UnitOfWork/Service) —
             // needs BaseAddress/Timeout, so it's registered explicitly instead.
             // ONE registration serves every module that runs a tool-calling chat (Asset AI Chat +
             // Attendance AI Chat) — the client lives in Shared.* and takes each module's tool
             // catalogue as a parameter, so there is nothing module-specific to register twice.
-            services.AddHttpClient<IOllamaChatClient, OllamaChatClient>((_, client) =>
+            // Was IOllamaChatClient/OllamaChatClient/AiChatSettings:OllamaBaseUrl before the internal
+            // AI server moved from Ollama to LM Studio (2026-08-24).
+            services.AddHttpClient<ILlmChatClient, LmStudioChatClient>((_, client) =>
             {
-                var baseUrl = configuration["AiChatSettings:OllamaBaseUrl"] ?? "http://localhost:11434";
+                var baseUrl = configuration["AiChatSettings:LmStudioBaseUrl"] ?? "http://localhost:1234/v1";
+                // LM Studio's OpenAI-compatible base URL carries a real path segment ("/v1") that must
+                // be PRESERVED, not replaced — HttpClient.BaseAddress + a relative request URI only
+                // appends correctly when BaseAddress ends with "/"; without the trailing slash, .NET's
+                // URI combining rules replace the last segment instead (the request in
+                // LmStudioChatClient relies on this by using a relative, no-leading-slash URI).
+                if (!baseUrl.EndsWith('/')) baseUrl += "/";
                 client.BaseAddress = new Uri(baseUrl);
                 // HttpClient.Timeout áp dụng cho TOÀN BỘ thời gian đọc xong response, không chỉ tới lúc
-                // nhận header đầu — dù OllamaChatClient dùng HttpCompletionOption.ResponseHeadersRead,
+                // nhận header đầu — dù LmStudioChatClient dùng HttpCompletionOption.ResponseHeadersRead,
                 // 1 câu hỏi cần tới 3 vòng gọi tool (mỗi vòng lại 1 SendAsync riêng, được cấp lại đủ
                 // ngần này giây) vẫn có thể vượt mốc cũ 120s ở 1 vòng nếu model cục bộ trả lời dài hoặc
-                // máy chạy Ollama đang tải nặng — khi đó HttpClient tự hủy nửa chừng, FE nhận lỗi kết nối
-                // dù model vẫn đang chạy bình thường, đúng kiểu "lúc được lúc không" (2026-07-27, nâng +
-                // cho cấu hình qua AiChatSettings:TimeoutSeconds để tinh chỉnh không cần build lại).
+                // máy chạy LM Studio đang tải nặng — khi đó HttpClient tự hủy nửa chừng, FE nhận lỗi kết
+                // nối dù model vẫn đang chạy bình thường, đúng kiểu "lúc được lúc không" (2026-07-27,
+                // nâng + cho cấu hình qua AiChatSettings:TimeoutSeconds để tinh chỉnh không cần build lại).
                 var timeoutSeconds = configuration.GetValue<int?>("AiChatSettings:TimeoutSeconds") ?? 300;
                 client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
             });

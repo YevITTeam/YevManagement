@@ -13,8 +13,9 @@ namespace Asset.Application.Services
     // (2026-07-23). Two steps like the other imports (preview -> confirm). Business rules (user decision):
     //   - a device can only be liquidated FROM the "Chờ thanh lý" (PendingLiquidation) state; any other
     //     state is rejected on that row (skip-and-report, does not block the batch);
-    //   - liquidating a device also frees its IPs (back to Available) and soft-deletes its emails —
-    //     it is treated as no longer in use, exactly like DeviceService.DeleteAsync.
+    //   - liquidating a device also frees its IPs (back to Available), soft-deletes its emails, and
+    //     uninstalls any Software still attached — it is treated as no longer in use, exactly like
+    //     DeviceService.DeleteAsync / DeviceService.UpdateAsync entering PendingLiquidation.
     public class DeviceLiquidationImportService : BaseService<IAssetUnitOfWork>, IDeviceLiquidationImportService
     {
         public DeviceLiquidationImportService(IAssetUnitOfWork unitOfWork) : base(unitOfWork) { }
@@ -60,6 +61,9 @@ namespace Asset.Application.Services
                 var emailsByDeviceId = (await _unitOfWork.DeviceEmails.FindAsync(x => deviceIds.Contains(x.DeviceId) && !x.IsDeleted))
                     .GroupBy(x => x.DeviceId)
                     .ToDictionary(g => g.Key, g => g.ToList());
+                var softwaresByDeviceId = (await _unitOfWork.DeviceSoftwares.FindAsync(x => deviceIds.Contains(x.DeviceId)))
+                    .GroupBy(x => x.DeviceId)
+                    .ToDictionary(g => g.Key, g => g.ToList());
 
                 foreach (var row in validRows)
                 {
@@ -99,6 +103,18 @@ namespace Asset.Application.Services
                     {
                         email.IsDeleted = true;
                         _unitOfWork.DeviceEmails.Update(email);
+                    }
+
+                    // A liquidated device no longer holds any installed Software either — same as
+                    // DeviceService.UpdateAsync releasing Software when a Device enters PendingLiquidation
+                    // (2026-08-25). Most devices will already be empty here (released earlier when they
+                    // first moved into PendingLiquidation), this is just the safety net for rows that
+                    // never went through that path.
+                    var softwares = softwaresByDeviceId.GetValueOrDefault(deviceId) ?? new List<Asset.Domain.Entities.DeviceSoftware>();
+                    if (softwares.Count > 0)
+                    {
+                        _unitOfWork.DeviceSoftwares.RemoveRange(softwares);
+                        result.ReleasedSoftwareCount += softwares.Count;
                     }
 
                     result.LiquidatedCount++;

@@ -1,4 +1,5 @@
 using Attendance.Application.Dtos.DepartmentApprovalSteps;
+using Attendance.Application.Dtos.Departments;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
@@ -106,6 +107,27 @@ namespace Attendance.Application.Services
             await _unitOfWork.SaveChangesAsync();
 
             return await GetByDepartmentCoreAsync(departmentId);
+        }
+
+        public async Task<List<DepartmentDto>> GetMyManagedDepartmentsAsync(string userName, bool isAdmin)
+        {
+            if (isAdmin)
+            {
+                var all = await _unitOfWork.Departments.SelectAsync(
+                    predicate: x => !x.IsDeleted,
+                    selector: x => new DepartmentDto { Id = x.Id, DepartmentCode = x.DepartmentCode, DepartmentNameVn = x.DepartmentNameVn, DepartmentNameJp = x.DepartmentNameJp });
+                return all.OrderBy(x => x.DepartmentNameVn).ToList();
+            }
+
+            var myDepartmentIds = (await _unitOfWork.DepartmentApprovalStepCoordinators.FindAsync(
+                x => x.Employee.UserName == userName && !x.IsDeleted))
+                .Select(x => x.DepartmentId)
+                .ToHashSet();
+
+            var items = await _unitOfWork.Departments.SelectAsync(
+                predicate: x => !x.IsDeleted && myDepartmentIds.Contains(x.Id),
+                selector: x => new DepartmentDto { Id = x.Id, DepartmentCode = x.DepartmentCode, DepartmentNameVn = x.DepartmentNameVn, DepartmentNameJp = x.DepartmentNameJp });
+            return items.OrderBy(x => x.DepartmentNameVn).ToList();
         }
     }
 }

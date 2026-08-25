@@ -57,6 +57,20 @@ public partial class OtFormEmployee
 
     public string? RemoveReason { get; set; }
 
+    // Snapshot từ ProductionEmployee tại thời điểm thêm vào đơn (chỉ có giá trị khi OtForm.IsProductionForm
+    // = true, tức đơn "theo chuyền") — ProductionEmployee đổi hàng ngày nên đơn đã tạo phải giữ đúng dữ
+    // liệu lúc đó, không đọc lại ProductionEmployee hiện tại (2026-08-24, cùng nguyên tắc snapshot với
+    // MonthToDate/YearToDate ở trên).
+    public string? CongDoanSnapshot { get; set; }
+
+    public string? TaskNameSnapshot { get; set; }
+
+    public string? BlockCodeSnapshot { get; set; }
+
+    public string? TeamCodeSnapshot { get; set; }
+
+    public string? ShiftTeamCodeSnapshot { get; set; }
+
     public virtual OtForm OtForm { get; set; } = null!;
 
     public virtual Employee Employee { get; set; } = null!;

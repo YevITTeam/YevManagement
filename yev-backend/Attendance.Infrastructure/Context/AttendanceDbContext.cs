@@ -44,6 +44,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<ProductionShiftTeam> ProductionShiftTeams { get; set; }
     public virtual DbSet<ProductionTeam> ProductionTeams { get; set; }
     public virtual DbSet<ProductionEmployee> ProductionEmployees { get; set; }
+    public virtual DbSet<ProductionApprovalStep> ProductionApprovalSteps { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -477,6 +478,22 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.EmployeeId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ProductionEmployees_Employees_EmployeeId");
+        });
+
+        modelBuilder.Entity<ProductionApprovalStep>(entity =>
+        {
+            entity.HasIndex(e => e.DepartmentId, "IX_ProductionApprovalSteps_DepartmentId");
+            entity.HasIndex(e => e.JobTitleId, "IX_ProductionApprovalSteps_JobTitleId");
+
+            entity.HasOne(d => d.Department).WithMany(p => p.ProductionApprovalSteps)
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionApprovalSteps_Departments_DepartmentId");
+
+            entity.HasOne(d => d.JobTitle).WithMany(p => p.ProductionApprovalSteps)
+                .HasForeignKey(d => d.JobTitleId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionApprovalSteps_JobTitles_JobTitleId");
         });
 
         OnModelCreatingPartial(modelBuilder);
