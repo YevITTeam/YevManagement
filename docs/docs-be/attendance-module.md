@@ -188,7 +188,8 @@ FE) nay gộp thành 1 bảng cấu hình Admin tự sửa được, không cầ
   nhập tay**, không tự tính.
 - **Giới hạn lũy kế**: `MonthlyOtHourLimit` (mặc định 25h) và `YearlyOtHourLimit` (mặc định 300h) — vượt
   ngưỡng thì UI tô đỏ cảnh báo trên MỌI màn hiển thị lũy kế, **không chặn** tạo/duyệt đơn hay sửa lũy kế
-  thủ công.
+  thủ công. **⚠ SUPERSEDED (2026-08-26)** — cả `MonthlyOtHourLimit`/`YearlyOtHourLimit` lẫn
+  `DailyOtHourLimit` mới thêm giờ CHẶN CỨNG, xem §Giới hạn giờ OT ngày/tháng/năm — CHẶN CỨNG bên dưới.
 
 ### §Có ăn hay không theo từng nhân viên — trừ 30 phút nếu có ăn (2026-08-06, đổi hướng 2026-08-26)
 
@@ -362,6 +363,75 @@ lũy kế và §Có ăn hay không phía trên — chốt qua nhiều vòng trao
   redesign này CÓ đổi: cả 3 bảng chọn nhân viên (Sửa đơn/Theo chuyền/Theo Nhóm) đều thêm cột "Loại
   phiếu ăn" (preview qua `computeMealTicketType`), và checkbox "Có ăn" bị khoá + đổi thành nhãn "Khung
   sớm — luôn phiếu Phụ" khi ca khớp đúng khung OT sớm (`isEarlyMealWindowOt`).
+
+### §Giới hạn giờ OT ngày/tháng/năm — CHẶN CỨNG tạo/sửa đơn (2026-08-26)
+
+**Đảo ngược hoàn toàn** hành vi cũ ở §Cấu hình phiếu ăn & giới hạn lũy kế phía trên (Monthly/YearlyOtHourLimit
+trước đây chỉ tô đỏ cảnh báo, KHÔNG chặn) — chốt qua trao đổi với người dùng (CLAUDE.md §2 luật 2), dựa
+trên `docs/Note_OT.txt` dòng "Ngày: không tăng ca quá 4 tiếng":
+
+- **3 mốc `AttendanceSetting`**: `DailyOtHourLimit` (mới, mặc định **4h**), `MonthlyOtHourLimit` (mặc
+  định 25h), `YearlyOtHourLimit` (mặc định 300h) — Admin sửa cả 3 qua `PUT /api/AttendanceSetting`
+  (`AttendanceSettingPanel.tsx`).
+- **CHẶN CỨNG, không tự động loại nhân viên**: vượt BẤT KỲ mốc nào (sau khi cộng thêm giờ OT thực tích
+  của chính đơn đang tạo/sửa) → `OtFormService.ValidateOtHourLimitsAsync` ném `DomainException` liệt kê
+  đủ mã nhân viên + mốc bị vượt, từ chối cả yêu cầu tạo/sửa — người tạo/sửa đơn phải tự bỏ chọn nhân
+  viên đó (Tạo đơn) hoặc giảm giờ/dùng "Loại khỏi đơn" (Sửa đơn) rồi thao tác lại. Áp dụng cho CẢ 2
+  luồng tạo đơn (theo Nhóm `CreateAsync` lẫn theo chuyền `CreateProductionFormAsync`, dùng chung
+  `FinalizeCreateAsync`) và `UpdateAsync` (sửa giờ kết thúc trước khi có bước duyệt nào được xử lý).
+- **"Ngày" cộng dồn theo NHÂN VIÊN**, không phải theo ca: tổng tất cả giờ OT thực tích của 1 nhân viên
+  trong đúng 1 ngày, kể cả từ nhiều đơn/nhiều ca khác nhau trong ngày đó (chốt qua AskUserQuestion —
+  "Tổng theo ngày/nhân viên", không phải kiểm từng ca đơn lẻ).
+  "Trước"/"sau" tính bằng `OtFormService.ComputeAccumulatedHoursBatchAsync` (đổi tên + mở rộng từ
+  `ComputeProjectedHoursBatchAsync` cũ, thêm chiều Ngày + tham số `excludeFormId` để `UpdateAsync` không
+  tự cộng dồn ngược với chính các dòng `OtFormEmployee` hiện có của đơn đang sửa) — nguồn dữ liệu và
+  filter (`!IsRemoved && Status != Rejected && !IsDeleted`) giữ nguyên như tính Dự kiến ở §Lũy kế dự
+  kiến bên dưới, chỉ thêm 1 chiều tổng hợp mới.
+- **FE cảnh báo SỚM** (trước khi submit, không thay cho validate BE): `EmployeeDto.ProjectedDayToDate`
+  (mới, song song `ProjectedMonthToDate`/`ProjectedYearToDate` đã có — chỉ `GetByGroupIdAsync` trả có ý
+  nghĩa) — `CreateOtFormPage.tsx` tô đỏ badge khi vượt bất kỳ mốc nào trong 3 mốc. BE luôn là nguồn chặn
+  thật; lỗi 400 hiện qua toast (`getApiErrorMessage`, không cần code thêm ở FE vì pattern catch/toast đã
+  có sẵn).
+- **Bảng "Theo chuyền" cũng có cảnh báo SỚM** (thêm cùng đợt 2026-08-26 — trước đó bảng này KHÔNG có
+  cột lũy kế nào, khác bảng "Theo Nhóm" đã có từ 2026-08-06, là thiếu sót đã sửa): mirror y hệt cơ chế
+  trên sang `ProductionEmployeeSearchItemDto.ProjectedDayToDate`/`ProjectedMonthToDate`/
+  `ProjectedYearToDate` + `ProductionEmployeeService.SearchAsync` (tham số mới `targetDate`, tự chứa
+  `CalculateProjectedHours` riêng — không gọi chéo sang `EmployeeService`, đúng quy ước mirror đã có).
+  `GET /api/ProductionEmployee/search` thêm query param `date` (optional, mặc định hôm nay thực tế nếu
+  bỏ trống) — FE `CreateOtFormPage.tsx` luôn truyền `date` = ngày trên đơn đang tạo, đổi ngày tự gọi
+  lại API (cùng cơ chế `useFetchEffect` deps đã có cho `productionResults`).
+- **Không retroactive**: đổi cấu hình chỉ ảnh hưởng đơn tạo/sửa SAU đó — không re-validate đơn đã tạo
+  trước đó (kể cả đơn đang `InApproval` chưa ai duyệt) khi Admin đổi giới hạn.
+
+### §Giới hạn OT/tháng/năm RIÊNG theo từng nhân viên — "gia hạn" cao hơn mặc định (2026-08-26)
+
+**Yêu cầu người dùng** (chốt qua trao đổi, CLAUDE.md §2 luật 2), dựa trên `docs/Note_OT.txt` dòng
+"Import lại số giờ giới hạn tăng ca của nhân viên": nhân viên có thể được "gia hạn" giờ OT cao hơn mức
+mặc định chung ở trên — thường dùng cho công nhân **dưới chuyền**.
+
+- **Chỉ Tháng + Năm được override riêng** (đã chốt — KHÔNG có Ngày riêng, Ngày luôn dùng chung đúng 1
+  mốc `AttendanceSetting.DailyOtHourLimit` cho MỌI nhân viên, không ai được gia hạn riêng mốc Ngày).
+- **Entity**: `Employee.CustomMonthlyOtHourLimit`/`CustomYearlyOtHourLimit` (`decimal?`, nullable) —
+  `null` = dùng mặc định chung (`AttendanceSetting.MonthlyOtHourLimit`/`YearlyOtHourLimit`), có giá trị
+  = dùng thẳng mốc đó cho riêng người này (thường CAO hơn mặc định, nhưng không bắt buộc). **Không có
+  thời hạn hiệu lực** (chốt: "hiện không có thời hạn nên lưu trực tiếp luôn") — set thẳng, còn hiệu lực
+  tới khi Admin đổi/xoá tay, không phải bảng lịch sử/effective-dated.
+- **Sửa qua `EmployeeForm.tsx`** (2 field số optional, "để trống = dùng mặc định hệ thống") — chốt
+  "cần được sửa thường xuyên" nên đi thẳng qua màn Sửa nhân viên hiện có, KHÔNG qua import Excel riêng
+  (việc có làm import sau này hay không "quyết định sau", chưa làm ở đợt này).
+- **`OtFormService.ValidateOtHourLimitsAsync`** (§Giới hạn giờ OT ngày/tháng/năm ở trên) đọc
+  `Employee.CustomMonthlyOtHourLimit ?? AttendanceSetting.MonthlyOtHourLimit` (tương tự Năm) cho từng
+  người trong đơn — Ngày luôn dùng thẳng `AttendanceSetting.DailyOtHourLimit`, không tra theo nhân viên.
+- **Message đổi theo đúng mẫu người dùng yêu cầu**: `"Nhân viên mã {code} quá giới hạn OT {ngày/tháng/
+  năm} ({sau}h > {mốc}h)"` — thay cho câu gộp `'{code}' (vượt ...)"` trước đó. FE
+  (`CreateOtFormPage.tsx`, hàm `buildOtLimitWarning`) mirror ĐÚNG câu chữ này để hiện ngay tại badge
+  lũy kế trong bảng chọn nhân viên khi tạo đơn (thay số giờ bằng câu cảnh báo khi vượt mốc), khớp yêu
+  cầu "hiển thị ở phần nhân viên trong đơn khi tạo đơn" — cả 3 bảng (Sửa đơn/Theo chuyền/Theo Nhóm) đều
+  áp dụng, riêng bảng Sửa đơn không có dữ liệu "Dự kiến theo ngày" (chỉ lũy kế THẬT tháng/năm) nên chỉ
+  cảnh báo được tháng/năm, không cảnh báo ngày ở bảng đó (BE vẫn luôn chặn đủ cả 3 mốc lúc submit).
+- **Contract mở rộng theo cùng field**: `EmployeeDto`/`OtFormEmployeeDto`/`ProductionEmployeeSearchItemDto`
+  đều thêm `customMonthlyOtHourLimit`/`customYearlyOtHourLimit` (`decimal?`) — xem
+  `attendance-api-fe.md` §3.5/§4.3.
 
 ### §Lũy kế dự kiến — cảnh báo cả những đơn khác đang chờ duyệt (2026-08-06, REDESIGN 2026-08-19)
 

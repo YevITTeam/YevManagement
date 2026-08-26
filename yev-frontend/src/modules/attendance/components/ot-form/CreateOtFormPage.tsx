@@ -53,12 +53,35 @@ function getTodayStr(): string {
     return `${year}-${month}-${day}`;
 }
 
+// KHÔNG hỗ trợ ca qua đêm (2026-08-26, theo yêu cầu người dùng) — giờ kết thúc phải SAU giờ bắt đầu
+// trong CÙNG ngày, không tự cộng thêm 24h như trước (từng gây tổng giờ dài bất thường, vd 14h→06h ra
+// nhầm 16h, mà hệ thống cũng chưa hỗ trợ đúng ca qua đêm ở các chỗ khác — vd ValidateEmployeesAsync so
+// TimeOnly trực tiếp không tính ngày). Trả 0 khi không hợp lệ, xem isTimeRangeInvalid để hiện lỗi.
 function computeTotalHour(startTime: string, endTime: string): number {
     if (!startTime || !endTime) return 0;
-    const startMinutes = toMinutes(startTime);
-    let endMinutes = toMinutes(endTime);
-    if (endMinutes < startMinutes) endMinutes += 24 * 60; // qua ngày hôm sau
-    return Math.round(((endMinutes - startMinutes) / 60) * 100) / 100;
+    const diffMinutes = toMinutes(endTime) - toMinutes(startTime);
+    if (diffMinutes <= 0) return 0;
+    return Math.round((diffMinutes / 60) * 100) / 100;
+}
+
+// Thông báo "Nhân viên mã ... quá ..." khi vượt bất kỳ mốc ngày/tháng/năm nào — đúng mẫu người dùng
+// yêu cầu (2026-08-26), mirror OtFormService.ValidateOtHourLimitsAsync ở BE (dayLimit luôn dùng chung
+// 1 mốc cho mọi người; monthLimit/yearLimit ưu tiên mốc riêng employee.customMonthly/YearlyOtHourLimit
+// nếu đã gán — xem CreateOtFormPage gọi hàm này). Chỉ cảnh báo SỚM, BE luôn là nguồn chặn thật.
+function buildOtLimitWarning(
+    t: (key: string, values?: Record<string, string | number>) => string,
+    code: string,
+    dayHours: number,
+    dayLimit: number,
+    monthHours: number,
+    monthLimit: number,
+    yearHours: number,
+    yearLimit: number
+): string | null {
+    if (dayHours > dayLimit) return t("employeeOverDailyLimit", { code, hours: dayHours, limit: dayLimit });
+    if (monthHours > monthLimit) return t("employeeOverMonthlyLimit", { code, hours: monthHours, limit: monthLimit });
+    if (yearHours > yearLimit) return t("employeeOverYearlyLimit", { code, hours: yearHours, limit: yearLimit });
+    return null;
 }
 
 // Badge "Loại phiếu ăn" dùng chung cho cả 3 bảng chọn nhân viên (Sửa đơn/Theo chuyền/Theo Nhóm) —
@@ -102,15 +125,24 @@ interface EmployeeOverride {
     noteJp: string;
 }
 
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
-
 const timeSelectClassName =
-    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+    "h-10 w-11 rounded-lg border border-[#e0e3e5] bg-white px-1 text-center text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// Input giờ/phút dựng bằng 2 <select> thay cho <input type="time"> — trình duyệt (đặc biệt Firefox)
-// bỏ qua thuộc tính lang và luôn hiển thị theo định dạng hệ điều hành (có thể ra AM/PM), nên tự dựng
-// để đảm bảo LUÔN nhập/hiển thị 24h bất kể trình duyệt/OS.
+// Kẹp về khoảng hợp lệ [0, max] CHỈ khi vượt mốc — giữ nguyên chuỗi số đã gõ trong mọi trường hợp còn
+// lại (không quy đổi qua Number rồi String lại, vì "05" → 5 → "5" sẽ tự ý xoá số 0 vừa gõ ngay trước
+// mắt người dùng). Không tự pad "0" khi còn đang gõ dở (vd đang gõ "1" định gõ tiếp "14") — chỉ pad lúc
+// rời khỏi ô, xem handleBlur.
+function clampDigits(raw: string, max: number): string {
+    const digits = raw.replace(/\D/g, "").slice(0, 2);
+    if (digits === "") return "";
+    return Number(digits) > max ? String(max) : digits;
+}
+
+// Input giờ/phút gõ trực tiếp bằng số (đổi từ 2 <select> ngày 2026-08-26, theo yêu cầu người dùng —
+// dropdown 24/60 lựa chọn quá bất tiện, dễ bấm nhầm mà không để ý, vd chọn nhầm giờ kết thúc khiến ca
+// OT vắt qua đêm dài bất thường mà không nhận ra ngay). Vẫn tự dựng thay <input type="time"> vì lý do
+// cũ: trình duyệt (đặc biệt Firefox) bỏ qua thuộc tính lang và hiển thị theo định dạng hệ điều hành
+// (có thể ra AM/PM) — tự dựng đảm bảo LUÔN nhập/hiển thị 24h bất kể trình duyệt/OS.
 function TimePicker24h({
     value,
     onChange,
@@ -123,41 +155,38 @@ function TimePicker24h({
     const t = useTranslations("Attendance.CreateOtForm");
     const [hour, minute] = value ? value.split(":") : ["", ""];
 
+    const commitHour = (nextHour: string) => onChange(`${nextHour}:${minute}`);
+    const commitMinute = (nextMinute: string) => onChange(`${hour}:${nextMinute}`);
+
     return (
         <div className="flex items-center gap-1.5">
-            <select
+            <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
                 value={hour}
-                onChange={(event) => onChange(`${event.target.value}:${minute || "00"}`)}
+                onChange={(event) => commitHour(clampDigits(event.target.value, 23))}
+                onBlur={() => hour !== "" && commitHour(hour.padStart(2, "0"))}
                 disabled={disabled}
                 required
+                placeholder={t("hourPlaceholder")}
                 className={timeSelectClassName}
-            >
-                <option value="" disabled>
-                    {t("hourPlaceholder")}
-                </option>
-                {HOUR_OPTIONS.map((h) => (
-                    <option key={h} value={h}>
-                        {h}
-                    </option>
-                ))}
-            </select>
+            />
             <span className="text-sm font-semibold text-[#5e3f3a]">:</span>
-            <select
+            <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
                 value={minute}
-                onChange={(event) => onChange(`${hour || "00"}:${event.target.value}`)}
+                onChange={(event) => commitMinute(clampDigits(event.target.value, 59))}
+                onBlur={() => minute !== "" && commitMinute(minute.padStart(2, "0"))}
                 disabled={disabled}
                 required
+                placeholder={t("minutePlaceholder")}
                 className={timeSelectClassName}
-            >
-                <option value="" disabled>
-                    {t("minutePlaceholder")}
-                </option>
-                {MINUTE_OPTIONS.map((m) => (
-                    <option key={m} value={m}>
-                        {m}
-                    </option>
-                ))}
-            </select>
+            />
         </div>
     );
 }
@@ -364,9 +393,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                       teamId: productionTeamId,
                       shiftTeamId: productionShiftTeamId === "" ? undefined : productionShiftTeamId,
                       keyword: productionKeyword.trim() || undefined,
+                      date: date || undefined,
                   })
                 : Promise.resolve([]),
-        [formMode, isEditMode, canSearchProduction, productionLineId, productionTeamId, productionShiftTeamId, productionKeyword],
+        [formMode, isEditMode, canSearchProduction, productionLineId, productionTeamId, productionShiftTeamId, productionKeyword, date],
         setProductionResults,
         t("productionSearchError")
     );
@@ -505,6 +535,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [groupId, isEditMode, date]);
 
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
+    const isTimeRangeInvalid = Boolean(startTime && endTime && toMinutes(endTime) <= toMinutes(startTime));
 
     // Tự tính số phiếu ăn theo giờ OT THỰC TẾ của từng người đang chọn — redesign 3 bậc (2026-08-26,
     // xem modules/attendance/lib/mealTicket.ts + docs §Phiếu ăn): thực tích < sàn -> không phiếu; sàn..
@@ -672,14 +703,18 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             toast.error(t("requiredFieldsError"));
             return;
         }
+        if (!isEditMode && isTimeRangeInvalid) {
+            toast.error(t("endTimeBeforeStartError"));
+            return;
+        }
 
+        // Không hỗ trợ ca qua đêm (2026-08-26) — giờ kết thúc của mỗi người luôn nằm trong CÙNG ngày,
+        // giữa giờ bắt đầu và giờ kết thúc của đơn, không còn cộng thêm 24h như trước.
         const orderStartMinutes = toMinutes(`${startTime}:00`);
-        let orderEndMinutes = toMinutes(`${endTime}:00`);
-        if (orderEndMinutes < orderStartMinutes) orderEndMinutes += 24 * 60; // qua ngày hôm sau
+        const orderEndMinutes = toMinutes(`${endTime}:00`);
         for (const employeeId of selectedEmployeeIds) {
             const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
-            let employeeEndMinutes = toMinutes(`${employeeEndTime}:00`);
-            if (employeeEndMinutes < orderStartMinutes) employeeEndMinutes += 24 * 60; // qua ngày hôm sau
+            const employeeEndMinutes = toMinutes(`${employeeEndTime}:00`);
             if (employeeEndMinutes <= orderStartMinutes || employeeEndMinutes > orderEndMinutes) {
                 const code = isEditMode
                     ? editEmployees.find((e) => e.employeeId === employeeId)?.employeeCode
@@ -882,19 +917,41 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             />
                         </label>
 
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldStartTime")}</span>
-                            <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting || isEditMode} />
-                        </label>
-
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldEndTime")}</span>
-                            <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting || isEditMode} />
-                        </label>
+                        {/* Gộp Giờ bắt đầu + Giờ kết thúc chung 1 ô lưới (2026-08-26) — ô nhập giờ đã đổi
+                            sang gõ số nên hẹp hơn hẳn dropdown cũ, để riêng mỗi ô 1 cột lưới thừa nhiều
+                            khoảng trắng; gộp lại còn đẩy "Tổng số giờ" trồi lên cùng hàng thay vì rơi
+                            xuống hàng riêng gần như trống (theo yêu cầu người dùng). */}
+                        <div className="block">
+                            <div className="grid grid-cols-2 gap-3">
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("fieldStartTime")}</span>
+                                    <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting || isEditMode} />
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("fieldEndTime")}</span>
+                                    <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting || isEditMode} />
+                                </label>
+                            </div>
+                            {isTimeRangeInvalid && (
+                                <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#930006]">
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                    {t("endTimeBeforeStartError")}
+                                </p>
+                            )}
+                        </div>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldTotalHour")}</span>
                             <input value={totalHour} disabled className={fieldClassName} />
+                            {/* Cảnh báo SỚM, không tự chặn ở đây — người tạo có thể set giờ kết thúc riêng ngắn
+                                hơn cho từng nhân viên (employeeOverrides), nên tổng giờ CẢ đơn dài hơn ngưỡng/ngày
+                                không hẳn đã sai (2026-08-26). */}
+                            {!isTimeRangeInvalid && totalHour > setting.dailyOtHourLimit && (
+                                <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#930006]">
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                    {t("totalHourOverLimitWarning", { limit: setting.dailyOtHourLimit })}
+                                </p>
+                            )}
                         </label>
                     </div>
 
@@ -928,7 +985,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <div className="overflow-x-auto">
                             <table className="min-w-full border-collapse text-left">
                                 <thead>
-                                    <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                         <th className="px-3 py-2">{t("colEmployeeCode")}</th>
                                         <th className="px-3 py-2">{t("colFullName")}</th>
                                         <th className="px-3 py-2">{t("colAccumulation")}</th>
@@ -939,9 +996,20 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 </thead>
                                 <tbody>
                                     {editEmployees.map((employee) => {
-                                        const isOverLimit =
-                                            employee.monthToDate > setting.monthlyOtHourLimit ||
-                                            employee.yearToDate > setting.yearlyOtHourLimit;
+                                        // Không có dữ liệu "ngày" ở bảng này (monthToDate/yearToDate là lũy kế
+                                        // THẬT, không phải Dự kiến theo ngày) — chỉ cảnh báo tháng/năm, ưu tiên
+                                        // mốc riêng của nhân viên nếu đã gán (2026-08-26).
+                                        const otLimitWarning = buildOtLimitWarning(
+                                            t,
+                                            employee.employeeCode,
+                                            0,
+                                            setting.dailyOtHourLimit,
+                                            employee.monthToDate,
+                                            employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit,
+                                            employee.yearToDate,
+                                            employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit
+                                        );
+                                        const isOverLimit = otLimitWarning !== null;
                                         const currentEndTime = employeeOverrides[employee.employeeId]?.endTime ?? endTime;
                                         const currentDidEat = employeeOverrides[employee.employeeId]?.didEat ?? true;
                                         const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
@@ -961,7 +1029,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         }`}
                                                     >
                                                         {isOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                                        {employee.monthToDate}h / {employee.yearToDate}h
+                                                        {otLimitWarning ?? `${employee.monthToDate}h / ${employee.yearToDate}h`}
                                                     </span>
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
@@ -975,18 +1043,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     {earlyWindow ? (
                                                         <span className="text-xs text-[#8a8f94]">{t("didEatNotApplicableEarlyWindow")}</span>
                                                     ) : (
-                                                        <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={currentDidEat}
-                                                                onChange={(event) =>
-                                                                    handleEmployeeDidEatChange(employee.employeeId, event.target.checked)
-                                                                }
-                                                                disabled={isSubmitting}
-                                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                            />
-                                                            {t("didEatLabel")}
-                                                        </label>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={currentDidEat}
+                                                            onChange={(event) =>
+                                                                handleEmployeeDidEatChange(employee.employeeId, event.target.checked)
+                                                            }
+                                                            disabled={isSubmitting}
+                                                            aria-label={t("didEatLabel")}
+                                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                        />
                                                     )}
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
@@ -1061,7 +1127,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <div className="overflow-x-auto">
                                     <table className="min-w-full border-collapse text-left">
                                         <thead>
-                                            <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                            <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                                 <th className="w-10 px-3 py-2">
                                                     <input
                                                         type="checkbox"
@@ -1082,6 +1148,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 <th className="px-3 py-2">{t("colBlockCode")}</th>
                                                 <th className="px-3 py-2">{t("colCongDoan")}</th>
                                                 <th className="px-3 py-2">{t("colShiftTeam")}</th>
+                                                <th className="px-3 py-2">{t("colAccumulation")}</th>
                                                 <th className="px-3 py-2">{t("colEndTime")}</th>
                                                 <th className="px-3 py-2">{t("colDidEat")}</th>
                                                 <th className="px-3 py-2">{t("colMealTicketType")}</th>
@@ -1091,6 +1158,23 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <tbody>
                                             {productionResults.map((item) => {
                                                 const checked = selectedEmployeeIds.includes(item.employeeId);
+                                                // Cảnh báo SỚM ngay lúc chọn người (trước khi submit) — mirror bảng "Theo
+                                                // Nhóm" phía dưới, trước đây bảng "Theo chuyền" không có cột này (thiếu
+                                                // sót, xem ProductionEmployeeService.SearchAsync). Ưu tiên mốc riêng của
+                                                // nhân viên (customMonthly/YearlyOtHourLimit) nếu đã gán — "gia hạn" cao
+                                                // hơn mặc định, thường dùng cho công nhân dưới chuyền (2026-08-26). BE
+                                                // luôn là nguồn chặn thật (ValidateOtHourLimitsAsync).
+                                                const otLimitWarning = buildOtLimitWarning(
+                                                    t,
+                                                    item.employeeCode,
+                                                    item.projectedDayToDate,
+                                                    setting.dailyOtHourLimit,
+                                                    item.projectedMonthToDate,
+                                                    item.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit,
+                                                    item.projectedYearToDate,
+                                                    item.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit
+                                                );
+                                                const isOverLimit = otLimitWarning !== null;
                                                 const currentEndTime = employeeOverrides[item.employeeId]?.endTime ?? endTime;
                                                 const currentDidEat = employeeOverrides[item.employeeId]?.didEat ?? mealServiceActive;
                                                 const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
@@ -1125,9 +1209,22 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                                 </div>
                                                             )}
                                                         </td>
-                                                        <td className="px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.blockCode || "—"}</td>
-                                                        <td className="px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.congDoan || "—"}</td>
-                                                        <td className="px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.shiftTeamNameVn || item.shiftTeamCode || "—"}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.blockCode || "—"}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.congDoan || "—"}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.shiftTeamNameVn || item.shiftTeamCode || "—"}</td>
+                                                        <td className="px-3 py-2 align-top text-sm">
+                                                            <span
+                                                                className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                                                    isOverLimit
+                                                                        ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                                                        : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                                                }`}
+                                                            >
+                                                                {isOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                                                {otLimitWarning ??
+                                                                    `${item.projectedDayToDate}h · ${item.projectedMonthToDate}h / ${item.projectedYearToDate}h`}
+                                                            </span>
+                                                        </td>
                                                         <td className="px-3 py-2 align-top">
                                                             <TimePicker24h
                                                                 value={currentEndTime}
@@ -1139,16 +1236,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                             {earlyWindow ? (
                                                                 <span className="text-xs text-[#8a8f94]">{t("didEatNotApplicableEarlyWindow")}</span>
                                                             ) : (
-                                                                <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={currentDidEat}
-                                                                        onChange={(event) => handleEmployeeDidEatChange(item.employeeId, event.target.checked)}
-                                                                        disabled={isSubmitting || !checked}
-                                                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                                    />
-                                                                    {t("didEatLabel")}
-                                                                </label>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={currentDidEat}
+                                                                    onChange={(event) => handleEmployeeDidEatChange(item.employeeId, event.target.checked)}
+                                                                    disabled={isSubmitting || !checked}
+                                                                    aria-label={t("didEatLabel")}
+                                                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                                />
                                                             )}
                                                         </td>
                                                         <td className="px-3 py-2 align-top">
@@ -1184,7 +1279,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <div className="overflow-x-auto">
                             <table className="min-w-full border-collapse text-left">
                                 <thead>
-                                    <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                         <th className="w-10 px-3 py-2">
                                             <input
                                                 type="checkbox"
@@ -1215,9 +1310,20 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         // Dùng lũy kế DỰ KIẾN (thực tế + đơn khác đang chờ duyệt) chứ không phải
                                         // monthToDate/yearToDate (chỉ phản ánh phần đã duyệt xong) — tránh trường
                                         // hợp tạo 2 đơn cùng lúc mà đơn nào cũng không thấy cảnh báo vượt hạn mức.
-                                        const isOverLimit =
-                                            employee.projectedMonthToDate > setting.monthlyOtHourLimit ||
-                                            employee.projectedYearToDate > setting.yearlyOtHourLimit;
+                                        // Chỉ mang tính cảnh báo SỚM — BE luôn là nguồn chân lý chặn thật khi submit
+                                        // (ValidateOtHourLimitsAsync, cộng thêm giờ của chính đơn đang tạo). Ưu tiên
+                                        // mốc riêng của nhân viên nếu đã gán (2026-08-26).
+                                        const otLimitWarning = buildOtLimitWarning(
+                                            t,
+                                            employee.code,
+                                            employee.projectedDayToDate,
+                                            setting.dailyOtHourLimit,
+                                            employee.projectedMonthToDate,
+                                            employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit,
+                                            employee.projectedYearToDate,
+                                            employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit
+                                        );
+                                        const isOverLimit = otLimitWarning !== null;
                                         const currentEndTime = employeeOverrides[employee.id]?.endTime ?? endTime;
                                         const currentDidEat = employeeOverrides[employee.id]?.didEat ?? mealServiceActive;
                                         const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
@@ -1256,7 +1362,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         }`}
                                                     >
                                                         {isOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                                        {employee.projectedMonthToDate}h / {employee.projectedYearToDate}h
+                                                        {otLimitWarning ??
+                                                            `${employee.projectedDayToDate}h · ${employee.projectedMonthToDate}h / ${employee.projectedYearToDate}h`}
                                                     </span>
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
@@ -1270,16 +1377,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     {earlyWindow ? (
                                                         <span className="text-xs text-[#8a8f94]">{t("didEatNotApplicableEarlyWindow")}</span>
                                                     ) : (
-                                                        <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={currentDidEat}
-                                                                onChange={(event) => handleEmployeeDidEatChange(employee.id, event.target.checked)}
-                                                                disabled={isSubmitting || !checked}
-                                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                            />
-                                                            {t("didEatLabel")}
-                                                        </label>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={currentDidEat}
+                                                            onChange={(event) => handleEmployeeDidEatChange(employee.id, event.target.checked)}
+                                                            disabled={isSubmitting || !checked}
+                                                            aria-label={t("didEatLabel")}
+                                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                        />
                                                     )}
                                                 </td>
                                                 <td className="px-3 py-2 align-top">

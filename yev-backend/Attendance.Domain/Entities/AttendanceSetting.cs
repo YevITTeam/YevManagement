@@ -34,11 +34,16 @@ public partial class AttendanceSetting
 
     public TimeOnly EarlyMealWindowEndTime { get; set; }
 
-    // Monthly OT hour limit — an employee whose MonthToDate exceeds this is flagged in red on the UI.
-    // Display/warning only, does NOT block creating or approving a form. Default 25.
+    // Giới hạn giờ OT theo NGÀY/THÁNG/NĂM của 1 nhân viên (2026-08-26, redesign — trước đây Monthly/
+    // Yearly chỉ hiển thị cảnh báo đỏ, KHÔNG chặn; nay CẢ 3 mốc đều CHẶN tạo/sửa đơn — xem
+    // OtFormService.ValidateOtHourLimitsAsync). Vượt bất kỳ mốc nào thì BE từ chối tạo/sửa đơn, bắt
+    // buộc loại nhân viên đó khỏi đơn hoặc giảm giờ trước khi tạo lại. Default 4.
+    public decimal DailyOtHourLimit { get; set; }
+
+    // Default 25.
     public decimal MonthlyOtHourLimit { get; set; }
 
-    // Yearly OT hour limit — same semantics as MonthlyOtHourLimit. Default 300.
+    // Default 300 (khớp "Năm: 300h giới hạn" — docs/Note_OT.txt).
     public decimal YearlyOtHourLimit { get; set; }
 
     // Giờ trong ngày OtFormBatchBackgroundService chạy gom "Đơn tổng" (giờ Việt Nam, khớp

@@ -67,6 +67,7 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
             values.noMealTicketMaxHours < 0 ||
             values.mealBreakDeductionHours < 0 ||
             values.noMealTicketMaxHours >= values.mainMealTicketMinHours ||
+            values.dailyOtHourLimit <= 0 ||
             values.monthlyOtHourLimit <= 0 ||
             values.yearlyOtHourLimit <= 0
         ) {
@@ -239,7 +240,20 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                     </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-3">
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldDailyOtHourLimit")}</span>
+                        <input
+                            type="number"
+                            step="0.5"
+                            min={0.5}
+                            max={24}
+                            value={values.dailyOtHourLimit}
+                            onChange={(event) => setValues((current) => current && { ...current, dailyOtHourLimit: Number(event.target.value) })}
+                            disabled={isSaving}
+                            className={fieldClassName}
+                        />
+                    </label>
                     <label className="block">
                         <span className={fieldLabelClassName}>{t("fieldMonthlyOtHourLimit")}</span>
                         <input

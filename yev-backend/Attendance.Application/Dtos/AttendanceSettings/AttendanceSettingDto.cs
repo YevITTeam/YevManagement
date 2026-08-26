@@ -19,7 +19,10 @@ namespace Attendance.Application.Dtos.AttendanceSettings
 
         public TimeOnly EarlyMealWindowEndTime { get; set; }
 
-        // Giới hạn giờ OT trong tháng / trong năm — vượt thì UI cảnh báo đỏ (không chặn tạo/duyệt đơn).
+        // Giới hạn giờ OT theo ngày / tháng / năm của 1 nhân viên — vượt bất kỳ mốc nào thì BE CHẶN
+        // tạo/sửa đơn (2026-08-26, không còn "chỉ cảnh báo" như trước — xem AttendanceSetting.cs).
+        public decimal DailyOtHourLimit { get; set; }
+
         public decimal MonthlyOtHourLimit { get; set; }
 
         public decimal YearlyOtHourLimit { get; set; }

@@ -47,6 +47,27 @@
   chỉ quản lý Phòng ban); Trưởng Xưởng/Giám đốc để cả 2 field trống (dùng chung toàn công ty). Đúng 1
   trong 2 field bắt buộc/cấm tuỳ `JobTitle.terminalLevel` — sai tổ hợp → 400. Xem §3.5,
   `attendance-module.md` §Gán tổ chức theo Chức vụ.
+- **Cập nhật 2026-08-26 (breaking, redesign 3 bậc phiếu ăn + khung OT sớm)**: chốt qua nhiều vòng
+  trao đổi (CLAUDE.md §2 luật 2), dựa trên `docs/Note_OT.txt` — thay thế hoàn toàn mô hình 2 bậc
+  (Chính/Phụ, không sàn dưới) ngày 2026-08-01. `OtFormEmployeeDto.isEligibleForMeal:bool` **XOÁ HẲN**,
+  thay bằng `mealTicketType:int` (0=Không có phiếu/1=Phụ/2=Chính, tính trên giờ THỰC TÍCH thay vì giờ
+  thô). `AttendanceSettingDto` thêm 4 field: `noMealTicketMaxHours`, `mealBreakDeductionHours`,
+  `earlyMealWindowStartTime`, `earlyMealWindowEndTime` (xem §6d). Xem chi tiết đầy đủ ở
+  `attendance-module.md` §Phiếu ăn — REDESIGN 3 bậc + khung OT sớm đặc cách.
+- **Cập nhật 2026-08-26 (breaking, giới hạn giờ OT ngày/tháng/năm nay CHẶN CỨNG)**: thêm
+  `AttendanceSettingDto.dailyOtHourLimit` (mặc định 4h, khớp `docs/Note_OT.txt` "Ngày: không tăng ca
+  quá 4 tiếng"); `monthlyOtHourLimit`/`yearlyOtHourLimit` đảo ngược hành vi cũ "chỉ cảnh báo đỏ" —
+  giờ CẢ 3 mốc đều chặn `POST`/`PUT /api/OtForm` nếu vượt (400, liệt kê nhân viên vi phạm). Thêm
+  `EmployeeDto.projectedDayToDate` (song song `projectedMonthToDate`/`projectedYearToDate` đã có) để
+  FE cảnh báo sớm trước khi submit. Xem §3.5b, §6d, `attendance-module.md` §Lũy kế dự kiến.
+- **Cập nhật 2026-08-26 (mới, giới hạn OT/tháng/năm RIÊNG theo nhân viên)**: `Employee` thêm
+  `customMonthlyOtHourLimit`/`customYearlyOtHourLimit` (`decimal?`, nullable — null = dùng mặc định
+  chung) — cho phép "gia hạn" giờ OT cao hơn mặc định cho từng người (thường dùng công nhân dưới
+  chuyền). Sửa qua `PUT/POST /api/Employee` (`EmployeeForm.tsx`), KHÔNG có Ngày riêng (Ngày luôn dùng
+  chung 1 mốc cho mọi người). Field mới xuất hiện trên `EmployeeDto`, `OtFormEmployeeDto`,
+  `ProductionEmployeeSearchItemDto`. `OtFormService.ValidateOtHourLimitsAsync` ưu tiên mốc riêng nếu
+  có gán, message đổi thành `"Nhân viên mã {code} quá giới hạn OT {ngày/tháng/năm} ({sau}h > {mốc}h)"`.
+  Xem §3.5, §3.5b, §4.3, `attendance-module.md` §Giới hạn OT/tháng/năm RIÊNG theo từng nhân viên.
 
 ## 1. Tổng quan nghiệp vụ, vai trò & luồng UI (đọc trước khi code màn hình)
 
@@ -194,8 +215,9 @@ Group tự cân nhắc trước khi gửi (vd sắp vượt ngưỡng tháng c�
 [ ] NV002 - Trần Thị B     (Lũy kế: 20.0h/tháng, 150h/năm)  ...
 ──────────────────────────────────────────────
 Phát sinh khác (ProcessPart, optional): [ ] Ăn  [ ] Xe đưa đón  [ ] Dùng phòng photo   Đề xuất khác: [___]
-     ↑ Gợi ý tick "Ăn": ở màn Chi tiết đơn, mỗi nhân viên có cờ `isEligibleForMeal`
-       (giờ OT thực tế > 2h) — FE có thể hiện gợi ý nhưng không bắt buộc theo.
+     ↑ Gợi ý tick "Ăn": ở màn Chi tiết đơn, mỗi nhân viên có `mealTicketType` (0=Không có
+       phiếu/1=Phụ/2=Chính, tính trên giờ thực tích — redesign 2026-08-26, xem §6d) — FE có
+       thể hiện gợi ý nhưng không bắt buộc theo.
      ↑ Tick "Ăn" xong hiện thêm 3 ô nhập số lượng (2026-07-16, nhập tay, chung cho cả
        đơn — không phải theo từng người): Phiếu chính [_] Phiếu phụ [_] Sữa [_]
        (mainTicketCount/secondaryTicketCount/milkCount, mặc định 0).
@@ -229,15 +251,16 @@ Danh sách nhân viên đã đăng ký (bảng, chỉ sửa được qua màn "S
 ┌──────────┬────────────┬───────┬───────┬────────────┬────────────┬──────────────┐
 │ Mã NV    │ Họ tên     │ Giờ BĐ│ Giờ KT│ Lũy kế tháng│ Lũy kế năm │ Phiếu ăn     │
 ├──────────┼────────────┼───────┼───────┼────────────┼────────────┼──────────────┤
-│ NV001    │ Nguyễn Văn A│ 17:30│ 19:30 │ 12.5h      │ 80h        │ ✅ (>2h)     │
+│ NV001    │ Nguyễn Văn A│ 17:30│ 19:30 │ 12.5h      │ 80h        │ Phiếu Chính  │
 └──────────┴────────────┴───────┴───────┴────────────┴────────────┴──────────────┘
   ↑ "Lũy kế tháng/năm" lấy TRỰC TIẾP từ employees[].monthToDate/yearToDate — đây là
     giá trị HIỆN TẠI (live) của nhân viên, không phải snapshot lúc tạo đơn, giúp người
     duyệt đối chiếu ngưỡng TH3 (mặc định >25h/tháng, >300h/năm — đọc từ GET /AttendanceSetting,
     Admin sửa được, xem §6d) ngay tại đây, không cần mở màn Employee.
-  ↑ "Phiếu ăn" = employees[].isEligibleForMeal (giờ KT - giờ BĐ >= ngưỡng cấu hình, mặc định
-    2.5h — xem §6d), chỉ mang tính tham khảo hiển thị — không quyết định ProcessPart.isEat
-    (cờ đó do người lập đơn tự tick, FE tự tính gợi ý mainTicketCount/secondaryTicketCount).
+  ↑ "Phiếu ăn" = employees[].mealTicketType (0=Không có phiếu/1=Phụ/2=Chính, tính trên giờ
+    THỰC TÍCH — redesign 3 bậc 2026-08-26, thay `isEligibleForMeal` cũ, xem §6d), chỉ mang
+    tính tham khảo hiển thị — không quyết định ProcessPart.isEat (cờ đó do người lập đơn tự
+    tick, FE tự tính gợi ý mainTicketCount/secondaryTicketCount).
 ──────────────────────────────────────────────
 Phát sinh khác (ProcessPart, nếu có)
 ──────────────────────────────────────────────
@@ -633,12 +656,13 @@ gọi từ `Attendance.EmployeeService.CreateAsync/UpdateAsync/DeleteAsync` mỗ
 { "id": 100, "code": "NV001", "firstName": "Nguyễn Văn", "lastName": "A",
   "userName": "YEV\\n.van.a",                     // nullable — tài khoản AD của chính nhân viên (nếu có)
   "monthToDate": 12.5, "yearToDate": 80.0,         // lũy kế THẬT — BE tính lúc đọc, xem §3.5a
-  "projectedMonthToDate": 0, "projectedYearToDate": 0, // lũy kế DỰ KIẾN — CHỈ có ý nghĩa ở by-group, xem §3.5b
+  "projectedDayToDate": 0, "projectedMonthToDate": 0, "projectedYearToDate": 0, // lũy kế DỰ KIẾN — CHỈ có ý nghĩa ở by-group, xem §3.5b (projectedDayToDate mới 2026-08-26)
   "groupId": 5, "groupNameVn": "Nhóm 1",           // cả 2 nullable từ 2026-08-08, xem ngay dưới
   "departmentId": null, "departmentNameVn": null,  // MỚI 2026-08-08
-  "jobTitleId": 11, "jobTitleName": "Manager" }    // nullable, MỚI 2026-08-06 — xem §3.4b
+  "jobTitleId": 11, "jobTitleName": "Manager",     // nullable, MỚI 2026-08-06 — xem §3.4b
+  "customMonthlyOtHourLimit": null, "customYearlyOtHourLimit": 400 } // decimal? nullable, MỚI 2026-08-26 — null = dùng mặc định chung, có giá trị = "gia hạn" riêng cho người này (xem §3.5b)
 ```
-POST/PUT: `code`[Required], `firstName`[Required], `lastName`[Required], `userName?` (optional — gán tài khoản AD để liên kết nhân viên với đúng người tạo/duyệt đơn OT, xem §3.5), `groupId?`/`departmentId?`, `jobTitleId?` (optional, MỚI 2026-08-06 — id không tồn tại/đã xóa → 404). Trùng `userName` với nhân viên khác (kể cả đang active) → 400. `monthToDate`/`yearToDate`/`projectedMonthToDate`/`projectedYearToDate` là field **chỉ đọc** (response only) — **không còn trong POST/PUT body nữa** (2026-08-19, xem §3.6 — bỏ hẳn khả năng chỉnh tay).
+POST/PUT: `code`[Required], `firstName`[Required], `lastName`[Required], `userName?` (optional — gán tài khoản AD để liên kết nhân viên với đúng người tạo/duyệt đơn OT, xem §3.5), `groupId?`/`departmentId?`, `jobTitleId?` (optional, MỚI 2026-08-06 — id không tồn tại/đã xóa → 404), `customMonthlyOtHourLimit?`/`customYearlyOtHourLimit?` (optional, MỚI 2026-08-26, `[Range(1,744)]`/`[Range(1,8784)]` khi có giá trị — KHÔNG có `customDailyOtHourLimit`, Ngày luôn dùng chung 1 mốc cho mọi người). Trùng `userName` với nhân viên khác (kể cả đang active) → 400. `monthToDate`/`yearToDate`/`projectedMonthToDate`/`projectedYearToDate` là field **chỉ đọc** (response only) — **không còn trong POST/PUT body nữa** (2026-08-19, xem §3.6 — bỏ hẳn khả năng chỉnh tay).
 
 ### 3.5a Lũy kế THẬT — `monthToDate`/`yearToDate` (REDESIGN 2026-08-19)
 
@@ -656,7 +680,7 @@ luôn đúng-theo-hôm-nay chứ không phải "theo lần Hoàn tất gần nh�
 
 FE `EmployeeForm.tsx` (2026-08-08): chọn **Chức vụ trước**, dropdown Bộ phận/Phòng ban hiện đúng 1 trong 2 (hoặc ẩn cả 2 kèm ghi chú "dùng chung toàn công ty") theo `JobTitleDto.terminalLevel` của lựa chọn — đổi Chức vụ giữa 3 nhóm tự reset field cũ.
 
-**Chọn nhân viên hàng loạt khi lập đơn**: `GET /api/Employee/by-group/{groupId}?date=2026-08-01` → `EmployeeDto[]` toàn bộ nhân viên nhóm đó (Trưởng nhóm tick chọn nhiều người cho `CreateOtFormDto.employees`) — FE dùng **`projectedMonthToDate`/`projectedYearToDate`** (KHÔNG dùng `monthToDate`/`yearToDate`) để cảnh báo hạn mức TH3 ngay lúc chọn (§1.3.A, §3.5b). `date` query param (optional, mặc định hôm nay thực tế nếu bỏ trống) = **ngày trên đơn đang tạo** — BẮT BUỘC truyền để Dự kiến scope đúng tháng/năm của đơn đó (2026-08-19); FE phải gọi lại endpoint này mỗi khi người dùng đổi ngày trên form.
+**Chọn nhân viên hàng loạt khi lập đơn**: `GET /api/Employee/by-group/{groupId}?date=2026-08-01` → `EmployeeDto[]` toàn bộ nhân viên nhóm đó (Trưởng nhóm tick chọn nhiều người cho `CreateOtFormDto.employees`) — FE dùng **`projectedDayToDate`/`projectedMonthToDate`/`projectedYearToDate`** (KHÔNG dùng `monthToDate`/`yearToDate`) để cảnh báo hạn mức TH3 ngay lúc chọn (§1.3.A, §3.5b) — chỉ là cảnh báo SỚM, BE luôn tự chặn thật lúc submit (§6d). `date` query param (optional, mặc định hôm nay thực tế nếu bỏ trống) = **ngày trên đơn đang tạo** — BẮT BUỘC truyền để Dự kiến scope đúng tháng/năm của đơn đó (2026-08-19); FE phải gọi lại endpoint này mỗi khi người dùng đổi ngày trên form.
 
 **Toàn bộ nhân viên active (mọi Group)**: `GET /api/Employee/all` (`Attendance.Employee.View`, mới 2026-08-06) → `EmployeeDto[]` — dùng cho dropdown/công cụ cần chọn 1 nhân viên bất kỳ không giới hạn theo Group. Trước đó FE (`EmployeeApi.getAllEmployees()`) đã gọi sẵn route này nhưng BE chưa có action khớp — request rơi vào `GET /{id}` với `id="all"`, trả 400 `"The value 'all' is not valid"`; đã bổ sung action thật.
 
@@ -664,12 +688,12 @@ FE `EmployeeForm.tsx` (2026-08-08): chọn **Chức vụ trước**, dropdown B�
 
 **Lọc `grid-list` theo Phòng ban/Bộ phận** (mới 2026-08-07): `GET /api/Employee/grid-list?...&DepartmentId=&GroupId=` — 2 query param optional, dùng cho ô lọc trên màn "Nhân viên" để dễ tìm đúng nhóm người cần gán Chức vụ trước khi cấu hình cây duyệt. `DepartmentId` lọc qua `Group.DepartmentId` (không cần biết Group con); `GroupId` lọc chính xác 1 Group; có thể kết hợp cả 2 (thực tế `GroupId` đã đủ hẹp, `DepartmentId` chỉ còn tác dụng lọc thô).
 
-### 3.5b Lũy kế DỰ KIẾN — `projectedMonthToDate`/`projectedYearToDate` (2026-08-06, REDESIGN 2026-08-19)
+### 3.5b Lũy kế DỰ KIẾN — `projectedDayToDate`/`projectedMonthToDate`/`projectedYearToDate` (2026-08-06, REDESIGN 2026-08-19, thêm `projectedDayToDate` 2026-08-26)
 
-`monthToDate`/`yearToDate` chỉ cộng khi đơn OT đạt `Completed` (xem [attendance-module.md §Lũy kế tháng/năm](attendance-module.md)) — nên nếu nhân viên đang có 1 đơn khác chưa được duyệt xong, hạn mức không phản ánh được phần đó, dễ gây trường hợp tạo 2 đơn cùng lúc mà đơn nào cũng không thấy cảnh báo vượt hạn mức. `projectedMonthToDate`/`projectedYearToDate` giải quyết việc này: tính = thực tế + mọi đơn khác của người đó còn hiệu lực (`!IsRemoved && Status != Rejected && !IsDeleted`) rơi vào **đúng tháng/năm của `date` query param** (không phải hôm nay thực tế) — **không lưu ở đâu cả, BE tính trực tiếp mỗi lần gọi** từ 2026-08-19 (trước đó là bộ đếm cộng/trừ dần trên `Employee`, đã bỏ — xem [attendance-module.md §Lũy kế dự kiến](attendance-module.md)).
+`monthToDate`/`yearToDate` chỉ cộng khi đơn OT đạt `Completed` (xem [attendance-module.md §Lũy kế tháng/năm](attendance-module.md)) — nên nếu nhân viên đang có 1 đơn khác chưa được duyệt xong, hạn mức không phản ánh được phần đó, dễ gây trường hợp tạo 2 đơn cùng lúc mà đơn nào cũng không thấy cảnh báo vượt hạn mức. `projectedDayToDate`/`projectedMonthToDate`/`projectedYearToDate` giải quyết việc này: tính = thực tế + mọi đơn khác của người đó còn hiệu lực (`!IsRemoved && Status != Rejected && !IsDeleted`) rơi vào **đúng ngày/tháng/năm của `date` query param** (không phải hôm nay thực tế) — **không lưu ở đâu cả, BE tính trực tiếp mỗi lần gọi** từ 2026-08-19 (trước đó là bộ đếm cộng/trừ dần trên `Employee`, đã bỏ — xem [attendance-module.md §Lũy kế dự kiến](attendance-module.md)).
 
 FE dùng field nào ở đâu:
-- **`GET /api/Employee/by-group/{groupId}?date=`** (chọn nhân viên lúc TẠO đơn mới) → dùng `projectedMonthToDate`/`projectedYearToDate`, **BẮT BUỘC truyền `date`** = ngày trên đơn đang tạo (§3.5). Đây là **nguồn DUY NHẤT** trả 2 field này có ý nghĩa — mọi endpoint `EmployeeDto` khác trả về `0`.
+- **`GET /api/Employee/by-group/{groupId}?date=`** (chọn nhân viên lúc TẠO đơn mới) → dùng `projectedDayToDate`/`projectedMonthToDate`/`projectedYearToDate`, **BẮT BUỘC truyền `date`** = ngày trên đơn đang tạo (§3.5). Đây là **nguồn DUY NHẤT** trả 3 field này có ý nghĩa — mọi endpoint `EmployeeDto` khác trả về `0`.
 - **`OtFormEmployeeDto.monthToDate`/`yearToDate`** (§4.3, hiện trên 1 đơn cụ thể — chi tiết/sửa/PDF/email) → vẫn 2 tên field cũ, vẫn là **snapshot lũy kế dự kiến** tại thời điểm tạo đơn, TRƯỚC khi cộng chính đơn đó (không đổi từ 2026-08-06) — không đổi tên field, chỉ đổi cách BE tính ra số để chụp.
 - Màn quản lý nhân viên (`EmployeeList`, Admin) dùng `monthToDate`/`yearToDate` (thực tế, §3.5a) — không liên quan tới 1 đơn cụ thể nào, và Admin **không còn sửa tay được nữa** (§3.6).
 
@@ -831,10 +855,18 @@ Pattern **Preview → Confirm** (giống hệt import Device bên module Asset �
 ```
 - **`employees[].startTime` KHÔNG còn tồn tại** (bỏ từ 2026-07-16) — giờ bắt đầu của từng nhân viên LUÔN bằng `startTime` của đơn, BE tự set, FE không gửi lên nữa.
 - `employees[].endTime` do FE cho phép chỉnh riêng từng người, nhưng phải **> `startTime` của đơn** và **<= `endTime` của đơn** — sai thì 400 (`DomainException`, kèm mã nhân viên vi phạm trong message).
+- **`endTime` của đơn phải > `startTime` của đơn — KHÔNG hỗ trợ ca qua đêm** (2026-08-26, theo yêu cầu
+  người dùng): `endTime <= startTime` → 400 ngay đầu `CreateAsync`, trước khi làm bất kỳ việc gì khác
+  (áp dụng cho cả 2 kiểu tạo đơn, theo Nhóm lẫn theo chuyền). Trước đây không có validate này — FE từng
+  tự hiểu ngầm `endTime < startTime` là "qua ngày hôm sau" và cộng thêm 24h khi tính `totalHour`, nhưng
+  hệ thống chưa từng hỗ trợ đúng ca qua đêm ở chỗ khác (dòng ngay trên so `endTime`/`startTime` bằng
+  `TimeOnly` trực tiếp, không tính ngày) — dễ tạo nhầm đơn dài bất thường (vd 14h→06h ra 16h) mà không
+  ai nhận ra ngay. FE `CreateOtFormPage.tsx` tự chặn trước khi gọi API (hiện lỗi ngay dưới ô "Giờ kết
+  thúc"), BE luôn là nguồn chặn thật.
 - `employees[].employeeId` **phải cùng `groupId`** với đơn — khác nhóm → 400 (`DomainException`).
 - **`departmentId` phải đúng là Department của `groupId` đã chọn** (`Group.DepartmentId`, mới 2026-07-17) — gửi cặp `groupId`/`departmentId` không khớp nhau → 400 "Nhóm '...' không thuộc Bộ phận đã chọn." Dùng đúng cascading dropdown §3.2 (chọn Department trước, Group lọc theo `by-department/{id}`) sẽ không bao giờ gặp lỗi này.
 - **KHÔNG có field chữ ký nào trong body** — chữ ký (nếu bước nào đó trong chuỗi yêu cầu) chỉ bắt buộc lúc Duyệt (§4.4), không phải lúc tạo. Đơn vào chuỗi duyệt **ngay lập tức** (`status=InApproval`), hoặc `status=Completed` ngay nếu chuỗi rỗng (người tạo đã ở cấp cao nhất áp dụng cho `otCaseId` đó) — không còn khái niệm Draft. `approvalHistories` của response sẽ **rỗng** (chưa ai duyệt).
-- **`processPart.mainTicketCount`/`secondaryTicketCount`/`milkCount`** (số nguyên `int`, mặc định `0`) — số lượng phiếu ăn theo loại (phiếu chính/phiếu phụ/sữa), chỉ có ý nghĩa khi `isEat = true`. Người lập đơn **tự nhập tay 3 ô số lượng này** cho **cả đơn** (không phải theo từng nhân viên) — BE không tự tính, không validate tổng khớp `numberOfEmployee` hay `employees[].isEligibleForMeal`. FE nên ẩn 3 ô này khi `isEat = false`.
+- **`processPart.mainTicketCount`/`secondaryTicketCount`/`milkCount`** (số nguyên `int`, mặc định `0`) — số lượng phiếu ăn theo loại (phiếu chính/phiếu phụ/sữa), chỉ có ý nghĩa khi `isEat = true`. Người lập đơn **tự nhập tay 3 ô số lượng này** cho **cả đơn** (không phải theo từng nhân viên) — BE không tự tính, không validate tổng khớp `numberOfEmployee` hay `employees[].mealTicketType`. FE nên ẩn 3 ô này khi `isEat = false`.
 - **Điều kiện được phép tạo** (đổi 2026-08-07, Giai đoạn 3.1 — bỏ nhánh `UserApprovalScope(Submitter)`): tài khoản đang gọi API phải được liên kết với 1 `Employee` (`Employee.UserName`) có **đúng `groupId` với đơn**, hoặc là Admin (không giới hạn phạm vi). Không thoả → 400 (`DomainException` "Bạn chỉ được tạo/sửa đơn cho đúng Nhóm/Bộ phận của mình..."). Employee liên kết với người tạo cũng chính là cơ sở để suy luận chuỗi duyệt (Admin tạo hộ thì coi như cấp thấp nhất — chuỗi vẫn chạy đầy đủ từ bước đầu của Department).
 - **Chuỗi duyệt không đủ KHÔNG chặn tạo đơn** — nếu Department chưa cấu hình cây duyệt, hoặc thiếu người giữ đúng Chức vụ ở 1 bước nào đó, đơn vẫn được tạo với chuỗi cắt cụt tới đâu hay tới đó; `response.data.approvalChainWarning` (string, `null` nếu đủ) cho biết lý do cụ thể — FE hiện banner cảnh báo trên màn chi tiết đơn khi field này khác `null` (xem §4.3).
 - Response `201 Created` (Location header trỏ `GET /{id}`), `data` = `OtFormDto` (§4.3) đầy đủ luôn — không cần gọi lại `GetById`.
@@ -956,7 +988,7 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
   "employees": [
     { "employeeId": 100, "employeeCode": "NV001", "fullName": "Nguyễn Văn A",
       "startTime": "17:30:00", "endTime": "19:30:00", "noteVn": null, "noteJp": null,
-      "monthToDate": 12.5, "yearToDate": 80.0, "isEligibleForMeal": false,
+      "monthToDate": 12.5, "yearToDate": 80.0, "mealTicketType": 0,
       "actualHours": 2.0, "didEat": false,
       "isRemoved": false, "removedByUserName": null, "removedByFullName": null,
       "removedAtLevel": null, "removedAt": null, "removeReason": null }
@@ -996,13 +1028,23 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 - **"Bước đang chờ ai duyệt/ký tiếp"** (đổi 2026-08-07): suy từ `approvalSteps[]` — phần tử đầu tiên có `status=0 Pending` (nếu có) là bước đang chờ, `candidates[]` của bước đó là danh sách người có thể Duyệt/Từ chối. `status==Completed(1)`/`Rejected(2)` ở cấp `OtForm` → hết, ẩn nút Duyệt/Từ chối. KHÔNG còn suy được trực tiếp từ `OtForm.status` như enum cũ (chỉ còn 3 giá trị, không phân biệt "đang chờ ai").
 - `isEditable` (đổi 2026-08-07) = `status == InApproval && !approvalSteps.some(s => s.status === 1 /* Approved */)` — điều kiện CẦN (chưa đủ) để hiện nút "Sửa", xem §1.2 và §4.1b.
 - **`employees[].monthToDate`/`yearToDate`** — snapshot **đóng băng lũy kế DỰ KIẾN** (§3.5b) tại đúng thời điểm dòng này được thêm vào đơn (KHÔNG live, KHÔNG phải lũy kế thực tế `Employee.monthToDate`/`yearToDate`) — dùng để người duyệt đối chiếu ngưỡng TH3 (mặc định >25h/tháng, >300h/năm — Admin sửa được qua `GET/PUT /AttendanceSetting`, xem §6d) ngay trên màn chi tiết, không cần mở thêm màn Employee. Xem lại 1 đơn cũ luôn ra đúng con số tại thời điểm lập đơn, không phải lũy kế hiện tại.
-- **`employees[].isEligibleForMeal`** — `true` khi `(endTime - startTime) >= AttendanceSetting.mainMealTicketMinHours` (mặc định 2.5h, xem §6d). Tính sẵn ở BE, FE chỉ hiển thị (gợi ý tick `processPart.isEat`), không tự tính lại field này — nhưng FE TỰ TÍNH `processPart.mainTicketCount`/`secondaryTicketCount` theo cùng ngưỡng (§4.1/§6d), khác với `isEligibleForMeal` chỉ mang tính hiển thị tham khảo.
-- **`employees[].actualHours`** (mới 2026-08-26) — giờ OT thực tính của NGƯỜI ĐÓ, BE tính sẵn:
-  `endTime - startTime`, trừ thêm **0.5h (30 phút)** nếu `isEligibleForMeal=true` VÀ `didEat=true` (có
-  ăn thì bị trừ giờ nghỉ ăn; không ăn thì giữ nguyên giờ thô). FE (`OtFormDetail.tsx`,
-  `OtFormBatchDetail.tsx`, `OtFormEmailConfirmPage.tsx`) dùng field này để hiển thị cột giờ + tổng giờ
-  OT của form — **không** tự trừ `startTime`/`endTime` nữa. Riêng `IsEligibleForMeal` và số phiếu ăn
-  chính/phụ vẫn luôn tính trên giờ THÔ (không đọc `actualHours`).
+- **`employees[].mealTicketType`** (redesign 3 bậc 2026-08-26, THAY `isEligibleForMeal:bool` cũ) —
+  `int`: `0`=Không có phiếu, `1`=Phụ, `2`=Chính. Tính trên giờ **THỰC TÍCH** (`actualHours` bên dưới,
+  SAU khi trừ nếu có ăn — khác bản cũ luôn tính trên giờ thô): `< AttendanceSetting.noMealTicketMaxHours`
+  (mặc định 2h) → 0; `< AttendanceSetting.mainMealTicketMinHours` (mặc định 3.5h) → 1; còn lại → 2.
+  Ngoại lệ: ca khớp ĐÚNG khung `earlyMealWindowStartTime`/`earlyMealWindowEndTime` (mặc định 6h-8h)
+  luôn = 1 (Phụ), bất kể giờ. Tính sẵn ở BE, FE chỉ hiển thị (badge "Loại phiếu ăn",
+  `MealTicketTypeBadge.tsx`) — không tự tính lại field này khi XEM đơn đã lưu; nhưng
+  `CreateOtFormPage.tsx` (đang TẠO đơn, `OtFormEmployee` chưa tồn tại) tự tính preview bằng
+  `modules/attendance/lib/mealTicket.ts` (mirror đúng công thức BE) cho cả badge lẫn
+  `processPart.mainTicketCount`/`secondaryTicketCount` (§4.1/§6d).
+- **`employees[].actualHours`** (mới 2026-08-26, công thức đổi cùng đợt redesign trên) — giờ OT thực
+  tính của NGƯỜI ĐÓ, BE tính sẵn: `endTime - startTime`, trừ thêm `mealBreakDeductionHours` (mặc định
+  0.5h) nếu `didEat=true` — **trừ ca khớp đúng khung OT sớm, luôn KHÔNG trừ dù `didEat` là gì**. Có ăn
+  thì bị trừ giờ nghỉ ăn ở MỌI mức giờ (không chỉ khi đủ ngưỡng phiếu Chính như bản cũ); không ăn thì
+  giữ nguyên giờ thô. FE (`OtFormDetail.tsx`, `OtFormBatchDetail.tsx`, `OtFormEmailConfirmPage.tsx`)
+  dùng field này để hiển thị cột giờ + tổng giờ OT của form — **không** tự trừ `startTime`/`endTime`
+  nữa. `mealTicketType` cũng tính trên chính `actualHours` này (khác bản cũ tính trên giờ thô).
 - **`groupNameJp`/`departmentNameJp`/`reasonNameJp`** — song ngữ Việt/Nhật (nullable), lấy thẳng từ `Group`/`Department`/`Reason` tương ứng. FE (`OtFormDetail.tsx`, `OtFormEmailConfirmPage.tsx`) hiện `"{Vn} / {Jp}"` cho Phòng ban/Bộ phận/Lý do, tương tự cho `employees[].noteJp`/`processPart.anotherSuggestionJp`.
 - **`employees[].isRemoved`/`removedByUserName`/`removedByFullName`/`removedAtLevel`/`removedAt`/`removeReason` (xem §4.5a)** — người bị 1 bước duyệt loại khỏi đơn qua `POST /{id}/employees/remove` **vẫn nằm trong mảng `employees[]`** (BE cố tình KHÔNG lọc bỏ) để giữ dấu vết ai loại/lúc nào/lý do gì trên màn chi tiết — FE tự lọc `isRemoved === true` ra khỏi (1) tổng giờ OT hiển thị, (2) bản in PDF/A4/A5, (3) trang xem trước qua email. **`removedAtLevel` đổi ý nghĩa 2026-08-07**: giờ là `OtFormApprovalStep.stepOrder` (trước là số `ApprovalLevel`) — tra tên bước bằng cách tìm phần tử `approvalSteps[]` có `stepOrder` khớp, lấy `jobTitleNameSnapshot`, KHÔNG map qua `approvalLevelLabels` nữa. `numberOfEmployee` (cả `OtFormDto` lẫn `OtFormListItemDto`) chỉ đếm người **chưa** bị loại, không cần FE tự trừ.
 
@@ -1183,9 +1225,15 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
 | PUT | `/api/AttendanceSetting` | `Attendance.Setting.Update` (chỉ Admin) | Sửa cấu hình |
 
 ```jsonc
-// AttendanceSettingDto — response GET, body PUT (cùng shape)
+// AttendanceSettingDto — response GET, body PUT (cùng shape). 4 field phiếu ăn đầu tiên: redesign 3
+// bậc + khung OT sớm (2026-08-26) — xem attendance-module.md §Phiếu ăn — REDESIGN 3 bậc.
 {
-  "mainMealTicketMinHours": 2.5,   // decimal, [Range(0.5, 24)] khi PUT
+  "mainMealTicketMinHours": 3.5,      // decimal, [Range(0.5, 24)] — thực tích từ mốc này = phiếu CHÍNH
+  "noMealTicketMaxHours": 2,          // decimal, [Range(0, 24)] — thực tích dưới mốc này = KHÔNG phiếu
+  "mealBreakDeductionHours": 0.5,     // decimal, [Range(0, 4)] — số giờ trừ khi có ăn
+  "earlyMealWindowStartTime": "06:00:00",  // TimeOnly "HH:mm:ss", [Required] khi PUT
+  "earlyMealWindowEndTime": "08:00:00",    // TimeOnly "HH:mm:ss", [Required] khi PUT
+  "dailyOtHourLimit": 4,           // decimal, [Range(0.5, 24)] khi PUT — MỚI 2026-08-26
   "monthlyOtHourLimit": 25,        // decimal, [Range(1, 744)] khi PUT
   "yearlyOtHourLimit": 300,        // decimal, [Range(1, 8784)] khi PUT
   "batchAutoSendTime": "15:00:00"  // TimeOnly "HH:mm:ss", [Required] khi PUT — mới 2026-08-08, xem §6e
@@ -1195,14 +1243,26 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
 - **`GET` cố tình KHÔNG gắn permission** — Role "Nhân viên"/"Trưởng nhóm" không có permission quản trị
   nào nhưng màn Tạo đơn của họ vẫn phải đọc được cấu hình này để tự tính phiếu ăn (§4.1) và tô đỏ lũy
   kế vượt ngưỡng. Chỉ hành động **SỬA** mới cần `Attendance.Setting.Update`.
-- **`mainMealTicketMinHours`** — mốc giờ OT để nhận **phiếu chính**; dưới mốc này nhận **phiếu phụ**
-  (không có ngưỡng sàn, mọi người tăng ca đều nhận đúng 1 trong 2 loại — chốt qua AskUserQuestion). Áp
-  dụng cho cả `OtFormEmployeeDto.isEligibleForMeal` (BE tính) lẫn `processPart.mainTicketCount`/
-  `secondaryTicketCount` (FE tự tính ở `CreateOtFormPage.tsx`, người dùng vẫn sửa tay được — xem §4.1).
-- **`monthlyOtHourLimit`/`yearlyOtHourLimit`** — chỉ ảnh hưởng **hiển thị** (badge/pill đỏ cảnh báo ở
-  `EmployeeList.tsx`, `CreateOtFormPage.tsx`, `OtFormDetail.tsx`, `OtFormBatchDetail.tsx`,
-  `OtFormPrintView.tsx`), **không** chặn tạo/duyệt đơn hay Admin chỉnh lũy kế thủ công qua
-  `PUT /Employee/{id}` — vẫn không giới hạn gì.
+- **3 bậc phiếu ăn** (redesign 2026-08-26, đảo ngược quyết định "không sàn dưới" chốt ngày 2026-08-01):
+  thực tích `< noMealTicketMaxHours` → KHÔNG phiếu; `< mainMealTicketMinHours` → phiếu Phụ; còn lại →
+  phiếu Chính. Áp dụng cho cả `OtFormEmployeeDto.mealTicketType` (BE tính, thay `isEligibleForMeal:bool`
+  cũ) lẫn `processPart.mainTicketCount`/`secondaryTicketCount` (FE tự tính ở `CreateOtFormPage.tsx` qua
+  `modules/attendance/lib/mealTicket.ts`, người dùng vẫn sửa tay được — xem §4.1).
+- **`mealBreakDeductionHours`** — số giờ trừ khỏi giờ thô khi `didEat=true` (trước đây hardcode `0.5m`).
+  Áp dụng ở MỌI mức giờ (không chỉ khi đủ ngưỡng phiếu Chính như bản cũ trước 2026-08-26).
+- **`earlyMealWindowStartTime`/`earlyMealWindowEndTime`** — khung OT sớm đặc cách (mặc định 6h-8h). Ca
+  OT có `startTime`/`endTime` khớp **ĐÚNG** 2 mốc này (không phải chỉ chồng lấn) luôn nhận phiếu Phụ và
+  KHÔNG bị trừ `mealBreakDeductionHours`, bất kể `didEat`.
+- **`dailyOtHourLimit`/`monthlyOtHourLimit`/`yearlyOtHourLimit`** — REDESIGN 2026-08-26 (đảo ngược
+  hoàn toàn hành vi cũ): cả 3 mốc giờ đều **CHẶN CỨNG** `POST`/`PUT /api/OtForm` — nếu tổng giờ OT
+  thực tích của 1 nhân viên (SAU khi cộng thêm giờ của chính đơn đang tạo/sửa) vượt bất kỳ mốc nào,
+  BE trả 400 liệt kê tên các nhân viên vi phạm + mốc bị vượt, không tạo/sửa được đơn cho tới khi loại
+  nhân viên đó khỏi đơn hoặc giảm giờ (xem `OtFormService.ValidateOtHourLimitsAsync`). "Ngày" cộng dồn
+  TẤT CẢ ca OT của 1 nhân viên trong đúng ngày (nhiều đơn/nhiều ca cộng lại, không phải riêng lẻ từng
+  ca). Badge/pill đỏ ở `EmployeeList.tsx`/`CreateOtFormPage.tsx`/`OtFormDetail.tsx`/
+  `OtFormBatchDetail.tsx`/`OtFormPrintView.tsx` vẫn giữ nguyên vai trò cảnh báo SỚM (trước khi submit),
+  nhưng giờ BE mới là nguồn chặn thật — không chỉnh lũy kế thủ công qua `PUT /Employee/{id}` được nữa
+  (đã bỏ từ 2026-08-19, xem §3.6) nên không có đường vòng nào để né validate này.
 - **FE cache dùng chung** (`useAttendanceSetting.ts`) — 1 promise cấp module, không gọi lại API mỗi màn
   mount; gọi `invalidateAttendanceSettingCache()` sau khi Admin lưu cấu hình mới để các màn mở sau đó
   thấy ngay, không cần F5 cả trang.
@@ -1269,7 +1329,7 @@ gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
   hàng loạt qua "Đơn tổng" mà không thấy "Yêu cầu hỗ trợ khác"/lý do chi tiết/lũy kế từng nhân viên như
   màn Chi tiết đơn thường. Giờ mỗi phần tử `otForms[]` có đủ dữ liệu để FE render lại đúng mức chi tiết
   của `OtFormDto` (§4.3) — `employees[]` vẫn là `OtFormEmployeeDto` đầy đủ (đã có sẵn từ đầu, gồm cả
-  `monthToDate`/`yearToDate`/`isEligibleForMeal`/`actualHours`/`didEat`/`noteVn`/`noteJp`), chỉ thêm mới `subReason`
+  `monthToDate`/`yearToDate`/`mealTicketType`/`actualHours`/`didEat`/`noteVn`/`noteJp`), chỉ thêm mới `subReason`
   và `processPart` ở cấp đơn.
 
 - **Duyệt hàng loạt** — body `ProcessOtFormBatchDto`:
@@ -1388,6 +1448,7 @@ Tab **"Đơn tôi tham gia"** (**mới**, mọi role kể cả "Nhân viên") �
 | `POST /{id}/approve\|reject` 400 "Mật khẩu cấp 2 không đúng" | `secondaryPassword` gửi lên không khớp mật khẩu cấp 2 đã đăng ký — nhập lại, không liên quan tới mật khẩu đăng nhập AD |
 | `GET/POST /SecondaryPassword/confirm/{token}` 404/400 | Cùng luật lỗi hệt `UserSignature/confirm/{token}` ở 3 dòng dưới đây, đổi "chữ ký" thành "mật khẩu cấp 2" |
 | `POST /OtForm` 400 "Bạn chỉ được tạo/sửa đơn cho đúng Nhóm/Bộ phận của mình..." | Tài khoản gọi API chưa liên kết `Employee` đúng `groupId` của đơn (và không phải Admin) — 2026-08-07, xem §4.1 |
+| `POST /OtForm` 400 "Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm)" (**mới 2026-08-26**) | `endTime <= startTime` của đơn — không còn được coi là "qua ngày hôm sau", FE nên chặn ngay tại UI trước khi gọi API, xem §4.1 |
 | `POST /UserApprovalScope` 400 "chưa giữ Role '...'" (mở rộng cho cả 4 cấp, **2026-07-17**) | Admin gán `approvalLevel` (Submitter/GroupHead/DepartmentManager/WorkshopManager) cho `userName` chưa có đúng Role tương ứng (Trưởng nhóm/Trưởng Bộ phận/Trưởng phòng/Trưởng xưởng) — gán Role qua Identity `update-user-roles` trước, rồi mới gán scope. Xem bảng mapping ở §5 |
 | `POST /UserApprovalScope` 400 "Cấp duyệt này chỉ được gán theo phạm vi '...'" (**mới 2026-07-17**) | `scopeType` không khớp `approvalLevel` (VD gán `Trưởng Bộ phận` theo phạm vi "Phòng ban" thay vì "Bộ phận", hoặc `Trưởng phòng` theo phạm vi "Bộ phận" thay vì "Phòng ban") — xem bảng mapping ScopeType ở §5, FE nên ép sẵn PHẠM VI theo `approvalLevel` đã chọn để tránh lỗi này |
 | `pending-approvals` luôn rỗng dù có đơn chờ | User Tổng Giám Đốc thiếu Role `"Tổng Giám Đốc"` (case-sensitive, kiểm tra đúng chuỗi), hoặc Trưởng phòng/xưởng thiếu `UserApprovalScope` |

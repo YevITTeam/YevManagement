@@ -21,9 +21,9 @@ namespace Attendance.Api.Controllers
         [HttpGet("search")]
         public async Task<ActionResult<ApiResponse<List<ProductionEmployeeSearchItemDto>>>> Search(
             [FromQuery] int? productionLineId, [FromQuery] int? teamId, [FromQuery] int? shiftTeamId,
-            [FromQuery] string? congDoan, [FromQuery] string? keyword)
+            [FromQuery] string? congDoan, [FromQuery] string? keyword, [FromQuery] DateOnly? date = null)
         {
-            var result = await _productionEmployeeService.SearchAsync(productionLineId, teamId, shiftTeamId, congDoan, keyword);
+            var result = await _productionEmployeeService.SearchAsync(productionLineId, teamId, shiftTeamId, congDoan, keyword, date);
             return Success(result);
         }
 

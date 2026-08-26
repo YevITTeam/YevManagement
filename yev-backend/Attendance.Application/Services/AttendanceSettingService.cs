@@ -18,6 +18,7 @@ namespace Attendance.Application.Services
         public const decimal DefaultMealBreakDeductionHours = 0.5m;
         public static readonly TimeOnly DefaultEarlyMealWindowStartTime = new(6, 0);
         public static readonly TimeOnly DefaultEarlyMealWindowEndTime = new(8, 0);
+        public const decimal DefaultDailyOtHourLimit = 4m;
         public const decimal DefaultMonthlyOtHourLimit = 25m;
         public const decimal DefaultYearlyOtHourLimit = 300m;
         public static readonly TimeOnly DefaultBatchAutoSendTime = new(15, 0);
@@ -38,6 +39,7 @@ namespace Attendance.Application.Services
             setting.MealBreakDeductionHours = request.MealBreakDeductionHours;
             setting.EarlyMealWindowStartTime = request.EarlyMealWindowStartTime;
             setting.EarlyMealWindowEndTime = request.EarlyMealWindowEndTime;
+            setting.DailyOtHourLimit = request.DailyOtHourLimit;
             setting.MonthlyOtHourLimit = request.MonthlyOtHourLimit;
             setting.YearlyOtHourLimit = request.YearlyOtHourLimit;
             setting.BatchAutoSendTime = request.BatchAutoSendTime;
@@ -61,6 +63,7 @@ namespace Attendance.Application.Services
             MealBreakDeductionHours = setting.MealBreakDeductionHours,
             EarlyMealWindowStartTime = setting.EarlyMealWindowStartTime,
             EarlyMealWindowEndTime = setting.EarlyMealWindowEndTime,
+            DailyOtHourLimit = setting.DailyOtHourLimit,
             MonthlyOtHourLimit = setting.MonthlyOtHourLimit,
             YearlyOtHourLimit = setting.YearlyOtHourLimit,
             BatchAutoSendTime = setting.BatchAutoSendTime,
@@ -81,6 +84,7 @@ namespace Attendance.Application.Services
                 MealBreakDeductionHours = DefaultMealBreakDeductionHours,
                 EarlyMealWindowStartTime = DefaultEarlyMealWindowStartTime,
                 EarlyMealWindowEndTime = DefaultEarlyMealWindowEndTime,
+                DailyOtHourLimit = DefaultDailyOtHourLimit,
                 MonthlyOtHourLimit = DefaultMonthlyOtHourLimit,
                 YearlyOtHourLimit = DefaultYearlyOtHourLimit,
                 BatchAutoSendTime = DefaultBatchAutoSendTime,

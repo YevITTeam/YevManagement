@@ -56,6 +56,7 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.MainMealTicketMinHours).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.NoMealTicketMaxHours).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.MealBreakDeductionHours).HasColumnType("decimal(5, 2)");
+            entity.Property(e => e.DailyOtHourLimit).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.MonthlyOtHourLimit).HasColumnType("decimal(10, 2)");
             entity.Property(e => e.YearlyOtHourLimit).HasColumnType("decimal(10, 2)");
         });
@@ -109,6 +110,10 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.FirstName).HasMaxLength(150);
             entity.Property(e => e.LastName).HasMaxLength(150);
             entity.Property(e => e.UserName).HasMaxLength(100);
+            // decimal(10,2) — cùng kiểu với AttendanceSetting.MonthlyOtHourLimit/YearlyOtHourLimit để
+            // so sánh không bị lệch.
+            entity.Property(e => e.CustomMonthlyOtHourLimit).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.CustomYearlyOtHourLimit).HasColumnType("decimal(10, 2)");
 
             entity.HasOne(d => d.Group).WithMany(p => p.Employees)
                 .HasForeignKey(d => d.GroupId)

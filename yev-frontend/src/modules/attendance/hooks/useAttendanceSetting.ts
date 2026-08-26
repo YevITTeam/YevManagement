@@ -15,6 +15,7 @@ export const DEFAULT_ATTENDANCE_SETTING: AttendanceSettingDto = {
     mealBreakDeductionHours: 0.5,
     earlyMealWindowStartTime: "06:00:00",
     earlyMealWindowEndTime: "08:00:00",
+    dailyOtHourLimit: 4,
     monthlyOtHourLimit: 25,
     yearlyOtHourLimit: 300,
     batchAutoSendTime: "15:00:00",

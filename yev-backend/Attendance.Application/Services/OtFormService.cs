@@ -260,6 +260,8 @@ namespace Attendance.Application.Services
                     NoteJp = x.NoteJp,
                     MonthToDate = x.MonthToDate,
                     YearToDate = x.YearToDate,
+                    CustomMonthlyOtHourLimit = x.Employee.CustomMonthlyOtHourLimit,
+                    CustomYearlyOtHourLimit = x.Employee.CustomYearlyOtHourLimit,
                     MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                     ActualHours = CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                     DidEat = x.DidEat,
@@ -309,6 +311,13 @@ namespace Attendance.Application.Services
 
         public async Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
         {
+            // KHÔNG hỗ trợ ca qua đêm (2026-08-26, theo yêu cầu người dùng) — giờ kết thúc phải SAU giờ
+            // bắt đầu trong CÙNG ngày. Chặn ở đây trước khi làm gì khác, vì ValidateEmployeesAsync bên
+            // dưới so TimeOnly trực tiếp không tính ngày — nếu EndTime < StartTime lọt qua, validate đó
+            // sẽ sai lệch (coi StartTime/EndTime của đơn như 1 mốc giờ trong ngày, không phải khoảng).
+            if (request.EndTime <= request.StartTime)
+                throw new DomainException("Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).");
+
             if (request.IsProductionForm)
                 return await CreateProductionFormAsync(createdByUserName, createdByFullName, isAdmin, request);
 
@@ -488,16 +497,22 @@ namespace Attendance.Application.Services
 
             var mealSettings = await _attendanceSettingService.GetAsync();
 
+            // Chặn CỨNG trước khi ghi bất kỳ gì — vượt giới hạn ngày/tháng/năm của bất kỳ nhân viên nào
+            // thì từ chối tạo cả đơn (2026-08-26, xem ValidateOtHourLimitsAsync).
+            var newHoursByEmployeeId = request.Employees.ToDictionary(
+                x => x.EmployeeId, x => CalculateOtHours(request.StartTime, x.EndTime, x.DidEat, mealSettings));
+            await ValidateOtHourLimitsAsync(request.Date, newHoursByEmployeeId, mealSettings, excludeFormId: null);
+
             // Chụp lại Dự kiến "trước khi thêm đơn này" — query CHƯA thấy đơn đang tạo (chưa
             // AddAsync/SaveChanges), nên tự nhiên đúng nghĩa "trước" (2026-08-19). Fetch 1 lượt cho CẢ
             // đơn (batch) thay vì từng người, tránh N+1 khi đơn có nhiều nhân viên.
-            var projectedByEmployee = await ComputeProjectedHoursBatchAsync(
+            var projectedByEmployee = await ComputeAccumulatedHoursBatchAsync(
                 request.Employees.Select(x => x.EmployeeId), request.Date, mealSettings);
 
             foreach (var item in request.Employees)
             {
-                var (projectedMonthBefore, projectedYearBefore) =
-                    projectedByEmployee.TryGetValue(item.EmployeeId, out var projected) ? projected : (0m, 0m);
+                var (_, projectedMonthBefore, projectedYearBefore) =
+                    projectedByEmployee.TryGetValue(item.EmployeeId, out var projected) ? projected : (0m, 0m, 0m);
                 ProductionEmployee? pe = null;
                 productionEmployeesByEmployeeId?.TryGetValue(item.EmployeeId, out pe);
 
@@ -674,6 +689,13 @@ namespace Attendance.Application.Services
             }
 
             var mealSettings = await _attendanceSettingService.GetAsync();
+
+            // Chặn CỨNG nếu giờ sửa lại khiến ai đó vượt ngày/tháng/năm — excludeFormId: otForm.Id vì
+            // các dòng OtFormEmployee hiện có của CHÍNH đơn này đang bị thay thế/sửa, không được cộng
+            // dồn ngược lại với giá trị cũ của chính nó (xem ValidateOtHourLimitsAsync).
+            var newHoursByEmployeeId = request.Employees.ToDictionary(
+                x => x.EmployeeId, x => CalculateOtHours(otForm.StartTime, x.EndTime, x.DidEat, mealSettings));
+            await ValidateOtHourLimitsAsync(otForm.Date, newHoursByEmployeeId, mealSettings, excludeFormId: otForm.Id);
 
             var activeByEmployeeId = activeEmployees.ToDictionary(x => x.EmployeeId);
             foreach (var item in request.Employees)
@@ -1229,23 +1251,75 @@ namespace Attendance.Application.Services
         // Nhận CẢ DANH SÁCH employeeId, fetch 1 lượt duy nhất (mirror batch-fetch ledger đã có ở
         // AccumulateEmployeeHoursAsync) — tránh N+1 khi đơn có nhiều người (CreateAsync trước đây gọi
         // hàm này riêng cho từng người trong vòng lặp, N nhân viên = N query).
-        private async Task<Dictionary<int, (decimal Month, decimal Year)>> ComputeProjectedHoursBatchAsync(
-            IEnumerable<int> employeeIds, DateOnly targetDate, AttendanceSettingDto mealSettings)
+        // excludeFormId: bỏ qua chính đơn đang sửa khi tính "trước" (UpdateAsync sửa giờ của các dòng
+        // đã tồn tại trên CHÍNH đơn này — không được cộng dồn ngược lại với chính nó). Create truyền
+        // null vì đơn chưa tồn tại, không có gì để loại trừ.
+        private async Task<Dictionary<int, (decimal Day, decimal Month, decimal Year)>> ComputeAccumulatedHoursBatchAsync(
+            IEnumerable<int> employeeIds, DateOnly targetDate, AttendanceSettingDto mealSettings, int? excludeFormId = null)
         {
             var employeeIdList = employeeIds.Distinct().ToList();
 
             var rows = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
                 x => employeeIdList.Contains(x.EmployeeId) && !x.IsRemoved && x.OtForm.Status != (int)OtFormStatus.Rejected
-                     && !x.OtForm.IsDeleted && x.OtForm.Date.Year == targetDate.Year,
+                     && !x.OtForm.IsDeleted && x.OtForm.Date.Year == targetDate.Year
+                     && (excludeFormId == null || x.OtFormId != excludeFormId.Value),
                 x => x.OtForm);
 
             return rows.GroupBy(x => x.EmployeeId).ToDictionary(
                 g => g.Key,
                 g => (
+                    Day: g.Where(x => x.OtForm.Date == targetDate)
+                        .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)),
                     Month: g.Where(x => x.OtForm.Date.Month == targetDate.Month)
                         .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)),
                     Year: g.Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings))
                 ));
+        }
+
+        // Chặn CỨNG tạo/sửa đơn nếu bất kỳ nhân viên nào vượt giới hạn ngày/tháng/năm SAU KHI cộng
+        // thêm giờ của đơn đang tạo/sửa (2026-08-26, theo yêu cầu người dùng — đảo ngược hành vi cũ
+        // "chỉ cảnh báo đỏ trên UI" của Monthly/YearlyOtHourLimit). "Ngày" cộng dồn theo TẤT CẢ ca OT
+        // của nhân viên đó trong đúng ngày (nhiều đơn/nhiều ca cộng lại), không phải riêng lẻ từng ca.
+        // Không tự động loại nhân viên khỏi đơn — ném lỗi liệt kê đủ tên, buộc người tạo/sửa đơn tự bỏ
+        // bớt (Update) hoặc bỏ chọn (Create) rồi thao tác lại.
+        // Ngày dùng CHUNG 1 mốc cho mọi người (AttendanceSetting.DailyOtHourLimit), KHÔNG override được
+        // per-employee (đã chốt với người dùng — "Ngày" không nằm trong 2 mốc cho phép gia hạn riêng).
+        // Tháng/Năm ưu tiên mốc riêng Employee.CustomMonthlyOtHourLimit/CustomYearlyOtHourLimit nếu đã
+        // gán (2026-08-26, "gia hạn" cao hơn mặc định cho từng người — thường dùng cho công nhân dưới
+        // chuyền), rơi về mặc định chung nếu chưa gán. Message theo đúng mẫu người dùng yêu cầu: "Nhân
+        // viên mã {code} quá ..." — mirror ở FE (CreateOtFormPage.tsx) để cảnh báo SỚM cùng câu chữ.
+        private async Task ValidateOtHourLimitsAsync(
+            DateOnly date, Dictionary<int, decimal> newHoursByEmployeeId, AttendanceSettingDto settings, int? excludeFormId)
+        {
+            if (newHoursByEmployeeId.Count == 0) return;
+
+            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, date, settings, excludeFormId);
+            var employeesById = (await _unitOfWork.Employees.FindAsync(x => newHoursByEmployeeId.Keys.Contains(x.Id)))
+                .ToDictionary(x => x.Id);
+
+            var violations = new List<string>();
+            foreach (var (employeeId, newHours) in newHoursByEmployeeId)
+            {
+                var (dayBefore, monthBefore, yearBefore) = accumulated.TryGetValue(employeeId, out var acc) ? acc : (0m, 0m, 0m);
+                var employee = employeesById.GetValueOrDefault(employeeId);
+                var code = employee?.Code ?? employeeId.ToString();
+                var monthlyLimit = employee?.CustomMonthlyOtHourLimit ?? settings.MonthlyOtHourLimit;
+                var yearlyLimit = employee?.CustomYearlyOtHourLimit ?? settings.YearlyOtHourLimit;
+
+                var dayAfter = dayBefore + newHours;
+                var monthAfter = monthBefore + newHours;
+                var yearAfter = yearBefore + newHours;
+
+                if (dayAfter > settings.DailyOtHourLimit)
+                    violations.Add($"Nhân viên mã {code} quá giới hạn OT ngày ({dayAfter:0.##}h > {settings.DailyOtHourLimit:0.##}h)");
+                if (monthAfter > monthlyLimit)
+                    violations.Add($"Nhân viên mã {code} quá giới hạn OT tháng ({monthAfter:0.##}h > {monthlyLimit:0.##}h)");
+                if (yearAfter > yearlyLimit)
+                    violations.Add($"Nhân viên mã {code} quá giới hạn OT năm ({yearAfter:0.##}h > {yearlyLimit:0.##}h)");
+            }
+
+            if (violations.Count > 0)
+                throw new DomainException(string.Join("; ", violations) + ". Vui lòng loại khỏi đơn hoặc giảm giờ OT rồi thử lại.");
         }
 
         // === "Đơn tổng" — REDESIGN theo Cây chức vụ (2026-08-07, Giai đoạn 3.2) ===
@@ -1406,6 +1480,8 @@ namespace Attendance.Application.Services
                             NoteJp = x.NoteJp,
                             MonthToDate = x.MonthToDate,
                             YearToDate = x.YearToDate,
+                            CustomMonthlyOtHourLimit = x.Employee.CustomMonthlyOtHourLimit,
+                            CustomYearlyOtHourLimit = x.Employee.CustomYearlyOtHourLimit,
                             MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                             ActualHours = CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                             DidEat = x.DidEat,

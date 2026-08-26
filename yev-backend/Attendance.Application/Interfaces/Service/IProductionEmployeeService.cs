@@ -5,7 +5,7 @@ namespace Attendance.Application.Interfaces.Service
     public interface IProductionEmployeeService
     {
         Task<List<ProductionEmployeeSearchItemDto>> SearchAsync(
-            int? productionLineId, int? teamId, int? shiftTeamId, string? congDoan, string? keyword);
+            int? productionLineId, int? teamId, int? shiftTeamId, string? congDoan, string? keyword, DateOnly? targetDate);
 
         Task<List<ProductionOptionDto>> GetLineOptionsAsync(int? teamId);
         Task<List<ProductionOptionDto>> GetTeamOptionsAsync();

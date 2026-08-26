@@ -20,6 +20,7 @@ namespace Attendance.Application.Dtos.Employees
         // này, tính trực tiếp từ OtFormEmployee/OtForm (không lưu ở đâu cả). CHỈ được set có ý nghĩa bởi
         // EmployeeService.GetByGroupIdAsync (màn Tạo đơn OT, scope theo NGÀY TRÊN ĐƠN đang tạo, không
         // phải hôm nay thực tế) — mọi endpoint khác để mặc định 0, không dùng tới field này.
+        public decimal ProjectedDayToDate { get; set; }
         public decimal ProjectedMonthToDate { get; set; }
         public decimal ProjectedYearToDate { get; set; }
 
@@ -34,5 +35,11 @@ namespace Attendance.Application.Dtos.Employees
         // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán.
         public int? JobTitleId { get; set; }
         public string? JobTitleName { get; set; }
+
+        // Giới hạn giờ OT/tháng/năm RIÊNG cho người này — null = dùng mặc định chung
+        // (AttendanceSettingDto.MonthlyOtHourLimit/YearlyOtHourLimit). Không có Ngày riêng — Ngày luôn
+        // dùng chung 1 mốc cho mọi người (2026-08-26, xem Employee.cs).
+        public decimal? CustomMonthlyOtHourLimit { get; set; }
+        public decimal? CustomYearlyOtHourLimit { get; set; }
     }
 }

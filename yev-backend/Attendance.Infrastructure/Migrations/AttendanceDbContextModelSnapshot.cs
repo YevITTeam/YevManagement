@@ -33,6 +33,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<TimeOnly>("BatchAutoSendTime")
                         .HasColumnType("time");
 
+                    b.Property<decimal>("DailyOtHourLimit")
+                        .HasColumnType("decimal(5, 2)");
+
                     b.Property<TimeOnly>("EarlyMealWindowEndTime")
                         .HasColumnType("time");
 
@@ -163,6 +166,12 @@ namespace Attendance.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal?>("CustomMonthlyOtHourLimit")
+                        .HasColumnType("decimal(10, 2)");
+
+                    b.Property<decimal?>("CustomYearlyOtHourLimit")
+                        .HasColumnType("decimal(10, 2)");
 
                     b.Property<int?>("DepartmentId")
                         .HasColumnType("int");

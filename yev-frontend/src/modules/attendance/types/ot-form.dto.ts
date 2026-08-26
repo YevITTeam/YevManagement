@@ -52,6 +52,11 @@ export interface OtFormEmployeeDto {
     noteJp: string | null;
     monthToDate: number;
     yearToDate: number;
+    // Giới hạn giờ OT/tháng/năm RIÊNG của nhân viên này TẠI THỜI ĐIỂM ĐỌC (live, không snapshot như
+    // monthToDate/yearToDate ở trên) — null = dùng mặc định chung (2026-08-26, mirror
+    // EmployeeDto.customMonthlyOtHourLimit/customYearlyOtHourLimit).
+    customMonthlyOtHourLimit: number | null;
+    customYearlyOtHourLimit: number | null;
     // Loại phiếu ăn: 0=Không có phiếu, 1=Phiếu Phụ, 2=Phiếu Chính — redesign 3 bậc (2026-08-26, thay
     // isEligibleForMeal cũ), xem modules/attendance/lib/mealTicket.ts + docs §Phiếu ăn.
     mealTicketType: number;

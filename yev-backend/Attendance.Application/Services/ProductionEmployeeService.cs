@@ -1,5 +1,9 @@
+using Attendance.Application.Dtos.AttendanceSettings;
 using Attendance.Application.Dtos.ProductionEmployees;
 using Attendance.Application.Interfaces.Service;
+using Attendance.Domain.Entities;
+using Attendance.Domain.Enums;
+using Shared.Application.Helper;
 using Shared.Application.Services;
 
 namespace Attendance.Application.Services
@@ -10,10 +14,19 @@ namespace Attendance.Application.Services
     // nạp, xem ProductionEmployee.cs) — không cần lọc thêm ở đây.
     public class ProductionEmployeeService : BaseService<IAttendanceUnitOfWork>, IProductionEmployeeService
     {
-        public ProductionEmployeeService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
+        private readonly IAttendanceSettingService _attendanceSettingService;
 
+        public ProductionEmployeeService(IAttendanceUnitOfWork unitOfWork, IAttendanceSettingService attendanceSettingService)
+            : base(unitOfWork)
+        {
+            _attendanceSettingService = attendanceSettingService;
+        }
+
+        // targetDate = ngày trên đơn đang tạo (2026-08-26, mirror EmployeeService.GetByGroupIdAsync) —
+        // thêm lũy kế DỰ KIẾN để cảnh báo vượt giới hạn ngày/tháng/năm NGAY lúc chọn người ở màn "Theo
+        // chuyền" (trước đây bảng này không có cảnh báo gì, khác bảng "Theo Nhóm" đã có từ 2026-08-06).
         public async Task<List<ProductionEmployeeSearchItemDto>> SearchAsync(
-            int? productionLineId, int? teamId, int? shiftTeamId, string? congDoan, string? keyword)
+            int? productionLineId, int? teamId, int? shiftTeamId, string? congDoan, string? keyword, DateOnly? targetDate)
         {
             var trimmedKeyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim();
 
@@ -38,10 +51,45 @@ namespace Attendance.Application.Services
                     TeamCode = x.TeamCode,
                     ShiftTeamCode = x.ShiftTeamCode,
                     ShiftTeamNameVn = x.ShiftTeam != null ? x.ShiftTeam.NameVn : null,
-                    IsLeader = x.IsLeader
+                    IsLeader = x.IsLeader,
+                    CustomMonthlyOtHourLimit = x.Employee!.CustomMonthlyOtHourLimit,
+                    CustomYearlyOtHourLimit = x.Employee!.CustomYearlyOtHourLimit
                 });
 
-            return items.OrderBy(x => x.EmployeeCode).ToList();
+            var result = items.OrderBy(x => x.EmployeeCode).ToList();
+            if (result.Count == 0) return result;
+
+            var target = targetDate ?? DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
+            var mealSettings = await _attendanceSettingService.GetAsync();
+            var employeeIds = result.Select(x => x.EmployeeId).ToList();
+
+            var pendingRows = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
+                x => employeeIds.Contains(x.EmployeeId) && !x.IsRemoved && x.OtForm.Status != (int)OtFormStatus.Rejected
+                     && !x.OtForm.IsDeleted && x.OtForm.Date.Year == target.Year,
+                x => x.OtForm);
+
+            var rowsByEmployee = pendingRows.GroupBy(x => x.EmployeeId).ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var item in result)
+            {
+                if (!rowsByEmployee.TryGetValue(item.EmployeeId, out var rows)) continue;
+                item.ProjectedDayToDate = rows.Where(x => x.OtForm.Date == target)
+                    .Sum(x => CalculateProjectedHours(x, mealSettings));
+                item.ProjectedMonthToDate = rows.Where(x => x.OtForm.Date.Month == target.Month)
+                    .Sum(x => CalculateProjectedHours(x, mealSettings));
+                item.ProjectedYearToDate = rows.Sum(x => CalculateProjectedHours(x, mealSettings));
+            }
+
+            return result;
+        }
+
+        // Mirror EmployeeService.CalculateProjectedHours/OtFormService.CalculateOtHours — mỗi service tự
+        // chứa logic tính giờ của mình, không gọi chéo (quy ước đã có từ redesign 3 bậc phiếu ăn 2026-08-26).
+        private static decimal CalculateProjectedHours(OtFormEmployee row, AttendanceSettingDto mealSettings)
+        {
+            var hours = (decimal)(row.EndTime - row.StartTime).TotalHours;
+            var isEarlyWindow = row.StartTime == mealSettings.EarlyMealWindowStartTime && row.EndTime == mealSettings.EarlyMealWindowEndTime;
+            if (!isEarlyWindow && row.DidEat) hours -= mealSettings.MealBreakDeductionHours;
+            return hours;
         }
 
         // teamId lọc Line theo đúng Team đã chọn — ProductionLine.TeamId là FK thật (xem ProductionLine.cs),

@@ -85,7 +85,9 @@ namespace Attendance.Application.Services
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
                     JobTitleId = x.JobTitleId,
-                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
+                    CustomMonthlyOtHourLimit = x.CustomMonthlyOtHourLimit,
+                    CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit
                 }
             );
         }
@@ -111,7 +113,9 @@ namespace Attendance.Application.Services
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
                     JobTitleId = x.JobTitleId,
-                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
+                    CustomMonthlyOtHourLimit = x.CustomMonthlyOtHourLimit,
+                    CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit
                 }
             );
             return items.OrderBy(x => x.Code).ToList();
@@ -144,7 +148,9 @@ namespace Attendance.Application.Services
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
                     JobTitleId = x.JobTitleId,
-                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
+                    CustomMonthlyOtHourLimit = x.CustomMonthlyOtHourLimit,
+                    CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit
                 }
             );
 
@@ -166,6 +172,8 @@ namespace Attendance.Application.Services
                 foreach (var item in items)
                 {
                     if (!rowsByEmployee.TryGetValue(item.Id, out var rows)) continue;
+                    item.ProjectedDayToDate = rows.Where(x => x.OtForm.Date == target)
+                        .Sum(x => CalculateProjectedHours(x, mealSettings));
                     item.ProjectedMonthToDate = rows.Where(x => x.OtForm.Date.Month == target.Month)
                         .Sum(x => CalculateProjectedHours(x, mealSettings));
                     item.ProjectedYearToDate = rows.Sum(x => CalculateProjectedHours(x, mealSettings));
@@ -208,7 +216,9 @@ namespace Attendance.Application.Services
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
                     JobTitleId = x.JobTitleId,
-                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
+                    CustomMonthlyOtHourLimit = x.CustomMonthlyOtHourLimit,
+                    CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit
                 }
             );
             return items.OrderBy(x => x.Code).ToList();
@@ -286,7 +296,9 @@ namespace Attendance.Application.Services
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
                     JobTitleId = x.JobTitleId,
-                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null
+                    JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
+                    CustomMonthlyOtHourLimit = x.CustomMonthlyOtHourLimit,
+                    CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit
                 }
             );
         }
@@ -386,7 +398,9 @@ namespace Attendance.Application.Services
                 DepartmentId = employee.DepartmentId,
                 DepartmentNameVn = employee.Department?.DepartmentNameVn,
                 JobTitleId = employee.JobTitleId,
-                JobTitleName = employee.JobTitle?.Name
+                JobTitleName = employee.JobTitle?.Name,
+                CustomMonthlyOtHourLimit = employee.CustomMonthlyOtHourLimit,
+                CustomYearlyOtHourLimit = employee.CustomYearlyOtHourLimit
             };
         }
 
@@ -412,7 +426,9 @@ namespace Attendance.Application.Services
                 DepartmentId = employee.DepartmentId,
                 DepartmentNameVn = employee.Department?.DepartmentNameVn,
                 JobTitleId = employee.JobTitleId,
-                JobTitleName = employee.JobTitle?.Name
+                JobTitleName = employee.JobTitle?.Name,
+                CustomMonthlyOtHourLimit = employee.CustomMonthlyOtHourLimit,
+                CustomYearlyOtHourLimit = employee.CustomYearlyOtHourLimit
             };
         }
 
@@ -438,6 +454,8 @@ namespace Attendance.Application.Services
                 GroupId = groupId,
                 DepartmentId = departmentId,
                 JobTitleId = request.JobTitleId,
+                CustomMonthlyOtHourLimit = request.CustomMonthlyOtHourLimit,
+                CustomYearlyOtHourLimit = request.CustomYearlyOtHourLimit,
                 IsDeleted = false
             };
 
@@ -479,6 +497,8 @@ namespace Attendance.Application.Services
             employee.GroupId = groupId;
             employee.DepartmentId = departmentId;
             employee.JobTitleId = request.JobTitleId;
+            employee.CustomMonthlyOtHourLimit = request.CustomMonthlyOtHourLimit;
+            employee.CustomYearlyOtHourLimit = request.CustomYearlyOtHourLimit;
 
             _unitOfWork.Employees.Update(employee);
             await _unitOfWork.SaveChangesAsync();

@@ -33,6 +33,16 @@ public partial class Employee
     // chưa được gán, và 1 người chỉ giữ đúng 1 Chức vụ tại 1 thời điểm (không kiêm nhiệm).
     public int? JobTitleId { get; set; }
 
+    // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — nullable, null = dùng mặc định chung
+    // (AttendanceSetting.MonthlyOtHourLimit/YearlyOtHourLimit). Cho phép "gia hạn" cao hơn mặc định
+    // cho từng người (2026-08-26, theo yêu cầu người dùng — thường dùng cho công nhân dưới chuyền hay
+    // cần OT nhiều hơn mức chung). KHÔNG có giới hạn Ngày riêng — Ngày luôn dùng chung 1 mốc
+    // (AttendanceSetting.DailyOtHourLimit) cho mọi người, không override được (đã chốt qua trao đổi
+    // với người dùng). Không có thời hạn hiệu lực — set thẳng, còn hiệu lực tới khi bị đổi/xoá tay.
+    public decimal? CustomMonthlyOtHourLimit { get; set; }
+
+    public decimal? CustomYearlyOtHourLimit { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual Group? Group { get; set; }

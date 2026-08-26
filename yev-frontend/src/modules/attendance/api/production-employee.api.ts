@@ -17,6 +17,10 @@ export interface ProductionEmployeeSearchParams {
     shiftTeamId?: number;
     congDoan?: string;
     keyword?: string;
+    // Ngày trên đơn đang tạo — BẮT BUỘC truyền để lũy kế Dự kiến (projectedDayToDate/MonthToDate/
+    // YearToDate) scope đúng ngày/tháng/năm của đơn đó, không phải hôm nay thực tế (mirror
+    // EmployeeApi.getEmployeesByGroup, 2026-08-26).
+    date?: string;
 }
 
 export const ProductionEmployeeApi = {
@@ -27,6 +31,7 @@ export const ProductionEmployeeApi = {
         if (params?.shiftTeamId !== undefined) query.set("ShiftTeamId", String(params.shiftTeamId));
         if (params?.congDoan) query.set("CongDoan", params.congDoan);
         if (params?.keyword) query.set("Keyword", params.keyword);
+        if (params?.date) query.set("date", params.date);
 
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.PRODUCTION_EMPLOYEE.search}?${queryString}` : ENDPOINTS.PRODUCTION_EMPLOYEE.search;

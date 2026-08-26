@@ -17,6 +17,13 @@ namespace Attendance.Application.Dtos.OtForms
         public decimal MonthToDate { get; set; }
         public decimal YearToDate { get; set; }
 
+        // Giới hạn giờ OT/tháng/năm RIÊNG của nhân viên này TẠI THỜI ĐIỂM ĐỌC (live, KHÔNG snapshot
+        // như MonthToDate/YearToDate ở trên) — null = dùng mặc định chung. Mirror
+        // EmployeeDto.CustomMonthlyOtHourLimit/CustomYearlyOtHourLimit (2026-08-26), dùng để FE tô đỏ
+        // cảnh báo đúng theo mốc riêng của người này ở màn Sửa đơn.
+        public decimal? CustomMonthlyOtHourLimit { get; set; }
+        public decimal? CustomYearlyOtHourLimit { get; set; }
+
         // Loại phiếu ăn (0=None/1=Secondary/2=Main, xem Attendance.Domain.Enums.MealTicketType) —
         // precomputed theo AttendanceSetting hiện hành, thay cho IsEligibleForMeal cũ (redesign 3 bậc
         // 2026-08-26, xem OtFormService.CalculateMealTicketType).

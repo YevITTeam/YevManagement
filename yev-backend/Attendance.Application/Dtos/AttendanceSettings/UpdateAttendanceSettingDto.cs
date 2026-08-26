@@ -22,6 +22,10 @@ namespace Attendance.Application.Dtos.AttendanceSettings
         [Required(ErrorMessage = "Giờ kết thúc khung OT sớm không được để trống")]
         public TimeOnly EarlyMealWindowEndTime { get; set; }
 
+        [Required(ErrorMessage = "Giới hạn giờ OT trong ngày không được để trống")]
+        [Range(0.5, 24, ErrorMessage = "Giới hạn giờ OT trong ngày phải từ 0.5 đến 24")]
+        public decimal DailyOtHourLimit { get; set; }
+
         [Required(ErrorMessage = "Giới hạn giờ OT trong tháng không được để trống")]
         [Range(1, 744, ErrorMessage = "Giới hạn giờ OT trong tháng phải từ 1 đến 744")]
         public decimal MonthlyOtHourLimit { get; set; }

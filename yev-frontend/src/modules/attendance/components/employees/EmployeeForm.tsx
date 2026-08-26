@@ -14,6 +14,7 @@ import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 
 // JobTitleTerminalLevel (docs/attendance-api-fe.md) — 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
 const TERMINAL_LEVEL_NONE = 0;
@@ -30,6 +31,11 @@ export interface EmployeeFormValues {
     groupId: number | null;
     departmentId: number | null;
     jobTitleId: number | null;
+    // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — null = dùng mặc định chung (2026-08-26, theo
+    // yêu cầu người dùng — cho phép "gia hạn" cao hơn mặc định, thường dùng cho công nhân dưới chuyền).
+    // Không có Ngày riêng — Ngày luôn dùng chung 1 mốc cho mọi người.
+    customMonthlyOtHourLimit: number | null;
+    customYearlyOtHourLimit: number | null;
 }
 
 interface EmployeeFormProps {
@@ -49,6 +55,8 @@ const emptyValues: EmployeeFormValues = {
     groupId: null,
     departmentId: null,
     jobTitleId: null,
+    customMonthlyOtHourLimit: null,
+    customYearlyOtHourLimit: null,
 };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
@@ -58,6 +66,7 @@ const fieldClassName =
 export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: EmployeeFormProps) {
     const t = useTranslations("Attendance.Employee");
     const tCommon = useTranslations("Common");
+    const { setting } = useAttendanceSetting();
     const [values, setValues] = useState<EmployeeFormValues>(emptyValues);
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
@@ -92,6 +101,8 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                       groupId: current.groupId,
                       departmentId: current.departmentId,
                       jobTitleId: current.jobTitleId,
+                      customMonthlyOtHourLimit: current.customMonthlyOtHourLimit,
+                      customYearlyOtHourLimit: current.customYearlyOtHourLimit,
                   }
                 : emptyValues
         );
@@ -291,6 +302,49 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             {t("companyWideHint")}
                         </p>
                     )}
+
+                    {/* Giới hạn OT riêng — "gia hạn" cao hơn mặc định chung cho từng người (2026-08-26,
+                        theo yêu cầu người dùng, thường dùng cho công nhân dưới chuyền). Để trống = dùng
+                        mặc định hệ thống. Không có Ngày riêng — Ngày luôn dùng chung 1 mốc cho mọi người. */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldCustomMonthlyOtHourLimit")}</span>
+                            <input
+                                type="number"
+                                step="1"
+                                min={1}
+                                value={values.customMonthlyOtHourLimit ?? ""}
+                                onChange={(event) =>
+                                    setValues((current) => ({
+                                        ...current,
+                                        customMonthlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
+                                    }))
+                                }
+                                placeholder={String(setting.monthlyOtHourLimit)}
+                                disabled={loading}
+                                className={fieldClassName}
+                            />
+                        </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldCustomYearlyOtHourLimit")}</span>
+                            <input
+                                type="number"
+                                step="1"
+                                min={1}
+                                value={values.customYearlyOtHourLimit ?? ""}
+                                onChange={(event) =>
+                                    setValues((current) => ({
+                                        ...current,
+                                        customYearlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
+                                    }))
+                                }
+                                placeholder={String(setting.yearlyOtHourLimit)}
+                                disabled={loading}
+                                className={fieldClassName}
+                            />
+                        </label>
+                    </div>
+                    <p className="-mt-2 text-xs text-[#8a8f94]">{t("fieldCustomOtHourLimitHint")}</p>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

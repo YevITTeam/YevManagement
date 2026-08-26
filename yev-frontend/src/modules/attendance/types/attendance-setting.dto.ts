@@ -14,7 +14,9 @@ export interface AttendanceSettingDto {
     // TimeOnly "HH:mm:ss" — khung giờ OT sớm đặc cách (mặc định 06:00:00 - 08:00:00).
     earlyMealWindowStartTime: string;
     earlyMealWindowEndTime: string;
-    // Vượt các mốc này thì UI tô đỏ cảnh báo (không chặn tạo/duyệt đơn).
+    // Giới hạn giờ OT theo ngày/tháng/năm của 1 nhân viên — vượt bất kỳ mốc nào thì BE CHẶN tạo/sửa
+    // đơn (2026-08-26, không còn "chỉ cảnh báo" như trước).
+    dailyOtHourLimit: number;
     monthlyOtHourLimit: number;
     yearlyOtHourLimit: number;
     // TimeOnly "HH:mm:ss" — giờ hằng ngày hệ thống tự gom "Đơn tổng" gửi Trưởng phòng.
