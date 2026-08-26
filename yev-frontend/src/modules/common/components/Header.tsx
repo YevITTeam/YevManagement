@@ -21,7 +21,7 @@ const IDENTITY_ADMIN_PERMISSIONS = [
 export default function Header() {
   const t = useTranslations("Header");
   const pathname = usePathname() || "";
-  const hasSidebar = pathname.startsWith("/pc") || pathname.startsWith("/ot");
+  const hasSidebar = pathname.startsWith("/pc") || pathname.startsWith("/ot") || pathname.startsWith("/workflow");
   const { user, isLoading, refreshUser, logout } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const router = useRouter();

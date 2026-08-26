@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Shared.Application.Interfaces.External;
 using Shared.Infrastructure.External;
+using Workflow.Infrastructure.Context;
 
 namespace CompanySystem.HostApi.Configurations
 {
@@ -16,6 +17,7 @@ namespace CompanySystem.HostApi.Configurations
             var identityConnectionString = configuration.GetConnectionString("IdentityManagementConnection");
             var pcManagementConnectionString = configuration.GetConnectionString("PCManagementConnection");
             var otManagementConnectionString = configuration.GetConnectionString("OTManagementConnection");
+            var workflowManagementConnectionString = configuration.GetConnectionString("WorkflowManagementConnection");
 
             services.AddDbContext<IdentityDbContext>(options =>
                 options.UseSqlServer(identityConnectionString));
@@ -23,6 +25,8 @@ namespace CompanySystem.HostApi.Configurations
                 options.UseSqlServer(pcManagementConnectionString));
             services.AddDbContext<AttendanceDbContext>(options =>
                 options.UseSqlServer(otManagementConnectionString));
+            services.AddDbContext<WorkflowDbContext>(options =>
+                options.UseSqlServer(workflowManagementConnectionString));
 
 
             services.Scan(scan => scan
@@ -30,6 +34,7 @@ namespace CompanySystem.HostApi.Configurations
                 assembly.FullName.StartsWith("Identity") ||
                 assembly.FullName.StartsWith("Attendance") ||
                 assembly.FullName.StartsWith("Asset") ||
+                assembly.FullName.StartsWith("Workflow") ||
                 assembly.FullName.StartsWith("Shared"))
 
             .AddClasses(classes => classes.Where(type =>

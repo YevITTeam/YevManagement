@@ -4,8 +4,54 @@
 > Sơ đồ quan hệ trực quan: [`docs/workflow-erd.drawio`](../workflow-erd.drawio) (mở bằng draw.io).
 > Mô hình tham chiếu: **POWER EGG 3.5 — 汎用申請ワークフロー**.
 >
-> **Trạng thái tính tới 2026-08-20: MỚI CÓ THIẾT KẾ. 0 dòng code, 0 migration, chưa tạo project.**
-> Tài liệu này viết TRƯỚC khi scaffold theo đúng CLAUDE.md §2 luật 2.
+> **Trạng thái tính tới 2026-08-26: Pha 1, 2A, 2B, 2C, 2D, 3A, 3B-1, 3B-2 đã xong cả BE+FE — Pha 2
+> HOÀN TẤT, Pha 3A HOÀN TẤT, Pha 3B (engine nộp/duyệt + FE) HOÀN TẤT.** Pha 1: 5 bảng nhóm Tổ
+> chức + nhân sự. Pha 2A: `FormCategories` `FormCategoryCoordinators` `FormDataSources`. Pha 2B:
+> `FormDefinitions` (khung thông tin form). Pha 2C: `FormFields` (field designer kéo-thả thật, FE dùng
+> `@dnd-kit`) + `FormFieldConditions` (điều kiện ẩn/hiện/bắt buộc, chặn vòng lặp). Pha 2D: `FormAccesses`
+> (ai được tạo đơn) + `POST /{id}/publish` (bật `IsPublished`, tăng `Version` khi publish lại) +
+> `POST /{id}/clone` (nhân bản form kèm FormFields/FormFieldConditions, KHÔNG kèm FormAccesses). Pha 3A:
+> `FormRoutes` + `FormApprovalSteps` + `FormApprovalStepParticipants` — cấu hình nhánh rẽ + bước duyệt +
+> người duyệt, thuần CRUD/validate. Pha 3B-1: `WorkflowRequests` `WorkflowRequestSteps`
+> `WorkflowRequestStepParticipants` `WorkflowRequestHistories` `WorkflowSequences` `ApprovalDelegations`
+> — **engine nộp/duyệt đơn THẬT chạy được** (tạo Draft → sửa → nộp → duyệt/từ chối/trả về/thêm người
+> duyệt/hủy/ủy quyền duyệt thay). Pha 3B-2: **FE render form động để nộp đơn + inbox "Chờ tôi duyệt" +
+> xem/in đơn + quản lý ủy quyền duyệt thay**, cộng 3 endpoint BE nhỏ bổ sung để FE đọc được đúng phạm vi
+> dữ liệu của người nộp đơn thường (`available-forms`, `form-schema/{id}`, `my-employee` — xem §6, §10).
+> Tất cả đủ Entity → Repository/UnitOfWork → Service → Controller → FE, đã smoke-test qua HTTP đầy đủ
+> (3B-2 build+tsc+eslint sạch, luồng Draft→Submit→Approve xác nhận qua HTTP, KHÔNG có công cụ trình
+> duyệt tự động trong phiên làm việc nên chưa tự tay bấm thử UI — xem §10). Permission
+> `Workflow.Organization.View/Manage`, `Workflow.FormDesign.View/Manage`, `Workflow.Setting.Manage`,
+> `Workflow.Request.Create`, `Workflow.Request.ViewAll` đã seed vào Identity DB, gán Admin.
+>
+> **Gap phát hiện lúc test Pha 2D, CHƯA fix (out of scope pha này):** `FormCategoryService.DeleteAsync`
+> vẫn còn nguyên comment "chưa scaffold FormDefinitions nên chưa check" từ Pha 2A — nay `FormDefinitions`
+> đã tồn tại nhưng guard chưa được bổ sung, nên xoá 1 `FormCategory` đang có `FormDefinitions` trỏ tới
+> sẽ để lại `FormDefinitions.FormCategoryId` trỏ vào 1 danh mục đã `IsDeleted=true`. Cần thêm guard
+> "còn FormDefinitions chưa xoá dùng danh mục này thì chặn xoá" (mirror cách `FormDefinitionService.
+> DeleteAsync` chặn xoá form đã publish) ở đợt code tiếp theo chạm tới `FormCategoryService`.
+>
+> **Quyết định kèm Pha 2B (2026-08-25): thêm claim `UserId` (số) vào JWT.** Trước đó JWT toàn hệ
+> thống chỉ mang username Windows dạng chuỗi — không đủ để tra `Employees.UserId` (điểm neo cross-DB
+> đã chốt ở §1.4) nhằm xác định "nhân sự nào đang đăng nhập" cho các cột kiểu
+> `CreatedByEmployeeId`/`ApproverEmployeeId` sẽ còn dùng lại xuyên suốt Pha 2B-4. Đã sửa
+> `Identity.Application/Authentication/IdentityClaimTypes.cs` (thêm hằng `UserId`) +
+> `Indentity.Infrastructure/Authentication/MyClaimsTransformation.cs` (thêm claim lúc build
+> `DbRoles` identity). `WorkflowBaseController.CurrentUserId` đọc claim này bằng chuỗi thô `"UserId"`
+> (không reference `Identity.Application` — giữ Workflow độc lập theo §1.1), Service resolve ra
+> `Employee.Id` qua `Employees.FirstOrDefault(x => x.UserId == currentUserId)`, chặn thao tác nếu
+> tài khoản hiện tại chưa gán vào Employee nào. **JWT cũ (phát trước 2026-08-25) không có claim
+> này** — holder phải đăng nhập lại.
+>
+> `ApprovalDelegations` đã scaffold ở Pha 3B-1 dù nằm trong nhóm "Độc lập / cấu hình" §3.4, vì logic
+> duyệt thay (§5.6) cần ngay từ engine nộp/duyệt.
+>
+> **Pha 4 tách làm 4 phần độc lập** (xem §8): 4A (chữ ký đăng ký sẵn) **✅ xong BE+FE 2026-08-26** —
+> `EmployeeSignatures` + `PendingEmployeeSignatureConfirmations` (bảng mới ngoài 25 bảng gốc, mirror
+> `Attendance.UserSignature` — cập nhật qua email xác nhận, không áp dụng ngay). 4B (đính kèm file)
+> **✅ xong BE+FE 2026-08-26** — `WorkflowAttachments` (file nằm trên đĩa, KHÔNG lưu byte[] trong DB) +
+> `WorkflowSettings` (giới hạn dung lượng/số lượng/đuôi file, luôn 1 dòng seed sẵn). 4C
+> (`WorkflowRequestEmailTokens`), 4D (xuất Excel) **CHƯA scaffold**.
 
 ---
 
@@ -95,6 +141,19 @@ người nộp). **Đã gỡ bỏ.** Attendance thử đúng cơ chế này và 
 > *"KHÔNG dùng để tự bắc cầu qua mọi cấp đang có người giữ nữa — bắc cầu tự động khiến 1 đơn phải
 > qua quá nhiều bước nếu Phòng ban có đủ người ở mọi cấp."*
 
+### 1.7 Route API prefix bằng `api/Workflow/` — bắt buộc (phát hiện 2026-08-24)
+
+Attendance module đã có sẵn `EmployeeController` và `JobTitleController` (route mặc định
+`api/[controller]` → `api/Employee`, `api/JobTitle`) — trùng thẳng tên entity với Workflow (§1.1).
+Vì routing của ASP.NET Core chỉ nhìn tên class, không nhìn namespace, scaffold Pha 1 ban đầu dùng
+`api/[controller]` y hệt Asset/Attendance đã vỡ ngay ở runtime (`AmbiguousMatchException` khi gọi
+`GET /api/JobTitle` hay `/api/Employee` — cả 2 controller cùng khớp route).
+
+**Quyết định: `WorkflowBaseController` dùng `[Route("api/Workflow/[controller]")]`** — MỌI controller
+Workflow (không chỉ 2 cái trùng tên) đều nằm dưới tiền tố `api/Workflow/`, để phòng entity nào khác
+sau này lại trùng tên với Asset/Attendance/Identity. FE gọi Workflow API phải nhớ thêm tiền tố này,
+khác Asset/Attendance/Identity (`api/{Controller}` không tiền tố).
+
 ---
 
 ## 2. Bản đồ 25 bảng
@@ -151,6 +210,7 @@ Trục chính của thiết kế: **form → nhánh → bước → người**, 
 | `Code` | nvarchar(50) | **UNIQUE**. Cùng quy ước với Attendance (§1.2) |
 | `NameVn` / `NameJp` | nvarchar(200) | |
 | `RankOrder` | int | thứ bậc, số nhỏ = cao hơn. **Chỉ để hiển thị/sắp xếp**, KHÔNG dùng suy luận luồng duyệt (§1.6) |
+| `IsUniquePerOrgUnit` | bit = 1 | true = tại 1 `OrgUnit` chỉ 1 người giữ chức danh này cùng lúc (bắt buộc cho chức danh dùng route duyệt qua `ParticipantSource=JobTitle`, §5.5). false = chức danh phổ thông, nhiều người cùng giữ (vd "Nhân viên") — **không được** chọn làm `ParticipantRole=Approver` khi cấu hình `FormApprovalStepParticipants` (chặn ở `ReplaceRoutesAsync`). Chốt 2026-08-26, xem §10 |
 | `IsDeleted` | bit = 0 | |
 
 #### `Employees` — nhân sự, điểm neo định danh duy nhất
@@ -192,8 +252,9 @@ Trục chính của thiết kế: **form → nhánh → bước → người**, 
 - `UNIQUE (EmployeeId, OrgUnitId, JobTitleId)`
 - **Validate ở Service** (không dùng ràng buộc DB vì có thời hiệu):
   - 1 `Employee` chỉ có tối đa **1 dòng** `IsPrimary = 1` còn hiệu lực.
-  - 1 cặp (`OrgUnitId`, `JobTitleId`) chỉ có **1 người** giữ tại một thời điểm — đây là điều kiện để
-    resolve người duyệt theo chức danh ra kết quả xác định.
+  - 1 cặp (`OrgUnitId`, `JobTitleId`) chỉ có **1 người** giữ tại một thời điểm — **CHỈ áp dụng khi
+    `JobTitles.IsUniquePerOrgUnit = true`** (chốt 2026-08-26, xem §10). Chức danh phổ thông
+    (`IsUniquePerOrgUnit = false`) không bị chặn, nhiều người cùng giữ được tại 1 đơn vị.
 
 **Đây là bảng duy nhất trả lời "ai đang là Trưởng phòng Kế toán"** — nên cũng là chỗ duy nhất phải
 sửa khi nhân sự thay đổi.
@@ -336,6 +397,12 @@ Ràng buộc thêm: `TargetFieldId` và `SourceFieldId` phải cùng thuộc m�
 - `UNIQUE (FormDefinitionId, TargetType, RoleId, OrgUnitId, EmployeeId)` — hoạt động đúng vì mỗi dòng
   chỉ có đúng 1 trong 3 cột đích khác NULL, và SQL Server coi NULL = NULL khi so unique nhiều cột.
 - Service validate: đúng 1 cột đích khớp `TargetType`, 2 cột còn lại phải NULL.
+- **`TargetType = OrgUnit` LAN XUỐNG cây con** (chốt 2026-08-26, xem §10): cấp quyền cho 1 `OrgUnit`
+  thì mọi nhân sự thuộc `OrgUnit` đó **hoặc bất kỳ đơn vị con cháu nào của nó** đều coi là có quyền —
+  không phải so khớp đúng-1-cấp. `HasFormAccessAsync` (`WorkflowRequestService`) duyệt ngược từ
+  `OrgUnit` của nhân sự lên gốc qua `ParentId`, khớp bất kỳ nút nào (kể cả chính nó) với `OrgUnitId` đã
+  cấp. Áp dụng thống nhất ở mọi nơi kiểm tra `FormAccesses` (`CreateDraftAsync`, `SubmitAsync`,
+  `GET .../available-forms`).
 
 #### `FormRoutes` — nhánh duyệt theo điều kiện (ルート判定条件)
 
@@ -535,6 +602,24 @@ Token hợp lệ khi: chưa `UsedAt`, chưa quá `ExpiresAt`, và `StepOrder` v�
 | `SignatureImage` | varbinary(max) | ⇄ chuỗi base64 trong JSON |
 | `UpdatedAt` | datetime2 | |
 
+Cập nhật KHÔNG áp dụng ngay — luôn qua `PendingEmployeeSignatureConfirmations` + email xác nhận cho
+chính chủ, chống chiếm phiên đăng nhập đổi chữ ký hộ người khác (mirror `Attendance.UserSignature`,
+quyết định 2026-08-26 §10).
+
+#### `PendingEmployeeSignatureConfirmations` — chữ ký chờ xác nhận qua email
+
+Không nằm trong 25 bảng thiết kế gốc — thêm khi scaffold Pha 4 (§10).
+
+| Cột | Kiểu | Ghi chú |
+|---|---|---|
+| `Id` | int IDENTITY | PK |
+| `EmployeeId` | int | FK → `Employees`, **Restrict** |
+| `SignatureImage` | varbinary(max) | Chữ ký MỚI, chưa áp dụng |
+| `Token` | nvarchar(128) | **UNIQUE**. Sinh ngẫu nhiên bằng CSPRNG (`TokenHelper`) |
+| `ExpiresAt` | datetime2 | 30 phút kể từ lúc tạo |
+| `ConfirmedAt` | datetime2 NULL | Null = chưa xác nhận |
+| `CreatedAt` | datetime2 | |
+
 #### `WorkflowSequences` — cấp số atomic
 
 | Cột | Kiểu | Ghi chú |
@@ -590,7 +675,8 @@ RequestAction      : Submit=1, Approve=2, Reject=3, SendBack=4, Cancel=5,
 Toàn bộ nằm trong **một transaction**. Nếu bất kỳ bước nào fail thì không tạo gì cả.
 
 1. Kiểm tra `FormDefinition.IsPublished = true`.
-2. Kiểm tra người nộp nằm trong `FormAccesses` (theo Role / OrgUnit / Employee).
+2. Kiểm tra người nộp nằm trong `FormAccesses` (theo Role / OrgUnit — **lan xuống cây con**, xem §3.2 /
+   Employee).
 3. Validate `DataJson` theo `FormFields` — **có tính tới điều kiện** (§5.3): ô đang bị `Hide` thì
    không validate `IsRequired`; ô bị `Require` bởi điều kiện thì bắt buộc dù `IsRequired = 0`.
 4. **Chọn nhánh** `FormRoutes` (§5.2).
@@ -657,6 +743,11 @@ Cho mỗi `FormApprovalSteps` của nhánh đã chọn:
    - `ParticipantSource = Employee` → chính `EmployeeId` đó.
    - `ParticipantSource = JobTitle` → tìm trong `EmployeeOrgUnits` người đang giữ `JobTitleId` đó tại
      node vừa xác định, **còn hiệu lực theo `ValidFrom`/`ValidTo`**, `IsActive = 1`, `IsDeleted = 0`.
+     Lấy **1 người đầu tiên tìm được** (`FirstOrDefault`) — chỉ cho kết quả xác định nếu
+     `JobTitles.IsUniquePerOrgUnit = true` (đúng như tên chức danh này ngụ ý). Vì vậy
+     `FormDefinitionService.ReplaceRoutesAsync` **chặn cấu hình** `ParticipantRole = Approver` với
+     chức danh có `IsUniquePerOrgUnit = false` ngay từ lúc lưu route (§3.1, §10) — không đợi đến lúc
+     nộp đơn mới phát hiện resolve ra người "bất kỳ".
 3. **Chặn nộp nếu**:
    - Một bước không resolve ra **Approver** nào, hoặc
    - Approver resolve ra có `Employee.UserId IS NULL`.
@@ -779,8 +870,175 @@ Dùng tên tiếng Anh chuẩn EF Core: `PK_OrgUnits`, `FK_OrgUnits_OrgLevels_Or
 
 ## 6. API dự kiến
 
-Route `api/[controller]`, `[ApiController]`, controller kế thừa `WorkflowBaseController`.
-Mọi response bọc `ApiResponse<T>`; danh sách phân trang trả `PagedResponse<T>` (CLAUDE.md §3.4).
+Route `api/Workflow/[controller]` (tiền tố `Workflow/` bắt buộc — xem §1.7), `[ApiController]`,
+controller kế thừa `WorkflowBaseController`. Mọi response bọc `ApiResponse<T>`; danh sách phân trang
+trả `PagedResponse<T>` (CLAUDE.md §3.4).
+
+**Đã scaffold (Pha 1):** `GET/POST/PUT/DELETE api/Workflow/OrgLevel[/{id}]` + `GET .../all`,
+`GET/POST/PUT/DELETE api/Workflow/OrgUnit[/{id}]` + `GET .../tree` + `PUT .../reorder`,
+`GET/POST/PUT/DELETE api/Workflow/JobTitle[/{id}]` + `GET .../all`,
+`GET/POST/PUT/DELETE api/Workflow/Employee[/{id}]` + `GET/PUT .../{id}/org-units` (replace pattern).
+Tất cả đứng sau `[RequirePermission("Workflow.Organization.View")]` (GET) hoặc
+`"Workflow.Organization.Manage")]` (POST/PUT/DELETE).
+
+**Đã scaffold (Pha 2A):**
+`GET/POST/PUT/DELETE api/Workflow/FormCategory[/{id}]` + `GET .../grid-list` + `GET .../all` +
+`GET/PUT .../{id}/coordinators` (replace pattern) — đứng sau `"Workflow.FormDesign.View"` (GET) /
+`"Workflow.FormDesign.Manage"` (POST/PUT/DELETE/PUT coordinators).
+`GET/POST/PUT/DELETE api/Workflow/FormDataSource[/{id}]` + `GET .../grid-list` + `GET .../all` —
+đứng sau `"Workflow.Setting.Manage"` cho MỌI verb kể cả GET (màn admin-only, không có permission View
+riêng — khác các nhóm khác). `SourceKind = SqlQuery` bị `CreateAsync`/`UpdateAsync` từ chối
+(`DomainException`) cho tới khi chốt cơ chế bảo mật ở §3.2.
+
+**Đã scaffold (Pha 2B):**
+`GET/POST/PUT/DELETE api/Workflow/FormDefinition[/{id}]` + `GET .../grid-list` — đứng sau
+`"Workflow.FormDesign.View"` (GET) / `"Workflow.FormDesign.Manage"` (POST/PUT/DELETE).
+`CreatedByEmployeeId`/`UpdatedByEmployeeId` do Service tự resolve từ `WorkflowBaseController.
+CurrentUserId` (claim JWT `"UserId"`, xem hộp trạng thái đầu file) — **không** nhận qua body. `POST`
+ném `DomainException` nếu tài khoản hiện tại chưa liên kết Employee nào. `RouteConditionType` chỉ
+nhận lúc `POST`, không có trong `PUT` (bất biến). `PUT`/`POST` đều validate: `RouteConditionType`
+cần `RouteNumericFieldKey`/`RouteClassFieldKey` tương ứng thì 2 field đó không được rỗng (chỉ validate
+"có nhập hay chưa", chưa xác thực trỏ đúng `FieldKey` thật — vẫn CHƯA nâng cấp lên dù `FormFields` đã
+có ở Pha 2C, để dành đợt sau vì form lúc `POST` chưa có field nào). `DELETE` chặn nếu `IsPublished = true`.
+
+**Đã scaffold (Pha 2C):**
+`GET/PUT api/Workflow/FormDefinition/{id}/fields`, `GET/PUT api/Workflow/FormDefinition/{id}/conditions`
+— cùng permission `Workflow.FormDesign.View/Manage` như trên. `PUT .../fields` **merge theo Id/FieldKey,
+KHÔNG xoá-tất-tạo-lại** (khác mọi pattern "replace" khác trong module) — lý do và chi tiết thuật toán
+nằm trong comment ngay tại `FormDefinitionService.ReplaceFieldsAsync`, ĐỪNG đổi thành xoá-tất-tạo-lại
+dù có vẻ đơn giản hơn, sẽ làm gãy tham chiếu của `FormFieldConditions.SourceFieldId`/`TargetFieldId`.
+`PUT .../conditions` xoá-tất-tạo-lại bình thường (không bảng nào tham chiếu ngược `FormFieldConditions.Id`),
+nhưng validate: field thuộc đúng form, `Target ≠ Source`, giá trị so sánh đủ theo `Operator`, và
+**chặn vòng lặp** bằng DFS 3 màu trên đồ thị `SourceFieldId → TargetFieldId` dựng từ toàn bộ danh
+sách gửi lên trong 1 lượt lưu (không chỉ từng cặp riêng lẻ).
+
+**Đã scaffold (Pha 2D):**
+`GET/PUT api/Workflow/FormDefinition/{id}/accesses`, `POST api/Workflow/FormDefinition/{id}/publish`,
+`POST api/Workflow/FormDefinition/{id}/clone` — cùng permission `Workflow.FormDesign.View/Manage`.
+`PUT .../accesses` xoá-tất-tạo-lại (không bảng nào tham chiếu ngược `FormAccesses.Id`, khác hẳn pattern
+merge-theo-Id của `fields`), validate đúng 1 trong 3 cột đích (`RoleId`/`OrgUnitId`/`EmployeeId`) khớp
+`TargetType`, 2 cột còn lại NULL. `RoleId` là cross-DB (`Identity.Roles`, §1.4) nên BE không resolve
+được tên — FE tự ánh xạ bằng `AuthApi.getAllRoles()`.
+`POST .../publish`: chặn nếu form chưa có `FormFields` nào; **`Version` chỉ tăng khi publish LẠI**
+(form đã `IsPublished=true` từ trước) — lần publish đầu tiên giữ nguyên `Version=1` mặc định, đúng
+nghĩa "tăng mỗi lần publish lại" ở §3.2. Không có endpoint unpublish trong roadmap.
+`POST .../clone`: tạo 1 `FormDefinition` mới (Code/NameVn/NameJp do người gọi truyền vào, còn lại kế
+thừa nguyên từ form gốc), sao chép toàn bộ `FormFields` (Id mới) + `FormFieldConditions` (remap qua
+`FieldKey`), **KHÔNG sao chép `FormAccesses`** — ai tạo đơn được là quyết định riêng cho từng form,
+phải cấu hình tay lại (cùng nguyên tắc "chỉ định tay, không suy ra" của `FormCategoryCoordinators`).
+Form mới luôn `IsPublished=false`, `Version=1`.
+
+**Đã scaffold (Pha 3A):**
+`GET/PUT api/Workflow/FormDefinition/{id}/routes` — cùng permission `Workflow.FormDesign.View/Manage`.
+`PUT .../routes` thay NGUYÊN cả cây nhánh+bước+người trong 1 lượt (đúng nghĩa đen câu chữ ở bảng
+"Nhóm" bên dưới). **`FormRoutes` merge theo Id** (mirror `FormFields` ở Pha 2C — `WorkflowRequests.
+FormRouteId`, Pha 3B, sẽ là FK thật Restrict trỏ vào đây) nhưng **`FormApprovalSteps`/
+`FormApprovalStepParticipants` luôn xoá-tất-tạo-lại** mỗi lần lưu route (không bảng nào tham chiếu Id
+của chúng — `WorkflowRequestSteps` ở Pha 3B chỉ snapshot GIÁ TRỊ, không FK ngược). `SortOrder`/
+`StepOrder` do BE tự gán theo vị trí mảng gửi lên, không tin FE. Validate theo `FormDefinitions.
+RouteConditionType`: `None` bắt buộc đúng 1 route và phải `IsDefault`; mọi kiểu tối đa 1 `IsDefault`
+trong 1 lượt lưu (KHÔNG bắt buộc phải CÓ `IsDefault` — đó là luật lúc NỘP đơn ở Pha 3B, không phải
+điều kiện để lưu cấu hình); **nhánh `IsDefault=true` được MIỄN** yêu cầu Min/Max/ClassValue (nhánh dự
+phòng không cần tự có điều kiện riêng — lỗi này bị bắt lúc test HTTP, xem §10). Guard tự thêm: mỗi
+route ≥1 step, mỗi step ≥1 participant `ParticipantRole=Approver`. Cảnh báo (KHÔNG chặn lưu) khi
+khoảng số `NumericRange` chồng nhau/để hở — nối vào `message` của response thành công.
+Đọc nested tree (routes→steps→participants) dùng projection `.Select()` lồng nhau ngay trong
+`ToListAsync<TResult>`, KHÔNG cần `ThenInclude` (repo generic chỉ hỗ trợ `Include` 1 cấp).
+
+**Đã scaffold (Pha 3B-1):**
+`POST/PUT/GET api/Workflow/WorkflowRequest[/{id}]` (Draft), `GET .../my-requests` `.../pending-my-approval`
+`.../visible-to-me`, `POST .../{id}/submit` `.../cancel` `.../approve` `.../reject` `.../send-back`
+`.../add-approver` — TẤT CẢ đứng sau đúng 1 permission `Workflow.Request.Create` (§7 "permission thô,
+luật chi tiết là dữ liệu"; `Workflow.Request.ViewAll` chỉ đọc thẳng bằng `User.HasClaim("Permission",
+"Workflow.Request.ViewAll")` trong Controller để mở rộng phạm vi xem, không gate riêng action nào).
+`GET/POST/PUT/DELETE api/Workflow/ApprovalDelegation[/{id}]` — cùng permission, `DelegatorEmployeeId`
+luôn resolve = người gọi (không nhận qua body, tránh impersonation).
+
+`SubmitAsync` theo đúng 10 bước §5.1, bọc trong 1 `BeginTransactionAsync`/`CommitTransactionAsync` tường
+minh (lần đầu tiên module Workflow dùng transaction tường minh — trước giờ mọi Service chỉ dựa vào 1
+`SaveChangesAsync()` làm ranh giới ngầm). `RequestCode` sinh atomic bằng `WorkflowSequenceRepository.
+GetNextSequenceAsync` — raw SQL `MERGE ... WITH (HOLDLOCK) ... OUTPUT INSERTED.LastSequence` chạy chung
+connection/transaction với `DbContext` qua `Database.SqlQuery<int>()` (EF Core 8+), format
+`"{CodePrefix}-{Year}-{Sequence:0000}"`. Test 5 lượt submit song song (PowerShell `Start-Job`) ra đúng
+5 mã liên tiếp không trùng.
+
+**Lệch số `WorkflowRequestSteps.StepOrder` so với `FormApprovalSteps.StepOrder` cấu hình gốc: +1.**
+`FormApprovalSteps.StepOrder` đánh số từ 0 (Pha 3A), nhưng `0` ở tầng `WorkflowRequests` mang nghĩa
+riêng ("chưa vào luồng duyệt" / đích `SendBack` = "trả về người nộp", §5.1 §5.6) — nếu giữ nguyên số
+0-based thì bước duyệt ĐẦU TIÊN sẽ trùng giá trị sentinel đó. `SubmitAsync` snapshot
+`WorkflowRequestStep.StepOrder = FormApprovalStep.StepOrder + 1` để tách bạch, xem comment tại
+`WorkflowRequestStep.cs`.
+
+**`WorkflowRequestSteps.AllowAddApproverSnapshot` KHÔNG có trong bảng cột liệt kê ở §3.3** (chỉ ghi
+`AllowSendBackSnapshot`) — phát hiện lúc code Pha 3B-1: `AllowAddApprover` chi phối §5.6 y hệt
+`AllowSendBack` nhưng `WorkflowRequestStep` không giữ FK ngược về `FormApprovalStep` gốc để tra lại sau
+khi đã submit, nên PHẢI snapshot thêm cột này (mirror `AllowSendBackSnapshot`) — bổ sung vào entity +
+migration, không đợi sửa lại §3.3 (coi là lỗi thiếu sót nhỏ trong bảng liệt kê, không phải quyết định
+nghiệp vụ mới).
+
+**Resolve người duyệt** (`ResolveStepParticipantsAsync`, §5.5) dùng trực tiếp `EmployeeOrgUnits` khi
+`ParticipantSource=JobTitle` (lọc còn hiệu lực theo `ValidFrom`/`ValidTo`, `IsActive`, `!IsDeleted`),
+chặn nộp nếu bước không ra được Approver có `UserId` khác NULL. **Đánh giá điều kiện ẩn/hiện/bắt buộc**
+(`EvaluateConditions`, §5.3) đánh giá lại toàn bộ ở Service (không tin FE), tách riêng theo từng
+`ConditionEffect` (Show/Hide/Require/ReadOnly kích hoạt độc lập), mỗi effect nhóm theo `LogicGroup`
+(AND trong group, OR giữa group). **`DataJson` chuẩn hoá** theo đúng bảng kiểu §5.8: `Employee`/`OrgUnit`
+BE tự tra lại `code`/`name` theo `id` client gửi, bỏ qua mọi `code`/`name` FE gửi kèm.
+
+**Duyệt thay (`ApprovalDelegations`, §5.6)** — bug tự bắt được lúc test HTTP: người gọi VỪA là Approver
+trực tiếp của bước VỪA là Delegate hợp lệ cho người khác cùng bước thì hệ thống không tự phân biệt được
+"duyệt với tư cách ai" nếu chỉ nhìn `CurrentUserId` — gọi `Approve` lần 2 để duyệt thay bị hiểu nhầm
+thành duyệt lại chính mình, báo lỗi "đã duyệt rồi". Fix: thêm `OnBehalfOfEmployeeId` (nullable) vào
+`ApproveRequestDto`/`RejectRequestDto`/`SendBackRequestDto`/`AddApproverRequestDto` — để trống thì ưu
+tiên hành động với tư cách bản thân nếu là Approver trực tiếp (hành vi cũ), có chỉ định thì bắt buộc
+tìm đúng ủy quyền từ người đó. **Bug thứ 2 tự bắt được**: `CancelAsync` ban đầu không đổi `Status` của
+`WorkflowRequestStep` đang `Current`, khiến đơn đã hủy vẫn hiện trong `GET .../pending-my-approval` —
+fix bằng cách chuyển bước đó sang `StepStatus.Skipped` khi hủy.
+
+**Guard đã bổ sung đúng vị trí `// TODO Pha 3B` đánh dấu từ Pha 3A**: `FormDefinitionService.
+ReplaceRoutesAsync` giờ chặn xoá 1 `FormRoute` nếu đang có `WorkflowRequests.FormRouteId` tham chiếu —
+test HTTP xác nhận chặn đúng.
+
+**Đã scaffold (Pha 3B-2):** FE nộp/duyệt đơn (`modules/workflow/components/requests/`) +
+**3 endpoint BE nhỏ bổ sung** trên `WorkflowRequestController` (cùng permission
+`Workflow.Request.Create`, KHÔNG migration vì chỉ đọc) — lý do: người nộp đơn thường thường KHÔNG có
+`Workflow.FormDesign.View` (chỉ người thiết kế form) nên không đọc được `FormDefinition/grid-list` hay
+`FormDefinition/{id}/fields|conditions`, và JWT không mang `Employee.Id`:
+- `GET .../available-forms` — danh sách `FormDefinition` đã publish + người gọi có `FormAccesses`
+  (tách `GuardFormAccessAsync` cũ thành `HasFormAccessAsync` trả `bool`, dùng lại ở cả 2 nơi).
+- `GET .../form-schema/{formDefinitionId}` — field/condition SỐNG (khác `FormSchemaJson` đã snapshot)
+  để dựng màn điền đơn lúc còn Draft, cùng guard publish + `FormAccesses`.
+- `GET .../my-employee` — `{id, employeeCode, fullName}` của người đang đăng nhập, FE dùng để biết
+  "dòng participant nào là tôi" và lọc đúng chiều `ApprovalDelegations` (`GetMineAsync` trả cả 2 chiều
+  Delegator/Delegate, không phân biệt).
+
+**Bug tự bắt được lúc rà lại code (không phải lúc test HTTP lần này, phát hiện khi đối chiếu response
+thật với kiểu FE)**: `WorkflowRequestService.BuildFormSchemaJson` gọi `JsonSerializer.Serialize(snapshot)`
+KHÔNG kèm `PropertyNamingPolicy = CamelCase` — toàn bộ response khác của hệ thống mặc định camelCase
+(ASP.NET Core default, không cấu hình `AddJsonOptions` riêng ở `Program.cs`), nhưng `FormSchemaJson`
+serialize thủ công (không qua pipeline response) nên lộ PascalCase (`FieldKey`/`LabelVn`/...) — khác hẳn
+phần còn lại của `WorkflowRequestDto`. Sửa bằng 1 `JsonSerializerOptions` static dùng lại. Test HTTP xác
+nhận sau khi sửa: submit đơn thật rồi đọc lại `formSchemaJson` ra đúng camelCase
+(`fieldKey`/`labelVn`/`dataType`/...).
+
+**`WorkflowRequestHistoryDto` bổ sung `SignatureImageBase64`** (byte[] ⇄ base64, CLAUDE.md §4.4) —
+trước đó cột `SignatureImage` có trong Entity/DB (§3.3) nhưng chưa từng được chiếu ra DTO nào, nên bản
+in (§5.7 "khối chữ ký dựng từ ... `WorkflowRequestHistories.SignatureImage`") không có gì để hiển thị.
+Bổ sung field + set giá trị trong `BuildDtoAsync`.
+
+**FE**: `DynamicFormRenderer.tsx` (dựng form từ `FormFieldDto[]` sống, đánh giá điều kiện client-side
+CHỈ để UX — mirror chính xác thuật toán `EvaluateConditions`/`EvaluateSingleCondition` ở BE, BE luôn
+đánh giá lại lúc nộp) dùng cho màn điền Draft; `WorkflowRequestDataView.tsx` (hiển thị tĩnh từ
+`FormSchemaJson` snapshot + `DataJson`, KHÔNG cần đánh giá lại điều kiện vì field bị ẩn lúc nộp đã có
+giá trị `null` sẵn) dùng cho xem đơn đã nộp lẫn bản in. `WorkflowRequestPrintView.tsx`: `window.print()`
++ CSS `@media print`/`@page`, KHÔNG `html2canvas` (đúng chốt §5.7 — mirror cơ chế của
+`OtFormPrintView.tsx` nhưng KHÔNG mirror phần mô phỏng ảnh nền biểu mẫu giấy, vì Workflow chủ động chọn
+hướng ngược lại). Chữ ký lúc duyệt: `SignatureUpload.tsx` (upload file ảnh → base64, KHÔNG canvas vẽ
+tay) mirror y hệt `modules/attendance/components/signature/SignatureUpload.tsx`, tạo bản riêng trong
+`modules/workflow` (không import chéo module). Trang "Chọn `OnBehalfOfEmployeeId`" tính hoàn toàn ở FE
+từ `ApprovalDelegationApi.getMine()` + `WorkflowRequestApi.getMyEmployee()`, không cần thêm endpoint
+BE nào khác. Nút Duyệt/Từ chối/Trả về/Thêm người duyệt LUÔN hiện khi đơn đang ở bước chờ duyệt (không
+tính trước phía FE xem đúng lượt hay không) — BE tự chặn và trả lỗi tiếng Việt rõ ràng qua toast nếu
+bấm nhầm, tránh logic trùng lặp không cần thiết ở FE.
 
 | Nhóm | Endpoint chính |
 |---|---|
@@ -797,8 +1055,10 @@ Mọi response bọc `ApiResponse<T>`; danh sách phân trang trả `PagedRespon
 | | `POST /{id}/approve` · `POST /{id}/reject` · `POST /{id}/send-back` · `POST /{id}/add-approver` |
 | | `GET /WorkflowRequest/my-requests` · `/pending-my-approval` · `/visible-to-me` |
 | | `GET /WorkflowRequest/{id}` (kèm steps + participants + histories cho màn xem & in) |
+| | `GET /WorkflowRequest/available-forms` · `/form-schema/{formDefinitionId}` · `/my-employee` (Pha 3B-2, phục vụ FE) |
 | Đính kèm | `POST /WorkflowRequest/{id}/attachments` · `DELETE /attachments/{id}` · `GET /attachments/{id}/download` |
-| Chữ ký | `GET /EmployeeSignature/me` · `PUT /EmployeeSignature/me` |
+| Chữ ký | `GET /EmployeeSignature/me` · `PUT /EmployeeSignature/me` (chỉ gửi email xác nhận, không áp dụng ngay) |
+| | `GET /EmployeeSignature/confirm/{token}` · `POST /EmployeeSignature/confirm/{token}` (`[AllowAnonymous]`) |
 | Ủy quyền | `ApprovalDelegation` CRUD |
 | Email | `GET /WorkflowApproval/by-token/{token}` · `POST /WorkflowApproval/by-token/{token}` |
 | Cấu hình | `GET /WorkflowSetting` · `PUT /WorkflowSetting` |
@@ -823,6 +1083,8 @@ Workflow.FormDesign.View / Manage        — thiết kế form (ai được thi�
 Workflow.Request.Create                  — tạo đơn (form NÀO do FormAccesses quyết)
 Workflow.Request.ViewAll                 — xem mọi đơn toàn công ty (dành cho HR/Admin)
 Workflow.Setting.Manage                  — WorkflowSettings, FormDataSources
+Workflow.Signature.Update                — đăng ký/cập nhật chữ ký điện tử của CHÍNH mình
+                                            (Pha 4; 2 action "confirm" [AllowAnonymous], không cần quyền)
 ```
 
 **Luật chi tiết là dữ liệu, không phải permission:**
@@ -845,10 +1107,18 @@ Nguyên tắc: mỗi pha tự chạy được và có giá trị sử dụng, kh
 | Pha | Nội dung | Bảng |
 |---|---|---|
 | **0** | Tài liệu này. Chưa code. | — |
-| **1** | Nền tổ chức + nhân sự, màn hình quản trị cây kéo-thả | `OrgLevels` `OrgUnits` `JobTitles` `Employees` `EmployeeOrgUnits` |
-| **2** | Form designer + renderer, tạo/lưu nháp. **Nặng nhất về FE.** | `FormCategories` `FormCategoryCoordinators` `FormDefinitions` `FormFields` `FormFieldConditions` `FormDataSources` `FormAccesses` |
-| **3** | Luồng duyệt — hết pha này hệ thống dùng được thật | `FormRoutes` `FormApprovalSteps` `FormApprovalStepParticipants` `WorkflowRequests` `WorkflowRequestSteps` `WorkflowRequestStepParticipants` `WorkflowRequestHistories` `WorkflowSequences` |
-| **4** | Bổ trợ: đính kèm, chữ ký, duyệt qua email, ủy quyền, in, xuất Excel | `WorkflowAttachments` `EmployeeSignatures` `WorkflowRequestEmailTokens` `ApprovalDelegations` `WorkflowSettings` |
+| **1** | ✅ **Xong BE+FE** (2026-08-24): Entity + DbContext + Repository/UnitOfWork + Service + Controller CRUD + màn quản trị cây kéo-thả FE, migration đã chạy, permission đã seed, test qua HTTP + UI thật đều pass. | `OrgLevels` `OrgUnits` `JobTitles` `Employees` `EmployeeOrgUnits` |
+| **2A** | ✅ **Xong BE+FE** (2026-08-25): Danh mục form (+ người phụ trách thiết kế, replace pattern) và nguồn dữ liệu built-in (Employees/OrgUnits/JobTitles — `SqlQuery` bị chặn tới khi chốt bảo mật). Entity/Service/Controller/FE đều xong, test qua HTTP pass. | `FormCategories` `FormCategoryCoordinators` `FormDataSources` |
+| **2B** | ✅ **Xong BE+FE** (2026-08-25): Khung thông tin form (mã, tên, danh mục, mô tả, cờ đính kèm, CodePrefix, RouteConditionType). **Chưa có field designer** — form tạo ra chưa có ô nhập nào. Kèm theo: thêm claim `UserId` vào JWT toàn hệ thống để resolve `CreatedByEmployeeId`/`UpdatedByEmployeeId` (xem hộp trạng thái đầu file). | `FormDefinitions` |
+| **2C** | ✅ **Xong BE+FE** (2026-08-25): Field designer kéo-thả thật (kéo từ bảng chọn kiểu ô thả vào canvas, dùng `@dnd-kit`) + điều kiện ẩn/hiện/bắt buộc. Route mới `workflow/form-definitions/detail?id=` (query string, không dùng `[id]` động — static export). | `FormFields` `FormFieldConditions` |
+| **2D** | ✅ **Xong BE+FE** (2026-08-25): `FormAccesses` (ai tạo đơn được — theo Role/Đơn vị/Nhân sự, xoá-tất-tạo-lại) + `POST /publish` (chặn nếu chưa có field, Version chỉ tăng khi publish lại) + `POST /clone` (sao chép FormFields+FormFieldConditions, KHÔNG kèm FormAccesses). **Pha 2 hoàn tất** — form đủ điều kiện publish và gán quyền, chỉ còn thiếu luồng duyệt (Pha 3) để tạo `WorkflowRequest` thật. | `FormAccesses` |
+| **3A** | ✅ **Xong BE+FE** (2026-08-25): Cấu hình luồng duyệt — nhánh rẽ (`FormRoutes`) + bước duyệt (`FormApprovalSteps`) + người duyệt (`FormApprovalStepParticipants`). Thuần CRUD/validate, **CHƯA nộp đơn được**. | `FormRoutes` `FormApprovalSteps` `FormApprovalStepParticipants` |
+| **3B-1** | ✅ **Xong BE, CHƯA có FE** (2026-08-25): Engine nộp/duyệt đơn thật — Draft → sửa → nộp (chọn nhánh, resolve người duyệt, cấp số atomic, snapshot schema) → duyệt/từ chối/trả về/thêm người duyệt/hủy/ủy quyền duyệt thay (§5.1, §5.5, §5.6). Test qua HTTP đầy đủ (không có màn hình). | `WorkflowRequests` `WorkflowRequestSteps` `WorkflowRequestStepParticipants` `WorkflowRequestHistories` `WorkflowSequences` `ApprovalDelegations` |
+| **3B-2** | ✅ **Xong BE+FE** (2026-08-26): FE form render động để nộp đơn (dựng từ `FormFieldDto` sống lúc Draft, đánh giá điều kiện ẩn/hiện client-side) + "Đơn của tôi"/"Chờ tôi duyệt"/"Tất cả" + màn xem/duyệt/in đơn + quản lý ủy quyền duyệt thay. Kèm 3 endpoint BE nhỏ đọc (`available-forms`/`form-schema`/`my-employee`), không migration. | không thêm bảng |
+| **4A** | ✅ **Xong BE+FE** (2026-08-26): Chữ ký đăng ký sẵn — tự điền lúc duyệt đơn thay vì tải ảnh lên mỗi lần. Cập nhật qua email xác nhận (mirror `Attendance.UserSignature`). | `EmployeeSignatures` `PendingEmployeeSignatureConfirmations` (bảng mới, ngoài 25 bảng gốc) |
+| **4B** | ✅ **Xong BE+FE** (2026-08-26): Đính kèm file — upload/xoá/tải xuống, file nằm trên đĩa (KHÔNG lưu byte[] trong DB). `WorkflowSettings` giới hạn dung lượng/số lượng/đuôi file (giá trị mặc định seed sẵn, sửa được ở màn "Cấu hình"). Chủ đơn thêm/xoá xuyên suốt tới khi đơn kết thúc (không giới hạn ở Draft). `RequireAttachment=true` chặn nộp đơn nếu chưa có file nào. | `WorkflowAttachments` `WorkflowSettings` |
+| **4C** | Duyệt qua email (`WorkflowRequestEmailTokens`) — trang duyệt public không cần đăng nhập | `WorkflowRequestEmailTokens` |
+| **4D** | Xuất Excel danh sách đơn — không thêm bảng, chỉ export dữ liệu `WorkflowRequests` đã có | không thêm bảng |
 | **5** | Gộp nền với Attendance — **chỉ khi đạt tiêu chí §1.3** | không thêm bảng |
 
 **Ước lượng có căn cứ:** Attendance mất ~3,5 tuần (27/07 → 19/08/2026) cho 10,8k dòng BE + 12,4k dòng
@@ -881,3 +1151,24 @@ loại đơn cộng hai giao diện designer (form và luồng duyệt) — hãy
 | 2026-08-20 | **In = layout form trên màn hình**, không mô phỏng mẫu giấy (§1.5, §5.7) |
 | 2026-08-20 | Bỏ `OrgUnitScope = ApplicantAncestor` (§1.6); thêm `FormCategoryCoordinators` |
 | 2026-08-20 | Chốt quy ước `DataJson` (§5.8), index bắt buộc (§5.9), đặt tên DB kiểu EF chuẩn (§5.10) — gỡ 3 chỗ hở cuối trước khi scaffold |
+| 2026-08-24 | **Pha 1 scaffold xong BE**: 4 project tạo mới, DB `YevWorkflowManagement` tạo thật (migration `InitialWorkflowOrganization`), permission `Workflow.Organization.View/Manage` seed vào Identity. Route API bắt buộc tiền tố `api/Workflow/` (§1.7) — phát hiện trùng route với `Attendance.EmployeeController`/`JobTitleController` lúc smoke-test, sửa ngay trước khi có FE nào gọi tới. |
+| 2026-08-24 | **Pha 1 FE xong**: 4 màn quản trị (Cấp tổ chức, Cây tổ chức kéo-thả, Chức danh, Nhân sự + gán đơn vị/chức danh kiêm nhiệm), i18n vi/ja đầy đủ. |
+| 2026-08-25 | **Pha 2A xong BE+FE**: `FormCategories`/`FormCategoryCoordinators`/`FormDataSources` — migration `AddFormDesignCatalog` (Workflow DB) + `AddWorkflowFormDesignPermissions` (Identity DB, seed `Workflow.FormDesign.View/Manage` + `Workflow.Setting.Manage`). Quyết định trong lúc scaffold: (a) `FormDataSource` chỉ có 1 permission `Setting.Manage` cho mọi verb kể cả GET, không có cặp View/Manage riêng như các nhóm khác — vì đây thuần màn admin-only; (b) `SourceKind = SqlQuery` bị `Create`/`UpdateAsync` từ chối bằng `DomainException` cho tới khi chốt cơ chế bảo mật (§3.2), FE ẩn hẳn lựa chọn này khỏi dropdown thay vì chỉ disable. |
+| 2026-08-25 | **Thêm claim `UserId` vào JWT toàn hệ thống** (Identity module) trước khi scaffold Pha 2B — phát hiện lúc thiết kế `FormDefinitions.CreatedByEmployeeId`: JWT trước giờ chỉ có username Windows dạng chuỗi, không đủ để tra `Employees.UserId` (điểm neo cross-DB đã chốt ở §1.4). Người dùng chọn phương án thêm claim số (thay vì match theo Email hoặc thêm cột Username vào `Employees`) vì đúng với thiết kế cross-DB đã có sẵn, không cần đổi schema `Employees`. Ảnh hưởng ra ngoài Workflow: mọi JWT hệ thống phát ra từ nay có thêm claim này (JWT cũ vẫn hợp lệ, chỉ thiếu claim, không vỡ). |
+| 2026-08-25 | **Pha 2B xong BE+FE**: `FormDefinitions` — migration `AddFormDefinitions`. `WorkflowBaseController.CurrentUserId` (đọc claim `"UserId"` bằng chuỗi thô, không reference `Identity.Application`) → Service resolve `Employee.Id` tương ứng, chặn thao tác nếu chưa liên kết. `RouteConditionType` xác nhận bất biến: có trong `CreateDto`, không có trong `UpdateDto`. Thêm guard tự thân (không cần bảng khác): chặn xoá form đã `IsPublished`. |
+| 2026-08-25 | **Pha 2C xong BE+FE**: `FormFields`/`FormFieldConditions` — migration `AddFormFieldsAndConditions`. Quyết định kiến trúc quan trọng nhất: `ReplaceFieldsAsync` **merge theo Id/FieldKey thay vì xoá-tất-tạo-lại** — phát hiện lúc thiết kế rằng pattern "replace nguyên danh sách" cũ (dùng cho `EmployeeOrgUnits`/`FormCategoryCoordinators`) sẽ làm Id đổi liên tục mỗi lần lưu, gãy tham chiếu `FormFieldConditions.TargetFieldId`/`SourceFieldId` (2 FK trỏ thẳng `FormFields.Id`). Đã hỏi mức độ tương tác kéo-thả FE trước khi code — chốt "kéo thẳng từ palette thả vào canvas" (không phải "click-để-thêm"), nên dùng `@dnd-kit/core` (drag giữa 2 container + `DragOverlay`) thay vì chỉ `@dnd-kit/sortable`. Route detail dùng query string `?id=` (mirror `OtFormDetail`), không dùng `[id]` động vì static export không hỗ trợ. Test HTTP xác nhận: field giữ nguyên Id qua nhiều lần lưu khi vẫn còn trong danh sách, xoá field đang là `SourceFieldId` bị chặn, cấu hình điều kiện vòng lặp bị chặn. |
+| 2026-08-25 | **Pha 2D xong BE+FE — Pha 2 hoàn tất**: `FormAccesses` — migration `AddFormAccesses`, xoá-tất-tạo-lại bình thường (không bảng nào tham chiếu ngược `FormAccesses.Id`, khác `FormFields`). `POST /publish`: quyết định "Version chỉ tăng khi publish LẠI, không tăng lần đầu" — đọc đúng nghĩa đen §3.2 "tăng mỗi lần publish lại"; không có endpoint unpublish nên gọi `/publish` khi đã `IsPublished=true` luôn hiểu là "vừa sửa xong, publish lại". Thêm guard tự thân: chặn publish nếu form chưa có `FormFields` nào (publish form rỗng vô nghĩa). `POST /clone`: quyết định **KHÔNG sao chép `FormAccesses`** sang form nhân bản — cùng nguyên tắc "chỉ định tay, không suy ra" đã áp dụng cho `FormCategoryCoordinators`, tránh vô tình cấp quyền tạo đơn cho form mới mà admin chưa kịp rà soát; remap `FormFieldConditions` sang Id mới bằng `FieldKey` (unique theo form) thay vì giữ tham chiếu object EF qua nhiều lần `SaveChangesAsync`. Test HTTP xác nhận đủ: publish chặn khi rỗng, version giữ 1 ở lần publish đầu và tăng lên 2 ở lần publish lại, `FormAccesses` guard đúng-1-cột-đích theo `TargetType`, clone copy đúng field+condition (remap Id) nhưng để trống accesses, dup-code bị chặn, xoá form đã publish vẫn bị chặn như Pha 2B. **Phát hiện gap ngoài phạm vi pha này** (đã ghi ở hộp trạng thái đầu file): `FormCategoryService.DeleteAsync` chưa guard "còn `FormDefinitions` đang dùng danh mục" dù `FormDefinitions` đã tồn tại từ Pha 2B — để dành sửa ở đợt code tiếp theo chạm `FormCategoryService`. |
+| 2026-08-25 | **Quyết định phạm vi Pha 3**: 8 bảng + luật nghiệp vụ quá lớn để làm gọn 1 lượt như 1 pha con của Pha 2 (xem §5.1-5.6). Đã hỏi và chốt **Pha 3A: chỉ cấu hình luồng duyệt** (`FormRoutes`/`FormApprovalSteps`/`FormApprovalStepParticipants`, thuần CRUD/validate) trước, để dành nộp đơn + duyệt/từ chối/trả về/thêm người duyệt/ủy quyền (`WorkflowRequests` và các bảng liên quan) cho Pha 3B — mirror cách Pha 2 đã tách 2A-2D. |
+| 2026-08-25 | **Pha 3A xong BE+FE**: `FormRoutes`/`FormApprovalSteps`/`FormApprovalStepParticipants` — migration `AddFormRoutesAndApprovalSteps`. Quyết định kiến trúc quan trọng nhất: xác nhận `GenericRepository.Delete()` là HARD delete (`_dbSet.Remove()`) — toàn bộ pattern "replace nguyên danh sách" trong module từ Pha 2A đều xoá thật chứ không set `IsDeleted=true`, nên FK Cascade thật của SQL Server tự chạy. Nhờ đó xác định được: `FormApprovalSteps`/`FormApprovalStepParticipants` **luôn xoá-tất-tạo-lại** an toàn (không bảng nào tham chiếu Id của chúng, khác bài học `FormFields` ở Pha 2C), nhưng `FormRoutes` vẫn phải **merge theo Id** vì `WorkflowRequests.FormRouteId` (Pha 3B) sẽ là FK Restrict thật trỏ vào đây dù bảng đó chưa tồn tại lúc viết Pha 3A — đã đánh dấu `// TODO Pha 3B` ngay tại chỗ xoá route, tránh lặp lại lỗi quên guard đã xảy ra thật ở `FormCategoryService` (Pha 2A→2D). Đọc cây lồng nhau (route→step→participant) dùng projection `.Select()` lồng nhau trực tiếp trong `ToListAsync`, xác nhận EF Core dịch được thành 1 câu SQL có subquery tương quan mà không cần `Include`/`ThenInclude` (repo generic chỉ hỗ trợ Include 1 cấp) — không phải sửa interface repo. **Bug tự bắt được lúc test HTTP**: `GuardRouteFields` ban đầu bắt mọi route (kể cả `IsDefault=true`) phải có Min/Max/ClassValue theo `RouteConditionType`, làm nhánh mặc định (dự phòng, đúng ra không cần điều kiện riêng) bị chặn lưu vô lý — sửa bằng cách miễn guard này cho `IsDefault=true`, phát hiện và fix ngay trong phiên test trước khi báo hoàn thành. Test HTTP xác nhận đủ 13 kịch bản: cấu trúc `RouteConditionType=None`, giới hạn 1 `IsDefault`, ≥1 step/route, ≥1 Approver/step, Employee/JobTitle đúng 1 cột đích, Approver nguồn Employee cần `UserId`, `OrgUnitScope=Fixed/ApplicantUnit` đúng ràng buộc `OrgUnitId`, trùng participant trong step, trùng `ClassValue` giữa route (case-insensitive), merge-giữ-Id qua 2 lần lưu, cảnh báo chồng/hở khoảng số không chặn lưu. |
+| 2026-08-25 | **Quyết định phạm vi Pha 3B**: chốt **Pha 3B-1 — chỉ engine BE** (nộp/duyệt đơn, test qua HTTP) trước, để dành FE (form render động + inbox "Chờ tôi duyệt") cho Pha 3B-2 — mirror lần tách Pha 3A đã làm. 7 quyết định chốt trước khi code (đầy đủ trong plan, tóm tắt): `RequestCode` nullable cho Draft (unique filtered WHERE NOT NULL) + format cố định `"{CodePrefix}-{Year}-{Sequence:0000}"`; `FormFields.AutoNumberPattern` và endpoint `RequestAction.Comment` riêng ngoài phạm vi; `SendBack` về `StepOrder=0` chưa có endpoint "nộp lại"; permission approve/reject/send-back/add-approver dùng chung `Workflow.Request.Create`; `FormSchemaJson` snapshot theo `FieldKey`. |
+| 2026-08-25 | **Pha 3B-1 xong BE (chưa FE)**: `WorkflowRequests`/`WorkflowRequestSteps`/`WorkflowRequestStepParticipants`/`WorkflowRequestHistories`/`WorkflowSequences`/`ApprovalDelegations` — migration `AddWorkflowRequestsAndDelegations` (Workflow DB) + `AddWorkflowRequestPermissions` (Identity DB, seed `Workflow.Request.Create`/`ViewAll`). Lần đầu module dùng transaction tường minh (`BeginTransactionAsync`/`CommitTransactionAsync`) trong `SubmitAsync`, bọc luôn bước cấp số atomic bằng raw SQL `MERGE ... WITH (HOLDLOCK) ... OUTPUT` qua `Database.SqlQuery<int>()` — test 5 lượt submit song song (`Start-Job`) ra đúng 5 `RequestCode` liên tiếp không trùng. Quyết định kỹ thuật quan trọng nhất: `WorkflowRequestSteps.StepOrder` lệch **+1** so với `FormApprovalSteps.StepOrder` cấu hình gốc (đánh số từ 0) — tránh trùng giá trị sentinel `0 = chưa vào luồng duyệt / trả về người nộp` với bước duyệt đầu tiên. Bổ sung guard đúng vị trí `// TODO Pha 3B` đã đánh dấu từ Pha 3A: `ReplaceRoutesAsync` giờ chặn xoá `FormRoute` đang có `WorkflowRequests` tham chiếu — test HTTP xác nhận chặn đúng. Phát hiện 1 thiếu sót nhỏ trong bảng cột §3.3 (không phải quyết định nghiệp vụ mới): `WorkflowRequestSteps` cần thêm cột `AllowAddApproverSnapshot` (mirror `AllowSendBackSnapshot`) vì bảng không giữ FK ngược về `FormApprovalStep` gốc để tra lại sau khi submit. **2 bug tự bắt được lúc test HTTP, sửa ngay trước khi báo xong**: (1) người gọi vừa là Approver trực tiếp vừa là Delegate hợp lệ cho người khác cùng bước thì `Approve` lần 2 (định duyệt thay) bị hiểu nhầm thành duyệt lại chính mình — sửa bằng cách thêm `OnBehalfOfEmployeeId` (nullable, để trống thì giữ hành vi ưu tiên bản thân) vào 4 action DTO; (2) `CancelAsync` không chuyển `WorkflowRequestStep` đang `Current` sang trạng thái khác, khiến đơn đã hủy vẫn hiện trong `GET .../pending-my-approval` — sửa bằng cách chuyển bước đó sang `StepStatus.Skipped`. Test HTTP trên 1 form test riêng (`TEST-3B-FORM`, `RouteConditionType=NumericRange`, còn giữ lại trong DB để tái dùng cho Pha 3B-2) xác nhận đủ: FormAccesses chặn đúng, Draft tạo/sửa, thiếu field bắt buộc chặn submit, chọn đúng nhánh theo giá trị số, resolve người duyệt qua cả `ParticipantSource=Employee` lẫn `JobTitle`+`OrgUnitScope=ApplicantUnit` (tra `EmployeeOrgUnits`), `ApproverMode=Any`/`All` (duyệt đủ mới xong bước), duyệt thay qua `ApprovalDelegations` (kèm chặn tự ủy quyền + chặn dây chuyền 2 chiều), tiến bước đúng `CurrentStepOrder`, từ chối dừng hẳn đơn, trả về (`SendBack`) reset đúng các bước từ đích trở đi, thêm người duyệt giữa chừng (`AddApprover`) renumber đúng `StepOrder` các bước sau, chuẩn hoá `Employee`-type field bỏ qua `code`/`name` do FE gửi (chỉ tin `id`), 3 endpoint danh sách (`my-requests`/`pending-my-approval`/`visible-to-me`), CRUD `ApprovalDelegation` đầy đủ, 5 submit song song không trùng `RequestCode`. **Giới hạn môi trường test đã ghi nhận**: chỉ có 1 tài khoản Windows thật đăng nhập được trong lúc test (`Employees.UserId` chỉ có đúng 1 dòng khác NULL) — kịch bản "duyệt thay" phải tạo 1 `Employee` test có `UserId` giả (`TEST3B-APV`, giữ lại trong DB) và 1 dòng `ApprovalDelegations` chèn thẳng bằng SQL (không qua API, vì `CreateUpdateApprovalDelegationDto.DelegatorEmployeeId` cố tình luôn resolve = người gọi, không nhận qua body) để mô phỏng "người khác ủy quyền cho mình" — bản thân `ApprovalDelegationController` CRUD vẫn được test đầy đủ qua HTTP ở chiều `Delegator=mình`. |
+| 2026-08-26 | **Pha 3B-2 xong BE+FE**: FE nộp/duyệt đơn hoàn chỉnh (`modules/workflow/components/requests/`: `DynamicFormRenderer`, `WorkflowRequestDataView`, `WorkflowRequestList`, `NewWorkflowRequestPicker`, `WorkflowRequestDetail`, `WorkflowRequestPrintView`, `SignatureUpload`, `ApprovalDelegationList`), route mới `workflow/requests[/new\|/detail]` + `workflow/delegations` (query-string `?id=` cho trang chi tiết, mirror `form-definitions/detail`), sidebar + i18n vi/ja đầy đủ. Trước khi code phát hiện 3 lỗ hổng khiến "Pha 3B-2 chỉ FE" không khả thi (nêu rõ ở đầu file + §6): người nộp đơn thường không có `Workflow.FormDesign.View` nên không đọc được danh sách form/field sống, và JWT không mang `Employee.Id` — bổ sung 3 endpoint đọc nhỏ `GET .../available-forms`, `.../form-schema/{id}`, `.../my-employee` trên `WorkflowRequestController` (cùng permission `Workflow.Request.Create`, không migration). Rà lại code lúc viết FE phát hiện thêm 2 việc cần sửa ở BE (không phải bug nghiệp vụ, chỉ là chỗ hở kỹ thuật): (1) `BuildFormSchemaJson` serialize bằng `JsonSerializer.Serialize(snapshot)` không set `PropertyNamingPolicy=CamelCase`, làm `FormSchemaJson` lộ PascalCase khác hẳn phần còn lại của response (ASP.NET Core mặc định camelCase) — sửa bằng 1 `JsonSerializerOptions` static dùng lại, test HTTP xác nhận submit lại ra đúng camelCase; (2) `WorkflowRequestHistoryDto` chưa từng chiếu `SignatureImage` (cột đã có ở DB từ Pha 3B-1) ra ngoài — bản in cần cột này để vẽ chữ ký (§5.7), bổ sung `SignatureImageBase64` (base64, CLAUDE.md §4.4). Quyết định thiết kế FE: nút Duyệt/Từ chối/Trả về/Thêm người duyệt LUÔN hiện khi đơn ở bước chờ duyệt, không tính trước "có phải lượt tôi" ở FE — để BE tự chặn và trả lỗi tiếng Việt qua toast, tránh trùng lặp logic; dropdown "Duyệt thay cho ai" tính hoàn toàn từ `ApprovalDelegationApi.getMine()` (trả cả 2 chiều Delegator/Delegate) giao với participant Approver chưa `actedAt` của bước hiện tại, không cần endpoint riêng; Dropdown/Radio/MultiSelect chỉ đọc `OptionsJson` tĩnh — nguồn dữ liệu động qua `FormDataSourceId` chưa từng có endpoint "lấy giá trị" ở bất kỳ đâu trong hệ thống (kể cả lúc thiết kế field), ngoài phạm vi phiên làm việc này. **Verify**: `dotnet build` sạch, `npx tsc --noEmit` + `eslint` sạch, `pnpm build` (static export) sinh đủ route mới không lỗi, smoke test HTTP đầy đủ qua PowerShell (3 endpoint mới trả đúng dữ liệu lọc theo quyền, tạo Draft → sửa → nộp → `formSchemaJson` đúng camelCase → duyệt → xác nhận biến mất khỏi `pending-my-approval` → `visible-to-me` đúng danh sách). **Giới hạn đã ghi nhận minh bạch**: phiên làm việc này KHÔNG có công cụ điều khiển trình duyệt (Playwright/…), nên UI thật (giao diện form render, điều kiện ẩn/hiện, layout in) chưa được tự tay bấm thử qua trình duyệt — chỉ xác nhận được qua build/type-check/lint sạch và HTTP đúng dữ liệu; cần người dùng tự kiểm tra UI trước khi coi là hoàn tất 100%. |
+| 2026-08-26 | **`FormAccesses.OrgUnit` đổi từ so khớp đúng-1-cấp sang LAN XUỐNG cây con** — phát hiện khi người dùng báo "nhân sự phòng IT không thấy form nào để tạo". Tra dữ liệu thật: `FormAccesses` của form test chỉ cấp cho `OrgUnit` cha ("Xưởng Dĩ An"), nhân sự đó lại thuộc `OrgUnit` con cháu ("IT", qua "Phòng Công Vụ") — so khớp đúng-1-cấp (hành vi từ Pha 2D/3B-1, không đổi từ lúc đó tới giờ) không nhận ra quan hệ cha-con nên trả về rỗng, đúng theo luật CŨ nhưng không đúng kỳ vọng thực tế. Đã hỏi người dùng 2 hướng (sửa dữ liệu `FormAccesses` cho đúng phòng ban cụ thể, hoặc đổi luật cho lan truyền theo cây) — chọn **đổi luật**. Sửa `HasFormAccessAsync`/`GuardFormAccessAsync` (`WorkflowRequestService`) duyệt ngược `OrgUnit` của nhân sự lên gốc qua `ParentId` (giới hạn 50 bước đề phòng dữ liệu lỗi tạo vòng lặp), khớp bất kỳ nút nào trên đường đi. Ảnh hưởng TẤT CẢ chỗ dùng `FormAccesses` kiểu `OrgUnit`: `CreateDraftAsync`, `SubmitAsync` (Pha 3B-1), `GET .../available-forms` (Pha 3B-2) — sửa 1 chỗ dùng chung cho cả 3. **Verify bằng dữ liệu thật, không cần data giả**: tài khoản test (`Employees.Id=2`) vốn cũng thuộc `OrgUnit` "IT" — trước fix `available-forms` chỉ trả 2 form (cấp trực tiếp theo Employee), sau fix trả thêm `TEST-2D-FORM` (cấp theo `OrgUnit` cha "Xưởng Dĩ An") đúng như kỳ vọng. |
+| 2026-08-26 | **Thêm `JobTitles.IsUniquePerOrgUnit`** — phát hiện ngay sau fix `FormAccesses` ở trên, cùng phiên: nhân sự phòng IT phản ánh không gán được chức danh phổ thông "Nhân viên" cho người thứ 2 tại cùng đơn vị. Luật cũ (từ Pha 1) áp "1 người/1 (OrgUnit,JobTitle)" cho MỌI chức danh không phân biệt — đúng mục đích ban đầu (route duyệt qua `ParticipantSource=JobTitle` cần resolve ra đúng 1 người, §5.5) nhưng sai với chức danh phổ thông thực tế có nhiều người giữ. Đã hỏi 3 hướng (sửa dữ liệu cụ thể / bỏ hẳn luật rồi đổi §5.5 sang resolve nhiều Approver / thêm cờ phân loại chức danh) — chọn **thêm cờ** `IsUniquePerOrgUnit` (mặc định `true` cho toàn bộ dữ liệu có sẵn qua migration `AddJobTitleIsUniquePerOrgUnit`, tránh âm thầm phá vỡ cấu hình route đang chạy). Sửa 2 chỗ: (1) `EmployeeService.ReplaceOrgUnitsAsync` chỉ enforce "1 người/đơn vị" khi cờ `true`; (2) `FormDefinitionService.ReplaceRoutesAsync` chặn cấu hình `ParticipantRole=Approver` với chức danh cờ `false` — hệ quả tất yếu của việc mở khoá đa-người: nếu không chặn, `ResolveStepParticipantsAsync` (§5.5) vẫn `FirstOrDefault` một người bất kỳ trong nhiều người, route sai âm thầm. FE: `JobTitleForm.tsx` thêm checkbox, `JobTitleList.tsx` thêm cột hiển thị. **Verify qua HTTP với dữ liệu thật** (không cần data giả): thử gán JobTitle "Nhân viên" (đã có nhân sự phòng IT giữ) cho 1 nhân sự IT khác — bị chặn đúng thông báo cũ; bật cờ `IsUniquePerOrgUnit=false` cho "Nhân viên" qua `PUT JobTitle/5`; thử lại → thành công; dọn dữ liệu test ngay sau đó (khôi phục tên chức danh đúng dấu, gỡ dòng gán thử ở nhân sự test), **giữ nguyên** `IsUniquePerOrgUnit=false` cho "Nhân viên" vì đó chính là fix người dùng cần. |
+| 2026-08-26 | **Reset dữ liệu form/đơn để test tay Pha 3B-2 với người dùng thật.** Người dùng yêu cầu xoá sạch dữ liệu form/đơn cũ (đa số là test data tích luỹ qua Pha 2A-3B-1) để dựng lại 1 form thật gọn dựng thử luồng duyệt. Đã hỏi xác nhận phạm vi trước khi xoá (CLAUDE.md — DB dùng chung) — chốt: **giữ nguyên cây tổ chức** (`OrgLevels`/`OrgUnits`/`JobTitles`/`Employees`/`EmployeeOrgUnits`, vì đã đúng sẵn cơ cấu phòng IT có Trưởng phòng + Nhân viên phù hợp kịch bản test), chỉ xoá 2 nhóm còn lại: **Định nghĩa form** (`FormCategories` `FormCategoryCoordinators` `FormDataSources` `FormDefinitions` `FormFields` `FormFieldConditions` `FormAccesses` `FormRoutes` `FormApprovalSteps` `FormApprovalStepParticipants`) và **Dữ liệu đơn** (`WorkflowRequests` `WorkflowRequestSteps` `WorkflowRequestStepParticipants` `WorkflowRequestHistories` `ApprovalDelegations` `WorkflowSequences`) — xoá bằng SQL trực tiếp (DELETE theo thứ tự con→cha, không dùng TRUNCATE vì còn FK), không qua API vì khối lượng lớn và một số bản ghi (form đã publish, route đang có `WorkflowRequests` tham chiếu) bị chính API chặn xoá theo đúng thiết kế. Dựng lại 1 form thật qua API (không SQL thẳng, để đi đúng validate/permission-seed sẵn có): `FormCategory` "NS - Đơn nhân sự" → `FormDefinition` "NGHIPHEP - Giấy nghỉ phép" (`RouteConditionType=None`, `CodePrefix="NP"`, field `loaiNghiPhep`/`tuNgay`/`denNgay`/`soNgay`/`lyDo`/`ghiChu`) → `FormAccesses` cấp `TargetType=OrgUnit` cho `OrgUnit="IT"` (mọi nhân sự IT tạo được đơn) → 1 `FormRoute` mặc định, 1 `FormApprovalStep` (`OrgUnitScope=Fixed`, `OrgUnitId=IT`, `ApproverMode=Any`) với 1 participant `ParticipantSource=JobTitle`, `JobTitleId="Trưởng phòng"`, `ParticipantRole=Approver` → publish. Verify qua HTTP: `available-forms` (gọi bằng tài khoản Trưởng phòng IT) trả đúng form vừa tạo, `GET routes` xác nhận đúng step/participant đã cấu hình. **Không tự nộp/duyệt thử đơn nào** — để dành nguyên luồng cho người dùng + đồng nghiệp tự bấm thử qua UI thật, đúng mục đích yêu cầu ban đầu. |
+| 2026-08-26 | **Sửa 2 bug layout FE phát hiện lúc người dùng tự test luồng duyệt qua UI thật (Pha 3B-2), không phải nghiệp vụ mới:** (1) `SearchableSelect` nhận `triggerClassName` ngắn (vd `"h-9"`) sẽ THAY THẾ toàn bộ style mặc định (border/nền/bo góc) thay vì cộng thêm — làm ô chọn Nhân sự/Chức danh/Đơn vị trong `StepCard.tsx`/`FormAccessesPanel.tsx`/`DynamicFormRenderer.tsx` gần như vô hình, không bấm chọn được; (2) `w-28`/`w-32` ghép sau 1 class base đã có sẵn `w-full` (`StepCard.tsx`) khiến Tailwind chọn class thắng theo thứ tự sinh CSS nội bộ chứ không theo thứ tự viết trong code — select "Người duyệt" bị kéo full-width tràn màn hình. Sửa bằng cách luôn truyền đủ style qua `triggerClassName` (không dùng bare `"h-9"`) và tách 1 class base KHÔNG có `w-full` riêng cho các phần tử trong hàng flex cần độ rộng cố định. Không phải lỗi nghiệp vụ — chỉ ghi lại vì đã sửa nhiều nơi cùng lúc, tránh lặp lại khi thêm field/route designer mới. |
+| 2026-08-26 | **Đơn "chưa lưu nháp lần nào" không còn tự tạo `WorkflowRequests` chỉ vì chọn loại đơn.** Người dùng phản ánh: bấm chọn 1 loại đơn ở "Tạo đơn mới" là `createDraft` chạy ngay lập tức, kể cả khi chưa nhập gì/chưa bấm "Lưu nháp" — bấm nhầm loại đơn cũng để lại rác. Sửa: `NewWorkflowRequestPicker.tsx` chỉ điều hướng sang `workflow/requests/detail?formDefinitionId=` (không gọi API); `WorkflowRequestDetail.tsx` nhận thêm `id: number \| null` — `id=null` là chế độ "đơn chưa tồn tại" (tải sẵn form-schema để hiển thị y hệt draft, dùng 1 object `WorkflowRequestDto` tạm `id=0` chỉ để thoả kiểu, `canCancel` tự chặn); `createDraft` CHỈ được gọi bên trong `handleSaveDraft`/`handleSubmit` khi người dùng chủ động bấm, xong thì `router.replace` sang `?id=<id thật>` để chuyển hẳn sang luồng cập nhật draft bình thường. Không migration, không đổi API BE. |
+| 2026-08-26 | **Pha 4A xong BE+FE — chữ ký đăng ký sẵn.** Đã hỏi và chốt trước khi code: mirror ĐÚNG cơ chế `Attendance.UserSignature` — cập nhật KHÔNG áp dụng ngay, phải xác nhận qua email (chống chiếm phiên đăng nhập đổi chữ ký hộ người khác) — thay vì đơn giản hoá thành lưu ngay như thiết kế gốc 4 cột trong §3.4. Thêm 1 bảng ngoài 25 bảng gốc: `PendingEmployeeSignatureConfirmations` (mirror `PendingSignatureConfirmation`, khác biệt duy nhất: khoá theo `EmployeeId` thay vì `UserName` — đúng điểm neo Workflow đã chốt ở §1.4). Migration `AddEmployeeSignatures` (Workflow DB) + `AddWorkflowSignaturePermissions` (Identity DB, seed `Workflow.Signature.Update`, gán Admin). BE: `EmployeeSignatureController`/`Service` mirror gần như nguyên vẹn `UserSignatureController`/`Service` của Attendance (kể cả hằng số 30 phút hết hạn), chỉ đổi điểm neo `EmployeeId`; endpoint `confirm/{token}` `[AllowAnonymous]`. Email template mới `Workflow.Infrastructure/EmailTemplates/EmployeeSignature/RequestUpdateConfirmation.html` (copy layout của Attendance, đổi placeholder `UserName`→`EmployeeFullName`) — `EmailTemplateService` (`Shared.Infrastructure`) đọc chung 1 thư mục `EmailTemplates/` cạnh DLL host bất kể module nào khai `<Content>`, không cần đổi gì ở tầng đọc file. FE: trang tự quản `workflow/signature` (`EmployeeSignaturePanel.tsx`, mirror `UserSignaturePanel.tsx`) + trang xác nhận public `/xac-nhan-chu-ky-quy-trinh` (route riêng, KHÔNG dùng chung `/xac-nhan-chu-ky` của Attendance — giữ đúng nguyên tắc module độc lập §1.1); tự viết `modules/workflow/lib/bilingual.ts` (bản rút gọn chỉ có `createBilingualTranslator`, không kéo theo các hằng số bilingual riêng của OT-form) thay vì import từ `modules/attendance/lib/bilingual.ts`. Tích hợp vào màn duyệt đơn (`WorkflowRequestDetail.tsx`): tải trước chữ ký đã lưu (`savedSignatureBase64`, fetch 1 lần, im lặng khi chưa đăng ký — không toast vì đây là trạng thái bình thường) truyền vào `SignatureUpload` qua prop mới `initialBase64` chỉ để HIỂN THỊ mặc định; giá trị thật sự gửi lúc duyệt là `signatureBase64 ?? savedSignatureBase64` — tránh hẳn việc phải đồng bộ 2 state qua lại giữa cha/con. **Verify**: `dotnet build`/`npx tsc --noEmit`/`pnpm lint`/`pnpm build` (static export, 2 route mới sinh đúng cho cả /vi /ja) đều sạch; migration áp thành công vào cả 2 DB; smoke test HTTP read-only xác nhận đúng luồng permission→resolve Employee→404 "chưa đăng ký" khi chưa có dữ liệu. **Không tự test luồng ghi** (yêu cầu cập nhật chữ ký thật sẽ gửi email thật vào hộp thư người dùng) — để người dùng tự bấm thử qua UI "Chữ ký của tôi". |
+| 2026-08-26 | **Pha 4B xong BE+FE — đính kèm file.** Đã hỏi và chốt trước khi code (nghiệp vụ chưa có trong thiết kế gốc): chủ đơn được thêm/xoá file đính kèm **xuyên suốt** tới khi đơn kết thúc (Approved/Rejected/Cancelled), không giới hạn ở Draft — cho phép bổ sung hồ sơ khi người duyệt yêu cầu; người duyệt chỉ xem/tải, không tự thêm được. Migration `AddWorkflowAttachmentsAndSettings` (Workflow DB) tạo `WorkflowAttachments` + `WorkflowSettings`, seed sẵn 1 dòng cấu hình mặc định (10 MB, `.pdf,.jpg,.jpeg,.png,.docx,.xlsx`, tối đa 5 file/đơn, `EmailTokenExpiryDays=7` — cột này chưa dùng tới khi Pha 4C). **Phát hiện lúc tạo migration Identity**: permission `Workflow.Setting.Manage` đã được seed sẵn từ Pha 2A (`AddWorkflowFormDesignPermissions`, dùng cho `FormDataSources`) — không cần seed lại, migration Identity dự định ban đầu bị dư nên đã `ef migrations remove`. File vật lý lưu trên đĩa server chạy host (KHÔNG lưu byte[] trong DB, đúng thiết kế §3.3): thư mục gốc cấu hình qua `appsettings.json` → `AppSettings:WorkflowAttachmentStoragePath` (mặc định `App_Data/WorkflowAttachments` tính từ `AppContext.BaseDirectory` — production nên trỏ ra đường dẫn tuyệt đối bên ngoài thư mục build để không mất file khi redeploy, chưa hỗ trợ multi-instance/network share). Trừu tượng hoá qua `IWorkflowAttachmentStorage` (interface ở `Workflow.Application`, impl `WorkflowAttachmentStorageService` ở `Workflow.Infrastructure`, tên kết thúc `Service` nên Scrutor tự đăng ký) — mirror pattern `IEmailService`. BE: 3 action mới gộp thẳng vào `WorkflowRequestService`/`WorkflowRequestController` (không tách controller riêng, đúng tiền lệ mọi entity con của aggregate `WorkflowRequest` đều nằm chung 1 controller) — `UploadAttachmentAsync` validate theo thứ tự `AllowAttachment` → dung lượng → đuôi file → số lượng (đọc từ `WorkflowSettings`), `DeleteAttachmentAsync` soft-delete DB trước rồi mới xoá file vật lý (đảm bảo không mất file nếu DB lỗi giữa chừng), `DownloadAttachmentAsync` trả `PhysicalPath` cho Controller tự `PhysicalFile(...)` (KHÔNG bọc `ApiResponse<T>` vì là nhị phân — ngoại lệ duy nhất của luật §3.4-1). Tách `GuardCanViewRequestAsync` từ logic cũ của `GetByIdAsync` (§7 luật "Ai xem được đơn này?") để dùng lại cho `DownloadAttachmentAsync`. `SubmitAsync` thêm bước 2b: `RequireAttachment=true` mà chưa có file nào thì chặn nộp. `WorkflowSettingController`/`Service` mới (`GET`/`PUT /WorkflowSetting`, luôn đúng 1 dòng Id=1, permission `Workflow.Setting.Manage`). FE: khối "Đính kèm" trong `WorkflowRequestDetail.tsx` (upload qua `<input type=file>` ẩn, tải xuống dựng `Blob` + `<a download>` y hệt pattern export Excel của Asset, mirror `formatFileSize` cục bộ) — thêm hàm `getForBlob` vào `lib/client.ts` (GET-blob, mirror `postFormForBlob` sẵn có). Trang admin mới `workflow/settings` (`WorkflowSettingPanel.tsx`) + mục sidebar "Cấu hình" (permission `Workflow.Setting.Manage`, cùng nhóm với "Nguồn dữ liệu"). `WorkflowRequestPrintView.tsx` thêm khối liệt kê tên file đính kèm (§5.7 "Đính kèm | danh sách tên file"). **Verify**: `dotnet build`/`npx tsc --noEmit`/`pnpm lint`/`pnpm build` (static export, route `/workflow/settings` sinh đúng cho cả /vi /ja) đều sạch; migration áp thành công vào Workflow DB; smoke test HTTP read-only xác nhận `GET /WorkflowSetting` trả đúng cấu hình mặc định và `GET /WorkflowRequest/{id}` trả thêm `attachments: []` không vỡ response cũ. **Không tự test luồng ghi** (upload/xoá tạo file thật + dòng DB thật trên DB chia sẻ) — để người dùng tự thử qua UI. |
+| 2026-08-26 | **Sửa lỗi in đơn: hộp thoại in của trình duyệt hiện cả sidebar/layout, vỡ bố cục.** Xem trước trên màn hình (`WorkflowRequestPrintView.tsx`, overlay `z-50`) đã đúng vì z-index che được sidebar — nhưng khi trình duyệt thực sự render trang in, nó bỏ qua stacking/`position: fixed` và layout lại theo flow bình thường, nên sidebar (`fixed`, không có `print:hidden`) + margin-left/max-width của `(workflow-manager)/layout.tsx` (thiếu toàn bộ class `print:*`) vẫn chiếm chỗ. `(ot-manager)/layout.tsx` + `OtManagerSidebar.tsx` (module Attendance) đã có sẵn đúng bộ class này (`print:ml-0!`/`print:p-0`/`print:max-w-none` ở layout, `print:hidden` ở `<aside>`) nên in OT Form không bị lỗi — mirror lại y hệt cho `(workflow-manager)/layout.tsx` + `WorkflowManagerSidebar.tsx`. **Vẫn chưa đủ** (phát hiện lúc test thật bước 2): sidebar đã ẩn nhưng hộp thoại in vẫn in CẢ nội dung trang chi tiết đơn (`WorkflowRequestDetail.tsx`, các section NỘI DUNG ĐƠN/ĐÍNH KÈM/CÁC BƯỚC DUYỆT/LỊCH SỬ...) LẪN `WorkflowRequestPrintView` chồng lên nhau — vì `position: fixed` của overlay preview chỉ có tác dụng ở màn hình, lúc trình duyệt thực sự render trang in nó bỏ qua stacking context nên toàn bộ DOM (kể cả phần bị che phía dưới overlay) đều được in theo thứ tự document. Sửa triệt để: bọc riêng phần "nội dung trang" (mọi thứ trừ `WorkflowRequestPrintView`/`AttachmentPreviewDialog`) vào 1 `<div className="... print:hidden">` tách biệt (dùng Fragment `<>...</>` ở ngoài cùng), để 2 modal kia là SIBLING chứ không phải con của div bị `print:hidden` — nếu để chung 1 div rồi gắn `print:hidden` lên chính nó thì các modal con cũng bị ẩn theo (Tailwind `hidden` = `display:none`, con của phần tử `display:none` không tự "thoát" ra ngoài được dù bản thân có `fixed`). |
+| 2026-08-26 | **Xem trước file đính kèm trước khi tải xuống.** Thêm `AttachmentPreviewDialog.tsx` (modal full-screen, mirror `WorkflowRequestPrintView.tsx`) — gọi lại đúng endpoint `GET .../attachments/{id}/download` sẵn có (không thêm BE), dựng `Blob` thành `<img>` (ảnh) hoặc `<iframe>` (PDF, trình duyệt tự render); loại file khác (docx/xlsx…) hiện thông báo "không hỗ trợ xem trước, tải xuống để xem" — cố tình KHÔNG kéo thêm thư viện đọc docx/xlsx phía client. Nút "Tải xuống" trong dialog dùng lại `Blob` đã tải sẵn (không gọi API lần 2). Nút mắt (Eye) mới thêm cạnh nút Tải xuống ở mỗi dòng đính kèm trong `WorkflowRequestDetail.tsx`. |

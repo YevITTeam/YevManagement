@@ -13,7 +13,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers()
     .AddApplicationPart(typeof(Identity.Api.AssemblyReference).Assembly)
     .AddApplicationPart(typeof(Asset.Api.AssemblyReference).Assembly)
-    .AddApplicationPart(typeof(Attendance.Api.AssemblyReference).Assembly);
+    .AddApplicationPart(typeof(Attendance.Api.AssemblyReference).Assembly)
+    .AddApplicationPart(typeof(Workflow.Api.AssemblyReference).Assembly);
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi(options =>

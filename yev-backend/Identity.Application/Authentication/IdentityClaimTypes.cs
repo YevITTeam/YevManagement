@@ -17,6 +17,14 @@ namespace Identity.Application.Authentication
         public const string DeviceName = "DeviceName";
         public const string IpAddress = "IpAddress";
 
+        // Numeric Identity.Users.Id, added 2026-08-25 so other modules (starting with Workflow —
+        // Workflow.Domain.Entities.Employee.UserId, workflow-module.md §1.4) can resolve "which
+        // Employee row is the current logged-in user" without a username/email match. Before this,
+        // no claim carried the numeric id at all — every module only had the Windows username string
+        // (ClaimTypes.Name). Safe to add: existing JWTs without this claim keep working, they just
+        // can't resolve a current Employee until the holder re-logs in and gets a fresh token.
+        public const string UserId = "UserId";
+
         // Marks a principal whose Role/Permission claims were already loaded from the DB during the
         // current request. Must NEVER be written into the JWT: if it were, the next Bearer request
         // would short-circuit MyClaimsTransformation and keep running on the stale snapshot.

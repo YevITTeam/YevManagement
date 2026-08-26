@@ -162,6 +162,8 @@ namespace Identity.Infrastructure.Authentication
                     }
                 }
 
+                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.UserId, user.Id.ToString()));
+
                 if (!string.IsNullOrEmpty(user.FullName))
                 {
                     dbIdentity.AddClaim(new Claim(IdentityClaimTypes.FullName, user.FullName));

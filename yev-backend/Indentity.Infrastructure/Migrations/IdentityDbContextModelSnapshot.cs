@@ -47,7 +47,7 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("LoginUserIPs");
+                    b.ToTable("LoginUserIPs", (string)null);
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.Permission", b =>
@@ -77,7 +77,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Permissions");
+                    b.ToTable("Permissions", (string)null);
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.Role", b =>
@@ -101,7 +101,7 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Roles");
+                    b.ToTable("Roles", (string)null);
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.User", b =>
@@ -133,7 +133,7 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.UserPermission", b =>
@@ -156,7 +156,7 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasIndex("PermissionId");
 
-                    b.ToTable("UserPermissions");
+                    b.ToTable("UserPermissions", (string)null);
                 });
 
             modelBuilder.Entity("RolePermission", b =>

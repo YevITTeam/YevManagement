@@ -321,6 +321,31 @@ export const postFormForBlob = async (
   return { blob, fileName, headers: response.headers };
 };
 
+// GET nhận về Blob thay vì JSON — dùng cho endpoint tải file đính kèm (vd GET
+// /WorkflowRequest/attachments/{id}/download, BE trả bằng PhysicalFile(...)). Lỗi xử lý y hệt
+// `postFormForBlob`, chỉ khác method.
+export const getForBlob = async (url: string, options?: RequestInit): Promise<BlobDownloadResult> => {
+  const response = await fetchWithAuth(url, { ...options, method: "GET" });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      persistToken(null);
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    const payload = contentType.includes("application/json")
+      ? await response.json().catch(() => null)
+      : await response.text().catch(() => "");
+    const errorBody = typeof payload === "string" ? payload : JSON.stringify(payload ?? {});
+    throw new Error(errorBody || `API Error: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const fileName = extractFileNameFromContentDisposition(response.headers.get("content-disposition"));
+
+  return { blob, fileName, headers: response.headers };
+};
+
 // Cho phép tầng trên biết ĐÃ có phiên đăng nhập hay chưa để chọn cách lấy hồ sơ user: còn token thì
 // gọi `GET /Auth/me` (Bearer, âm thầm), chưa có mới phải `windows-login` (Negotiate → có thể bị trình
 // duyệt hỏi tài khoản domain). Chỉ trả về sự hiện diện của token, không dùng để đọc/parse nội dung JWT.

@@ -16,6 +16,12 @@
     <Project Path="Attendance.Domain/Attendance.Domain.csproj" Id="4736d01b-6551-4d03-8b6b-14567a99e8f9" />
     <Project Path="Attendance.Infrastructure/Attendance.Infrastructure.csproj" Id="0f007f42-2c16-4ee3-998b-b7856ef2cd84" />
   </Folder>
+  <Folder Name="/src/modules/Workflow/">
+    <Project Path="Workflow.Api/Workflow.Api.csproj" />
+    <Project Path="Workflow.Application/Workflow.Application.csproj" />
+    <Project Path="Workflow.Domain/Workflow.Domain.csproj" />
+    <Project Path="Workflow.Infrastructure/Workflow.Infrastructure.csproj" />
+  </Folder>
   <Folder Name="/src/modules/Identity/">
     <Project Path="Identity.Api/Identity.Api.csproj" Id="9ec7d7fe-6ba5-427e-93ec-2117c9c24807" />
     <Project Path="Identity.Application/Identity.Application.csproj" Id="8f61bcbf-6abe-4f14-9f61-6867bcd92715" />

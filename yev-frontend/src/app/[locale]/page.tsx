@@ -1,6 +1,6 @@
 "use client";
 
-import { Cpu, FileText, Notebook, CalendarClock, MessagesSquare } from "lucide-react";
+import { Cpu, FileText, Notebook, CalendarClock, MessagesSquare, Network } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -13,6 +13,8 @@ export default function Home() {
   const canManagePc = !isLoading && hasModuleAccess(user, "Asset");
   // Chỉ hiện mục "Quản lý tăng ca" nếu user có ít nhất 1 permission module Attendance
   const canManageOt = !isLoading && hasModuleAccess(user, "Attendance");
+  // Chỉ hiện mục "Workflow" nếu user có ít nhất 1 permission module Workflow (Pha 1: tổ chức + nhân sự)
+  const canManageWorkflow = !isLoading && hasModuleAccess(user, "Workflow");
 
   const menuItems = [
     {
@@ -35,6 +37,13 @@ export default function Home() {
       link: "/ot",
       icon: <Notebook className="w-8 h-8" />,
       visible: canManageOt,
+    },
+    {
+      title: t("workflowTitle"),
+      desc: t("workflowDesc"),
+      link: "/workflow",
+      icon: <Network className="w-8 h-8" />,
+      visible: canManageWorkflow,
     },
     {
       title: t("contractsTitle"),
