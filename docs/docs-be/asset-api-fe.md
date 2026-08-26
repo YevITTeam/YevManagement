@@ -2,7 +2,7 @@
 
 > Hợp đồng API quản lý Thiết bị/PC. Implementation: [asset-module.md](asset-module.md).
 
-- **Base URL (Dev)**: `http://10.45.1.155:8080` (theo `CompanySystem.HostApi/Properties/launchSettings.json` — đây là nguồn chuẩn; giá trị cũ `http://localhost:5000` đã không còn dùng) · Scalar UI `/scalar/v1`.
+- **Base URL (Dev)**: `http://10.45.1.155:8081` (theo `CompanySystem.HostApi/Properties/launchSettings.json` — đây là nguồn chuẩn; giá trị cũ `http://localhost:5000` đã không còn dùng, port đổi từ `8080` ngày 2026-08-26) · Scalar UI `/scalar/v1`.
 - **Auth**: mọi endpoint cần `Authorization: Bearer <token>` (từ `windows-login`, xem [identity-api-fe.md](identity-api-fe.md)) **và** permission tương ứng (vd `Asset.Device.View`). Thiếu token→401, thiếu permission→403. FE dựa `user.permissions` ẩn/hiện nút.
 - **Content-Type**: `application/json` cho request có body.
 

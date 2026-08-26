@@ -8,9 +8,18 @@
 > Đây là tính năng **song song** với [ai-chat-be-huong-dan.md](ai-chat-be-huong-dan.md) (AI Chat của
 > Asset — các tool tra cứu, chỉ đọc) chứ **không phải** mở rộng của tính năng đó — 2 endpoint, 2
 > permission, 2 orchestrator, 2 system prompt hoàn toàn tách biệt, chỉ dùng chung phần hạ tầng gọi
-> Ollama (§1). Lý do tách hoàn toàn: (1) giữ đúng ranh giới module Clean Architecture (Asset không
-> được biết Attendance và ngược lại — CLAUDE.md §3.2); (2) đây là **tool ghi dữ liệu đầu tiên** của
-> toàn bộ tính năng AI Chat, cần cô lập rủi ro khỏi các tool đọc-only của Asset đang ổn định.
+> LLM server (§1, `ILlmChatClient`/`LmStudioChatClient`). Lý do tách hoàn toàn: (1) giữ đúng ranh giới
+> module Clean Architecture (Asset không được biết Attendance và ngược lại — CLAUDE.md §3.2); (2) đây
+> là **tool ghi dữ liệu đầu tiên** của toàn bộ tính năng AI Chat, cần cô lập rủi ro khỏi các tool
+> đọc-only của Asset đang ổn định.
+>
+> **Cập nhật 2026-08-24**: hạ tầng dùng chung (`ILlmChatClient`) đã chuyển từ Ollama sang LM Studio —
+> chi tiết giao thức + 🔴 **BLOCKER thật đang chặn cả tính năng này** (mọi request kèm `tools` treo
+> ~5 phút rồi lỗi `"Engine protocol predict request failed: fetch failed"`, xác nhận là vấn đề phía
+> server LM Studio chứ không phải code, xem cách cô lập bằng `curl` trực tiếp) ghi ở
+> [ai-chat-be-huong-dan.md](ai-chat-be-huong-dan.md) (đầu file, mục cập nhật 2026-08-24) — vì tool
+> `create_ot_form_draft` + các tool tra cứu khác của module này cũng đi qua đúng client đó nên bị chặn
+> y hệt, chưa test riêng nhưng không có lý do gì khác đi.
 
 ## 0. Vì sao đây không phải "thêm 1 tool" đơn giản
 

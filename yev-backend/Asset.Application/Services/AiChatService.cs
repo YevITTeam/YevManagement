@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Asset.Application.Dtos.AiChat;
 using Asset.Application.Interfaces.Service;
@@ -9,8 +10,9 @@ using Shared.Application.Interfaces.External;
 
 namespace Asset.Application.Services
 {
-    // Orchestrates 1 chat turn against Ollama with tool-calling (docs/ai-chat-be-huong-dan.md §4):
-    // stream Ollama's answer, execute any tool the model asks for by calling straight into internal
+    // Orchestrates 1 chat turn against the LLM server with tool-calling (docs/ai-chat-be-huong-dan.md
+    // §4; server was Ollama until 2026-08-24, now LM Studio — see LmStudioChatClient): stream the
+    // model's answer, execute any tool the model asks for by calling straight into internal
     // Application services (AiChatToolExecutorService), feed the result back, repeat up to
     // MaxToolRounds times. Stateless — the FE resends the whole history every turn, nothing is
     // persisted server-side.
@@ -118,16 +120,16 @@ namespace Asset.Application.Services
             @"(sẽ\s+(thực hiện|tra cứu|kiểm tra|gọi)|ngay bây giờ|trong giây lát|xin chờ|để tôi\s+(kiểm tra|tra cứu))",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        private readonly IOllamaChatClient _ollamaChatClient;
+        private readonly ILlmChatClient _llmChatClient;
         private readonly IAiChatToolExecutorService _toolExecutor;
         private readonly IConfiguration _configuration;
 
         public AiChatService(
-            IOllamaChatClient ollamaChatClient,
+            ILlmChatClient llmChatClient,
             IAiChatToolExecutorService toolExecutor,
             IConfiguration configuration)
         {
-            _ollamaChatClient = ollamaChatClient;
+            _llmChatClient = llmChatClient;
             _toolExecutor = toolExecutor;
             _configuration = configuration;
         }
@@ -151,7 +153,7 @@ namespace Asset.Application.Services
             const int MaxPromiseRetries = 2;
             var promiseRetriesUsed = 0;
 
-            var messages = new List<OllamaMessageWire>
+            var messages = new List<ChatMessageWire>
             {
                 new()
                 {
@@ -162,7 +164,7 @@ namespace Asset.Application.Services
                 }
             };
             foreach (var historyMessage in request.History)
-                messages.Add(new OllamaMessageWire { Role = historyMessage.Role, Content = historyMessage.Content });
+                messages.Add(new ChatMessageWire { Role = historyMessage.Role, Content = historyMessage.Content });
 
             // Guard against a reproduced small-model failure mode (docs §14): "tool" messages are never
             // persisted/resent by the FE (AiChatMessageDto only has user/assistant), so if a PAST turn's
@@ -177,7 +179,7 @@ namespace Asset.Application.Services
                 lastHistoryMessage.Role == "assistant" &&
                 UnfulfilledPromisePattern.IsMatch(lastHistoryMessage.Content ?? ""))
             {
-                messages.Add(new OllamaMessageWire
+                messages.Add(new ChatMessageWire
                 {
                     Role = "system",
                     Content = "LƯU Ý HỆ THỐNG: tin nhắn trợ lý ngay phía trên có nhắc sẽ tra cứu/kiểm tra " +
@@ -200,24 +202,24 @@ namespace Asset.Application.Services
             if (string.IsNullOrWhiteSpace(request.SystemPrompt) &&
                 string.Equals(request.Locale, "ja", StringComparison.OrdinalIgnoreCase))
             {
-                messages.Add(new OllamaMessageWire
+                messages.Add(new ChatMessageWire
                 {
                     Role = "system",
                     Content = "重要: 次の返信は必ず日本語で書いてください。ベトナム語や英語は一切使用しないでください。"
                 });
             }
 
-            messages.Add(new OllamaMessageWire { Role = "user", Content = request.Message });
+            messages.Add(new ChatMessageWire { Role = "user", Content = request.Message });
 
             for (var round = 0; round < maxRounds; round++)
             {
                 var contentBuilder = new StringBuilder();
-                List<OllamaToolCallWire>? toolCalls = null;
+                List<ChatToolCallWire>? toolCalls = null;
                 AiChatStreamEventDto? streamError = null;
 
                 // DeepClone() is mandatory — AiChatToolDefinitions.Tools is a shared static node and a
-                // JsonNode can only ever be attached to 1 parent (see IOllamaChatClient's remark).
-                var enumerator = _ollamaChatClient
+                // JsonNode can only ever be attached to 1 parent (see ILlmChatClient's remark).
+                var enumerator = _llmChatClient
                     .StreamChatAsync(messages, AiChatToolDefinitions.Tools.DeepClone(), think, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
                 try
@@ -275,7 +277,7 @@ namespace Asset.Application.Services
 
                 if (toolCalls == null || toolCalls.Count == 0)
                 {
-                    messages.Add(new OllamaMessageWire { Role = "assistant", Content = text });
+                    messages.Add(new ChatMessageWire { Role = "assistant", Content = text });
 
                     // Same-turn version of the cross-turn guard above: don't hand control back to the
                     // user on a bare promise — the model has already proven (in production use) that it
@@ -285,7 +287,7 @@ namespace Asset.Application.Services
                     if (UnfulfilledPromisePattern.IsMatch(text) && promiseRetriesUsed < MaxPromiseRetries && round < maxRounds - 1)
                     {
                         promiseRetriesUsed++;
-                        messages.Add(new OllamaMessageWire
+                        messages.Add(new ChatMessageWire
                         {
                             Role = "system",
                             Content = "LƯU Ý HỆ THỐNG: câu trả lời bạn vừa viết chỉ là lời hứa ('sẽ tra cứu', " +
@@ -300,7 +302,7 @@ namespace Asset.Application.Services
                     yield break;
                 }
 
-                messages.Add(new OllamaMessageWire { Role = "assistant", Content = text, ToolCalls = toolCalls });
+                messages.Add(new ChatMessageWire { Role = "assistant", Content = text, ToolCalls = toolCalls });
 
                 foreach (var call in toolCalls)
                 {
@@ -309,7 +311,13 @@ namespace Asset.Application.Services
                     AiChatToolExecutionResult toolResult;
                     try
                     {
-                        toolResult = await _toolExecutor.ExecuteAsync(call.Function.Name, call.Function.Arguments, cancellationToken);
+                        // LM Studio sends `arguments` as a JSON-ENCODED STRING (OpenAI wire format),
+                        // unlike Ollama which sent a JSON object — parse it into the JsonElement shape
+                        // AiChatToolExecutorService already expects, so the 7 tool implementations
+                        // there needed no change for the Ollama->LM Studio migration (2026-08-24).
+                        var argumentsJson = string.IsNullOrWhiteSpace(call.Function.Arguments) ? "{}" : call.Function.Arguments;
+                        using var argumentsDoc = JsonDocument.Parse(argumentsJson);
+                        toolResult = await _toolExecutor.ExecuteAsync(call.Function.Name, argumentsDoc.RootElement, cancellationToken);
                     }
                     catch (Exception ex)
                     {
@@ -318,10 +326,12 @@ namespace Asset.Application.Services
                         toolResult = new AiChatToolExecutionResult { Json = $"{{\"error\":\"Lỗi khi thực thi tool: {ex.Message}\"}}" };
                     }
 
-                    messages.Add(new OllamaMessageWire { Role = "tool", Content = toolResult.Json });
+                    // ToolCallId echoes call.Id back per the OpenAI Chat Completions spec (docs §9) —
+                    // required by LM Studio's wire format, unused/ignored under Ollama's old shape.
+                    messages.Add(new ChatMessageWire { Role = "tool", Content = toolResult.Json, ToolCallId = call.Id });
 
                     // Device deep-link buttons (§11) — pure FE metadata, never part of the message
-                    // history sent back to Ollama.
+                    // history sent back to the model.
                     foreach (var deviceRef in toolResult.DeviceReferences)
                     {
                         if (emittedDeviceIds.Add(deviceRef.Id))

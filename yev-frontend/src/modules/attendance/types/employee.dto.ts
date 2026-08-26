@@ -14,6 +14,7 @@ export interface EmployeeDto {
     // Lũy kế DỰ KIẾN = thực tế + các đơn khác đang chờ duyệt (chưa Completed/Rejected) của người này
     // (2026-08-06) — dùng cảnh báo hạn mức lúc TẠO đơn mới thay cho monthToDate/yearToDate. CHỈ có ý
     // nghĩa khi lấy từ getEmployeesByGroup (scope theo ngày trên đơn đang tạo) — nơi khác trả về 0.
+    projectedDayToDate: number;
     projectedMonthToDate: number;
     projectedYearToDate: number;
     // Nullable (2026-08-08): Trưởng phòng dùng departmentId thay vì groupId (không thuộc Bộ phận cụ
@@ -27,4 +28,10 @@ export interface EmployeeDto {
     // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán (xem docs/attendance-api-fe.md §Cây chức vụ).
     jobTitleId: number | null;
     jobTitleName: string | null;
+
+    // Giới hạn giờ OT/tháng/năm RIÊNG cho người này — null = dùng mặc định chung
+    // (AttendanceSettingDto.monthlyOtHourLimit/yearlyOtHourLimit). Không có Ngày riêng — Ngày luôn dùng
+    // chung 1 mốc cho mọi người (2026-08-26).
+    customMonthlyOtHourLimit: number | null;
+    customYearlyOtHourLimit: number | null;
 }

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Attendance.Application.Dtos.AiChat;
 using Attendance.Application.Interfaces.Service;
@@ -9,7 +10,7 @@ using Shared.Application.Interfaces.External;
 
 namespace Attendance.Application.Services
 {
-    // Orchestrates 1 chat turn against Ollama with tool-calling for OT-form creation (mirrors Asset's
+    // Orchestrates 1 chat turn against the LLM server with tool-calling for OT-form creation (mirrors Asset's
     // AiChatService — docs/docs-be/ai-chat-be-huong-dan.md §4/§14, adapted here in
     // docs/docs-be/attendance-aichat-be-huong-dan.md). Stateless — the FE resends the whole history
     // every turn, nothing is persisted server-side. Unlike Asset's version, this feature has exactly 1
@@ -95,16 +96,16 @@ namespace Attendance.Application.Services
             @"^\s*(đồng ý|dong y|xác nhận|xac nhan|ok(ay)?|được|duoc|tạo đi|tao di|yes|confirm)\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        private readonly IOllamaChatClient _ollamaChatClient;
+        private readonly ILlmChatClient _llmChatClient;
         private readonly IAttendanceAiChatToolExecutorService _toolExecutor;
         private readonly IConfiguration _configuration;
 
         public AttendanceAiChatService(
-            IOllamaChatClient ollamaChatClient,
+            ILlmChatClient llmChatClient,
             IAttendanceAiChatToolExecutorService toolExecutor,
             IConfiguration configuration)
         {
-            _ollamaChatClient = ollamaChatClient;
+            _llmChatClient = llmChatClient;
             _toolExecutor = toolExecutor;
             _configuration = configuration;
         }
@@ -128,7 +129,7 @@ namespace Attendance.Application.Services
             const int MaxPromiseRetries = 2;
             var promiseRetriesUsed = 0;
 
-            var messages = new List<OllamaMessageWire>
+            var messages = new List<ChatMessageWire>
             {
                 new()
                 {
@@ -143,9 +144,9 @@ namespace Attendance.Application.Services
             // rather than relying on history is deliberate: the FE only resends user/assistant
             // messages, so nothing else carries earlier lookups into this turn.
             var referenceContext = await _toolExecutor.BuildReferenceContextAsync(caller, cancellationToken);
-            messages.Add(new OllamaMessageWire { Role = "system", Content = referenceContext });
+            messages.Add(new ChatMessageWire { Role = "system", Content = referenceContext });
             foreach (var historyMessage in request.History)
-                messages.Add(new OllamaMessageWire { Role = historyMessage.Role, Content = historyMessage.Content });
+                messages.Add(new ChatMessageWire { Role = historyMessage.Role, Content = historyMessage.Content });
 
             // Same unfulfilled-promise guard as Asset's AiChatService (docs §14) — "tool" messages are
             // never persisted/resent by the FE, so if a PAST turn's assistant reply was just a promise
@@ -156,7 +157,7 @@ namespace Attendance.Application.Services
                 lastHistoryMessage.Role == "assistant" &&
                 UnfulfilledPromisePattern.IsMatch(lastHistoryMessage.Content ?? ""))
             {
-                messages.Add(new OllamaMessageWire
+                messages.Add(new ChatMessageWire
                 {
                     Role = "system",
                     Content = "LƯU Ý HỆ THỐNG: tin nhắn trợ lý ngay phía trên có nhắc sẽ thực hiện/tạo đơn " +
@@ -167,17 +168,17 @@ namespace Attendance.Application.Services
                 });
             }
 
-            messages.Add(new OllamaMessageWire { Role = "user", Content = request.Message });
+            messages.Add(new ChatMessageWire { Role = "user", Content = request.Message });
 
             for (var round = 0; round < maxRounds; round++)
             {
                 var contentBuilder = new StringBuilder();
-                List<OllamaToolCallWire>? toolCalls = null;
+                List<ChatToolCallWire>? toolCalls = null;
                 AttendanceAiChatStreamEventDto? streamError = null;
 
                 // DeepClone() is mandatory — AttendanceAiChatToolDefinitions.Tools is a shared static
                 // node and a JsonNode can only ever be attached to 1 parent.
-                var enumerator = _ollamaChatClient
+                var enumerator = _llmChatClient
                     .StreamChatAsync(messages, AttendanceAiChatToolDefinitions.Tools.DeepClone(), think, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
                 try
@@ -227,7 +228,7 @@ namespace Attendance.Application.Services
 
                 if (toolCalls == null || toolCalls.Count == 0)
                 {
-                    messages.Add(new OllamaMessageWire { Role = "assistant", Content = text });
+                    messages.Add(new ChatMessageWire { Role = "assistant", Content = text });
 
                     // Same-turn version of the cross-turn guard above: don't hand control back to the
                     // user on a bare promise — the model has already proven (in production use) that it
@@ -237,7 +238,7 @@ namespace Attendance.Application.Services
                     if (UnfulfilledPromisePattern.IsMatch(text) && promiseRetriesUsed < MaxPromiseRetries && round < maxRounds - 1)
                     {
                         promiseRetriesUsed++;
-                        messages.Add(new OllamaMessageWire
+                        messages.Add(new ChatMessageWire
                         {
                             Role = "system",
                             Content = "LƯU Ý HỆ THỐNG: câu trả lời bạn vừa viết chỉ là lời hứa ('sẽ tra cứu', " +
@@ -252,7 +253,7 @@ namespace Attendance.Application.Services
                     yield break;
                 }
 
-                messages.Add(new OllamaMessageWire { Role = "assistant", Content = text, ToolCalls = toolCalls });
+                messages.Add(new ChatMessageWire { Role = "assistant", Content = text, ToolCalls = toolCalls });
 
                 foreach (var call in toolCalls)
                 {
@@ -280,7 +281,14 @@ namespace Attendance.Application.Services
                     {
                         try
                         {
-                            toolResult = await _toolExecutor.ExecuteAsync(call.Function.Name, call.Function.Arguments, caller, cancellationToken);
+                            // LM Studio sends `arguments` as a JSON-ENCODED STRING (OpenAI wire
+                            // format), unlike Ollama which sent a JSON object — parse it into the
+                            // JsonElement shape AttendanceAiChatToolExecutorService already expects, so
+                            // its tool implementations needed no change for the Ollama->LM Studio
+                            // migration (2026-08-24).
+                            var argumentsJson = string.IsNullOrWhiteSpace(call.Function.Arguments) ? "{}" : call.Function.Arguments;
+                            using var argumentsDoc = JsonDocument.Parse(argumentsJson);
+                            toolResult = await _toolExecutor.ExecuteAsync(call.Function.Name, argumentsDoc.RootElement, caller, cancellationToken);
                         }
                         catch (Exception ex)
                         {
@@ -290,10 +298,12 @@ namespace Attendance.Application.Services
                         }
                     }
 
-                    messages.Add(new OllamaMessageWire { Role = "tool", Content = toolResult.Json });
+                    // ToolCallId echoes call.Id back per the OpenAI Chat Completions spec (see Asset's
+                    // AiChatService for the full rationale) — required by LM Studio's wire format.
+                    messages.Add(new ChatMessageWire { Role = "tool", Content = toolResult.Json, ToolCallId = call.Id });
 
                     // Deep-link button for the FE (§C) — pure metadata, never part of the message
-                    // history sent back to Ollama.
+                    // history sent back to the model.
                     if (toolResult.CreatedOtFormId != null && emittedOtFormId == null)
                     {
                         emittedOtFormId = toolResult.CreatedOtFormId;

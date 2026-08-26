@@ -11,7 +11,7 @@ import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
 import { approvalActionLabels, otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
-import { calculateHours, formatHours } from "@/modules/attendance/lib/time";
+import { formatHours } from "@/modules/attendance/lib/time";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -19,6 +19,7 @@ import { useRouter, getPathname } from "@/navigation";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import AccumulationHistoryModal from "@/modules/attendance/components/employees/AccumulationHistoryModal";
+import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
 
 interface OtFormDetailProps {
     id: number;
@@ -317,10 +318,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // Người đã bị loại khỏi đơn KHÔNG tính vào tổng giờ OT — họ không còn nằm trong đơn được duyệt
     // (docs §4.5a). Vẫn hiện dòng của họ trong bảng bên dưới để giữ dấu vết ai loại/khi nào/vì sao.
     const activeEmployees = form.employees.filter((employee) => !employee.isRemoved);
-    const totalWorkedHours = activeEmployees.reduce(
-        (sum, employee) => sum + calculateHours(employee.startTime, employee.endTime),
-        0
-    );
+    const totalWorkedHours = activeEmployees.reduce((sum, employee) => sum + employee.actualHours, 0);
 
     return (
         <div className="space-y-6">
@@ -561,7 +559,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
                                 const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
                                 const isOverLimit = isMonthOverLimit || isYearOverLimit;
-                                const hours = calculateHours(employee.startTime, employee.endTime);
+                                const hours = employee.actualHours;
                                 // Đã bị loại khỏi đơn (docs §4.5a) — vẫn hiện dòng để giữ dấu vết, nhưng
                                 // làm mờ + gạch ngang, thay toàn bộ cột số liệu bằng lý do/người loại.
                                 if (employee.isRemoved) {
@@ -627,19 +625,11 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                 )}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-3 text-center text-sm text-[#5e3f3a]">
-                                            {employee.isEligibleForMeal ? (
-                                                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50">
-                                                    <Check size={14} className="text-emerald-600" />
-                                                </span>
-                                            ) : (
-                                                <span className="text-[#9aa0a6]">—</span>
-                                            )}
+                                        <td className="px-6 py-3 text-center text-sm">
+                                            <MealTicketTypeBadge type={employee.mealTicketType} t={t} />
                                         </td>
                                         <td className="px-6 py-3 text-center text-sm">
-                                            {!employee.isEligibleForMeal ? (
-                                                <span className="text-[#9aa0a6]">—</span>
-                                            ) : employee.didEat ? (
+                                            {employee.didEat ? (
                                                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                                                     <Check size={12} /> {t("didEatYes")}
                                                 </span>

@@ -17,11 +17,25 @@ namespace Attendance.Application.Dtos.OtForms
         public decimal MonthToDate { get; set; }
         public decimal YearToDate { get; set; }
 
-        // Only eligible for a meal ticket when actual OT hours (EndTime - StartTime) > 2 hours —
-        // precomputed so the FE doesn't have to subtract the times itself (see docs/attendance-module.md).
-        public bool IsEligibleForMeal { get; set; }
+        // Giới hạn giờ OT/tháng/năm RIÊNG của nhân viên này TẠI THỜI ĐIỂM ĐỌC (live, KHÔNG snapshot
+        // như MonthToDate/YearToDate ở trên) — null = dùng mặc định chung. Mirror
+        // EmployeeDto.CustomMonthlyOtHourLimit/CustomYearlyOtHourLimit (2026-08-26), dùng để FE tô đỏ
+        // cảnh báo đúng theo mốc riêng của người này ở màn Sửa đơn.
+        public decimal? CustomMonthlyOtHourLimit { get; set; }
+        public decimal? CustomYearlyOtHourLimit { get; set; }
 
-        // Có ăn hay không (chỉ có ý nghĩa khi IsEligibleForMeal=true) — xem OtFormEmployee.DidEat.
+        // Loại phiếu ăn (0=None/1=Secondary/2=Main, xem Attendance.Domain.Enums.MealTicketType) —
+        // precomputed theo AttendanceSetting hiện hành, thay cho IsEligibleForMeal cũ (redesign 3 bậc
+        // 2026-08-26, xem OtFormService.CalculateMealTicketType).
+        public int MealTicketType { get; set; }
+
+        // Giờ OT thực tính (2026-08-26) — raw (EndTime-StartTime), trừ MealBreakDeductionHours nếu
+        // DidEat=true (trừ ca khớp đúng khung sớm — không bao giờ trừ). Đây là số DUY NHẤT nên
+        // hiển thị/cộng làm "giờ OT của người này" — xem OtFormService.CalculateOtHours.
+        public decimal ActualHours { get; set; }
+
+        // Có ăn hay không — xem OtFormEmployee.DidEat. Vẫn ảnh hưởng ActualHours/MealTicketType bất kể
+        // giá trị nào, TRỪ ca khớp đúng khung sớm (luôn bỏ qua DidEat).
         public bool DidEat { get; set; }
 
         // Dropped from the form by an approver (see docs/attendance-module.md — Loại nhân viên khỏi đơn).
@@ -35,5 +49,13 @@ namespace Attendance.Application.Dtos.OtForms
         public int? RemovedAtLevel { get; set; }
         public DateTime? RemovedAt { get; set; }
         public string? RemoveReason { get; set; }
+
+        // Snapshot ProductionEmployee lúc thêm vào đơn — chỉ có giá trị khi OtForm.IsProductionForm =
+        // true (đơn "theo chuyền"), null cho đơn "theo Nhóm" — xem OtFormEmployee.CongDoanSnapshot.
+        public string? CongDoanSnapshot { get; set; }
+        public string? TaskNameSnapshot { get; set; }
+        public string? BlockCodeSnapshot { get; set; }
+        public string? TeamCodeSnapshot { get; set; }
+        public string? ShiftTeamCodeSnapshot { get; set; }
     }
 }

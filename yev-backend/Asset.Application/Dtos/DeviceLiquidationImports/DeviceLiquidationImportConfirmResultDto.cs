@@ -14,9 +14,10 @@ namespace Asset.Application.Dtos.DeviceLiquidationImports
         public int LiquidatedCount { get; set; }
         public List<int> LiquidatedDeviceIds { get; set; } = new();
 
-        // How many IPs were freed / emails hidden as a side effect of liquidation (a liquidated device
-        // is treated as no longer in use — same cleanup as deleting one).
+        // How many IPs were freed / emails hidden / installed Software uninstalled as a side effect of
+        // liquidation (a liquidated device is treated as no longer in use — same cleanup as deleting one).
         public int ReleasedIpCount { get; set; }
+        public int ReleasedSoftwareCount { get; set; }
 
         public int SkippedCount { get; set; }
         public List<DeviceLiquidationImportSkippedRowDto> SkippedRows { get; set; } = new();

@@ -47,6 +47,10 @@ export interface CreateUpdateEmployeeDto {
     groupId: number | null;
     departmentId: number | null;
     jobTitleId?: number | null;
+    // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — null = dùng mặc định chung (2026-08-26, xem
+    // EmployeeForm.tsx).
+    customMonthlyOtHourLimit: number | null;
+    customYearlyOtHourLimit: number | null;
 }
 
 export const EmployeeApi = {

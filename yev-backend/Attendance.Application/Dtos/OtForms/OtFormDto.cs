@@ -3,9 +3,13 @@ namespace Attendance.Application.Dtos.OtForms
     public class OtFormDto
     {
         public int Id { get; set; }
-        public int GroupId { get; set; }
-        public string GroupNameVn { get; set; } = null!;
+
+        // Null khi IsProductionForm = true (đơn "theo chuyền") — xem OtForm.GroupId.
+        public int? GroupId { get; set; }
+        public string? GroupNameVn { get; set; }
         public string? GroupNameJp { get; set; }
+
+        public bool IsProductionForm { get; set; }
         public int DepartmentId { get; set; }
         public string DepartmentNameVn { get; set; } = null!;
         public string? DepartmentNameJp { get; set; }

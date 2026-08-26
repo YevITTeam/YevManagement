@@ -21,7 +21,8 @@ import {
     removedByLabelBilingual,
     removedReasonLabelBilingual,
 } from "@/modules/attendance/lib/bilingual";
-import { calculateHours, formatHours } from "@/modules/attendance/lib/time";
+import { formatHours } from "@/modules/attendance/lib/time";
+import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
 
 function formatDate(value: string) {
     if (!value) return "-";
@@ -264,10 +265,7 @@ export default function OtFormEmailConfirmPage() {
     // email — kênh email KHÔNG có hành động "Loại khỏi đơn" (chỉ có ở trong app), nhưng vẫn phải phản
     // ánh đúng trạng thái đơn hiện tại nếu việc loại người đã xảy ra trước đó qua app.
     const activeEmployees = form.employees.filter((employee) => !employee.isRemoved);
-    const totalWorkedHours = activeEmployees.reduce(
-        (sum, employee) => sum + calculateHours(employee.startTime, employee.endTime),
-        0
-    );
+    const totalWorkedHours = activeEmployees.reduce((sum, employee) => sum + employee.actualHours, 0);
 
     return (
         // max-w-[1600px] — trang này là route public độc lập (xac-nhan-don/page.tsx), KHÔNG nằm
@@ -513,7 +511,7 @@ export default function OtFormEmailConfirmPage() {
                                 const isMonthOverLimit = employee.monthToDate > DEFAULT_ATTENDANCE_SETTING.monthlyOtHourLimit;
                                 const isYearOverLimit = employee.yearToDate > DEFAULT_ATTENDANCE_SETTING.yearlyOtHourLimit;
                                 const isOverLimit = isMonthOverLimit || isYearOverLimit;
-                                const hours = calculateHours(employee.startTime, employee.endTime);
+                                const hours = employee.actualHours;
                                 return (
                                     <tr
                                         key={employee.employeeId}
@@ -541,19 +539,11 @@ export default function OtFormEmailConfirmPage() {
                                         <td className={`px-6 py-3 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                             {employee.yearToDate}h
                                         </td>
-                                        <td className="px-6 py-3 text-center text-sm text-[#5e3f3a]">
-                                            {employee.isEligibleForMeal ? (
-                                                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50">
-                                                    <Check size={14} className="text-emerald-600" />
-                                                </span>
-                                            ) : (
-                                                <span className="text-[#9aa0a6]">—</span>
-                                            )}
+                                        <td className="px-6 py-3 text-center text-sm">
+                                            <MealTicketTypeBadge type={employee.mealTicketType} t={t} />
                                         </td>
                                         <td className="px-6 py-3 text-center text-sm">
-                                            {!employee.isEligibleForMeal ? (
-                                                <span className="text-[#9aa0a6]">—</span>
-                                            ) : employee.didEat ? (
+                                            {employee.didEat ? (
                                                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                                                     <Check size={12} /> {t("didEatYes")}
                                                 </span>

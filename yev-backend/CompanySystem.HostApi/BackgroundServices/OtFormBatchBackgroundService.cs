@@ -31,7 +31,18 @@ namespace CompanySystem.HostApi.BackgroundServices
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                var delay = await GetDelayUntilNextRunAsync();
+                TimeSpan delay;
+                try
+                {
+                    delay = await GetDelayUntilNextRunAsync();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Host đang shutdown ngay đúng lúc vòng lặp mới bắt đầu — root IServiceProvider đã
+                    // bị dispose trước khi kịp check stoppingToken. Coi như tín hiệu dừng, không phải lỗi.
+                    break;
+                }
+
                 try
                 {
                     await Task.Delay(delay, stoppingToken);

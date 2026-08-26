@@ -14,9 +14,15 @@ import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 interface DeviceSoftwarePanelProps {
     deviceId: number;
+    deviceStatus: number;
     softwares: DeviceSoftwareDeviceDto[];
     onChanged: () => void;
 }
+
+// Trạng thái Device không cho cài thêm phần mềm — khớp DeviceStatusExtensions.IsLiquidationStatus ở BE
+// (2 = PendingLiquidation, 3 = Liquidated). Máy ở 2 trạng thái này bị DeviceService tự gỡ hết phần
+// mềm mỗi lần Save, nên chặn thêm mới ngay từ đây để tránh cài xong lại mất.
+const LIQUIDATION_STATUSES = new Set([2, 3]);
 
 const PRIORITY_FILTER_ALL = "all";
 const PRIORITY_FILTER_NONE = "none";
@@ -36,8 +42,9 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-export default function DeviceSoftwarePanel({ deviceId, softwares, onChanged }: DeviceSoftwarePanelProps) {
+export default function DeviceSoftwarePanel({ deviceId, deviceStatus, softwares, onChanged }: DeviceSoftwarePanelProps) {
     const [pickerOpen, setPickerOpen] = useState(false);
+    const canInstall = !LIQUIDATION_STATUSES.has(deviceStatus);
 
     const [editingItem, setEditingItem] = useState<DeviceSoftwareDeviceDto | null>(null);
     const [editLicenseKey, setEditLicenseKey] = useState("");
@@ -164,6 +171,11 @@ export default function DeviceSoftwarePanel({ deviceId, softwares, onChanged }: 
                         <p className="mt-0.5 text-xs text-[#5e3f3a]">
                             {visibleSoftwares.length} / {softwares.length} phần mềm đang cài trên thiết bị.
                         </p>
+                        {!canInstall && (
+                            <p className="mt-0.5 text-xs font-semibold text-[#930006]">
+                                Thiết bị đang chờ thanh lý/đã thanh lý — không thể cài thêm phần mềm.
+                            </p>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         <select
@@ -181,7 +193,9 @@ export default function DeviceSoftwarePanel({ deviceId, softwares, onChanged }: 
                         </select>
                         <button
                             onClick={() => setPickerOpen(true)}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                            disabled={!canInstall}
+                            title={canInstall ? undefined : "Thiết bị đang chờ thanh lý/đã thanh lý, không thể cài thêm phần mềm."}
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             Cập nhật phần mềm
                         </button>

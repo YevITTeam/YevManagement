@@ -68,6 +68,10 @@ namespace Attendance.Application.Services
             public bool RequiresSignature { get; set; }
             public bool IsResponsible { get; set; }
             public int TerminalLevel { get; set; }
+
+            // Chỉ có giá trị thật khi đọc từ ProductionApprovalStep (đơn "theo chuyền") — xem
+            // JobTitle.IsLineScoped, ResolveChainForProductionCreationAsync.
+            public bool IsLineScoped { get; set; }
         }
 
         private async Task<ResolveApprovalChainResultDto> ResolveChainCoreAsync(int creatorRank, int groupId, int departmentId, int otCaseId)
@@ -255,6 +259,217 @@ namespace Attendance.Application.Services
             {
                 var missingStepNames = steps.Where(x => x.Candidates.Count == 0).Select(x => x.JobTitleName);
                 warning = $"Chưa có ai giữ Chức vụ: {string.Join(", ", missingStepNames)} trong Nhóm/Bộ phận — đơn sẽ bị kẹt ở (các) bước này.";
+            }
+
+            return new ResolveApprovalChainResultDto
+            {
+                IsComplete = isComplete,
+                Steps = steps,
+                Warning = warning,
+                RequiresCreatorSelfSign = requiresCreatorSelfSign
+            };
+        }
+
+        public async Task<ResolveApprovalChainResultDto> ResolveChainForProductionCreationAsync(
+            int? creatorEmployeeId, int departmentId, List<int> employeeIds, int otCaseId)
+        {
+            var creatorRank = 0;
+            if (creatorEmployeeId.HasValue)
+            {
+                var creator = await _unitOfWork.Employees.FirstOrDefaultAsync(
+                    x => x.Id == creatorEmployeeId.Value && !x.IsDeleted, x => x.JobTitle!);
+                if (creator?.JobTitle != null)
+                    creatorRank = creator.JobTitle.RankOrder;
+            }
+
+            var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otCaseId && !x.IsDeleted);
+            otCase.OrThrowNotFound("Trường hợp OT", otCaseId);
+
+            var targetTerminalLevel = otCase!.RequiredApprovalLevel;
+            var targetJobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(
+                x => x.TerminalLevel == targetTerminalLevel && !x.IsDeleted);
+
+            if (targetJobTitle is null)
+            {
+                return new ResolveApprovalChainResultDto
+                {
+                    IsComplete = false,
+                    Warning = $"Chưa có Chức vụ nào được cấu hình làm cấp duyệt cuối tương ứng (TerminalLevel={targetTerminalLevel})."
+                };
+            }
+
+            var configuredSteps = (await _unitOfWork.ProductionApprovalSteps.SelectAsync(
+                predicate: x => x.DepartmentId == departmentId && !x.IsDeleted,
+                selector: x => new ConfiguredStepRow
+                {
+                    StepOrder = x.StepOrder,
+                    JobTitleId = x.JobTitle.Id,
+                    JobTitleCode = x.JobTitle.Code,
+                    JobTitleName = x.JobTitle.Name,
+                    RankOrder = x.JobTitle.RankOrder,
+                    RequiresSignature = x.RequiresSignature,
+                    IsResponsible = x.IsResponsible,
+                    TerminalLevel = x.JobTitle.TerminalLevel,
+                    IsLineScoped = x.JobTitle.IsLineScoped
+                }))
+                .OrderBy(x => x.StepOrder)
+                .ToList();
+
+            var configuredSigningIntermediateSteps = configuredSteps
+                .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None && x.RequiresSignature)
+                .ToList();
+            var requiresCreatorSelfSign = creatorRank > 0
+                && configuredSigningIntermediateSteps.Count > 0
+                && configuredSigningIntermediateSteps.All(x => x.RankOrder <= creatorRank);
+
+            if (targetJobTitle.RankOrder <= creatorRank)
+                return new ResolveApprovalChainResultDto { IsComplete = true, RequiresCreatorSelfSign = requiresCreatorSelfSign };
+
+            if (configuredSteps.Count == 0)
+            {
+                return new ResolveApprovalChainResultDto
+                {
+                    IsComplete = false,
+                    Warning = "Bộ phận này chưa cấu hình cây duyệt theo chuyền (xem màn \"Cây duyệt\", phần \"Cây duyệt Chuyền\")."
+                };
+            }
+
+            var relevantSteps = configuredSteps.Where(x => x.RankOrder > creatorRank).ToList();
+
+            var cutoffIndex = relevantSteps.FindIndex(x => x.TerminalLevel == targetTerminalLevel);
+            var reachesTarget = cutoffIndex >= 0;
+            if (reachesTarget)
+                relevantSteps = relevantSteps.Take(cutoffIndex + 1).ToList();
+
+            if (relevantSteps.Count == 0)
+            {
+                return new ResolveApprovalChainResultDto
+                {
+                    IsComplete = false,
+                    Warning = $"Cây duyệt chuyền của Bộ phận chưa có bước nào phù hợp để tới '{targetJobTitle.Name}'.",
+                    RequiresCreatorSelfSign = requiresCreatorSelfSign
+                };
+            }
+
+            // Trong 1 chuỗi duy nhất, cấp trung gian (TerminalLevel=None) tách làm 2 phạm vi khác nhau:
+            // Line Leader (IsLineScoped=true, theo ProductionLineId) và Group Leader/Team Leader
+            // (IsLineScoped=false, theo GroupId) — cả 2 phạm vi đều suy TỰ ĐỘNG từ chính những người
+            // đang được thêm vào đơn, KHÔNG có 1 GroupId/ProductionLineId cố định trên OtForm.
+            var lineScopedJobTitleIds = relevantSteps
+                .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None && x.IsLineScoped)
+                .Select(x => x.JobTitleId)
+                .ToList();
+            var groupScopedJobTitleIds = relevantSteps
+                .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None && !x.IsLineScoped)
+                .Select(x => x.JobTitleId)
+                .ToList();
+            var deptScopedJobTitleIds = relevantSteps
+                .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager)
+                .Select(x => x.JobTitleId)
+                .ToList();
+            var companyWideJobTitleIds = relevantSteps
+                .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.WorkshopManager
+                    || x.TerminalLevel == (int)JobTitleTerminalLevel.GeneralDirector)
+                .Select(x => x.JobTitleId)
+                .ToList();
+
+            // Chỉ suy ra phạm vi khi TẤT CẢ người trong đơn cùng 1 Group / cùng 1 ProductionLine — lẫn
+            // nhiều Group/Line thì phạm vi đó coi như không suy được (bước tương ứng sẽ không có ứng
+            // viên nào, hiển thị đúng qua Warning bên dưới, không tự ý chọn đại 1 Group/Line).
+            int? derivedGroupId = null;
+            int? derivedProductionLineId = null;
+            if (employeeIds.Count > 0)
+            {
+                var participantGroupIds = (await _unitOfWork.Employees.SelectAsync(
+                    predicate: x => employeeIds.Contains(x.Id) && !x.IsDeleted,
+                    selector: x => x.GroupId))
+                    .Distinct()
+                    .ToList();
+                if (participantGroupIds.Count == 1 && participantGroupIds[0].HasValue)
+                    derivedGroupId = participantGroupIds[0];
+
+                var participantLineIds = (await _unitOfWork.ProductionEmployees.SelectAsync(
+                    predicate: x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted,
+                    selector: x => x.ProductionLineId))
+                    .Distinct()
+                    .ToList();
+                if (participantLineIds.Count == 1 && participantLineIds[0].HasValue)
+                    derivedProductionLineId = participantLineIds[0];
+            }
+
+            var lineScopedCandidates = (lineScopedJobTitleIds.Count == 0 || derivedProductionLineId is null)
+                ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
+                : (await _unitOfWork.Employees.SelectAsync(
+                    predicate: x => !x.IsDeleted && x.UserName != null && x.JobTitleId != null
+                        && lineScopedJobTitleIds.Contains(x.JobTitleId.Value)
+                        && x.ProductionEmployees.Any(pe => !pe.IsDeleted && pe.ProductionLineId == derivedProductionLineId),
+                    selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
+                    .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
+                    .ToList();
+
+            var groupScopedCandidates = (groupScopedJobTitleIds.Count == 0 || derivedGroupId is null)
+                ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
+                : (await _unitOfWork.Employees.SelectAsync(
+                    predicate: x => !x.IsDeleted && x.UserName != null && x.GroupId == derivedGroupId
+                        && x.JobTitleId != null && groupScopedJobTitleIds.Contains(x.JobTitleId.Value),
+                    selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
+                    .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
+                    .ToList();
+
+            var deptCandidates = deptScopedJobTitleIds.Count == 0
+                ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
+                : (await _unitOfWork.Employees.SelectAsync(
+                    predicate: x => !x.IsDeleted && x.UserName != null
+                        && ((x.Group != null && x.Group.DepartmentId == departmentId) || x.DepartmentId == departmentId)
+                        && x.JobTitleId != null && deptScopedJobTitleIds.Contains(x.JobTitleId.Value),
+                    selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
+                    .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
+                    .ToList();
+
+            var companyWideCandidates = companyWideJobTitleIds.Count == 0
+                ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
+                : (await _unitOfWork.Employees.SelectAsync(
+                    predicate: x => !x.IsDeleted && x.UserName != null
+                        && x.JobTitleId != null && companyWideJobTitleIds.Contains(x.JobTitleId.Value),
+                    selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
+                    .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
+                    .ToList();
+
+            var allCandidates = lineScopedCandidates.Concat(groupScopedCandidates).Concat(deptCandidates).Concat(companyWideCandidates).ToList();
+
+            var steps = relevantSteps
+                .Select((step, index) => new ResolvedApprovalStepDto
+                {
+                    StepOrder = index + 1,
+                    JobTitleId = step.JobTitleId,
+                    JobTitleCode = step.JobTitleCode,
+                    JobTitleName = step.JobTitleName,
+                    RankOrder = step.RankOrder,
+                    RequiresSignature = step.RequiresSignature,
+                    IsResponsible = step.IsResponsible,
+                    TerminalLevel = step.TerminalLevel,
+                    Candidates = allCandidates
+                        .Where(c => c.JobTitleId == step.JobTitleId)
+                        .Select(c => new ResolvedApprovalCandidateDto
+                        {
+                            EmployeeId = c.Id,
+                            UserName = c.UserName,
+                            FullName = $"{c.LastName} {c.FirstName}"
+                        })
+                        .ToList()
+                })
+                .ToList();
+
+            var isComplete = reachesTarget && steps.All(x => x.Candidates.Count > 0);
+
+            string? warning = null;
+            if (!reachesTarget)
+                warning = $"Cây duyệt chuyền của Bộ phận chưa cấu hình tới cấp '{targetJobTitle.Name}' — đơn sẽ bị kẹt.";
+            else if (!isComplete)
+            {
+                var missingStepNames = steps.Where(x => x.Candidates.Count == 0).Select(x => x.JobTitleName);
+                warning = $"Chưa tìm được ứng viên cho: {string.Join(", ", missingStepNames)} — có thể chưa có ai giữ Chức vụ đó, " +
+                    "hoặc những người trong đơn đang lẫn nhiều Nhóm/Line khác nhau — đơn sẽ bị kẹt ở (các) bước này.";
             }
 
             return new ResolveApprovalChainResultDto

@@ -7,14 +7,15 @@ import { Check, GripVertical, Plus, Star, Trash2, X } from "lucide-react";
 
 import { DepartmentApprovalStepApi } from "@/modules/attendance/api/department-approval-step.api";
 import { GroupApprovalStepApi } from "@/modules/attendance/api/group-approval-step.api";
+import { ProductionApprovalStepApi } from "@/modules/attendance/api/production-approval-step.api";
 import { DepartmentApprovalStepCoordinatorApi } from "@/modules/attendance/api/department-approval-step-coordinator.api";
 import { GroupApprovalStepCoordinatorApi } from "@/modules/attendance/api/group-approval-step-coordinator.api";
-import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { DepartmentApprovalStepDto } from "@/modules/attendance/types/department-approval-step.dto";
 import type { GroupApprovalStepDto } from "@/modules/attendance/types/group-approval-step.dto";
+import type { ProductionApprovalStepDto } from "@/modules/attendance/types/production-approval-step.dto";
 import type { DepartmentApprovalStepCoordinatorDto } from "@/modules/attendance/types/department-approval-step-coordinator.dto";
 import type { GroupApprovalStepCoordinatorDto } from "@/modules/attendance/types/group-approval-step-coordinator.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
@@ -45,6 +46,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 ) {
     const tDept = useTranslations("Attendance.DepartmentApprovalStep");
     const tGroup = useTranslations("Attendance.GroupApprovalStep");
+    const tProd = useTranslations("Attendance.ProductionApprovalStep");
     const { user } = useAuth();
     // Chỉ Admin (hoặc người được cấp riêng — không xảy ra trong thực tế) mới quản lý ĐƯỢC danh sách
     // Người phụ trách — bản thân 1 Người phụ trách khi mở màn này (được cho vào từ 2026-08-11 qua
@@ -57,8 +59,24 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [deptJobTitles, setDeptJobTitles] = useState<JobTitleDto[]>([]);
     const [groupJobTitles, setGroupJobTitles] = useState<JobTitleDto[]>([]);
+    // Cây duyệt Chuyền nhận CẢ 2 loại Chức vụ (trung gian lẫn cấp cuối) trong 1 danh sách duy nhất —
+    // không lọc theo terminalLevel như 2 khối trên (xem ProductionApprovalStepService.ReplaceAsync).
+    const [allJobTitles, setAllJobTitles] = useState<JobTitleDto[]>([]);
     const [departmentId, setDepartmentId] = useState<number | "">("");
     const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+    // 2 tab (2026-08-25): "Theo Nhóm" = 2 khối cũ (Nhóm + Bộ phận, dùng cho đơn OT thường) gộp
+    // chung 1 tab vì đơn đi xuyên qua CẢ 2 liền mạch (Nhóm trước, Bộ phận sau); "Theo chuyền" = khối
+    // Chuyền (1 danh sách duy nhất, dùng cho đơn OT "theo chuyền" Chế tạo) tách tab riêng vì đây là
+    // 1 luồng độc lập, không liên quan gì tới cấu hình Nhóm/Bộ phận — khớp đúng 2 chế độ tạo đơn ở
+    // CreateOtFormPage.tsx (formMode "group"/"production").
+    const [activeTab, setActiveTab] = useState<"group" | "production">("group");
+
+    // ── Khối Chuyền (Bộ phận, 1 danh sách duy nhất — 2026-08-24) ─────────────
+    const [productionSteps, setProductionSteps] = useState<ProductionApprovalStepDto[]>([]);
+    const [addingProductionJobTitleId, setAddingProductionJobTitleId] = useState<number | "">("");
+    const [isLoadingProductionSteps, setIsLoadingProductionSteps] = useState(false);
+    const [isSavingProduction, setIsSavingProduction] = useState(false);
+    const [isProductionDirty, setIsProductionDirty] = useState(false);
 
     // ── Khối cấp cuối (Bộ phận) ─────────────────────────────────────────────
     const [deptSteps, setDeptSteps] = useState<DepartmentApprovalStepDto[]>([]);
@@ -93,7 +111,10 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
     useEffect(() => {
         setIsLoadingOptions(true);
-        Promise.all([DepartmentApi.getAllDepartments(), GroupApi.getAllGroups(), JobTitleApi.getAllJobTitles()])
+        // getMyDepartments (không phải DepartmentApi.getAllDepartments()) — Admin thấy toàn bộ, người
+        // được gán phụ trách (Coordinator, không phải Admin) chỉ thấy đúng Bộ phận mình quản, tránh
+        // chọn nhầm Bộ phận không thuộc quyền rồi bị 403 khi gọi các API bên dưới (2026-08-25).
+        Promise.all([DepartmentApprovalStepApi.getMyDepartments(), GroupApi.getAllGroups(), JobTitleApi.getAllJobTitles()])
             .then(([departmentData, groupData, jobTitleData]) => {
                 setDepartments(departmentData);
                 setGroups(groupData);
@@ -101,6 +122,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 // (Staff/Group Leader/Team Leader) cho khối Nhóm.
                 setDeptJobTitles(jobTitleData.filter((jt) => jt.terminalLevel !== 0));
                 setGroupJobTitles(jobTitleData.filter((jt) => jt.terminalLevel === 0));
+                setAllJobTitles(jobTitleData);
             })
             .catch((err) => {
                 console.error(err);
@@ -126,6 +148,20 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 toast.error(getApiErrorMessage(err, tDept("loadStepsError")));
             })
             .finally(() => setIsLoadingDeptSteps(false));
+    };
+
+    const fetchProductionSteps = (targetDepartmentId: number) => {
+        setIsLoadingProductionSteps(true);
+        ProductionApprovalStepApi.getByDepartment(targetDepartmentId)
+            .then((data) => {
+                setProductionSteps(data);
+                setIsProductionDirty(false);
+            })
+            .catch((err) => {
+                console.error(err);
+                toast.error(getApiErrorMessage(err, tProd("loadStepsError")));
+            })
+            .finally(() => setIsLoadingProductionSteps(false));
     };
 
     const fetchDeptEmployees = (targetDepartmentId: number) => {
@@ -194,6 +230,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 fetchDeptSteps(departmentId);
                 fetchDeptEmployees(departmentId);
                 fetchDeptCoordinators(departmentId);
+                fetchProductionSteps(departmentId);
             }
             if (typeof groupId === "number") {
                 fetchGroupSteps(groupId);
@@ -211,6 +248,9 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setDeptCoordinators([]);
         setAddingDeptJobTitleId("");
         setIsDeptDirty(false);
+        setProductionSteps([]);
+        setAddingProductionJobTitleId("");
+        setIsProductionDirty(false);
         // Đổi Bộ phận thì Nhóm đang chọn (nếu có) không còn thuộc Bộ phận này nữa — reset luôn.
         setGroupId("");
         setGroupSteps([]);
@@ -222,6 +262,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             fetchDeptSteps(value);
             fetchDeptEmployees(value);
             fetchDeptCoordinators(value);
+            fetchProductionSteps(value);
         }
     };
 
@@ -496,6 +537,90 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
+    // ── Khối Chuyền: thêm/xoá/sắp xếp/lưu bước ────────────────────────────────
+    const usedProductionJobTitleIds = new Set(productionSteps.map((s) => s.jobTitleId));
+    const availableProductionJobTitles = allJobTitles.filter((jt) => !usedProductionJobTitleIds.has(jt.id));
+
+    // Đúng 2 ô "Người đề nghị" cố định trên giấy in — CHỈ tính cấp trung gian (terminalLevel===0:
+    // Line Leader/Group Leader/Team Leader), 3 cấp cuối có 3 ô chữ ký riêng, không tính vào đây —
+    // mirror groupSigningCount nhưng lọc thêm theo terminalLevel (xem ProductionApprovalStepService.ReplaceAsync).
+    const productionIntermediateSteps = productionSteps.filter((s) => s.terminalLevel === 0);
+    const productionSigningCount = productionIntermediateSteps.filter((s) => s.requiresSignature).length;
+    const productionSigningLimitReached = productionSigningCount >= 2;
+    const productionSigningMinNotMet = productionIntermediateSteps.length > 0 && productionSigningCount === 0;
+
+    const handleAddProductionStep = () => {
+        if (!addingProductionJobTitleId) return;
+        const jobTitle = allJobTitles.find((jt) => jt.id === addingProductionJobTitleId);
+        if (!jobTitle) return;
+        setProductionSteps((current) => [
+            ...current,
+            {
+                id: 0,
+                departmentId: typeof departmentId === "number" ? departmentId : 0,
+                stepOrder: current.length + 1,
+                jobTitleId: jobTitle.id,
+                jobTitleCode: jobTitle.code,
+                jobTitleName: jobTitle.name,
+                rankOrder: jobTitle.rankOrder,
+                requiresSignature: false,
+                isResponsible: false,
+                terminalLevel: jobTitle.terminalLevel,
+            },
+        ]);
+        setAddingProductionJobTitleId("");
+        setIsProductionDirty(true);
+    };
+
+    const handleRemoveProductionStep = (index: number) => {
+        setProductionSteps((current) => current.filter((_, i) => i !== index));
+        setIsProductionDirty(true);
+    };
+
+    const handleToggleProductionSignature = (index: number) => {
+        const target = productionSteps[index];
+        if (target.terminalLevel === 0 && !target.requiresSignature && productionSigningLimitReached) {
+            toast.error(tProd("signingLimitToggleError"));
+            return;
+        }
+        setProductionSteps((current) =>
+            current.map((step, i) => (i === index ? { ...step, requiresSignature: !step.requiresSignature } : step))
+        );
+        setIsProductionDirty(true);
+    };
+
+    const handleSetProductionResponsible = (index: number) => {
+        setProductionSteps((current) =>
+            current.map((step, i) => ({ ...step, isResponsible: i === index ? !current[index].isResponsible : false }))
+        );
+        setIsProductionDirty(true);
+    };
+
+    const handleReorderProductionSteps = (next: ProductionApprovalStepDto[]) => {
+        setProductionSteps(next);
+        setIsProductionDirty(true);
+    };
+    const productionDrag = useDragReorder(productionSteps, handleReorderProductionSteps, (s) => s.jobTitleId);
+
+    const handleSaveProduction = async () => {
+        if (typeof departmentId !== "number") return;
+        setIsSavingProduction(true);
+        try {
+            const data = await ProductionApprovalStepApi.replaceByDepartment(
+                departmentId,
+                productionSteps.map((s) => ({ jobTitleId: s.jobTitleId, requiresSignature: s.requiresSignature, isResponsible: s.isResponsible }))
+            );
+            setProductionSteps(data);
+            setIsProductionDirty(false);
+            toast.success(tProd("saveSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, tProd("saveError")));
+        } finally {
+            setIsSavingProduction(false);
+        }
+    };
+
     // ── Khối Nhóm: thêm/xoá/sắp xếp/lưu bước ─────────────────────────────────
     const usedGroupJobTitleIds = new Set(groupSteps.map((s) => s.jobTitleId));
     const availableGroupJobTitles = groupJobTitles.filter((jt) => !usedGroupJobTitleIds.has(jt.id));
@@ -596,6 +721,25 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
             {typeof departmentId === "number" && (
                 <>
+                    <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">
+                        {(["group", "production"] as const).map((tab) => (
+                            <button
+                                key={tab}
+                                type="button"
+                                onClick={() => setActiveTab(tab)}
+                                className={`cursor-pointer border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+                                    activeTab === tab
+                                        ? "border-[#e3000f] text-[#191c1e]"
+                                        : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
+                                }`}
+                            >
+                                {tab === "group" ? tDept("tabGroupModeLabel") : tDept("tabProductionModeLabel")}
+                            </button>
+                        ))}
+                    </div>
+
+                    {activeTab === "group" && (
+                        <>
                     {/* Khối cấp trung gian — theo Nhóm con của Bộ phận đang chọn (đơn đi qua khối này TRƯỚC) */}
                     <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                         <div className="space-y-1">
@@ -1059,6 +1203,137 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                             </>
                         )}
                     </section>
+                        </>
+                    )}
+
+                    {activeTab === "production" && (
+                    /* Khối Chuyền — 1 danh sách duy nhất (Line Leader -> ... -> Director) theo chính
+                        Bộ phận đang chọn, dùng cho đơn OT "theo chuyền" (2026-08-24). Khác 2 khối trên:
+                        không tách Group/Department, không hiển thị "ai đang giữ Chức vụ" (dữ liệu
+                        chuyền đổi hàng ngày, danh sách người giữ ở đây không có ý nghĩa lâu dài). */
+                    <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                        <div className="space-y-1">
+                            <h3 className={sectionTitleClassName}>{tProd("sectionTitle")}</h3>
+                            <p className="text-sm text-[#5e3f3a]">{tProd("description")}</p>
+                        </div>
+
+                        {isLoadingProductionSteps ? (
+                            <p className="text-sm text-[#5e3f3a]">{tProd("loadingSteps")}</p>
+                        ) : (
+                            <>
+                                {productionSteps.length === 0 && <p className="text-sm text-[#5e3f3a]">{tProd("noSteps")}</p>}
+
+                                {productionSteps.length > 0 && (
+                                    <ol className="space-y-2">
+                                        {productionSteps.map((step, index) => (
+                                            <li
+                                                key={step.jobTitleId}
+                                                ref={productionDrag.registerNode(step.jobTitleId)}
+                                                draggable
+                                                onDragStart={productionDrag.handleDragStart(index)}
+                                                onDragOver={productionDrag.handleDragOver(index)}
+                                                onDragEnd={productionDrag.handleDragEnd}
+                                                className={`relative flex flex-wrap items-center gap-2 rounded-lg border p-3 transition-[box-shadow,border-color,background-color] duration-150 lg:flex-nowrap ${
+                                                    productionDrag.dragIndex === index
+                                                        ? "z-10 scale-[1.01] border-[#e3000f] bg-[#fff4f2] shadow-lg ring-2 ring-[#e3000f]/25"
+                                                        : "border-[#e0e3e5] bg-white"
+                                                }`}
+                                            >
+                                                <span
+                                                    title={tProd("dragHandleLabel")}
+                                                    aria-label={tProd("dragHandleLabel")}
+                                                    className="shrink-0 cursor-grab text-[#8a8f94] active:cursor-grabbing"
+                                                >
+                                                    <GripVertical className="h-4 w-4" />
+                                                </span>
+                                                <div className="flex w-[230px] shrink-0 items-center gap-2" title={`${step.jobTitleName} (${step.jobTitleCode}, cấp ${step.rankOrder})`}>
+                                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-xs font-bold text-white">
+                                                        {index + 1}
+                                                    </span>
+                                                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#191c1e]">{step.jobTitleName}</span>
+                                                    <span className="shrink-0 whitespace-nowrap text-xs text-[#8a8f94]">({step.jobTitleCode}, cấp {step.rankOrder})</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleToggleProductionSignature(index)}
+                                                    title={tProd("toggleSignatureHint")}
+                                                    className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
+                                                        step.requiresSignature
+                                                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                                            : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
+                                                    }`}
+                                                >
+                                                    {step.requiresSignature ? <Check size={11} /> : <X size={11} />}
+                                                    {step.requiresSignature ? tProd("requiresSignatureYes") : tProd("requiresSignatureNo")}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSetProductionResponsible(index)}
+                                                    title={tProd("toggleResponsibleHint")}
+                                                    className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
+                                                        step.isResponsible
+                                                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                                            : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
+                                                    }`}
+                                                >
+                                                    <Star size={11} fill={step.isResponsible ? "currentColor" : "none"} />
+                                                    {step.isResponsible ? tProd("isResponsibleYes") : tProd("isResponsibleNo")}
+                                                </button>
+                                                <div className="ml-auto flex shrink-0 items-center gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveProductionStep(index)}
+                                                        title={tProd("removeStep")}
+                                                        aria-label={tProd("removeStep")}
+                                                        className="cursor-pointer rounded-lg border border-[#e9bcb6] bg-white p-1.5 text-[#930006] transition hover:bg-[#fff4f2]"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                )}
+
+                                <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
+                                    <select
+                                        value={addingProductionJobTitleId}
+                                        onChange={(event) => setAddingProductionJobTitleId(event.target.value ? Number(event.target.value) : "")}
+                                        className="h-10 flex-1 min-w-[220px] rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                    >
+                                        <option value="">{tProd("fieldAddJobTitlePlaceholder")}</option>
+                                        {availableProductionJobTitles.map((jobTitle) => (
+                                            <option key={jobTitle.id} value={jobTitle.id}>
+                                                {jobTitle.name} ({jobTitle.code}, cấp {jobTitle.rankOrder})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={handleAddProductionStep}
+                                        disabled={!addingProductionJobTitleId}
+                                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" /> {tProd("addStepButton")}
+                                    </button>
+                                </div>
+                                {productionSigningMinNotMet && <p className="text-xs text-[#930006]">{tProd("intermediateMinHint")}</p>}
+                                {productionSigningLimitReached && <p className="text-xs text-[#9a5b00]">{tProd("intermediateLimitHint")}</p>}
+
+                                <div className="flex justify-end pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveProduction}
+                                        disabled={!isProductionDirty || isSavingProduction || productionSigningMinNotMet}
+                                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {isSavingProduction ? tProd("saving") : tProd("saveButton")}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </section>
+                    )}
                 </>
             )}
         </div>

@@ -8,6 +8,13 @@ namespace Attendance.Domain.Entities;
 // vẫn là nguồn chân lý ổn định (theo nhịp cập nhật hàng tháng của Tổng vụ). Khi 1 người ở đây được thêm
 // vào OtForm (chế độ chọn "dưới chuyền"), CongDoan/TaskName/BlockCode/TeamCode/ShiftTeamCode tại thời
 // điểm đó được copy thành snapshot trên OtFormEmployee — bảng này chỉ phản ánh trạng thái MỚI NHẤT.
+//
+// Quy tắc nạp (2026-08-24): 1 dòng chỉ được đưa vào bảng này nếu EmployeeId (khớp Employee.Code),
+// ProductionLineId (khớp BlockCode), TeamId (khớp TeamCode) và ShiftTeamId (khớp ShiftTeamCode) đều
+// resolve được — dòng nào lệch (mã cũ/hết hạn so với ProductionLine/ProductionTeam/ProductionShiftTeam
+// hiện hành, hoặc EmployeeCode chưa có trong Employee) thì bỏ qua, không nạp vào, thay vì lưu với FK
+// NULL. Vì vậy các cột FK về mặt kỹ thuật vẫn nullable (đúng shape gốc, phòng khi chính sách đổi) nhưng
+// theo policy nạp hiện tại sẽ luôn có giá trị.
 public partial class ProductionEmployee
 {
     public int Id { get; set; }

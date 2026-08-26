@@ -52,9 +52,21 @@ export interface OtFormEmployeeDto {
     noteJp: string | null;
     monthToDate: number;
     yearToDate: number;
-    isEligibleForMeal: boolean;
-    // Có ăn hay không (chỉ có ý nghĩa khi isEligibleForMeal=true) — mới 2026-08-06, xem §Phiếu ăn.
-    // Không ăn dù đủ ngưỡng thì +30 phút vào lũy kế lúc đơn Hoàn tất (BE tự cộng, FE không tự tính).
+    // Giới hạn giờ OT/tháng/năm RIÊNG của nhân viên này TẠI THỜI ĐIỂM ĐỌC (live, không snapshot như
+    // monthToDate/yearToDate ở trên) — null = dùng mặc định chung (2026-08-26, mirror
+    // EmployeeDto.customMonthlyOtHourLimit/customYearlyOtHourLimit).
+    customMonthlyOtHourLimit: number | null;
+    customYearlyOtHourLimit: number | null;
+    // Loại phiếu ăn: 0=Không có phiếu, 1=Phiếu Phụ, 2=Phiếu Chính — redesign 3 bậc (2026-08-26, thay
+    // isEligibleForMeal cũ), xem modules/attendance/lib/mealTicket.ts + docs §Phiếu ăn.
+    mealTicketType: number;
+    // Giờ OT thực tính (2026-08-26) — BE đã trừ sẵn giờ nghỉ ăn nếu có ăn (trừ ca khớp đúng khung sớm,
+    // luôn không trừ); không ăn thì bằng đúng endTime-startTime. LUÔN dùng field này để hiển thị/cộng
+    // tổng giờ OT của 1 người — KHÔNG tự tính lại bằng calculateHours(startTime, endTime) nữa.
+    actualHours: number;
+    // Có ăn hay không — mới 2026-08-06, xem §Phiếu ăn. Quyết định actualHours có bị trừ giờ nghỉ ăn hay
+    // không (BE tự tính, FE không tự tính) — vẫn có ý nghĩa bất kể mealTicketType, trừ ca khớp đúng
+    // khung sớm (luôn bỏ qua).
     didEat: boolean;
     isRemoved: boolean;
     removedByUserName: string | null;
@@ -64,6 +76,13 @@ export interface OtFormEmployeeDto {
     removedAtLevel: number | null;
     removedAt: string | null;
     removeReason: string | null;
+    // Snapshot ProductionEmployee lúc thêm vào đơn — chỉ có giá trị khi OtFormDto.isProductionForm =
+    // true (đơn "theo chuyền"), null cho đơn "theo Nhóm" (2026-08-24).
+    congDoanSnapshot: string | null;
+    taskNameSnapshot: string | null;
+    blockCodeSnapshot: string | null;
+    teamCodeSnapshot: string | null;
+    shiftTeamCodeSnapshot: string | null;
 }
 
 // GET /api/OtForm/my-create-scopes — §4.0a. Bộ phận/Phòng ban mà CHÍNH user gọi được phép tạo đơn
@@ -78,8 +97,11 @@ export interface MyCreateScopeItemDto {
 }
 
 // Body POST /api/OtForm — §4.1. Không còn field chữ ký (BE tự lấy từ UserSignature/me).
+// groupId/isProductionForm (2026-08-24): đơn "theo Nhóm" (mặc định) bắt buộc groupId, isProductionForm
+// = false; đơn "theo chuyền" (Chế tạo) groupId = null, isProductionForm = true — xem CreateOtFormPage.tsx.
 export interface CreateOtFormDto {
-    groupId: number;
+    groupId: number | null;
+    isProductionForm: boolean;
     departmentId: number;
     reasonId: number;
     otCaseId: number;
@@ -125,8 +147,10 @@ export interface OtFormApprovalSummaryItemDto {
 // Item bảng my-forms / pending-approvals — §4.2.
 export interface OtFormListItemDto {
     id: number;
-    groupNameVn: string;
+    // Null khi đơn "theo chuyền" (isProductionForm = true) — 2026-08-24.
+    groupNameVn: string | null;
     groupNameJp: string | null;
+    isProductionForm: boolean;
     departmentNameVn: string;
     departmentNameJp: string | null;
     otCaseCode: string;
@@ -182,9 +206,11 @@ export interface OtFormApprovalStepDto {
 // Chi tiết GET /api/OtForm/{id} (và GET /OtForm/email-confirm/{token}) — §4.3.
 export interface OtFormDto {
     id: number;
-    groupId: number;
-    groupNameVn: string;
+    // Null khi đơn "theo chuyền" (isProductionForm = true) — 2026-08-24, xem OtForm.GroupId.
+    groupId: number | null;
+    groupNameVn: string | null;
     groupNameJp: string | null;
+    isProductionForm: boolean;
     departmentId: number;
     departmentNameVn: string;
     departmentNameJp: string | null;

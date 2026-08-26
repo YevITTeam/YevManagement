@@ -5,7 +5,7 @@ description: Build, run, smoke-test, and drive the YevManagement backend API (Co
 
 YevManagement backend: a .NET 10 modular monolith (Identity + Asset +
 Attendance modules) hosted in a single ASP.NET Core API,
-`CompanySystem.HostApi`, listening on `http://10.45.1.155:8080` (the `http`
+`CompanySystem.HostApi`, listening on `http://10.45.1.155:8081` (the `http`
 launch profile's `applicationUrl` — check
 `CompanySystem.HostApi/Properties/launchSettings.json` before assuming a port;
 it used to be `localhost:5000`). Drive it over HTTP: run
@@ -58,7 +58,7 @@ SQL query there — useful for debugging).
 To call endpoints manually after `-KeepRunning`:
 
 ```powershell
-$base = "http://10.45.1.155:8080"
+$base = "http://10.45.1.155:8081"
 
 # Get a JWT as the current Windows user (requires Admin role in DB for Auth endpoints)
 $login = Invoke-RestMethod -Uri "$base/api/Auth/windows-login" -Method Post -UseDefaultCredentials
@@ -82,7 +82,7 @@ Get-NetTCPConnection -LocalPort 8080 -State Listen | Select-Object -First 1 |
 
 ```powershell
 dotnet run --project CompanySystem.HostApi --launch-profile http
-# → listens on http://10.45.1.155:8080, Scalar UI at /scalar/v1. Ctrl+C to stop.
+# → listens on http://10.45.1.155:8081, Scalar UI at /scalar/v1. Ctrl+C to stop.
 ```
 
 ## Test

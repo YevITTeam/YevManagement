@@ -7,8 +7,11 @@ namespace Attendance.Application.Dtos.OtFormBatches
     public class OtFormBatchItemDto
     {
         public int OtFormId { get; set; }
-        public string GroupNameVn { get; set; } = null!;
+
+        // Null khi đơn "theo chuyền" (OtForm.IsProductionForm = true, không có GroupId cố định).
+        public string? GroupNameVn { get; set; }
         public string? GroupNameJp { get; set; }
+        public bool IsProductionForm { get; set; }
         public string ReasonNameVn { get; set; } = null!;
         public string? ReasonNameJp { get; set; }
         public string OtCaseCode { get; set; } = null!;

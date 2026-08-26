@@ -25,8 +25,10 @@ export interface OtFormBatchListItemDto {
 // 1 đơn nhỏ trong đơn tổng — chỉ gồm nhân viên ĐANG active (chưa bị loại).
 export interface OtFormBatchItemDto {
     otFormId: number;
-    groupNameVn: string;
+    // Null khi đơn "theo chuyền" (isProductionForm = true) — 2026-08-24.
+    groupNameVn: string | null;
     groupNameJp: string | null;
+    isProductionForm: boolean;
     reasonNameVn: string;
     reasonNameJp: string | null;
     otCaseCode: string;

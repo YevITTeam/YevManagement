@@ -33,11 +33,26 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<TimeOnly>("BatchAutoSendTime")
                         .HasColumnType("time");
 
+                    b.Property<decimal>("DailyOtHourLimit")
+                        .HasColumnType("decimal(5, 2)");
+
+                    b.Property<TimeOnly>("EarlyMealWindowEndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly>("EarlyMealWindowStartTime")
+                        .HasColumnType("time");
+
                     b.Property<decimal>("MainMealTicketMinHours")
+                        .HasColumnType("decimal(5, 2)");
+
+                    b.Property<decimal>("MealBreakDeductionHours")
                         .HasColumnType("decimal(5, 2)");
 
                     b.Property<decimal>("MonthlyOtHourLimit")
                         .HasColumnType("decimal(10, 2)");
+
+                    b.Property<decimal>("NoMealTicketMaxHours")
+                        .HasColumnType("decimal(5, 2)");
 
                     b.Property<decimal>("YearlyOtHourLimit")
                         .HasColumnType("decimal(10, 2)");
@@ -151,6 +166,12 @@ namespace Attendance.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal?>("CustomMonthlyOtHourLimit")
+                        .HasColumnType("decimal(10, 2)");
+
+                    b.Property<decimal?>("CustomYearlyOtHourLimit")
+                        .HasColumnType("decimal(10, 2)");
 
                     b.Property<int?>("DepartmentId")
                         .HasColumnType("int");
@@ -340,6 +361,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsLineScoped")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -469,10 +493,13 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time");
 
-                    b.Property<int>("GroupId")
+                    b.Property<int?>("GroupId")
                         .HasColumnType("int");
 
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsProductionForm")
                         .HasColumnType("bit");
 
                     b.Property<int>("NumberOfEmployee")
@@ -797,6 +824,12 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<int>("EmployeeId")
                         .HasColumnType("int");
 
+                    b.Property<string>("BlockCodeSnapshot")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CongDoanSnapshot")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("DidEat")
                         .HasColumnType("bit");
 
@@ -836,8 +869,17 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("ShiftTeamCodeSnapshot")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time");
+
+                    b.Property<string>("TaskNameSnapshot")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TeamCodeSnapshot")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("YearToDate")
                         .HasPrecision(10, 2)
@@ -977,6 +1019,41 @@ namespace Attendance.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ProcessParts");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionApprovalStep", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsResponsible")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("JobTitleId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresSignature")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "DepartmentId" }, "IX_ProductionApprovalSteps_DepartmentId");
+
+                    b.HasIndex(new[] { "JobTitleId" }, "IX_ProductionApprovalSteps_JobTitleId");
+
+                    b.ToTable("ProductionApprovalSteps");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionEmployee", b =>
@@ -1376,7 +1453,6 @@ namespace Attendance.Infrastructure.Migrations
                         .WithMany("OtForms")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("FK_OtForms_Groups_GroupId");
 
                     b.HasOne("Attendance.Domain.Entities.OtCase", "OtCase")
@@ -1542,6 +1618,27 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtForm");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionApprovalStep", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Department", "Department")
+                        .WithMany("ProductionApprovalSteps")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionApprovalSteps_Departments_DepartmentId");
+
+                    b.HasOne("Attendance.Domain.Entities.JobTitle", "JobTitle")
+                        .WithMany("ProductionApprovalSteps")
+                        .HasForeignKey("JobTitleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionApprovalSteps_JobTitles_JobTitleId");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("JobTitle");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionEmployee", b =>
                 {
                     b.HasOne("Attendance.Domain.Entities.Employee", "Employee")
@@ -1598,6 +1695,8 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("Groups");
 
                     b.Navigation("OtForms");
+
+                    b.Navigation("ProductionApprovalSteps");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Employee", b =>
@@ -1629,6 +1728,8 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("GroupApprovalSteps");
 
                     b.Navigation("JobTitlePermissions");
+
+                    b.Navigation("ProductionApprovalSteps");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtCase", b =>

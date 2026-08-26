@@ -486,7 +486,7 @@ namespace Asset.Application.Services
 
             // Máy tạo thẳng ở trạng thái Chờ thanh lý/Đã thanh lý coi như không dùng -> không gán IP
             // dù request có gửi kèm, để IP đó vẫn Available cho máy khác (2026-08-22).
-            if (IsLiquidationStatus(newDevice.Status))
+            if (newDevice.Status.IsLiquidationStatus())
             {
                 ipAddresses = new List<IpAddress>();
             }
@@ -551,7 +551,19 @@ namespace Asset.Application.Services
 
             await ValidateSuggestedNewDeviceIdAsync(request.SuggestedNewDeviceId, currentDeviceId: device!.Id);
 
-            if (IsLiquidationStatus(request.Status))
+            var previousStatus = device.Status;
+
+            // 2026-08-25 (user decision): a Device only holds a live Ip/installed Software while it is
+            // actually InUse. Moving into PendingLiquidation/Liquidated releases both the Ip and the
+            // installed Software; moving InUse -> PendingUse (taken out of service, not yet re-assigned)
+            // releases just the Ip — the Software list still makes sense to keep for whenever it comes
+            // back InUse.
+            if (request.Status.IsLiquidationStatus())
+            {
+                await ReleaseAllIpsAsync(device.Id);
+                await ReleaseAllSoftwareAsync(device.Id);
+            }
+            else if (previousStatus == (int)DeviceStatus.InUse && request.Status == (int)DeviceStatus.PendingUse)
                 await ReleaseAllIpsAsync(device.Id);
             else
                 await SyncIpAddressesAsync(device.Id, request.IpAddressIds);
@@ -674,6 +686,9 @@ namespace Asset.Application.Services
             _unitOfWork.Devices.Update(device);
 
             await ReleaseAllIpsAsync(id);
+            // Safety net for devices that reached Liquidated before this cleanup existed (2026-08-25) —
+            // normally already empty by the time Status became PendingLiquidation/Liquidated.
+            await ReleaseAllSoftwareAsync(id);
 
             var emails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
             foreach (var email in emails)
@@ -746,6 +761,11 @@ namespace Asset.Application.Services
                 email.IsDeleted = true;
                 _unitOfWork.DeviceEmails.Update(email);
             }
+
+            // Safety net, same reasoning as DeleteAsync above — batched across the whole deletable set.
+            var installedSoftwares = await _unitOfWork.DeviceSoftwares.FindAsync(x => deletableIds.Contains(x.DeviceId));
+            if (installedSoftwares.Count > 0)
+                _unitOfWork.DeviceSoftwares.RemoveRange(installedSoftwares);
 
             await _unitOfWork.SaveChangesAsync();
 
@@ -831,8 +851,15 @@ namespace Asset.Application.Services
             }
         }
 
-        private static bool IsLiquidationStatus(int status) =>
-            status == (int)DeviceStatus.PendingLiquidation || status == (int)DeviceStatus.Liquidated;
+        // Hard-deletes every DeviceSoftware row for a Device (uninstalls all software), same "xóa cứng"
+        // treatment DeviceSoftwareService already uses for this keyless join table. Used whenever a
+        // Device moves into PendingLiquidation/Liquidated (2026-08-25).
+        private async Task ReleaseAllSoftwareAsync(int deviceId)
+        {
+            var installed = await _unitOfWork.DeviceSoftwares.FindAsync(x => x.DeviceId == deviceId);
+            if (installed.Count > 0)
+                _unitOfWork.DeviceSoftwares.RemoveRange(installed);
+        }
 
         // Reconciles a Device's emails with the requested list, matched by trimmed/case-insensitive
         // Email text (input items have no Id): entries missing from the request are soft-deleted,

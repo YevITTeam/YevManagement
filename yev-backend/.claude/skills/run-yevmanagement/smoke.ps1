@@ -18,7 +18,7 @@
 # API with that profile, so a mismatched URL just times out waiting for a port
 # that never opens. Override with -BaseUrl if the profile changes.
 param(
-    [string]$BaseUrl = "http://10.45.1.155:8080",
+    [string]$BaseUrl = "http://10.45.1.155:8081",
     [switch]$KeepRunning
 )
 
@@ -113,13 +113,15 @@ Check 'GET /api/Auth/get-all-roles with Bearer token returns roles (requires Adm
     Write-Host "       roles in DB: $(($r.data | ForEach-Object { $_.roleName }) -join ', ')"
 }
 
-Check 'GET /api/Branch/grid-list returns branches (currently [AllowAnonymous])' {
-    $r = Invoke-RestMethod -Uri "$BaseUrl/api/Branch/grid-list?pageIndex=1&pageSize=5" -TimeoutSec 15
+Check 'GET /api/Branch/grid-list returns branches (requires Bearer token + permission)' {
+    if (-not $script:token) { throw 'no token from windows-login (previous check failed)' }
+    $r = Invoke-RestMethod -Uri "$BaseUrl/api/Branch/grid-list?pageIndex=1&pageSize=5" -Headers @{ Authorization = "Bearer $($script:token)" } -TimeoutSec 15
     if (-not $r.isSuccess) { throw $r.message }
 }
 
 Check 'GET /api/Device/grid-list returns paged devices from SQL Server' {
-    $r = Invoke-RestMethod -Uri "$BaseUrl/api/Device/grid-list?pageIndex=1&pageSize=2" -TimeoutSec 20
+    if (-not $script:token) { throw 'no token from windows-login (previous check failed)' }
+    $r = Invoke-RestMethod -Uri "$BaseUrl/api/Device/grid-list?pageIndex=1&pageSize=2" -Headers @{ Authorization = "Bearer $($script:token)" } -TimeoutSec 20
     if (-not $r.isSuccess) { throw $r.message }
     Write-Host "       total devices: $($r.data.totalCount)"
 }
