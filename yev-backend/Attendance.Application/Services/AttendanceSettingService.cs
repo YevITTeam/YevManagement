@@ -9,11 +9,15 @@ namespace Attendance.Application.Services
     // Mirror Asset.Application.Services.AssetSettingService.
     public class AttendanceSettingService : BaseService<IAttendanceUnitOfWork>, IAttendanceSettingService
     {
-        // Giá trị mặc định phải KHỚP với seed trong migration AddAttendanceSetting — dùng lại ở đây làm
-        // fallback khi dòng cấu hình bị xoá tay trực tiếp dưới DB.
-        // Đổi lại 2.5 -> 2 (2026-08-05, theo yêu cầu người dùng) — ngưỡng này giờ dùng chung cho cả
-        // việc chia phiếu chính/phụ VÀ rule "không ăn +30p lũy kế" (OtFormService.AccumulateEmployeeHoursAsync).
-        public const decimal DefaultMainMealTicketMinHours = 2m;
+        // Giá trị mặc định phải KHỚP với seed trong migration AddAttendanceSetting/tương ứng — dùng lại
+        // ở đây làm fallback khi dòng cấu hình bị xoá tay trực tiếp dưới DB.
+        // Đổi 2 -> 3.5 (2026-08-26, redesign 3 bậc phiếu ăn theo yêu cầu người dùng) — giờ so trên
+        // THỰC TÍCH (sau khi trừ MealBreakDeductionHours), không còn trên giờ thô như trước.
+        public const decimal DefaultMainMealTicketMinHours = 3.5m;
+        public const decimal DefaultNoMealTicketMaxHours = 2m;
+        public const decimal DefaultMealBreakDeductionHours = 0.5m;
+        public static readonly TimeOnly DefaultEarlyMealWindowStartTime = new(6, 0);
+        public static readonly TimeOnly DefaultEarlyMealWindowEndTime = new(8, 0);
         public const decimal DefaultMonthlyOtHourLimit = 25m;
         public const decimal DefaultYearlyOtHourLimit = 300m;
         public static readonly TimeOnly DefaultBatchAutoSendTime = new(15, 0);
@@ -30,6 +34,10 @@ namespace Attendance.Application.Services
         {
             var setting = await GetOrCreateSettingEntityAsync();
             setting.MainMealTicketMinHours = request.MainMealTicketMinHours;
+            setting.NoMealTicketMaxHours = request.NoMealTicketMaxHours;
+            setting.MealBreakDeductionHours = request.MealBreakDeductionHours;
+            setting.EarlyMealWindowStartTime = request.EarlyMealWindowStartTime;
+            setting.EarlyMealWindowEndTime = request.EarlyMealWindowEndTime;
             setting.MonthlyOtHourLimit = request.MonthlyOtHourLimit;
             setting.YearlyOtHourLimit = request.YearlyOtHourLimit;
             setting.BatchAutoSendTime = request.BatchAutoSendTime;
@@ -38,12 +46,6 @@ namespace Attendance.Application.Services
             await _unitOfWork.SaveChangesAsync();
 
             return ToDto(setting);
-        }
-
-        public async Task<decimal> GetMainMealTicketMinHoursAsync()
-        {
-            var setting = await GetOrCreateSettingEntityAsync();
-            return setting.MainMealTicketMinHours;
         }
 
         public async Task<TimeOnly> GetBatchAutoSendTimeAsync()
@@ -55,6 +57,10 @@ namespace Attendance.Application.Services
         private static AttendanceSettingDto ToDto(AttendanceSetting setting) => new()
         {
             MainMealTicketMinHours = setting.MainMealTicketMinHours,
+            NoMealTicketMaxHours = setting.NoMealTicketMaxHours,
+            MealBreakDeductionHours = setting.MealBreakDeductionHours,
+            EarlyMealWindowStartTime = setting.EarlyMealWindowStartTime,
+            EarlyMealWindowEndTime = setting.EarlyMealWindowEndTime,
             MonthlyOtHourLimit = setting.MonthlyOtHourLimit,
             YearlyOtHourLimit = setting.YearlyOtHourLimit,
             BatchAutoSendTime = setting.BatchAutoSendTime,
@@ -71,6 +77,10 @@ namespace Attendance.Application.Services
             setting = new AttendanceSetting
             {
                 MainMealTicketMinHours = DefaultMainMealTicketMinHours,
+                NoMealTicketMaxHours = DefaultNoMealTicketMaxHours,
+                MealBreakDeductionHours = DefaultMealBreakDeductionHours,
+                EarlyMealWindowStartTime = DefaultEarlyMealWindowStartTime,
+                EarlyMealWindowEndTime = DefaultEarlyMealWindowEndTime,
                 MonthlyOtHourLimit = DefaultMonthlyOtHourLimit,
                 YearlyOtHourLimit = DefaultYearlyOtHourLimit,
                 BatchAutoSendTime = DefaultBatchAutoSendTime,

@@ -54,6 +54,8 @@ public partial class AttendanceDbContext : DbContext
             // decimal(5,2) đủ cho mốc giờ phiếu ăn (vd 2.50), decimal(10,2) cho giới hạn lũy kế
             // tháng/năm — cùng kiểu với Employee.MonthToDate/YearToDate để so sánh không bị lệch.
             entity.Property(e => e.MainMealTicketMinHours).HasColumnType("decimal(5, 2)");
+            entity.Property(e => e.NoMealTicketMaxHours).HasColumnType("decimal(5, 2)");
+            entity.Property(e => e.MealBreakDeductionHours).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.MonthlyOtHourLimit).HasColumnType("decimal(10, 2)");
             entity.Property(e => e.YearlyOtHourLimit).HasColumnType("decimal(10, 2)");
         });

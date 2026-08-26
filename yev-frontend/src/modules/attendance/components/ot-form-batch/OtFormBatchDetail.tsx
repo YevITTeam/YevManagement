@@ -8,11 +8,12 @@ import { Car, Check, MessageCircle, Printer, Utensils, X } from "lucide-react";
 import { OtFormBatchApi } from "@/modules/attendance/api/ot-form-batch.api";
 import type { OtFormBatchDto, ProcessOtFormBatchFormDto } from "@/modules/attendance/types/ot-form-batch.dto";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
-import { calculateHours, formatHours } from "@/modules/attendance/lib/time";
+import { formatHours } from "@/modules/attendance/lib/time";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { useRouter } from "@/navigation";
+import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
 
 function formatDate(value: string) {
     if (!value) return "-";
@@ -213,10 +214,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                         {batch.otForms.map((form) => {
                             const state = decisions[form.otFormId];
                             if (!state) return null;
-                            const totalHours = form.employees.reduce(
-                                (sum, employee) => sum + calculateHours(employee.startTime, employee.endTime),
-                                0
-                            );
+                            const totalHours = form.employees.reduce((sum, employee) => sum + employee.actualHours, 0);
                             return (
                                 <section key={form.otFormId} className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-4">
@@ -346,7 +344,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                 <tbody>
                                                     {form.employees.map((employee) => {
                                                         const isExcluded = state.excludedEmployeeIds.has(employee.employeeId);
-                                                        const hours = calculateHours(employee.startTime, employee.endTime);
+                                                        const hours = employee.actualHours;
                                                         const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
                                                         const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
                                                         return (
@@ -375,19 +373,11 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                                 <td className={`px-6 py-2.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                                     {employee.yearToDate}h
                                                                 </td>
-                                                                <td className="px-6 py-2.5 text-center text-sm text-[#5e3f3a]">
-                                                                    {employee.isEligibleForMeal ? (
-                                                                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50">
-                                                                            <Check size={13} className="text-emerald-600" />
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-[#9aa0a6]">—</span>
-                                                                    )}
+                                                                <td className="px-6 py-2.5 text-center text-sm">
+                                                                    <MealTicketTypeBadge type={employee.mealTicketType} t={tDetail} />
                                                                 </td>
                                                                 <td className="px-6 py-2.5 text-center text-sm">
-                                                                    {!employee.isEligibleForMeal ? (
-                                                                        <span className="text-[#9aa0a6]">—</span>
-                                                                    ) : employee.didEat ? (
+                                                                    {employee.didEat ? (
                                                                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                                                                             <Check size={11} /> {tDetail("didEatYes")}
                                                                         </span>

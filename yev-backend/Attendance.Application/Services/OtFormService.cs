@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Attendance.Application.Dtos.AttendanceSettings;
 using Attendance.Application.Dtos.JobTitles;
 using Attendance.Application.Dtos.OtFormBatches;
 using Attendance.Application.Dtos.OtForms;
@@ -218,7 +219,7 @@ namespace Attendance.Application.Services
             var isEditable = otForm!.Status == (int)OtFormStatus.InApproval &&
                 orderedSteps.All(s => s.Status != (int)OtFormApprovalStepStatus.Approved);
 
-            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+            var mealSettings = await _attendanceSettingService.GetAsync();
 
             return new OtFormDto
             {
@@ -259,7 +260,8 @@ namespace Attendance.Application.Services
                     NoteJp = x.NoteJp,
                     MonthToDate = x.MonthToDate,
                     YearToDate = x.YearToDate,
-                    IsEligibleForMeal = (decimal)(x.EndTime - x.StartTime).TotalHours >= mainMealTicketMinHours,
+                    MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
+                    ActualHours = CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                     DidEat = x.DidEat,
                     IsRemoved = x.IsRemoved,
                     RemovedByUserName = x.RemovedByUserName,
@@ -484,13 +486,13 @@ namespace Attendance.Application.Services
         {
             await _unitOfWork.OtForms.AddAsync(newOtForm);
 
-            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+            var mealSettings = await _attendanceSettingService.GetAsync();
 
             // Chụp lại Dự kiến "trước khi thêm đơn này" — query CHƯA thấy đơn đang tạo (chưa
             // AddAsync/SaveChanges), nên tự nhiên đúng nghĩa "trước" (2026-08-19). Fetch 1 lượt cho CẢ
             // đơn (batch) thay vì từng người, tránh N+1 khi đơn có nhiều nhân viên.
             var projectedByEmployee = await ComputeProjectedHoursBatchAsync(
-                request.Employees.Select(x => x.EmployeeId), request.Date, mainMealTicketMinHours);
+                request.Employees.Select(x => x.EmployeeId), request.Date, mealSettings);
 
             foreach (var item in request.Employees)
             {
@@ -671,7 +673,7 @@ namespace Attendance.Application.Services
                 }
             }
 
-            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+            var mealSettings = await _attendanceSettingService.GetAsync();
 
             var activeByEmployeeId = activeEmployees.ToDictionary(x => x.EmployeeId);
             foreach (var item in request.Employees)
@@ -682,7 +684,7 @@ namespace Attendance.Application.Services
                 _unitOfWork.OtFormEmployees.Update(existing);
             }
 
-            await RecalculateMealTicketCountsAsync(otForm.Id, activeEmployees, mainMealTicketMinHours);
+            await RecalculateMealTicketCountsAsync(otForm.Id, activeEmployees, mealSettings);
 
             await _unitOfWork.SaveChangesAsync();
 
@@ -883,10 +885,10 @@ namespace Attendance.Application.Services
             target.RemoveReason = reason;
             _unitOfWork.OtFormEmployees.Update(target);
 
-            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+            var mealSettings = await _attendanceSettingService.GetAsync();
 
             var remainingActiveEmployees = otForm.OtFormEmployees.Where(x => !x.IsRemoved).ToList();
-            await RecalculateMealTicketCountsAsync(otForm.Id, remainingActiveEmployees, mainMealTicketMinHours);
+            await RecalculateMealTicketCountsAsync(otForm.Id, remainingActiveEmployees, mealSettings);
 
             otForm.NumberOfEmployee = remainingActiveEmployees.Count;
             _unitOfWork.OtForms.Update(otForm);
@@ -1106,40 +1108,51 @@ namespace Attendance.Application.Services
             return overlappingIds;
         }
 
-        private const decimal NoMealExtraAccumulationHours = 0.5m;
+        // Redesign 3 bậc phiếu ăn (2026-08-26, chốt với người dùng qua nhiều vòng — xem
+        // AttendanceSetting.cs và docs/attendance-module.md §Phiếu ăn). Ca OT khớp ĐÚNG khung sớm
+        // (StartTime/EndTime bằng đúng EarlyMealWindowStartTime/EndTime, không phải chỉ overlap) là
+        // ngoại lệ: không trừ giờ dù DidEat thế nào, và luôn nhận phiếu Phụ bất kể độ dài ca.
+        private static bool IsEarlyMealWindowOt(TimeOnly startTime, TimeOnly endTime, AttendanceSettingDto settings) =>
+            startTime == settings.EarlyMealWindowStartTime && endTime == settings.EarlyMealWindowEndTime;
 
-        private static decimal CalculateOtHours(TimeOnly startTime, TimeOnly endTime, bool didEat, decimal mainMealTicketMinHours)
+        // Giờ OT thực tính — DUY NHẤT nên hiển thị/cộng làm "giờ OT của người này" (hiển thị lẫn lũy
+        // kế). Ngoài khung sớm: có ăn thì trừ MealBreakDeductionHours, không ăn giữ nguyên giờ thô.
+        private static decimal CalculateOtHours(TimeOnly startTime, TimeOnly endTime, bool didEat, AttendanceSettingDto settings)
         {
             var hours = (decimal)(endTime - startTime).TotalHours;
 
-            if (hours >= mainMealTicketMinHours && !didEat)
-            {
-                hours += NoMealExtraAccumulationHours;
-            }
+            if (IsEarlyMealWindowOt(startTime, endTime, settings)) return hours;
+
+            if (didEat) hours -= settings.MealBreakDeductionHours;
 
             return hours;
         }
 
-        // Cùng quy tắc tự tính phiếu ăn với FE (CreateOtFormPage.tsx §mealTicketCounts): OT thực tế
-        // (chưa cộng bù 30p) >= ngưỡng + Có ăn -> 1 phiếu Chính; >= ngưỡng + Không ăn -> không tính
-        // phiếu nào; < ngưỡng -> luôn 1 phiếu Phụ (chưa có ô "Có ăn" để tự khai). Sữa vẫn luôn nhập tay,
-        // không đụng tới ở đây.
+        // Loại phiếu ăn 1 người nhận cho 1 lần OT — nguồn chân lý DUY NHẤT, dùng cả cho
+        // OtFormEmployeeDto.MealTicketType (hiển thị per-person) lẫn CalculateMealTicketCounts (tổng
+        // Chính/Phụ của ProcessPart) để tránh 2 nơi tính lệch nhau.
+        private static MealTicketType CalculateMealTicketType(TimeOnly startTime, TimeOnly endTime, bool didEat, AttendanceSettingDto settings)
+        {
+            if (IsEarlyMealWindowOt(startTime, endTime, settings)) return MealTicketType.Secondary;
+
+            var actualHours = CalculateOtHours(startTime, endTime, didEat, settings);
+            if (actualHours < settings.NoMealTicketMaxHours) return MealTicketType.None;
+            if (actualHours < settings.MainMealTicketMinHours) return MealTicketType.Secondary;
+            return MealTicketType.Main;
+        }
+
         private static (int Main, int Secondary) CalculateMealTicketCounts(
-            IEnumerable<OtFormEmployee> activeEmployees, decimal mainMealTicketMinHours)
+            IEnumerable<OtFormEmployee> activeEmployees, AttendanceSettingDto settings)
         {
             var main = 0;
             var secondary = 0;
 
             foreach (var employee in activeEmployees)
             {
-                var rawHours = (decimal)(employee.EndTime - employee.StartTime).TotalHours;
-                if (rawHours >= mainMealTicketMinHours)
+                switch (CalculateMealTicketType(employee.StartTime, employee.EndTime, employee.DidEat, settings))
                 {
-                    if (employee.DidEat) main++;
-                }
-                else
-                {
-                    secondary++;
+                    case MealTicketType.Main: main++; break;
+                    case MealTicketType.Secondary: secondary++; break;
                 }
             }
 
@@ -1151,12 +1164,12 @@ namespace Attendance.Application.Services
         // MainTicketCount/SecondaryTicketCount, giữ nguyên MilkCount (luôn nhập tay). Không làm gì nếu
         // đơn chưa từng bật "Ăn uống" lúc tạo (không có ProcessPart).
         private async Task RecalculateMealTicketCountsAsync(
-            int otFormId, IEnumerable<OtFormEmployee> activeEmployees, decimal mainMealTicketMinHours)
+            int otFormId, IEnumerable<OtFormEmployee> activeEmployees, AttendanceSettingDto settings)
         {
             var processPart = await _unitOfWork.ProcessParts.FirstOrDefaultAsync(x => x.OtFormId == otFormId);
             if (processPart == null) return;
 
-            var (main, secondary) = CalculateMealTicketCounts(activeEmployees, mainMealTicketMinHours);
+            var (main, secondary) = CalculateMealTicketCounts(activeEmployees, settings);
             processPart.MainTicketCount = main;
             processPart.SecondaryTicketCount = secondary;
             _unitOfWork.ProcessParts.Update(processPart);
@@ -1169,7 +1182,7 @@ namespace Attendance.Application.Services
         // Completed từ trước (xem docs/docs-be/attendance-module.md §Lũy kế).
         private async Task AccumulateEmployeeHoursAsync(OtForm otForm)
         {
-            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+            var mealSettings = await _attendanceSettingService.GetAsync();
 
             var otFormEmployees = await _unitOfWork.OtFormEmployees.FindAsync(x => x.OtFormId == otForm.Id && !x.IsRemoved);
 
@@ -1185,7 +1198,7 @@ namespace Attendance.Application.Services
 
             foreach (var otFormEmployee in otFormEmployees)
             {
-                var hours = CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mainMealTicketMinHours);
+                var hours = CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mealSettings);
 
                 if (existingLedgerRows.TryGetValue(otFormEmployee.EmployeeId, out var ledgerRow))
                 {
@@ -1217,7 +1230,7 @@ namespace Attendance.Application.Services
         // AccumulateEmployeeHoursAsync) — tránh N+1 khi đơn có nhiều người (CreateAsync trước đây gọi
         // hàm này riêng cho từng người trong vòng lặp, N nhân viên = N query).
         private async Task<Dictionary<int, (decimal Month, decimal Year)>> ComputeProjectedHoursBatchAsync(
-            IEnumerable<int> employeeIds, DateOnly targetDate, decimal mainMealTicketMinHours)
+            IEnumerable<int> employeeIds, DateOnly targetDate, AttendanceSettingDto mealSettings)
         {
             var employeeIdList = employeeIds.Distinct().ToList();
 
@@ -1230,8 +1243,8 @@ namespace Attendance.Application.Services
                 g => g.Key,
                 g => (
                     Month: g.Where(x => x.OtForm.Date.Month == targetDate.Month)
-                        .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mainMealTicketMinHours)),
-                    Year: g.Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mainMealTicketMinHours))
+                        .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)),
+                    Year: g.Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings))
                 ));
         }
 
@@ -1338,7 +1351,7 @@ namespace Attendance.Application.Services
                 : (await _unitOfWork.ProcessParts.FindAsync(x => activeFormIds.Contains(x.OtFormId)))
                     .ToDictionary(x => x.OtFormId);
 
-            var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+            var mealSettings = await _attendanceSettingService.GetAsync();
 
             return new OtFormBatchDto
             {
@@ -1393,7 +1406,8 @@ namespace Attendance.Application.Services
                             NoteJp = x.NoteJp,
                             MonthToDate = x.MonthToDate,
                             YearToDate = x.YearToDate,
-                            IsEligibleForMeal = (decimal)(x.EndTime - x.StartTime).TotalHours >= mainMealTicketMinHours,
+                            MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
+                            ActualHours = CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                             DidEat = x.DidEat,
                             IsRemoved = x.IsRemoved,
                             RemovedByUserName = x.RemovedByUserName,

@@ -62,7 +62,14 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!values) return;
-        if (values.mainMealTicketMinHours <= 0 || values.monthlyOtHourLimit <= 0 || values.yearlyOtHourLimit <= 0) {
+        if (
+            values.mainMealTicketMinHours <= 0 ||
+            values.noMealTicketMaxHours < 0 ||
+            values.mealBreakDeductionHours < 0 ||
+            values.noMealTicketMaxHours >= values.mainMealTicketMinHours ||
+            values.monthlyOtHourLimit <= 0 ||
+            values.yearlyOtHourLimit <= 0
+        ) {
             toast.error(t("invalidValueError"));
             return;
         }
@@ -112,20 +119,76 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                     </div>
                 </div>
 
-                <label className="block max-w-xs">
-                    <span className={fieldLabelClassName}>{t("fieldMainMealTicketMinHours")}</span>
-                    <input
-                        type="number"
-                        step="0.5"
-                        min={0.5}
-                        max={24}
-                        value={values.mainMealTicketMinHours}
-                        onChange={(event) => setValues((current) => current && { ...current, mainMealTicketMinHours: Number(event.target.value) })}
-                        disabled={isSaving}
-                        className={fieldClassName}
-                    />
-                    <p className="mt-1.5 text-xs text-[#5e3f3a]">{t("fieldMainMealTicketMinHoursHint")}</p>
-                </label>
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldNoMealTicketMaxHours")}</span>
+                        <input
+                            type="number"
+                            step="0.5"
+                            min={0}
+                            max={24}
+                            value={values.noMealTicketMaxHours}
+                            onChange={(event) => setValues((current) => current && { ...current, noMealTicketMaxHours: Number(event.target.value) })}
+                            disabled={isSaving}
+                            className={fieldClassName}
+                        />
+                    </label>
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldMainMealTicketMinHours")}</span>
+                        <input
+                            type="number"
+                            step="0.5"
+                            min={0.5}
+                            max={24}
+                            value={values.mainMealTicketMinHours}
+                            onChange={(event) => setValues((current) => current && { ...current, mainMealTicketMinHours: Number(event.target.value) })}
+                            disabled={isSaving}
+                            className={fieldClassName}
+                        />
+                    </label>
+                </div>
+                <p className="text-xs text-[#5e3f3a]">{t("fieldMainMealTicketMinHoursHint")}</p>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldMealBreakDeductionHours")}</span>
+                        <input
+                            type="number"
+                            step="0.25"
+                            min={0}
+                            max={4}
+                            value={values.mealBreakDeductionHours}
+                            onChange={(event) => setValues((current) => current && { ...current, mealBreakDeductionHours: Number(event.target.value) })}
+                            disabled={isSaving}
+                            className={fieldClassName}
+                        />
+                    </label>
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldEarlyMealWindowStartTime")}</span>
+                        <input
+                            type="time"
+                            value={toTimeInputValue(values.earlyMealWindowStartTime)}
+                            onChange={(event) =>
+                                setValues((current) => current && { ...current, earlyMealWindowStartTime: fromTimeInputValue(event.target.value) })
+                            }
+                            disabled={isSaving}
+                            className={fieldClassName}
+                        />
+                    </label>
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldEarlyMealWindowEndTime")}</span>
+                        <input
+                            type="time"
+                            value={toTimeInputValue(values.earlyMealWindowEndTime)}
+                            onChange={(event) =>
+                                setValues((current) => current && { ...current, earlyMealWindowEndTime: fromTimeInputValue(event.target.value) })
+                            }
+                            disabled={isSaving}
+                            className={fieldClassName}
+                        />
+                    </label>
+                </div>
+                <p className="text-xs text-[#5e3f3a]">{t("fieldEarlyMealWindowHint")}</p>
             </section>
 
             <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">

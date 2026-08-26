@@ -4,8 +4,20 @@ namespace Attendance.Application.Dtos.AttendanceSettings
     // (§Cấu hình phiếu ăn & giới hạn lũy kế).
     public class AttendanceSettingDto
     {
-        // Số giờ OT tối thiểu để nhận PHIẾU CHÍNH; dưới mốc này nhận PHIẾU PHỤ.
+        // Số giờ OT THỰC TÍCH tối thiểu để nhận PHIẾU CHÍNH; dưới mốc này (nhưng còn >= NoMealTicketMaxHours)
+        // nhận PHIẾU PHỤ; dưới NoMealTicketMaxHours thì không có phiếu nào (xem AttendanceSetting.cs).
         public decimal MainMealTicketMinHours { get; set; }
+
+        // Sàn dưới — thực tích dưới mốc này thì không có phiếu ăn nào.
+        public decimal NoMealTicketMaxHours { get; set; }
+
+        // Số giờ trừ khi có ăn (áp dụng ngoài khung sớm).
+        public decimal MealBreakDeductionHours { get; set; }
+
+        // Khung giờ OT sớm đặc cách (mặc định 6h-8h) — khớp ĐÚNG khung này thì luôn phiếu Phụ, không trừ.
+        public TimeOnly EarlyMealWindowStartTime { get; set; }
+
+        public TimeOnly EarlyMealWindowEndTime { get; set; }
 
         // Giới hạn giờ OT trong tháng / trong năm — vượt thì UI cảnh báo đỏ (không chặn tạo/duyệt đơn).
         public decimal MonthlyOtHourLimit { get; set; }

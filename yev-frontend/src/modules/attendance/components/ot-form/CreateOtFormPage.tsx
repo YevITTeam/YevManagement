@@ -33,6 +33,7 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { MEAL_TICKET_MAIN, MEAL_TICKET_SECONDARY, computeMealTicketType, isEarlyMealWindowOt } from "@/modules/attendance/lib/mealTicket";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -58,6 +59,26 @@ function computeTotalHour(startTime: string, endTime: string): number {
     let endMinutes = toMinutes(endTime);
     if (endMinutes < startMinutes) endMinutes += 24 * 60; // qua ngày hôm sau
     return Math.round(((endMinutes - startMinutes) / 60) * 100) / 100;
+}
+
+// Badge "Loại phiếu ăn" dùng chung cho cả 3 bảng chọn nhân viên (Sửa đơn/Theo chuyền/Theo Nhóm) —
+// preview lúc đang tạo/sửa đơn, mirror màu badge "Có ăn"/"Không ăn" ở OtFormDetail.tsx cho nhất quán.
+function MealTicketTypeBadge({ type, labels }: { type: number; labels: { main: string; secondary: string; none: string } }) {
+    if (type === MEAL_TICKET_MAIN) {
+        return (
+            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                {labels.main}
+            </span>
+        );
+    }
+    if (type === MEAL_TICKET_SECONDARY) {
+        return (
+            <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-semibold text-[#5e3f3a]">
+                {labels.secondary}
+            </span>
+        );
+    }
+    return <span className="text-xs text-[#9aa0a6]">{labels.none}</span>;
 }
 
 const emptyProcessPart: ProcessPartDto = {
@@ -225,6 +246,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [endTime, setEndTime] = useState("");
     const [subReason, setSubReason] = useState("");
 
+    // Chặn hiện danh sách nhân viên bên dưới (cả 2 chế độ) cho tới khi đã điền đủ thông tin đơn cốt
+    // lõi — trước đây "Theo Nhóm" chỉ cần chọn Nhóm là ra danh sách dù Lý do/Trường hợp OT/Ngày/Giờ
+    // còn trống, dễ khiến người dùng chọn nhân viên trước rồi mới điền nốt phần trên, sai thứ tự thao
+    // tác mong muốn (2026-08-26, yêu cầu người dùng). Không tính groupId ở đây — "Theo Nhóm" còn cần
+    // check riêng groupId (giữ nguyên hint chooseGroupFirstHint), "Theo chuyền" không có groupId.
+    const isCoreFormInfoFilled = Boolean(departmentId && reasonId && otCaseId && date && startTime && endTime);
+
     const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
     const [employeeOverrides, setEmployeeOverrides] = useState<Record<number, EmployeeOverride>>({});
     // Chỉ dùng khi Sửa đơn — danh sách nhân viên CỐ ĐỊNH lấy thẳng từ đơn (đã lọc bỏ người bị loại),
@@ -323,18 +351,22 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         "Không thể tải danh sách Nhóm ca."
     );
 
-    // Tìm kiếm ProductionEmployee theo bộ lọc — chỉ chạy khi đang ở chế độ "Theo chuyền" lúc Tạo mới.
+    // Tìm kiếm ProductionEmployee theo bộ lọc — chỉ chạy khi đang ở chế độ "Theo chuyền" lúc Tạo mới VÀ
+    // đã chọn đủ Team + Line (2026-08-25, yêu cầu người dùng: chọn lẻ tẻ 1 trong 2 khiến danh sách quá
+    // dài — cả nghìn ProductionEmployee — gây giật lag khi render bảng). Chưa đủ 2 điều kiện → không gọi
+    // API, hiện hint thay vì bảng (xem chooseTeamLineFirstHint bên dưới).
+    const canSearchProduction = isCoreFormInfoFilled && productionTeamId !== "" && productionLineId !== "";
     useFetchEffect(
         () =>
-            formMode === "production" && !isEditMode
+            formMode === "production" && !isEditMode && canSearchProduction
                 ? ProductionEmployeeApi.search({
-                      productionLineId: productionLineId === "" ? undefined : productionLineId,
-                      teamId: productionTeamId === "" ? undefined : productionTeamId,
+                      productionLineId,
+                      teamId: productionTeamId,
                       shiftTeamId: productionShiftTeamId === "" ? undefined : productionShiftTeamId,
                       keyword: productionKeyword.trim() || undefined,
                   })
                 : Promise.resolve([]),
-        [formMode, isEditMode, productionLineId, productionTeamId, productionShiftTeamId, productionKeyword],
+        [formMode, isEditMode, canSearchProduction, productionLineId, productionTeamId, productionShiftTeamId, productionKeyword],
         setProductionResults,
         t("productionSearchError")
     );
@@ -474,27 +506,22 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
 
-    // Tự tính số phiếu ăn theo giờ OT THỰC TẾ của từng người đang chọn (docs §Cấu hình phiếu ăn):
-    // tăng ca >= mốc cấu hình (mặc định 2h30) → 1 phiếu CHÍNH, dưới mốc → 1 phiếu PHỤ. Người đủ ngưỡng
-    // nhưng tick "Không ăn" (didEat=false) thì KHÔNG tính vào phiếu nào cả — không ăn thì không cần
-    // suất, và họ đã được cộng bù 30 phút lũy kế thay vào đó (2026-08-06, xem §Có ăn hay không). Người
-    // dưới ngưỡng chưa có ô "Có ăn" để tự khai nên vẫn mặc định tính vào phiếu phụ như cũ. Sữa KHÔNG
-    // tự tính — luôn để người lập đơn tự nhập.
+    // Tự tính số phiếu ăn theo giờ OT THỰC TẾ của từng người đang chọn — redesign 3 bậc (2026-08-26,
+    // xem modules/attendance/lib/mealTicket.ts + docs §Phiếu ăn): thực tích < sàn -> không phiếu; sàn..
+    // mốc chính -> Phụ; >= mốc chính -> Chính. Ca khớp đúng khung sớm luôn tính Phụ. Sữa KHÔNG tự tính
+    // — luôn để người lập đơn tự nhập.
     const mealTicketCounts = useMemo(() => {
         let main = 0;
         let secondary = 0;
         for (const employeeId of selectedEmployeeIds) {
             const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
-            const hours = computeTotalHour(startTime, employeeEndTime);
-            if (hours >= setting.mainMealTicketMinHours) {
-                const didEat = employeeOverrides[employeeId]?.didEat ?? mealServiceActive;
-                if (didEat) main += 1;
-            } else {
-                secondary += 1;
-            }
+            const didEat = employeeOverrides[employeeId]?.didEat ?? mealServiceActive;
+            const ticketType = computeMealTicketType(startTime, employeeEndTime, didEat, setting);
+            if (ticketType === MEAL_TICKET_MAIN) main += 1;
+            else if (ticketType === MEAL_TICKET_SECONDARY) secondary += 1;
         }
         return { main, secondary };
-    }, [selectedEmployeeIds, employeeOverrides, startTime, endTime, setting.mainMealTicketMinHours, mealServiceActive]);
+    }, [selectedEmployeeIds, employeeOverrides, startTime, endTime, setting, mealServiceActive]);
 
     // Đồng bộ kết quả tự tính vào ô nhập — so sánh snapshot NGAY TRONG RENDER thay vì dùng effect
     // (CLAUDE.md §4.5: không setState đồng bộ trong useEffect). Dừng đồng bộ ngay khi người dùng tự gõ
@@ -557,6 +584,30 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 ? current
                 : { ...current, [employeeId]: { endTime, didEat: mealServiceActive, noteVn: "", noteJp: "" } }
         );
+    };
+
+    // Chọn/bỏ chọn HÀNG LOẠT toàn bộ danh sách đang hiện (bảng Theo Nhóm hoặc Theo chuyền) — tích từng
+    // dòng một quá chậm khi danh sách dài (yêu cầu người dùng 2026-08-25). Chỉ tác động tới những người
+    // đang hiển thị theo bộ lọc hiện tại, KHÔNG đụng tới lựa chọn đã có từ bộ lọc khác trước đó (VD đổi
+    // Line/Team giữa chừng vẫn giữ nguyên người đã chọn ở Line/Team trước).
+    const setEmployeesSelected = (employeeIds: number[], selected: boolean) => {
+        setSelectedEmployeeIds((current) => {
+            if (selected) {
+                const toAdd = employeeIds.filter((id) => !current.includes(id));
+                return toAdd.length > 0 ? [...current, ...toAdd] : current;
+            }
+            const idsToRemove = new Set(employeeIds);
+            return current.filter((id) => !idsToRemove.has(id));
+        });
+        if (selected) {
+            setEmployeeOverrides((current) => {
+                const next = { ...current };
+                for (const id of employeeIds) {
+                    if (!next[id]) next[id] = { endTime, didEat: mealServiceActive, noteVn: "", noteJp: "" };
+                }
+                return next;
+            });
+        }
     };
 
     const handleEmployeeOverrideChange = (employeeId: number, field: "endTime" | "noteVn" | "noteJp", value: string) => {
@@ -883,6 +934,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <th className="px-3 py-2">{t("colAccumulation")}</th>
                                         <th className="px-3 py-2">{t("colEndTime")}</th>
                                         <th className="px-3 py-2">{t("colDidEat")}</th>
+                                        <th className="px-3 py-2">{t("colMealTicketType")}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -891,8 +943,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             employee.monthToDate > setting.monthlyOtHourLimit ||
                                             employee.yearToDate > setting.yearlyOtHourLimit;
                                         const currentEndTime = employeeOverrides[employee.employeeId]?.endTime ?? endTime;
-                                        const isEligibleForMeal =
-                                            computeTotalHour(startTime, currentEndTime) >= setting.mainMealTicketMinHours;
+                                        const currentDidEat = employeeOverrides[employee.employeeId]?.didEat ?? true;
+                                        const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
+                                        const mealTicketType = computeMealTicketType(startTime, currentEndTime, currentDidEat, setting);
                                         return (
                                             <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
                                                 <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">
@@ -919,11 +972,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
-                                                    {isEligibleForMeal ? (
+                                                    {earlyWindow ? (
+                                                        <span className="text-xs text-[#8a8f94]">{t("didEatNotApplicableEarlyWindow")}</span>
+                                                    ) : (
                                                         <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={employeeOverrides[employee.employeeId]?.didEat ?? true}
+                                                                checked={currentDidEat}
                                                                 onChange={(event) =>
                                                                     handleEmployeeDidEatChange(employee.employeeId, event.target.checked)
                                                                 }
@@ -932,9 +987,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                             />
                                                             {t("didEatLabel")}
                                                         </label>
-                                                    ) : (
-                                                        <span className="text-sm text-[#8a8f94]">—</span>
                                                     )}
+                                                </td>
+                                                <td className="px-3 py-2 align-top">
+                                                    <MealTicketTypeBadge
+                                                        type={mealTicketType}
+                                                        labels={{ main: t("mealTicketTypeMain"), secondary: t("mealTicketTypeSecondary"), none: t("mealTicketTypeNone") }}
+                                                    />
                                                 </td>
                                             </tr>
                                         );
@@ -945,6 +1004,20 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     ) : formMode === "production" ? (
                         <div className="space-y-4">
                             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                                {/* Team PHẢI chọn trước Line — Line là con thật của Team (ProductionLine.TeamId
+                                    là FK), đặt Team lên trước + khoá Line tới khi có Team để không còn ai hiểu
+                                    nhầm Line là bộ lọc chọn đầu tiên (2026-08-26, yêu cầu người dùng). */}
+                                <select
+                                    value={productionTeamId}
+                                    onChange={(event) => setProductionTeamId(event.target.value ? Number(event.target.value) : "")}
+                                    disabled={!isCoreFormInfoFilled}
+                                    className={fieldClassName}
+                                >
+                                    <option value="">{t("productionFilterTeamPlaceholder")}</option>
+                                    {teamOptions.map((option) => (
+                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
+                                    ))}
+                                </select>
                                 <SearchableSelect
                                     options={lineOptions.map((option) => ({
                                         value: option.id,
@@ -953,21 +1026,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     }))}
                                     value={productionLineId}
                                     onChange={(v) => setProductionLineId(v)}
-                                    placeholder={t("productionFilterLinePlaceholder")}
+                                    placeholder={
+                                        productionTeamId === "" ? t("productionFilterLinePlaceholderNeedTeam") : t("productionFilterLinePlaceholder")
+                                    }
+                                    disabled={!isCoreFormInfoFilled || productionTeamId === ""}
                                 />
-                                <select
-                                    value={productionTeamId}
-                                    onChange={(event) => setProductionTeamId(event.target.value ? Number(event.target.value) : "")}
-                                    className={fieldClassName}
-                                >
-                                    <option value="">{t("productionFilterTeamPlaceholder")}</option>
-                                    {teamOptions.map((option) => (
-                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
-                                    ))}
-                                </select>
                                 <select
                                     value={productionShiftTeamId}
                                     onChange={(event) => setProductionShiftTeamId(event.target.value ? Number(event.target.value) : "")}
+                                    disabled={!isCoreFormInfoFilled}
                                     className={fieldClassName}
                                 >
                                     <option value="">{t("productionFilterShiftTeamPlaceholder")}</option>
@@ -979,18 +1046,37 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     value={productionKeyword}
                                     onChange={(event) => setProductionKeyword(event.target.value)}
                                     placeholder={t("productionFilterKeywordPlaceholder")}
+                                    disabled={!isCoreFormInfoFilled}
                                     className={fieldClassName}
                                 />
                             </div>
 
-                            {productionResults.length === 0 ? (
+                            {!isCoreFormInfoFilled ? (
+                                <p className="text-sm text-[#5e3f3a]">{t("fillFormInfoFirstHint")}</p>
+                            ) : !canSearchProduction ? (
+                                <p className="text-sm text-[#5e3f3a]">{t("chooseTeamLineFirstHint")}</p>
+                            ) : productionResults.length === 0 ? (
                                 <p className="text-sm text-[#5e3f3a]">{t("noProductionResults")}</p>
                             ) : (
                                 <div className="overflow-x-auto">
                                     <table className="min-w-full border-collapse text-left">
                                         <thead>
                                             <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                <th className="w-10 px-3 py-2"></th>
+                                                <th className="w-10 px-3 py-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={productionResults.length > 0 && productionResults.every((item) => selectedEmployeeIds.includes(item.employeeId))}
+                                                        onChange={() =>
+                                                            setEmployeesSelected(
+                                                                productionResults.map((item) => item.employeeId),
+                                                                !productionResults.every((item) => selectedEmployeeIds.includes(item.employeeId))
+                                                            )
+                                                        }
+                                                        disabled={isSubmitting}
+                                                        aria-label={t("selectAllLabel")}
+                                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                    />
+                                                </th>
                                                 <th className="px-3 py-2">{t("colEmployeeCode")}</th>
                                                 <th className="px-3 py-2">{t("colFullName")}</th>
                                                 <th className="px-3 py-2">{t("colBlockCode")}</th>
@@ -998,6 +1084,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 <th className="px-3 py-2">{t("colShiftTeam")}</th>
                                                 <th className="px-3 py-2">{t("colEndTime")}</th>
                                                 <th className="px-3 py-2">{t("colDidEat")}</th>
+                                                <th className="px-3 py-2">{t("colMealTicketType")}</th>
                                                 <th className="px-3 py-2">{t("colNote")}</th>
                                             </tr>
                                         </thead>
@@ -1005,8 +1092,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             {productionResults.map((item) => {
                                                 const checked = selectedEmployeeIds.includes(item.employeeId);
                                                 const currentEndTime = employeeOverrides[item.employeeId]?.endTime ?? endTime;
-                                                const isEligibleForMeal =
-                                                    computeTotalHour(startTime, currentEndTime) >= setting.mainMealTicketMinHours;
+                                                const currentDidEat = employeeOverrides[item.employeeId]?.didEat ?? mealServiceActive;
+                                                const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
+                                                const mealTicketType = computeMealTicketType(startTime, currentEndTime, currentDidEat, setting);
                                                 return (
                                                     <tr
                                                         key={item.employeeId}
@@ -1048,20 +1136,26 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                             />
                                                         </td>
                                                         <td className="px-3 py-2 align-top">
-                                                            {isEligibleForMeal ? (
+                                                            {earlyWindow ? (
+                                                                <span className="text-xs text-[#8a8f94]">{t("didEatNotApplicableEarlyWindow")}</span>
+                                                            ) : (
                                                                 <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
                                                                     <input
                                                                         type="checkbox"
-                                                                        checked={employeeOverrides[item.employeeId]?.didEat ?? mealServiceActive}
+                                                                        checked={currentDidEat}
                                                                         onChange={(event) => handleEmployeeDidEatChange(item.employeeId, event.target.checked)}
                                                                         disabled={isSubmitting || !checked}
                                                                         className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                                                     />
                                                                     {t("didEatLabel")}
                                                                 </label>
-                                                            ) : (
-                                                                <span className="text-sm text-[#8a8f94]">—</span>
                                                             )}
+                                                        </td>
+                                                        <td className="px-3 py-2 align-top">
+                                                            <MealTicketTypeBadge
+                                                                type={mealTicketType}
+                                                                labels={{ main: t("mealTicketTypeMain"), secondary: t("mealTicketTypeSecondary"), none: t("mealTicketTypeNone") }}
+                                                            />
                                                         </td>
                                                         <td className="px-3 py-2 align-top">
                                                             <input
@@ -1080,6 +1174,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 </div>
                             )}
                         </div>
+                    ) : !isCoreFormInfoFilled ? (
+                        <p className="text-sm text-[#5e3f3a]">{t("fillFormInfoFirstHint")}</p>
                     ) : !groupId ? (
                         <p className="text-sm text-[#5e3f3a]">{t("chooseGroupFirstHint")}</p>
                     ) : groupEmployees.length === 0 ? (
@@ -1089,12 +1185,27 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <table className="min-w-full border-collapse text-left">
                                 <thead>
                                     <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                        <th className="w-10 px-3 py-2"></th>
+                                        <th className="w-10 px-3 py-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={groupEmployees.length > 0 && groupEmployees.every((employee) => selectedEmployeeIds.includes(employee.id))}
+                                                onChange={() =>
+                                                    setEmployeesSelected(
+                                                        groupEmployees.map((employee) => employee.id),
+                                                        !groupEmployees.every((employee) => selectedEmployeeIds.includes(employee.id))
+                                                    )
+                                                }
+                                                disabled={isSubmitting}
+                                                aria-label={t("selectAllLabel")}
+                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                            />
+                                        </th>
                                         <th className="px-3 py-2">{t("colEmployeeCode")}</th>
                                         <th className="px-3 py-2">{t("colFullName")}</th>
                                         <th className="px-3 py-2">{t("colAccumulation")}</th>
                                         <th className="px-3 py-2">{t("colEndTime")}</th>
                                         <th className="px-3 py-2">{t("colDidEat")}</th>
+                                        <th className="px-3 py-2">{t("colMealTicketType")}</th>
                                         <th className="px-3 py-2">{t("colNote")}</th>
                                     </tr>
                                 </thead>
@@ -1108,8 +1219,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             employee.projectedMonthToDate > setting.monthlyOtHourLimit ||
                                             employee.projectedYearToDate > setting.yearlyOtHourLimit;
                                         const currentEndTime = employeeOverrides[employee.id]?.endTime ?? endTime;
-                                        const isEligibleForMeal =
-                                            computeTotalHour(startTime, currentEndTime) >= setting.mainMealTicketMinHours;
+                                        const currentDidEat = employeeOverrides[employee.id]?.didEat ?? mealServiceActive;
+                                        const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
+                                        const mealTicketType = computeMealTicketType(startTime, currentEndTime, currentDidEat, setting);
                                         return (
                                             <tr
                                                 key={employee.id}
@@ -1155,20 +1267,26 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
-                                                    {isEligibleForMeal ? (
+                                                    {earlyWindow ? (
+                                                        <span className="text-xs text-[#8a8f94]">{t("didEatNotApplicableEarlyWindow")}</span>
+                                                    ) : (
                                                         <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#191c1e]">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={employeeOverrides[employee.id]?.didEat ?? mealServiceActive}
+                                                                checked={currentDidEat}
                                                                 onChange={(event) => handleEmployeeDidEatChange(employee.id, event.target.checked)}
                                                                 disabled={isSubmitting || !checked}
                                                                 className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                                             />
                                                             {t("didEatLabel")}
                                                         </label>
-                                                    ) : (
-                                                        <span className="text-sm text-[#8a8f94]">—</span>
                                                     )}
+                                                </td>
+                                                <td className="px-3 py-2 align-top">
+                                                    <MealTicketTypeBadge
+                                                        type={mealTicketType}
+                                                        labels={{ main: t("mealTicketTypeMain"), secondary: t("mealTicketTypeSecondary"), none: t("mealTicketTypeNone") }}
+                                                    />
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
                                                     <input
@@ -1236,7 +1354,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                         <span className="flex items-center gap-1.5 text-[#5e3f3a]">
                                             <Calculator className="h-3.5 w-3.5 shrink-0" />
-                                            {t("mealTicketRuleHint", { hours: setting.mainMealTicketMinHours })}
+                                            {t("mealTicketRuleHint", {
+                                                noTicketHours: setting.noMealTicketMaxHours,
+                                                mainHours: setting.mainMealTicketMinHours,
+                                            })}
                                         </span>
                                         {!isEditMode &&
                                             (autoMealTicket ? (

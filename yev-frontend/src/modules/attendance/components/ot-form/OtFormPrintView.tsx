@@ -55,6 +55,22 @@ function getGivenName(fullName: string | null | undefined) {
     return parts[parts.length - 1];
 }
 
+// Đơn "theo chuyền" (isProductionForm=true) không gắn 1 Group cố định nên ô "Tên công đoạn" không thể
+// in departmentNameVn/groupNameVn như đơn "theo Nhóm" — thay bằng Team/Công đoạn/Nhóm ca snapshot trên
+// từng nhân viên (OtFormEmployee.TeamCodeSnapshot/CongDoanSnapshot/ShiftTeamCodeSnapshot, xem docs
+// attendance-otform-pdf-mapping.md). Người bị loại (isRemoved) không tính. Gộp theo giá trị PHÂN BIỆT
+// (thường cả đơn chỉ 1 Team/1 Nhóm ca vì chọn qua bộ lọc cascading ở CreateOtFormPage, nhưng Công đoạn
+// có thể khác nhau giữa từng người trong cùng Line nên vẫn phải gộp, không chỉ lấy người đầu tiên) —
+// yêu cầu người dùng 2026-08-25, khớp mẫu giấy in thật.
+function getProductionCongDoanLabel(form: OtFormDto) {
+    const activeEmployees = form.employees.filter((e) => !e.isRemoved);
+    const distinct = (values: (string | null)[]) => Array.from(new Set(values.filter((v): v is string => !!v)));
+    const teamCodes = distinct(activeEmployees.map((e) => e.teamCodeSnapshot));
+    const congDoans = distinct(activeEmployees.map((e) => e.congDoanSnapshot));
+    const shiftTeamCodes = distinct(activeEmployees.map((e) => e.shiftTeamCodeSnapshot));
+    return [teamCodes.join("/"), congDoans.join("/"), shiftTeamCodes.join("/")].filter(Boolean).join("   ");
+}
+
 // Toạ độ (% theo chiều rộng/cao TỪNG TRANG ảnh nền) của mọi ô cần điền — đo trực tiếp từ file gốc
 // src/assets/file-ot-form/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO (A4/A5).doc/.pdf qua Word COM
 // (Range.Information + Cell.Width/Height), KHÔNG áng chừng bằng mắt. Toàn bộ nội dung form (kể cả
@@ -452,7 +468,7 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
             })}
 
             <div style={nowrapBoxStyle(layout.tenCongDoan)} className="pl-1">
-                {form.departmentNameVn} — {form.groupNameVn}
+                {form.isProductionForm ? getProductionCongDoanLabel(form) : `${form.departmentNameVn} — ${form.groupNameVn}`}
             </div>
             <div style={nowrapBoxStyle(layout.soLuongNhanVien)} className="pl-1">
                 {form.numberOfEmployee}

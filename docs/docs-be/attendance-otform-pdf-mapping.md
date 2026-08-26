@@ -36,23 +36,26 @@ FE gợi ý: nếu muốn in kèm tên người ký/ngày ký dưới mỗi ô (
 
 | Ô trên phiếu (Vn / Jp) | Nguồn dữ liệu | Ghi chú |
 |---|---|---|
-| Tên công đoạn / 工程名 | **⚠️ Chưa có field** | Xem §3 |
+| Tên công đoạn / 工程名 | **Đã chốt (2026-08-25)** — xem §3 | Khác nhau theo `isProductionForm` |
 | Số lượng nhân viên / 人数 | `numberOfEmployee` | |
-| Người chịu trách nhiệm / 責任者 | **Đã chốt (2026-07-20)**: `approvalHistories[]` lọc `approvalLevel == 0 (Submitter)` → `.approverFullName` (fallback `.approverUserName` nếu null) | Là Trưởng nhóm — cùng người ký ô "Người đề nghị" ở §1, chỉ khác là ở đây in **tên chữ** thay vì ảnh chữ ký. Không cần field DB riêng — tái dùng đúng dữ liệu approval history cấp Submitter |
+| Người chịu trách nhiệm / 責任者 | **Đã chốt (2026-08-07, Giai đoạn Cây chức vụ)**: `approvalSteps[]` lọc `isResponsibleSnapshot == true` → tra `approvalHistories[stepOrder]` → `.approverFullName` (fallback `.approverUserName`, rồi `createdByFullName`/`createdByUserName` nếu bước chưa duyệt tới hoặc chuỗi chưa cấu hình bước IsResponsible) | Là bước được Admin đánh dấu "người chịu trách nhiệm" khi cấu hình Cây duyệt (Nhóm hoặc Chuyền) — **không còn phải Trưởng nhóm cố định** như thiết kế cũ (`approvalLevel==0 Submitter`, đã bỏ cùng đợt thay thế `UserApprovalScope` bằng Cây chức vụ). Dùng chung logic cho cả đơn "theo Nhóm" và "theo chuyền". |
 | Thời gian — Từ / から | `startTime` (format `HH:mm`) | |
 | Thời gian — Đến / まで | `endTime` (format `HH:mm`) | Đây là giờ kết thúc TỐI ĐA của đơn — từng nhân viên có thể kết thúc sớm hơn, xem bảng nhân viên §4 |
 | Ngày / 日付 | `date` (format `dd/MM/yyyy`) | |
 | Lý do / 理由 | `reasonNameVn` (+ nối thêm `subReason` nếu có, VD `"{reasonNameVn}: {subReason}"`) | Phiếu chỉ có 1 ô free-text, không tách 2 dòng — FE tự quyết cách nối |
 
-## 3. Ô CHƯA có field trong DB (gap — cần quyết định trước khi in đủ)
+## 3. Ô "Tên công đoạn / 工程名" — khác nhau theo loại đơn (đã chốt 2026-08-25)
 
-| Ô trên phiếu | Hiện trạng | Đề xuất |
+Field cũ `AreaLine` đã bị xoá hẳn (migration `RemoveAreaLineFromOtFormAddGroupDepartment`, 2026-07-14)
+khi thay bằng `Group`/`Department` — đúng cho đơn "theo Nhóm" nhưng đơn "theo chuyền"
+(`isProductionForm=true`) không gắn 1 Group cố định (`groupNameVn = null`) nên cần nguồn khác:
+
+| Loại đơn | Nguồn dữ liệu | Ghi chú |
 |---|---|---|
-| **Tên công đoạn / 工程名** | Field cũ `AreaLine` đã bị xoá hẳn (migration `RemoveAreaLineFromOtFormAddGroupDepartment`, 2026-07-14) khi thay bằng `Group`/`Department`. Đã ghi nhận từ trước trong `attendance-module.md`, chưa quyết định thêm lại. | Nếu nghiệp vụ xác nhận vẫn cần in, phải thêm migration cột mới cho `OtForm` + cập nhật `OtFormDto`/`CreateOtFormDto`/`UpdateOtFormDto`. |
+| Theo Nhóm (`isProductionForm=false`) | `${departmentNameVn} — ${groupNameVn}` | Không đổi so với trước |
+| Theo chuyền (`isProductionForm=true`) | Gộp theo GIÁ TRỊ PHÂN BIỆT từ `employees[].teamCodeSnapshot` / `.congDoanSnapshot` / `.shiftTeamCodeSnapshot` (bỏ qua `isRemoved=true`), nối `"{teamCodes}   {congDoans}   {shiftTeamCodes}"` | Snapshot lấy từ `ProductionEmployee` lúc thêm người vào đơn (xem `OtFormEmployee.CongDoanSnapshot`/`TeamCodeSnapshot`/`ShiftTeamCodeSnapshot`, `attendance-module.md §Chế tạo`). Mỗi phần có thể có NHIỀU giá trị nếu nhân viên trong đơn không cùng Team/Công đoạn/Nhóm ca — nối bằng `/` |
 
-> ~~Người chịu trách nhiệm / 責任者~~ — **đã chốt (2026-07-20)**, không phải gap: ô này = Trưởng nhóm, lấy chung từ `approvalHistories[approvalLevel=0].approverFullName` (xem §2). Không cần field DB riêng.
-
-**Quy trình chung khi gặp ô kiểu này ở phiếu mới**: KHÔNG tự ý nhét dữ liệu có sẵn khi chưa xác nhận — chỉ để trống/note "cần bổ sung" và hỏi người yêu cầu nghiệp vụ trước, giống cách `Tên công đoạn` đã được xử lý (đúng CLAUDE.md §2 luật 2 — không tự bịa nghiệp vụ khi thiếu thông tin).
+**Quy trình chung khi gặp ô kiểu này ở phiếu mới**: KHÔNG tự ý nhét dữ liệu có sẵn khi chưa xác nhận — chỉ để trống/note "cần bổ sung" và hỏi người yêu cầu nghiệp vụ trước (đúng CLAUDE.md §2 luật 2 — không tự bịa nghiệp vụ khi thiếu thông tin).
 
 ## 4. Khối "Phần xử lý / 処理欄"
 

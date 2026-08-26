@@ -541,6 +541,14 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const usedProductionJobTitleIds = new Set(productionSteps.map((s) => s.jobTitleId));
     const availableProductionJobTitles = allJobTitles.filter((jt) => !usedProductionJobTitleIds.has(jt.id));
 
+    // Đúng 2 ô "Người đề nghị" cố định trên giấy in — CHỈ tính cấp trung gian (terminalLevel===0:
+    // Line Leader/Group Leader/Team Leader), 3 cấp cuối có 3 ô chữ ký riêng, không tính vào đây —
+    // mirror groupSigningCount nhưng lọc thêm theo terminalLevel (xem ProductionApprovalStepService.ReplaceAsync).
+    const productionIntermediateSteps = productionSteps.filter((s) => s.terminalLevel === 0);
+    const productionSigningCount = productionIntermediateSteps.filter((s) => s.requiresSignature).length;
+    const productionSigningLimitReached = productionSigningCount >= 2;
+    const productionSigningMinNotMet = productionIntermediateSteps.length > 0 && productionSigningCount === 0;
+
     const handleAddProductionStep = () => {
         if (!addingProductionJobTitleId) return;
         const jobTitle = allJobTitles.find((jt) => jt.id === addingProductionJobTitleId);
@@ -556,6 +564,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 jobTitleName: jobTitle.name,
                 rankOrder: jobTitle.rankOrder,
                 requiresSignature: false,
+                isResponsible: false,
                 terminalLevel: jobTitle.terminalLevel,
             },
         ]);
@@ -569,8 +578,20 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     };
 
     const handleToggleProductionSignature = (index: number) => {
+        const target = productionSteps[index];
+        if (target.terminalLevel === 0 && !target.requiresSignature && productionSigningLimitReached) {
+            toast.error(tProd("signingLimitToggleError"));
+            return;
+        }
         setProductionSteps((current) =>
             current.map((step, i) => (i === index ? { ...step, requiresSignature: !step.requiresSignature } : step))
+        );
+        setIsProductionDirty(true);
+    };
+
+    const handleSetProductionResponsible = (index: number) => {
+        setProductionSteps((current) =>
+            current.map((step, i) => ({ ...step, isResponsible: i === index ? !current[index].isResponsible : false }))
         );
         setIsProductionDirty(true);
     };
@@ -587,7 +608,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         try {
             const data = await ProductionApprovalStepApi.replaceByDepartment(
                 departmentId,
-                productionSteps.map((s) => ({ jobTitleId: s.jobTitleId, requiresSignature: s.requiresSignature }))
+                productionSteps.map((s) => ({ jobTitleId: s.jobTitleId, requiresSignature: s.requiresSignature, isResponsible: s.isResponsible }))
             );
             setProductionSteps(data);
             setIsProductionDirty(false);
@@ -1245,6 +1266,19 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                     {step.requiresSignature ? <Check size={11} /> : <X size={11} />}
                                                     {step.requiresSignature ? tProd("requiresSignatureYes") : tProd("requiresSignatureNo")}
                                                 </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSetProductionResponsible(index)}
+                                                    title={tProd("toggleResponsibleHint")}
+                                                    className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
+                                                        step.isResponsible
+                                                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                                            : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
+                                                    }`}
+                                                >
+                                                    <Star size={11} fill={step.isResponsible ? "currentColor" : "none"} />
+                                                    {step.isResponsible ? tProd("isResponsibleYes") : tProd("isResponsibleNo")}
+                                                </button>
                                                 <div className="ml-auto flex shrink-0 items-center gap-1">
                                                     <button
                                                         type="button"
@@ -1283,12 +1317,14 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                         <Plus className="h-3.5 w-3.5" /> {tProd("addStepButton")}
                                     </button>
                                 </div>
+                                {productionSigningMinNotMet && <p className="text-xs text-[#930006]">{tProd("intermediateMinHint")}</p>}
+                                {productionSigningLimitReached && <p className="text-xs text-[#9a5b00]">{tProd("intermediateLimitHint")}</p>}
 
                                 <div className="flex justify-end pt-2">
                                     <button
                                         type="button"
                                         onClick={handleSaveProduction}
-                                        disabled={!isProductionDirty || isSavingProduction}
+                                        disabled={!isProductionDirty || isSavingProduction || productionSigningMinNotMet}
                                         className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         {isSavingProduction ? tProd("saving") : tProd("saveButton")}

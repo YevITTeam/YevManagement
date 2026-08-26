@@ -74,7 +74,9 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form).
 - EF Core 10 + SQL Server (scaffold từ hệ cũ, có Migrations). Scrutor 7 để auto-DI.
 - Host: `CompanySystem.HostApi` (ASP.NET Core Web API). API docs: OpenAPI + **Scalar UI** `/scalar/v1`
   (chỉ Development). Auth: Windows Negotiate (AD) → JWT Bearer.
-- **Base URL hiện tại: `http://10.45.1.155:8080`** (`CompanySystem.HostApi/Properties/launchSettings.json`).
+- **Base URL hiện tại: `http://10.45.1.155:8081`** (`CompanySystem.HostApi/Properties/launchSettings.json`
+  — đổi từ `:8080` ngày 2026-08-26 vì máy dev có 1 rule `netsh interface portproxy` cũ (WSL, đã tắt)
+  chiếm cứng port 8080, chặn Kestrel bind; không đụng vào rule portproxy đó).
   Một số doc còn ghi `http://localhost:5000` (giá trị cũ) — lấy `launchSettings.json` làm chuẩn.
 
 ```powershell
@@ -193,7 +195,7 @@ npx tsc --noEmit    # CHẠY SAU MỖI THAY ĐỔI .ts/.tsx, trước khi báo x
 
 - Path alias `@/*` → `src/*`.
 - `NEXT_PUBLIC_API_URL` đặt trong `.env.local` (gitignored, **phải tự tạo**), giá trị = base URL của
-  BE **kèm `/api`**, vd `http://10.45.1.155:8080/api`.
+  BE **kèm `/api`**, vd `http://10.45.1.155:8081/api`.
 - Vì là static export: **không có** middleware/SSR/route handler ở production (IIS chỉ serve file tĩnh).
   `src/proxy.ts` (middleware next-intl) chỉ chạy khi dev.
 

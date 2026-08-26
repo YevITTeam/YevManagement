@@ -8,10 +8,31 @@ public partial class AttendanceSetting
 {
     public int Id { get; set; }
 
-    // OT hours from which an employee gets a MAIN meal ticket ("phiếu chính"). Below this they get a
-    // SECONDARY ticket ("phiếu phụ") instead — every OT employee gets exactly one of the two, there is
-    // no lower bound (chốt với người dùng 2026-08-01). Default 2.5 (= 2h30).
+    // Redesign 2026-08-26 (chốt với người dùng qua nhiều vòng trao đổi, xem docs/attendance-module.md
+    // §Phiếu ăn): 3 bậc phiếu tính trên GIỜ THỰC TÍCH (actualHours = raw − MealBreakDeductionHours nếu
+    // DidEat=true), KHÔNG còn trên giờ thô như trước, VÀ không còn "luôn có ít nhất phiếu phụ" (quyết
+    // định 2026-08-01 đã bị đảo ngược):
+    //   actualHours < NoMealTicketMaxHours        -> KHÔNG có phiếu ăn nào
+    //   NoMealTicketMaxHours <= actualHours < đây  -> phiếu PHỤ
+    //   actualHours >= MainMealTicketMinHours      -> phiếu CHÍNH
+    // Ngoại lệ: ca OT khớp ĐÚNG khung [EarlyMealWindowStartTime, EarlyMealWindowEndTime) (mặc định
+    // 6h-8h) luôn được phiếu PHỤ, KHÔNG trừ MealBreakDeductionHours dù DidEat=true hay false — xem
+    // OtFormService.IsEarlyMealWindowOt. Default 3.5.
     public decimal MainMealTicketMinHours { get; set; }
+
+    // Sàn dưới — giờ thực tích dưới mốc này thì KHÔNG có phiếu ăn nào (không áp dụng cho ca khớp đúng
+    // khung sớm, xem trên). Default 2.
+    public decimal NoMealTicketMaxHours { get; set; }
+
+    // Số giờ trừ khi 1 nhân viên tick "Có ăn" (trước đây hardcode 0.5, chuyển thành cấu hình được
+    // 2026-08-26). Không áp dụng cho ca khớp đúng khung sớm. Default 0.5.
+    public decimal MealBreakDeductionHours { get; set; }
+
+    // Khung giờ OT sớm đặc cách (mặc định 6h-8h sáng) — ca OT có StartTime/EndTime khớp ĐÚNG 2 mốc này
+    // (không phải chỉ overlap) thì luôn phiếu Phụ + không trừ MealBreakDeductionHours, bất kể DidEat.
+    public TimeOnly EarlyMealWindowStartTime { get; set; }
+
+    public TimeOnly EarlyMealWindowEndTime { get; set; }
 
     // Monthly OT hour limit — an employee whose MonthToDate exceeds this is flagged in red on the UI.
     // Display/warning only, does NOT block creating or approving a form. Default 25.

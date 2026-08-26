@@ -3,7 +3,7 @@
 > Hợp đồng API quản lý Giấy tăng ca (OT Form). Implementation: [attendance-module.md](attendance-module.md).
 > Module Identity: [identity-api-fe.md](identity-api-fe.md) · Module Asset: [asset-api-fe.md](asset-api-fe.md).
 
-- **Base URL (Dev)**: `http://10.45.1.155:8080` (launchSettings hiện trỏ IP này, không phải `localhost:5000`) · Scalar UI `/scalar/v1`.
+- **Base URL (Dev)**: `http://10.45.1.155:8081` (launchSettings hiện trỏ IP này, không phải `localhost:5000` — port đổi từ `8080` ngày 2026-08-26, xem CLAUDE.md) · Scalar UI `/scalar/v1`.
 - **Auth**: mọi endpoint cần `Authorization: Bearer <token>` (từ `windows-login`, xem [identity-api-fe.md](identity-api-fe.md)) **và** permission tương ứng (vd `Attendance.OTForm.Create`). Thiếu token→401, thiếu permission→403. FE dựa `user.permissions` ẩn/hiện nút.
 - Envelope `ApiResponse<T>`, phân trang, mã lỗi HTTP, pattern CRUD cơ bản — giống hệt Asset, xem [asset-api-fe.md §1](asset-api-fe.md#1-quy-ước-chung). Tóm tắt: mọi response bọc `{ isSuccess, message, data, errors, timestamp }`; `grid-list` trả `data.data[]` + `pageIndex/pageSize/totalCount/totalPages/hasNextPage/hasPreviousPage`.
 - **byte[] qua JSON**: field kiểu `byte[]` (chữ ký `SignatureImage`) serialize/deserialize thành **chuỗi base64** — FE convert ảnh (**upload file ảnh chữ ký có sẵn** — PNG/JPG chụp/scan chữ ký tay thật, KHÔNG phải vẽ bằng canvas/chuột trên web) sang base64 trước khi gửi, và decode base64 → hiển thị `<img src="data:image/png;base64,...">` khi nhận.
@@ -957,6 +957,7 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
     { "employeeId": 100, "employeeCode": "NV001", "fullName": "Nguyễn Văn A",
       "startTime": "17:30:00", "endTime": "19:30:00", "noteVn": null, "noteJp": null,
       "monthToDate": 12.5, "yearToDate": 80.0, "isEligibleForMeal": false,
+      "actualHours": 2.0, "didEat": false,
       "isRemoved": false, "removedByUserName": null, "removedByFullName": null,
       "removedAtLevel": null, "removedAt": null, "removeReason": null }
   ],
@@ -996,6 +997,12 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 - `isEditable` (đổi 2026-08-07) = `status == InApproval && !approvalSteps.some(s => s.status === 1 /* Approved */)` — điều kiện CẦN (chưa đủ) để hiện nút "Sửa", xem §1.2 và §4.1b.
 - **`employees[].monthToDate`/`yearToDate`** — snapshot **đóng băng lũy kế DỰ KIẾN** (§3.5b) tại đúng thời điểm dòng này được thêm vào đơn (KHÔNG live, KHÔNG phải lũy kế thực tế `Employee.monthToDate`/`yearToDate`) — dùng để người duyệt đối chiếu ngưỡng TH3 (mặc định >25h/tháng, >300h/năm — Admin sửa được qua `GET/PUT /AttendanceSetting`, xem §6d) ngay trên màn chi tiết, không cần mở thêm màn Employee. Xem lại 1 đơn cũ luôn ra đúng con số tại thời điểm lập đơn, không phải lũy kế hiện tại.
 - **`employees[].isEligibleForMeal`** — `true` khi `(endTime - startTime) >= AttendanceSetting.mainMealTicketMinHours` (mặc định 2.5h, xem §6d). Tính sẵn ở BE, FE chỉ hiển thị (gợi ý tick `processPart.isEat`), không tự tính lại field này — nhưng FE TỰ TÍNH `processPart.mainTicketCount`/`secondaryTicketCount` theo cùng ngưỡng (§4.1/§6d), khác với `isEligibleForMeal` chỉ mang tính hiển thị tham khảo.
+- **`employees[].actualHours`** (mới 2026-08-26) — giờ OT thực tính của NGƯỜI ĐÓ, BE tính sẵn:
+  `endTime - startTime`, trừ thêm **0.5h (30 phút)** nếu `isEligibleForMeal=true` VÀ `didEat=true` (có
+  ăn thì bị trừ giờ nghỉ ăn; không ăn thì giữ nguyên giờ thô). FE (`OtFormDetail.tsx`,
+  `OtFormBatchDetail.tsx`, `OtFormEmailConfirmPage.tsx`) dùng field này để hiển thị cột giờ + tổng giờ
+  OT của form — **không** tự trừ `startTime`/`endTime` nữa. Riêng `IsEligibleForMeal` và số phiếu ăn
+  chính/phụ vẫn luôn tính trên giờ THÔ (không đọc `actualHours`).
 - **`groupNameJp`/`departmentNameJp`/`reasonNameJp`** — song ngữ Việt/Nhật (nullable), lấy thẳng từ `Group`/`Department`/`Reason` tương ứng. FE (`OtFormDetail.tsx`, `OtFormEmailConfirmPage.tsx`) hiện `"{Vn} / {Jp}"` cho Phòng ban/Bộ phận/Lý do, tương tự cho `employees[].noteJp`/`processPart.anotherSuggestionJp`.
 - **`employees[].isRemoved`/`removedByUserName`/`removedByFullName`/`removedAtLevel`/`removedAt`/`removeReason` (xem §4.5a)** — người bị 1 bước duyệt loại khỏi đơn qua `POST /{id}/employees/remove` **vẫn nằm trong mảng `employees[]`** (BE cố tình KHÔNG lọc bỏ) để giữ dấu vết ai loại/lúc nào/lý do gì trên màn chi tiết — FE tự lọc `isRemoved === true` ra khỏi (1) tổng giờ OT hiển thị, (2) bản in PDF/A4/A5, (3) trang xem trước qua email. **`removedAtLevel` đổi ý nghĩa 2026-08-07**: giờ là `OtFormApprovalStep.stepOrder` (trước là số `ApprovalLevel`) — tra tên bước bằng cách tìm phần tử `approvalSteps[]` có `stepOrder` khớp, lấy `jobTitleNameSnapshot`, KHÔNG map qua `approvalLevelLabels` nữa. `numberOfEmployee` (cả `OtFormDto` lẫn `OtFormListItemDto`) chỉ đếm người **chưa** bị loại, không cần FE tự trừ.
 
@@ -1262,7 +1269,7 @@ gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
   hàng loạt qua "Đơn tổng" mà không thấy "Yêu cầu hỗ trợ khác"/lý do chi tiết/lũy kế từng nhân viên như
   màn Chi tiết đơn thường. Giờ mỗi phần tử `otForms[]` có đủ dữ liệu để FE render lại đúng mức chi tiết
   của `OtFormDto` (§4.3) — `employees[]` vẫn là `OtFormEmployeeDto` đầy đủ (đã có sẵn từ đầu, gồm cả
-  `monthToDate`/`yearToDate`/`isEligibleForMeal`/`didEat`/`noteVn`/`noteJp`), chỉ thêm mới `subReason`
+  `monthToDate`/`yearToDate`/`isEligibleForMeal`/`actualHours`/`didEat`/`noteVn`/`noteJp`), chỉ thêm mới `subReason`
   và `processPart` ở cấp đơn.
 
 - **Duyệt hàng loạt** — body `ProcessOtFormBatchDto`:

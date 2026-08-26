@@ -7,10 +7,12 @@ export interface ProductionApprovalStepDto {
     jobTitleName: string;
     rankOrder: number;
     requiresSignature: boolean;
+    isResponsible: boolean;
     terminalLevel: number;
 }
 
 export interface ReplaceProductionApprovalStepItem {
     jobTitleId: number;
     requiresSignature: boolean;
+    isResponsible: boolean;
 }

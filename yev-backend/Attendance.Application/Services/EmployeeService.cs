@@ -1,3 +1,4 @@
+using Attendance.Application.Dtos.AttendanceSettings;
 using Attendance.Application.Dtos.EmployeeAccumulationHistories;
 using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Interfaces.Service;
@@ -151,7 +152,7 @@ namespace Attendance.Application.Services
             var employeeIds = items.Select(x => x.Id).ToList();
             if (employeeIds.Count > 0)
             {
-                var mainMealTicketMinHours = await _attendanceSettingService.GetMainMealTicketMinHoursAsync();
+                var mealSettings = await _attendanceSettingService.GetAsync();
 
                 // !IsRemoved + Status != Rejected + !IsDeleted = đơn còn "đang treo" (kể cả Completed —
                 // vẫn tính vào Dự kiến, xem Employee.cs cũ/docs §Lũy kế Dự kiến). Chỉ lấy đúng năm của
@@ -166,20 +167,22 @@ namespace Attendance.Application.Services
                 {
                     if (!rowsByEmployee.TryGetValue(item.Id, out var rows)) continue;
                     item.ProjectedMonthToDate = rows.Where(x => x.OtForm.Date.Month == target.Month)
-                        .Sum(x => CalculateProjectedHours(x, mainMealTicketMinHours));
-                    item.ProjectedYearToDate = rows.Sum(x => CalculateProjectedHours(x, mainMealTicketMinHours));
+                        .Sum(x => CalculateProjectedHours(x, mealSettings));
+                    item.ProjectedYearToDate = rows.Sum(x => CalculateProjectedHours(x, mealSettings));
                 }
             }
 
             return items.OrderBy(x => x.Code).ToList();
         }
 
-        // Mirror OtFormService.CalculateOtHours (+30 phút nếu đủ ngưỡng phiếu ăn mà không ăn) — không
-        // gọi chéo sang OtFormService, mỗi service tự chứa logic tính giờ của mình.
-        private static decimal CalculateProjectedHours(OtFormEmployee row, decimal mainMealTicketMinHours)
+        // Mirror OtFormService.CalculateOtHours (redesign 3 bậc phiếu ăn 2026-08-26, xem
+        // AttendanceSetting.cs) — không gọi chéo sang OtFormService, mỗi service tự chứa logic tính
+        // giờ của mình. Ca khớp ĐÚNG khung sớm (EarlyMealWindowStartTime/EndTime) không trừ dù DidEat.
+        private static decimal CalculateProjectedHours(OtFormEmployee row, AttendanceSettingDto mealSettings)
         {
             var hours = (decimal)(row.EndTime - row.StartTime).TotalHours;
-            if (hours >= mainMealTicketMinHours && !row.DidEat) hours += 0.5m;
+            var isEarlyWindow = row.StartTime == mealSettings.EarlyMealWindowStartTime && row.EndTime == mealSettings.EarlyMealWindowEndTime;
+            if (!isEarlyWindow && row.DidEat) hours -= mealSettings.MealBreakDeductionHours;
             return hours;
         }
 

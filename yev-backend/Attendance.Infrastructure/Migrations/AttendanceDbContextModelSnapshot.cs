@@ -33,11 +33,23 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<TimeOnly>("BatchAutoSendTime")
                         .HasColumnType("time");
 
+                    b.Property<TimeOnly>("EarlyMealWindowEndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly>("EarlyMealWindowStartTime")
+                        .HasColumnType("time");
+
                     b.Property<decimal>("MainMealTicketMinHours")
+                        .HasColumnType("decimal(5, 2)");
+
+                    b.Property<decimal>("MealBreakDeductionHours")
                         .HasColumnType("decimal(5, 2)");
 
                     b.Property<decimal>("MonthlyOtHourLimit")
                         .HasColumnType("decimal(10, 2)");
+
+                    b.Property<decimal>("NoMealTicketMaxHours")
+                        .HasColumnType("decimal(5, 2)");
 
                     b.Property<decimal>("YearlyOtHourLimit")
                         .HasColumnType("decimal(10, 2)");

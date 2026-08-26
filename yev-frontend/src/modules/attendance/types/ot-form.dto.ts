@@ -52,9 +52,16 @@ export interface OtFormEmployeeDto {
     noteJp: string | null;
     monthToDate: number;
     yearToDate: number;
-    isEligibleForMeal: boolean;
-    // Có ăn hay không (chỉ có ý nghĩa khi isEligibleForMeal=true) — mới 2026-08-06, xem §Phiếu ăn.
-    // Không ăn dù đủ ngưỡng thì +30 phút vào lũy kế lúc đơn Hoàn tất (BE tự cộng, FE không tự tính).
+    // Loại phiếu ăn: 0=Không có phiếu, 1=Phiếu Phụ, 2=Phiếu Chính — redesign 3 bậc (2026-08-26, thay
+    // isEligibleForMeal cũ), xem modules/attendance/lib/mealTicket.ts + docs §Phiếu ăn.
+    mealTicketType: number;
+    // Giờ OT thực tính (2026-08-26) — BE đã trừ sẵn giờ nghỉ ăn nếu có ăn (trừ ca khớp đúng khung sớm,
+    // luôn không trừ); không ăn thì bằng đúng endTime-startTime. LUÔN dùng field này để hiển thị/cộng
+    // tổng giờ OT của 1 người — KHÔNG tự tính lại bằng calculateHours(startTime, endTime) nữa.
+    actualHours: number;
+    // Có ăn hay không — mới 2026-08-06, xem §Phiếu ăn. Quyết định actualHours có bị trừ giờ nghỉ ăn hay
+    // không (BE tự tính, FE không tự tính) — vẫn có ý nghĩa bất kể mealTicketType, trừ ca khớp đúng
+    // khung sớm (luôn bỏ qua).
     didEat: boolean;
     isRemoved: boolean;
     removedByUserName: string | null;

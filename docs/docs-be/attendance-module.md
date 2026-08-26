@@ -190,32 +190,56 @@ FE) nay gộp thành 1 bảng cấu hình Admin tự sửa được, không cầ
   ngưỡng thì UI tô đỏ cảnh báo trên MỌI màn hiển thị lũy kế, **không chặn** tạo/duyệt đơn hay sửa lũy kế
   thủ công.
 
-### §Có ăn hay không theo từng nhân viên — +30 phút lũy kế nếu không ăn (2026-08-06)
+### §Có ăn hay không theo từng nhân viên — trừ 30 phút nếu có ăn (2026-08-06, đổi hướng 2026-08-26)
 
-**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): nhân viên đủ
-ngưỡng nhận phiếu ăn (`IsEligibleForMeal`) mà **không ăn** thì được cộng bù **30 phút** vào lũy kế
-tháng/năm — khác hẳn `ProcessPart.IsEat`/`MainTicketCount` hiện có (cờ + số lượng **chung cho cả đơn**,
-nhập tay, không theo từng người). Ban đầu (2026-08-06) `ProcessPart` không bị đụng tới khi đổi
-`DidEat` — đã sửa lại, xem §Đồng bộ phiếu ăn khi sửa đơn/loại nhân viên bên dưới.
+**Yêu cầu người dùng gốc** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2, 2026-08-06):
+nhân viên đủ ngưỡng nhận phiếu ăn (`IsEligibleForMeal`) mà **không ăn** thì được cộng bù **30 phút**
+vào lũy kế tháng/năm — khác hẳn `ProcessPart.IsEat`/`MainTicketCount` hiện có (cờ + số lượng **chung
+cho cả đơn**, nhập tay, không theo từng người).
 
-- **Entity**: `OtFormEmployee.DidEat: bool` (mới, default `false`) — chỉ có ý nghĩa khi giờ OT thực tế
-  của người đó `>= AttendanceSetting.MainMealTicketMinHours` (dùng CHUNG ngưỡng với việc chia phiếu
-  chính/phụ, không phải ngưỡng riêng).
+**Đổi hướng (2026-08-26, chốt qua AskUserQuestion, CLAUDE.md §2 luật 2)**: lật ngược công thức — VÍ DỤ
+14h-18h (4h, đủ ngưỡng) → **có ăn** thì giờ OT thực tính = **3.5h** (trừ 30 phút nghỉ ăn); **không ăn**
+thì giữ nguyên **4h** (bỏ hẳn phần +30 phút cộng bù trước đây). Khác biệt quan trọng so với bản gốc:
+áp dụng cho **CẢ giờ hiển thị** trên đơn/danh sách/bản in, **không còn** chỉ ảnh hưởng lũy kế.
+
+- **Entity**: `OtFormEmployee.DidEat: bool` (mới, default `false`) — chỉ có ý nghĩa khi giờ OT **thô**
+  (`EndTime - StartTime`) của người đó `>= AttendanceSetting.MainMealTicketMinHours` (dùng CHUNG
+  ngưỡng với việc chia phiếu chính/phụ, không phải ngưỡng riêng). Ngưỡng đủ điều kiện (`IsEligibleForMeal`)
+  LUÔN tính trên giờ thô, không bao giờ tính trên giờ đã trừ — tránh vòng lặp (đủ điều kiện mới có ô
+  "Có ăn" để chọn, chọn xong mới trừ giờ).
 - **Nhập/sửa**: cùng luồng và cùng giới hạn thời gian với việc sửa giờ kết thúc thực tế ("thực tích") —
   nhập lúc tạo đơn (`CreateOtFormEmployeeItemDto.DidEat`), sửa được tới trước khi Trưởng phòng duyệt
   (`UpdateOtFormEmployeeTimeDto.DidEat`, cùng `OtFormService.UpdateAsync` đang giới hạn phạm vi sửa).
-- **Tính toán**: `OtFormService.AccumulateEmployeeHoursAsync` (chạy đúng 1 lần khi đơn `Completed`,
-  xem §Lũy kế tháng/năm) — nếu `hours >= MainMealTicketMinHours && !DidEat` thì cộng thêm
-  `NoMealExtraAccumulationHours = 0.5m` vào biến `hours` TRƯỚC khi cộng vào `MonthToDate`/`YearToDate`.
-  **CHỈ ảnh hưởng lũy kế** — `EndTime`, `TotalHour`, giờ hiển thị trên đơn/PDF **giữ nguyên**, không đổi.
-- **FE**: `CreateOtFormPage.tsx` — checkbox "Có ăn" ở cả 2 bảng nhân viên (tạo mới + sửa đơn), chỉ hiện
-  khi giờ OT thực tế của người đó (tính lại theo `endTime` override hiện tại) đủ ngưỡng. `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx` (đọc, dùng chung namespace dịch
-  `Attendance.OtFormDetail`) — thêm cột hiển thị Có ăn/Không ăn cạnh cột Phiếu ăn, không sửa được.
-  `OtFormPrintView.tsx` (bản in chính thức) **không đổi** — đúng theo chốt "không đụng giờ hiển thị".
+- **Công thức dùng chung 1 nơi** — `OtFormService.CalculateOtHours(startTime, endTime, didEat,
+  mainMealTicketMinHours)`: `hours = EndTime - StartTime`; nếu `hours >= mainMealTicketMinHours &&
+  didEat` thì `hours -= MealBreakDeductionHours (0.5m)`; ngược lại giữ nguyên. Mirror độc lập ở
+  `EmployeeService.CalculateProjectedHours` (Dự kiến, không gọi chéo — mỗi service tự chứa logic tính
+  giờ của mình, quy ước cũ giữ nguyên).
+- **Nơi dùng công thức này**:
+  - `OtFormService.AccumulateEmployeeHoursAsync` (ghi lũy kế, chạy đúng 1 lần khi đơn `Completed`).
+  - `OtFormService.ComputeProjectedHoursBatchAsync` (snapshot `MonthToDate`/`YearToDate` lúc tạo đơn).
+  - **Mới (2026-08-26)**: `OtFormEmployeeDto.ActualHours` — field mới, BE tính sẵn bằng đúng công thức
+    trên (gọi `CalculateOtHours` ngay trong `GetByIdAsync`/`BuildBatchDtoAsync`), trả về FE. Đây là
+    field DUY NHẤT nên dùng để hiển thị "giờ OT của 1 người" — **không** tự tính lại
+    `endTime - startTime` ở FE nữa.
+  - `EmployeeService.CalculateProjectedHours` — badge Dự kiến ở màn Nhân viên/chọn nhân viên tạo đơn.
+- **KHÔNG dùng công thức này** (giữ nguyên giờ thô, có chủ đích): `IsEligibleForMeal`
+  (`OtFormService.cs` — inline `(EndTime-StartTime) >= mainMealTicketMinHours`, cả 2 chỗ map DTO) và
+  `CalculateMealTicketCounts` (số phiếu chính/phụ — comment tại chỗ đã ghi rõ "OT thực tế, CHƯA cộng
+  bù 30p", nay đọc là "chưa trừ 30p", ý nghĩa không đổi: ngưỡng/số phiếu luôn theo giờ thô).
+- **FE**: `ot-form.dto.ts` — `OtFormEmployeeDto.actualHours: number` (mới). `OtFormDetail.tsx`,
+  `OtFormBatchDetail.tsx`, `OtFormEmailConfirmPage.tsx` — cột giờ + tổng giờ OT của form đổi từ tự tính
+  `calculateHours(startTime, endTime)` (hàm `lib/time.ts`) sang đọc thẳng `employee.actualHours`.
+  `CreateOtFormPage.tsx` (màn Tạo đơn) **không đổi** — trang này chỉ hiển thị `totalHour` cấp CẢ ĐƠN
+  (khung giờ chung, không phải giờ từng người, không bị trừ) và dùng giờ thô cho việc gợi ý phiếu
+  ăn/hiện checkbox "Có ăn" (đúng quy tắc "không dùng công thức này" ở trên) — không có cột "giờ OT thực
+  tính" nào ở màn này cần đổi. `OtFormPrintView.tsx` (bản in) chỉ in giờ vào/ra thô của từng người
+  (`StartTime`–`EndTime`), không in số giờ tính toán nào — không cần đổi.
 - **Giá trị mặc định "Có ăn" đồng bộ theo "Ăn uống" (2026-08-06)** — `ProcessPart.IsEat` (cấp cả đơn,
-  đặt suất ăn) và `OtFormEmployee.DidEat` (cấp từng người, quyết định +30 phút) là 2 field **độc lập ở
-  BE**, nhưng dễ khiến người lập đơn nhầm 2 cái liên quan nhau (bỏ tích "Ăn uống" nhưng quên đổi tay
-  "Có ăn" từng người → không ai được cộng bù 30 phút dù thực tế không đặt suất ăn cho ai). Chỉ sửa ở
+  đặt suất ăn) và `OtFormEmployee.DidEat` (cấp từng người, quyết định có bị trừ 30 phút hay không) là
+  2 field **độc lập ở BE**, nhưng dễ khiến người lập đơn nhầm 2 cái liên quan nhau (bỏ tích "Ăn uống"
+  nhưng quên đổi tay "Có ăn" từng người → giờ OT của họ vẫn bị trừ dù thực tế không đặt suất ăn cho ai).
+  Chỉ sửa ở
   FE (`CreateOtFormPage.tsx`, `mealServiceActive = processPartEnabled && processPart.isEat`), **không**
   đổi logic BE: giá trị mặc định của "Có ăn" khi chọn nhân viên mới, và khi bấm sửa giờ/ghi chú trước
   khi tick "Có ăn", đều lấy theo `mealServiceActive` thay vì hardcode `true`; mỗi lần bật/tắt "Ăn uống"
@@ -225,7 +249,8 @@ nhập tay, không theo từng người). Ban đầu (2026-08-06) `ProcessPart` 
 - **Số phiếu tự tính cũng loại người "Không ăn" (2026-08-06)** — `mealTicketCounts` (`CreateOtFormPage.tsx`)
   trước đây chỉ tính theo giờ OT, không đọc `didEat`, nên người tick "Không ăn" vẫn bị tính vào phiếu
   chính/phụ. Sửa lại: người đủ ngưỡng mà `didEat=false` → **không tính vào phiếu nào cả** (không ăn thì
-  không cần suất, họ đã được cộng bù 30 phút lũy kế thay vào đó); người đủ ngưỡng và có ăn → phiếu chính;
+  không cần suất); người đủ ngưỡng và có ăn → phiếu chính (và giờ OT thực tính của họ bị trừ 30 phút,
+  xem đầu mục này);
   người dưới ngưỡng (chưa có ô "Có ăn" để tự khai) → vẫn mặc định phiếu phụ như cũ.
 
 ### §Đồng bộ phiếu ăn khi sửa đơn/loại nhân viên (2026-08-18)
@@ -291,6 +316,52 @@ có cách nào tự suy luận số sữa từ danh sách nhân viên. (mirror `
   `AttendanceSettingPanel.tsx`, 2 khối "Phiếu ăn" + "Giới hạn lũy kế", nút "Lưu cấu hình" gọi PUT rồi
   `invalidateAttendanceSettingCache()`. Tab này không có bảng/nút "Thêm mới" nên `CategoryManagement.tsx`
   ẩn nút đó khi `addLabel == null`.
+
+### §Phiếu ăn — REDESIGN 3 bậc + khung OT sớm đặc cách (2026-08-26)
+
+**Thay thế hoàn toàn** mô hình 2 bậc (Chính/Phụ, không sàn dưới) mô tả ở §Cấu hình phiếu ăn & giới hạn
+lũy kế và §Có ăn hay không phía trên — chốt qua nhiều vòng trao đổi với người dùng (CLAUDE.md §2 luật
+2), dựa trên `docs/Note_OT.txt`:
+
+- **3 bậc, tính trên giờ THỰC TÍCH** (`actualHours`, sau khi trừ `MealBreakDeductionHours` nếu có ăn —
+  KHÔNG còn tính trên giờ thô như bản cũ):
+  - `actualHours < NoMealTicketMaxHours` (mặc định **2h**) → **KHÔNG có phiếu ăn nào** (đảo ngược quyết
+    định "không có sàn dưới" ngày 2026-08-01).
+  - `NoMealTicketMaxHours <= actualHours < MainMealTicketMinHours` (mặc định **3.5h**, đổi từ tính trên
+    giờ thô sang thực tích) → **phiếu Phụ**.
+  - `actualHours >= MainMealTicketMinHours` → **phiếu Chính**.
+- **Ngoại lệ khung OT sớm** (`EarlyMealWindowStartTime`/`EarlyMealWindowEndTime`, mặc định **6h–8h**):
+  ca OT có `StartTime`/`EndTime` khớp **ĐÚNG** khung này (không phải chỉ overlap — vd ca 6h30-8h **không**
+  tính) luôn nhận **phiếu Phụ** và **KHÔNG** trừ `MealBreakDeductionHours`, bất kể `DidEat` là gì. Ví dụ
+  chốt với người dùng: OT 6h-8h (2h) → phiếu Phụ, lũy kế ghi nhận đủ **2h** (không phải 1.5h như công
+  thức thường).
+- **`DidEat` vẫn giữ nguyên vai trò gate việc trừ giờ** (per-employee, KHÔNG đổi thành trừ vô điều kiện
+  theo khung giờ như bản nháp đầu của `Note_OT.txt`) — lý do: 1 đơn có thể có người ăn người không ăn
+  cùng lúc, mỗi người đã có field `DidEat` riêng từ 2026-08-06. `DidEat` vẫn có tác dụng ở MỌI mức giờ
+  (không chỉ khi đủ phiếu Chính) — khác bản cũ chỉ ảnh hưởng khi đủ ngưỡng.
+- **Cấu hình mở rộng** (`AttendanceSetting`, cả 4 field mới đều sửa được qua `PUT /api/AttendanceSetting`,
+  `AttendanceSettingPanel.tsx`): `NoMealTicketMaxHours:decimal(5,2)` (default 2),
+  `MealBreakDeductionHours:decimal(5,2)` (default 0.5, trước đây hardcode hằng số `0.5m`),
+  `EarlyMealWindowStartTime`/`EarlyMealWindowEndTime:TimeOnly` (default 06:00/08:00). Migration
+  `RedesignMealTicketRules` backfill 4 cột mới bằng default, và **UPDATE** dòng cấu hình live đang có
+  `MainMealTicketMinHours=2` (mốc cũ) sang **3.5** (mốc mới) — bắt buộc vì đổi Ý NGHĨA field, không chỉ
+  thêm cột.
+- **Nguồn chân lý DUY NHẤT**: `OtFormService.CalculateOtHours`/`CalculateMealTicketType` (mới, enum
+  `Attendance.Domain.Enums.MealTicketType: None=0/Secondary=1/Main=2`) — `CalculateMealTicketCounts`
+  (tổng Chính/Phụ ghi vào `ProcessPart`) giờ gọi lại `CalculateMealTicketType` thay vì tự lặp lại
+  ngưỡng, tránh 2 nơi tính lệch nhau. Mirror độc lập ở `EmployeeService.CalculateProjectedHours` (Dự
+  kiến) và FE `modules/attendance/lib/mealTicket.ts` (preview lúc `CreateOtFormPage.tsx` đang tạo đơn,
+  trước khi `OtFormEmployee` tồn tại để BE tính).
+- **`OtFormEmployeeDto.IsEligibleForMeal` (bool) bị XOÁ HẲN**, thay bằng
+  `MealTicketType: int` (0/1/2, mirror enum BE) — hiển thị badge "Loại phiếu ăn" (Chính/Phụ/Không có
+  phiếu) per-employee ở `OtFormDetail.tsx`/`OtFormBatchDetail.tsx`/`OtFormEmailConfirmPage.tsx`
+  (component dùng chung `MealTicketTypeBadge.tsx`) — đúng yêu cầu người dùng "cần note trong đơn ai
+  được ăn loại phiếu nào". Cột "Có ăn?" (badge dựa theo `DidEat`) không còn bị ẩn theo ngưỡng nữa — LUÔN
+  hiện vì `DidEat` giờ có ý nghĩa ở mọi mức giờ.
+- **`CreateOtFormPage.tsx`** (màn Tạo/Sửa đơn) — khác mô tả cũ ở §Có ăn hay không ("không đổi"), bản
+  redesign này CÓ đổi: cả 3 bảng chọn nhân viên (Sửa đơn/Theo chuyền/Theo Nhóm) đều thêm cột "Loại
+  phiếu ăn" (preview qua `computeMealTicketType`), và checkbox "Có ăn" bị khoá + đổi thành nhãn "Khung
+  sớm — luôn phiếu Phụ" khi ca khớp đúng khung OT sớm (`isEarlyMealWindowOt`).
 
 ### §Lũy kế dự kiến — cảnh báo cả những đơn khác đang chờ duyệt (2026-08-06, REDESIGN 2026-08-19)
 
