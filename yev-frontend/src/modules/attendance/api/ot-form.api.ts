@@ -1,6 +1,9 @@
 import { api } from "@/lib/client";
 import type {
     ApproveOtFormDto,
+    BulkApproveOtFormDto,
+    BulkOtFormActionResultItemDto,
+    BulkRejectOtFormDto,
     CheckOtFormOverlapDto,
     CreateOtFormDto,
     DeleteOtFormDto,
@@ -29,6 +32,8 @@ const ENDPOINTS = {
         updateOtForm: (id: number) => `/OtForm/${id}`,
         approveOtForm: (id: number) => `/OtForm/${id}/approve`,
         rejectOtForm: (id: number) => `/OtForm/${id}/reject`,
+        bulkApprove: "/OtForm/bulk-approve",
+        bulkReject: "/OtForm/bulk-reject",
         deleteOtForm: (id: number) => `/OtForm/${id}/delete`,
         removeOtFormEmployee: (id: number) => `/OtForm/${id}/employees/remove`,
         emailConfirmGet: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}`,
@@ -135,6 +140,14 @@ export const OtFormApi = {
     },
     rejectOtForm: async (id: number, data: RejectOtFormDto) => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.rejectOtForm(id), data);
+        return response.data;
+    },
+    bulkApprove: async (data: BulkApproveOtFormDto) => {
+        const response = await api.post<ApiResponse<BulkOtFormActionResultItemDto[]>>(ENDPOINTS.OT_FORM.bulkApprove, data);
+        return response.data;
+    },
+    bulkReject: async (data: BulkRejectOtFormDto) => {
+        const response = await api.post<ApiResponse<BulkOtFormActionResultItemDto[]>>(ENDPOINTS.OT_FORM.bulkReject, data);
         return response.data;
     },
     // Admin xoá đơn kẹt vĩnh viễn trong chuỗi duyệt — chặn ở BE nếu đơn đã Completed (2026-08-08).

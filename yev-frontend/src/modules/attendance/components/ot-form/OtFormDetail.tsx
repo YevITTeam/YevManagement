@@ -155,11 +155,14 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const showApprovalActions = canApprove && form?.status === 0 && currentStep !== null;
     const requireSignatureToApprove = currentStep?.requiresSignatureSnapshot ?? false;
 
-    // Nút "Sửa" (docs §1.2): isEditable=true + chính người tạo + có quyền tạo đơn.
+    // Nút "Sửa" (docs §1.2): isEditable=true + có quyền tạo đơn. Đơn theo Nhóm còn phải là chính người
+    // tạo; đơn "theo chuyền" (Giai đoạn 5, 2026-08-27) sửa được theo TỪNG BƯỚC — giống cách nút Duyệt/
+    // Từ chối bên dưới cũng không tự lọc theo candidate ở FE, để BE là nguồn chặn thật (trả lỗi rõ ràng
+    // nếu bấm Sửa mà không phải candidate của bước hiện tại).
     const canEdit =
         Boolean(form?.isEditable) &&
-        form?.createdByUserName === user?.userName &&
-        hasPermission(user, "Attendance.OTForm.Create");
+        hasPermission(user, "Attendance.OTForm.Create") &&
+        (form?.isProductionForm || form?.createdByUserName === user?.userName);
 
     // Nút "Xoá đơn" (Admin only, mới 2026-08-08) — chặn khi đã Completed (status=1, đã cộng lũy kế thật).
     const canDelete = hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;

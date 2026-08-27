@@ -5,6 +5,7 @@ using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
 using Shared.Application.Helper;
 using Shared.Application.Services;
+using Shared.Application.Wrapper;
 
 namespace Attendance.Application.Services
 {
@@ -123,6 +124,63 @@ namespace Attendance.Application.Services
                 selector: x => new ProductionOptionDto { Id = x.ShiftTeamId!.Value, Code = x.ShiftTeam!.Code, NameVn = x.ShiftTeam!.NameVn });
 
             return items.DistinctBy(x => x.Id).OrderBy(x => x.Code).ToList();
+        }
+
+        // Màn "Nhân viên dưới chuyền" — view riêng đọc thẳng ProductionEmployees (khác EmployeeService,
+        // đọc bảng Employees) để hiển thị đúng dữ liệu chuyền mới nhất (Line/Team/Nhóm ca/Công đoạn),
+        // chỉ hiển thị (2026-08-27, theo yêu cầu người dùng) — không có Sửa/Xoá, chỉnh qua import lại.
+        public async Task<PagedResponse<ProductionEmployeeListItemDto>> GetPagedAsync(
+            int pageIndex, int pageSize, string? keyword, int? productionLineId, int? teamId, int? shiftTeamId, int? departmentId)
+        {
+            var (todayYear, todayMonth) = GetTodayYearMonth();
+            var trimmedKeyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim();
+
+            var query = _unitOfWork.ProductionEmployees.GetQueryable(false).Where(x => !x.IsDeleted
+                && (productionLineId == null || x.ProductionLineId == productionLineId)
+                && (teamId == null || x.TeamId == teamId)
+                && (shiftTeamId == null || x.ShiftTeamId == shiftTeamId)
+                && (departmentId == null || (x.Employee != null && x.Employee.Group != null && x.Employee.Group.DepartmentId == departmentId))
+                && (trimmedKeyword == null
+                    || x.EmployeeCode.Contains(trimmedKeyword)
+                    || (x.Employee != null && (x.Employee.LastName.Contains(trimmedKeyword) || x.Employee.FirstName.Contains(trimmedKeyword)))));
+
+            var orderedQuery = query.OrderBy(x => x.EmployeeCode);
+
+            return await _unitOfWork.ProductionEmployees.ToPagedResponseAsync(
+                orderedQuery,
+                pageIndex,
+                pageSize,
+                x => new ProductionEmployeeListItemDto
+                {
+                    Id = x.Id,
+                    EmployeeId = x.EmployeeId,
+                    EmployeeCode = x.EmployeeCode,
+                    FullName = x.Employee != null ? x.Employee.LastName + " " + x.Employee.FirstName : x.EmployeeCode,
+                    CongDoan = x.CongDoan,
+                    TaskName = x.TaskName,
+                    BlockCode = x.BlockCode,
+                    TeamCode = x.TeamCode,
+                    TeamNameVn = x.Team != null ? x.Team.NameVn : null,
+                    ShiftTeamCode = x.ShiftTeamCode,
+                    ShiftTeamNameVn = x.ShiftTeam != null ? x.ShiftTeam.NameVn : null,
+                    IsLeader = x.IsLeader,
+                    DepartmentNameVn = x.Employee != null && x.Employee.Group != null && x.Employee.Group.Department != null
+                        ? x.Employee.Group.Department.DepartmentNameVn
+                        : null,
+                    MonthToDate = x.EmployeeId != null
+                        ? x.Employee!.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month == todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m
+                        : 0m,
+                    YearToDate = x.EmployeeId != null
+                        ? x.Employee!.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m
+                        : 0m
+                });
+        }
+
+        // Mirror EmployeeService.GetTodayYearMonth — lũy kế luôn scope theo năm/tháng THỰC TẾ hôm nay.
+        private static (int Year, int Month) GetTodayYearMonth()
+        {
+            var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
+            return (today.Year, today.Month);
         }
     }
 }

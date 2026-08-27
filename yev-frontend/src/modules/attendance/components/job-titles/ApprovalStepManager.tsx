@@ -566,6 +566,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 requiresSignature: false,
                 isResponsible: false,
                 terminalLevel: jobTitle.terminalLevel,
+                isLineScoped: jobTitle.isLineScoped ?? false,
             },
         ]);
         setAddingProductionJobTitleId("");
@@ -1233,12 +1234,13 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                 onDragStart={productionDrag.handleDragStart(index)}
                                                 onDragOver={productionDrag.handleDragOver(index)}
                                                 onDragEnd={productionDrag.handleDragEnd}
-                                                className={`relative flex flex-wrap items-center gap-2 rounded-lg border p-3 transition-[box-shadow,border-color,background-color] duration-150 lg:flex-nowrap ${
+                                                className={`relative space-y-2 rounded-lg border p-3 transition-[box-shadow,border-color,background-color] duration-150 ${
                                                     productionDrag.dragIndex === index
                                                         ? "z-10 scale-[1.01] border-[#e3000f] bg-[#fff4f2] shadow-lg ring-2 ring-[#e3000f]/25"
                                                         : "border-[#e0e3e5] bg-white"
                                                 }`}
                                             >
+                                                <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
                                                 <span
                                                     title={tProd("dragHandleLabel")}
                                                     aria-label={tProd("dragHandleLabel")}
@@ -1290,6 +1292,62 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                         <Trash2 className="h-3.5 w-3.5" />
                                                     </button>
                                                 </div>
+                                                </div>
+
+                                                {step.terminalLevel === 0 && step.isLineScoped && (
+                                                    <p className="pl-8 text-xs italic text-[#8a8f94]">{tProd("lineLeaderAutoHint")}</p>
+                                                )}
+
+                                                {step.terminalLevel === 0 && !step.isLineScoped && (
+                                                    <div className="flex flex-wrap items-center gap-1.5 pl-8">
+                                                        <span className="text-xs font-semibold text-[#8a8f94]">{tDept("holdersLabel")}</span>
+                                                        {isLoadingDeptEmployees ? (
+                                                            <span className="text-xs text-[#8a8f94]">{tDept("loadingEmployees")}</span>
+                                                        ) : (
+                                                            <>
+                                                                {(() => {
+                                                                    const holders = deptEmployees.filter((e) => e.jobTitleId === step.jobTitleId);
+                                                                    return holders.length === 0 ? (
+                                                                        <span className="text-xs italic text-[#8a8f94]">{tDept("noHolders")}</span>
+                                                                    ) : (
+                                                                        holders.map((holder) => (
+                                                                            <span
+                                                                                key={holder.id}
+                                                                                className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-[#f8fafc] py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
+                                                                            >
+                                                                                {holder.lastName} {holder.firstName} ({holder.code})
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => handleAssignDeptJobTitle(holder, "")}
+                                                                                    disabled={assigningDeptEmployeeId === holder.id}
+                                                                                    title={tDept("removeHolderHint")}
+                                                                                    aria-label={tDept("removeHolderHint")}
+                                                                                    className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
+                                                                                >
+                                                                                    <X size={10} />
+                                                                                </button>
+                                                                            </span>
+                                                                        ))
+                                                                    );
+                                                                })()}
+                                                                <div className="w-56 shrink-0">
+                                                                    <SearchableSelect
+                                                                        options={buildHolderOptions(deptEmployees, step.jobTitleId)}
+                                                                        value={addingDeptHolderByJobTitle[step.jobTitleId] ?? ""}
+                                                                        onChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
+                                                                        placeholder={tDept("addHolderPlaceholder")}
+                                                                        disabled={assigningDeptEmployeeId !== null}
+                                                                        triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
+                                                                    />
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {step.terminalLevel !== 0 && (
+                                                    <p className="pl-8 text-xs italic text-[#8a8f94]">{tProd("finalStepManagedElsewhereHint")}</p>
+                                                )}
                                             </li>
                                         ))}
                                     </ol>

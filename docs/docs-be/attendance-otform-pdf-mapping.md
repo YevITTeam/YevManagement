@@ -42,7 +42,7 @@ FE gợi ý: nếu muốn in kèm tên người ký/ngày ký dưới mỗi ô (
 | Thời gian — Từ / から | `startTime` (format `HH:mm`) | |
 | Thời gian — Đến / まで | `endTime` (format `HH:mm`) | Đây là giờ kết thúc TỐI ĐA của đơn — từng nhân viên có thể kết thúc sớm hơn, xem bảng nhân viên §4 |
 | Ngày / 日付 | `date` (format `dd/MM/yyyy`) | |
-| Lý do / 理由 | `reasonNameVn` (+ nối thêm `subReason` nếu có, VD `"{reasonNameVn}: {subReason}"`) | Phiếu chỉ có 1 ô free-text, không tách 2 dòng — FE tự quyết cách nối |
+| Lý do / 理由 | Dòng 1: `reasonNameVn` (+ nối thêm `subReason` nếu có, VD `"{reasonNameVn}: {subReason}"`); dòng 2 (nếu có): `reasonNameJp` | **Sửa 2026-08-27**: trước chỉ in `reasonNameVn`, thiếu hẳn tiếng Nhật dù `Reason.ReasonNameJp` đã có sẵn từ lâu — nay in 2 dòng trong cùng ô (font dòng Nhật nhỏ hơn), khớp mẫu giấy gốc vốn luôn có cả 2 ngôn ngữ. `reasonNameJp` null (Reason đó chưa dịch) thì chỉ in 1 dòng như cũ. |
 
 ## 3. Ô "Tên công đoạn / 工程名" — khác nhau theo loại đơn (đã chốt 2026-08-25)
 
@@ -53,7 +53,7 @@ khi thay bằng `Group`/`Department` — đúng cho đơn "theo Nhóm" nhưng đ
 | Loại đơn | Nguồn dữ liệu | Ghi chú |
 |---|---|---|
 | Theo Nhóm (`isProductionForm=false`) | `${departmentNameVn} — ${groupNameVn}` | Không đổi so với trước |
-| Theo chuyền (`isProductionForm=true`) | Gộp theo GIÁ TRỊ PHÂN BIỆT từ `employees[].teamCodeSnapshot` / `.congDoanSnapshot` / `.shiftTeamCodeSnapshot` (bỏ qua `isRemoved=true`), nối `"{teamCodes}   {congDoans}   {shiftTeamCodes}"` | Snapshot lấy từ `ProductionEmployee` lúc thêm người vào đơn (xem `OtFormEmployee.CongDoanSnapshot`/`TeamCodeSnapshot`/`ShiftTeamCodeSnapshot`, `attendance-module.md §Chế tạo`). Mỗi phần có thể có NHIỀU giá trị nếu nhân viên trong đơn không cùng Team/Công đoạn/Nhóm ca — nối bằng `/` |
+| Theo chuyền (`isProductionForm=true`) | Gộp theo GIÁ TRỊ PHÂN BIỆT từ `employees[].teamCodeSnapshot` / `.blockCodeSnapshot` / `.shiftTeamCodeSnapshot` (bỏ qua `isRemoved=true`), nối `"{teamCodes}   {lineCodes}   {shiftTeamCodes}"` | **Sửa 2026-08-27**: trước dùng nhầm `.congDoanSnapshot` ở vị trí giữa (ra mã tắt vô nghĩa như "HC GT HC"), người dùng xác nhận công thức đúng là **Team + Line + Nhóm Ca** — `.blockCodeSnapshot` (= "Line", vì `ProductionLineId` khớp `BlockCode`) thay cho `.congDoanSnapshot`. Snapshot lấy từ `ProductionEmployee` lúc thêm người vào đơn (xem `OtFormEmployee.BlockCodeSnapshot`/`TeamCodeSnapshot`/`ShiftTeamCodeSnapshot`, `attendance-module.md §Chế tạo`). Mỗi phần có thể có NHIỀU giá trị nếu nhân viên trong đơn không cùng Team/Line/Nhóm ca — nối bằng `/` |
 
 **Quy trình chung khi gặp ô kiểu này ở phiếu mới**: KHÔNG tự ý nhét dữ liệu có sẵn khi chưa xác nhận — chỉ để trống/note "cần bổ sung" và hỏi người yêu cầu nghiệp vụ trước (đúng CLAUDE.md §2 luật 2 — không tự bịa nghiệp vụ khi thiếu thông tin).
 

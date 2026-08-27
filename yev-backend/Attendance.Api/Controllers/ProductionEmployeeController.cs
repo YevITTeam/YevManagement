@@ -51,5 +51,18 @@ namespace Attendance.Api.Controllers
             var result = await _productionEmployeeService.GetShiftTeamOptionsAsync(productionLineId, teamId);
             return Success(result);
         }
+
+        // Màn "Nhân viên dưới chuyền" — dùng chung quyền xem Nhân viên (2026-08-27, chỉ là 1 view khác
+        // của cùng dữ liệu nhân sự, không phải năng lực mới cần permission riêng).
+        [RequirePermission("Attendance.Employee.View")]
+        [HttpGet("page-nation")]
+        public async Task<ActionResult<ApiResponse<PagedResponse<ProductionEmployeeListItemDto>>>> GetPaged(
+            [FromQuery] int pageIndex, [FromQuery] int pageSize, [FromQuery] string? keyword,
+            [FromQuery] int? productionLineId, [FromQuery] int? teamId, [FromQuery] int? shiftTeamId, [FromQuery] int? departmentId)
+        {
+            var result = await _productionEmployeeService.GetPagedAsync(
+                pageIndex, pageSize, keyword, productionLineId, teamId, shiftTeamId, departmentId);
+            return Success(result);
+        }
     }
 }

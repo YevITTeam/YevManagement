@@ -1,6 +1,10 @@
 import { api } from "@/lib/client";
-import type { ProductionEmployeeSearchItemDto, ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
-import { ApiResponse } from "@/types/api";
+import type {
+    ProductionEmployeeListItemDto,
+    ProductionEmployeeSearchItemDto,
+    ProductionOptionDto,
+} from "@/modules/attendance/types/production-employee.dto";
+import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
     PRODUCTION_EMPLOYEE: {
@@ -8,8 +12,19 @@ const ENDPOINTS = {
         lineOptions: "/ProductionEmployee/line-options",
         teamOptions: "/ProductionEmployee/team-options",
         shiftTeamOptions: "/ProductionEmployee/shift-team-options",
+        pageNation: "/ProductionEmployee/page-nation",
     },
 } as const;
+
+export interface GetProductionEmployeePageNationParams {
+    pageIndex?: number;
+    pageSize?: number;
+    keyword?: string;
+    productionLineId?: number;
+    teamId?: number;
+    shiftTeamId?: number;
+    departmentId?: number;
+}
 
 export interface ProductionEmployeeSearchParams {
     productionLineId?: number;
@@ -54,6 +69,21 @@ export const ProductionEmployeeApi = {
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.PRODUCTION_EMPLOYEE.shiftTeamOptions}?${queryString}` : ENDPOINTS.PRODUCTION_EMPLOYEE.shiftTeamOptions;
         const response = await api.get<ApiResponse<ProductionOptionDto[]>>(url);
+        return response.data;
+    },
+    getPageNation: async (params?: GetProductionEmployeePageNationParams) => {
+        const query = new URLSearchParams();
+        if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
+        if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+        if (params?.keyword) query.set("Keyword", params.keyword);
+        if (params?.productionLineId !== undefined) query.set("ProductionLineId", String(params.productionLineId));
+        if (params?.teamId !== undefined) query.set("TeamId", String(params.teamId));
+        if (params?.shiftTeamId !== undefined) query.set("ShiftTeamId", String(params.shiftTeamId));
+        if (params?.departmentId !== undefined) query.set("DepartmentId", String(params.departmentId));
+
+        const queryString = query.toString();
+        const url = queryString ? `${ENDPOINTS.PRODUCTION_EMPLOYEE.pageNation}?${queryString}` : ENDPOINTS.PRODUCTION_EMPLOYEE.pageNation;
+        const response = await api.get<ApiResponseWithPageNation<ProductionEmployeeListItemDto>>(url);
         return response.data;
     },
 };

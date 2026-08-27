@@ -355,6 +355,13 @@ namespace Attendance.Application.Services
             // Line Leader (IsLineScoped=true, theo ProductionLineId) và Group Leader/Team Leader
             // (IsLineScoped=false, theo GroupId) — cả 2 phạm vi đều suy TỰ ĐỘNG từ chính những người
             // đang được thêm vào đơn, KHÔNG có 1 GroupId/ProductionLineId cố định trên OtForm.
+            //
+            // Line Leader KHÔNG gán qua Employee.JobTitleId (2026-08-27, sửa lại theo yêu cầu người
+            // dùng) — ai là Line Leader của Line nào đã có sẵn trong file import nhân sự dưới chuyền
+            // (cột LEADER → ProductionEmployee.IsLeader, luôn mới nhất mỗi lần import lại), không cần
+            // gán tay qua Cây chức vụ nữa. Group Leader/Team Leader thì KHÔNG có nguồn dữ liệu sẵn nào
+            // tương tự (file import không phân cấp lãnh đạo) — vẫn phải gán tay qua Employee.JobTitleId
+            // như trước (xem ApprovalStepManager.tsx khối "holders" mới ở tab Theo chuyền).
             var lineScopedJobTitleIds = relevantSteps
                 .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None && x.IsLineScoped)
                 .Select(x => x.JobTitleId)
@@ -397,15 +404,22 @@ namespace Attendance.Application.Services
                     derivedProductionLineId = participantLineIds[0];
             }
 
-            var lineScopedCandidates = (lineScopedJobTitleIds.Count == 0 || derivedProductionLineId is null)
-                ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
-                : (await _unitOfWork.Employees.SelectAsync(
-                    predicate: x => !x.IsDeleted && x.UserName != null && x.JobTitleId != null
-                        && lineScopedJobTitleIds.Contains(x.JobTitleId.Value)
-                        && x.ProductionEmployees.Any(pe => !pe.IsDeleted && pe.ProductionLineId == derivedProductionLineId),
-                    selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
-                    .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
+            var lineLeaderHolders = (lineScopedJobTitleIds.Count == 0 || derivedProductionLineId is null)
+                ? new List<(int Id, string UserName, string FirstName, string LastName)>()
+                : (await _unitOfWork.ProductionEmployees.SelectAsync(
+                    predicate: pe => !pe.IsDeleted && pe.IsLeader && pe.ProductionLineId == derivedProductionLineId
+                        && pe.EmployeeId != null && !pe.Employee!.IsDeleted && pe.Employee!.UserName != null,
+                    selector: pe => new { pe.Employee!.Id, pe.Employee!.UserName, pe.Employee!.FirstName, pe.Employee!.LastName }))
+                    .Select(x => (x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
+                    .Distinct()
                     .ToList();
+
+            // 1 người "IsLeader" áp dụng cho MỌI bước Line Leader trong chuỗi (thực tế luôn chỉ có 1
+            // bước như vậy — file import chỉ có 1 cột LEADER, không phân biệt "Line Leader của bước
+            // nào") — xem comment ở trên.
+            var lineScopedCandidates = lineScopedJobTitleIds
+                .SelectMany(jobTitleId => lineLeaderHolders.Select(h => (JobTitleId: jobTitleId, h.Id, h.UserName, h.FirstName, h.LastName)))
+                .ToList();
 
             var groupScopedCandidates = (groupScopedJobTitleIds.Count == 0 || derivedGroupId is null)
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()

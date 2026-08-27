@@ -26,3 +26,23 @@ export interface ProductionOptionDto {
     code: string;
     nameVn: string | null;
 }
+
+// 1 dòng cho màn "Nhân viên dưới chuyền" (view riêng, đọc thẳng ProductionEmployees) — chỉ hiển thị,
+// không có Sửa/Xoá (chỉnh qua import lại file Excel).
+export interface ProductionEmployeeListItemDto {
+    id: number;
+    employeeId: number | null;
+    employeeCode: string;
+    fullName: string;
+    congDoan: string | null;
+    taskName: string | null;
+    blockCode: string | null;
+    teamCode: string | null;
+    teamNameVn: string | null;
+    shiftTeamCode: string | null;
+    shiftTeamNameVn: string | null;
+    isLeader: boolean;
+    departmentNameVn: string | null;
+    monthToDate: number;
+    yearToDate: number;
+}

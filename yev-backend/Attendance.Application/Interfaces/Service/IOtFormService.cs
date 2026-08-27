@@ -45,6 +45,15 @@ namespace Attendance.Application.Interfaces.Service
 
         Task RejectAsync(int id, string approverUserName, string? approverFullName, RejectOtFormDto request);
 
+        // Ký/Từ chối hàng loạt (Team Leader/Trưởng phòng — nhiều Group Leader/Team Leader bên dưới,
+        // 2026-08-27). Lặp gọi lại ApproveAsync/RejectAsync đơn lẻ cho từng OtFormId, từng đơn độc lập
+        // (1 đơn lỗi không huỷ các đơn còn lại) — xem BulkApproveOtFormDto/BulkRejectOtFormDto.
+        Task<List<BulkOtFormActionResultItemDto>> BulkApproveAsync(
+            string approverUserName, string? approverFullName, BulkApproveOtFormDto request);
+
+        Task<List<BulkOtFormActionResultItemDto>> BulkRejectAsync(
+            string approverUserName, string? approverFullName, BulkRejectOtFormDto request);
+
         // Loại 1 nhân viên khỏi đơn để duyệt được phần còn lại thay vì từ chối cả đơn — xem
         // docs/attendance-module.md § Loại nhân viên khỏi đơn.
         Task<OtFormDto> RemoveEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request);

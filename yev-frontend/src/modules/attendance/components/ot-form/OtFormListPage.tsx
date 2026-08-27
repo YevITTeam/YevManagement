@@ -13,6 +13,7 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 const PAGE_SIZE = 10;
 
@@ -82,7 +83,17 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const router = useRouter();
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
+    const canBulkApprove = mode === "pending-approvals" && hasPermission(user, "Attendance.OTForm.Approve");
     const [forms, setForms] = useState<OtFormListItemDto[]>([]);
+
+    // Ký/Từ chối hàng loạt (2026-08-27) — chỉ ở tab "Chờ tôi duyệt". Comment: FE KHÔNG tự lọc theo
+    // candidate của bước hiện tại (giống nút Duyệt/Từ chối đơn lẻ) — BE là nguồn chặn thật, trả lỗi
+    // riêng từng đơn nếu người bấm không phải candidate hợp lệ.
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [bulkAction, setBulkAction] = useState<"approve" | "reject" | null>(null);
+    const [bulkComment, setBulkComment] = useState("");
+    const [bulkSecondaryPassword, setBulkSecondaryPassword] = useState("");
+    const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -152,6 +163,78 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         setAppliedFilters({ fromDate: "", toDate: "", status: "" });
     };
 
+    // Xoá lựa chọn khi danh sách đổi (đổi trang/lọc/mode, hoặc sau khi xử lý xong) — so sánh snapshot
+    // ngay trong render thay vì effect (CLAUDE.md §4.5).
+    const formsKey = forms.map((form) => form.id).join(",");
+    const [prevFormsKey, setPrevFormsKey] = useState(formsKey);
+    if (prevFormsKey !== formsKey) {
+        setPrevFormsKey(formsKey);
+        setSelectedIds([]);
+    }
+
+    const toggleSelectOne = (id: number) => {
+        setSelectedIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+    };
+
+    const toggleSelectAll = () => {
+        setSelectedIds((current) => (current.length === forms.length ? [] : forms.map((form) => form.id)));
+    };
+
+    const openBulkAction = (type: "approve" | "reject") => {
+        setBulkComment("");
+        setBulkSecondaryPassword("");
+        setBulkAction(type);
+    };
+
+    const closeBulkAction = () => {
+        if (isBulkSubmitting) return;
+        setBulkAction(null);
+    };
+
+    const handleBulkSubmit = async () => {
+        if (bulkAction === "reject" && !bulkComment.trim()) {
+            toast.error(t("rejectCommentRequiredError"));
+            return;
+        }
+        if (!bulkSecondaryPassword) {
+            toast.error(t("secondaryPasswordRequiredError"));
+            return;
+        }
+        setIsBulkSubmitting(true);
+        try {
+            const results =
+                bulkAction === "approve"
+                    ? await OtFormApi.bulkApprove({
+                          otFormIds: selectedIds,
+                          comment: bulkComment.trim() || null,
+                          secondaryPassword: bulkSecondaryPassword,
+                      })
+                    : await OtFormApi.bulkReject({
+                          otFormIds: selectedIds,
+                          comment: bulkComment.trim(),
+                          secondaryPassword: bulkSecondaryPassword,
+                      });
+            const successCount = results.filter((item) => item.success).length;
+            const failedItems = results.filter((item) => !item.success);
+            if (failedItems.length === 0) {
+                toast.success(t("bulkActionAllSuccess", { count: successCount }));
+            } else {
+                toast.error(
+                    t("bulkActionPartialError", { success: successCount, failed: failedItems.length }) +
+                        " " +
+                        failedItems.map((item) => `#${item.otFormId}: ${item.error}`).join("; ")
+                );
+            }
+            setBulkAction(null);
+            await fetchForms();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("bulkActionError")));
+        } finally {
+            setIsBulkSubmitting(false);
+        }
+    };
+
     const title =
         mode === "my-forms"
             ? t("titleMyForms")
@@ -168,7 +251,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             : mode === "my-actions"
             ? t("descMyActions")
             : t("descMyParticipations");
-    const columnCount = mode === "my-forms" ? 9 : 8;
+    const columnCount = (mode === "my-forms" ? 9 : 8) + (canBulkApprove ? 1 : 0);
 
     return (
         <div className="space-y-8">
@@ -240,17 +323,36 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
                     <div className="text-sm text-[#5e3f3a]">
                         {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: forms.length, total: totalCount })}
                     </div>
-                    <button
-                        onClick={() => fetchForms()}
-                        disabled={isLoading}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                    >
-                        <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {canBulkApprove && selectedIds.length > 0 && (
+                            <>
+                                <span className="text-sm font-semibold text-[#191c1e]">{t("selectedCount", { count: selectedIds.length })}</span>
+                                <button
+                                    onClick={() => openBulkAction("approve")}
+                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                                >
+                                    {t("bulkApproveButton")}
+                                </button>
+                                <button
+                                    onClick={() => openBulkAction("reject")}
+                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                >
+                                    {t("bulkRejectButton")}
+                                </button>
+                            </>
+                        )}
+                        <button
+                            onClick={() => fetchForms()}
+                            disabled={isLoading}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        >
+                            <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
+                        </button>
+                    </div>
                 </div>
 
                 {error && (
@@ -261,6 +363,17 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                                {canBulkApprove && (
+                                    <th className="w-10 px-4 py-2.5">
+                                        <input
+                                            type="checkbox"
+                                            checked={forms.length > 0 && selectedIds.length === forms.length}
+                                            onChange={toggleSelectAll}
+                                            aria-label={t("selectAllLabel")}
+                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                        />
+                                    </th>
+                                )}
                                 <th className="px-4 py-2.5">{t("colDepartmentGroup")}</th>
                                 <th className="px-4 py-2.5">{t("colOtCase")}</th>
                                 <th className="px-4 py-2.5">{t("colDate")}</th>
@@ -289,6 +402,17 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                     onClick={() => router.push({ pathname: "/ot/forms", query: { id: String(form.id) } })}
                                     className="cursor-pointer border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]"
                                 >
+                                    {canBulkApprove && (
+                                        <td className="px-4 py-3 align-top" onClick={(event) => event.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.includes(form.id)}
+                                                onChange={() => toggleSelectOne(form.id)}
+                                                aria-label={t("selectAllLabel")}
+                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                            />
+                                        </td>
+                                    )}
                                     <td className="px-4 py-3 align-top">
                                         <div className="text-sm font-semibold text-[#191c1e]">
                                             {bilingualText(form.departmentNameVn, form.departmentNameJp)}
@@ -361,6 +485,85 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     </button>
                 </div>
             </section>
+
+            {bulkAction && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+                    <div className="fixed inset-0 bg-black/40" onClick={closeBulkAction} />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                    >
+                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                            <h3 className="text-lg font-semibold text-[#191c1e]">
+                                {bulkAction === "approve"
+                                    ? t("modalTitleBulkApprove", { count: selectedIds.length })
+                                    : t("modalTitleBulkReject", { count: selectedIds.length })}
+                            </h3>
+                            <button
+                                onClick={closeBulkAction}
+                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                aria-label={tCommon("close")}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("commentLabel")} {bulkAction === "reject" && <span className="text-[#930006]">*</span>}
+                                </span>
+                                <textarea
+                                    value={bulkComment}
+                                    onChange={(event) => setBulkComment(event.target.value)}
+                                    disabled={isBulkSubmitting}
+                                    rows={3}
+                                    required={bulkAction === "reject"}
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <input
+                                    type="password"
+                                    value={bulkSecondaryPassword}
+                                    onChange={(event) => setBulkSecondaryPassword(event.target.value)}
+                                    disabled={isBulkSubmitting}
+                                    autoComplete="off"
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <p className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
+                                {t("bulkActionHint")}
+                            </p>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={closeBulkAction}
+                                    disabled={isBulkSubmitting}
+                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {tCommon("cancel")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleBulkSubmit}
+                                    disabled={isBulkSubmitting}
+                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isBulkSubmitting ? tCommon("processing") : tCommon("confirm")}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -1,8 +1,9 @@
-import { api } from "@/lib/client";
+import { api, getForBlob, type BlobDownloadResult } from "@/lib/client";
 import type {
     EmployeeImportConfirmResultDto,
     EmployeeImportPreviewResultDto,
     EmployeeImportPreviewRowDto,
+    EmployeeOtHourLimitImportResultDto,
 } from "@/modules/attendance/types/employee-import.dto";
 import { ApiResponse } from "@/types/api";
 
@@ -10,6 +11,9 @@ const ENDPOINTS = {
     EMPLOYEE_IMPORT: {
         preview: "/EmployeeImport/preview",
         confirm: "/EmployeeImport/confirm",
+        otHourLimits: "/EmployeeImport/ot-hour-limits",
+        template: "/EmployeeImport/template",
+        otHourLimitsTemplate: "/EmployeeImport/ot-hour-limits/template",
     },
 } as const;
 
@@ -30,6 +34,22 @@ export const EmployeeImportApi = {
             rows,
         });
         return response.data;
+    },
+    // multipart/form-data — field "file". Áp dụng thẳng, không có Preview riêng (mục 5, 2026-08-27).
+    importOtHourLimits: async (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await api.postForm<ApiResponse<EmployeeOtHourLimitImportResultDto>>(
+            ENDPOINTS.EMPLOYEE_IMPORT.otHourLimits,
+            formData
+        );
+        return response.data;
+    },
+    downloadTemplate: async (): Promise<BlobDownloadResult> => {
+        return getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.template);
+    },
+    downloadOtHourLimitTemplate: async (): Promise<BlobDownloadResult> => {
+        return getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.otHourLimitsTemplate);
     },
 };
 

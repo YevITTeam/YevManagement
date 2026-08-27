@@ -231,6 +231,10 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<int>("Month")
                         .HasColumnType("int");
 
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<decimal>("TotalHours")
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");

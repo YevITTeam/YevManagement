@@ -18,7 +18,8 @@ namespace Attendance.Application.Services
             Code = jobTitle.Code,
             Name = jobTitle.Name,
             RankOrder = jobTitle.RankOrder,
-            TerminalLevel = jobTitle.TerminalLevel
+            TerminalLevel = jobTitle.TerminalLevel,
+            IsLineScoped = jobTitle.IsLineScoped
         };
 
         public async Task<PagedResponse<JobTitleDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword)

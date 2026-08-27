@@ -732,6 +732,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     employeeId,
                     endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
                     didEat: employeeOverrides[employeeId]?.didEat ?? true,
+                    noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
+                    noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
                 }));
                 result = await OtFormApi.updateOtForm(otFormId, { employees });
             } else {
@@ -992,6 +994,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <th className="px-3 py-2">{t("colEndTime")}</th>
                                         <th className="px-3 py-2">{t("colDidEat")}</th>
                                         <th className="px-3 py-2">{t("colMealTicketType")}</th>
+                                        <th className="px-3 py-2">{t("colNote")}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1059,6 +1062,17 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     <MealTicketTypeBadge
                                                         type={mealTicketType}
                                                         labels={{ main: t("mealTicketTypeMain"), secondary: t("mealTicketTypeSecondary"), none: t("mealTicketTypeNone") }}
+                                                    />
+                                                </td>
+                                                <td className="px-3 py-2 align-top">
+                                                    <input
+                                                        value={employeeOverrides[employee.employeeId]?.noteVn ?? ""}
+                                                        onChange={(event) =>
+                                                            handleEmployeeOverrideChange(employee.employeeId, "noteVn", event.target.value)
+                                                        }
+                                                        placeholder={t("notePlaceholder")}
+                                                        disabled={isSubmitting}
+                                                        className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                                     />
                                                 </td>
                                             </tr>

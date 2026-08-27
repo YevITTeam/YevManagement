@@ -22,13 +22,21 @@ public partial class JobTitle
     // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — None nếu chỉ là cấp trung gian.
     public int TerminalLevel { get; set; }
 
-    // true CHỈ cho "Line Leader" (2026-08-24) — đánh dấu Chức vụ này tìm ứng viên theo phạm vi Line
-    // (Employee.JobTitleId khớp + ProductionEmployee.ProductionLineId khớp Line của đơn), KHÁC với
-    // Chức vụ trung gian thường (Group Leader/Team Leader — tìm theo Employee.GroupId). Tách riêng
-    // khỏi TerminalLevel vì TerminalLevel mang nghĩa "cấp CUỐI chuỗi duyệt phải chạm tới" (dùng để cắt
-    // relevantSteps trong JobTitleApprovalChainService) — Line Leader không phải cấp cuối, vẫn đúng
-    // TerminalLevel=None, chỉ khác PHẠM VI tìm ứng viên. KHÔNG hardcode Code=="LL" ở nơi dùng (tránh
-    // đúng lỗi đã gặp với "SM" trùng mã trước đây).
+    // true CHỈ cho "Line Leader" (2026-08-24) — đánh dấu bước này trong ProductionApprovalStep tìm
+    // ứng viên theo phạm vi Line, KHÁC với Chức vụ trung gian thường (Group Leader/Team Leader — tìm
+    // theo Employee.GroupId, vẫn gán tay qua Employee.JobTitleId). Tách riêng khỏi TerminalLevel vì
+    // TerminalLevel mang nghĩa "cấp CUỐI chuỗi duyệt phải chạm tới" (dùng để cắt relevantSteps trong
+    // JobTitleApprovalChainService) — Line Leader không phải cấp cuối, vẫn đúng TerminalLevel=None,
+    // chỉ khác PHẠM VI tìm ứng viên. KHÔNG hardcode Code=="LL" ở nơi dùng (tránh đúng lỗi đã gặp với
+    // "SM" trùng mã trước đây).
+    //
+    // ⚠ SỬA 2026-08-27: KHÔNG còn tìm ứng viên qua Employee.JobTitleId=="Line Leader" nữa — ai là
+    // Line Leader của Line nào lấy THẲNG từ ProductionEmployee.IsLeader (cột LEADER trong file import
+    // nhân sự dưới chuyền, luôn mới nhất mỗi lần import lại) + ProductionEmployee.ProductionLineId
+    // khớp Line của đơn. JobTitle "Line Leader" vẫn tồn tại làm 1 dòng trong ProductionApprovalStep
+    // (để hiển thị/sắp xếp đúng vị trí trong chuỗi), nhưng gán Employee.JobTitleId="Line Leader" cho
+    // ai đó giờ KHÔNG còn tác dụng gì tới việc suy luận ứng viên nữa — xem
+    // JobTitleApprovalChainService.ResolveChainForProductionCreationAsync.
     public bool IsLineScoped { get; set; }
 
     public bool IsDeleted { get; set; }

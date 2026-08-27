@@ -6,6 +6,8 @@ namespace Attendance.Application.Dtos.OtForms
     // ONLY each active employee's actual OT end time + DidEat (added 2026-08-05, xem OtFormEmployee.DidEat)
     // — see OtFormService.UpdateAsync. EmployeeId must already be an active (not removed) employee on
     // the form; adding/removing people is rejected.
+    // NoteVn/NoteJp trở lại 2026-08-27 (Giai đoạn 5) — Group Leader/Team Leader (đơn "theo chuyền") ghi
+    // chú trao đổi qua từng nhân viên thay vì ghi giấy, xem OtFormService.UpdateAsync.
     public class UpdateOtFormEmployeeTimeDto
     {
         [Required(ErrorMessage = "Nhân viên không được để trống")]
@@ -14,5 +16,9 @@ namespace Attendance.Application.Dtos.OtForms
         public TimeOnly EndTime { get; set; }
 
         public bool DidEat { get; set; }
+
+        public string? NoteVn { get; set; }
+
+        public string? NoteJp { get; set; }
     }
 }

@@ -68,6 +68,44 @@
   `ProductionEmployeeSearchItemDto`. `OtFormService.ValidateOtHourLimitsAsync` ưu tiên mốc riêng nếu
   có gán, message đổi thành `"Nhân viên mã {code} quá giới hạn OT {ngày/tháng/năm} ({sau}h > {mốc}h)"`.
   Xem §3.5, §3.5b, §4.3, `attendance-module.md` §Giới hạn OT/tháng/năm RIÊNG theo từng nhân viên.
+- **Cập nhật 2026-08-27 (mới, Import/Export nhân sự dưới chuyền)**: thêm
+  `POST /api/ProductionEmployeeImport/preview|confirm|apply-accumulation` và
+  `GET /api/ProductionEmployeeExport/export` — nạp/xuất `ProductionEmployee` theo đúng format
+  `Import_Nhan_Su_Che_Tao.xlsx`. Khác `EmployeeImport` (§3.7) ở 2 điểm: (1) mã nhân viên chưa có
+  `Employee` được PHÉP tự tạo (gán Group "Chưa phân loại" dưới Phòng ban Chế Tạo), NHƯNG Line/Team/
+  ShiftTeam không khớp thì chỉ skip, không tự tạo; (2) cột "OT month" tách hẳn thành bước riêng
+  (`apply-accumulation`, quyền riêng `Attendance.EmployeeAccumulation.Import` vì ảnh hưởng lương) thay
+  vì gộp chung vào Confirm cấu trúc. 3 permission mới: `Attendance.ProductionEmployee.Import/.Export`,
+  `Attendance.EmployeeAccumulation.Import`. Xem §3.8, `attendance-module.md` §Import/Export nhân sự
+  dưới chuyền.
+- **Cập nhật 2026-08-27b (UI nhân sự dưới chuyền)**: thêm `GET /api/ProductionEmployee/page-nation`
+  (view đọc-only riêng cho màn "Nhân viên dưới chuyền", quyền dùng chung `Attendance.Employee.View`).
+  Export (§3.8) đổi sang xuất **đúng vị trí cột A..O** của `Import_Nhan_Su_Che_Tao.xlsx` (trước đó dồn
+  cột, không khớp vị trí file mẫu). Không đổi shape response nào khác. Xem §3.8b,
+  `attendance-module.md` §Import/Export nhân sự dưới chuyền.
+- **Cập nhật 2026-08-27c (Cây duyệt "theo chuyền" — sửa cách tìm ứng viên Line Leader)**: bước
+  **Line Leader** trong `ProductionApprovalStep` KHÔNG còn đọc `Employee.JobTitleId` nữa — lấy thẳng
+  từ `ProductionEmployee.IsLeader` (cột LEADER khi import nhân sự dưới chuyền, §3.8) kết hợp
+  `ProductionEmployee.ProductionLineId` khớp Line của đơn. `JobTitleDto`/`ProductionApprovalStepDto`
+  thêm field `isLineScoped: boolean`. Group Leader/Team Leader vẫn gán tay như cũ qua
+  `Employee.JobTitleId` — thêm UI gán tay ở tab "Theo chuyền" (`ApprovalStepManager.tsx`), trước đó tab
+  này hoàn toàn chưa có UI gán tay nào. Không đổi contract `GET/PUT /api/ProductionApprovalStep/by-department/{id}`
+  ngoài field mới. Xem `attendance-module.md` §Giai đoạn 9 — Đơn "theo chuyền" (Chế tạo).
+- **Cập nhật 2026-08-27d (sửa đơn theo chuyền theo từng bước + ký/từ chối hàng loạt + import giới hạn
+  OT)**: `PUT /api/OtForm/{id}` với đơn `isProductionForm=true` giờ sửa được theo TỪNG BƯỚC (candidate
+  của bước Pending hiện tại thì sửa được, không còn chỉ-người-tạo/chỉ-trước-khi-có-bước-Approved —
+  đơn theo Nhóm không đổi); body `Employees[]` có lại `noteVn`/`noteJp`. `IsEditable` (list item lẫn
+  detail) đổi công thức cho đơn theo chuyền (chỉ cần `Status=InApproval`). Thêm
+  `POST /api/OtForm/bulk-approve`/`bulk-reject` (permission `Attendance.OTForm.Approve`, body
+  `{otFormIds, comment, secondaryPassword}`, trả `List<{otFormId, success, error}>`). Thêm
+  `POST /api/EmployeeImport/ot-hour-limits` (permission `Attendance.Employee.Update`, multipart field
+  `file`, không có Preview riêng — áp dụng thẳng, trả `{updatedCount, skippedCount, rows[]}`). Thêm
+  `GET /api/EmployeeImport/template`, `GET /api/EmployeeImport/ot-hour-limits/template`,
+  `GET /api/ProductionEmployeeImport/template` (file mẫu tải xuống, trả `.xlsx` trực tiếp không bọc
+  `ApiResponse<T>`, permission dùng lại của action import tương ứng). `GET /api/ProductionEmployee/page-nation`
+  thêm query `DepartmentId` (optional, lọc theo `Employee.Group.DepartmentId`) + đổi nhãn cột/filter
+  FE cho khớp thuật ngữ màn "chọn nhân viên" (Line/Team/Nhóm ca/Công đoạn thay vì BLOCK/GROUP/NHOM
+  thô). Xem `attendance-module.md` §Giai đoạn 10.
 
 ## 1. Tổng quan nghiệp vụ, vai trò & luồng UI (đọc trước khi code màn hình)
 
@@ -798,6 +836,88 @@ Pattern **Preview → Confirm** (giống hệt import Device bên module Asset �
 - Mã nhân viên trùng **trong cùng file** (2 dòng cùng `employeeCode`) vẫn là lỗi (không biết dòng nào đúng) — khác với trùng mã đã có sẵn trong hệ thống (không còn là lỗi, sẽ update).
 - File không phải `.xlsx` thật (VD `.xlsb`, hoặc `.xls` cũ đổi đuôi) → 400 kèm chi tiết exception gốc trong `errors[]` để debug (không chỉ message chung chung).
 
+### 3.8 Import/Export nhân sự dưới chuyền — `/api/ProductionEmployeeImport`, `/api/ProductionEmployeeExport` (2026-08-27)
+
+Nạp/xuất `ProductionEmployee` theo đúng format `docs/Data/Import_Nhan_Su_Che_Tao.xlsx` (sheet `OT(N+1)`).
+Pattern **Preview → Confirm** y hệt §3.7, cộng thêm 1 bước riêng "Áp dụng lũy kế" — chi tiết thiết kế
+xem `attendance-module.md` §Import/Export nhân sự dưới chuyền.
+
+```jsonc
+// POST /api/ProductionEmployeeImport/preview — multipart/form-data, field "file"
+// Permission: Attendance.ProductionEmployee.Import — response ProductionEmployeeImportPreviewResultDto
+{
+  "rows": [
+    { "rowNumber": 2, "employeeCode": "46", "lastName": "PHAN OANH", "firstName": "LIỆT",
+      "congDoan": "GT", "taskName": "FUKU KJC", "blockCode": "CT", "teamCode": "HC", "shiftTeamCode": "HC",
+      "isLeader": false, "otMonthHours": 0, "otYearHours": 4.5,
+      "resolvedProductionLineId": 78, "resolvedTeamId": 3, "resolvedShiftTeamId": 4,
+      "isNewEmployee": false, "isNewProductionEmployee": false, "isUpdatedProductionEmployee": false,
+      "isValid": true, "errors": [] }
+  ],
+  "totalRows": 2414, "validRows": 2119, "invalidRows": 295,
+  "newEmployeeCount": 292, "newProductionEmployeeCount": 431, "updatedProductionEmployeeCount": 1258,
+  "unchangedProductionEmployeeCount": 0, "removedProductionEmployeeCount": 6,
+  "removedRows": [ { "employeeCode": "9999", "fullName": "Nguyễn Văn A" } ]
+}
+
+// POST /api/ProductionEmployeeImport/confirm — body { "rows": [ ...y hệt rows ở Preview... ] }
+// Permission: Attendance.ProductionEmployee.Import — response ProductionEmployeeImportConfirmResultDto
+{ "createdGroupCount": 1, "createdEmployeeCount": 292, "createdProductionEmployeeCount": 431,
+  "updatedProductionEmployeeCount": 1258, "removedProductionEmployeeCount": 6,
+  "skippedCount": 295, "skippedRows": [ { "rowNumber": 40, "employeeCode": "512", "errors": ["Mã GROUP 'S' không khớp Team nào trong hệ thống."] } ] }
+
+// POST /api/ProductionEmployeeImport/apply-accumulation — body { "year": 2026, "month": 8, "rows": [ ...rows... ] }
+// Permission RIÊNG: Attendance.EmployeeAccumulation.Import (đụng lũy kế OT, ảnh hưởng lương)
+// response ProductionEmployeeAccumulationResultDto
+{ "adjustedCount": 2100, "unchangedCount": 19, "skippedCount": 0, "skippedRows": [], "totalDeltaHours": 340.5 }
+
+// GET /api/ProductionEmployeeExport/export — Permission: Attendance.ProductionEmployee.Export
+// KHÔNG bọc ApiResponse<T> — trả thẳng file .xlsx (Content-Disposition), 1 sheet / Phòng ban thật của
+// hệ thống (Employee.Group.Department), cột OT month/OT year lấy SỐNG từ EmployeeAccumulationHistory.
+// Cột xuất ra ĐÚNG VỊ TRÍ A..O của file mẫu (A=KHOI SU để trống, B=MNV...K=GROUP, L/M/N để trống,
+// O=LEADER — 2026-08-27b) — file xuất ra dùng lại được ngay làm file Import tháng sau.
+```
+- Chỉ resolve `BlockCode`/`TeamCode`/`ShiftTeamCode` theo `ProductionLine`/`ProductionTeam`/`ProductionShiftTeam`
+  hiện có trong hệ thống — **KHÔNG tự tạo mới** khi không khớp (khác `EmployeeImportService` ở §3.7),
+  chỉ skip dòng đó kèm lý do. Mã nhân viên (`MNV`) thì NGƯỢC LẠI — **được phép tự tạo** `Employee` nếu
+  chưa có, gán vào Group `"Chưa phân loại (nhập từ file chuyền)"` (mã `KHAC`) dưới Phòng ban `Chế Tạo`.
+- `otMonthHours`/`otYearHours` trong `rows` chỉ mang tính hiển thị ở Preview/Confirm — **không được ghi
+  vào đâu** cho tới khi gọi riêng `apply-accumulation`. Chỉ `otMonthHours` được dùng (cộng **chênh lệch**
+  vào `EmployeeAccumulationHistory` của đúng Year/Month chọn tay, kèm `Note` truy vết) — `otYearHours`
+  chỉ tham khảo.
+- Người đang có trong `ProductionEmployees` nhưng KHÔNG còn xuất hiện trong file mới → tự động soft-delete
+  khi Confirm (`removedRows`/`removedProductionEmployeeCount`) — FE nên cảnh báo rõ trước khi bấm Confirm.
+- **FE (`ProductionEmployeeImportDialog.tsx`, 2026-08-27b)**: bản xem trước tách thành 6 tab (Tất cả/
+  Mới/Cập nhật/Không đổi/Lỗi/Bị gỡ, mỗi tab có số đếm) — lọc lại client-side từ CÙNG `rows`/`removedRows`
+  của response Preview (`isNewProductionEmployee`/`isUpdatedProductionEmployee`/`isValid`), không gọi
+  thêm API nào. Nút Import/Export gom vào 1 dropdown "Excel" ở toolbar view "Nhân viên dưới chuyền".
+
+### 3.8b `GET /api/ProductionEmployee/page-nation` — Màn "Nhân viên dưới chuyền" (2026-08-27b, mới)
+
+View đọc-only riêng, đọc thẳng bảng `ProductionEmployees` (KHÁC `Employee/grid-list` §3.1 đọc bảng
+`Employees`) — hiển thị đúng dữ liệu chuyền mới nhất (Line/Team/Nhóm ca/Công đoạn/Trưởng nhóm) thay vì
+Nhóm/Phòng ban/Chức vụ tổ chức. Không có Sửa/Xoá — chỉnh dữ liệu qua Import lại (§3.8). Permission dùng
+chung `Attendance.Employee.View` (chỉ là 1 view khác của cùng dữ liệu nhân sự).
+
+```jsonc
+// GET /api/ProductionEmployee/page-nation?PageIndex=1&PageSize=10&Keyword=&ProductionLineId=&TeamId=&ShiftTeamId=
+// response — data: ProductionEmployeeListItemDto[] (bọc PagedResponse như mọi grid-list khác)
+{
+  "data": [
+    { "id": 12, "employeeId": 46, "employeeCode": "46", "fullName": "LIỆT PHAN OANH",
+      "congDoan": "GT", "taskName": "FUKU KJC", "blockCode": "CT",
+      "teamCode": "HC", "teamNameVn": "Hành chính", "shiftTeamCode": "HC", "shiftTeamNameVn": "Hành chính",
+      "isLeader": false, "departmentNameVn": "Chế Tạo", "monthToDate": 12.5, "yearToDate": 88.0 }
+  ],
+  "pageIndex": 1, "pageSize": 10, "totalCount": 1688, "totalPages": 169,
+  "hasNextPage": true, "hasPreviousPage": false
+}
+```
+- 3 dropdown lọc (`ProductionLineId`/`TeamId`/`ShiftTeamId`) dùng lại đúng 3 API option đã có sẵn cho
+  màn "Theo chuyền" khi tạo đơn OT: `GET /api/ProductionEmployee/line-options|team-options|shift-team-options`.
+- `monthToDate`/`yearToDate` là lũy kế THẬT (từ `EmployeeAccumulationHistory`, scope theo năm/tháng
+  thực tế hôm nay) — cùng công thức `EmployeeService.GetPagedAsync`, không phải số tĩnh từ file import.
+
 ## 4. OtForm (`/api/OtForm`) — nghiệp vụ chính
 
 > **⚠ Giai đoạn 3.1 (2026-08-07)** — bảng route và các mục §4.1a/§4.2a bên dưới đã lỗi thời ở phần mô
@@ -1381,6 +1501,9 @@ gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
 | `/api/AttendanceSetting` | GET (mọi tài khoản), PUT (Admin — §6d) |
 | `/api/OtForm` | `my-forms`, `pending-approvals` (`currentStepCandidateCount`, mới 2026-08-08), `my-actions` (§4.2b), `my-participations` (§4.2c), `{id}` (GET/PUT), POST, `{id}/approve`, `{id}/reject`, `{id}/delete` (Admin only, mới 2026-08-08, §4.1c), `{id}/employees/remove` (§4.5a), `email-confirm/{token}` (GET), `email-confirm/{token}/approve`, `email-confirm/{token}/reject`, `email-confirm/{token}/employees/remove` (public, không mật khẩu cấp 2 — §4.6). **KHÔNG còn `{id}/submit`** (xoá 2026-08-07) lẫn `pending-submissions` (xoá 2026-08-08, xem §4.2a) |
 | `/api/EmployeeImport` | `preview`, `confirm` (Admin, §3.7) |
+| `/api/ProductionEmployeeImport` | `preview`, `confirm`, `apply-accumulation` (quyền riêng, ảnh hưởng lương — §3.8) |
+| `/api/ProductionEmployeeExport` | `export` (GET, trả file .xlsx — §3.8) |
+| `/api/ProductionEmployee` | `search`, `line-options`, `team-options`, `shift-team-options` (màn "Theo chuyền" tạo đơn OT, gate `OTForm.Create`), `page-nation` (màn "Nhân viên dưới chuyền" đọc-only, gate `Employee.View` — mới 2026-08-27b, §3.8b) |
 
 ## 8. Checklist FE — màn hình chính
 

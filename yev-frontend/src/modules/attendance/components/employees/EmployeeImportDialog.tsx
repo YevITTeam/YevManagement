@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Download, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -35,6 +35,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
         newGroupCount: number;
     } | null>(null);
     const [result, setResult] = useState<EmployeeImportConfirmResultDto | null>(null);
+    const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     if (!isOpen) return null;
@@ -120,6 +121,23 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
     };
 
     const canConfirm = summary !== null && rows.length > 0 && result === null;
+
+    const handleDownloadTemplate = async () => {
+        setIsDownloadingTemplate(true);
+        try {
+            const { blob, fileName } = await EmployeeImportApi.downloadTemplate();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName ?? "Mau_Import_NhanVien.xlsx";
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, t("importTemplateError")));
+        } finally {
+            setIsDownloadingTemplate(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -207,6 +225,14 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                                 className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {isPreviewing ? t("importPreviewing") : t("importPreviewButton")}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDownloadTemplate}
+                                disabled={isDownloadingTemplate}
+                                className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <Download className="h-3.5 w-3.5" /> {t("importDownloadTemplate")}
                             </button>
                         </div>
 

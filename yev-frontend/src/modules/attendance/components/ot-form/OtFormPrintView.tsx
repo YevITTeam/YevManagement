@@ -56,19 +56,20 @@ function getGivenName(fullName: string | null | undefined) {
 }
 
 // Đơn "theo chuyền" (isProductionForm=true) không gắn 1 Group cố định nên ô "Tên công đoạn" không thể
-// in departmentNameVn/groupNameVn như đơn "theo Nhóm" — thay bằng Team/Công đoạn/Nhóm ca snapshot trên
-// từng nhân viên (OtFormEmployee.TeamCodeSnapshot/CongDoanSnapshot/ShiftTeamCodeSnapshot, xem docs
-// attendance-otform-pdf-mapping.md). Người bị loại (isRemoved) không tính. Gộp theo giá trị PHÂN BIỆT
-// (thường cả đơn chỉ 1 Team/1 Nhóm ca vì chọn qua bộ lọc cascading ở CreateOtFormPage, nhưng Công đoạn
-// có thể khác nhau giữa từng người trong cùng Line nên vẫn phải gộp, không chỉ lấy người đầu tiên) —
-// yêu cầu người dùng 2026-08-25, khớp mẫu giấy in thật.
+// in departmentNameVn/groupNameVn như đơn "theo Nhóm" — thay bằng Team/Line/Nhóm ca snapshot trên từng
+// nhân viên (OtFormEmployee.TeamCodeSnapshot/BlockCodeSnapshot/ShiftTeamCodeSnapshot — BlockCodeSnapshot
+// = "Line" vì ProductionLineId khớp BlockCode, xem docs attendance-otform-pdf-mapping.md). Trước
+// 2026-08-27 dùng nhầm CongDoanSnapshot ở vị trí giữa (ra mã tắt vô nghĩa như "HC GT HC") — người dùng
+// xác nhận công thức đúng là Team + Line + Nhóm Ca. Người bị loại (isRemoved) không tính. Gộp theo giá
+// trị PHÂN BIỆT (thường cả đơn chỉ 1 Team/1 Line/1 Nhóm ca vì chọn qua bộ lọc cascading ở
+// CreateOtFormPage, nhưng vẫn gộp phòng trường hợp khác nhau giữa từng người) — khớp mẫu giấy in thật.
 function getProductionCongDoanLabel(form: OtFormDto) {
     const activeEmployees = form.employees.filter((e) => !e.isRemoved);
     const distinct = (values: (string | null)[]) => Array.from(new Set(values.filter((v): v is string => !!v)));
     const teamCodes = distinct(activeEmployees.map((e) => e.teamCodeSnapshot));
-    const congDoans = distinct(activeEmployees.map((e) => e.congDoanSnapshot));
+    const lineCodes = distinct(activeEmployees.map((e) => e.blockCodeSnapshot));
     const shiftTeamCodes = distinct(activeEmployees.map((e) => e.shiftTeamCodeSnapshot));
-    return [teamCodes.join("/"), congDoans.join("/"), shiftTeamCodes.join("/")].filter(Boolean).join("   ");
+    return [teamCodes.join("/"), lineCodes.join("/"), shiftTeamCodes.join("/")].filter(Boolean).join("   ");
 }
 
 // Toạ độ (% theo chiều rộng/cao TỪNG TRANG ảnh nền) của mọi ô cần điền — đo trực tiếp từ file gốc
@@ -486,9 +487,19 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
                 {formatDate(form.date)}
             </div>
 
-            <div style={nowrapBoxStyle(layout.lyDo)} className="pl-1">
-                {form.reasonNameVn}
-                {form.subReason ? ` — ${form.subReason}` : ""}
+            <div
+                style={{ ...boxStyle(layout.lyDo), display: "flex", flexDirection: "column", justifyContent: "center", overflow: "hidden" }}
+                className="pl-1"
+            >
+                <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+                    {form.reasonNameVn}
+                    {form.subReason ? ` — ${form.subReason}` : ""}
+                </div>
+                {form.reasonNameJp && (
+                    <div className="overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontSize: "0.85em" }}>
+                        {form.reasonNameJp}
+                    </div>
+                )}
             </div>
 
             {/* "Không"/mặc định luôn được tick khi mục tương ứng chưa bật (kể cả khi cả đơn không có

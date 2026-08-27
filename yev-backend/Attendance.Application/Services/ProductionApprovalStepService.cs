@@ -54,7 +54,8 @@ namespace Attendance.Application.Services
                     RankOrder = x.JobTitle.RankOrder,
                     RequiresSignature = x.RequiresSignature,
                     IsResponsible = x.IsResponsible,
-                    TerminalLevel = x.JobTitle.TerminalLevel
+                    TerminalLevel = x.JobTitle.TerminalLevel,
+                    IsLineScoped = x.JobTitle.IsLineScoped
                 });
 
             return steps.OrderBy(x => x.StepOrder).ToList();

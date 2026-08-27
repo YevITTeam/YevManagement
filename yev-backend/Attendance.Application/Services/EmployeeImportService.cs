@@ -412,5 +412,143 @@ namespace Attendance.Application.Services
 
             return rows;
         }
+
+        // Mục 5 (2026-08-27, xem docs/Note_OT.txt "Import lại số giờ giới hạn tăng ca của nhân viên").
+        // File Excel riêng, khác EmployeeImportRowDto ở trên: cột A bỏ trống (theo đúng quy ước các file
+        // import khác trong module — vd Import_Nhan_Su_Che_Tao.xlsx), B=MNV, C=Giới hạn Tháng, D=Giới
+        // hạn Năm. Chỉ UPDATE nhân viên ĐÃ TỒN TẠI (không tạo mới, không có Department/Group phụ thuộc
+        // cần rà như import Employee đầy đủ) — không cần Preview/Confirm 2 bước, áp dụng thẳng và trả
+        // lại kết quả từng dòng. Ô Giới hạn Tháng/Năm để TRỐNG ở 1 dòng = GIỮ NGUYÊN override cũ của
+        // nhân viên đó (không phải xoá) — đã chốt với người dùng 2026-08-27.
+        private const string OtHourLimitHeaderMarkerCellB = "MNV";
+
+        public async Task<EmployeeOtHourLimitImportResultDto> ImportOtHourLimitsAsync(Stream excelFileStream)
+        {
+            XLWorkbook workbook;
+            try
+            {
+                workbook = new XLWorkbook(excelFileStream);
+            }
+            catch (Exception ex) when (ex is not DomainException)
+            {
+                throw new DomainException(
+                    "File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx).",
+                    new List<string> { $"{ex.GetType().Name}: {ex.Message}" });
+            }
+
+            using var _ = workbook;
+            var worksheet = workbook.Worksheets.First();
+            var usedRange = worksheet.RangeUsed();
+
+            var result = new EmployeeOtHourLimitImportResultDto();
+            if (usedRange == null) return result;
+
+            var allUsedRows = usedRange.RowsUsed().ToList();
+            var headerRow = allUsedRows.FirstOrDefault(r =>
+                string.Equals(r.Cell(2).GetString().Trim(), OtHourLimitHeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
+            if (headerRow == null)
+                throw new DomainException(
+                    $"Không tìm thấy dòng tiêu đề (cột B = \"{OtHourLimitHeaderMarkerCellB}\") trong file — đúng mẫu là cột B=MNV, C=Giới hạn Tháng, D=Giới hạn Năm.");
+
+            var dataRows = allUsedRows
+                .Where(r => r.RowNumber() > headerRow.RowNumber())
+                .Select(r => new
+                {
+                    RowNumber = r.RowNumber(),
+                    EmployeeCode = r.Cell(2).GetString().Trim(),
+                    MonthlyLimit = r.Cell(3).TryGetValue<decimal>(out var m) ? (decimal?)m : null,
+                    YearlyLimit = r.Cell(4).TryGetValue<decimal>(out var y) ? (decimal?)y : null
+                })
+                .Where(r => !string.IsNullOrWhiteSpace(r.EmployeeCode))
+                .ToList();
+
+            var codes = dataRows.Select(r => r.EmployeeCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var employeesByCode = (await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && codes.Contains(x.Code)))
+                .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var row in dataRows)
+            {
+                if (!employeesByCode.TryGetValue(row.EmployeeCode, out var employee))
+                {
+                    result.SkippedCount++;
+                    result.Rows.Add(new EmployeeOtHourLimitImportRowResultDto
+                    {
+                        RowNumber = row.RowNumber,
+                        EmployeeCode = row.EmployeeCode,
+                        Success = false,
+                        Error = "Không tìm thấy nhân viên có mã này trong hệ thống."
+                    });
+                    continue;
+                }
+
+                if (row.MonthlyLimit.HasValue) employee.CustomMonthlyOtHourLimit = row.MonthlyLimit;
+                if (row.YearlyLimit.HasValue) employee.CustomYearlyOtHourLimit = row.YearlyLimit;
+                _unitOfWork.Employees.Update(employee);
+
+                result.UpdatedCount++;
+                result.Rows.Add(new EmployeeOtHourLimitImportRowResultDto
+                {
+                    RowNumber = row.RowNumber,
+                    EmployeeCode = row.EmployeeCode,
+                    Success = true,
+                    MonthlyLimit = employee.CustomMonthlyOtHourLimit,
+                    YearlyLimit = employee.CustomYearlyOtHourLimit
+                });
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+            return result;
+        }
+
+        // File mẫu cho import Nhân viên đầy đủ (2026-08-27, theo yêu cầu người dùng — cột khớp ĐÚNG
+        // ParseXlsx ở trên: B=Employee code, C=Full name, D=Department code, E=Department name,
+        // F=Group code, G=Group name; cột A bỏ trống theo đúng quy ước các file import khác trong
+        // module). Kèm 1 dòng ví dụ để người dùng dễ hình dung, không phải dữ liệu thật.
+        public (byte[] Content, string FileName) GenerateTemplate()
+        {
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("Nhan vien");
+
+            string[] headers = { "", "Employee code", "Full name", "Department code", "Department name", "Group code", "Group name" };
+            for (var col = 0; col < headers.Length; col++)
+                sheet.Cell(1, col + 1).Value = headers[col];
+            sheet.Row(1).Style.Font.Bold = true;
+
+            sheet.Cell(2, 2).Value = "NV001";
+            sheet.Cell(2, 3).Value = "Nguyễn Văn A";
+            sheet.Cell(2, 4).Value = "CT";
+            sheet.Cell(2, 5).Value = "Chế tạo";
+            sheet.Cell(2, 6).Value = "CT-A";
+            sheet.Cell(2, 7).Value = "Nhóm A";
+
+            sheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return (stream.ToArray(), "Mau_Import_NhanVien.xlsx");
+        }
+
+        // File mẫu cho import giới hạn OT tháng/năm (mục 5, 2026-08-27) — cột khớp ĐÚNG
+        // ImportOtHourLimitsAsync ở trên: B=MNV, C=Giới hạn Tháng, D=Giới hạn Năm.
+        public (byte[] Content, string FileName) GenerateOtHourLimitTemplate()
+        {
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("Gioi han OT");
+
+            string[] headers = { "", "MNV", "Giới hạn Tháng", "Giới hạn Năm" };
+            for (var col = 0; col < headers.Length; col++)
+                sheet.Cell(1, col + 1).Value = headers[col];
+            sheet.Row(1).Style.Font.Bold = true;
+
+            sheet.Cell(2, 2).Value = "NV001";
+            sheet.Cell(2, 3).Value = 25;
+            sheet.Cell(2, 4).Value = 300;
+
+            sheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return (stream.ToArray(), "Mau_Import_GioiHanOT.xlsx");
+        }
     }
 }

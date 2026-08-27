@@ -40,8 +40,11 @@ namespace Attendance.Application.Services
             CreatedByUserName = x.CreatedByUserName,
             CreatedByFullName = x.CreatedByFullName,
             Status = x.Status,
+            // Giai đoạn 5 (2026-08-27): đơn "theo chuyền" sửa được theo TỪNG BƯỚC (xem UpdateAsync) nên
+            // "có bước nào Approved chưa" không còn chặn — chỉ cần đơn còn InApproval là VẪN CÓ NGƯỜI
+            // sửa được (đúng là ai thì FE/Service tự kiểm khi gọi PUT). Đơn theo Nhóm giữ nguyên luật cũ.
             IsEditable = x.Status == (int)OtFormStatus.InApproval &&
-                !x.ApprovalSteps.Any(s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Approved),
+                (x.IsProductionForm || !x.ApprovalSteps.Any(s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Approved)),
             ApprovalSummary = x.OtFormApprovalHistories
                 .OrderBy(h => h.ActionAt)
                 .Select(h => new ApprovalSummaryItemDto
@@ -216,8 +219,9 @@ namespace Attendance.Application.Services
                 x => x.OtFormId == id && !x.IsDeleted, x => x.Candidates);
             var orderedSteps = steps.OrderBy(x => x.StepOrder).ToList();
 
+            // Giai đoạn 5 (2026-08-27) — xem ghi chú ở ToListItemDto.IsEditable.
             var isEditable = otForm!.Status == (int)OtFormStatus.InApproval &&
-                orderedSteps.All(s => s.Status != (int)OtFormApprovalStepStatus.Approved);
+                (otForm.IsProductionForm || orderedSteps.All(s => s.Status != (int)OtFormApprovalStepStatus.Approved));
 
             var mealSettings = await _attendanceSettingService.GetAsync();
 
@@ -648,19 +652,39 @@ namespace Attendance.Application.Services
                 x => x.OtFormEmployees);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
 
-            if (otForm!.CreatedByUserName != currentUserName)
-                throw new DomainException("Bạn chỉ có thể sửa đơn do chính mình tạo.");
+            if (otForm!.Status != (int)OtFormStatus.InApproval)
+                throw new DomainException("Đơn đã xử lý xong (hoàn tất/từ chối), không thể sửa.");
 
-            var hasApprovedStep = (await _unitOfWork.OtFormApprovalSteps.FindAsync(
-                x => x.OtFormId == otForm.Id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved)).Count > 0;
-            if (otForm.Status != (int)OtFormStatus.InApproval || hasApprovedStep)
-                throw new DomainException("Đơn đã có bước duyệt được xử lý, không thể sửa nữa.");
+            // Giai đoạn 5 (2026-08-27, theo yêu cầu người dùng — xem attendance-module.md §Chế tạo):
+            // quyền sửa đơn "theo chuyền" đi theo TỪNG BƯỚC duyệt — ai đang là candidate của bước
+            // Pending hiện tại thì sửa được (giống hệt ai được duyệt bước đó), KHÔNG còn giới hạn "chỉ
+            // người tạo, chỉ trước khi có bước nào Approved" như đơn theo Nhóm. Bước trước đã ký thì
+            // GIỮ NGUYÊN chữ ký cũ khi có sửa ở bước sau (đã chốt với người dùng — không huỷ/bắt ký
+            // lại), nhưng chính bước ĐÃ ký đó bị khoá lại — chỉ bước đang Pending mới sửa được (khớp
+            // đúng "Line Leader ký xong không sửa được nữa" nhưng Group Leader/Team Leader ở bước sau
+            // vẫn sửa được cho tới khi TỰ HỌ ký). Không có Admin bypass — cùng nguyên tắc với
+            // LoadFormAndCurrentStepAsync (Approve/Reject).
+            if (otForm.IsProductionForm)
+            {
+                var currentStep = await GetCurrentPendingStepAsync(id);
+                if (currentStep == null)
+                    throw new DomainException("Đơn không còn bước duyệt nào đang chờ xử lý (dữ liệu không nhất quán, liên hệ Admin).");
+                if (!currentStep.Candidates.Any(c => c.UserName == currentUserName))
+                    throw new DomainException($"Bạn không phải người được chỉ định xử lý bước hiện tại (Chức vụ '{currentStep.JobTitleNameSnapshot}') của đơn này, không thể sửa.");
+            }
+            else
+            {
+                if (otForm.CreatedByUserName != currentUserName)
+                    throw new DomainException("Bạn chỉ có thể sửa đơn do chính mình tạo.");
 
-            // Đơn "theo chuyền" (GroupId null) chưa có scope kiểu Group để kiểm lại — dòng 527-528 phía
-            // trên đã chặn chỉ chính người tạo mới sửa được, tạm đủ cho tới khi thiết kế quyền sửa đơn
-            // chuyền đầy đủ (Giai đoạn 5, chưa làm — xem OtForm.IsProductionForm).
-            if (otForm.GroupId.HasValue)
-                await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, otForm.GroupId.Value);
+                var hasApprovedStep = (await _unitOfWork.OtFormApprovalSteps.FindAsync(
+                    x => x.OtFormId == otForm.Id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved)).Count > 0;
+                if (hasApprovedStep)
+                    throw new DomainException("Đơn đã có bước duyệt được xử lý, không thể sửa nữa.");
+
+                if (otForm.GroupId.HasValue)
+                    await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, otForm.GroupId.Value);
+            }
 
             var activeEmployees = otForm.OtFormEmployees.Where(x => !x.IsRemoved).ToList();
             var activeEmployeeIds = activeEmployees.Select(x => x.EmployeeId).ToHashSet();
@@ -703,6 +727,8 @@ namespace Attendance.Application.Services
                 var existing = activeByEmployeeId[item.EmployeeId];
                 existing.EndTime = item.EndTime;
                 existing.DidEat = item.DidEat;
+                existing.NoteVn = item.NoteVn;
+                existing.NoteJp = item.NoteJp;
                 _unitOfWork.OtFormEmployees.Update(existing);
             }
 
@@ -713,10 +739,20 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(otForm.Id);
         }
 
-        // Tìm đơn + bước duyệt HIỆN TẠI (bước Pending có StepOrder nhỏ nhất), validate approverUserName
-        // là 1 trong các candidate của bước đó (2026-08-07, Giai đoạn 3.1 — thay
-        // LoadFormAndValidateAuthorityAsync cũ). Không có Admin bypass ở đây — giữ đúng hành vi cũ
-        // (ApproveAsync/RejectAsync trước đây cũng không cho Admin bypass, chỉ Submitter mới có).
+        // Bước Pending có StepOrder nhỏ nhất của 1 đơn (kèm Candidates) — dùng chung cho
+        // LoadFormAndCurrentStepAsync (Approve/Reject) VÀ UpdateAsync (Giai đoạn 5, 2026-08-27 — quyền
+        // sửa đơn "theo chuyền" đi theo từng bước, xem UpdateAsync).
+        private async Task<OtFormApprovalStep?> GetCurrentPendingStepAsync(int otFormId)
+        {
+            var pendingSteps = await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
+                x => x.OtFormId == otFormId && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending, x => x.Candidates);
+            return pendingSteps.OrderBy(x => x.StepOrder).FirstOrDefault();
+        }
+
+        // Tìm đơn + bước duyệt HIỆN TẠI, validate approverUserName là 1 trong các candidate của bước đó
+        // (2026-08-07, Giai đoạn 3.1 — thay LoadFormAndValidateAuthorityAsync cũ). Không có Admin bypass
+        // ở đây — giữ đúng hành vi cũ (ApproveAsync/RejectAsync trước đây cũng không cho Admin bypass,
+        // chỉ Submitter mới có).
         private async Task<(OtForm otForm, OtFormApprovalStep currentStep)> LoadFormAndCurrentStepAsync(
             int id, string approverUserName)
         {
@@ -726,10 +762,7 @@ namespace Attendance.Application.Services
             if (otForm!.Status != (int)OtFormStatus.InApproval)
                 throw new DomainException("Đơn đã xử lý xong (hoàn tất/từ chối), không thể duyệt/từ chối thêm.");
 
-            var pendingSteps = await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
-                x => x.OtFormId == id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending, x => x.Candidates);
-
-            var currentStep = pendingSteps.OrderBy(x => x.StepOrder).FirstOrDefault();
+            var currentStep = await GetCurrentPendingStepAsync(id);
             if (currentStep == null)
                 throw new DomainException("Đơn không còn bước duyệt nào đang chờ xử lý (dữ liệu không nhất quán, liên hệ Admin).");
 
@@ -827,6 +860,50 @@ namespace Attendance.Application.Services
             _unitOfWork.OtForms.Update(otForm);
 
             await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Ký hàng loạt (2026-08-27, theo yêu cầu người dùng — Team Leader/Trưởng phòng có nhiều Group
+        // Leader/Team Leader bên dưới cần xử lý nhanh nhiều đơn cùng lúc). Lặp gọi lại ApproveAsync đơn
+        // lẻ cho từng OtFormId — TÁI DÙNG NGUYÊN logic/validate đã có (candidate đúng bước, chữ ký nếu
+        // bắt buộc, mật khẩu cấp 2...), không viết lại. Từng đơn thành công/thất bại ĐỘC LẬP (bắt
+        // DomainException/NotFoundException của riêng đơn đó, không để 1 đơn lỗi chặn các đơn còn lại).
+        public async Task<List<BulkOtFormActionResultItemDto>> BulkApproveAsync(
+            string approverUserName, string? approverFullName, BulkApproveOtFormDto request)
+        {
+            var results = new List<BulkOtFormActionResultItemDto>();
+            foreach (var otFormId in request.OtFormIds.Distinct())
+            {
+                try
+                {
+                    await ApproveAsync(otFormId, approverUserName, approverFullName, request);
+                    results.Add(new BulkOtFormActionResultItemDto { OtFormId = otFormId, Success = true });
+                }
+                catch (Exception ex) when (ex is DomainException or NotFoundException)
+                {
+                    results.Add(new BulkOtFormActionResultItemDto { OtFormId = otFormId, Success = false, Error = ex.Message });
+                }
+            }
+            return results;
+        }
+
+        // Từ chối hàng loạt — mirror BulkApproveAsync.
+        public async Task<List<BulkOtFormActionResultItemDto>> BulkRejectAsync(
+            string approverUserName, string? approverFullName, BulkRejectOtFormDto request)
+        {
+            var results = new List<BulkOtFormActionResultItemDto>();
+            foreach (var otFormId in request.OtFormIds.Distinct())
+            {
+                try
+                {
+                    await RejectAsync(otFormId, approverUserName, approverFullName, request);
+                    results.Add(new BulkOtFormActionResultItemDto { OtFormId = otFormId, Success = true });
+                }
+                catch (Exception ex) when (ex is DomainException or NotFoundException)
+                {
+                    results.Add(new BulkOtFormActionResultItemDto { OtFormId = otFormId, Success = false, Error = ex.Message });
+                }
+            }
+            return results;
         }
 
         public async Task<OtFormDto> RemoveEmployeeAsync(

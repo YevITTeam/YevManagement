@@ -19,5 +19,11 @@ public partial class EmployeeAccumulationHistory
 
     public decimal TotalHours { get; set; }
 
+    // Vết audit khi TotalHours bị cộng thêm bởi 1 lần "Điều chỉnh lũy kế" từ import nhân sự dưới
+    // chuyền (khác nguồn AccumulateEmployeeHoursAsync bình thường, vốn không set field này) — vì
+    // (EmployeeId, Year, Month) có unique index nên không thể tách riêng 1 dòng cho phần điều chỉnh,
+    // chỉ có thể ghi chú lại TRONG dòng chung (2026-08-27, xem ProductionEmployeeImportService).
+    public string? Note { get; set; }
+
     public virtual Employee Employee { get; set; } = null!;
 }

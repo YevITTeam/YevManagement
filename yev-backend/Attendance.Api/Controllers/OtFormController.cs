@@ -120,9 +120,9 @@ namespace Attendance.Api.Controllers
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công.");
         }
 
-        // Edit the entire form — only the creator, and only while the form is still Draft or Pending
-        // (Service validates both conditions). Once past the Department Manager level it becomes
-        // locked and can no longer be edited (see docs/attendance-module.md).
+        // Đơn theo Nhóm: chỉ người tạo, chỉ khi Status=InApproval VÀ chưa bước nào Approved. Đơn "theo
+        // chuyền": theo TỪNG BƯỚC — ai đang là candidate của bước Pending hiện tại thì sửa được (Giai
+        // đoạn 5, 2026-08-27, xem OtFormService.UpdateAsync + docs/attendance-module.md §Chế tạo).
         [RequirePermission("Attendance.OTForm.Create")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> Update(int id, [FromBody] UpdateOtFormDto request)
@@ -146,6 +146,25 @@ namespace Attendance.Api.Controllers
         {
             await _otFormService.RejectAsync(id, CurrentUserName, CurrentFullName, request);
             return Success(true, "Từ chối đơn thành công.");
+        }
+
+        // Ký/Từ chối hàng loạt (2026-08-27) — xem BulkApproveOtFormDto/BulkRejectOtFormDto. Trả 200 kèm
+        // kết quả TỪNG đơn dù có đơn lỗi (không phải all-or-nothing) — FE tự đọc mảng result để báo
+        // đúng đơn nào thành công/thất bại.
+        [RequirePermission("Attendance.OTForm.Approve")]
+        [HttpPost("bulk-approve")]
+        public async Task<ActionResult<ApiResponse<List<BulkOtFormActionResultItemDto>>>> BulkApprove([FromBody] BulkApproveOtFormDto request)
+        {
+            var results = await _otFormService.BulkApproveAsync(CurrentUserName, CurrentFullName, request);
+            return Success(results, "Đã xử lý ký hàng loạt.");
+        }
+
+        [RequirePermission("Attendance.OTForm.Approve")]
+        [HttpPost("bulk-reject")]
+        public async Task<ActionResult<ApiResponse<List<BulkOtFormActionResultItemDto>>>> BulkReject([FromBody] BulkRejectOtFormDto request)
+        {
+            var results = await _otFormService.BulkRejectAsync(CurrentUserName, CurrentFullName, request);
+            return Success(results, "Đã xử lý từ chối hàng loạt.");
         }
 
         // Admin-only — xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate ở 1 bước, không resolve lại

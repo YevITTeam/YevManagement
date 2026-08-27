@@ -40,3 +40,21 @@ export interface EmployeeImportConfirmResultDto {
     skippedCount: number;
     skippedRows: SkippedEmployeeImportRowDto[];
 }
+
+// Import hàng loạt giới hạn OT tháng/năm riêng từng nhân viên (mục 5, 2026-08-27). KHÔNG có bước
+// Preview/Confirm — file Excel cột B=MNV, C=Giới hạn Tháng, D=Giới hạn Năm, áp dụng thẳng, trả lại kết
+// quả từng dòng để xem lại. Ô Giới hạn để trống ở 1 dòng = giữ nguyên override cũ của nhân viên đó.
+export interface EmployeeOtHourLimitImportRowResultDto {
+    rowNumber: number;
+    employeeCode: string;
+    success: boolean;
+    error: string | null;
+    monthlyLimit: number | null;
+    yearlyLimit: number | null;
+}
+
+export interface EmployeeOtHourLimitImportResultDto {
+    updatedCount: number;
+    skippedCount: number;
+    rows: EmployeeOtHourLimitImportRowResultDto[];
+}

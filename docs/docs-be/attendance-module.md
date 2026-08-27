@@ -417,8 +417,9 @@ mặc định chung ở trên — thường dùng cho công nhân **dưới chuy
   thời hạn hiệu lực** (chốt: "hiện không có thời hạn nên lưu trực tiếp luôn") — set thẳng, còn hiệu lực
   tới khi Admin đổi/xoá tay, không phải bảng lịch sử/effective-dated.
 - **Sửa qua `EmployeeForm.tsx`** (2 field số optional, "để trống = dùng mặc định hệ thống") — chốt
-  "cần được sửa thường xuyên" nên đi thẳng qua màn Sửa nhân viên hiện có, KHÔNG qua import Excel riêng
-  (việc có làm import sau này hay không "quyết định sau", chưa làm ở đợt này).
+  "cần được sửa thường xuyên" nên đi thẳng qua màn Sửa nhân viên hiện có, KHÔNG qua import Excel riêng.
+  (Import hàng loạt số giờ giới hạn riêng — "quyết định sau" — VẪN CHƯA làm; khác với import Nhân sự
+  dưới chuyền ở §Import nhân sự dưới chuyền bên dưới, vốn KHÔNG đụng tới 2 field này.)
 - **`OtFormService.ValidateOtHourLimitsAsync`** (§Giới hạn giờ OT ngày/tháng/năm ở trên) đọc
   `Employee.CustomMonthlyOtHourLimit ?? AttendanceSetting.MonthlyOtHourLimit` (tương tự Năm) cho từng
   người trong đơn — Ngày luôn dùng thẳng `AttendanceSetting.DailyOtHourLimit`, không tra theo nhân viên.
@@ -432,6 +433,83 @@ mặc định chung ở trên — thường dùng cho công nhân **dưới chuy
 - **Contract mở rộng theo cùng field**: `EmployeeDto`/`OtFormEmployeeDto`/`ProductionEmployeeSearchItemDto`
   đều thêm `customMonthlyOtHourLimit`/`customYearlyOtHourLimit` (`decimal?`) — xem
   `attendance-api-fe.md` §3.5/§4.3.
+
+### §Import/Export nhân sự dưới chuyền (`ProductionEmployee`) theo file mẫu Chế Tạo (2026-08-27)
+
+**Yêu cầu người dùng** (chốt qua nhiều vòng trao đổi, CLAUDE.md §2 luật 2), dựa trên format thật
+`docs/Data/Import_Nhan_Su_Che_Tao.xlsx` (sheet `OT(N+1)`) — trước đợt này, 1688 dòng `ProductionEmployees`
+hiện có trong DB là nạp TAY 1 lần (không qua UI), đúng luật "phải resolve đủ Line/Team/ShiftTeam mới
+nạp" đã ghi sẵn trong comment `ProductionEmployee.cs`. Đợt này biến luật đó thành 1 tính năng Preview →
+Confirm dùng lại được mỗi tháng, cộng thêm vài thay đổi nghiệp vụ mới:
+
+- **Cột file → field**: `MNV`→`EmployeeCode`, `BOPHAN`→`CongDoan` (raw, không FK), `HO`/`TEN`→
+  `Employee.LastName`/`FirstName` (đã tách sẵn, không cần suy như `EmployeeImportService`), `CÔNG VIỆC`→
+  `TaskName`, `BLOCK`→ resolve `ProductionLineId` (khớp `LineCode`), `GROUP`→ dịch A→"1"/B→"2"/HC→"HC"
+  (còn lại khớp trực tiếp) rồi resolve `TeamId`, `NHOM`→ resolve `ShiftTeamId` (khớp `Code` trực tiếp),
+  `LEADER`→ `IsLeader`. Cột `KHOI SU` (mã Line thật khi `BLOCK="LC-A"`) và `OT month`/`OT year` **KHÔNG**
+  ảnh hưởng cấu trúc — xem 2 mục riêng bên dưới. Cột "1"/"2"/rác/`#REF!` bỏ qua hoàn toàn.
+- **Line/Team/ShiftTeam không khớp được → SKIP dòng đó, KHÔNG tự tạo mới** — dữ liệu Line/Team trong
+  file mẫu người dùng đưa "có thể đang có sai sót, không cần quan tâm" (chốt rõ, đảo ngược so với đề
+  xuất ban đầu của tôi là tự tạo Line mới khi gặp mã lạ).
+  - **Ngoại lệ**: mã nhân viên (`MNV`) KHÔNG BẮT BUỘC đã có `Employee` sẵn nữa — khác hẳn luật cũ
+    (`EmployeeId` từng là 1 trong 4 khoá bắt buộc resolve). Người chưa có `Employee` được **TỰ TẠO**,
+    gán `GroupId` vào Group **"Chưa phân loại (nhập từ file chuyền)"** (mã `KHAC`) dưới Phòng ban
+    **Chế Tạo** (mã `CT`, đã có sẵn) — tự tạo Group này ở lần Confirm đầu tiên cần tới, tái dùng sau đó.
+    Lý do: file này không cho đủ dữ liệu Nhóm thật (146 Group chi tiết hiện có kiểu "LINE A01 - GREEN
+    GT" không suy ra được từ BOPHAN/BLOCK/GROUP trong file).
+  - Nhân viên ĐÃ tồn tại: import **KHÔNG** đụng `FirstName`/`LastName` của họ (chỉ set khi tạo mới) —
+    tránh ghi đè tên đã chỉnh đúng dấu/hoa-thường bằng bản HO/TEN thô từ file.
+- **Người không còn xuất hiện trong file mới → soft-delete `ProductionEmployee`** (dòng lỗi vẫn tính là
+  "còn nhắc tới", không bị gỡ — chỉ dòng nào vắng mặt HOÀN TOÀN mới bị gỡ). Preview liệt kê rõ danh
+  sách sẽ bị gỡ trước khi Confirm.
+- **Bản xem trước (Preview) phải cho thấy đủ**: dòng lỗi (kèm lý do), người sẽ tạo mới (Employee lẫn
+  `ProductionEmployee`), người sẽ cập nhật (kèm cờ đã đổi field gì), người sẽ bị gỡ — chốt rõ theo yêu
+  cầu người dùng "cần có bản xem trước như có gì bị xóa, dòng nào được cập nhật, có gì được tạo thêm".
+- **Cột `OT month`/`OT year` — TÁCH THÀNH BƯỚC RIÊNG, không nằm trong Confirm cấu trúc**:
+  - Chỉ `OT month` được dùng để ghi lũy kế; `OT year` CHỈ hiển thị tham khảo, KHÔNG ghi gì (hệ thống
+    mới chưa có đủ lịch sử các tháng cũ trước khi entity `EmployeeAccumulationHistory` ra đời để đối
+    chiếu chuẩn xác — nạp lịch sử cũ từ hệ thống khác là việc RIÊNG, chưa làm ở đợt này).
+  - Admin **chọn tay Year/Month áp dụng** (không tự suy theo ngày hôm nay — sheet tên "OT(N+1)" gợi ý
+    số liệu có thể là dự kiến tháng kế tiếp, không phải tháng hiện tại).
+  - **Cách ghi (phương án B đã chốt)**: KHÔNG ghi đè `TotalHours`. Vì `EmployeeAccumulationHistories`
+    có unique index `(EmployeeId, Year, Month)` nên không tách được 1 dòng riêng cho phần điều chỉnh —
+    tính `delta = OT month trong file − TotalHours hệ thống đang có cho đúng (Employee, Year, Month)`,
+    cộng thẳng `delta` vào dòng đó (có thể âm), rồi APPEND ghi chú vào `EmployeeAccumulationHistory.Note`
+    (cột mới, `nvarchar(1000)`, migration `AddNoteToEmployeeAccumulationHistory`) để giữ vết đây là
+    điều chỉnh từ import, không phải từ `OtForm` hoàn tất bình thường.
+  - **Quyền TÁCH RIÊNG**: `Attendance.EmployeeAccumulation.Import` (khác `Attendance.ProductionEmployee.Import`
+    dùng cho phần cấu trúc) — vì đụng lũy kế OT ảnh hưởng lương, chỉ người có trách nhiệm mới bấm được.
+    Nút "Áp dụng lũy kế" ở FE chỉ hiện nếu user có quyền này (`ProductionEmployeeImportDialog.tsx`).
+- **BE**: `ProductionEmployeeImportService` (`PreviewAsync`/`ConfirmAsync`/`ApplyAccumulationAsync`),
+  `ProductionEmployeeImportController` (`POST /api/ProductionEmployeeImport/preview|confirm|apply-accumulation`).
+- **Export** (`ProductionEmployeeExportService`/`ProductionEmployeeExportController`,
+  `GET /api/ProductionEmployeeExport/export`, quyền `Attendance.ProductionEmployee.Export`): xuất lại
+  toàn bộ `ProductionEmployee` hiện có **ĐÚNG VỊ TRÍ CỘT A..O của file mẫu** (A=`KHOI SU` để trống —
+  hệ thống không lưu cột này, B=`MNV`...K=`GROUP`, L/M/N để trống, O=`LEADER` — khớp hệt vị trí cột mà
+  `ProductionEmployeeImportService.ParseXlsx` đọc, 2026-08-27, theo yêu cầu người dùng "xuất theo đúng
+  format file mẫu" — để file xuất ra dùng lại được ngay làm file Import tháng sau), **1 sheet / Phòng
+  ban THẬT của hệ thống** (`Employee.Group.Department` — KHÁC cột `BOPHAN` trong file gốc, cột đó
+  không gắn gì với Department thật). Cột `OT month`/`OT year` lấy **SỐNG** từ
+  `EmployeeAccumulationHistory` tại thời điểm xuất (không phải số tĩnh đã nhập).
+- **Màn "Nhân viên dưới chuyền"** (view riêng, chỉ hiển thị — 2026-08-27, theo yêu cầu người dùng
+  "cần có phần chuyển sang giao diện nhân viên dưới chuyền"): `ProductionEmployeeList.tsx`, toggle
+  bằng 2 nút dạng segment ("Nhân viên" / "Nhân viên dưới chuyền") ở đầu `EmployeeList.tsx`, đọc thẳng
+  bảng `ProductionEmployees` (khác bảng `Employees` của view "Nhân viên") qua
+  `GET /api/ProductionEmployee/page-nation` (`ProductionEmployeeService.GetPagedAsync`, dùng chung
+  quyền `Attendance.Employee.View` — chỉ là 1 view khác của cùng dữ liệu nhân sự, không cần permission
+  riêng). Lọc theo Line(BLOCK)/Team(GROUP)/Nhóm ca(NHOM) tái dùng 3 API option đã có sẵn cho màn "Theo
+  chuyền" khi tạo đơn OT. Đọc-only — chỉnh dữ liệu qua Import lại file Excel, không có Sửa/Xoá.
+- **FE**: `ProductionEmployeeImportDialog.tsx` (mirror `EmployeeImportDialog.tsx`, thêm khối "Áp dụng
+  lũy kế" hiện sau khi Confirm cấu trúc xong). Bản xem trước (Preview) tách thành **6 tab** (Tất cả/
+  Mới/Cập nhật/Không đổi/Lỗi/Bị gỡ, mỗi tab có số đếm) thay vì 1 bảng dài duy nhất (2026-08-27, theo
+  yêu cầu người dùng) — lọc lại từ CÙNG mảng `rows`/`removedRows` đã có sẵn cờ
+  `isNew*`/`isUpdated*`/`isValid`, không gọi lại BE. Nút Import/Export nhân sự dưới chuyền gom vào 1
+  dropdown "Excel" (`ActionMenu.tsx`, `components/ui/`) hiện trong toolbar của view "Nhân viên dưới
+  chuyền" — tách khỏi nút "Import Excel" (nhân viên chuẩn) vẫn nằm ở toolbar view "Nhân viên", giảm số
+  nút dồn chung 1 hàng như bản đầu (2026-08-27, theo yêu cầu người dùng "bớt chữ đi một xíu").
+- **Permission mới** (migration Identity `AddProductionEmployeeImportPermissions`, gán theo Role đang
+  giữ `Attendance.Employee.Create`): `Attendance.ProductionEmployee.Import`,
+  `Attendance.ProductionEmployee.Export`, `Attendance.EmployeeAccumulation.Import`.
 
 ### §Lũy kế dự kiến — cảnh báo cả những đơn khác đang chờ duyệt (2026-08-06, REDESIGN 2026-08-19)
 
@@ -1788,6 +1866,153 @@ pipeline Auth/RBAC không bị ảnh hưởng — nhưng chưa test tay luồng 
 tất → xác nhận `MonthToDate`/`YearToDate` VÀ `GET .../accumulation-history?year=` cùng ra đúng số; gọi
 `GET /in-my-scope` bằng tài khoản chỉ có `OTForm.Approve` xác nhận không 403 và đúng phạm vi; gọi thử
 tài khoản khác Nhóm/Bộ phận xác nhận bị từ chối). Nên làm trước khi coi ổn định.
+
+#### §Giai đoạn 9 — Đơn "theo chuyền" (Chế tạo): Cây duyệt riêng (2026-08-24, sửa 2026-08-27)
+
+Đơn OT "theo chuyền" (chọn người qua `ProductionEmployee` thay vì `Group` cố định — xem §Import/Export
+nhân sự dưới chuyền) dùng 1 cây duyệt **cấu hình tay riêng** theo từng Bộ phận, KHÔNG tách 2 tầng
+Group/Department như đơn "theo Nhóm": entity `ProductionApprovalStep` (1 danh sách DUY NHẤT/Bộ phận,
+đi từ Line Leader → Group Leader → Team Leader → Manager → Factory Manager → Director, mỗi dòng =
+1 `JobTitleId`), service `ProductionApprovalStepService` (`GetByDepartmentAsync`/`ReplaceAsync` — thay
+NGUYÊN danh sách 1 lần, không CRUD từng dòng), controller `ProductionApprovalStepController`
+(`GET/PUT /api/ProductionApprovalStep/by-department/{id}`), permission
+`Attendance.ProductionApprovalStep.View/Update` (dùng chung Người phụ trách với đơn theo Nhóm —
+`DepartmentApprovalStepCoordinator`, không tạo bảng phụ trách riêng). FE: tab "Theo chuyền" trong
+`ApprovalStepManager.tsx` (cùng màn "Cây duyệt" với tab "Theo Nhóm"), kéo-thả sắp xếp
+(`useDragReorder`), tối đa 1 bước `IsResponsible`, 1-2 bước cấp trung gian `RequiresSignature` (khớp 2
+ô "Người đề nghị" cố định trên giấy in).
+
+`JobTitle.IsLineScoped` (chỉ `true` cho "Line Leader") đánh dấu bước này cần lọc thêm theo Line —
+`JobTitleApprovalChainService.ResolveChainForProductionCreationAsync` suy `derivedProductionLineId` từ
+chính `ProductionEmployee.ProductionLineId` của những người đang được thêm vào đơn (không có 1
+`ProductionLineId` cố định trên `OtForm`; nếu người trong đơn lẫn nhiều Line khác nhau thì coi như
+không suy được, bước Line Leader sẽ không có ứng viên — cảnh báo qua `Warning`).
+
+**Sửa 2026-08-27 (theo yêu cầu người dùng)** — cách tìm ứng viên bước **Line Leader** đổi hẳn:
+- **TRƯỚC**: gán tay `Employee.JobTitleId = "Line Leader"` qua Cây chức vụ (không có UI riêng để gán —
+  phải vòng qua tab "Nhân viên" sửa từng người), cộng thêm điều kiện `ProductionEmployee.ProductionLineId`
+  khớp Line của đơn.
+- **SAU**: bỏ hẳn việc đọc `Employee.JobTitleId` cho bước này — lấy THẲNG từ
+  `ProductionEmployee.IsLeader == true` (cột `LEADER` trong file `Import_Nhan_Su_Che_Tao.xlsx`, luôn
+  mới nhất mỗi lần import lại — xem §Import/Export nhân sự dưới chuyền) kết hợp
+  `ProductionEmployee.ProductionLineId` khớp Line của đơn. Lý do: dữ liệu "ai là Line Leader của Line
+  nào" đã có sẵn trong file nhân sự dưới chuyền mà Tổng vụ import mỗi tháng — không cần (và không nên)
+  bắt Admin gán tay lại 1 lần nữa qua Cây chức vụ. `JobTitle` "Line Leader" vẫn tồn tại làm 1 dòng
+  trong `ProductionApprovalStep` (để hiển thị/sắp xếp đúng vị trí + cấu hình "Bắt buộc ký"/"Người chịu
+  trách nhiệm"), nhưng gán `Employee.JobTitleId = "Line Leader"` cho ai đó giờ **không còn tác dụng gì**
+  tới việc suy luận ứng viên nữa.
+
+**Group Leader/Team Leader thì NGƯỢC LẠI — không có nguồn dữ liệu sẵn nào tương tự** (file import chỉ
+có 1 cột LEADER duy nhất, không phân cấp lãnh đạo) — vẫn phải gán tay qua `Employee.JobTitleId` như cũ
+(phạm vi tìm ứng viên suy theo `Employee.GroupId` của người trong đơn, mirror Line Leader nhưng theo
+Group thay vì Line). Vì trước đó tab "Theo chuyền" hoàn toàn không có UI gán tay (khác tab "Theo Nhóm" đã có khối "Ai đang
+giữ chức vụ" từ đầu), đã thêm khối này riêng cho từng bước trong `ApprovalStepManager.tsx`, phân biệt
+theo `TerminalLevel`/`IsLineScoped`:
+- Bước `terminalLevel=0 && isLineScoped` (Line Leader): chỉ hiện dòng chú thích, không có picker (tự
+  động theo import, xem trên).
+- Bước `terminalLevel=0 && !isLineScoped` (Group Leader/Team Leader): hiện khối "Ai đang giữ" + picker
+  gán/gỡ — TÁI DÙNG NGUYÊN state/handler đã có sẵn cho khối "Cấp cuối (Bộ phận)" của tab "Theo Nhóm"
+  (`deptEmployees`, `handleAssignDeptJobTitle`/`handlePickDeptHolder`/`buildHolderOptions`, gọi
+  `PUT /api/Employee/{id}/department-job-title`) — hàm này vốn đã tổng quát cho mọi `TerminalLevel`,
+  không cần viết thêm state/handler riêng.
+- Bước `terminalLevel!=0` (Manager/Factory Manager/Director): chỉ hiện dòng chú thích trỏ sang khối
+  "Cấp cuối (Bộ phận)" ở tab "Theo Nhóm" — 3 cấp này dùng CHUNG `Employee.JobTitleId` với đơn theo
+  Nhóm nên gán 1 lần ở đâu cũng có tác dụng cho cả 2 luồng, không cần lặp lại UI.
+
+DTO `ProductionApprovalStepDto`/`JobTitleDto` (cả BE lẫn FE) thêm field `isLineScoped: boolean` để FE
+biết bước nào cần ẩn/hiện khối nào ở trên.
+
+#### §Giai đoạn 10 — Sửa đơn "theo chuyền" theo từng bước + Ký/Từ chối hàng loạt + Import giới hạn OT (2026-08-27)
+
+Theo yêu cầu người dùng (đối chiếu `docs/Note_OT.txt`), làm 3 việc độc lập:
+
+**1. Quyền sửa đơn "theo chuyền" đi theo TỪNG BƯỚC** (`OtFormService.UpdateAsync`) — trước đây (từ
+lúc `ProductionFormSupport` ra đời 2026-08-24) đơn theo chuyền dùng CHUNG luật với đơn theo Nhóm: chỉ
+người tạo sửa được, và chỉ trước khi có bước nào Approved (ghi rõ trong code cũ là "tạm đủ, chưa thiết
+kế Giai đoạn 5" — nay chính là giai đoạn đó). Đã chốt lại với người dùng:
+- Group Leader/Team Leader **sửa trực tiếp được dữ liệu** (giờ kết thúc, `DidEat`, ghi chú) ở bước của
+  họ — không chỉ xem/viết ghi chú như 1 phương án đã cân nhắc.
+- Sửa dữ liệu sau khi cấp trước đã ký **KHÔNG huỷ** chữ ký/xác nhận cũ của cấp đó (giữ nguyên, không
+  bắt ký lại) — khác với đề xuất "huỷ xác nhận" ban đầu.
+- Mỗi cấp tự ký xong bước của họ thì bị **khoá lại theo đúng cấp đó** (giống Line Leader) — chỉ bước
+  đang `Pending` (StepOrder nhỏ nhất) mới sửa được.
+
+Cài đặt: `UpdateAsync` branch theo `otForm.IsProductionForm` — đơn theo chuyền dùng lại
+`GetCurrentPendingStepAsync` (helper mới, tách từ `LoadFormAndCurrentStepAsync` để dùng chung cho cả
+Approve/Reject/Update) để tìm bước Pending hiện tại + validate `currentUserName` là 1 candidate của
+bước đó (không có Admin bypass, cùng nguyên tắc Approve/Reject); đơn theo Nhóm giữ NGUYÊN luật cũ
+(chỉ người tạo, chỉ trước khi có bước nào Approved). `IsEditable` (cả ở `OtFormListItemDto` lẫn
+`OtFormDto`) cũng branch tương tự — đơn theo chuyền chỉ cần `Status==InApproval` là coi như "có người
+sửa được" (không quan tâm đã có bước nào Approved chưa), đơn theo Nhóm giữ nguyên. FE (`canEdit` ở
+`OtFormDetail.tsx`) theo đúng pattern đã dùng cho nút Duyệt/Từ chối: không tự lọc theo candidate ở FE,
+chỉ kiểm `isEditable` + quyền `Attendance.OTForm.Create` (+ với đơn theo Nhóm thì thêm điều kiện chính
+người tạo) — để BE là nguồn chặn thật, trả lỗi rõ ràng nếu bấm Sửa mà không đúng lượt.
+
+`UpdateOtFormEmployeeTimeDto` (cả BE lẫn FE) có lại `NoteVn`/`NoteJp` (đã bỏ từ 2026-07-31) — Group
+Leader/Team Leader ghi chú trao đổi qua từng nhân viên khi sửa đơn, thay thế việc ghi giấy như trước.
+FE: `CreateOtFormPage.tsx` bảng sửa đơn (`isEditMode`) thêm cột "Ghi chú" (input `noteVn`, mirror cột
+Note đã có sẵn ở bảng tạo đơn "theo chuyền" — `noteJp` có field/state nhưng CHƯA có input UI ở bất kỳ
+đâu, kể cả lúc tạo đơn, giữ nguyên khoảng trống cũ, không mở rộng thêm trong đợt này).
+
+**2. Ký hàng loạt / Từ chối hàng loạt** (`POST /api/OtForm/bulk-approve`, `POST /api/OtForm/bulk-reject`,
+permission `Attendance.OTForm.Approve` — dùng lại, không tạo permission mới) — cho Team Leader/Trưởng
+phòng xử lý nhanh nhiều đơn khi có nhiều Group Leader/Team Leader bên dưới. `BulkApproveOtFormDto`/
+`BulkRejectOtFormDto` kế thừa `ApproveOtFormDto`/`RejectOtFormDto` (Comment/SecondaryPassword dùng
+CHUNG cho cả loạt — đã chốt với người dùng, không nhập riêng từng đơn), thêm `OtFormIds: List<int>`.
+`OtFormService.BulkApproveAsync`/`BulkRejectAsync` lặp gọi lại NGUYÊN `ApproveAsync`/`RejectAsync` đơn
+lẻ cho từng Id (chấp nhận verify lại mật khẩu cấp 2 mỗi lần thay vì tách riêng logic — ưu tiên không
+đụng luồng đơn lẻ đã ổn định) — mỗi đơn thành công/thất bại ĐỘC LẬP (bắt `DomainException`/
+`NotFoundException` riêng từng đơn), trả về `List<BulkOtFormActionResultItemDto>` (`OtFormId, Success,
+Error`) để FE báo đúng đơn nào lỗi thay vì 1 thông báo chung. FE: tab "Chờ tôi duyệt"
+(`OtFormListPage.tsx`, `mode="pending-approvals"`) thêm cột checkbox (chỉ hiện khi có quyền
+`Attendance.OTForm.Approve`) + 2 nút "Ký hàng loạt"/"Từ chối hàng loạt" khi có đơn được chọn + modal
+Comment/Mật khẩu cấp 2 dùng chung — sau khi xử lý xong tự refetch danh sách, toast tổng kết
+"X thành công, Y lỗi" kèm chi tiết lỗi từng đơn nếu có.
+
+**3. Import hàng loạt giới hạn giờ OT tháng/năm** (`POST /api/EmployeeImport/ot-hour-limits`,
+permission `Attendance.Employee.Update` — action này chỉ UPDATE, không tạo nhân viên mới, khác 2
+action Preview/Confirm cùng controller đang dùng `Attendance.Employee.Create`) — khớp
+`docs/Note_OT.txt`: "Import lại số giờ giới hạn tăng ca của nhân viên". File Excel: cột A bỏ trống
+(theo đúng quy ước các file import khác trong module), B=MNV, C=Giới hạn Tháng, D=Giới hạn Năm, dò
+dòng tiêu đề bằng cột B="MNV". KHÔNG dùng cơ chế Preview/Confirm 2 bước như
+`EmployeeImportService.PreviewAsync`/`ConfirmAsync` (import nhân sự đầy đủ, có tạo Department/Group
+phụ thuộc cần rà trước) — vì action này chỉ update 2 field số nullable
+(`Employee.CustomMonthlyOtHourLimit`/`CustomYearlyOtHourLimit`) trên nhân viên ĐÃ TỒN TẠI, không có rủi
+ro tạo sai entity, nên áp dụng thẳng 1 bước và trả lại kết quả từng dòng (`EmployeeOtHourLimitImportResultDto`)
+để xem lại ngay trong dialog. Ô Giới hạn Tháng/Năm để TRỐNG ở 1 dòng = **GIỮ NGUYÊN** override cũ của
+nhân viên đó (không phải xoá) — đã chốt với người dùng. Mã nhân viên không tìm thấy → tính vào
+`SkippedCount`, không chặn các dòng khác. FE: dialog mới `EmployeeOtHourLimitImportDialog.tsx`, mở từ
+`ActionMenu` "Excel" đã có sẵn trên màn Nhân viên (thêm 1 item "Import giới hạn OT").
+
+**4. File mẫu tải xuống cho 3 chức năng import Attendance** (theo yêu cầu người dùng, cùng ngày) —
+`GET /api/EmployeeImport/template`, `GET /api/EmployeeImport/ot-hour-limits/template`,
+`GET /api/ProductionEmployeeImport/template` (trả file `.xlsx` trực tiếp, không bọc `ApiResponse<T>`,
+cùng pattern `ProductionEmployeeExportController.Export` — permission dùng lại đúng permission của
+action Preview/Import tương ứng, không tạo permission mới). Mỗi service có thêm method ĐỒNG BỘ (không
+`async`, không đụng DB) dựng workbook tĩnh trong bộ nhớ bằng ClosedXML: header đúng vị trí cột +
+1 dòng ví dụ minh hoạ (không phải dữ liệu thật). File mẫu "Nhân sự dưới chuyền" dùng lại NGUYÊN mảng
+header với `ProductionEmployeeExportService` để 2 file (mẫu import / xuất) luôn khớp cột nhau. FE:
+mỗi dialog import (`EmployeeImportDialog.tsx`/`EmployeeOtHourLimitImportDialog.tsx`/
+`ProductionEmployeeImportDialog.tsx`) thêm nút "Tải file mẫu" cạnh ô chọn file, tải qua
+`getForBlob` + tạo link `<a download>` tạm (cùng cơ chế `ProductionEmployeeExportApi.exportExcel`).
+
+**5. "Nhân viên dưới chuyền" — khớp thuật ngữ với màn "chọn nhân viên" + lọc theo Bộ phận** (theo yêu
+cầu người dùng, cùng ngày) — `ProductionEmployeeList.tsx` trước đó dùng thẳng tên cột thô của file
+Excel (BLOCK/GROUP/NHOM) không khớp với cách gọi ở `CreateOtFormPage.tsx` (màn "chọn nhân viên" khi
+tạo đơn theo chuyền, dùng "Line"/"Team"/"Nhóm ca"/"Công đoạn") — đổi lại nhãn cột + filter cho khớp
+("Block"/"Team"/"Nhóm ca", filter "Tất cả Line"/"Tất cả Team"/"Tất cả Nhóm ca"), thêm cột "Công đoạn"
+(field `congDoan` đã có sẵn trên DTO nhưng trước đó chưa render ra cột nào). Thêm filter theo **Bộ
+phận** (`departmentId`) — `ProductionEmployeeService.GetPagedAsync` lọc qua
+`Employee.Group.DepartmentId` (ProductionEmployee về lý thuyết không giới hạn cứng chỉ 1 Bộ phận
+"Chế tạo", dù thực tế thường vậy), `GET /api/ProductionEmployee/page-nation` thêm query
+`DepartmentId`. FE: dropdown Bộ phận mới (tái dùng `DepartmentApi.getAllDepartments()`, mirror
+`EmployeeList.tsx`), đặt trước 3 dropdown Line/Team/Nhóm ca.
+
+**Chưa verify sống** cả 5 việc trên (build sạch, `tsc`/`eslint` sạch — nhưng chưa test tay qua UI thật
+với tài khoản Group Leader/Team Leader/Trưởng phòng thật để xác nhận đúng luồng khoá-theo-từng-bước,
+ký hàng loạt xử lý đúng khi trộn lẫn đơn hợp lệ/không hợp lệ, import file giới hạn OT mẫu thật, các
+file mẫu tải xuống mở được đúng bằng Excel thật, và lọc Bộ phận trên "Nhân viên dưới chuyền" ra đúng
+kết quả).
 
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.

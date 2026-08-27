@@ -115,11 +115,15 @@ export interface CreateOtFormDto {
 }
 
 // Item của UpdateOtFormDto.employees — sửa 2026-07-31: chỉ còn EmployeeId + EndTime (bỏ NoteVn/NoteJp).
-// Thêm didEat 2026-08-06 — sửa được cùng lúc với EndTime (xem OtFormEmployeeDto.didEat).
+// Thêm didEat 2026-08-06 — sửa được cùng lúc với EndTime (xem OtFormEmployeeDto.didEat). noteVn/noteJp
+// trở lại 2026-08-27 (Giai đoạn 5) — Group Leader/Team Leader (đơn "theo chuyền") ghi chú trao đổi qua
+// từng nhân viên thay vì ghi giấy, xem attendance-module.md §Chế tạo.
 export interface UpdateOtFormEmployeeTimeDto {
     employeeId: number;
     endTime: string;
     didEat: boolean;
+    noteVn: string | null;
+    noteJp: string | null;
 }
 
 // Body PUT /api/OtForm/{id} — §4.1b. Sửa lại 2026-07-31 (breaking): trước đây giống hệt
@@ -257,6 +261,26 @@ export interface ApproveOtFormDto {
 export interface RejectOtFormDto {
     comment: string;
     secondaryPassword: string;
+}
+
+// Ký/Từ chối hàng loạt (2026-08-27) — Comment/SecondaryPassword dùng CHUNG cho cả loạt. BE xử lý từng
+// đơn ĐỘC LẬP (1 đơn lỗi không huỷ các đơn còn lại) — xem BulkOtFormActionResultItemDto.
+export interface BulkApproveOtFormDto {
+    otFormIds: number[];
+    comment: string | null;
+    secondaryPassword: string;
+}
+
+export interface BulkRejectOtFormDto {
+    otFormIds: number[];
+    comment: string;
+    secondaryPassword: string;
+}
+
+export interface BulkOtFormActionResultItemDto {
+    otFormId: number;
+    success: boolean;
+    error: string | null;
 }
 
 // Body POST /api/OtForm/{id}/delete — Admin only (Attendance.OTForm.Delete), 2026-08-08. Xoá đơn kẹt

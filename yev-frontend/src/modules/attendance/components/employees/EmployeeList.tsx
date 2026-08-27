@@ -1,9 +1,9 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Inbox } from "lucide-react";
+import { AlertTriangle, FileSpreadsheet, Inbox } from "lucide-react";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
@@ -12,16 +12,22 @@ import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import ActionMenu from "@/components/ui/ActionMenu";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
 import EmployeeImportDialog from "./EmployeeImportDialog";
+import EmployeeOtHourLimitImportDialog from "./EmployeeOtHourLimitImportDialog";
+import ProductionEmployeeImportDialog from "./ProductionEmployeeImportDialog";
+import ProductionEmployeeList, { type ProductionEmployeeListHandle } from "./ProductionEmployeeList";
 import AccumulationHistoryModal from "./AccumulationHistoryModal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
+import { ProductionEmployeeExportApi } from "@/modules/attendance/api/production-employee-import.api";
 
 const PAGE_SIZE = 10;
+type ViewMode = "employee" | "production";
 
 const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeList({ onLoadingChange }, ref) {
     const t = useTranslations("Attendance.Employee");
@@ -56,8 +62,17 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [historyEmployee, setHistoryEmployee] = useState<EmployeeDto | null>(null);
 
     const [importOpen, setImportOpen] = useState(false);
+    const [productionImportOpen, setProductionImportOpen] = useState(false);
+    const [otHourLimitImportOpen, setOtHourLimitImportOpen] = useState(false);
+    const [isExportingProduction, setIsExportingProduction] = useState(false);
     // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
     const { setting } = useAttendanceSetting();
+
+    // "Nhân viên" (bảng Employees) <-> "Nhân viên dưới chuyền" (bảng ProductionEmployees, đọc-only) —
+    // 2 view tách riêng trong cùng 1 tab, mỗi view có bộ lọc + thao tác Excel riêng (2026-08-27, theo
+    // yêu cầu người dùng — trước đó dồn hết nút vào 1 hàng gây rối UI).
+    const [viewMode, setViewMode] = useState<ViewMode>("employee");
+    const productionListRef = useRef<ProductionEmployeeListHandle>(null);
 
     useEffect(() => {
         DepartmentApi.getAllDepartments()
@@ -126,19 +141,40 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     }, [isLoading, onLoadingChange]);
 
     const openCreateForm = () => {
+        setViewMode("employee");
         setFormMode("create");
         setEditingEmployee(null);
         setFormOpen(true);
     };
 
     useImperativeHandle(ref, () => ({
-        refresh: fetchEmployees,
+        refresh: () => {
+            fetchEmployees();
+            productionListRef.current?.refresh();
+        },
         openCreate: openCreateForm,
     }));
 
     const handleSearch = () => {
         setPageIndex(1);
         setAppliedKeyword(keyword.trim());
+    };
+
+    const handleExportProduction = async () => {
+        setIsExportingProduction(true);
+        try {
+            const { blob, fileName } = await ProductionEmployeeExportApi.exportExcel();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName ?? "NhanSuDuoiChuyen.xlsx";
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, t("exportProductionError")));
+        } finally {
+            setIsExportingProduction(false);
+        }
     };
 
     const openEditForm = (employee: EmployeeDto) => {
@@ -190,8 +226,48 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         }
     };
 
+    const productionExcelActions = (
+        <ActionMenu
+            label={t("excelActionsLabel")}
+            icon={<FileSpreadsheet className="h-3.5 w-3.5" />}
+            items={[
+                { label: t("importProductionExcel"), onClick: () => setProductionImportOpen(true) },
+                {
+                    label: isExportingProduction ? t("exportingProduction") : t("exportProductionExcel"),
+                    onClick: handleExportProduction,
+                    disabled: isExportingProduction,
+                },
+                { label: t("otHourLimitImportMenuLabel"), onClick: () => setOtHourLimitImportOpen(true) },
+            ]}
+        />
+    );
+
     return (
         <div className="space-y-4">
+            <div className="inline-flex rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-1">
+                <button
+                    onClick={() => setViewMode("employee")}
+                    className={`cursor-pointer rounded-md px-3.5 py-1.5 text-sm font-semibold transition ${
+                        viewMode === "employee" ? "bg-white text-[#e3000f] shadow-sm" : "text-[#5e3f3a] hover:text-[#191c1e]"
+                    }`}
+                >
+                    {t("viewModeEmployee")}
+                </button>
+                <button
+                    onClick={() => setViewMode("production")}
+                    className={`cursor-pointer rounded-md px-3.5 py-1.5 text-sm font-semibold transition ${
+                        viewMode === "production" ? "bg-white text-[#e3000f] shadow-sm" : "text-[#5e3f3a] hover:text-[#191c1e]"
+                    }`}
+                >
+                    {t("viewModeProduction")}
+                </button>
+            </div>
+
+            {viewMode === "production" ? (
+                <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                    <ProductionEmployeeList ref={productionListRef} actions={productionExcelActions} />
+                </section>
+            ) : (
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex flex-wrap gap-2">
@@ -358,10 +434,26 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     </button>
                 </div>
             </section>
+            )}
 
             <EmployeeImportDialog
                 isOpen={importOpen}
                 onClose={() => setImportOpen(false)}
+                onImported={fetchEmployees}
+            />
+
+            <ProductionEmployeeImportDialog
+                isOpen={productionImportOpen}
+                onClose={() => setProductionImportOpen(false)}
+                onImported={() => {
+                    fetchEmployees();
+                    productionListRef.current?.refresh();
+                }}
+            />
+
+            <EmployeeOtHourLimitImportDialog
+                isOpen={otHourLimitImportOpen}
+                onClose={() => setOtHourLimitImportOpen(false)}
                 onImported={fetchEmployees}
             />
 

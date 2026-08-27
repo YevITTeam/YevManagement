@@ -219,6 +219,7 @@ public partial class AttendanceDbContext : DbContext
             entity.HasIndex(e => new { e.EmployeeId, e.Year, e.Month }, "IX_EmployeeAccumulationHistories_EmployeeId_Year_Month").IsUnique();
 
             entity.Property(e => e.TotalHours).HasPrecision(10, 2);
+            entity.Property(e => e.Note).HasMaxLength(1000);
 
             entity.HasOne(d => d.Employee).WithMany(p => p.EmployeeAccumulationHistories)
                 .HasForeignKey(d => d.EmployeeId)
