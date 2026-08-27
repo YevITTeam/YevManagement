@@ -29,5 +29,10 @@ namespace Workflow.Application.Interfaces.Service
         Task<WorkflowRequestDto> UploadAttachmentAsync(int workflowRequestId, Stream content, string originalFileName, string contentType, long fileSizeBytes, int? currentUserId);
         Task<WorkflowRequestDto> DeleteAttachmentAsync(int attachmentId, int? currentUserId);
         Task<WorkflowAttachmentDownloadDto> DownloadAttachmentAsync(int attachmentId, int? currentUserId, bool hasViewAll);
+
+        // Pha 4C: duyệt qua email, [AllowAnonymous] — token là credential duy nhất.
+        Task<WorkflowRequestDto> GetByEmailTokenAsync(string token);
+        Task<WorkflowRequestDto> ApproveByEmailTokenAsync(string token, EmailApproveRequestDto request);
+        Task<WorkflowRequestDto> RejectByEmailTokenAsync(string token, EmailRejectRequestDto request);
     }
 }

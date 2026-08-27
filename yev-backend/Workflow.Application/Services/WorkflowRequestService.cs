@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Shared.Application.Helper;
+using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
@@ -45,10 +47,21 @@ namespace Workflow.Application.Services
         };
 
         private readonly IWorkflowAttachmentStorage _attachmentStorage;
+        private readonly IEmailService _emailService;
+        private readonly IEmailTemplateRenderer _emailTemplateRenderer;
+        private readonly IConfiguration _configuration;
 
-        public WorkflowRequestService(IWorkflowUnitOfWork unitOfWork, IWorkflowAttachmentStorage attachmentStorage) : base(unitOfWork)
+        public WorkflowRequestService(
+            IWorkflowUnitOfWork unitOfWork,
+            IWorkflowAttachmentStorage attachmentStorage,
+            IEmailService emailService,
+            IEmailTemplateRenderer emailTemplateRenderer,
+            IConfiguration configuration) : base(unitOfWork)
         {
             _attachmentStorage = attachmentStorage;
+            _emailService = emailService;
+            _emailTemplateRenderer = emailTemplateRenderer;
+            _configuration = configuration;
         }
 
         // Pha 3B-2: 3 endpoint đọc phục vụ FE nộp/duyệt đơn — workflow-module.md §6 quyết định đi kèm.
@@ -412,6 +425,12 @@ namespace Workflow.Application.Services
                 throw;
             }
 
+            // Pha 4C: gửi email cho Approver của bước Current đầu tiên — CHỦ Ý gọi SAU khi transaction
+            // đã commit xong (không giữ transaction mở trong lúc gọi SMTP/render template).
+            var firstCurrentStep = entity.WorkflowRequestSteps.FirstOrDefault(s => s.Status == StepStatus.Current);
+            if (firstCurrentStep is not null)
+                await NotifyStepApproversAsync(firstCurrentStep, entity);
+
             return await GetByIdAsync(entity.Id, currentUserId, true);
         }
 
@@ -419,118 +438,81 @@ namespace Workflow.Application.Services
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
             var currentEmployee = (await _unitOfWork.Employees.GetByIdAsync(currentEmployeeId)).OrThrowNotFound("Nhân sự", currentEmployeeId);
-            var entity = (await _unitOfWork.WorkflowRequests.GetByIdAsync(id)).OrThrowNotFound("Đơn", id);
-
-            if (entity.Status is not (RequestStatus.Submitted or RequestStatus.InProgress))
-                throw new DomainException("Đơn không ở trạng thái chờ duyệt.");
-
-            var steps = await LoadStepsAsync(id);
-            var currentStep = steps.FirstOrDefault(s => s.StepOrder == entity.CurrentStepOrder && s.Status == StepStatus.Current)
-                ?? throw new DomainException("Không tìm thấy bước duyệt hiện tại của đơn.");
+            var (entity, currentStep) = await LoadPendingApprovalContextAsync(id);
 
             var now = TimeHelper.GetCurrentUtcTime();
             var (canAct, onBehalfOf) = await ResolveActingCapabilityAsync(currentStep.Id, entity.FormDefinitionId, currentEmployeeId, now, request.OnBehalfOfEmployeeId);
             if (!canAct)
                 throw new DomainException("Bạn không có quyền duyệt bước hiện tại của đơn này.");
 
-            var participants = (await _unitOfWork.WorkflowRequestStepParticipants.FindAsync(
-                p => p.WorkflowRequestStepId == currentStep.Id && p.ParticipantRole == ParticipantRole.Approver)).ToList();
+            return await ApplyApprovalAsync(entity, currentStep, currentEmployeeId, currentEmployee.FullName, onBehalfOf, request.Comment, request.SignatureImageBase64, currentUserId);
+        }
 
-            var actingAsEmployeeId = onBehalfOf ?? currentEmployeeId;
-            var actingParticipant = participants.FirstOrDefault(p => p.EmployeeId == actingAsEmployeeId)
-                ?? throw new DomainException("Không tìm thấy người duyệt tương ứng ở bước này.");
-            if (actingParticipant.ActedAt is not null)
-                throw new DomainException("Bạn đã duyệt bước này rồi.");
+        // Pha 4C: duyệt qua email (workflow-module.md §6) — token TỰ LÀ credential (ApproverEmployeeId đã
+        // chốt sẵn từ lúc gửi mail), không qua ResolveActingCapabilityAsync/delegation. Vẫn phải tự tra
+        // lại bước Current THẬT của đơn (LoadPendingApprovalContextAsync) thay vì tin StepOrder đã
+        // snapshot trong token — mirror Attendance.ApproveByEmailTokenAsync: nếu người khác đã xử lý
+        // xong bước này trước khi link được bấm, ApplyApprovalAsync tự báo lỗi rõ ràng qua
+        // "Không tìm thấy người duyệt tương ứng ở bước này." (participant của bước MỚI không còn khớp).
+        public async Task<WorkflowRequestDto> ApproveByEmailTokenAsync(string token, EmailApproveRequestDto request)
+        {
+            var emailToken = await ResolveEmailTokenAsync(token, requireUnused: true);
+            var (entity, currentStep) = await LoadPendingApprovalContextAsync(emailToken.WorkflowRequestId);
+            var actingEmployee = (await _unitOfWork.Employees.GetByIdAsync(emailToken.ApproverEmployeeId)).OrThrowNotFound("Nhân sự", emailToken.ApproverEmployeeId);
 
-            actingParticipant.ActedAt = now;
-            _unitOfWork.WorkflowRequestStepParticipants.Update(actingParticipant);
-
-            var stepDone = currentStep.ApproverModeSnapshot == ApproverMode.Any ||
-                participants.All(p => p.Id == actingParticipant.Id || p.ActedAt is not null);
-
-            byte[]? signatureBytes = string.IsNullOrEmpty(request.SignatureImageBase64) ? null : Convert.FromBase64String(request.SignatureImageBase64);
-
-            await _unitOfWork.WorkflowRequestHistories.AddAsync(new WorkflowRequestHistory
+            // Trang public không có UI chọn ảnh chữ ký — tự lấy từ EmployeeSignatures (Pha 4A) nếu bước
+            // yêu cầu, mirror Attendance (ApproveByEmailTokenAsync pull UserSignature theo ApproverUserName).
+            string? signatureImageBase64 = null;
+            if (currentStep.RequireSignatureSnapshot)
             {
-                WorkflowRequestId = entity.Id,
-                StepOrder = currentStep.StepOrder,
-                ActorEmployeeId = currentEmployeeId,
-                OnBehalfOfEmployeeId = onBehalfOf,
-                ActorNameSnapshot = currentEmployee.FullName,
-                Action = RequestAction.Approve,
-                Comment = request.Comment,
-                SignatureImage = signatureBytes,
-                ActionAt = now
-            });
-
-            if (stepDone)
-            {
-                currentStep.Status = StepStatus.Approved;
-                currentStep.ActedByEmployeeId = currentEmployeeId;
-                currentStep.ActedAt = now;
-                _unitOfWork.WorkflowRequestSteps.Update(currentStep);
-
-                var nextStep = steps.Where(s => s.StepOrder > currentStep.StepOrder && s.Status == StepStatus.Waiting).OrderBy(s => s.StepOrder).FirstOrDefault();
-                if (nextStep is null)
-                {
-                    entity.Status = RequestStatus.Approved;
-                    entity.CompletedAt = now;
-                }
-                else
-                {
-                    nextStep.Status = StepStatus.Current;
-                    _unitOfWork.WorkflowRequestSteps.Update(nextStep);
-                    entity.CurrentStepOrder = nextStep.StepOrder;
-                    entity.Status = RequestStatus.InProgress;
-                }
-                _unitOfWork.WorkflowRequests.Update(entity);
+                var signature = await _unitOfWork.EmployeeSignatures.FirstOrDefaultAsync(x => x.EmployeeId == emailToken.ApproverEmployeeId);
+                if (signature is null)
+                    throw new DomainException("Bước duyệt này yêu cầu chữ ký nhưng bạn chưa đăng ký chữ ký điện tử — vui lòng đăng nhập và đăng ký tại \"Chữ ký của tôi\" trước khi duyệt qua email.");
+                signatureImageBase64 = Convert.ToBase64String(signature!.SignatureImage);
             }
 
+            var result = await ApplyApprovalAsync(entity, currentStep, emailToken.ApproverEmployeeId, actingEmployee!.FullName, null, request.Comment, signatureImageBase64, null);
+
+            emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
+            _unitOfWork.WorkflowRequestEmailTokens.Update(emailToken);
             await _unitOfWork.SaveChangesAsync();
-            return await GetByIdAsync(id, currentUserId, true);
+
+            return result;
         }
 
         public async Task<WorkflowRequestDto> RejectAsync(int id, RejectRequestDto request, int? currentUserId)
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
             var currentEmployee = (await _unitOfWork.Employees.GetByIdAsync(currentEmployeeId)).OrThrowNotFound("Nhân sự", currentEmployeeId);
-            var entity = (await _unitOfWork.WorkflowRequests.GetByIdAsync(id)).OrThrowNotFound("Đơn", id);
-
-            if (entity.Status is not (RequestStatus.Submitted or RequestStatus.InProgress))
-                throw new DomainException("Đơn không ở trạng thái chờ duyệt.");
-
-            var steps = await LoadStepsAsync(id);
-            var currentStep = steps.FirstOrDefault(s => s.StepOrder == entity.CurrentStepOrder && s.Status == StepStatus.Current)
-                ?? throw new DomainException("Không tìm thấy bước duyệt hiện tại của đơn.");
+            var (entity, currentStep) = await LoadPendingApprovalContextAsync(id);
 
             var now = TimeHelper.GetCurrentUtcTime();
             var (canAct, onBehalfOf) = await ResolveActingCapabilityAsync(currentStep.Id, entity.FormDefinitionId, currentEmployeeId, now, request.OnBehalfOfEmployeeId);
             if (!canAct)
                 throw new DomainException("Bạn không có quyền từ chối bước hiện tại của đơn này.");
 
-            currentStep.Status = StepStatus.Rejected;
-            currentStep.ActedByEmployeeId = currentEmployeeId;
-            currentStep.ActedAt = now;
-            _unitOfWork.WorkflowRequestSteps.Update(currentStep);
+            return await ApplyRejectionAsync(entity, currentStep, currentEmployeeId, currentEmployee.FullName, onBehalfOf, request.Comment, currentUserId);
+        }
 
-            entity.Status = RequestStatus.Rejected;
-            entity.CompletedAt = now;
-            _unitOfWork.WorkflowRequests.Update(entity);
+        public async Task<WorkflowRequestDto> RejectByEmailTokenAsync(string token, EmailRejectRequestDto request)
+        {
+            var emailToken = await ResolveEmailTokenAsync(token, requireUnused: true);
+            var (entity, currentStep) = await LoadPendingApprovalContextAsync(emailToken.WorkflowRequestId);
+            var actingEmployee = (await _unitOfWork.Employees.GetByIdAsync(emailToken.ApproverEmployeeId)).OrThrowNotFound("Nhân sự", emailToken.ApproverEmployeeId);
 
-            await _unitOfWork.WorkflowRequestHistories.AddAsync(new WorkflowRequestHistory
-            {
-                WorkflowRequestId = entity.Id,
-                StepOrder = currentStep.StepOrder,
-                ActorEmployeeId = currentEmployeeId,
-                OnBehalfOfEmployeeId = onBehalfOf,
-                ActorNameSnapshot = currentEmployee.FullName,
-                Action = RequestAction.Reject,
-                Comment = request.Comment,
-                ActionAt = now
-            });
+            var result = await ApplyRejectionAsync(entity, currentStep, emailToken.ApproverEmployeeId, actingEmployee!.FullName, null, request.Comment, null);
 
+            emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
+            _unitOfWork.WorkflowRequestEmailTokens.Update(emailToken);
             await _unitOfWork.SaveChangesAsync();
-            return await GetByIdAsync(id, currentUserId, true);
+
+            return result;
+        }
+
+        public async Task<WorkflowRequestDto> GetByEmailTokenAsync(string token)
+        {
+            var emailToken = await ResolveEmailTokenAsync(token, requireUnused: false);
+            return await GetByIdAsync(emailToken.WorkflowRequestId, null, true);
         }
 
         public async Task<WorkflowRequestDto> SendBackAsync(int id, SendBackRequestDto request, int? currentUserId)
@@ -815,11 +797,16 @@ namespace Workflow.Application.Services
 
         // Dùng chung cho GetByIdAsync + DownloadAttachmentAsync (§7 luật "Ai xem được đơn này?" — người
         // tạo, participants (kể cả Viewer), hoặc có Request.ViewAll).
-        private async Task<int> GuardCanViewRequestAsync(WorkflowRequest entity, int? currentUserId, bool hasViewAll)
+        // hasViewAll=true PHẢI thoát ngay, KHÔNG được resolve currentEmployeeId trước — kênh email (Pha
+        // 4C) gọi GetByIdAsync(id, currentUserId: null, hasViewAll: true) vì không có JWT; resolve
+        // employee trước khi check hasViewAll sẽ luôn throw "Không xác định được người dùng hiện tại"
+        // (currentUserId null) dù đáng lẽ không cần đọc currentUserId trong nhánh này.
+        private async Task GuardCanViewRequestAsync(WorkflowRequest entity, int? currentUserId, bool hasViewAll)
         {
+            if (hasViewAll) return;
+
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
-            if (hasViewAll || entity.CreatedByEmployeeId == currentEmployeeId)
-                return currentEmployeeId;
+            if (entity.CreatedByEmployeeId == currentEmployeeId) return;
 
             var steps = await LoadStepsAsync(entity.Id);
             var stepIds = steps.Select(s => s.Id).ToList();
@@ -827,7 +814,6 @@ namespace Workflow.Application.Services
                 p => stepIds.Contains(p.WorkflowRequestStepId) && p.EmployeeId == currentEmployeeId)).Any();
             if (!isParticipant)
                 throw new DomainException("Bạn không có quyền xem đơn này.");
-            return currentEmployeeId;
         }
 
         // Đính kèm: chỉ chủ đơn, chỉ khi đơn chưa ở trạng thái kết thúc (quyết định 2026-08-26 §10).
@@ -842,6 +828,199 @@ namespace Workflow.Application.Services
         private async Task<List<WorkflowRequestStep>> LoadStepsAsync(int workflowRequestId)
         {
             return (await _unitOfWork.WorkflowRequestSteps.FindAsync(s => s.WorkflowRequestId == workflowRequestId)).OrderBy(s => s.StepOrder).ToList();
+        }
+
+        // Dùng chung cho ApproveAsync/RejectAsync (JWT) + ApproveByEmailTokenAsync/RejectByEmailTokenAsync
+        // (Pha 4C) — load + validate đúng 1 lần "đơn đang chờ duyệt, bước Current là bước nào" thay vì
+        // lặp lại ở 4 chỗ.
+        private async Task<(WorkflowRequest Entity, WorkflowRequestStep CurrentStep)> LoadPendingApprovalContextAsync(int id)
+        {
+            var entity = (await _unitOfWork.WorkflowRequests.GetByIdAsync(id)).OrThrowNotFound("Đơn", id);
+            if (entity.Status is not (RequestStatus.Submitted or RequestStatus.InProgress))
+                throw new DomainException("Đơn không ở trạng thái chờ duyệt.");
+
+            var steps = await LoadStepsAsync(id);
+            var currentStep = steps.FirstOrDefault(s => s.StepOrder == entity.CurrentStepOrder && s.Status == StepStatus.Current)
+                ?? throw new DomainException("Không tìm thấy bước duyệt hiện tại của đơn.");
+
+            return (entity, currentStep);
+        }
+
+        // Lõi thật của Duyệt (§5.5) — dùng chung cho kênh JWT (đã qua ResolveActingCapabilityAsync,
+        // actorEmployeeId = người đang đăng nhập) và kênh email Pha 4C (token tự xác định
+        // actorEmployeeId, onBehalfOfEmployeeId luôn null — không có ủy quyền qua email). currentUserId
+        // chỉ dùng để trả về DTO cuối (null hợp lệ vì GetByIdAsync gọi với hasViewAll=true).
+        private async Task<WorkflowRequestDto> ApplyApprovalAsync(
+            WorkflowRequest entity, WorkflowRequestStep currentStep, int actorEmployeeId, string actorFullName,
+            int? onBehalfOfEmployeeId, string? comment, string? signatureImageBase64, int? currentUserId)
+        {
+            var now = TimeHelper.GetCurrentUtcTime();
+            var participants = (await _unitOfWork.WorkflowRequestStepParticipants.FindAsync(
+                p => p.WorkflowRequestStepId == currentStep.Id && p.ParticipantRole == ParticipantRole.Approver)).ToList();
+
+            var actingAsEmployeeId = onBehalfOfEmployeeId ?? actorEmployeeId;
+            var actingParticipant = participants.FirstOrDefault(p => p.EmployeeId == actingAsEmployeeId)
+                ?? throw new DomainException("Không tìm thấy người duyệt tương ứng ở bước này.");
+            if (actingParticipant.ActedAt is not null)
+                throw new DomainException("Bạn đã duyệt bước này rồi.");
+
+            actingParticipant.ActedAt = now;
+            _unitOfWork.WorkflowRequestStepParticipants.Update(actingParticipant);
+
+            var stepDone = currentStep.ApproverModeSnapshot == ApproverMode.Any ||
+                participants.All(p => p.Id == actingParticipant.Id || p.ActedAt is not null);
+
+            byte[]? signatureBytes = string.IsNullOrEmpty(signatureImageBase64) ? null : Convert.FromBase64String(signatureImageBase64);
+
+            await _unitOfWork.WorkflowRequestHistories.AddAsync(new WorkflowRequestHistory
+            {
+                WorkflowRequestId = entity.Id,
+                StepOrder = currentStep.StepOrder,
+                ActorEmployeeId = actorEmployeeId,
+                OnBehalfOfEmployeeId = onBehalfOfEmployeeId,
+                ActorNameSnapshot = actorFullName,
+                Action = RequestAction.Approve,
+                Comment = comment,
+                SignatureImage = signatureBytes,
+                ActionAt = now
+            });
+
+            WorkflowRequestStep? nextStep = null;
+            if (stepDone)
+            {
+                currentStep.Status = StepStatus.Approved;
+                currentStep.ActedByEmployeeId = actorEmployeeId;
+                currentStep.ActedAt = now;
+                _unitOfWork.WorkflowRequestSteps.Update(currentStep);
+
+                var steps = await LoadStepsAsync(entity.Id);
+                nextStep = steps.Where(s => s.StepOrder > currentStep.StepOrder && s.Status == StepStatus.Waiting).OrderBy(s => s.StepOrder).FirstOrDefault();
+                if (nextStep is null)
+                {
+                    entity.Status = RequestStatus.Approved;
+                    entity.CompletedAt = now;
+                }
+                else
+                {
+                    nextStep.Status = StepStatus.Current;
+                    _unitOfWork.WorkflowRequestSteps.Update(nextStep);
+                    entity.CurrentStepOrder = nextStep.StepOrder;
+                    entity.Status = RequestStatus.InProgress;
+                }
+                _unitOfWork.WorkflowRequests.Update(entity);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            // Pha 4C: bước kế vừa chuyển Current — gửi email cho Approver của nó, SAU khi đã lưu xong.
+            if (nextStep is not null)
+                await NotifyStepApproversAsync(nextStep, entity);
+
+            return await GetByIdAsync(entity.Id, currentUserId, true);
+        }
+
+        // Lõi thật của Từ chối — mirror ApplyApprovalAsync, đơn giản hơn (không có bước kế/chữ ký).
+        private async Task<WorkflowRequestDto> ApplyRejectionAsync(
+            WorkflowRequest entity, WorkflowRequestStep currentStep, int actorEmployeeId, string actorFullName,
+            int? onBehalfOfEmployeeId, string comment, int? currentUserId)
+        {
+            var now = TimeHelper.GetCurrentUtcTime();
+
+            currentStep.Status = StepStatus.Rejected;
+            currentStep.ActedByEmployeeId = actorEmployeeId;
+            currentStep.ActedAt = now;
+            _unitOfWork.WorkflowRequestSteps.Update(currentStep);
+
+            entity.Status = RequestStatus.Rejected;
+            entity.CompletedAt = now;
+            _unitOfWork.WorkflowRequests.Update(entity);
+
+            await _unitOfWork.WorkflowRequestHistories.AddAsync(new WorkflowRequestHistory
+            {
+                WorkflowRequestId = entity.Id,
+                StepOrder = currentStep.StepOrder,
+                ActorEmployeeId = actorEmployeeId,
+                OnBehalfOfEmployeeId = onBehalfOfEmployeeId,
+                ActorNameSnapshot = actorFullName,
+                Action = RequestAction.Reject,
+                Comment = comment,
+                ActionAt = now
+            });
+
+            await _unitOfWork.SaveChangesAsync();
+            return await GetByIdAsync(entity.Id, currentUserId, true);
+        }
+
+        // Pha 4C: xác thực token duyệt qua email (workflow-module.md §3.3) — requireUnused=false cho
+        // GetByEmailTokenAsync (xem lại vẫn được dù đã dùng, mirror Attendance), true cho hành động ghi.
+        private async Task<WorkflowRequestEmailToken> ResolveEmailTokenAsync(string token, bool requireUnused)
+        {
+            var emailToken = await _unitOfWork.WorkflowRequestEmailTokens.FirstOrDefaultAsync(x => x.Token == token);
+            emailToken.OrThrowNotFound("Link duyệt đơn qua email", token);
+
+            if (emailToken!.ExpiresAt < TimeHelper.GetCurrentUtcTime())
+                throw new DomainException("Link duyệt đơn qua email đã hết hạn.");
+            if (requireUnused && emailToken.UsedAt != null)
+                throw new DomainException("Link duyệt đơn này đã được sử dụng.");
+
+            return emailToken;
+        }
+
+        // Pha 4C: gửi email cho các Approver của bước VỪA chuyển thành Current (gọi từ SubmitAsync sau
+        // commit + ApplyApprovalAsync sau SaveChanges — KHÔNG bao giờ trong lúc transaction còn mở).
+        // Mỗi Approver 1 token riêng; thiếu Email thì bỏ qua người đó — best-effort, 1 người thiếu Email
+        // không được chặn người khác/chặn cả luồng Submit/Approve chính (mirror EmployeeSignatureService).
+        private async Task NotifyStepApproversAsync(WorkflowRequestStep step, WorkflowRequest entity)
+        {
+            var participants = await _unitOfWork.WorkflowRequestStepParticipants.FindAsync(
+                p => p.WorkflowRequestStepId == step.Id && p.ParticipantRole == ParticipantRole.Approver);
+            if (participants.Count == 0) return;
+
+            var settings = await _unitOfWork.WorkflowSettings.GetByIdAsync(1);
+            var expiryDays = settings?.EmailTokenExpiryDays ?? 7;
+            var form = await _unitOfWork.FormDefinitions.GetByIdAsync(entity.FormDefinitionId);
+            var creator = await _unitOfWork.Employees.GetByIdAsync(entity.CreatedByEmployeeId);
+            var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
+            var now = TimeHelper.GetCurrentUtcTime();
+
+            foreach (var participant in participants)
+            {
+                var employee = await _unitOfWork.Employees.GetByIdAsync(participant.EmployeeId);
+                if (employee is null || string.IsNullOrWhiteSpace(employee.Email)) continue;
+
+                var emailToken = new WorkflowRequestEmailToken
+                {
+                    WorkflowRequestId = entity.Id,
+                    StepOrder = step.StepOrder,
+                    ApproverEmployeeId = employee.Id,
+                    Token = TokenHelper.GenerateSecureToken(),
+                    ExpiresAt = now.AddDays(expiryDays),
+                    CreatedAt = now
+                };
+                await _unitOfWork.WorkflowRequestEmailTokens.AddAsync(emailToken);
+                await _unitOfWork.SaveChangesAsync();
+
+                try
+                {
+                    var link = $"{baseUrl}/xac-nhan-don-quy-trinh?token={emailToken.Token}";
+                    var html = _emailTemplateRenderer.Render("WorkflowRequest/ApprovalNotification.html", new Dictionary<string, string>
+                    {
+                        ["ApproverFullName"] = employee.FullName,
+                        ["RequestCode"] = entity.RequestCode ?? "",
+                        ["FormDefinitionNameVn"] = form?.NameVn ?? "",
+                        ["CreatedByEmployeeName"] = creator?.FullName ?? "",
+                        ["StepNameSnapshot"] = step.StepNameSnapshot,
+                        ["ConfirmLink"] = link,
+                        ["ExpiryDays"] = expiryDays.ToString()
+                    });
+
+                    await _emailService.SendAsync(employee.Email!, $"Đơn {entity.RequestCode} đang chờ bạn duyệt - YevManagement", html);
+                }
+                catch (FileNotFoundException)
+                {
+                    // Thiếu file template — bỏ qua gửi mail cho người này, không chặn luồng chính.
+                }
+            }
         }
 
         // Role trong FormAccesses là cross-DB -> Identity.Roles (§1.4), Workflow không query được DB

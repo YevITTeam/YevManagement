@@ -41,6 +41,7 @@ public partial class WorkflowDbContext : DbContext
     public virtual DbSet<PendingEmployeeSignatureConfirmation> PendingEmployeeSignatureConfirmations { get; set; }
     public virtual DbSet<WorkflowAttachment> WorkflowAttachments { get; set; }
     public virtual DbSet<WorkflowSetting> WorkflowSettings { get; set; }
+    public virtual DbSet<WorkflowRequestEmailToken> WorkflowRequestEmailTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -501,6 +502,22 @@ public partial class WorkflowDbContext : DbContext
         {
             // Luôn 1 dòng (Id = 1, seed trong migration) — không cần index nào khác ngoài PK.
             entity.Property(e => e.AllowedFileExtensions).HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<WorkflowRequestEmailToken>(entity =>
+        {
+            entity.HasIndex(e => e.Token, "IX_WorkflowRequestEmailTokens_Token").IsUnique();
+            entity.Property(e => e.Token).HasMaxLength(128);
+
+            entity.HasOne(d => d.WorkflowRequest).WithMany(p => p.WorkflowRequestEmailTokens)
+                .HasForeignKey(d => d.WorkflowRequestId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_WorkflowRequestEmailTokens_WorkflowRequests_WorkflowRequestId");
+
+            entity.HasOne(d => d.ApproverEmployee).WithMany(p => p.ReceivedWorkflowRequestEmailTokens)
+                .HasForeignKey(d => d.ApproverEmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_WorkflowRequestEmailTokens_Employees_ApproverEmployeeId");
         });
 
         OnModelCreatingPartial(modelBuilder);

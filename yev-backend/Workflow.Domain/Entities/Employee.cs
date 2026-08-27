@@ -56,4 +56,6 @@ public partial class Employee
     public virtual ICollection<PendingEmployeeSignatureConfirmation> PendingEmployeeSignatureConfirmations { get; set; } = new List<PendingEmployeeSignatureConfirmation>();
 
     public virtual ICollection<WorkflowAttachment> UploadedWorkflowAttachments { get; set; } = new List<WorkflowAttachment>();
+
+    public virtual ICollection<WorkflowRequestEmailToken> ReceivedWorkflowRequestEmailTokens { get; set; } = new List<WorkflowRequestEmailToken>();
 }

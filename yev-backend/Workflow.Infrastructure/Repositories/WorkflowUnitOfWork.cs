@@ -33,7 +33,8 @@ namespace Workflow.Infrastructure.Repositories
             IEmployeeSignatureRepository employeeSignatures,
             IPendingEmployeeSignatureConfirmationRepository pendingEmployeeSignatureConfirmations,
             IWorkflowAttachmentRepository workflowAttachments,
-            IWorkflowSettingRepository workflowSettings) : base(dbContext)
+            IWorkflowSettingRepository workflowSettings,
+            IWorkflowRequestEmailTokenRepository workflowRequestEmailTokens) : base(dbContext)
         {
             OrgLevels = orgLevels;
             OrgUnits = orgUnits;
@@ -60,6 +61,7 @@ namespace Workflow.Infrastructure.Repositories
             PendingEmployeeSignatureConfirmations = pendingEmployeeSignatureConfirmations;
             WorkflowAttachments = workflowAttachments;
             WorkflowSettings = workflowSettings;
+            WorkflowRequestEmailTokens = workflowRequestEmailTokens;
         }
 
         public IOrgLevelRepository OrgLevels { get; }
@@ -87,5 +89,6 @@ namespace Workflow.Infrastructure.Repositories
         public IPendingEmployeeSignatureConfirmationRepository PendingEmployeeSignatureConfirmations { get; }
         public IWorkflowAttachmentRepository WorkflowAttachments { get; }
         public IWorkflowSettingRepository WorkflowSettings { get; }
+        public IWorkflowRequestEmailTokenRepository WorkflowRequestEmailTokens { get; }
     }
 }

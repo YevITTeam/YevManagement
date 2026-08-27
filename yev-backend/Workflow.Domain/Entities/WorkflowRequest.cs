@@ -51,4 +51,6 @@ public partial class WorkflowRequest
     public virtual ICollection<WorkflowRequestHistory> WorkflowRequestHistories { get; set; } = new List<WorkflowRequestHistory>();
 
     public virtual ICollection<WorkflowAttachment> WorkflowAttachments { get; set; } = new List<WorkflowAttachment>();
+
+    public virtual ICollection<WorkflowRequestEmailToken> WorkflowRequestEmailTokens { get; set; } = new List<WorkflowRequestEmailToken>();
 }

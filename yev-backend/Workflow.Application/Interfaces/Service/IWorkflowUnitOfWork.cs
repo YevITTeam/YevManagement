@@ -30,5 +30,6 @@ namespace Workflow.Application.Interfaces.Service
         IPendingEmployeeSignatureConfirmationRepository PendingEmployeeSignatureConfirmations { get; }
         IWorkflowAttachmentRepository WorkflowAttachments { get; }
         IWorkflowSettingRepository WorkflowSettings { get; }
+        IWorkflowRequestEmailTokenRepository WorkflowRequestEmailTokens { get; }
     }
 }
