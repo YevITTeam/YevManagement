@@ -61,7 +61,37 @@ namespace Workflow.Application.Services
                 predicate: x => !x.IsDeleted,
                 selector: x => new { x.Id, x.ParentId })).ToDictionary(x => x.Id, x => x.ParentId);
 
+            // Nạp kèm "ai đang giữ chức gì" ngay trong 1 lần gọi cây, tránh người dùng phải rời màn
+            // cây sang màn Nhân sự chỉ để xem — chỉ tính nhân sự còn hoạt động (workflow-module.md §10).
+            var memberRows = await _unitOfWork.EmployeeOrgUnits.FindWithIncludesAsync(
+                x => !x.IsDeleted && !x.Employee.IsDeleted && x.Employee.IsActive,
+                x => x.Employee, x => x.JobTitle!);
+
+            var membersByOrgUnit = memberRows
+                .GroupBy(x => x.OrgUnitId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g
+                        .OrderBy(x => x.JobTitle != null ? x.JobTitle.RankOrder : int.MaxValue)
+                        .ThenBy(x => x.Employee.FullName)
+                        .Select(x => new OrgUnitTreeMemberDto
+                        {
+                            EmployeeId = x.EmployeeId,
+                            EmployeeFullName = x.Employee.FullName,
+                            EmployeeCode = x.Employee.EmployeeCode,
+                            JobTitleId = x.JobTitleId,
+                            JobTitleNameVn = x.JobTitle?.NameVn,
+                            JobTitleRankOrder = x.JobTitle != null ? x.JobTitle.RankOrder : null,
+                            IsPrimary = x.IsPrimary
+                        })
+                        .ToList());
+
             var byId = units.ToDictionary(x => x.Id);
+            foreach (var unit in units)
+            {
+                if (membersByOrgUnit.TryGetValue(unit.Id, out var members))
+                    unit.Members = members;
+            }
             var roots = new List<OrgUnitTreeDto>();
 
             foreach (var unit in units)

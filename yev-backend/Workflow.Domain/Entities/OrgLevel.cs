@@ -13,4 +13,6 @@ public partial class OrgLevel
     public bool IsDeleted { get; set; }
 
     public virtual ICollection<OrgUnit> OrgUnits { get; set; } = new List<OrgUnit>();
+
+    public virtual ICollection<OrgLevelJobTitleSuggestion> OrgLevelJobTitleSuggestions { get; set; } = new List<OrgLevelJobTitleSuggestion>();
 }

@@ -14,6 +14,7 @@ namespace Workflow.Infrastructure.Repositories
             IJobTitleRepository jobTitles,
             IEmployeeRepository employees,
             IEmployeeOrgUnitRepository employeeOrgUnits,
+            IOrgLevelJobTitleSuggestionRepository orgLevelJobTitleSuggestions,
             IFormCategoryRepository formCategories,
             IFormCategoryCoordinatorRepository formCategoryCoordinators,
             IFormDataSourceRepository formDataSources,
@@ -33,13 +34,15 @@ namespace Workflow.Infrastructure.Repositories
             IEmployeeSignatureRepository employeeSignatures,
             IPendingEmployeeSignatureConfirmationRepository pendingEmployeeSignatureConfirmations,
             IWorkflowAttachmentRepository workflowAttachments,
-            IWorkflowSettingRepository workflowSettings) : base(dbContext)
+            IWorkflowSettingRepository workflowSettings,
+            IWorkflowRequestEmailTokenRepository workflowRequestEmailTokens) : base(dbContext)
         {
             OrgLevels = orgLevels;
             OrgUnits = orgUnits;
             JobTitles = jobTitles;
             Employees = employees;
             EmployeeOrgUnits = employeeOrgUnits;
+            OrgLevelJobTitleSuggestions = orgLevelJobTitleSuggestions;
             FormCategories = formCategories;
             FormCategoryCoordinators = formCategoryCoordinators;
             FormDataSources = formDataSources;
@@ -60,6 +63,7 @@ namespace Workflow.Infrastructure.Repositories
             PendingEmployeeSignatureConfirmations = pendingEmployeeSignatureConfirmations;
             WorkflowAttachments = workflowAttachments;
             WorkflowSettings = workflowSettings;
+            WorkflowRequestEmailTokens = workflowRequestEmailTokens;
         }
 
         public IOrgLevelRepository OrgLevels { get; }
@@ -67,6 +71,7 @@ namespace Workflow.Infrastructure.Repositories
         public IJobTitleRepository JobTitles { get; }
         public IEmployeeRepository Employees { get; }
         public IEmployeeOrgUnitRepository EmployeeOrgUnits { get; }
+        public IOrgLevelJobTitleSuggestionRepository OrgLevelJobTitleSuggestions { get; }
         public IFormCategoryRepository FormCategories { get; }
         public IFormCategoryCoordinatorRepository FormCategoryCoordinators { get; }
         public IFormDataSourceRepository FormDataSources { get; }
@@ -87,5 +92,6 @@ namespace Workflow.Infrastructure.Repositories
         public IPendingEmployeeSignatureConfirmationRepository PendingEmployeeSignatureConfirmations { get; }
         public IWorkflowAttachmentRepository WorkflowAttachments { get; }
         public IWorkflowSettingRepository WorkflowSettings { get; }
+        public IWorkflowRequestEmailTokenRepository WorkflowRequestEmailTokens { get; }
     }
 }

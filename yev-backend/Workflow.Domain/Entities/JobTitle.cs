@@ -27,4 +27,6 @@ public partial class JobTitle
     public virtual ICollection<EmployeeOrgUnit> EmployeeOrgUnits { get; set; } = new List<EmployeeOrgUnit>();
 
     public virtual ICollection<FormApprovalStepParticipant> FormApprovalStepParticipants { get; set; } = new List<FormApprovalStepParticipant>();
+
+    public virtual ICollection<OrgLevelJobTitleSuggestion> OrgLevelJobTitleSuggestions { get; set; } = new List<OrgLevelJobTitleSuggestion>();
 }

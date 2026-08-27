@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, Plus, Pencil, Trash2, ChevronRight, ChevronDown } from "lucide-react";
+import { RefreshCw, Plus, Pencil, Trash2, UserPlus, ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -10,6 +10,8 @@ import { OrgLevelApi } from "@/modules/workflow/api/org-level.api";
 import type { OrgUnitDto, OrgUnitTreeDto } from "@/modules/workflow/types/org-unit.dto";
 import type { OrgLevelDto } from "@/modules/workflow/types/org-level.dto";
 import OrgUnitForm, { type OrgUnitFormValues, type FlatOrgUnitOption } from "./OrgUnitForm";
+import AssignEmployeeDialog from "./AssignEmployeeDialog";
+import OrgUnitMemberTree from "./OrgUnitMemberTree";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -34,11 +36,12 @@ interface TreeNodeProps {
     depth: number;
     canManage: boolean;
     onAddChild: (parentId: number) => void;
+    onAssignMember: (node: OrgUnitTreeDto) => void;
     onEdit: (id: number) => void;
     onDelete: (node: OrgUnitTreeDto) => void;
 }
 
-function TreeNode({ node, depth, canManage, onAddChild, onEdit, onDelete }: TreeNodeProps) {
+function TreeNode({ node, depth, canManage, onAddChild, onAssignMember, onEdit, onDelete }: TreeNodeProps) {
     const [expanded, setExpanded] = useState(true);
     const hasChildren = node.children.length > 0;
 
@@ -75,6 +78,14 @@ function TreeNode({ node, depth, canManage, onAddChild, onEdit, onDelete }: Tree
                         </button>
                         <button
                             type="button"
+                            onClick={() => onAssignMember(node)}
+                            title="Gán nhân sự"
+                            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-[#5e3f3a] hover:bg-[#eceef0] hover:text-[#191c1e]"
+                        >
+                            <UserPlus className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                            type="button"
                             onClick={() => onEdit(node.id)}
                             title="Sửa"
                             className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-[#5e3f3a] hover:bg-[#eceef0] hover:text-[#191c1e]"
@@ -93,6 +104,8 @@ function TreeNode({ node, depth, canManage, onAddChild, onEdit, onDelete }: Tree
                 )}
             </div>
 
+            <OrgUnitMemberTree members={node.members} baseIndentRem={depth * 1.5 + 2.25} />
+
             {hasChildren && expanded && (
                 <div>
                     {node.children.map((child) => (
@@ -102,6 +115,7 @@ function TreeNode({ node, depth, canManage, onAddChild, onEdit, onDelete }: Tree
                             depth={depth + 1}
                             canManage={canManage}
                             onAddChild={onAddChild}
+                            onAssignMember={onAssignMember}
                             onEdit={onEdit}
                             onDelete={onDelete}
                         />
@@ -130,6 +144,8 @@ export default function OrgUnitList() {
 
     const [deletingItem, setDeletingItem] = useState<OrgUnitTreeDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    const [assigningFor, setAssigningFor] = useState<OrgUnitTreeDto | null>(null);
 
     const { isLoading, error, refetch: fetchAll } = useFetchEffect(
         async () => {
@@ -267,6 +283,7 @@ export default function OrgUnitList() {
                             depth={0}
                             canManage={canManage}
                             onAddChild={(parentId) => openCreateForm(parentId)}
+                            onAssignMember={(n) => setAssigningFor(n)}
                             onEdit={(id) => openEditForm(id)}
                             onDelete={(n) => setDeletingItem(n)}
                         />
@@ -301,6 +318,13 @@ export default function OrgUnitList() {
                     if (!isDeleting) setDeletingItem(null);
                 }}
             />
+
+            {assigningFor && (
+                <AssignEmployeeDialog
+                    orgUnit={{ id: assigningFor.id, code: assigningFor.code, nameVn: assigningFor.nameVn, orgLevelId: assigningFor.orgLevelId }}
+                    onClose={() => setAssigningFor(null)}
+                />
+            )}
         </div>
     );
 }

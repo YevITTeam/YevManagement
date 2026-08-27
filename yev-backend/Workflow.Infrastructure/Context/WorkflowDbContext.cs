@@ -21,6 +21,7 @@ public partial class WorkflowDbContext : DbContext
     public virtual DbSet<JobTitle> JobTitles { get; set; }
     public virtual DbSet<Employee> Employees { get; set; }
     public virtual DbSet<EmployeeOrgUnit> EmployeeOrgUnits { get; set; }
+    public virtual DbSet<OrgLevelJobTitleSuggestion> OrgLevelJobTitleSuggestions { get; set; }
     public virtual DbSet<FormCategory> FormCategories { get; set; }
     public virtual DbSet<FormCategoryCoordinator> FormCategoryCoordinators { get; set; }
     public virtual DbSet<FormDataSource> FormDataSources { get; set; }
@@ -41,6 +42,7 @@ public partial class WorkflowDbContext : DbContext
     public virtual DbSet<PendingEmployeeSignatureConfirmation> PendingEmployeeSignatureConfirmations { get; set; }
     public virtual DbSet<WorkflowAttachment> WorkflowAttachments { get; set; }
     public virtual DbSet<WorkflowSetting> WorkflowSettings { get; set; }
+    public virtual DbSet<WorkflowRequestEmailToken> WorkflowRequestEmailTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -119,6 +121,21 @@ public partial class WorkflowDbContext : DbContext
                 .HasForeignKey(d => d.JobTitleId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_EmployeeOrgUnits_JobTitles_JobTitleId");
+        });
+
+        modelBuilder.Entity<OrgLevelJobTitleSuggestion>(entity =>
+        {
+            entity.HasIndex(e => new { e.OrgLevelId, e.JobTitleId }, "IX_OrgLevelJobTitleSuggestions_OrgLevelId_JobTitleId").IsUnique();
+
+            entity.HasOne(d => d.OrgLevel).WithMany(p => p.OrgLevelJobTitleSuggestions)
+                .HasForeignKey(d => d.OrgLevelId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OrgLevelJobTitleSuggestions_OrgLevels_OrgLevelId");
+
+            entity.HasOne(d => d.JobTitle).WithMany(p => p.OrgLevelJobTitleSuggestions)
+                .HasForeignKey(d => d.JobTitleId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OrgLevelJobTitleSuggestions_JobTitles_JobTitleId");
         });
 
         modelBuilder.Entity<FormCategory>(entity =>
@@ -501,6 +518,22 @@ public partial class WorkflowDbContext : DbContext
         {
             // Luôn 1 dòng (Id = 1, seed trong migration) — không cần index nào khác ngoài PK.
             entity.Property(e => e.AllowedFileExtensions).HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<WorkflowRequestEmailToken>(entity =>
+        {
+            entity.HasIndex(e => e.Token, "IX_WorkflowRequestEmailTokens_Token").IsUnique();
+            entity.Property(e => e.Token).HasMaxLength(128);
+
+            entity.HasOne(d => d.WorkflowRequest).WithMany(p => p.WorkflowRequestEmailTokens)
+                .HasForeignKey(d => d.WorkflowRequestId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_WorkflowRequestEmailTokens_WorkflowRequests_WorkflowRequestId");
+
+            entity.HasOne(d => d.ApproverEmployee).WithMany(p => p.ReceivedWorkflowRequestEmailTokens)
+                .HasForeignKey(d => d.ApproverEmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_WorkflowRequestEmailTokens_Employees_ApproverEmployeeId");
         });
 
         OnModelCreatingPartial(modelBuilder);

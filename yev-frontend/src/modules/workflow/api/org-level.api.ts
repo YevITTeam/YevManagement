@@ -1,5 +1,10 @@
 import { api } from "@/lib/client";
-import type { OrgLevelDto, CreateUpdateOrgLevelDto } from "@/modules/workflow/types/org-level.dto";
+import type {
+    OrgLevelDto,
+    CreateUpdateOrgLevelDto,
+    OrgLevelJobTitleSuggestionDto,
+    ReplaceOrgLevelJobTitleSuggestionsDto,
+} from "@/modules/workflow/types/org-level.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 // Tiền tố "/Workflow" bắt buộc: BE dùng api/Workflow/[controller] để tránh trùng route với
@@ -12,6 +17,8 @@ const ENDPOINTS = {
         createOrgLevel: "/Workflow/OrgLevel",
         updateOrgLevel: (id: number) => `/Workflow/OrgLevel/${id}`,
         deleteOrgLevel: (id: number) => `/Workflow/OrgLevel/${id}`,
+        getJobTitleSuggestions: (id: number) => `/Workflow/OrgLevel/${id}/job-title-suggestions`,
+        replaceJobTitleSuggestions: (id: number) => `/Workflow/OrgLevel/${id}/job-title-suggestions`,
     },
 } as const;
 
@@ -59,6 +66,16 @@ export const OrgLevelApi = {
 
     deleteOrgLevel: async (id: number) => {
         const response = await api.delete<ApiResponse<boolean>>(ENDPOINTS.ORG_LEVEL.deleteOrgLevel(id));
+        return response.data;
+    },
+
+    getJobTitleSuggestions: async (id: number) => {
+        const response = await api.get<ApiResponse<OrgLevelJobTitleSuggestionDto[]>>(ENDPOINTS.ORG_LEVEL.getJobTitleSuggestions(id));
+        return response.data;
+    },
+
+    replaceJobTitleSuggestions: async (id: number, data: ReplaceOrgLevelJobTitleSuggestionsDto) => {
+        const response = await api.put<ApiResponse<OrgLevelJobTitleSuggestionDto[]>>(ENDPOINTS.ORG_LEVEL.replaceJobTitleSuggestions(id), data);
         return response.data;
     },
 };

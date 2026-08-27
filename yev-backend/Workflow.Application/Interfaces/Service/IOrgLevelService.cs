@@ -11,5 +11,7 @@ namespace Workflow.Application.Interfaces.Service
         Task<OrgLevelDto> CreateAsync(CreateOrgLevelDto request);
         Task UpdateAsync(UpdateOrgLevelDto request);
         Task DeleteAsync(int id);
+        Task<List<OrgLevelJobTitleSuggestionDto>> GetJobTitleSuggestionsAsync(int orgLevelId);
+        Task<List<OrgLevelJobTitleSuggestionDto>> ReplaceJobTitleSuggestionsAsync(int orgLevelId, ReplaceOrgLevelJobTitleSuggestionsDto request);
     }
 }

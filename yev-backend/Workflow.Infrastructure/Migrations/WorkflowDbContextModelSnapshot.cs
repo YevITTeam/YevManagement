@@ -797,6 +797,36 @@ namespace Workflow.Infrastructure.Migrations
                     b.ToTable("OrgLevels");
                 });
 
+            modelBuilder.Entity("Workflow.Domain.Entities.OrgLevelJobTitleSuggestion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("JobTitleId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OrgLevelId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobTitleId");
+
+                    b.HasIndex(new[] { "OrgLevelId", "JobTitleId" }, "IX_OrgLevelJobTitleSuggestions_OrgLevelId_JobTitleId")
+                        .IsUnique();
+
+                    b.ToTable("OrgLevelJobTitleSuggestions");
+                });
+
             modelBuilder.Entity("Workflow.Domain.Entities.OrgUnit", b =>
                 {
                     b.Property<int>("Id")
@@ -1011,6 +1041,49 @@ namespace Workflow.Infrastructure.Migrations
                         .HasFilter("[RequestCode] IS NOT NULL");
 
                     b.ToTable("WorkflowRequests");
+                });
+
+            modelBuilder.Entity("Workflow.Domain.Entities.WorkflowRequestEmailToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ApproverEmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("StepOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("WorkflowRequestId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApproverEmployeeId");
+
+                    b.HasIndex("WorkflowRequestId");
+
+                    b.HasIndex(new[] { "Token" }, "IX_WorkflowRequestEmailTokens_Token")
+                        .IsUnique();
+
+                    b.ToTable("WorkflowRequestEmailTokens");
                 });
 
             modelBuilder.Entity("Workflow.Domain.Entities.WorkflowRequestHistory", b =>
@@ -1470,6 +1543,27 @@ namespace Workflow.Infrastructure.Migrations
                     b.Navigation("FormDefinition");
                 });
 
+            modelBuilder.Entity("Workflow.Domain.Entities.OrgLevelJobTitleSuggestion", b =>
+                {
+                    b.HasOne("Workflow.Domain.Entities.JobTitle", "JobTitle")
+                        .WithMany("OrgLevelJobTitleSuggestions")
+                        .HasForeignKey("JobTitleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_OrgLevelJobTitleSuggestions_JobTitles_JobTitleId");
+
+                    b.HasOne("Workflow.Domain.Entities.OrgLevel", "OrgLevel")
+                        .WithMany("OrgLevelJobTitleSuggestions")
+                        .HasForeignKey("OrgLevelId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_OrgLevelJobTitleSuggestions_OrgLevels_OrgLevelId");
+
+                    b.Navigation("JobTitle");
+
+                    b.Navigation("OrgLevel");
+                });
+
             modelBuilder.Entity("Workflow.Domain.Entities.OrgUnit", b =>
                 {
                     b.HasOne("Workflow.Domain.Entities.OrgLevel", "OrgLevel")
@@ -1558,6 +1652,27 @@ namespace Workflow.Infrastructure.Migrations
                     b.Navigation("FormDefinition");
 
                     b.Navigation("FormRoute");
+                });
+
+            modelBuilder.Entity("Workflow.Domain.Entities.WorkflowRequestEmailToken", b =>
+                {
+                    b.HasOne("Workflow.Domain.Entities.Employee", "ApproverEmployee")
+                        .WithMany("ReceivedWorkflowRequestEmailTokens")
+                        .HasForeignKey("ApproverEmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkflowRequestEmailTokens_Employees_ApproverEmployeeId");
+
+                    b.HasOne("Workflow.Domain.Entities.WorkflowRequest", "WorkflowRequest")
+                        .WithMany("WorkflowRequestEmailTokens")
+                        .HasForeignKey("WorkflowRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkflowRequestEmailTokens_WorkflowRequests_WorkflowRequestId");
+
+                    b.Navigation("ApproverEmployee");
+
+                    b.Navigation("WorkflowRequest");
                 });
 
             modelBuilder.Entity("Workflow.Domain.Entities.WorkflowRequestHistory", b =>
@@ -1668,6 +1783,8 @@ namespace Workflow.Infrastructure.Migrations
 
                     b.Navigation("PendingEmployeeSignatureConfirmations");
 
+                    b.Navigation("ReceivedWorkflowRequestEmailTokens");
+
                     b.Navigation("UpdatedFormDefinitions");
 
                     b.Navigation("UploadedWorkflowAttachments");
@@ -1724,10 +1841,14 @@ namespace Workflow.Infrastructure.Migrations
                     b.Navigation("EmployeeOrgUnits");
 
                     b.Navigation("FormApprovalStepParticipants");
+
+                    b.Navigation("OrgLevelJobTitleSuggestions");
                 });
 
             modelBuilder.Entity("Workflow.Domain.Entities.OrgLevel", b =>
                 {
+                    b.Navigation("OrgLevelJobTitleSuggestions");
+
                     b.Navigation("OrgUnits");
                 });
 
@@ -1749,6 +1870,8 @@ namespace Workflow.Infrastructure.Migrations
             modelBuilder.Entity("Workflow.Domain.Entities.WorkflowRequest", b =>
                 {
                     b.Navigation("WorkflowAttachments");
+
+                    b.Navigation("WorkflowRequestEmailTokens");
 
                     b.Navigation("WorkflowRequestHistories");
 

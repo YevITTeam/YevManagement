@@ -208,3 +208,13 @@ export interface AddApproverRequestDto {
 export interface CancelRequestDto {
     reason: string | null;
 }
+
+// Pha 4C: duyệt qua email — không có OnBehalfOfEmployeeId (không ủy quyền qua kênh email) và không có
+// SignatureImageBase64 (chữ ký tự lấy từ EmployeeSignatures nếu bước yêu cầu, BE tự xử lý).
+export interface EmailApproveRequestDto {
+    comment: string | null;
+}
+
+export interface EmailRejectRequestDto {
+    comment: string;
+}
