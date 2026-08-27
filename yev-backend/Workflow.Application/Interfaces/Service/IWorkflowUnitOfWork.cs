@@ -10,6 +10,7 @@ namespace Workflow.Application.Interfaces.Service
         IJobTitleRepository JobTitles { get; }
         IEmployeeRepository Employees { get; }
         IEmployeeOrgUnitRepository EmployeeOrgUnits { get; }
+        IOrgLevelJobTitleSuggestionRepository OrgLevelJobTitleSuggestions { get; }
         IFormCategoryRepository FormCategories { get; }
         IFormCategoryCoordinatorRepository FormCategoryCoordinators { get; }
         IFormDataSourceRepository FormDataSources { get; }

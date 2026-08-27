@@ -911,7 +911,17 @@
       "deleteSuccess": "Xoá cấp tổ chức thành công",
       "deleteError": "Xoá cấp tổ chức thất bại",
       "deleteTitle": "Xoá cấp tổ chức",
-      "deleteMessage": "Bạn có chắc muốn xoá cấp tổ chức <b>{name}</b> không? Hành động này không thể hoàn tác."
+      "deleteMessage": "Bạn có chắc muốn xoá cấp tổ chức <b>{name}</b> không? Hành động này không thể hoàn tác.",
+      "jobTitleSuggestionsButton": "Chức danh gợi ý",
+      "jobTitleSuggestionsTitle": "Chức danh gợi ý theo cấp",
+      "jobTitleSuggestionsHint": "Chỉ dùng để tự chọn sẵn khi gán nhân sự từ Cây tổ chức — người dùng vẫn chọn tự do toàn bộ chức danh khác nếu cần.",
+      "jobTitleSuggestionsEmpty": "Chưa có chức danh gợi ý nào cho cấp này.",
+      "jobTitleSuggestionsAddLabel": "Thêm chức danh",
+      "jobTitleSuggestionsMoveUp": "Chuyển lên",
+      "jobTitleSuggestionsMoveDown": "Chuyển xuống",
+      "jobTitleSuggestionsLoadError": "Không thể tải chức danh gợi ý.",
+      "jobTitleSuggestionsSaveSuccess": "Cập nhật chức danh gợi ý thành công",
+      "jobTitleSuggestionsSaveError": "Cập nhật chức danh gợi ý thất bại"
     },
     "OrgUnit": {
       "title": "Cây tổ chức",
@@ -944,7 +954,21 @@
       "deleteSuccess": "Xoá đơn vị tổ chức thành công",
       "deleteError": "Xoá đơn vị tổ chức thất bại",
       "deleteTitle": "Xoá đơn vị tổ chức",
-      "deleteMessage": "Bạn có chắc muốn xoá đơn vị <b>{name}</b> không? Hành động này không thể hoàn tác."
+      "deleteMessage": "Bạn có chắc muốn xoá đơn vị <b>{name}</b> không? Hành động này không thể hoàn tác.",
+      "assignMemberTitle": "Gán nhân sự vào đơn vị",
+      "assignMemberFieldEmployee": "Nhân sự",
+      "assignMemberFieldEmployeePlaceholder": "Chọn nhân sự...",
+      "assignMemberFieldJobTitle": "Chức danh",
+      "assignMemberFieldJobTitleNoJobTitle": "— Không có chức danh —",
+      "assignMemberFieldJobTitleSuggestedGroup": "Gợi ý cho cấp này",
+      "assignMemberFieldJobTitleAllGroup": "Toàn bộ chức danh",
+      "assignMemberFieldPrimary": "Đơn vị chính",
+      "assignMemberEmployeeRequired": "Vui lòng chọn nhân sự.",
+      "assignMemberLoadError": "Không thể tải dữ liệu để gán nhân sự.",
+      "assignMemberSaveSuccess": "Gán nhân sự vào đơn vị thành công",
+      "assignMemberSaveError": "Gán nhân sự vào đơn vị thất bại",
+      "assignMemberDuplicateError": "Nhân sự này đã được gán đúng đơn vị/chức danh này.",
+      "treeMemberNoJobTitle": "Không chức danh"
     },
     "JobTitle": {
       "title": "Chức danh",

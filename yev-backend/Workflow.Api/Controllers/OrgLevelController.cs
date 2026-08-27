@@ -65,5 +65,21 @@ namespace Workflow.Api.Controllers
             await _orgLevelService.DeleteAsync(id);
             return Success(true, "Xóa cấp tổ chức thành công.");
         }
+
+        [RequirePermission("Workflow.Organization.View")]
+        [HttpGet("{id}/job-title-suggestions")]
+        public async Task<ActionResult<ApiResponse<List<OrgLevelJobTitleSuggestionDto>>>> GetJobTitleSuggestions(int id)
+        {
+            var result = await _orgLevelService.GetJobTitleSuggestionsAsync(id);
+            return Success(result);
+        }
+
+        [RequirePermission("Workflow.Organization.Manage")]
+        [HttpPut("{id}/job-title-suggestions")]
+        public async Task<ActionResult<ApiResponse<List<OrgLevelJobTitleSuggestionDto>>>> ReplaceJobTitleSuggestions(int id, [FromBody] ReplaceOrgLevelJobTitleSuggestionsDto request)
+        {
+            var result = await _orgLevelService.ReplaceJobTitleSuggestionsAsync(id, request);
+            return Success(result, "Cập nhật chức danh gợi ý thành công.");
+        }
     }
 }

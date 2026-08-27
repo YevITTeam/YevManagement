@@ -101,5 +101,59 @@ namespace Workflow.Application.Services
             _unitOfWork.OrgLevels.Update(entity);
             await _unitOfWork.SaveChangesAsync();
         }
+
+        public async Task<List<OrgLevelJobTitleSuggestionDto>> GetJobTitleSuggestionsAsync(int orgLevelId)
+        {
+            (await _unitOfWork.OrgLevels.GetByIdAsync(orgLevelId)).OrThrowNotFound("Cấp tổ chức", orgLevelId);
+
+            var items = await _unitOfWork.OrgLevelJobTitleSuggestions.FindWithIncludesAsync(
+                x => x.OrgLevelId == orgLevelId && !x.IsDeleted,
+                x => x.JobTitle);
+
+            return items
+                .OrderBy(x => x.SortOrder)
+                .Select(x => new OrgLevelJobTitleSuggestionDto
+                {
+                    JobTitleId = x.JobTitleId,
+                    JobTitleCode = x.JobTitle.Code,
+                    JobTitleNameVn = x.JobTitle.NameVn,
+                    JobTitleNameJp = x.JobTitle.NameJp,
+                    SortOrder = x.SortOrder
+                })
+                .ToList();
+        }
+
+        public async Task<List<OrgLevelJobTitleSuggestionDto>> ReplaceJobTitleSuggestionsAsync(int orgLevelId, ReplaceOrgLevelJobTitleSuggestionsDto request)
+        {
+            (await _unitOfWork.OrgLevels.GetByIdAsync(orgLevelId)).OrThrowNotFound("Cấp tổ chức", orgLevelId);
+
+            var distinctJobTitleIds = request.JobTitleIds.Distinct().ToList();
+
+            foreach (var jobTitleId in distinctJobTitleIds)
+            {
+                (await _unitOfWork.JobTitles.GetByIdAsync(jobTitleId)).OrThrowNotFound("Chức danh", jobTitleId);
+            }
+
+            var existing = await _unitOfWork.OrgLevelJobTitleSuggestions.FindAsync(x => x.OrgLevelId == orgLevelId && !x.IsDeleted);
+            foreach (var item in existing)
+            {
+                _unitOfWork.OrgLevelJobTitleSuggestions.Delete(item);
+            }
+
+            var newItems = distinctJobTitleIds
+                .Select((jobTitleId, index) => new OrgLevelJobTitleSuggestion
+                {
+                    OrgLevelId = orgLevelId,
+                    JobTitleId = jobTitleId,
+                    SortOrder = index,
+                    IsDeleted = false
+                })
+                .ToList();
+
+            await _unitOfWork.OrgLevelJobTitleSuggestions.AddRangeAsync(newItems);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetJobTitleSuggestionsAsync(orgLevelId);
+        }
     }
 }

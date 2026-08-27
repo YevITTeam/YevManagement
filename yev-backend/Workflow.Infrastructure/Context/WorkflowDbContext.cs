@@ -21,6 +21,7 @@ public partial class WorkflowDbContext : DbContext
     public virtual DbSet<JobTitle> JobTitles { get; set; }
     public virtual DbSet<Employee> Employees { get; set; }
     public virtual DbSet<EmployeeOrgUnit> EmployeeOrgUnits { get; set; }
+    public virtual DbSet<OrgLevelJobTitleSuggestion> OrgLevelJobTitleSuggestions { get; set; }
     public virtual DbSet<FormCategory> FormCategories { get; set; }
     public virtual DbSet<FormCategoryCoordinator> FormCategoryCoordinators { get; set; }
     public virtual DbSet<FormDataSource> FormDataSources { get; set; }
@@ -120,6 +121,21 @@ public partial class WorkflowDbContext : DbContext
                 .HasForeignKey(d => d.JobTitleId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_EmployeeOrgUnits_JobTitles_JobTitleId");
+        });
+
+        modelBuilder.Entity<OrgLevelJobTitleSuggestion>(entity =>
+        {
+            entity.HasIndex(e => new { e.OrgLevelId, e.JobTitleId }, "IX_OrgLevelJobTitleSuggestions_OrgLevelId_JobTitleId").IsUnique();
+
+            entity.HasOne(d => d.OrgLevel).WithMany(p => p.OrgLevelJobTitleSuggestions)
+                .HasForeignKey(d => d.OrgLevelId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OrgLevelJobTitleSuggestions_OrgLevels_OrgLevelId");
+
+            entity.HasOne(d => d.JobTitle).WithMany(p => p.OrgLevelJobTitleSuggestions)
+                .HasForeignKey(d => d.JobTitleId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OrgLevelJobTitleSuggestions_JobTitles_JobTitleId");
         });
 
         modelBuilder.Entity<FormCategory>(entity =>

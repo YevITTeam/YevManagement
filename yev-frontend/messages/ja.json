@@ -910,7 +910,17 @@
       "deleteSuccess": "組織階層を削除しました",
       "deleteError": "組織階層の削除に失敗しました",
       "deleteTitle": "組織階層を削除",
-      "deleteMessage": "組織階層 <b>{name}</b> を削除してもよろしいですか？この操作は取り消せません。"
+      "deleteMessage": "組織階層 <b>{name}</b> を削除してもよろしいですか？この操作は取り消せません。",
+      "jobTitleSuggestionsButton": "推奨役職",
+      "jobTitleSuggestionsTitle": "階層別の推奨役職",
+      "jobTitleSuggestionsHint": "組織図から人員を割り当てる際に初期選択されるだけです — 他の役職も自由に選択できます。",
+      "jobTitleSuggestionsEmpty": "この階層にはまだ推奨役職がありません。",
+      "jobTitleSuggestionsAddLabel": "役職を追加",
+      "jobTitleSuggestionsMoveUp": "上へ移動",
+      "jobTitleSuggestionsMoveDown": "下へ移動",
+      "jobTitleSuggestionsLoadError": "推奨役職を読み込めませんでした。",
+      "jobTitleSuggestionsSaveSuccess": "推奨役職を更新しました",
+      "jobTitleSuggestionsSaveError": "推奨役職の更新に失敗しました"
     },
     "OrgUnit": {
       "title": "組織図",
@@ -943,7 +953,21 @@
       "deleteSuccess": "組織単位を削除しました",
       "deleteError": "組織単位の削除に失敗しました",
       "deleteTitle": "組織単位を削除",
-      "deleteMessage": "組織単位 <b>{name}</b> を削除してもよろしいですか？この操作は取り消せません。"
+      "deleteMessage": "組織単位 <b>{name}</b> を削除してもよろしいですか？この操作は取り消せません。",
+      "assignMemberTitle": "組織単位に人員を割り当て",
+      "assignMemberFieldEmployee": "社員",
+      "assignMemberFieldEmployeePlaceholder": "社員を選択...",
+      "assignMemberFieldJobTitle": "役職",
+      "assignMemberFieldJobTitleNoJobTitle": "— 役職なし —",
+      "assignMemberFieldJobTitleSuggestedGroup": "この階層の推奨役職",
+      "assignMemberFieldJobTitleAllGroup": "すべての役職",
+      "assignMemberFieldPrimary": "主所属",
+      "assignMemberEmployeeRequired": "社員を選択してください。",
+      "assignMemberLoadError": "割り当てに必要なデータを読み込めませんでした。",
+      "assignMemberSaveSuccess": "人員を組織単位に割り当てました",
+      "assignMemberSaveError": "人員の割り当てに失敗しました",
+      "assignMemberDuplicateError": "この社員はすでに同じ組織単位・役職に割り当てられています。",
+      "treeMemberNoJobTitle": "役職なし"
     },
     "JobTitle": {
       "title": "役職管理",

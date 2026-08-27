@@ -10,3 +10,15 @@ export interface CreateUpdateOrgLevelDto {
     nameVn: string;
     nameJp: string | null;
 }
+
+export interface OrgLevelJobTitleSuggestionDto {
+    jobTitleId: number;
+    jobTitleCode: string;
+    jobTitleNameVn: string;
+    jobTitleNameJp: string | null;
+    sortOrder: number;
+}
+
+export interface ReplaceOrgLevelJobTitleSuggestionsDto {
+    jobTitleIds: number[];
+}

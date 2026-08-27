@@ -9,6 +9,7 @@ namespace Workflow.Application.Dtos.OrgUnits
         public string? NameJp { get; set; }
         public int OrgLevelId { get; set; }
         public int SortOrder { get; set; }
+        public List<OrgUnitTreeMemberDto> Members { get; set; } = new();
         public List<OrgUnitTreeDto> Children { get; set; } = new();
     }
 }

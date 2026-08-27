@@ -14,6 +14,7 @@ namespace Workflow.Infrastructure.Repositories
             IJobTitleRepository jobTitles,
             IEmployeeRepository employees,
             IEmployeeOrgUnitRepository employeeOrgUnits,
+            IOrgLevelJobTitleSuggestionRepository orgLevelJobTitleSuggestions,
             IFormCategoryRepository formCategories,
             IFormCategoryCoordinatorRepository formCategoryCoordinators,
             IFormDataSourceRepository formDataSources,
@@ -41,6 +42,7 @@ namespace Workflow.Infrastructure.Repositories
             JobTitles = jobTitles;
             Employees = employees;
             EmployeeOrgUnits = employeeOrgUnits;
+            OrgLevelJobTitleSuggestions = orgLevelJobTitleSuggestions;
             FormCategories = formCategories;
             FormCategoryCoordinators = formCategoryCoordinators;
             FormDataSources = formDataSources;
@@ -69,6 +71,7 @@ namespace Workflow.Infrastructure.Repositories
         public IJobTitleRepository JobTitles { get; }
         public IEmployeeRepository Employees { get; }
         public IEmployeeOrgUnitRepository EmployeeOrgUnits { get; }
+        public IOrgLevelJobTitleSuggestionRepository OrgLevelJobTitleSuggestions { get; }
         public IFormCategoryRepository FormCategories { get; }
         public IFormCategoryCoordinatorRepository FormCategoryCoordinators { get; }
         public IFormDataSourceRepository FormDataSources { get; }

@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { OrgLevelApi } from "@/modules/workflow/api/org-level.api";
 import type { OrgLevelDto } from "@/modules/workflow/types/org-level.dto";
 import OrgLevelForm, { type OrgLevelFormValues } from "./OrgLevelForm";
+import OrgLevelJobTitleSuggestionsDialog from "./OrgLevelJobTitleSuggestionsDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -29,6 +30,8 @@ export default function OrgLevelList() {
 
     const [deletingItem, setDeletingItem] = useState<OrgLevelDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    const [suggestionsFor, setSuggestionsFor] = useState<OrgLevelDto | null>(null);
 
     const { isLoading, error, refetch: fetchOrgLevels } = useFetchEffect(
         () => OrgLevelApi.getAllOrgLevels(),
@@ -152,6 +155,12 @@ export default function OrgLevelList() {
                                         <td className="px-6 py-4 text-right text-sm">
                                             <div className="inline-flex items-center gap-3">
                                                 <button
+                                                    onClick={() => setSuggestionsFor(item)}
+                                                    className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                >
+                                                    {t("jobTitleSuggestionsButton")}
+                                                </button>
+                                                <button
                                                     onClick={() => openEditForm(item)}
                                                     className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
                                                 >
@@ -197,6 +206,10 @@ export default function OrgLevelList() {
                     if (!isDeleting) setDeletingItem(null);
                 }}
             />
+
+            {suggestionsFor && (
+                <OrgLevelJobTitleSuggestionsDialog orgLevel={suggestionsFor} onClose={() => setSuggestionsFor(null)} />
+            )}
         </div>
     );
 }
