@@ -55,6 +55,16 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleDateString("vi-VN");
 }
 
+// Tăng số cuối của mã thiết bị (vd "YDC-1877" -> "YDC-1878") để gợi ý mã cho máy nhân bản,
+// giữ nguyên số chữ số đệm 0. Mã không có đuôi số thì trả nguyên văn — người dùng tự sửa.
+function incrementDeviceCode(code: string): string {
+  const match = code.match(/^(.*?)(\d+)$/);
+  if (!match) return code;
+  const [, prefix, digits] = match;
+  const nextDigits = String(Number(digits) + 1).padStart(digits.length, "0");
+  return `${prefix}${nextDigits}`;
+}
+
 // Bảng thiết bị có nhiều dòng cao thấp khác nhau (IP/email nhiều dòng) nên không dùng
 // công thức "số dòng x chiều cao 1 dòng" như bảng IP; cố định chiều cao khung cuộn để
 // danh sách gọn trong màn hình, giống cách IpAddressList giới hạn maxHeight cho khung bảng.
@@ -266,6 +276,30 @@ export default function DeviceList() {
       const detail = await DeviceApi.getDeviceById(device.id);
       setFormMode("edit");
       setEditingDevice(detail);
+      setFormOpen(true);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Không thể tải thông tin thiết bị."));
+    } finally {
+      setIsLoadingEditTarget(false);
+    }
+  };
+
+  // Nhân bản: mở form tạo mới, điền sẵn toàn bộ thông tin máy nguồn TRỪ IP/số serial/người quản
+  // lý/email (theo yêu cầu nghiệp vụ — các field này đặc thù riêng cho từng máy vật lý), mã thiết
+  // bị gợi ý tự tăng để người dùng dễ chỉnh.
+  const openDuplicateForm = async (device: DeviceDto) => {
+    setIsLoadingEditTarget(true);
+    try {
+      const detail = await DeviceApi.getDeviceById(device.id);
+      setFormMode("create");
+      setEditingDevice({
+        ...detail,
+        deviceCode: incrementDeviceCode(detail.deviceCode),
+        manager: "",
+        serialNumber: "",
+        emails: [],
+        ipAddresses: [],
+      });
       setFormOpen(true);
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Không thể tải thông tin thiết bị."));
@@ -579,6 +613,7 @@ export default function DeviceList() {
                         actions={[
                           { label: "Chi tiết", onClick: () => router.push({ pathname: "/pc/devices", query: { id: String(device.id) } }) },
                           { label: "Sửa", onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
+                          { label: "Nhân bản", onClick: () => openDuplicateForm(device), disabled: isLoadingEditTarget },
                           {
                             label: "Chuyển máy",
                             onClick: () => {
