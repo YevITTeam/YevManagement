@@ -1,10 +1,15 @@
 "use client";
 
-import { ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
+import { useState } from "react";
+import { ArrowUp, ArrowDown, Trash2, Plus, ListTree } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { toast } from "react-toastify";
 import { RouteConditionType } from "@/modules/workflow/types/form-definition.dto";
-import type { SelectOption } from "@/components/ui/SearchableSelect";
-import { createDefaultStep, type EditableRoute } from "./editableRoute";
+import { OrgUnitScope, ParticipantRole, ParticipantSource } from "@/modules/workflow/types/form-route.dto";
+import { OrgLevelApi } from "@/modules/workflow/api/org-level.api";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import type { OrgUnitAncestorInfo } from "./FormApprovalRoutesPanel";
+import { createDefaultParticipant, createDefaultStep, type EditableRoute, type EditableStep } from "./editableRoute";
 import StepCard from "./StepCard";
 
 interface RouteCardProps {
@@ -13,6 +18,7 @@ interface RouteCardProps {
     totalRoutes: number;
     routeConditionType: RouteConditionType;
     orgUnitOptions: SelectOption[];
+    orgUnitsById: Map<number, OrgUnitAncestorInfo>;
     employeeOptions: SelectOption[];
     jobTitleOptions: SelectOption[];
     onChange: (patch: Partial<EditableRoute>) => void;
@@ -31,6 +37,7 @@ export default function RouteCard({
     totalRoutes,
     routeConditionType,
     orgUnitOptions,
+    orgUnitsById,
     employeeOptions,
     jobTitleOptions,
     onChange,
@@ -39,11 +46,72 @@ export default function RouteCard({
     onRemove,
 }: RouteCardProps) {
     const t = useTranslations("Workflow.FormDefinition");
+    const [autoFillFromId, setAutoFillFromId] = useState<number | "">("");
+    const [autoFillToId, setAutoFillToId] = useState<number | "">("");
+    const [isAutoFilling, setIsAutoFilling] = useState(false);
 
     const showNumericRange = routeConditionType === RouteConditionType.NumericRange || routeConditionType === RouteConditionType.Both;
     const showClassValue = routeConditionType === RouteConditionType.ClassValue || routeConditionType === RouteConditionType.Both;
 
     const addStep = () => onChange({ steps: [...route.steps, createDefaultStep(t("stepDefaultName", { order: route.steps.length + 1 }))] });
+
+    // Trợ giúp — KHÔNG thay cho luật chặn lưu ở BE (workflow-module.md §5.x): tự điền sẵn 1 bước
+    // Fixed cho MỖI đơn vị tổ tiên từ "Từ đơn vị" lên "Đến đơn vị" theo đúng cây tổ chức thật (đi
+    // ngược ParentId qua orgUnitsById), lấy chức danh gợi ý đầu tiên của từng cấp làm mặc định — người
+    // dùng vẫn sửa/xoá tự do trước khi Lưu, giữ đúng tinh thần "gợi ý không ép".
+    const autoFillChain = async () => {
+        if (autoFillFromId === "" || autoFillToId === "") return;
+
+        const chain: number[] = [];
+        let cursor: number | null = autoFillFromId;
+        while (cursor !== null) {
+            chain.push(cursor);
+            cursor = orgUnitsById.get(cursor)?.parentId ?? null;
+        }
+        const toPos = chain.indexOf(autoFillToId);
+        if (toPos === -1) {
+            toast.error(t("autoFillNotAncestor"));
+            return;
+        }
+        const requiredChain = chain.slice(0, toPos + 1);
+
+        const existingOrgUnitIds = new Set(
+            route.steps.filter((s) => s.orgUnitScope === OrgUnitScope.Fixed && s.orgUnitId !== null).map((s) => s.orgUnitId)
+        );
+
+        setIsAutoFilling(true);
+        try {
+            const newSteps: EditableStep[] = [];
+            for (const unitId of requiredChain) {
+                if (existingOrgUnitIds.has(unitId)) continue;
+                const unit = orgUnitsById.get(unitId);
+                if (!unit) continue;
+
+                const suggestions = await OrgLevelApi.getJobTitleSuggestions(unit.orgLevelId);
+                const step = createDefaultStep(unit.nameVn);
+                step.orgUnitScope = OrgUnitScope.Fixed;
+                step.orgUnitId = unitId;
+                step.participants = [
+                    {
+                        ...createDefaultParticipant(),
+                        participantSource: ParticipantSource.JobTitle,
+                        jobTitleId: suggestions[0]?.jobTitleId ?? null,
+                        participantRole: ParticipantRole.Approver,
+                    },
+                ];
+                newSteps.push(step);
+            }
+
+            if (newSteps.length === 0) {
+                toast.info(t("autoFillChainNoneToAdd"));
+            } else {
+                onChange({ steps: [...route.steps, ...newSteps] });
+                toast.success(t("autoFillChainSuccess", { count: newSteps.length }));
+            }
+        } finally {
+            setIsAutoFilling(false);
+        }
+    };
     const updateStep = (clientId: string, patch: Partial<EditableRoute["steps"][number]>) =>
         onChange({ steps: route.steps.map((s) => (s.clientId === clientId ? { ...s, ...patch } : s)) });
     const removeStep = (clientId: string) => onChange({ steps: route.steps.filter((s) => s.clientId !== clientId) });
@@ -124,6 +192,37 @@ export default function RouteCard({
                     <span className="text-xs font-semibold uppercase text-[#8a8f94]">{t("stepsTitle")}</span>
                     <button type="button" onClick={addStep} className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1 text-xs font-semibold text-[#191c1e] hover:bg-[#f2f4f6]">
                         <Plus className="h-3.5 w-3.5" /> {t("addStep")}
+                    </button>
+                </div>
+
+                <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-[#e0e3e5] bg-[#f8fafc] p-2.5">
+                    <div className="min-w-[180px] flex-1">
+                        <span className={labelClassName}>{t("autoFillChainFromLabel")}</span>
+                        <SearchableSelect
+                            options={orgUnitOptions}
+                            value={autoFillFromId}
+                            onChange={(v) => setAutoFillFromId(v === "" ? "" : Number(v))}
+                            placeholder={t("stepOrgUnitPlaceholder")}
+                            triggerClassName={fieldClassName}
+                        />
+                    </div>
+                    <div className="min-w-[180px] flex-1">
+                        <span className={labelClassName}>{t("autoFillChainToLabel")}</span>
+                        <SearchableSelect
+                            options={orgUnitOptions}
+                            value={autoFillToId}
+                            onChange={(v) => setAutoFillToId(v === "" ? "" : Number(v))}
+                            placeholder={t("stepOrgUnitPlaceholder")}
+                            triggerClassName={fieldClassName}
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        onClick={autoFillChain}
+                        disabled={autoFillFromId === "" || autoFillToId === "" || isAutoFilling}
+                        className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <ListTree className="h-3.5 w-3.5" /> {isAutoFilling ? t("saving") : t("autoFillChainButton")}
                     </button>
                 </div>
 

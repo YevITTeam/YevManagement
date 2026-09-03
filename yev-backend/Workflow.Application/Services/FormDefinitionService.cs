@@ -581,6 +581,8 @@ namespace Workflow.Application.Services
                 {
                     await GuardStepAsync(stepItem);
                 }
+
+                await GuardOrgLevelChainAsync(routeItem.NameVn, routeItem.Steps);
             }
 
             var duplicateClassValue = request.Items
@@ -787,6 +789,84 @@ namespace Workflow.Application.Services
 
                     if (!seen.Add((2, participant.JobTitleId.Value)))
                         throw new DomainException($"Bước '{step.NameVn}' có chức danh bị lặp lại trong danh sách người duyệt.");
+                }
+            }
+        }
+
+        // "Duyệt đủ cấp tổ chức" (workflow-module.md §5.x, chốt 2026-08-29) — KHÔNG phải suy luận
+        // runtime (§1.6 vẫn giữ nguyên, ResolveStepParticipantsAsync §5.5 không đổi gì): đây thuần là
+        // ràng buộc lúc LƯU cấu hình route. Chỉ xét bước OrgUnitScope=Fixed (có OrgUnitId cụ thể ngay
+        // lúc thiết kế) — bước ApplicantUnit không có đơn vị xác định trước khi nộp đơn nên bỏ qua.
+        // Nếu route có ≥2 bước Fixed nằm trên CÙNG 1 nhánh cha-con của cây tổ chức, bắt buộc đủ bước
+        // cho MỌI đơn vị tổ tiên nằm giữa 2 đầu, và thứ tự bước phải tăng dần từ đơn vị sâu (cấp thấp)
+        // lên đơn vị cao. 2 bước Fixed KHÔNG có quan hệ tổ tiên-con cháu (vd 2 phòng ban duyệt song
+        // song) bị bỏ qua — không phải lỗi cấu hình.
+        private async Task GuardOrgLevelChainAsync(string routeName, List<ReplaceFormApprovalStepItemDto> steps)
+        {
+            var fixedSteps = steps
+                .Select((s, index) => (Step: s, Index: index))
+                .Where(x => x.Step.OrgUnitScope == OrgUnitScope.Fixed && x.Step.OrgUnitId is not null)
+                .ToList();
+
+            if (fixedSteps.Count < 2)
+                return;
+
+            var allUnits = (await _unitOfWork.OrgUnits.SelectAsync(
+                x => !x.IsDeleted,
+                x => new { x.Id, x.ParentId, x.OrgLevelId, x.NameVn })).ToDictionary(x => x.Id);
+            var allLevels = (await _unitOfWork.OrgLevels.SelectAsync(
+                x => !x.IsDeleted,
+                x => new { x.Id, x.LevelNumber })).ToDictionary(x => x.Id);
+
+            var deepest = fixedSteps
+                .OrderByDescending(x => allLevels[allUnits[x.Step.OrgUnitId!.Value].OrgLevelId].LevelNumber)
+                .First();
+
+            var chainUnitIds = new List<int>();
+            int? cursor = deepest.Step.OrgUnitId!.Value;
+            var guard = 0;
+            while (cursor is not null && guard++ < 50)
+            {
+                chainUnitIds.Add(cursor.Value);
+                cursor = allUnits[cursor.Value].ParentId;
+            }
+
+            var otherFixedOnChain = fixedSteps
+                .Where(x => x.Index != deepest.Index && chainUnitIds.Contains(x.Step.OrgUnitId!.Value))
+                .ToList();
+            if (otherFixedOnChain.Count == 0)
+                return;
+
+            var topOnChain = otherFixedOnChain
+                .OrderBy(x => allLevels[allUnits[x.Step.OrgUnitId!.Value].OrgLevelId].LevelNumber)
+                .First();
+
+            var deepPos = chainUnitIds.IndexOf(deepest.Step.OrgUnitId!.Value);
+            var topPos = chainUnitIds.IndexOf(topOnChain.Step.OrgUnitId!.Value);
+            var requiredChain = chainUnitIds.Skip(deepPos).Take(topPos - deepPos + 1).ToList();
+
+            var fixedUnitIdsInRoute = fixedSteps.Select(x => x.Step.OrgUnitId!.Value).ToHashSet();
+            var missing = requiredChain.Where(id => !fixedUnitIdsInRoute.Contains(id)).ToList();
+            if (missing.Count > 0)
+            {
+                var missingNames = string.Join(", ", missing.Select(id => $"'{allUnits[id].NameVn}'"));
+                throw new DomainException(
+                    $"Nhánh '{routeName}': đã chọn duyệt tới cấp '{allUnits[topOnChain.Step.OrgUnitId!.Value].NameVn}' " +
+                    $"nhưng còn thiếu bước duyệt ở (các) đơn vị trung gian: {missingNames}. Phải duyệt đủ từng cấp từ " +
+                    $"'{allUnits[deepest.Step.OrgUnitId!.Value].NameVn}' lên tới " +
+                    $"'{allUnits[topOnChain.Step.OrgUnitId!.Value].NameVn}', không được bỏ qua cấp nào.");
+            }
+
+            var stepIndexByUnitId = fixedSteps.ToDictionary(x => x.Step.OrgUnitId!.Value, x => x.Index);
+            for (var i = 0; i + 1 < requiredChain.Count; i++)
+            {
+                var lowerIndex = stepIndexByUnitId[requiredChain[i]];
+                var upperIndex = stepIndexByUnitId[requiredChain[i + 1]];
+                if (lowerIndex >= upperIndex)
+                {
+                    throw new DomainException(
+                        $"Nhánh '{routeName}': bước duyệt của đơn vị '{allUnits[requiredChain[i]].NameVn}' phải đứng " +
+                        $"TRƯỚC bước duyệt của đơn vị cấp trên '{allUnits[requiredChain[i + 1]].NameVn}' (duyệt từ dưới lên).");
                 }
             }
         }
