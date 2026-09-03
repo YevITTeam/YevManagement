@@ -155,7 +155,11 @@ function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, str
     .row {
       display: flex;
       align-items: center;
-      justify-content: center;
+      /* flex-start (không phải center): hàng đủ 2 tem thì content vừa khít bề rộng trang nên 2 cách
+         cho cùng kết quả, nhưng hàng lẻ (chỉ còn 1 tem cuối) phải nằm ở vị trí tem 1 (bên trái) để
+         khớp đúng vị trí vật lý của decal trên máy in Zebra — center sẽ đẩy nó ra giữa trang, lệch
+         khỏi decal đã cắt sẵn. */
+      justify-content: flex-start;
       width: ${ZEBRA_PAGE_WIDTH_CM}cm;
       height: ${ZEBRA_PAGE_HEIGHT_CM}cm;
       gap: ${ZEBRA_ROW_GAP_CM}cm;
@@ -173,9 +177,9 @@ function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, str
       text-align: left;
     }
     .qr { width: 1.8cm; height: 1.8cm; flex: none; }
-    .text { max-width: 2.8cm; overflow: hidden; }
+    .text { max-width: 2.8cm; }
     .code { font-size: 14px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .serial { font-size: 11px; font-weight: 700; color: #555; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .serial { font-size: 10px; font-weight: 700; color: #555; margin-top: 3px; line-height: 1.15; white-space: normal; overflow-wrap: anywhere; word-break: break-all; }
   </style>
 </head>
 <body>
