@@ -33,6 +33,21 @@ function flattenOrgUnits(nodes: OrgUnitTreeDto[], depth = 0): SelectOption[] {
     return result;
 }
 
+export interface OrgUnitAncestorInfo {
+    parentId: number | null;
+    orgLevelId: number;
+    nameVn: string;
+}
+
+// Map tra cứu ParentId — cây gốc (OrgUnitTreeDto) không mang ParentId (chỉ có children lồng nhau),
+// nên phải tự dựng lúc duyệt đệ quy để nút "Điền chuỗi duyệt" đi ngược lên cây tổ chức được.
+function buildOrgUnitsById(nodes: OrgUnitTreeDto[], parentId: number | null, acc: Map<number, OrgUnitAncestorInfo>): void {
+    for (const node of nodes) {
+        acc.set(node.id, { parentId, orgLevelId: node.orgLevelId, nameVn: node.nameVn });
+        buildOrgUnitsById(node.children, node.id, acc);
+    }
+}
+
 // Cấu hình nhánh + bước duyệt + người duyệt (workflow-module.md §3.2 FormRoutes/FormApprovalSteps/
 // FormApprovalStepParticipants) — thuần cấu hình, CHƯA nộp được đơn thật (Pha 3B). Không autosave,
 // mirror mọi panel khác trong module: 1 nút "Lưu thay đổi" gửi lại TOÀN BỘ cây nhánh+bước+người.
@@ -40,6 +55,7 @@ export default function FormApprovalRoutesPanel({ formDefinitionId, routeConditi
     const t = useTranslations("Workflow.FormDefinition");
     const [routes, setRoutes] = useState<EditableRoute[]>([]);
     const [orgUnitOptions, setOrgUnitOptions] = useState<SelectOption[]>([]);
+    const [orgUnitsById, setOrgUnitsById] = useState<Map<number, OrgUnitAncestorInfo>>(new Map());
     const [employeeOptions, setEmployeeOptions] = useState<SelectOption[]>([]);
     const [jobTitleOptions, setJobTitleOptions] = useState<SelectOption[]>([]);
     const [isSaving, setIsSaving] = useState(false);
@@ -58,6 +74,9 @@ export default function FormApprovalRoutesPanel({ formDefinitionId, routeConditi
         (result) => {
             setRoutes(result.routeList.map(fromRouteDto));
             setOrgUnitOptions(flattenOrgUnits(result.orgUnitTree));
+            const ancestorMap = new Map<number, OrgUnitAncestorInfo>();
+            buildOrgUnitsById(result.orgUnitTree, null, ancestorMap);
+            setOrgUnitsById(ancestorMap);
             setEmployeeOptions(
                 result.employees
                     .filter((x) => x.isActive)
@@ -164,6 +183,7 @@ export default function FormApprovalRoutesPanel({ formDefinitionId, routeConditi
                             totalRoutes={routes.length}
                             routeConditionType={routeConditionType}
                             orgUnitOptions={orgUnitOptions}
+                            orgUnitsById={orgUnitsById}
                             employeeOptions={employeeOptions}
                             jobTitleOptions={jobTitleOptions}
                             onChange={(patch) => updateRoute(route.clientId, patch)}

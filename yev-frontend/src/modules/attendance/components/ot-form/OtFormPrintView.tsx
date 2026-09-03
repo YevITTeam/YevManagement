@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { Printer, RectangleHorizontal, RectangleVertical } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -324,6 +324,71 @@ function nowrapBoxStyle(box: FieldBox): React.CSSProperties {
     };
 }
 
+const REASON_BASE_FONT_PT = 9;
+const REASON_JP_RATIO = 0.85;
+// Sàn thu nhỏ: 60% cỡ chữ gốc (~5.4pt) — nhỏ hơn nữa thì khó đọc, chấp nhận tràn nhẹ (box cha vẫn có
+// overflow:hidden chặn không cho vẽ đè lên nội dung khác trên giấy).
+const REASON_MIN_SCALE = 0.6;
+const REASON_SCALE_STEP = 0.05;
+const REASON_LINE_HEIGHT = 1.15;
+
+// Đè 2 dòng lý do (VN + bản dịch JP) lên đúng ô "Lý do" — cho ngắt dòng THẬT (không còn ép 1 dòng như
+// trước) rồi tự thu nhỏ cỡ chữ dựa trên chiều cao THỰC ĐO ĐƯỢC của DOM (scrollHeight so với clientHeight
+// cố định của ô) cho tới khi vừa khít, thay vì tính trước bằng canvas: cách đo bằng canvas (dùng font
+// xấp xỉ "Arial") ước lượng bề rộng ký tự tiếng Việt có dấu/tiếng Nhật sai lệch khá nhiều so với font
+// fallback trình duyệt THẬT SỰ dùng để vẽ (Inter chỉ có subset "latin", không có dấu VN/chữ Nhật), gây
+// ngắt dòng sớm dù ô còn thừa chỗ (lỗi người dùng báo 2026-09-03) — đo trực tiếp trên DOM đã render thì
+// luôn khớp đúng 100% với những gì thật sự hiển thị, dù là xem trước trên màn hình hay khi in.
+function ReasonAutoFit({ box, vnText, jpText }: { box: FieldBox; vnText: string; jpText: string }) {
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const vnRef = useRef<HTMLDivElement>(null);
+    const jpRef = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+        function fit() {
+            const wrapper = wrapperRef.current;
+            const vnEl = vnRef.current;
+            if (!wrapper || !vnEl) return;
+            let scale = 1;
+            const applyScale = (s: number) => {
+                vnEl.style.fontSize = `${REASON_BASE_FONT_PT * s}pt`;
+                if (jpRef.current) jpRef.current.style.fontSize = `${REASON_BASE_FONT_PT * REASON_JP_RATIO * s}pt`;
+            };
+            applyScale(scale);
+            while (wrapper.scrollHeight > wrapper.clientHeight && scale > REASON_MIN_SCALE) {
+                scale = Math.max(REASON_MIN_SCALE, scale - REASON_SCALE_STEP);
+                applyScale(scale);
+            }
+        }
+        fit();
+        // In (Ctrl+P / window.print) dựng lại layout theo khổ giấy @page thật — kích thước px của box
+        // lúc đó khác lúc xem trên màn hình (khung mx-auto max-w-4xl), nên phải đo + co lại đúng lúc đó.
+        window.addEventListener("beforeprint", fit);
+        window.addEventListener("resize", fit);
+        return () => {
+            window.removeEventListener("beforeprint", fit);
+            window.removeEventListener("resize", fit);
+        };
+    }, [vnText, jpText]);
+
+    return (
+        <div
+            ref={wrapperRef}
+            style={{ ...boxStyle(box), display: "flex", flexDirection: "column", justifyContent: "center", overflow: "hidden" }}
+            className="pl-1"
+        >
+            <div ref={vnRef} style={{ lineHeight: REASON_LINE_HEIGHT, overflowWrap: "break-word" }}>
+                {vnText}
+            </div>
+            {jpText && (
+                <div ref={jpRef} style={{ lineHeight: REASON_LINE_HEIGHT, wordBreak: "break-all" }}>
+                    {jpText}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // Chỉ 4 field thật sự cần để vẽ 1 ô chữ ký — tách khỏi OtFormApprovalHistoryDto đầy đủ để SignatureCell
 // dùng chung được cho cả lịch sử duyệt thật (findHistory) LẪN chữ ký tự ký của người tạo đơn (không có
 // OtFormApprovalHistory tương ứng, xem selfSignDisplay bên dưới).
@@ -444,6 +509,8 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
           }
         : null;
 
+    const reasonVnText = `${form.reasonNameVn}${form.subReason ? ` — ${form.subReason}` : ""}`;
+
     return (
         <div className="text-[9pt]">
             {layout.signature.map(({ level, box }) => {
@@ -487,20 +554,7 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
                 {formatDate(form.date)}
             </div>
 
-            <div
-                style={{ ...boxStyle(layout.lyDo), display: "flex", flexDirection: "column", justifyContent: "center", overflow: "hidden" }}
-                className="pl-1"
-            >
-                <div className="overflow-hidden text-ellipsis whitespace-nowrap">
-                    {form.reasonNameVn}
-                    {form.subReason ? ` — ${form.subReason}` : ""}
-                </div>
-                {form.reasonNameJp && (
-                    <div className="overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontSize: "0.85em" }}>
-                        {form.reasonNameJp}
-                    </div>
-                )}
-            </div>
+            <ReasonAutoFit box={layout.lyDo} vnText={reasonVnText} jpText={form.reasonNameJp ?? ""} />
 
             {/* "Không"/mặc định luôn được tick khi mục tương ứng chưa bật (kể cả khi cả đơn không có
                 processPart) — chỉ ô "Có"/"Ăn" mới cần đúng true mới tick, tránh để trống gây hiểu nhầm

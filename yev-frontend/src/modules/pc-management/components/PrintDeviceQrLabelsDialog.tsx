@@ -22,6 +22,9 @@ interface PrintDeviceQrLabelsDialogProps {
     isOpen: boolean;
     deviceIds: number[];
     onClose: () => void;
+    // Gọi riêng khi lệnh in đã được kích hoạt thành công (khác onClose — cũng chạy khi người dùng
+    // bấm Huỷ/backdrop). Dùng để bên gọi dọn danh sách đã tick chọn sau khi in xong.
+    onPrinted?: () => void;
 }
 
 // Mã thiết bị + số serial LUÔN hiển thị dạng chữ trên tem (không phải field để chọn) — các field còn
@@ -152,7 +155,11 @@ function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, str
     .row {
       display: flex;
       align-items: center;
-      justify-content: center;
+      /* flex-start (không phải center): hàng đủ 2 tem thì content vừa khít bề rộng trang nên 2 cách
+         cho cùng kết quả, nhưng hàng lẻ (chỉ còn 1 tem cuối) phải nằm ở vị trí tem 1 (bên trái) để
+         khớp đúng vị trí vật lý của decal trên máy in Zebra — center sẽ đẩy nó ra giữa trang, lệch
+         khỏi decal đã cắt sẵn. */
+      justify-content: flex-start;
       width: ${ZEBRA_PAGE_WIDTH_CM}cm;
       height: ${ZEBRA_PAGE_HEIGHT_CM}cm;
       gap: ${ZEBRA_ROW_GAP_CM}cm;
@@ -170,9 +177,9 @@ function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, str
       text-align: left;
     }
     .qr { width: 1.8cm; height: 1.8cm; flex: none; }
-    .text { max-width: 2.8cm; overflow: hidden; }
+    .text { max-width: 2.8cm; }
     .code { font-size: 14px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .serial { font-size: 11px; font-weight: 700; color: #555; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .serial { font-size: 10px; font-weight: 700; color: #555; margin-top: 3px; line-height: 1.15; white-space: normal; overflow-wrap: anywhere; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -235,7 +242,7 @@ function waitForImagesToLoad(doc: Document) {
     );
 }
 
-export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }: PrintDeviceQrLabelsDialogProps) {
+export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose, onPrinted }: PrintDeviceQrLabelsDialogProps) {
     const [labels, setLabels] = useState<DeviceQrLabelDto[]>([]);
     const [encodedFields, setEncodedFields] = useState<Set<QrEncodedFieldKey>>(new Set(DEFAULT_ENCODED_FIELDS));
     const [includeQr, setIncludeQr] = useState(true);
@@ -310,6 +317,7 @@ export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }
             printWindow.onafterprint = () => finish(true);
             printWindow.focus();
             printWindow.print();
+            onPrinted?.();
             onClose();
         } catch (err) {
             console.error(err);

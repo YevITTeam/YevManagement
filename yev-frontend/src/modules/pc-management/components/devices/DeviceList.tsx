@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown, ChevronDown, Printer, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown, ChevronDown, Printer, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import DeviceFilterBar, { type DeviceFilters } from "@/modules/pc-management/components/DeviceFilterBar";
 import PrintDeviceQrLabelsDialog from "@/modules/pc-management/components/PrintDeviceQrLabelsDialog";
 import RowActionsMenu from "@/modules/pc-management/components/RowActionsMenu";
@@ -113,7 +113,11 @@ export default function DeviceList() {
   const [deletingDevice, setDeletingDevice] = useState<DeviceDto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  // Map (id -> mã thiết bị) thay vì mảng id đơn thuần: giữ được nhãn để hiển thị lại thiết bị đã
+  // chọn ngay cả khi nó không còn nằm trong trang/kết quả tìm kiếm hiện tại (xem selectedIds bên dưới
+  // — cố ý KHÔNG reset khi `devices` đổi, để search nhiều lần rồi in gộp 1 lần theo yêu cầu người dùng).
+  const [selectedDevices, setSelectedDevices] = useState<Map<number, string>>(new Map());
+  const selectedIds = useMemo(() => Array.from(selectedDevices.keys()), [selectedDevices]);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
@@ -223,19 +227,35 @@ export default function DeviceList() {
     "devices"
   );
 
-  // Danh sách hiển thị đổi trang/lọc thì bỏ chọn để tránh giữ id không còn hiển thị.
-  const [prevDevices, setPrevDevices] = useState(devices);
-  if (prevDevices !== devices) {
-    setPrevDevices(devices);
-    setSelectedIds([]);
-  }
-
-  const toggleSelectDevice = (id: number) => {
-    setSelectedIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+  const toggleSelectDevice = (device: DeviceDto) => {
+    setSelectedDevices((current) => {
+      const next = new Map(current);
+      if (next.has(device.id)) next.delete(device.id);
+      else next.set(device.id, device.deviceCode);
+      return next;
+    });
   };
 
+  // Chỉ chọn/bỏ chọn các thiết bị đang hiển thị ở trang hiện tại — không đụng tới lựa chọn đã tích
+  // từ những lần search/trang trước đó.
   const toggleSelectAll = () => {
-    setSelectedIds((current) => (current.length === devices.length ? [] : devices.map((device) => device.id)));
+    const allVisibleSelected = devices.length > 0 && devices.every((device) => selectedDevices.has(device.id));
+    setSelectedDevices((current) => {
+      const next = new Map(current);
+      devices.forEach((device) => {
+        if (allVisibleSelected) next.delete(device.id);
+        else next.set(device.id, device.deviceCode);
+      });
+      return next;
+    });
+  };
+
+  const removeSelectedDevice = (id: number) => {
+    setSelectedDevices((current) => {
+      const next = new Map(current);
+      next.delete(id);
+      return next;
+    });
   };
 
   const handleBulkDelete = async () => {
@@ -255,7 +275,7 @@ export default function DeviceList() {
       }
 
       setIsBulkDeleteOpen(false);
-      setSelectedIds([]);
+      setSelectedDevices(new Map());
       await refetchDevices();
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Xoá thiết bị thất bại"));
@@ -452,6 +472,12 @@ export default function DeviceList() {
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-[#5e3f3a]">Đã chọn {selectedIds.length} thiết bị</span>
               <button
+                onClick={() => setSelectedDevices(new Map())}
+                className="cursor-pointer text-xs font-semibold text-[#5e3f3a] underline-offset-2 transition hover:text-[#191c1e] hover:underline"
+              >
+                Bỏ chọn tất cả
+              </button>
+              <button
                 onClick={handlePrintSelectedDevices}
                 className="flex cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
               >
@@ -466,6 +492,30 @@ export default function DeviceList() {
             </div>
           )}
         </div>
+
+        {/* Danh sách mã đã chọn được giữ lại xuyên suốt nhiều lần tìm kiếm/đổi trang (xem
+            selectedDevices) — hiển thị dạng badge kèm nút bỏ chọn để người dùng biết đang chọn những
+            mã nào kể cả khi chúng không còn nằm trong kết quả tìm kiếm hiện tại. */}
+        {selectedIds.length > 0 && (
+          <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto border-b border-[#e0e3e5] bg-[#fff8f6] px-4 py-3">
+            {Array.from(selectedDevices.entries()).map(([id, code]) => (
+              <span
+                key={id}
+                className="inline-flex items-center gap-1 rounded-md border border-[#e0e3e5] bg-white px-2 py-0.5 text-xs font-medium text-[#191c1e]"
+              >
+                {code}
+                <button
+                  type="button"
+                  onClick={() => removeSelectedDevice(id)}
+                  className="cursor-pointer text-[#8a8f94] transition hover:text-[#e3000f]"
+                  aria-label={`Bỏ chọn ${code}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         {error && (
           <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
@@ -487,9 +537,9 @@ export default function DeviceList() {
                   <input
                     type="checkbox"
                     className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                    checked={devices.length > 0 && selectedIds.length === devices.length}
+                    checked={devices.length > 0 && devices.every((device) => selectedDevices.has(device.id))}
                     onChange={toggleSelectAll}
-                    aria-label="Chọn tất cả"
+                    aria-label="Chọn tất cả (trang hiện tại)"
                   />
                 </th>
                 <th className="whitespace-nowrap px-4 py-3">
@@ -532,8 +582,8 @@ export default function DeviceList() {
                     <input
                       type="checkbox"
                       className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                      checked={selectedIds.includes(device.id)}
-                      onChange={() => toggleSelectDevice(device.id)}
+                      checked={selectedDevices.has(device.id)}
+                      onChange={() => toggleSelectDevice(device)}
                       aria-label={`Chọn thiết bị ${device.deviceCode}`}
                     />
                   </td>
@@ -715,6 +765,7 @@ export default function DeviceList() {
         isOpen={qrPrintDeviceIds !== null}
         deviceIds={qrPrintDeviceIds ?? []}
         onClose={() => setQrPrintDeviceIds(null)}
+        onPrinted={() => setSelectedDevices(new Map())}
       />
 
       <ConfirmDialog
