@@ -22,6 +22,9 @@ interface PrintDeviceQrLabelsDialogProps {
     isOpen: boolean;
     deviceIds: number[];
     onClose: () => void;
+    // Gọi riêng khi lệnh in đã được kích hoạt thành công (khác onClose — cũng chạy khi người dùng
+    // bấm Huỷ/backdrop). Dùng để bên gọi dọn danh sách đã tick chọn sau khi in xong.
+    onPrinted?: () => void;
 }
 
 // Mã thiết bị + số serial LUÔN hiển thị dạng chữ trên tem (không phải field để chọn) — các field còn
@@ -235,7 +238,7 @@ function waitForImagesToLoad(doc: Document) {
     );
 }
 
-export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }: PrintDeviceQrLabelsDialogProps) {
+export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose, onPrinted }: PrintDeviceQrLabelsDialogProps) {
     const [labels, setLabels] = useState<DeviceQrLabelDto[]>([]);
     const [encodedFields, setEncodedFields] = useState<Set<QrEncodedFieldKey>>(new Set(DEFAULT_ENCODED_FIELDS));
     const [includeQr, setIncludeQr] = useState(true);
@@ -310,6 +313,7 @@ export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose }
             printWindow.onafterprint = () => finish(true);
             printWindow.focus();
             printWindow.print();
+            onPrinted?.();
             onClose();
         } catch (err) {
             console.error(err);
