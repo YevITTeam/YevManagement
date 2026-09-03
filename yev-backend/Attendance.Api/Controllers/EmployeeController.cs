@@ -23,7 +23,7 @@ namespace Attendance.Api.Controllers
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null,
             [FromQuery] int? departmentId = null, [FromQuery] int? groupId = null)
         {
-            var result = await _employeeService.GetPagedAsync(pageIndex, pageSize, keyword, departmentId, groupId);
+            var result = await _employeeService.GetPagedAsync(CurrentUserName, User.IsInRole(AdminRole), pageIndex, pageSize, keyword, departmentId, groupId);
             return Success(result);
         }
 
@@ -33,7 +33,7 @@ namespace Attendance.Api.Controllers
         [HttpGet("all")]
         public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetAllActive()
         {
-            var result = await _employeeService.GetAllActiveAsync();
+            var result = await _employeeService.GetAllActiveAsync(CurrentUserName, User.IsInRole(AdminRole));
             return Success(result);
         }
 
@@ -55,6 +55,16 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByDepartment(int departmentId)
         {
             var result = await _employeeService.GetByDepartmentIdAsync(departmentId);
+            return Success(result);
+        }
+
+        // Cho FE thu hẹp dropdown lọc Phòng ban/Nhóm ở màn "Nhân viên" khớp đúng phạm vi GetPaged thật
+        // sự trả về — route literal đứng cùng cấp "all"/"in-my-scope", không đụng {id} (2026-09-03).
+        [RequirePermission("Attendance.Employee.View")]
+        [HttpGet("my-scope")]
+        public async Task<ActionResult<ApiResponse<EmployeeScopeDto>>> GetMyScope()
+        {
+            var result = await _employeeService.GetMyScopeAsync(CurrentUserName, User.IsInRole(AdminRole));
             return Success(result);
         }
 
@@ -147,6 +157,17 @@ namespace Attendance.Api.Controllers
         {
             var result = await _employeeService.AssignGroupJobTitleAsync(CurrentUserName, User.IsInRole(AdminRole), id, groupId, request.JobTitleId);
             return Success(result, "Cập nhật chức vụ thành công.");
+        }
+
+        // Permission RIÊNG, hẹp hơn Attendance.Employee.Update (2026-08-29) — Người phụ trách Bộ phận
+        // được tự động cấp quyền này (xem ApprovalStepCoordinatorPermissions.EmployeeUpdateOtLimitCode),
+        // nhưng KHÔNG có quyền sửa nhân viên nói chung.
+        [RequirePermission("Attendance.Employee.UpdateOtLimit")]
+        [HttpPut("{id}/ot-limit")]
+        public async Task<ActionResult<ApiResponse<EmployeeDto>>> UpdateOtLimit(int id, [FromBody] UpdateEmployeeOtLimitDto request)
+        {
+            var result = await _employeeService.UpdateOtLimitAsync(CurrentUserName, User.IsInRole(AdminRole), id, request);
+            return Success(result, "Cập nhật giới hạn OT thành công.");
         }
     }
 }

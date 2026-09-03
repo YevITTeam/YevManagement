@@ -9,6 +9,7 @@ namespace Attendance.Api.Controllers
 {
     public class ProductionEmployeeImportController : BaseController
     {
+        private const string AdminRole = "Admin";
         private readonly IProductionEmployeeImportService _productionEmployeeImportService;
 
         public ProductionEmployeeImportController(IProductionEmployeeImportService productionEmployeeImportService)
@@ -24,7 +25,7 @@ namespace Attendance.Api.Controllers
                 return Fail<ProductionEmployeeImportPreviewResultDto>("Vui lòng chọn file Excel để import.");
 
             await using var stream = file.OpenReadStream();
-            var result = await _productionEmployeeImportService.PreviewAsync(stream);
+            var result = await _productionEmployeeImportService.PreviewAsync(stream, CurrentUserName, User.IsInRole(AdminRole));
             return Success(result, "Đọc file thành công, vui lòng xem lại bản xem trước bên dưới.");
         }
 
@@ -32,7 +33,7 @@ namespace Attendance.Api.Controllers
         [HttpPost("confirm")]
         public async Task<ActionResult<ApiResponse<ProductionEmployeeImportConfirmResultDto>>> Confirm([FromBody] ConfirmProductionEmployeeImportDto request)
         {
-            var result = await _productionEmployeeImportService.ConfirmAsync(request);
+            var result = await _productionEmployeeImportService.ConfirmAsync(request, CurrentUserName, User.IsInRole(AdminRole));
             return Success(result, "Import nhân sự dưới chuyền thành công.");
         }
 
@@ -42,7 +43,7 @@ namespace Attendance.Api.Controllers
         [HttpPost("apply-accumulation")]
         public async Task<ActionResult<ApiResponse<ProductionEmployeeAccumulationResultDto>>> ApplyAccumulation([FromBody] ApplyProductionEmployeeAccumulationDto request)
         {
-            var result = await _productionEmployeeImportService.ApplyAccumulationAsync(request);
+            var result = await _productionEmployeeImportService.ApplyAccumulationAsync(request, CurrentUserName, User.IsInRole(AdminRole));
             return Success(result, $"Đã điều chỉnh lũy kế cho {result.AdjustedCount} nhân viên.");
         }
 

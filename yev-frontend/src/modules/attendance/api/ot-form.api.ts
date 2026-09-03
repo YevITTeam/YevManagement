@@ -1,5 +1,6 @@
 import { api } from "@/lib/client";
 import type {
+    AddOtFormEmployeeDto,
     ApproveOtFormDto,
     BulkApproveOtFormDto,
     BulkOtFormActionResultItemDto,
@@ -36,6 +37,7 @@ const ENDPOINTS = {
         bulkReject: "/OtForm/bulk-reject",
         deleteOtForm: (id: number) => `/OtForm/${id}/delete`,
         removeOtFormEmployee: (id: number) => `/OtForm/${id}/employees/remove`,
+        addOtFormEmployee: (id: number) => `/OtForm/${id}/employees/add`,
         emailConfirmGet: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}`,
         emailConfirmApprove: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/approve`,
         emailConfirmReject: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/reject`,
@@ -160,6 +162,12 @@ export const OtFormApi = {
     // cập nhật, không cần gọi lại getOtFormById.
     removeOtFormEmployee: async (id: number, data: RemoveOtFormEmployeeDto) => {
         const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.removeOtFormEmployee(id), data);
+        return response.data;
+    },
+    // Thêm 1 nhân viên vào đơn — chiều ngược của removeOtFormEmployee (mới 2026-08-28). Trả về
+    // OtFormDto đầy đủ đã cập nhật, không cần gọi lại getOtFormById.
+    addOtFormEmployee: async (id: number, data: AddOtFormEmployeeDto) => {
+        const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.addOtFormEmployee(id), data);
         return response.data;
     },
     // Duyệt/Từ chối qua link email — public, [AllowAnonymous] (docs §4.6).

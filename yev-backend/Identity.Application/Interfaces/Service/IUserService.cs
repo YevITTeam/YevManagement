@@ -13,5 +13,10 @@ namespace Identity.Application.Interfaces.Service
         Task<UserDto> CreateUserAsync(CreateUserDto request);
         Task<UserDto> UpdateUserFullNameAsync(UpdateUserFullNameDto request);
         Task DeleteUserAsync(int userId);
+
+        // Xác thực UserName/Password của 1 tài khoản đăng nhập TEST (TestLoginAccount) — KHÔNG liên
+        // quan tới AD, chỉ dùng cho luồng test nhanh khi ASPNETCORE_ENVIRONMENT=Development. Xem
+        // AuthController.Login() và Identity.Domain.Entities.TestLoginAccount.
+        Task<bool> ValidateTestLoginAsync(string userName, string password);
     }
 }

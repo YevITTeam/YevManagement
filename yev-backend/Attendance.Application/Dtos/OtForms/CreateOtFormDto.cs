@@ -36,5 +36,10 @@ namespace Attendance.Application.Dtos.OtForms
         public List<CreateOtFormEmployeeItemDto> Employees { get; set; } = new();
 
         public ProcessPartDto? ProcessPart { get; set; }
+
+        // Second-factor password — bắt buộc từ 2026-08-28 (theo yêu cầu người dùng, tạo đơn cũng phải
+        // nhập mật khẩu cấp 2 giống lúc Ký/Duyệt), cùng cơ chế với ApproveOtFormDto.SecondaryPassword.
+        [Required(ErrorMessage = "Mật khẩu cấp 2 không được để trống")]
+        public string SecondaryPassword { get; set; } = null!;
     }
 }

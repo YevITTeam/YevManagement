@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Microsoft.Extensions.DependencyInjection;
 using Attendance.Application.Dtos.AttendanceSettings;
 using Attendance.Application.Dtos.JobTitles;
 using Attendance.Application.Dtos.OtFormBatches;
@@ -12,6 +13,7 @@ using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
+using static Attendance.Application.Services.MealTicketCalculator;
 
 namespace Attendance.Application.Services
 {
@@ -80,6 +82,7 @@ namespace Attendance.Application.Services
         private readonly ISecondaryPasswordService _secondaryPasswordService;
         private readonly IAttendanceSettingService _attendanceSettingService;
         private readonly IJobTitleApprovalChainService _jobTitleApprovalChainService;
+        private readonly IBackgroundTaskQueue _taskQueue;
 
         public OtFormService(
             IAttendanceUnitOfWork unitOfWork,
@@ -89,7 +92,8 @@ namespace Attendance.Application.Services
             IConfiguration configuration,
             ISecondaryPasswordService secondaryPasswordService,
             IAttendanceSettingService attendanceSettingService,
-            IJobTitleApprovalChainService jobTitleApprovalChainService) : base(unitOfWork)
+            IJobTitleApprovalChainService jobTitleApprovalChainService,
+            IBackgroundTaskQueue taskQueue) : base(unitOfWork)
         {
             _userDirectoryService = userDirectoryService;
             _emailService = emailService;
@@ -98,6 +102,34 @@ namespace Attendance.Application.Services
             _secondaryPasswordService = secondaryPasswordService;
             _attendanceSettingService = attendanceSettingService;
             _jobTitleApprovalChainService = jobTitleApprovalChainService;
+            _taskQueue = taskQueue;
+        }
+
+        // Đưa việc gửi mail duyệt vào hàng đợi nền thay vì await trực tiếp — Create/Approve đã
+        // SaveChangesAsync xong PHẦN NGHIỆP VỤ CHÍNH trước khi gọi hàm này (xem 2 điểm gọi trong
+        // CreateAsync/ApproveAsync), nên hoãn việc gửi mail không ảnh hưởng tính đúng đắn, chỉ giúp
+        // response trả về ngay mà không đợi round-trip SMTP tới VNMAIL04 (có thể vài trăm ms tới vài
+        // giây mỗi người nhận). Chỉ truyền Id thuần (không truyền entity đã load) vì scope DI của
+        // request sẽ bị dispose trước khi tác vụ nền thực sự chạy (2026-09-03).
+        private void QueueStepApprovalNotification(int otFormId, int otFormApprovalStepId)
+        {
+            _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
+            {
+                var otFormService = sp.GetRequiredService<IOtFormService>();
+                await otFormService.SendStepApprovalNotificationAsync(otFormId, otFormApprovalStepId);
+            });
+        }
+
+        public async Task SendStepApprovalNotificationAsync(int otFormId, int otFormApprovalStepId)
+        {
+            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == otFormId);
+            if (otForm == null) return;
+
+            var step = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
+                x => x.Id == otFormApprovalStepId, x => x.Candidates)).FirstOrDefault();
+            if (step == null) return;
+
+            await NotifyEligibleApproversAsync(otForm, step);
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
@@ -219,6 +251,21 @@ namespace Attendance.Application.Services
                 x => x.OtFormId == id && !x.IsDeleted, x => x.Candidates);
             var orderedSteps = steps.OrderBy(x => x.StepOrder).ToList();
 
+            var editLogs = await _unitOfWork.OtFormEditLogs.SelectAsync(
+                predicate: x => x.OtFormId == id,
+                selector: x => new OtFormEditLogDto
+                {
+                    ActionByUserName = x.ActionByUserName,
+                    ActionByFullName = x.ActionByFullName,
+                    ActionAt = x.ActionAt,
+                    ActionType = x.ActionType,
+                    EmployeeId = x.EmployeeId,
+                    EmployeeCodeSnapshot = x.EmployeeCodeSnapshot,
+                    FieldName = x.FieldName,
+                    OldValue = x.OldValue,
+                    NewValue = x.NewValue
+                });
+
             // Giai đoạn 5 (2026-08-27) — xem ghi chú ở ToListItemDto.IsEditable.
             var isEditable = otForm!.Status == (int)OtFormStatus.InApproval &&
                 (otForm.IsProductionForm || orderedSteps.All(s => s.Status != (int)OtFormApprovalStepStatus.Approved));
@@ -293,6 +340,7 @@ namespace Attendance.Application.Services
                     AnotherSuggestionJp = processPart.AnotherSuggestionJp
                 },
                 ApprovalHistories = histories.OrderBy(x => x.ActionAt).ToList(),
+                EditLogs = editLogs.OrderByDescending(x => x.ActionAt).ToList(),
                 ApprovalSteps = orderedSteps.Select(s => new OtFormApprovalStepDto
                 {
                     Id = s.Id,
@@ -321,6 +369,10 @@ namespace Attendance.Application.Services
             // sẽ sai lệch (coi StartTime/EndTime của đơn như 1 mốc giờ trong ngày, không phải khoảng).
             if (request.EndTime <= request.StartTime)
                 throw new DomainException("Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).");
+
+            // Mật khẩu cấp 2 bắt buộc khi tạo đơn (2026-08-28, theo yêu cầu người dùng) — verify SỚM,
+            // trước khi làm bất kỳ việc gì khác, cùng nguyên tắc với ApproveAsync/RejectAsync.
+            await _secondaryPasswordService.VerifyAsync(createdByUserName, request.SecondaryPassword);
 
             if (request.IsProductionForm)
                 return await CreateProductionFormAsync(createdByUserName, createdByFullName, isAdmin, request);
@@ -405,8 +457,13 @@ namespace Attendance.Application.Services
 
         // Đơn "theo chuyền" (OtForm.IsProductionForm = true, 2026-08-24) — chọn nhân viên qua
         // ProductionEmployee thay vì theo Group cố định, xem docs/docs-be/attendance-module.md
-        // §Đơn theo chuyền. Không có Group để check "ai được tạo đơn cho Group này" như Mode A — thay
-        // bằng: Admin luôn được tạo, người thường phải là 1 trong chính những người có tên trong đơn.
+        // §Đơn theo chuyền. Không có Group để check "ai được tạo đơn cho Group này" như Mode A.
+        //
+        // Sửa 2026-08-28 (theo yêu cầu người dùng): quy tắc CŨ bắt creator phải nằm trong chính danh
+        // sách nhân viên của đơn ("có tăng ca") — sai bản chất, chặn nhầm Line Leader lập đơn hộ cả
+        // Line mà chính họ không tăng ca hôm đó. Quy tắc MỚI: Admin luôn được tạo; người thường phải
+        // là Line Leader thật (ProductionEmployee.IsLeader=true) của ÍT NHẤT 1 Line có mặt trong đơn —
+        // không cần chính họ có tên trong danh sách tăng ca.
         private async Task<OtFormDto> CreateProductionFormAsync(
             string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
         {
@@ -419,6 +476,8 @@ namespace Attendance.Application.Services
             var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == request.OtCaseId && !x.IsDeleted);
             otCase.OrThrowNotFound("Trường hợp OT", request.OtCaseId);
 
+            var employeeIds = request.Employees.Select(x => x.EmployeeId).ToList();
+
             Employee? creatorEmployee = null;
             if (!isAdmin)
             {
@@ -426,11 +485,29 @@ namespace Attendance.Application.Services
                     x => x.UserName == createdByUserName && !x.IsDeleted, x => x.JobTitle!);
                 if (creatorEmployee == null)
                     throw new DomainException("Tài khoản chưa liên kết với nhân viên nào. Liên hệ Admin nếu tài khoản chưa liên kết đúng nhân viên.");
-                if (!request.Employees.Any(x => x.EmployeeId == creatorEmployee.Id))
-                    throw new DomainException("Bạn chỉ được tạo đơn có chính bạn trong danh sách nhân viên.");
+
+                var orderLineIds = (await _unitOfWork.ProductionEmployees.SelectAsync(
+                    predicate: x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted,
+                    selector: x => x.ProductionLineId))
+                    .Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
+
+                var isLineLeaderOfAnyLine = orderLineIds.Count > 0 && (await _unitOfWork.ProductionEmployees.FindAsync(
+                    x => x.EmployeeId == creatorEmployee.Id && x.IsLeader && !x.IsDeleted
+                        && x.ProductionLineId.HasValue && orderLineIds.Contains(x.ProductionLineId.Value))).Count > 0;
+
+                if (!isLineLeaderOfAnyLine)
+                    throw new DomainException("Bạn phải là Line Leader của ít nhất 1 Line trong danh sách nhân viên mới được tạo đơn này.");
             }
 
-            var employeeIds = request.Employees.Select(x => x.EmployeeId).ToList();
+            // Nhóm ca bắt buộc trước khi tạo đơn (2026-08-28, theo yêu cầu người dùng) — phòng vệ thêm
+            // cho dữ liệu cũ/nhập tay ngoài Import; Import đã chặn "Thiếu mã NHOM" từ 2026-08-24 (xem
+            // ProductionEmployeeImportService.ValidateAndResolveRowsAsync) nên trường hợp này hiếm gặp.
+            var productionEmployeesForCheck = await _unitOfWork.ProductionEmployees.FindAsync(
+                x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted);
+            var missingShiftTeam = productionEmployeesForCheck.Where(x => x.ShiftTeamId == null).Select(x => x.EmployeeCode).ToList();
+            if (missingShiftTeam.Count > 0)
+                throw new DomainException($"Nhân viên chưa có Nhóm ca, cần cập nhật trước khi tạo đơn: {string.Join(", ", missingShiftTeam)}.");
+
             var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
 
             var employeeEndTimes = request.Employees.ToDictionary(x => x.EmployeeId, x => x.EndTime);
@@ -600,7 +677,7 @@ namespace Attendance.Application.Services
                 var firstStepWithCandidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                     x => x.Id == firstCreatedStep.Id, x => x.Candidates)).FirstOrDefault();
                 if (firstStepWithCandidates != null)
-                    await NotifyEligibleApproversAsync(newOtForm, firstStepWithCandidates);
+                    QueueStepApprovalNotification(newOtForm.Id, firstStepWithCandidates.Id);
             }
 
             return await GetByIdAsync(newOtForm.Id);
@@ -646,7 +723,7 @@ namespace Attendance.Application.Services
             };
         }
 
-        public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, bool isAdmin, UpdateOtFormDto request)
+        public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted,
                 x => x.OtFormEmployees);
@@ -685,6 +762,10 @@ namespace Attendance.Application.Services
                 if (otForm.GroupId.HasValue)
                     await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, otForm.GroupId.Value);
             }
+
+            // Mật khẩu cấp 2 bắt buộc khi lưu sửa đơn (2026-08-28, theo yêu cầu người dùng) — cùng cơ
+            // chế với ApproveAsync/RejectAsync.
+            await _secondaryPasswordService.VerifyAsync(currentUserName, request.SecondaryPassword);
 
             var activeEmployees = otForm.OtFormEmployees.Where(x => !x.IsRemoved).ToList();
             var activeEmployeeIds = activeEmployees.Select(x => x.EmployeeId).ToHashSet();
@@ -725,6 +806,22 @@ namespace Attendance.Application.Services
             foreach (var item in request.Employees)
             {
                 var existing = activeByEmployeeId[item.EmployeeId];
+                var code = employeeCodeById.GetValueOrDefault(item.EmployeeId, item.EmployeeId.ToString());
+
+                // Log lại từng field thực sự đổi (2026-08-28, theo yêu cầu người dùng — xem OtFormEditLog).
+                if (existing.EndTime != item.EndTime)
+                    await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.TimeChanged,
+                        item.EmployeeId, code, "EndTime", existing.EndTime.ToString("HH:mm"), item.EndTime.ToString("HH:mm"));
+                if (existing.DidEat != item.DidEat)
+                    await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.TimeChanged,
+                        item.EmployeeId, code, "DidEat", existing.DidEat ? "Có ăn" : "Không ăn", item.DidEat ? "Có ăn" : "Không ăn");
+                if (existing.NoteVn != item.NoteVn)
+                    await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.NoteChanged,
+                        item.EmployeeId, code, "NoteVn", existing.NoteVn, item.NoteVn);
+                if (existing.NoteJp != item.NoteJp)
+                    await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.NoteChanged,
+                        item.EmployeeId, code, "NoteJp", existing.NoteJp, item.NoteJp);
+
                 existing.EndTime = item.EndTime;
                 existing.DidEat = item.DidEat;
                 existing.NoteVn = item.NoteVn;
@@ -822,7 +919,7 @@ namespace Attendance.Application.Services
                 var nextStepWithCandidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                     x => x.Id == nextStepId, x => x.Candidates)).FirstOrDefault();
                 if (nextStepWithCandidates != null)
-                    await NotifyEligibleApproversAsync(otForm, nextStepWithCandidates);
+                    QueueStepApprovalNotification(otForm.Id, nextStepWithCandidates.Id);
             }
         }
 
@@ -909,16 +1006,140 @@ namespace Attendance.Application.Services
         public async Task<OtFormDto> RemoveEmployeeAsync(
             int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request)
         {
-            return await RemoveEmployeeCoreAsync(id, userName, fullName, isAdmin, request.EmployeeId, request.Reason);
+            return await RemoveEmployeeCoreAsync(id, userName, fullName, isAdmin, request.EmployeeId, request.Reason, request.SecondaryPassword);
         }
 
         public async Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request)
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: false);
 
+            // secondaryPassword: null — kênh email KHÔNG cần mật khẩu cấp 2 (quyết định riêng, không đổi
+            // theo yêu cầu 2026-08-28, xem RemoveOtFormEmployeeDto).
             return await RemoveEmployeeCoreAsync(
                 emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName,
-                isAdmin: false, request.EmployeeId, request.Reason);
+                isAdmin: false, request.EmployeeId, request.Reason, secondaryPassword: null);
+        }
+
+        // Thêm 1 nhân viên vào đơn đang chờ xử lý ở đúng bước mình được phân quyền — chiều ngược của
+        // RemoveEmployeeCoreAsync (2026-08-28, theo yêu cầu người dùng). Validate tương tự lúc tạo đơn:
+        // giới hạn giờ, trùng giờ OT, giới hạn ngày/tháng/năm, Nhóm ca (nếu đơn theo chuyền). Nhân viên
+        // trước đó đã bị loại khỏi CHÍNH đơn này (IsRemoved=true) được thêm lại bằng cách tái dùng đúng
+        // dòng cũ (giữ nguyên khoá chính OtFormId+EmployeeId), không tạo dòng mới.
+        public async Task<OtFormDto> AddEmployeeAsync(
+            int id, string userName, string? fullName, bool isAdmin, AddOtFormEmployeeDto request)
+        {
+            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, x => x.OtFormEmployees);
+            otForm.OrThrowNotFound("Đơn tăng ca", id);
+
+            if (otForm!.Status != (int)OtFormStatus.InApproval)
+                throw new DomainException("Đơn đã xử lý xong (hoàn tất/từ chối), không thể thêm nhân viên vào đơn nữa.");
+
+            var pendingSteps = await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
+                x => x.OtFormId == id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending, x => x.Candidates);
+            var currentStep = pendingSteps.OrderBy(x => x.StepOrder).FirstOrDefault();
+
+            if (!isAdmin)
+            {
+                if (currentStep == null || !currentStep.Candidates.Any(c => c.UserName == userName))
+                    throw new DomainException("Bạn không được phân quyền ở bước mà đơn này đang chờ, nên không thể thêm nhân viên vào đơn.");
+            }
+
+            await _secondaryPasswordService.VerifyAsync(userName, request.SecondaryPassword);
+
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == request.EmployeeId && !x.IsDeleted);
+            employee.OrThrowNotFound("Nhân viên", request.EmployeeId);
+
+            var existing = otForm.OtFormEmployees.FirstOrDefault(x => x.EmployeeId == request.EmployeeId);
+            if (existing != null && !existing.IsRemoved)
+                throw new DomainException($"Nhân viên '{employee!.Code}' đã có trong đơn.");
+
+            if (request.EndTime <= otForm.StartTime || request.EndTime > otForm.EndTime)
+                throw new DomainException(
+                    $"Giờ kết thúc OT phải sau giờ bắt đầu ({otForm.StartTime:HH:mm}) và không được vượt quá giờ kết thúc của đơn ({otForm.EndTime:HH:mm}).");
+
+            ProductionEmployee? productionEmployee = null;
+            if (otForm.IsProductionForm)
+            {
+                productionEmployee = await _unitOfWork.ProductionEmployees.FirstOrDefaultAsync(
+                    x => x.EmployeeId == request.EmployeeId && !x.IsDeleted);
+                if (productionEmployee == null)
+                    throw new DomainException($"Nhân viên '{employee!.Code}' không có trong danh sách nhân sự dưới chuyền.");
+                // Nhóm ca bắt buộc (2026-08-28) — xem ghi chú tương tự ở CreateProductionFormAsync.
+                if (productionEmployee.ShiftTeamId == null)
+                    throw new DomainException($"Nhân viên '{employee!.Code}' chưa có Nhóm ca, cần cập nhật trước khi thêm vào đơn.");
+            }
+            else if (otForm.GroupId.HasValue && employee!.GroupId != otForm.GroupId.Value)
+            {
+                throw new DomainException($"Nhân viên '{employee.Code}' không thuộc Nhóm của đơn này.");
+            }
+
+            var mealSettings = await _attendanceSettingService.GetAsync();
+            var hours = CalculateOtHours(otForm.StartTime, request.EndTime, request.DidEat, mealSettings);
+            await ValidateOtHourLimitsAsync(
+                otForm.Date, new Dictionary<int, decimal> { [request.EmployeeId] = hours }, mealSettings, excludeFormId: otForm.Id);
+
+            await EnsureNoOverlappingOtFormsAsync(
+                new List<Employee> { employee! }, otForm.Date, otForm.StartTime,
+                new Dictionary<int, TimeOnly> { [request.EmployeeId] = request.EndTime }, excludeFormId: otForm.Id);
+
+            var projectedByEmployee = await ComputeAccumulatedHoursBatchAsync(
+                new[] { request.EmployeeId }, otForm.Date, mealSettings, excludeFormId: otForm.Id);
+            var (_, projectedMonthBefore, projectedYearBefore) =
+                projectedByEmployee.TryGetValue(request.EmployeeId, out var projected) ? projected : (0m, 0m, 0m);
+
+            OtFormEmployee affectedRow;
+            if (existing != null)
+            {
+                existing.IsRemoved = false;
+                existing.RemovedByUserName = null;
+                existing.RemovedByFullName = null;
+                existing.RemovedAtLevel = null;
+                existing.RemovedAt = null;
+                existing.RemoveReason = null;
+                existing.EndTime = request.EndTime;
+                existing.DidEat = request.DidEat;
+                existing.NoteVn = request.NoteVn;
+                existing.NoteJp = request.NoteJp;
+                _unitOfWork.OtFormEmployees.Update(existing);
+                affectedRow = existing;
+            }
+            else
+            {
+                affectedRow = new OtFormEmployee
+                {
+                    OtForm = otForm,
+                    EmployeeId = request.EmployeeId,
+                    StartTime = otForm.StartTime,
+                    EndTime = request.EndTime,
+                    DidEat = request.DidEat,
+                    NoteVn = request.NoteVn,
+                    NoteJp = request.NoteJp,
+                    MonthToDate = projectedMonthBefore,
+                    YearToDate = projectedYearBefore,
+                    CongDoanSnapshot = productionEmployee?.CongDoan,
+                    TaskNameSnapshot = productionEmployee?.TaskName,
+                    BlockCodeSnapshot = productionEmployee?.BlockCode,
+                    TeamCodeSnapshot = productionEmployee?.TeamCode,
+                    ShiftTeamCodeSnapshot = productionEmployee?.ShiftTeamCode
+                };
+                await _unitOfWork.OtFormEmployees.AddAsync(affectedRow);
+            }
+
+            await LogEditAsync(otForm.Id, userName, fullName, OtFormEditActionType.EmployeeAdded,
+                request.EmployeeId, employee!.Code, null, null, $"{request.EndTime:HH:mm}");
+
+            var remainingActiveEmployees = otForm.OtFormEmployees
+                .Where(x => !x.IsRemoved && x.EmployeeId != request.EmployeeId)
+                .Append(affectedRow)
+                .ToList();
+            await RecalculateMealTicketCountsAsync(otForm.Id, remainingActiveEmployees, mealSettings);
+
+            otForm.NumberOfEmployee = remainingActiveEmployees.Count;
+            _unitOfWork.OtForms.Update(otForm);
+
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetByIdAsync(otForm.Id);
         }
 
         // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate ở 1 bước, không có cách resolve lại
@@ -946,7 +1167,7 @@ namespace Attendance.Application.Services
         }
 
         private async Task<OtFormDto> RemoveEmployeeCoreAsync(
-            int id, string userName, string? fullName, bool isAdmin, int employeeId, string reason)
+            int id, string userName, string? fullName, bool isAdmin, int employeeId, string reason, string? secondaryPassword)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, x => x.OtFormEmployees);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
@@ -966,6 +1187,11 @@ namespace Attendance.Application.Services
                     throw new DomainException("Bạn không được phân quyền ở bước mà đơn này đang chờ, nên không thể loại nhân viên khỏi đơn.");
             }
 
+            // secondaryPassword null = kênh email (RemoveEmployeeByEmailTokenAsync), không cần verify —
+            // xem RemoveOtFormEmployeeDto (2026-08-28).
+            if (secondaryPassword != null)
+                await _secondaryPasswordService.VerifyAsync(userName, secondaryPassword);
+
             var target = otForm.OtFormEmployees.FirstOrDefault(x => x.EmployeeId == employeeId);
             if (target == null)
                 throw new DomainException("Nhân viên này không có trong danh sách tăng ca của đơn.");
@@ -983,6 +1209,10 @@ namespace Attendance.Application.Services
             target.RemovedAt = TimeHelper.GetCurrentUtcTime();
             target.RemoveReason = reason;
             _unitOfWork.OtFormEmployees.Update(target);
+
+            var removedEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId);
+            await LogEditAsync(otForm.Id, userName, fullName, OtFormEditActionType.EmployeeRemoved,
+                employeeId, removedEmployee?.Code, null, null, reason);
 
             var mealSettings = await _attendanceSettingService.GetAsync();
 
@@ -1207,39 +1437,9 @@ namespace Attendance.Application.Services
             return overlappingIds;
         }
 
-        // Redesign 3 bậc phiếu ăn (2026-08-26, chốt với người dùng qua nhiều vòng — xem
-        // AttendanceSetting.cs và docs/attendance-module.md §Phiếu ăn). Ca OT khớp ĐÚNG khung sớm
-        // (StartTime/EndTime bằng đúng EarlyMealWindowStartTime/EndTime, không phải chỉ overlap) là
-        // ngoại lệ: không trừ giờ dù DidEat thế nào, và luôn nhận phiếu Phụ bất kể độ dài ca.
-        private static bool IsEarlyMealWindowOt(TimeOnly startTime, TimeOnly endTime, AttendanceSettingDto settings) =>
-            startTime == settings.EarlyMealWindowStartTime && endTime == settings.EarlyMealWindowEndTime;
-
-        // Giờ OT thực tính — DUY NHẤT nên hiển thị/cộng làm "giờ OT của người này" (hiển thị lẫn lũy
-        // kế). Ngoài khung sớm: có ăn thì trừ MealBreakDeductionHours, không ăn giữ nguyên giờ thô.
-        private static decimal CalculateOtHours(TimeOnly startTime, TimeOnly endTime, bool didEat, AttendanceSettingDto settings)
-        {
-            var hours = (decimal)(endTime - startTime).TotalHours;
-
-            if (IsEarlyMealWindowOt(startTime, endTime, settings)) return hours;
-
-            if (didEat) hours -= settings.MealBreakDeductionHours;
-
-            return hours;
-        }
-
-        // Loại phiếu ăn 1 người nhận cho 1 lần OT — nguồn chân lý DUY NHẤT, dùng cả cho
-        // OtFormEmployeeDto.MealTicketType (hiển thị per-person) lẫn CalculateMealTicketCounts (tổng
-        // Chính/Phụ của ProcessPart) để tránh 2 nơi tính lệch nhau.
-        private static MealTicketType CalculateMealTicketType(TimeOnly startTime, TimeOnly endTime, bool didEat, AttendanceSettingDto settings)
-        {
-            if (IsEarlyMealWindowOt(startTime, endTime, settings)) return MealTicketType.Secondary;
-
-            var actualHours = CalculateOtHours(startTime, endTime, didEat, settings);
-            if (actualHours < settings.NoMealTicketMaxHours) return MealTicketType.None;
-            if (actualHours < settings.MainMealTicketMinHours) return MealTicketType.Secondary;
-            return MealTicketType.Main;
-        }
-
+        // IsEarlyMealWindowOt/CalculateOtHours/CalculateMealTicketType đã dời sang MealTicketCalculator
+        // (cùng namespace Attendance.Application.Services, 2026-08-28) để ProductionOtReportService
+        // dùng lại đúng công thức — gọi không cần qualify vì cùng namespace.
         private static (int Main, int Secondary) CalculateMealTicketCounts(
             IEnumerable<OtFormEmployee> activeEmployees, AttendanceSettingDto settings)
         {
@@ -1272,6 +1472,29 @@ namespace Attendance.Application.Services
             processPart.MainTicketCount = main;
             processPart.SecondaryTicketCount = secondary;
             _unitOfWork.ProcessParts.Update(processPart);
+        }
+
+        // 1 dòng OtFormEditLog cho 1 field/hành động thay đổi (2026-08-28, theo yêu cầu người dùng —
+        // "mọi thao tác thay đổi này cần log lại ai làm gì thay đổi cái gì"). Gọi từ UpdateAsync (sửa
+        // giờ/ghi chú), AddEmployeeAsync, RemoveEmployeeCoreAsync — KHÔNG gọi từ CreateAsync (đơn mới
+        // đã có CreatedByUserName/CreatedAt làm log riêng).
+        private async Task LogEditAsync(
+            int otFormId, string userName, string? fullName, OtFormEditActionType actionType,
+            int? employeeId, string? employeeCode, string? fieldName, string? oldValue, string? newValue)
+        {
+            await _unitOfWork.OtFormEditLogs.AddAsync(new OtFormEditLog
+            {
+                OtFormId = otFormId,
+                ActionByUserName = userName,
+                ActionByFullName = fullName,
+                ActionAt = TimeHelper.GetCurrentUtcTime(),
+                ActionType = (int)actionType,
+                EmployeeId = employeeId,
+                EmployeeCodeSnapshot = employeeCode,
+                FieldName = fieldName,
+                OldValue = oldValue,
+                NewValue = newValue
+            });
         }
 
         // Lũy kế THẬT không còn lưu trên Employee (2026-08-19) — hàm này giờ CHỈ ghi ledger

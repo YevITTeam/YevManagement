@@ -89,6 +89,8 @@ builder.Services.AddDIConfig(builder.Configuration);
 builder.Services.AddHostedService<DeviceLiquidationBackgroundService>();
 // Redesign xong theo Cây chức vụ (2026-08-07, Giai đoạn 3.2) — xem docs/attendance-module.md §Đơn tổng.
 builder.Services.AddHostedService<OtFormBatchBackgroundService>();
+// Gửi email duyệt OT chạy nền, không chặn response Create/Approve (2026-09-03) — xem IBackgroundTaskQueue.
+builder.Services.AddHostedService<QueuedHostedService>();
 
 var app = builder.Build();
 

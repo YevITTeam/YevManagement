@@ -26,6 +26,8 @@ public partial class IdentityDbContext : DbContext
 
     public virtual DbSet<UserPermission> UserPermissions { get; set; }
 
+    public virtual DbSet<TestLoginAccount> TestLoginAccounts { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Role>(entity =>
@@ -83,6 +85,14 @@ public partial class IdentityDbContext : DbContext
             entity.HasOne(e => e.Permission).WithMany()
                 .HasForeignKey(e => e.PermissionId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TestLoginAccount>(entity =>
+        {
+            entity.Property(e => e.UserName).HasMaxLength(100);
+            entity.Property(e => e.FullName).HasMaxLength(100);
+            entity.Property(e => e.PasswordHash).HasMaxLength(500);
+            entity.HasIndex(e => e.UserName).IsUnique();
         });
 
         OnModelCreatingPartial(modelBuilder);

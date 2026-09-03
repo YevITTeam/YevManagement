@@ -181,5 +181,16 @@ namespace Identity.Application.Services
             _unitOfWork.Users.Delete(user!);
             await _unitOfWork.SaveChangesAsync();
         }
+
+        private static readonly Microsoft.AspNetCore.Identity.PasswordHasher<object> PasswordHasher = new();
+
+        public async Task<bool> ValidateTestLoginAsync(string userName, string password)
+        {
+            var record = await _unitOfWork.TestLoginAccounts.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted);
+            if (record == null) return false;
+
+            var result = PasswordHasher.VerifyHashedPassword(null!, record.PasswordHash, password);
+            return result != Microsoft.AspNetCore.Identity.PasswordVerificationResult.Failed;
+        }
     }
 }

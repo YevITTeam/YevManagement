@@ -15,7 +15,11 @@ namespace Attendance.Application.Dtos.OtForms
         [Required(ErrorMessage = "Lý do loại nhân viên khỏi đơn không được để trống")]
         public string Reason { get; set; } = null!;
 
-        // No SecondaryPassword — unlike sign/approve/reject, removing an employee does not re-verify
-        // the second-factor password (decided 2026-07-31, see docs/attendance-module.md — Mật khẩu cấp 2).
+        // Second-factor password — bắt buộc từ 2026-08-28 (theo yêu cầu người dùng, đảo ngược quyết
+        // định 2026-07-31 ở trên). CHỈ áp dụng cho action trong app này — kênh email
+        // (RemoveOtFormEmployeeByEmailTokenDto) vẫn giữ nguyên KHÔNG cần mật khẩu cấp 2 (token tự nó
+        // là thông tin xác thực, quyết định riêng không đổi).
+        [Required(ErrorMessage = "Mật khẩu cấp 2 không được để trống")]
+        public string SecondaryPassword { get; set; } = null!;
     }
 }

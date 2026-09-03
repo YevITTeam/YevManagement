@@ -334,7 +334,13 @@ namespace Attendance.Application.Services
                 };
             }
 
-            var relevantSteps = configuredSteps.Where(x => x.RankOrder > creatorRank).ToList();
+            // ">=" (không phải ">") — người tạo đơn "theo chuyền" không phải Admin BẮT BUỘC là Line
+            // Leader thật của Line trong đơn (xem OtFormService.CreateProductionFormAsync), tức
+            // creatorRank ở đây chỉ có thể là 0 (Admin, không lọc gì khác nhau) hoặc ĐÚNG RankOrder của
+            // chính bước Line Leader — dùng ">" sẽ loại luôn bước của chính họ, khiến đơn gửi thẳng lên
+            // Group Leader mà Line Leader không có bước Pending nào để tự ký/sửa trước (2026-09-03, theo
+            // yêu cầu người dùng — đơn phải dừng ở bước Line Leader tới khi họ tự ký mới gửi lên trên).
+            var relevantSteps = configuredSteps.Where(x => x.RankOrder >= creatorRank).ToList();
 
             var cutoffIndex = relevantSteps.FindIndex(x => x.TerminalLevel == targetTerminalLevel);
             var reachesTarget = cutoffIndex >= 0;
@@ -353,8 +359,12 @@ namespace Attendance.Application.Services
 
             // Trong 1 chuỗi duy nhất, cấp trung gian (TerminalLevel=None) tách làm 2 phạm vi khác nhau:
             // Line Leader (IsLineScoped=true, theo ProductionLineId) và Group Leader/Team Leader
-            // (IsLineScoped=false, theo GroupId) — cả 2 phạm vi đều suy TỰ ĐỘNG từ chính những người
-            // đang được thêm vào đơn, KHÔNG có 1 GroupId/ProductionLineId cố định trên OtForm.
+            // (IsLineScoped=false) — Line Leader suy TỰ ĐỘNG từ chính những người đang được thêm vào
+            // đơn (KHÔNG có 1 ProductionLineId cố định trên OtForm); Group Leader/Team Leader dùng
+            // chung CẢ Bộ phận Chế tạo (2026-08-28, theo yêu cầu người dùng — "GL/TL dưới chuyền là
+            // người duyệt tổng luôn", KHÔNG scoped theo từng Nhóm sản xuất như bản trước — xem
+            // attendance-module.md §Giai đoạn 13). CHỈ áp dụng cho đơn "theo chuyền"; đơn "theo Nhóm"
+            // (GroupApprovalStep, ResolveChainCoreAsync ở trên) vẫn giữ nguyên scoping theo Nhóm.
             //
             // Line Leader KHÔNG gán qua Employee.JobTitleId (2026-08-27, sửa lại theo yêu cầu người
             // dùng) — ai là Line Leader của Line nào đã có sẵn trong file import nhân sự dưới chuyền
@@ -380,21 +390,13 @@ namespace Attendance.Application.Services
                 .Select(x => x.JobTitleId)
                 .ToList();
 
-            // Chỉ suy ra phạm vi khi TẤT CẢ người trong đơn cùng 1 Group / cùng 1 ProductionLine — lẫn
-            // nhiều Group/Line thì phạm vi đó coi như không suy được (bước tương ứng sẽ không có ứng
-            // viên nào, hiển thị đúng qua Warning bên dưới, không tự ý chọn đại 1 Group/Line).
-            int? derivedGroupId = null;
+            // Chỉ suy ra phạm vi Line khi TẤT CẢ người trong đơn cùng 1 ProductionLine — lẫn nhiều Line
+            // thì phạm vi đó coi như không suy được (bước Line Leader sẽ không có ứng viên nào, hiển
+            // thị đúng qua Warning bên dưới, không tự ý chọn đại 1 Line). Group Leader/Team Leader
+            // không cần suy Group nữa (dùng chung cả Bộ phận, xem comment ở trên).
             int? derivedProductionLineId = null;
             if (employeeIds.Count > 0)
             {
-                var participantGroupIds = (await _unitOfWork.Employees.SelectAsync(
-                    predicate: x => employeeIds.Contains(x.Id) && !x.IsDeleted,
-                    selector: x => x.GroupId))
-                    .Distinct()
-                    .ToList();
-                if (participantGroupIds.Count == 1 && participantGroupIds[0].HasValue)
-                    derivedGroupId = participantGroupIds[0];
-
                 var participantLineIds = (await _unitOfWork.ProductionEmployees.SelectAsync(
                     predicate: x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted,
                     selector: x => x.ProductionLineId))
@@ -421,10 +423,11 @@ namespace Attendance.Application.Services
                 .SelectMany(jobTitleId => lineLeaderHolders.Select(h => (JobTitleId: jobTitleId, h.Id, h.UserName, h.FirstName, h.LastName)))
                 .ToList();
 
-            var groupScopedCandidates = (groupScopedJobTitleIds.Count == 0 || derivedGroupId is null)
+            var groupScopedCandidates = groupScopedJobTitleIds.Count == 0
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
                 : (await _unitOfWork.Employees.SelectAsync(
-                    predicate: x => !x.IsDeleted && x.UserName != null && x.GroupId == derivedGroupId
+                    predicate: x => !x.IsDeleted && x.UserName != null
+                        && ((x.Group != null && x.Group.DepartmentId == departmentId) || x.DepartmentId == departmentId)
                         && x.JobTitleId != null && groupScopedJobTitleIds.Contains(x.JobTitleId.Value),
                     selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
                     .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
@@ -482,8 +485,9 @@ namespace Attendance.Application.Services
             else if (!isComplete)
             {
                 var missingStepNames = steps.Where(x => x.Candidates.Count == 0).Select(x => x.JobTitleName);
-                warning = $"Chưa tìm được ứng viên cho: {string.Join(", ", missingStepNames)} — có thể chưa có ai giữ Chức vụ đó, " +
-                    "hoặc những người trong đơn đang lẫn nhiều Nhóm/Line khác nhau — đơn sẽ bị kẹt ở (các) bước này.";
+                warning = $"Chưa tìm được ứng viên cho: {string.Join(", ", missingStepNames)} — có thể chưa có ai giữ Chức vụ đó " +
+                    "trong Bộ phận, hoặc (riêng Line Leader) những người trong đơn đang lẫn nhiều Line khác nhau — đơn sẽ bị kẹt " +
+                    "ở (các) bước này.";
             }
 
             return new ResolveApprovalChainResultDto

@@ -28,6 +28,7 @@ import type {
 } from "@/modules/attendance/types/ot-form.dto";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
+import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -320,6 +321,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // (2026-08-07, Giai đoạn 3.1), chữ ký thật (nếu bước nào đó yêu cầu) chỉ bắt buộc lúc Duyệt. Ở đây
     // chỉ hiện gợi ý mềm, KHÔNG chặn nút Tạo đơn.
     const [hasSignature, setHasSignature] = useState<boolean | null>(null);
+    // Mật khẩu cấp 2 — bắt buộc khi Lưu (Tạo mới lẫn Sửa đơn, 2026-08-28), cùng cơ chế Approve/Reject.
+    const [hasSecondaryPassword, setHasSecondaryPassword] = useState<boolean | null>(null);
+    const [secondaryPassword, setSecondaryPassword] = useState("");
 
     const [isLoadingInitial, setIsLoadingInitial] = useState(isEditMode);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -457,6 +461,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             .catch(() => setHasSignature(false));
     }, [isEditMode]);
 
+    // Mật khẩu cấp 2 áp dụng CẢ 2 chế độ (Tạo mới lẫn Sửa đơn) — khác chữ ký ở trên.
+    useEffect(() => {
+        SecondaryPasswordApi.getMyStatus()
+            .then((data) => setHasSecondaryPassword(data.isRegistered))
+            .catch(() => setHasSecondaryPassword(false));
+    }, []);
+
     // Đổ sẵn dữ liệu đơn khi Sửa — set state trực tiếp (không qua handler) để KHÔNG bị 2 effect bên
     // dưới tự xoá lựa chọn Bộ phận/Nhân viên vừa đổ sẵn.
     useEffect(() => {
@@ -467,6 +478,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     setLoadError(t("notEditableError"));
                     return;
                 }
+                // Đồng bộ lại chế độ hiển thị đúng theo đơn (2026-08-28, sửa lỗi thiếu sót — comment ở
+                // khai báo formMode nói rõ ý định "giữ nguyên chế độ ban đầu" nhưng trước đó chưa từng
+                // set lại state này khi tải đơn để sửa, khiến form luôn hiện lại đúng UI "Theo Nhóm" mặc
+                // định dù đang sửa đơn "theo chuyền" — dropdown Nhóm hiện thừa trống, thiếu hẳn cột
+                // Line/Team/Nhóm ca ở bảng nhân viên bên dưới).
+                setFormMode(data.isProductionForm ? "production" : "group");
                 setDepartmentId(data.departmentId);
                 setGroupId(data.groupId);
                 setReasonId(data.reasonId);
@@ -536,6 +553,21 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
     const isTimeRangeInvalid = Boolean(startTime && endTime && toMinutes(endTime) <= toMinutes(startTime));
+
+    // Tóm tắt Line/Team/Nhóm ca của đơn "theo chuyền" khi Sửa (theo yêu cầu người dùng, 2026-08-28) —
+    // hiện ngay trong "Thông tin đơn" thay vì phải cuộn xuống bảng nhân viên mới thấy. Gộp theo GIÁ TRỊ
+    // DUY NHẤT trong đơn — thường 1 đơn chỉ có đúng 1 Line/Team/Nhóm ca, nhưng vẫn liệt kê đủ nếu lỡ có
+    // nhiều giá trị khác nhau (đơn thêm người sau, khác Line/Team/Nhóm ca với người tạo ban đầu) thay vì
+    // chỉ hiện 1 giá trị gây hiểu nhầm.
+    const editProductionSummary = useMemo(() => {
+        if (!isEditMode || formMode !== "production") return null;
+        const distinct = (values: (string | null)[]) => Array.from(new Set(values.filter((v): v is string => Boolean(v))));
+        return {
+            lines: distinct(editEmployees.map((e) => e.blockCodeSnapshot)),
+            teams: distinct(editEmployees.map((e) => e.teamCodeSnapshot)),
+            shiftTeams: distinct(editEmployees.map((e) => e.shiftTeamCodeSnapshot)),
+        };
+    }, [isEditMode, formMode, editEmployees]);
 
     // Tự tính số phiếu ăn theo giờ OT THỰC TẾ của từng người đang chọn — redesign 3 bậc (2026-08-26,
     // xem modules/attendance/lib/mealTicket.ts + docs §Phiếu ăn): thực tích < sàn -> không phiếu; sàn..
@@ -707,6 +739,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             toast.error(t("endTimeBeforeStartError"));
             return;
         }
+        if (hasSecondaryPassword === false) {
+            toast.error(t("secondaryPasswordMissingError"));
+            return;
+        }
+        if (!secondaryPassword) {
+            toast.error(t("secondaryPasswordRequiredError"));
+            return;
+        }
 
         // Không hỗ trợ ca qua đêm (2026-08-26) — giờ kết thúc của mỗi người luôn nằm trong CÙNG ngày,
         // giữa giờ bắt đầu và giờ kết thúc của đơn, không còn cộng thêm 24h như trước.
@@ -735,7 +775,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
                     noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
                 }));
-                result = await OtFormApi.updateOtForm(otFormId, { employees });
+                result = await OtFormApi.updateOtForm(otFormId, { employees, secondaryPassword });
             } else {
                 const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
                     employeeId,
@@ -757,6 +797,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     date,
                     employees,
                     processPart: processPartEnabled ? processPart : null,
+                    secondaryPassword,
                 });
             }
             toast.success(isEditMode ? t("updateSuccess") : t("createSuccess"));
@@ -875,6 +916,23 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             </label>
                         )}
 
+                        {editProductionSummary && (
+                            <>
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("colBlockCode")}</span>
+                                    <input value={editProductionSummary.lines.join(", ") || "—"} disabled className={fieldClassName} />
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("colTeamCode")}</span>
+                                    <input value={editProductionSummary.teams.join(", ") || "—"} disabled className={fieldClassName} />
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("colShiftTeam")}</span>
+                                    <input value={editProductionSummary.shiftTeams.join(", ") || "—"} disabled className={fieldClassName} />
+                                </label>
+                            </>
+                        )}
+
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldReason")}</span>
                             <SearchableSelect
@@ -990,6 +1048,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                         <th className="px-3 py-2">{t("colEmployeeCode")}</th>
                                         <th className="px-3 py-2">{t("colFullName")}</th>
+                                        {formMode === "production" && (
+                                            <>
+                                                <th className="px-3 py-2">{t("colBlockCode")}</th>
+                                                <th className="px-3 py-2">{t("colTeamCode")}</th>
+                                                <th className="px-3 py-2">{t("colShiftTeam")}</th>
+                                            </>
+                                        )}
                                         <th className="px-3 py-2">{t("colAccumulation")}</th>
                                         <th className="px-3 py-2">{t("colEndTime")}</th>
                                         <th className="px-3 py-2">{t("colDidEat")}</th>
@@ -1023,6 +1088,19 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     {employee.employeeCode}
                                                 </td>
                                                 <td className="px-3 py-2 align-top text-sm text-[#191c1e]">{employee.fullName}</td>
+                                                {formMode === "production" && (
+                                                    <>
+                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">
+                                                            {employee.blockCodeSnapshot || "—"}
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">
+                                                            {employee.teamCodeSnapshot || "—"}
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">
+                                                            {employee.shiftTeamCodeSnapshot || "—"}
+                                                        </td>
+                                                    </>
+                                                )}
                                                 <td className="px-3 py-2 align-top text-sm">
                                                     <span
                                                         className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
@@ -1501,7 +1579,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <input
                                             type="number"
                                             min={0}
-                                            value={processPart.mainTicketCount}
+                                            // Sửa đơn: khối này bị khoá không gửi lên (BE tự tính lại theo
+                                            // đúng giờ mới sau khi lưu — RecalculateMealTicketCountsAsync),
+                                            // nên LUÔN hiện số tự tính SỐNG theo employeeOverrides hiện tại
+                                            // thay vì số tĩnh lúc tải trang — tránh gây hiểu nhầm "sửa giờ mà
+                                            // không thấy phiếu đổi theo" (2026-08-28, theo phản hồi người dùng).
+                                            value={isEditMode ? mealTicketCounts.main : processPart.mainTicketCount}
                                             onChange={(event) => {
                                                 setAutoMealTicket(false);
                                                 setProcessPart((current) => ({ ...current, mainTicketCount: Number(event.target.value) }));
@@ -1515,7 +1598,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <input
                                             type="number"
                                             min={0}
-                                            value={processPart.secondaryTicketCount}
+                                            value={isEditMode ? mealTicketCounts.secondary : processPart.secondaryTicketCount}
                                             onChange={(event) => {
                                                 setAutoMealTicket(false);
                                                 setProcessPart((current) => ({
@@ -1557,6 +1640,31 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             </label>
                         </div>
                     )}
+                </section>
+
+                <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                    <label className="block max-w-sm">
+                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                        </span>
+                        <input
+                            type="password"
+                            value={secondaryPassword}
+                            onChange={(event) => setSecondaryPassword(event.target.value)}
+                            disabled={isSubmitting}
+                            autoComplete="off"
+                            className={fieldClassName}
+                        />
+                    </label>
+                    <div
+                        className={`mt-2 max-w-sm rounded-lg border px-3 py-2 text-xs ${
+                            hasSecondaryPassword === false
+                                ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
+                                : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                        }`}
+                    >
+                        {hasSecondaryPassword === false ? t("secondaryPasswordMissingHint") : t("secondaryPasswordOkHint")}
+                    </div>
                 </section>
 
                 <div className="flex justify-end gap-3">

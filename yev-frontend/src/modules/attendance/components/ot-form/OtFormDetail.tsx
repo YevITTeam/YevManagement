@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
-import { Car, Check, Clock, History, MessageCircle, Printer, Trash2, UserX, Utensils, X } from "lucide-react";
+import { Car, Check, Clock, History, MessageCircle, Printer, Search, Trash2, UserPlus, UserX, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import type { OtFormApprovalStepDto, OtFormDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
+import type { OtFormApprovalStepDto, OtFormDto, OtFormEditLogDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
+import { EmployeeApi } from "@/modules/attendance/api/employee.api";
+import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
 import { approvalActionLabels, otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { formatHours } from "@/modules/attendance/lib/time";
@@ -126,7 +128,26 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // trong app lẫn email.
     const [removeTarget, setRemoveTarget] = useState<OtFormEmployeeDto | null>(null);
     const [removeReason, setRemoveReason] = useState("");
+    const [removeSecondaryPassword, setRemoveSecondaryPassword] = useState("");
     const [isRemovingEmployee, setIsRemovingEmployee] = useState(false);
+
+    // Thêm nhân viên vào đơn — chiều ngược của Loại nhân viên (mới 2026-08-28, theo yêu cầu người
+    // dùng). Tìm theo Mã nhân viên/tên: đơn theo chuyền dùng ProductionEmployeeApi.search (đã hỗ trợ
+    // tìm theo Mã), đơn theo Nhóm dùng EmployeeApi.getEmployeesByGroup rồi lọc client-side (danh sách
+    // 1 Nhóm thường nhỏ).
+    const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
+    const [addSearchKeyword, setAddSearchKeyword] = useState("");
+    const [addSearchResults, setAddSearchResults] = useState<{ employeeId: number; employeeCode: string; fullName: string }[]>([]);
+    const [isSearchingAddEmployee, setIsSearchingAddEmployee] = useState(false);
+    const [addSelectedEmployee, setAddSelectedEmployee] = useState<{ employeeId: number; employeeCode: string; fullName: string } | null>(
+        null
+    );
+    const [addEndTime, setAddEndTime] = useState("");
+    const [addDidEat, setAddDidEat] = useState(false);
+    const [addNoteVn, setAddNoteVn] = useState("");
+    const [addNoteJp, setAddNoteJp] = useState("");
+    const [addSecondaryPassword, setAddSecondaryPassword] = useState("");
+    const [isAddingEmployee, setIsAddingEmployee] = useState(false);
 
     // Admin xoá đơn kẹt vĩnh viễn trong chuỗi duyệt (2026-08-08) — xem docs/attendance-module.md
     // §Cây chức vụ. BE chặn Completed (đã cộng lũy kế thật); FE ẩn luôn nút cho gọn thay vì để user
@@ -172,6 +193,25 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // này KHÔNG cấp cho Role "Nhân viên" (chỉ tạo đơn, không duyệt) nên thực chất không cần lọc thêm
     // ở đây, permission check là đủ.
     const canRemoveEmployee = hasPermission(user, "Attendance.OTForm.RemoveEmployee") && showApprovalActions;
+
+    // Nút "Thêm nhân viên" (mới 2026-08-28) — cùng điều kiện phân quyền với Loại nhân viên (candidate
+    // của bước đang chờ hiện tại + permission riêng Attendance.OTForm.AddEmployee).
+    const canAddEmployee = hasPermission(user, "Attendance.OTForm.AddEmployee") && showApprovalActions;
+
+    // Đơn "theo chuyền": hiện Line/Team/Nhóm ca ở cả khối "Thông tin đơn" (giá trị phân biệt gộp từ
+    // toàn bộ nhân viên còn active) lẫn từng dòng trong bảng danh sách — trước đó màn Chi tiết đơn
+    // format y hệt đơn "theo Nhóm" dù dữ liệu snapshot đã có sẵn trên OtFormEmployeeDto, không hiện gì
+    // cho biết đây là đơn dưới chuyền (2026-08-29, theo phản hồi người dùng).
+    const productionSummary = useMemo(() => {
+        if (!form?.isProductionForm) return null;
+        const distinct = (values: (string | null)[]) => Array.from(new Set(values.filter((v): v is string => Boolean(v))));
+        const activeEmployees = form.employees.filter((e) => !e.isRemoved);
+        return {
+            lines: distinct(activeEmployees.map((e) => e.blockCodeSnapshot)),
+            teams: distinct(activeEmployees.map((e) => e.teamCodeSnapshot)),
+            shiftTeams: distinct(activeEmployees.map((e) => e.shiftTeamCodeSnapshot)),
+        };
+    }, [form]);
 
     const openAction = (type: "approve" | "reject") => {
         setComment("");
@@ -250,7 +290,11 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     const openRemove = (employee: OtFormEmployeeDto) => {
         setRemoveReason("");
+        setRemoveSecondaryPassword("");
         setRemoveTarget(employee);
+        SecondaryPasswordApi.getMyStatus()
+            .then((data) => setHasSecondaryPassword(data.isRegistered))
+            .catch(() => setHasSecondaryPassword(false));
     };
 
     const closeRemove = () => {
@@ -264,11 +308,20 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
             toast.error(t("removeReasonRequiredError"));
             return;
         }
+        if (hasSecondaryPassword === false) {
+            toast.error(t("secondaryPasswordMissingError"));
+            return;
+        }
+        if (!removeSecondaryPassword) {
+            toast.error(t("secondaryPasswordRequiredError"));
+            return;
+        }
         setIsRemovingEmployee(true);
         try {
             const updated = await OtFormApi.removeOtFormEmployee(id, {
                 employeeId: removeTarget.employeeId,
                 reason: removeReason.trim(),
+                secondaryPassword: removeSecondaryPassword,
             });
             toast.success(t("removeSuccess", { name: removeTarget.fullName }));
             setForm(updated);
@@ -279,6 +332,109 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         } finally {
             setIsRemovingEmployee(false);
         }
+    };
+
+    const openAddEmployee = () => {
+        setAddSearchKeyword("");
+        setAddSearchResults([]);
+        setAddSelectedEmployee(null);
+        setAddEndTime(form ? form.endTime.slice(0, 5) : "");
+        setAddDidEat(false);
+        setAddNoteVn("");
+        setAddNoteJp("");
+        setAddSecondaryPassword("");
+        setAddEmployeeOpen(true);
+        SecondaryPasswordApi.getMyStatus()
+            .then((data) => setHasSecondaryPassword(data.isRegistered))
+            .catch(() => setHasSecondaryPassword(false));
+    };
+
+    const closeAddEmployee = () => {
+        if (isAddingEmployee) return;
+        setAddEmployeeOpen(false);
+    };
+
+    const handleSearchAddEmployee = async () => {
+        if (!form) return;
+        setIsSearchingAddEmployee(true);
+        try {
+            const activeIds = new Set(activeEmployees.map((employee) => employee.employeeId));
+            const keyword = addSearchKeyword.trim();
+            if (form.isProductionForm) {
+                const results = await ProductionEmployeeApi.search({ keyword: keyword || undefined, date: form.date });
+                setAddSearchResults(
+                    results
+                        .filter((item) => !activeIds.has(item.employeeId))
+                        .map((item) => ({ employeeId: item.employeeId, employeeCode: item.employeeCode, fullName: item.fullName }))
+                );
+            } else if (form.groupId) {
+                const results = await EmployeeApi.getEmployeesByGroup(form.groupId, form.date);
+                const lowerKeyword = keyword.toLowerCase();
+                setAddSearchResults(
+                    results
+                        .filter((item) => !activeIds.has(item.id))
+                        .filter(
+                            (item) =>
+                                !lowerKeyword ||
+                                item.code.toLowerCase().includes(lowerKeyword) ||
+                                `${item.lastName} ${item.firstName}`.toLowerCase().includes(lowerKeyword)
+                        )
+                        .map((item) => ({ employeeId: item.id, employeeCode: item.code, fullName: `${item.lastName} ${item.firstName}` }))
+                );
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("addSearchError")));
+        } finally {
+            setIsSearchingAddEmployee(false);
+        }
+    };
+
+    const handleAddEmployee = async () => {
+        if (!addSelectedEmployee) return;
+        if (!addEndTime) {
+            toast.error(t("addEndTimeRequiredError"));
+            return;
+        }
+        if (hasSecondaryPassword === false) {
+            toast.error(t("secondaryPasswordMissingError"));
+            return;
+        }
+        if (!addSecondaryPassword) {
+            toast.error(t("secondaryPasswordRequiredError"));
+            return;
+        }
+        setIsAddingEmployee(true);
+        try {
+            const updated = await OtFormApi.addOtFormEmployee(id, {
+                employeeId: addSelectedEmployee.employeeId,
+                endTime: `${addEndTime}:00`,
+                didEat: addDidEat,
+                noteVn: addNoteVn.trim() || null,
+                noteJp: addNoteJp.trim() || null,
+                secondaryPassword: addSecondaryPassword,
+            });
+            toast.success(t("addEmployeeSuccess", { name: addSelectedEmployee.fullName }));
+            setForm(updated);
+            setAddEmployeeOpen(false);
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("addEmployeeError")));
+        } finally {
+            setIsAddingEmployee(false);
+        }
+    };
+
+    // Nhãn hiển thị 1 dòng Lịch sử chỉnh sửa (mới 2026-08-28) — actionType: 0=TimeChanged,
+    // 1=NoteChanged, 2=EmployeeAdded, 3=EmployeeRemoved (enum OtFormEditActionType).
+    const editLogActionLabel = (log: OtFormEditLogDto) => {
+        if (log.actionType === 2) return t("editLogEmployeeAdded");
+        if (log.actionType === 3) return t("editLogEmployeeRemoved");
+        if (log.fieldName === "EndTime") return t("editLogFieldEndTime");
+        if (log.fieldName === "DidEat") return t("editLogFieldDidEat");
+        if (log.fieldName === "NoteVn") return t("editLogFieldNoteVn");
+        if (log.fieldName === "NoteJp") return t("editLogFieldNoteJp");
+        return log.fieldName ?? "";
     };
 
     const openDeleteModal = () => {
@@ -468,6 +624,22 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("createdByLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">{form.createdByFullName ?? form.createdByUserName}</div>
                 </div>
+                {productionSummary && (
+                    <>
+                        <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("colBlockCode")}</div>
+                            <div className="mt-1 text-sm text-[#191c1e]">{productionSummary.lines.join(", ") || "—"}</div>
+                        </div>
+                        <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("colTeamCode")}</div>
+                            <div className="mt-1 text-sm text-[#191c1e]">{productionSummary.teams.join(", ") || "—"}</div>
+                        </div>
+                        <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("colShiftTeam")}</div>
+                            <div className="mt-1 text-sm text-[#191c1e]">{productionSummary.shiftTeams.join(", ") || "—"}</div>
+                        </div>
+                    </>
+                )}
                 {form.subReason && (
                     <div>
                         <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("subReasonLabel")}</div>
@@ -534,9 +706,20 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                         {t("employeeListTitle", { count: form.numberOfEmployee })}
                     </h2>
-                    <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-white px-3 py-1 text-xs font-semibold text-[#191c1e]">
-                        {t("totalWorkedHoursLabel", { hours: formatHours(totalWorkedHours) })}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-white px-3 py-1 text-xs font-semibold text-[#191c1e]">
+                            {t("totalWorkedHoursLabel", { hours: formatHours(totalWorkedHours) })}
+                        </span>
+                        {canAddEmployee && (
+                            <button
+                                type="button"
+                                onClick={openAddEmployee}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            >
+                                <UserPlus className="h-3.5 w-3.5" /> {t("addEmployeeButton")}
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
@@ -544,6 +727,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                             <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colEmployeeCode")}</th>
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colFullName")}</th>
+                                {form.isProductionForm && (
+                                    <>
+                                        <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colBlockCode")}</th>
+                                        <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colTeamCode")}</th>
+                                        <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colShiftTeam")}</th>
+                                    </>
+                                )}
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colTime")}</th>
                                 <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colHours")}</th>
                                 <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
@@ -574,7 +764,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-3 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
-                                            <td colSpan={6} className="px-6 py-3 text-sm text-[#930006]">
+                                            <td colSpan={form.isProductionForm ? 9 : 6} className="px-6 py-3 text-sm text-[#930006]">
                                                 {t("removedInlineNote", {
                                                     name: employee.removedByFullName ?? employee.removedByUserName ?? "",
                                                     level: stepNameByOrder(form, employee.removedAtLevel),
@@ -601,6 +791,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                             </span>
                                         </td>
                                         <td className="px-6 py-3 text-sm font-medium text-[#191c1e]">{employee.fullName}</td>
+                                        {form.isProductionForm && (
+                                            <>
+                                                <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.blockCodeSnapshot ?? "—"}</td>
+                                                <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.teamCodeSnapshot ?? "—"}</td>
+                                                <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.shiftTeamCodeSnapshot ?? "—"}</td>
+                                            </>
+                                        )}
                                         <td className="px-6 py-3 text-sm text-[#5e3f3a]">
                                             {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
                                         </td>
@@ -633,15 +830,12 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                         </td>
                                         <td className="px-6 py-3 text-center text-sm">
                                             {employee.didEat ? (
-                                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                                                    <Check size={12} /> {t("didEatYes")}
+                                                <span title={t("didEatYes")}>
+                                                    <Check size={18} className="mx-auto text-emerald-600" aria-label={t("didEatYes")} role="img" />
                                                 </span>
                                             ) : (
-                                                <span
-                                                    className="inline-flex items-center gap-1 rounded-full border border-[#f5d0a9] bg-[#fff4e5] px-2 py-0.5 text-xs font-semibold text-[#9a5b00]"
-                                                    title={t("didEatNoHint")}
-                                                >
-                                                    <X size={12} /> {t("didEatNo")}
+                                                <span title={t("didEatNoHint")}>
+                                                    <X size={18} className="mx-auto text-[#9a5b00]" aria-label={t("didEatNo")} role="img" />
                                                 </span>
                                             )}
                                         </td>
@@ -703,6 +897,44 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         );
                     })}
                 </div>
+            </section>
+
+            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("editLogTitle")}</h2>
+                {form.editLogs.length === 0 ? (
+                    <p className="text-sm text-[#9aa0a6]">{t("editLogEmpty")}</p>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse text-left">
+                            <thead>
+                                <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    <th className="px-4 py-2">{t("editLogColTime")}</th>
+                                    <th className="px-4 py-2">{t("editLogColActor")}</th>
+                                    <th className="px-4 py-2">{t("editLogColEmployee")}</th>
+                                    <th className="px-4 py-2">{t("editLogColAction")}</th>
+                                    <th className="px-4 py-2">{t("editLogColChange")}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {form.editLogs.map((log, index) => (
+                                    <tr key={index} className="border-b border-[#f1f5f9] text-sm">
+                                        <td className="whitespace-nowrap px-4 py-2 text-[#5e3f3a]">{formatDateTime(log.actionAt)}</td>
+                                        <td className="px-4 py-2 text-[#191c1e]">{log.actionByFullName ?? log.actionByUserName}</td>
+                                        <td className="px-4 py-2 text-[#191c1e]">
+                                            {log.employeeCodeSnapshot ?? "-"}
+                                        </td>
+                                        <td className="px-4 py-2 text-[#5e3f3a]">{editLogActionLabel(log)}</td>
+                                        <td className="px-4 py-2 text-[#191c1e]">
+                                            {log.oldValue != null || log.newValue != null
+                                                ? t("editLogChangeValue", { oldValue: log.oldValue ?? "-", newValue: log.newValue ?? "-" })
+                                                : "-"}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </section>
 
             {showApprovalActions && (
@@ -859,6 +1091,25 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 />
                             </label>
 
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <input
+                                    type="password"
+                                    value={removeSecondaryPassword}
+                                    onChange={(event) => setRemoveSecondaryPassword(event.target.value)}
+                                    disabled={isRemovingEmployee}
+                                    autoComplete="off"
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+                            {hasSecondaryPassword === false && (
+                                <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-xs text-[#930006]">
+                                    {t("secondaryPasswordMissingHint")}
+                                </div>
+                            )}
+
                             <div className="flex justify-end gap-3 pt-2">
                                 <button
                                     type="button"
@@ -877,6 +1128,164 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     {isRemovingEmployee ? tCommon("processing") : t("confirmRemove")}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {addEmployeeOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+                    <div className="fixed inset-0 bg-black/40" onClick={closeAddEmployee} />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                    >
+                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                            <h3 className="text-lg font-semibold text-[#191c1e]">{t("addEmployeeModalTitle")}</h3>
+                            <button
+                                onClick={closeAddEmployee}
+                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                aria-label={tCommon("close")}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            {!addSelectedEmployee ? (
+                                <>
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={addSearchKeyword}
+                                            onChange={(event) => setAddSearchKeyword(event.target.value)}
+                                            onKeyDown={(event) => event.key === "Enter" && handleSearchAddEmployee()}
+                                            placeholder={t("addSearchPlaceholder")}
+                                            className="h-10 flex-1 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleSearchAddEmployee}
+                                            disabled={isSearchingAddEmployee}
+                                            className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                                        >
+                                            <Search className="h-3.5 w-3.5" /> {tCommon("search")}
+                                        </button>
+                                    </div>
+                                    <div className="max-h-64 space-y-1 overflow-y-auto">
+                                        {isSearchingAddEmployee ? (
+                                            <p className="py-4 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</p>
+                                        ) : addSearchResults.length === 0 ? (
+                                            <p className="py-4 text-center text-sm text-[#9aa0a6]">{t("addSearchEmpty")}</p>
+                                        ) : (
+                                            addSearchResults.map((item) => (
+                                                <button
+                                                    key={item.employeeId}
+                                                    type="button"
+                                                    onClick={() => setAddSelectedEmployee(item)}
+                                                    className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-left text-sm transition hover:border-[#e3000f] hover:bg-[#fff4f2]"
+                                                >
+                                                    <span className="font-medium text-[#191c1e]">{item.fullName}</span>
+                                                    <span className="font-mono text-xs text-[#5e3f3a]">{item.employeeCode}</span>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex items-center justify-between rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2">
+                                        <div>
+                                            <div className="text-sm font-semibold text-[#191c1e]">{addSelectedEmployee.fullName}</div>
+                                            <div className="font-mono text-xs text-[#5e3f3a]">{addSelectedEmployee.employeeCode}</div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAddSelectedEmployee(null)}
+                                            className="cursor-pointer text-xs font-semibold text-[#5e3f3a] underline transition hover:text-[#191c1e]"
+                                        >
+                                            {t("addChangeSelection")}
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <label className="block">
+                                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                                {t("addEndTimeLabel")} <span className="text-[#930006]">*</span>
+                                            </span>
+                                            <input
+                                                type="time"
+                                                value={addEndTime}
+                                                onChange={(event) => setAddEndTime(event.target.value)}
+                                                disabled={isAddingEmployee}
+                                                className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                            />
+                                        </label>
+                                        <label className="flex items-end pb-2.5">
+                                            <span className="flex items-center gap-2 text-sm text-[#191c1e]">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={addDidEat}
+                                                    onChange={(event) => setAddDidEat(event.target.checked)}
+                                                    disabled={isAddingEmployee}
+                                                    className="h-4 w-4 cursor-pointer rounded border-[#e0e3e5] text-[#e3000f] focus:ring-[#e3000f]"
+                                                />
+                                                {t("addDidEatLabel")}
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    <label className="block">
+                                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                            {t("colNote")}
+                                        </span>
+                                        <input
+                                            value={addNoteVn}
+                                            onChange={(event) => setAddNoteVn(event.target.value)}
+                                            disabled={isAddingEmployee}
+                                            className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                        />
+                                    </label>
+
+                                    <label className="block">
+                                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                            {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                                        </span>
+                                        <input
+                                            type="password"
+                                            value={addSecondaryPassword}
+                                            onChange={(event) => setAddSecondaryPassword(event.target.value)}
+                                            disabled={isAddingEmployee}
+                                            autoComplete="off"
+                                            className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                        />
+                                    </label>
+                                    {hasSecondaryPassword === false && (
+                                        <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-xs text-[#930006]">
+                                            {t("secondaryPasswordMissingHint")}
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-end gap-3 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={closeAddEmployee}
+                                            disabled={isAddingEmployee}
+                                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            {tCommon("cancel")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleAddEmployee}
+                                            disabled={isAddingEmployee}
+                                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            {isAddingEmployee ? tCommon("processing") : t("confirmAddEmployee")}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

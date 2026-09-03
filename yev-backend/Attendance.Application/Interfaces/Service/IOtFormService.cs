@@ -39,7 +39,7 @@ namespace Attendance.Application.Interfaces.Service
         // Mutations
         Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request);
 
-        Task<OtFormDto> UpdateAsync(int id, string currentUserName, bool isAdmin, UpdateOtFormDto request);
+        Task<OtFormDto> UpdateAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request);
 
         Task ApproveAsync(int id, string approverUserName, string? approverFullName, ApproveOtFormDto request);
 
@@ -62,6 +62,10 @@ namespace Attendance.Application.Interfaces.Service
         // KHÔNG cần mật khẩu cấp 2 (khác Approve/Reject qua email vẫn giữ) — xem docs/attendance-module.md.
         Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request);
 
+        // Thêm 1 nhân viên vào đơn — chiều ngược của RemoveEmployeeAsync (2026-08-28, theo yêu cầu
+        // người dùng). Cùng điều kiện phân quyền (candidate của bước Pending hiện tại/Admin).
+        Task<OtFormDto> AddEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, AddOtFormEmployeeDto request);
+
         // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate, không resolve lại được) — soft-delete,
         // chặn nếu đơn đã Completed (đã cộng lũy kế thật). Xem docs/attendance-module.md §Cây chức vụ.
         Task DeleteAsync(int id, string deletedByUserName, string? deletedByFullName, DeleteOtFormDto request);
@@ -82,5 +86,11 @@ namespace Attendance.Application.Interfaces.Service
 
         // Called by OtFormBatchBackgroundService (daily sweep, default 15:00).
         Task RunDailyBatchSweepAsync();
+
+        // Gọi bởi QueuedHostedService (chạy nền, ngoài request Create/Approve) — tự tải lại OtForm +
+        // OtFormApprovalStep (kèm Candidates) theo Id vì scope DI của request đã bị dispose lúc hàm
+        // này chạy, không thể tái sử dụng entity đã load trong CreateAsync/ApproveAsync. Xem
+        // docs/attendance-module.md "Gửi email duyệt chạy nền".
+        Task SendStepApprovalNotificationAsync(int otFormId, int otFormApprovalStepId);
     }
 }

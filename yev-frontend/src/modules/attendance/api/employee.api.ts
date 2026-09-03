@@ -13,13 +13,27 @@ const ENDPOINTS = {
         getEmployeeByUsername: (userName: string) => `/Employee/by-username/${encodeURIComponent(userName)}`,
         createEmployee: "/Employee",
         updateEmployee: (id: number) => `/Employee/${id}`,
+        updateOtLimit: (id: number) => `/Employee/${id}/ot-limit`,
         deleteEmployee: (id: number) => `/Employee/${id}`,
         assignDepartmentJobTitle: (id: number, departmentId: number) => `/Employee/${id}/department-job-title?departmentId=${departmentId}`,
         assignGroupJobTitle: (id: number, groupId: number) => `/Employee/${id}/group-job-title?groupId=${groupId}`,
         getInMyScope: "/Employee/in-my-scope",
         getAccumulationHistory: (id: number, year: number) => `/Employee/${id}/accumulation-history?year=${year}`,
+        getMyScope: "/Employee/my-scope",
     },
 } as const;
+
+// Phạm vi xem nhân viên của người gọi (2026-09-03) — Admin/company-wide hay chỉ đúng 1 Phòng ban/Nhóm.
+// FE dùng để thu hẹp dropdown lọc ở EmployeeList.tsx, KHÔNG dùng để enforce (BE đã tự scope
+// GetPagedAsync/GetAllActiveAsync rồi, đây chỉ phục vụ UX — chọn ngoài phạm vi trước đây ra bảng rỗng
+// không rõ lý do).
+export interface EmployeeScopeDto {
+    companyWide: boolean;
+    departmentId: number | null;
+    departmentNameVn: string | null;
+    groupId: number | null;
+    groupNameVn: string | null;
+}
 
 export interface GetEmployeePageNationParams {
     pageIndex?: number;
@@ -49,6 +63,15 @@ export interface CreateUpdateEmployeeDto {
     jobTitleId?: number | null;
     // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — null = dùng mặc định chung (2026-08-26, xem
     // EmployeeForm.tsx).
+    customMonthlyOtHourLimit: number | null;
+    customYearlyOtHourLimit: number | null;
+}
+
+// Sửa RIÊNG giới hạn OT (2026-08-29) — permission hẹp Attendance.Employee.UpdateOtLimit, KHÁC
+// updateEmployee (PUT /{id}, Attendance.Employee.Update — không còn nhận 2 field này nữa). Dùng cho
+// Người phụ trách Bộ phận (không có quyền sửa nhân viên nói chung) — xem docs/attendance-api-fe.md
+// §Phân quyền theo Phòng ban.
+export interface UpdateEmployeeOtLimitDto {
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
 }
@@ -103,6 +126,10 @@ export const EmployeeApi = {
         const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.updateEmployee(id), { id, ...data });
         return response.data;
     },
+    updateOtLimit: async (id: number, data: UpdateEmployeeOtLimitDto) => {
+        const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.updateOtLimit(id), data);
+        return response.data;
+    },
     deleteEmployee: async (id: number) => {
         const response = await api.delete<ApiResponse<void>>(ENDPOINTS.EMPLOYEE.deleteEmployee(id));
         return response.data;
@@ -135,6 +162,10 @@ export const EmployeeApi = {
     },
     getAccumulationHistory: async (id: number, year: number) => {
         const response = await api.get<ApiResponse<EmployeeAccumulationHistoryYearDto>>(ENDPOINTS.EMPLOYEE.getAccumulationHistory(id, year));
+        return response.data;
+    },
+    getMyScope: async () => {
+        const response = await api.get<ApiResponse<EmployeeScopeDto>>(ENDPOINTS.EMPLOYEE.getMyScope);
         return response.data;
     },
 };

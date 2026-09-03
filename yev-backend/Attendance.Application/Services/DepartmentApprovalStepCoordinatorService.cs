@@ -92,5 +92,27 @@ namespace Attendance.Application.Services
 
             return await GetByDepartmentAsync(departmentId);
         }
+
+        public async Task EnsureCoordinatorAsync(int departmentId, int employeeId)
+        {
+            var department = await _unitOfWork.Departments.GetByIdAsync(departmentId);
+            department.OrThrowNotFound("Phòng ban", departmentId);
+
+            var alreadyCoordinator = (await _unitOfWork.DepartmentApprovalStepCoordinators.FindAsync(
+                x => x.DepartmentId == departmentId && x.EmployeeId == employeeId && !x.IsDeleted)).Count > 0;
+            if (alreadyCoordinator) return;
+
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x =>
+                x.Id == employeeId && !x.IsDeleted &&
+                (x.DepartmentId == departmentId || (x.GroupId != null && x.Group!.DepartmentId == departmentId)));
+            if (employee == null)
+                throw new DomainException("Chỉ được chọn nhân viên đang thuộc Bộ phận này làm người phụ trách.");
+
+            await _unitOfWork.DepartmentApprovalStepCoordinators.AddAsync(
+                new DepartmentApprovalStepCoordinator { DepartmentId = departmentId, EmployeeId = employeeId, IsDeleted = false });
+            await _unitOfWork.SaveChangesAsync();
+
+            await _employeeService.SyncAutoGrantedPermissionsForEmployeeAsync(employeeId);
+        }
     }
 }

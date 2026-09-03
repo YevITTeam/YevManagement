@@ -4,8 +4,10 @@ using Identity.Infrastructure.Authentication;
 using Identity.Infrastructure.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
+using Shared.Application.Interfaces;
 using Shared.Application.Interfaces.External;
 using Shared.Infrastructure.External;
+using Shared.Infrastructure.Services;
 using Workflow.Infrastructure.Context;
 
 namespace CompanySystem.HostApi.Configurations
@@ -45,6 +47,13 @@ namespace CompanySystem.HostApi.Configurations
             .WithScopedLifetime()
             );
 
+
+            // Hàng đợi tác vụ nền dùng chung (vd gửi email duyệt OT sau khi Create/Approve đã commit
+            // xong DB) — tên "Queue" không khớp quy ước Repository/UnitOfWork/Service nên Scrutor
+            // không tự quét, phải đăng ký tay (cùng lý do với ILlmChatClient bên dưới). Singleton vì
+            // Channel phải là 1 instance DUY NHẤT dùng chung giữa mọi request (producer) và
+            // QueuedHostedService (consumer, cũng chạy Singleton) — xem Program.cs.
+            services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 
             // Register IHttpContextAccessor
             services.AddHttpContextAccessor();

@@ -698,6 +698,7 @@ Bổ sung 1 kênh xác nhận qua email (nút bấm mở trang xác nhận nhỏ
 - **Bề mặt `[AllowAnonymous]` đầu tiên và thứ 2 của toàn hệ thống** (trước đó không controller nào dùng, chỉ 2 dòng dev-only cho Scalar/OpenAPI) — bảo mật hoàn toàn dựa vào token ngẫu nhiên 256-bit (`Shared.Application.Helper.TokenHelper.GenerateSecureToken`), không dựa JWT/Permission. Token single-use (`ConfirmedAt`/`UsedAt`) + có hạn (`ExpiresAt`) — không cần logic thu hồi thủ công vì `LoadFormAndValidateAuthorityAsync`/status check tự nhiên chặn token cũ.
 - **Cross-module không qua HTTP**: `Shared.Application.Interfaces.IUserDirectoryService`/`IEmailService` là contract đặt ở `Shared.Application` (2 module đều đã reference sẵn); implementation thật (`Identity.Application.Services.UserDirectoryService`, `Shared.Infrastructure.Services.EmailService`) được Scrutor tự nối dây lúc runtime — `Attendance.Application` **không cần** ProjectReference tới `Identity.Application` dù cần đọc Email/FullName/Role của User (nằm DB khác).
 - **`Identity.User.Email`** (migration `AddEmailToUser`, DB `YevIdentityManagement`): tự resolve từ thuộc tính AD `mail` qua `MyClaimsTransformation.GetActualEmail` (dùng `UserPrincipal.EmailAddress`, cùng cơ chế `GetActualFullName`) — **chỉ set khi đang trống** (khác `DeviceName` vốn refresh mỗi lần đổi), tự "chữa lành" cho user cũ ở lần đăng nhập kế tiếp mà không cần Admin gán tay.
+- **Gửi email duyệt chạy nền, không chặn response (2026-09-03)** — `CreateAsync`/`ApproveAsync` không còn `await NotifyEligibleApproversAsync(...)` trực tiếp (mỗi lần gọi là 1 vòng SMTP connect/auth/send tới `VNMAIL04` cho từng candidate, có thể mất vài trăm ms tới vài giây/người, cộng dồn vào response). Thay bằng `QueueStepApprovalNotification(otFormId, stepId)` — đẩy 1 work item (chỉ chứa 2 Id) vào `Shared.Application.Interfaces.IBackgroundTaskQueue` (Channel-based, Singleton, impl `Shared.Infrastructure.Services.BackgroundTaskQueue`); `CompanySystem.HostApi.BackgroundServices.QueuedHostedService` (đăng ký `AddHostedService` trong `Program.cs`, cùng nhóm với `DeviceLiquidationBackgroundService`/`OtFormBatchBackgroundService`) dequeue rồi chạy trong scope DI riêng của nó, gọi `IOtFormService.SendStepApprovalNotificationAsync(otFormId, otFormApprovalStepId)` — hàm này tự tải lại `OtForm`/`OtFormApprovalStep` (kèm `Candidates`) theo Id (KHÔNG dùng lại entity đã load ở request cũ vì scope đó đã dispose) rồi gọi lại đúng `NotifyEligibleApproversAsync` như trước. An toàn về tính đúng đắn vì `CreateAsync`/`ApproveAsync` đã `SaveChangesAsync()` xong phần nghiệp vụ chính TRƯỚC khi enqueue — hoãn gửi mail không ảnh hưởng gì tới đơn. Không đổi guarantee cũ: `EmailService.SendAsync` vẫn best-effort (tự nuốt lỗi SMTP, không retry) — `QueuedHostedService` chỉ log lỗi nếu work item throw, không có cơ chế thử lại. **Cố ý CHƯA áp dụng** cho `NotifyBatchApproversAsync`/`RunDailyBatchSweepAsync` (đơn tổng) vì luồng đó vốn đã chạy trong `OtFormBatchBackgroundService` (không chặn request nào) — chỉ endpoint Admin `POST /api/OtFormBatch/run-now` còn block, nhưng đây là thao tác thủ công hiếm dùng, chấp nhận được.
 - **SMTP thật đã cấu hình và verify hoạt động (2026-07-17)** — `CompanySystem.HostApi/appsettings.json` mục `EmailSettings` trỏ tới mail server nội bộ `VNMAIL04.yev.vn:587` (STARTTLS). `EmailService.SendAsync` vẫn giữ nguyên tự bắt lỗi SMTP, trả `false`, KHÔNG throw — thiếu cấu hình/SMTP lỗi không làm hỏng nghiệp vụ chính (tạo đơn/duyệt đơn/cập nhật chữ ký vẫn thành công, chỉ không gửi được mail thông báo).
   - **Bẫy chứng chỉ TLS đã gặp và cách sửa**: ban đầu cấu hình `SmtpHost = mail.yev.vn` bị lỗi `SslHandshakeException` — chứng chỉ server thật ghi tên `VNMAIL04`/`VNMAIL04.yev.vn` (hostname mismatch). Đổi `SmtpHost` sang `VNMAIL04.yev.vn` thì hết mismatch nhưng lộ ra chứng chỉ đó là **self-signed** (`Subject = Issuer = CN=VNMAIL04`) → `UntrustedRoot` nếu máy chạy app chưa tin cậy cert này.
   - **Máy nào chạy app cũng cần tự import cert này** vào Trusted Root của máy đó (không tự động theo code) — export cert bằng `openssl`/PowerShell `X509Certificate2`, rồi trên máy host chạy `Import-Certificate -FilePath vnmail04.cer -CertStoreLocation Cert:\LocalMachine\Root` (cần quyền Admin; máy dev không có Admin thì tạm dùng `Cert:\CurrentUser\Root` qua `X509Store` API — chỉ đủ cho user hiện tại, KHÔNG dùng được nếu sau này host chạy dưới AppPool identity của IIS). Khi deploy IIS thật, phải lặp lại bước import trên đúng server đó (`LocalMachine\Root`, vì AppPool chạy user riêng) — cân nhắc nhờ IT đẩy cert qua Group Policy chung của domain `yev.vn` thay vì import tay từng server (domain đã có tiền lệ đẩy các cert nội bộ khác qua GPO).
@@ -2014,6 +2015,278 @@ ký hàng loạt xử lý đúng khi trộn lẫn đơn hợp lệ/không hợp 
 file mẫu tải xuống mở được đúng bằng Excel thật, và lọc Bộ phận trên "Nhân viên dưới chuyền" ra đúng
 kết quả).
 
+#### §Giai đoạn 11 — Thêm nhân viên vào đơn + mật khẩu cấp 2 khi Tạo/Sửa đơn + Lịch sử chỉnh sửa (2026-08-28)
+
+Theo yêu cầu người dùng (2026-08-28): "chỉnh sửa đơn" cho phép sửa giờ tăng ca (đã có) VÀ loại/thêm
+nhân viên (loại đã có sẵn từ trước — §Loại nhân viên khỏi đơn — chỉ "thêm" là mới); mọi thao tác thay
+đổi đơn phải log lại ai/khi nào/đổi gì và xem lại được; Lưu sửa đơn hay Tạo đơn đều phải nhập mật khẩu
+cấp 2; nhân viên thiếu Nhóm ca không được vào đơn. 4 câu hỏi qua `AskUserQuestion` đã chốt: (1) áp
+dụng cho CẢ đơn theo chuyền lẫn đơn thường (không chỉ Chế tạo); (2) mật khẩu cấp 2 dùng lại
+`SecondaryPassword`/`UserSignature` đã có (không thêm luồng xác thực mới); (3) Nhóm ca bắt buộc chặn
+CẢ lúc Import lẫn lúc tạo đơn; (4) log hiển thị ngay trong `OtFormDetail.tsx`.
+
+**1. `AddEmployeeAsync`/`POST /api/OtForm/{id}/employees/add`** (mới) — chiều ngược của
+`RemoveEmployeeAsync` đã có. `AddOtFormEmployeeDto { EmployeeId, EndTime, DidEat, NoteVn, NoteJp,
+SecondaryPassword }`. Cùng điều kiện phân quyền với Remove: candidate của bước `Pending` hiện tại
+(hoặc Admin) + permission riêng **`Attendance.OTForm.AddEmployee`** (migration Identity
+`AddOtFormAddEmployeePermission`, gán cho đúng các Role đang giữ `Attendance.OTForm.RemoveEmployee`
+qua subquery, mirror migration `AddOtFormRemoveEmployeePermission` — cũng thêm vào
+`JobTitlePermissionWhitelist`). Validate: đơn `InApproval`; nhân viên chưa có mặt active trong đơn
+(nếu trước đó đã bị loại khỏi CHÍNH đơn này thì TÁI DÙNG lại đúng dòng `OtFormEmployee` cũ — set
+`IsRemoved=false`, xoá 5 field `Removed*`, không tạo dòng mới); giờ kết thúc trong khoảng
+`[StartTime, EndTime]` của đơn; đơn theo chuyền phải có `ProductionEmployee` tương ứng VÀ
+`ShiftTeamId != null` (xem mục 3); đơn theo Nhóm phải cùng `GroupId`; giới hạn ngày/tháng/năm
+(`ValidateOtHourLimitsAsync`, `excludeFormId` = chính đơn); không trùng giờ OT ngày đó
+(`EnsureNoOverlappingOtFormsAsync`). Snapshot `MonthToDate`/`YearToDate` Dự kiến TRƯỚC khi thêm
+(`ComputeAccumulatedHoursBatchAsync`, cùng nguyên tắc với `CreateAsync`). Sau khi thêm: tính lại
+`ProcessPart.MainTicketCount`/`SecondaryTicketCount` (`RecalculateMealTicketCountsAsync`) +
+`OtForm.NumberOfEmployee`, ghi 1 dòng `OtFormEditLog` (mục 4). FE (`OtFormDetail.tsx`): nút "Thêm
+nhân viên" (điều kiện hiện giống hệt nút Loại — `canAddEmployee = hasPermission(...AddEmployee) &&
+showApprovalActions`) mở modal 2 bước — (a) ô tìm theo Mã/Tên + nút Tìm (đơn theo chuyền gọi
+`ProductionEmployeeApi.search({keyword})` đã hỗ trợ sẵn tìm theo Mã; đơn theo Nhóm gọi
+`EmployeeApi.getEmployeesByGroup(groupId)` rồi lọc client-side, danh sách 1 Nhóm thường nhỏ, loại sẵn
+người đã có trong đơn), (b) chọn 1 người → nhập Giờ kết thúc/Có ăn/Ghi chú/Mật khẩu cấp 2 → Submit.
+
+**2. Mật khẩu cấp 2 bắt buộc khi Tạo đơn VÀ Lưu sửa đơn** — trước đây chỉ Duyệt/Từ chối (kể cả hàng
+loạt) mới cần. `CreateOtFormDto`/`UpdateOtFormDto` thêm `SecondaryPassword` (`[Required]`),
+`OtFormService.CreateAsync`/`UpdateAsync` gọi `_secondaryPasswordService.VerifyAsync(...)` SỚM (đầu
+hàm, trước khi làm việc gì khác — cùng vị trí với `ApproveAsync`). `RemoveOtFormEmployeeDto` (Loại
+nhân viên, action trong app) **đảo ngược quyết định 2026-07-31** — nay CŨNG bắt buộc
+`SecondaryPassword` (đồng bộ với Add/Update ở trên); kênh email
+(`RemoveOtFormEmployeeByEmailTokenDto`) **giữ nguyên KHÔNG cần** (quyết định riêng biệt, token là
+thông tin xác thực duy nhất, không đổi). FE: `CreateOtFormPage.tsx` (dùng chung cho cả Tạo lẫn Sửa)
+thêm 1 field Mật khẩu cấp 2 ngay trên nút Lưu, fetch `SecondaryPasswordApi.getMyStatus()` KHÔNG điều
+kiện `isEditMode` (khác `hasSignature` — Sửa đơn không ký lại nên không cần chữ ký, nhưng vẫn cần mật
+khẩu cấp 2). `OtFormDetail.tsx`: modal Loại nhân viên thêm field Mật khẩu cấp 2 (trước đây không có).
+
+**3. Nhóm ca bắt buộc trước khi tạo/thêm vào đơn** — Import nhân sự dưới chuyền **đã chặn từ
+2026-08-24** (`ProductionEmployeeImportService.ValidateAndResolveRowsAsync` báo lỗi "Thiếu mã NHOM"
+nếu cột trống — mọi `ProductionEmployee` hợp lệ trong DB vốn LUÔN có `ShiftTeamId` do chính sách nạp
+"đủ FK mới nạp, thiếu thì bỏ qua" đã có sẵn, xem comment đầu `ProductionEmployee.cs`). Thêm lớp
+phòng vệ THỨ 2 (2026-08-28) trực tiếp ở `CreateProductionFormAsync`/`AddEmployeeAsync`: tra
+`ProductionEmployee.ShiftTeamId` của mọi nhân viên được chọn, `null` thì chặn tạo/thêm với message
+liệt kê đúng mã nhân viên thiếu — phòng trường hợp hiếm dữ liệu cũ/sửa tay ngoài Import.
+
+**4. `OtFormEditLog` — nhật ký chỉnh sửa đơn** (entity mới, migration `AddOtFormEditLog`) — khác
+`OtFormApprovalHistory` (chỉ ghi Approve/Reject): ghi CÁC THAY ĐỔI DỮ LIỆU sau khi tạo đơn — sửa
+giờ/`DidEat`/ghi chú của 1 nhân viên (`UpdateAsync`, chỉ ghi field THỰC SỰ đổi giá trị, so sánh trước
+khi gán), thêm nhân viên (`AddEmployeeAsync`), loại nhân viên (`RemoveEmployeeCoreAsync`, CẢ kênh
+trong app lẫn email — kênh email vẫn ghi log dù không cần mật khẩu cấp 2, 2 việc độc lập nhau). KHÔNG
+ghi khi `CreateAsync` (đơn mới đã có `CreatedByUserName`/`CreatedAt` làm log riêng). Field:
+`{OtFormId, ActionByUserName, ActionByFullName, ActionAt, ActionType (enum
+TimeChanged=0/NoteChanged=1/EmployeeAdded=2/EmployeeRemoved=3), EmployeeId, EmployeeCodeSnapshot,
+FieldName, OldValue, NewValue}` — 1 dòng/1 field đổi (hoặc 1 hành động Add/Remove), KHÔNG gộp nhiều
+field vào 1 dòng. Đọc qua `OtFormDto.EditLogs[]` (embed thẳng trong `GET /api/OtForm/{id}`, sắp mới
+nhất trước — không có endpoint riêng, người dùng chốt hiển thị ngay trong `OtFormDetail.tsx`). FE:
+khu vực "Lịch sử chỉnh sửa" mới, đặt dưới "Lịch sử duyệt", bảng Thời điểm/Người thực hiện/Nhân
+viên/Thao tác/Thay đổi (`oldValue → newValue`), rỗng thì hiện "Chưa có thay đổi nào" thay vì ẩn hẳn
+khối.
+
+**Chưa verify sống** cả 4 việc trên (build sạch, migration đã `database update` lên DB thật, smoke
+test 7 bước vẫn pass, `tsc`/`eslint` sạch — nhưng chưa test tay qua UI thật: thêm nhân viên vào đơn
+theo chuyền lẫn theo Nhóm, tái dùng dòng đã bị loại trước đó, mật khẩu cấp 2 khi Tạo/Sửa đơn, nhân
+viên thiếu Nhóm ca bị chặn đúng chỗ, và bảng Lịch sử chỉnh sửa hiển thị đúng sau vài lần sửa/thêm/loại
+thật).
+
+#### §Giai đoạn 12 — Phát hiện: Cây duyệt Chuyền của Chế tạo hoàn toàn kẹt (không ai duyệt được) + 6 tài khoản TEST (2026-08-28)
+
+Tra dữ liệu thật khi debug đơn #44 phát hiện: Bộ phận **Chế tạo (Id=7)** — Bộ phận DUY NHẤT có cấu
+hình `ProductionApprovalStep` — **không có ai duyệt được ở BẤT KỲ cấp nào**:
+- **Line Leader**: 17 người được đánh dấu `ProductionEmployee.IsLeader=1` qua file import, nhưng
+  **0/17 có `Employees.UserName`** (nhân viên dưới chuyền không có tài khoản AD) → không ai xác thực
+  được để trở thành candidate (xem §Giai đoạn 9, `JobTitleApprovalChainService` lọc
+  `Employee.UserName != null`).
+- **Group Leader/Team Leader/Manager/Factory Manager/Director**: **không ai** trong Bộ phận Chế tạo
+  giữ các Chức vụ này (chỉ có 4 tài khoản test cũ — Cường/Vinh/Tuấn/Tiến — thuộc Nhóm/Bộ phận IT,
+  không liên quan).
+
+Hệ quả: **mọi đơn "theo chuyền" tạo ra trước 2026-08-28 đều kẹt cứng ngay bước 1**, không phải lỗi
+riêng đơn nào — đây là khoảng trống dữ liệu tổ chức, không phải bug code. Đã báo người dùng, người
+dùng chọn hướng: **tạo tài khoản TEST** (không đụng nhân viên thật) để test được Cây duyệt Chuyền,
+scope theo Line SHIDO/Team HC — xem [identity-module.md §5.6](identity-module.md) cho cơ chế đăng
+nhập TEST (bypass AD, chỉ Development).
+
+**Dữ liệu Attendance đã tạo** (`YevOTManagement`, ghi tay qua `sqlcmd` — không có migration vì đây là
+dữ liệu nghiệp vụ/test, không phải schema):
+- 6 `Employee` mới, `Code` bắt đầu `T-` (`T-LL-SHIDO`/`T-GL-SHIDO`/`T-TL-SHIDO`/`T-MGR-CT`/`T-FM-01`/
+  `T-DIR-01`), `UserName` khớp đúng `TestLoginAccount` tương ứng ở Identity — Line Leader/Group
+  Leader/Team Leader gán `GroupId=35` (Nhóm "SHIDO"), Manager gán `DepartmentId=7` (Chế tạo — không
+  `GroupId`, đúng quy ước Trưởng phòng), Factory Manager/Director không gán Nhóm/Bộ phận (dùng chung
+  toàn công ty). `T-LL-SHIDO` gán thêm `JobTitleId=21` ("Line Leader") — dù không dùng để suy candidate
+  (§Giai đoạn 9, Line Leader suy qua `ProductionEmployee.IsLeader`), vẫn cần set để permission tự động
+  cấp theo Chức vụ hoạt động đúng (khớp cách 17 Line Leader thật cũng đều có `JobTitleId=21`).
+- 1 `ProductionEmployee` mới (`EmployeeCode='T-LL-SHIDO'`, `BlockCode='SHIDO'`, `ProductionLineId=98`,
+  `TeamCode='HC'`, `ShiftTeamCode='HC'`, `IsLeader=1`) để `T-LL-SHIDO` là candidate Line Leader hợp lệ
+  của Line SHIDO. **Rủi ro đã biết**: dòng này sẽ bị `ProductionEmployeeImportService` soft-delete
+  (`IsDeleted=true`) ở lần Import nhân sự dưới chuyền thật tiếp theo, vì `EmployeeCode='T-LL-SHIDO'`
+  không có trong file Excel thật (import là upsert-by-code + xoá mềm mọi code không còn xuất hiện) —
+  cần tạo lại tay sau mỗi lần Import nếu vẫn cần test.
+- `JobTitlePermissions` cho Chức vụ "Director" (Id=20) — **trống hoàn toàn trước đó** (không phải lỗi
+  do đợt này, phát hiện thêm khi setup) — đã copy nguyên 12 permission của "Factory Manager" (Id=19)
+  sang Director để tài khoản test Director dùng được (an toàn vì chưa có nhân viên thật nào giữ Chức
+  vụ Director).
+- 6 dòng `UserPermissions` (Identity, `IsAutoGranted=true`) tương ứng — seed tay 1 lần vì lúc tạo dữ
+  liệu `Identity.User` của 5/6 tài khoản còn chưa tồn tại (JIT-provision chỉ xảy ra lúc đăng nhập lần
+  đầu — xem [identity-module.md §5.6](identity-module.md)); từ nay sửa Chức vụ các Employee này qua UI
+  bình thường sẽ tự sync lại đúng cơ chế, không cần lặp lại bước tay này.
+
+**6 tài khoản TEST** (đăng nhập qua `POST /api/Auth/login`, mật khẩu chung `Test@2026`, CHỈ hoạt động
+khi BE chạy Development):
+
+| UserName | Vai trò | Phạm vi |
+|---|---|---|
+| `TEST\ll_shido` | Line Leader | Line SHIDO |
+| `TEST\gl_shido` | Group Leader | Nhóm SHIDO |
+| `TEST\tl_shido` | Team Leader | Nhóm SHIDO |
+| `TEST\mgr_ct` | Manager | Bộ phận Chế tạo |
+| `TEST\fm_01` | Factory Manager | Toàn công ty |
+| `TEST\dir_01` | Director | Toàn công ty |
+
+**Mật khẩu cấp 2 + chữ ký đã cấu hình đủ (2026-08-28)** — cả 6 tài khoản đều đã đăng ký Mật khẩu cấp 2
+(`Test@2026`, cùng giá trị với mật khẩu đăng nhập TEST cho dễ nhớ); riêng 3 tài khoản ở bước
+`RequiresSignature=true` theo `ProductionApprovalStep` của Chế tạo (`TEST\gl_shido`, `TEST\tl_shido`,
+`TEST\mgr_ct`) đã đăng ký thêm chữ ký (ảnh PNG 1x1 placeholder — chỉ để vượt qua check "đã có chữ ký
+chưa", không phải chữ ký thật). `TEST\ll_shido`/`TEST\fm_01`/`TEST\dir_01` KHÔNG cần chữ ký (bước
+tương ứng `RequiresSignature=false`) nên cố tình không đăng ký.
+
+Vì tài khoản TEST không có Email thật (JIT-provision không resolve được AD thật), luồng xác nhận qua
+email bình thường (`RequestUpdateAsync` gửi mail) không áp dụng được — đã tự lấy `Token` thẳng từ
+`PendingSecondaryPasswordConfirmations`/`PendingSignatureConfirmations` (DB) rồi gọi thẳng
+`POST .../confirm/{token}` ([AllowAnonymous], vốn dùng cho link email) để kích hoạt, KHÔNG bypass
+service/hasher — đi đúng luồng `SecondaryPasswordService`/`UserSignatureService` sẵn có, chỉ thay bước
+"nhận link qua email" bằng đọc token trực tiếp.
+
+**Chưa verify sống** — đã xác nhận 6 tài khoản đăng nhập được, trả đúng permission, có đủ Mật khẩu cấp
+2/chữ ký theo yêu cầu từng bước, nhưng CHƯA thử tạo 1 đơn "theo chuyền" thật cho Line SHIDO rồi đi hết
+chuỗi duyệt Line Leader → Group Leader → Team Leader → Manager qua UI thật (chỉ mới test tay từng
+API bằng `curl`/PowerShell).
+
+#### §Giai đoạn 13 — Group Leader/Team Leader "theo chuyền" đổi sang duyệt CHUNG cả Bộ phận + thêm 10 Line Leader TEST (2026-08-28)
+
+Theo yêu cầu người dùng ("Riêng ở dưới chuyền thì việc GL và TL sẽ là người duyệt tổng được luôn"):
+đơn "theo chuyền" (`ProductionApprovalStep`, §Giai đoạn 9) đổi phạm vi tìm ứng viên bước **Group
+Leader/Team Leader** từ **theo đúng Nhóm của người trong đơn** sang **CHUNG cả Bộ phận Chế tạo** —
+khớp đúng cách Manager đã hoạt động (`deptCandidates`), KHÔNG còn cần `derivedGroupId`/khớp
+`Employee.GroupId` nữa. **Chỉ áp dụng cho đơn "theo chuyền"** — đơn "theo Nhóm" (`GroupApprovalStep`,
+§Giai đoạn 4) vẫn giữ nguyên scoping theo từng Nhóm như cũ, không đổi gì.
+
+Sửa `JobTitleApprovalChainService.ResolveChainForProductionCreationAsync`
+(`Attendance.Application/Services/JobTitleApprovalChainService.cs`): xoá hẳn việc suy `derivedGroupId`
+từ `employeeIds` (không còn dùng); `groupScopedCandidates` đổi predicate từ `x.GroupId ==
+derivedGroupId` sang `(x.Group != null && x.Group.DepartmentId == departmentId) || x.DepartmentId ==
+departmentId` (y hệt `deptCandidates`). Hệ quả: `TEST\gl_shido`/`TEST\tl_shido` (Giai đoạn 12) giờ là
+candidate hợp lệ cho **MỌI** đơn theo chuyền của Chế tạo, không riêng gì Line SHIDO/Nhóm SHIDO.
+
+**Thêm 10 tài khoản TEST Line Leader** cho 10 Line thật khác của Chế tạo (đều đang có Leader thật qua
+`ProductionEmployee.IsLeader=1` nhưng không ai có `UserName`, cùng tình trạng đã phát hiện ở Giai đoạn
+12) — nhờ thay đổi trên, giờ chỉ cần thêm Line Leader là đủ đi hết chuỗi duyệt cho Line đó, không cần
+tạo thêm Group Leader/Team Leader riêng nữa. Migration `AddMoreTestLineLeaderAccounts` (Identity, seed
+`TestLoginAccounts`, cùng mật khẩu `Test@2026`) + `Employee`/`ProductionEmployee` tương ứng ghi tay
+(`YevOTManagement`, cùng cơ chế Giai đoạn 12 — không có migration data vì là dữ liệu nghiệp vụ/test).
+Mỗi tài khoản đã cấu hình Mật khẩu cấp 2 (`Test@2026`, KHÔNG cần chữ ký — bước Line Leader của Chế tạo
+`RequiresSignature=false`):
+
+| UserName | Line (`BlockCode`/`ProductionLineId`) |
+|---|---|
+| `TEST\ll_4s` | 4S / 75 |
+| `TEST\ll_ct` | CT / 78 |
+| `TEST\ll_f` | F / 92 |
+| `TEST\ll_hl` | HL / 66 |
+| `TEST\ll_kanbanmae` | KANBAN-MAE / 85 |
+| `TEST\ll_kza` | KZ-A / 87 |
+| `TEST\ll_kzm` | KZ-M / 91 |
+| `TEST\ll_tc` | TC / 57 |
+| `TEST\ll_tca` | TCA / 94 |
+| `TEST\ll_tqm` | TQM / 99 |
+
+Tổng cộng 16 tài khoản TEST hiện có cho Attendance (11 Line Leader + `gl_shido`/`tl_shido`/`mgr_ct`/
+`fm_01`/`dir_01`) — đủ để tạo + duyệt hết 1 đơn "theo chuyền" trên BẤT KỲ Line nào trong 11 Line kể
+trên, không riêng gì SHIDO.
+
+**Chưa verify sống** — build sạch, cả 2 migration (Identity) đã `database update` lên DB thật, smoke
+test 7 bước vẫn pass, đã xác nhận qua SQL rằng `gl_shido`/`tl_shido` khớp đúng điều kiện ứng viên mới
+(department-wide) — nhưng CHƯA tạo/duyệt thật 1 đơn nào trên các Line mới thêm qua UI.
+
+#### §Giai đoạn 14 — Sửa quyền tạo đơn "theo chuyền": Line Leader không cần tự tăng ca (2026-08-28)
+
+Người dùng phát hiện lỗi thiết kế khi test bằng `TEST\ll_shido`: quy tắc CŨ ở
+`CreateProductionFormAsync` bắt creator (không phải Admin) **phải nằm trong chính danh sách nhân viên
+của đơn** — comment gốc thú nhận đây chỉ là giải pháp tạm ("không có Group để check như đơn theo
+Nhóm"). Hệ quả sai: Line Leader đứng ra lập đơn OT cho cả Line mình phụ trách nhưng bản thân KHÔNG
+tăng ca hôm đó sẽ bị chặn vô lý bởi thông báo "Bạn chỉ được tạo đơn có chính bạn trong danh sách nhân
+viên."
+
+**Quy tắc mới** (đã xác nhận với người dùng): Admin luôn được tạo (không đổi); người thường phải là
+**Line Leader thật** (`ProductionEmployee.IsLeader=true`) của **ít nhất 1 Line** có mặt trong danh
+sách nhân viên của đơn — không còn yêu cầu chính họ có tên trong danh sách tăng ca. Sửa
+`OtFormService.CreateProductionFormAsync`: suy `orderLineIds` (các `ProductionLineId` phân biệt của
+những nhân viên trong `request.Employees`, qua `ProductionEmployee`), rồi kiểm tra
+`creatorEmployee.Id` có ít nhất 1 dòng `ProductionEmployee.IsLeader=true` trùng 1 trong các
+`orderLineIds` đó không.
+
+Không đổi `AddEmployeeAsync`/`UpdateAsync` (đơn theo chuyền) — 2 hàm đó vốn đã dùng đúng quy tắc
+"candidate của bước Pending hiện tại", không mắc lỗi tương tự.
+
+**Chưa verify sống** — build sạch, smoke test 7 bước vẫn pass — nhưng CHƯA test tay qua UI thật việc
+`TEST\ll_shido` tạo đơn cho các đồng nghiệp Line SHIDO khi chính mình không có tên trong danh sách.
+
+#### §Giai đoạn 15 — Sửa lỗi: permission `Attendance.OTForm.AddEmployee` chưa từng được cấp qua Chức vụ (2026-08-28)
+
+Người dùng phát hiện đăng nhập bằng `TEST\gl_shido` (Group Leader) rồi thử "Thêm nhân viên vào đơn"
+(tính năng Giai đoạn 11) thì không làm được. Nguyên nhân: `Attendance.OTForm.AddEmployee` (permission
+mới thêm ở Giai đoạn 11) **được seed gán cho Role** (migration `AddOtFormAddEmployeePermission`,
+copy quyền theo Role đang giữ `RemoveEmployee`), nhưng **quên thêm vào bảng `JobTitlePermissions`**
+(cơ chế cấp quyền tự động theo Chức vụ, §Cây chức vụ) — nên bất kỳ ai được cấp quyền qua Chức vụ (toàn
+bộ luồng "theo chuyền"/"theo Nhóm" hiện tại, không dùng Role phân quyền tay nữa) đều thiếu quyền này
+dù đúng là candidate hợp lệ của bước đang chờ — bị chặn ở tầng `[RequirePermission]` trước khi vào tới
+logic nghiệp vụ.
+
+**Đã sửa**: thêm `Attendance.OTForm.AddEmployee` vào `JobTitlePermissions` cho đúng 7 Chức vụ đang có
+sẵn `Attendance.OTForm.RemoveEmployee` (Staff/Line Leader/Group Leader/Team Leader/Manager/Factory
+Manager/Director — mirror y hệt danh sách Chức vụ đang giữ Remove), cộng thêm cấp thẳng
+`UserPermissions` (Identity, `IsAutoGranted=true`) cho MỌI tài khoản đang có sẵn Identity.User và giữ 1
+trong 7 Chức vụ đó (cả tài khoản TEST lẫn tài khoản thật: `m.cuong.da.pcd.it`, `m.khoi80419`,
+`n.truong.da.pcd.it`, `t.sang80972`, `tuan.system.da`, `v.vinh72266` — riêng `tien.section.da` chưa có
+Identity.User nào cả, vì chưa từng đăng nhập lần nào, sẽ tự có quyền này khi có ai sync lại Chức vụ
+của họ sau lần đăng nhập đầu, không cần thao tác tay thêm). Ghi tay qua `sqlcmd` (không phải migration
+vì đây là sửa DATA, không đổi schema) — về sau Admin sửa `JobTitlePermissions` qua UI bình thường
+(`PUT /api/JobTitlePermission/{jobTitleId}`) vẫn hoạt động đúng, không bị ghi đè lại.
+
+**Đã verify sống** — gọi lại `POST /api/Auth/login` bằng `TEST\gl_shido`, xác nhận
+`Attendance.OTForm.AddEmployee` đã có trong danh sách permission trả về.
+
+Lưu ý FE khi Admin sửa quyền qua Chức vụ (hoặc BE seed tay như trên): permission của 1 phiên đăng
+nhập đang mở chỉ đọc lại khi gọi `GET /api/Auth/me` (JWT không tự refresh) — nút "Làm mới quyền" ở
+Header đã có sẵn cho đúng trường hợp này, cần bấm lại (hoặc đăng nhập lại) sau khi quyền vừa đổi mới
+thấy nút/hành động mới xuất hiện ở FE.
+
+#### §Giai đoạn 16 — Màn Chi tiết đơn hiện Line/Team/Nhóm ca cho đơn "theo chuyền" (2026-08-29)
+
+Người dùng chỉ ra `OtFormDetail.tsx` (màn Chi tiết đơn) hiển thị y hệt đơn "theo Nhóm" dù đang xem 1
+đơn "theo chuyền" — không có gì cho biết Line/Team/Nhóm ca, dù dữ liệu snapshot
+(`blockCodeSnapshot`/`teamCodeSnapshot`/`shiftTeamCodeSnapshot`) đã có sẵn trên `OtFormEmployeeDto`
+(màn Sửa đơn `CreateOtFormPage.tsx` đã hiện từ Giai đoạn trước, riêng màn Chi tiết đơn thì quên).
+Thêm 2 chỗ, gate theo `form.isProductionForm`:
+- Khối "Thông tin đơn": 3 ô Line/Team/Nhóm ca — giá trị PHÂN BIỆT gộp từ toàn bộ nhân viên còn active
+  trong đơn (`useMemo productionSummary`, lọc `!employee.isRemoved`).
+- Bảng danh sách nhân viên: 3 cột Line/Team/Nhóm ca chèn ngay sau "Họ và tên" — đúng theo TỪNG người
+  (khác đơn theo Nhóm, các Line trong 1 đơn theo chuyền có thể khác nhau giữa các nhân viên). Dòng đã
+  bị loại khỏi đơn (`isRemoved`) tăng `colSpan` của ô ghi chú loại bỏ thêm 3 (6→9) để không lệch bảng.
+
+Thêm i18n key `colBlockCode`/`colTeamCode`/`colShiftTeam` vào namespace `Attendance.OtFormDetail`
+(vi.json/ja.json) — namespace riêng với `Attendance.CreateOtForm` (đã có 3 key cùng tên/nghĩa từ
+trước), không dùng chung được vì next-intl không share key giữa 2 namespace.
+
+**Sửa tiếp (2026-08-29, theo phản hồi người dùng ngay sau khi thêm 3 cột trên)**: bảng bị nhận xét
+"rối chữ" — cột "Có ăn" đổi từ pill có icon+chữ (`✓ Có ăn`/`✗ Không ăn`) sang CHỈ 1 icon căn giữa
+(`Check`/`X`, `lucide-react`), bỏ chữ vì header cột đã ghi rõ ý nghĩa rồi — `title`/`aria-label` vẫn
+giữ nguyên text cũ để hover/screen reader không mất thông tin. Lucide icon component không nhận prop
+`title` trực tiếp (lỗi kiểu `LucideProps` không có `title`) — phải bọc icon trong `<span title=...>`.
+Các cột khác (Loại phiếu ăn — 3 trạng thái, không rút gọn về icon đơn được) giữ nguyên, chưa đổi.
+
+**Đã verify** — `tsc --noEmit`/`eslint` sạch trên `OtFormDetail.tsx`. Chưa test tay qua UI thật (cần
+mở lại 1 đơn theo chuyền để xem — đơn #47 trong ảnh chụp màn hình người dùng gửi là ví dụ phù hợp).
+
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.
 - Migrations theo thứ tự: `InitAttendance` → `AddOtCaseApprovalLevelAndEmployeeScope` → `RemoveAreaLineFromOtFormAddGroupDepartment` → `MakeEmployeeGroupRequiredRemoveDepartment` → `RenameUserIdToUserName` → `AddApproverFullNameToOtFormApprovalHistory` → `AddEmployeeUserNameAccumulationAndOtFormCreatedByFullName` → `AddMealTicketCountsToProcessPart` → `AddEmailConfirmationTables` → `AddSecondaryPassword` (2026-07-30, bảng `SecondaryPasswords`/`PendingSecondaryPasswordConfirmations`) → `AddRemovedFieldsToOtFormEmployee` (2026-07-30, 6 cột soft-remove trên `OtFormEmployees`) → `AddAttendanceSetting` (2026-08-01, bảng `AttendanceSettings` 1 dòng, seed `(2.5, 25, 300)` — xem §Cấu hình phiếu ăn & giới hạn lũy kế) → `AddOtFormBatch` (2026-08-06, bảng `OtFormBatches`/`OtFormBatchEmailTokens` — xem §Đơn tổng) → `AddProjectedAccumulationToEmployee` (2026-08-06, 4 cột `Projected*` trên `Employees` — xem §Lũy kế dự kiến) → `AddJobTitle` (2026-08-06, bảng `JobTitles` + cột `Employees.JobTitleId` + seed 14 chức vụ — xem §Cây chức vụ) → `AddRequesterResponsible` (2026-08-06, cột `Requester*`/`Responsible*` trên `Group`/`OtForm` — tính năng KHÁC, không thuộc Cây chức vụ; **DB thật đã có sẵn schema này từ trước** do ai đó áp dụng tay ngoài EF, migration được **stamp thẳng vào `__EFMigrationsHistory` chứ không chạy lại DDL**, xem ghi chú cuối §Cây chức vụ Giai đoạn 2b) → `AddDepartmentApprovalStep` (2026-08-06, bảng `DepartmentApprovalSteps`, không seed dữ liệu — xem §Cây chức vụ Giai đoạn 2b) → `MoveRequiresSignatureToDepartmentApprovalStep` (2026-08-07, `DropColumn JobTitles.RequiresSignature` + `AddColumn DepartmentApprovalSteps.RequiresSignature` — xem §Cây chức vụ Giai đoạn 2c) → `AddIsResponsibleToDepartmentApprovalStep` (2026-08-07, `AddColumn DepartmentApprovalSteps.IsResponsible` — xem §Cây chức vụ Giai đoạn 2d) → `GiaiDoan3JobTitleApprovalStepWiring` (2026-08-07, rename `ApprovalLevel→OtFormApprovalStepId` trên `OtFormApprovalHistories`/`OtFormApprovalEmailTokens`, `AddColumn OtForms.ApprovalChainWarning`, `CreateTable OtFormApprovalSteps`/`OtFormApprovalStepCandidates` — xem §Cây chức vụ Giai đoạn 3.1) → `RemoveUserApprovalScope` (2026-08-08, Giai đoạn 3.2, `DropTable UserApprovalScopes` — xoá hẳn feature orphaned, xem §Cây chức vụ Giai đoạn 3.2 mục 4) → `AddOtFormDeleteFields` (2026-08-08, `AddColumn` 4 cột `Deleted*`/`DeleteReason` trên `OtForms` — xem §Xoá đơn kẹt vĩnh viễn) → `MakeEmployeeGroupNullableAddDepartment` (2026-08-08, `AlterColumn Employees.GroupId NULL` + `AddColumn Employees.DepartmentId` + FK + index — xem §Gán tổ chức theo Chức vụ) → `AddBatchAutoSendTimeToAttendanceSetting` (2026-08-08, `AddColumn AttendanceSettings.BatchAutoSendTime:TimeOnly` default `15:00:00` — xem §Đơn tổng) → `RemoveOldRequesterResponsibleAddCreatorSignature` (2026-08-08, `DropColumn` toàn bộ `Requester*`/`Responsible*` trên `Groups`/`OtForms` + FK liên quan, `AddColumn OtForms.CreatorSignatureImage:byte[]?` — xem §Người tạo tự ký ô "Người đề nghị") → `AddGroupApprovalStepRemoveDeptResponsible` (2026-08-08, `CreateTable GroupApprovalSteps` + `DropColumn DepartmentApprovalSteps.IsResponsible` — xem §Giai đoạn 4) → `SimplifyJobTitleTo6Levels` (2026-08-08, xoá toàn bộ dữ liệu đơn OT + cấu hình cây duyệt cũ, reset `Employees.JobTitleId=NULL`, thu gọn `JobTitles` 14→6 dòng — xem §Giai đoạn 4) → `AddJobTitlePermission` (2026-08-10, `CreateTable JobTitlePermissions` — xem §Giai đoạn 6) → `AddApprovalStepCoordinators` (2026-08-11, `CreateTable DepartmentApprovalStepCoordinators`/`GroupApprovalStepCoordinators` — xem §Giai đoạn 7) → `ChangeApprovalStepCoordinatorsToEmployeeId` (2026-08-11b, đổi khoá 2 bảng trên từ `UserName` sang `EmployeeId` FK, MAP dữ liệu cũ qua `Employees.UserName` trùng khớp trước khi xoá cột — xem §Giai đoạn 7, mục "Sửa 2026-08-11b") → `AddEmployeeAccumulationHistory` (2026-08-11d, `CreateTable EmployeeAccumulationHistories` — xem §Giai đoạn 8). Tất cả đã `database update`/stamp vào `YevOTManagement` (permission Identity tương ứng `AddJobTitlePermissions`/`AddDepartmentApprovalStepPermissions`/`AddGroupApprovalStepPermissions`/`AddJobTitlePermissionPermissions`/`AddApprovalStepCoordinatorPermissions` cũng đã apply vào `YevIdentityManagement`, cùng `AddIsAutoGrantedToUserPermission` — `AddColumn UserPermissions.IsAutoGranted` — xem §Giai đoạn 6). Đã xác nhận lại 2026-08-08 qua `__EFMigrationsHistory` trên DB thật: `GiaiDoan3JobTitleApprovalStepWiring` đứng đầu danh sách migration đã apply — dòng cảnh báo "CHƯA apply" trước đây đã lỗi thời, xoá bỏ.
@@ -2158,6 +2431,494 @@ hoạch chi tiết + lý do từng quyết định: `~/.claude/plans/attendance-
   "chưa giữ Role X" (không còn tra được theo Role nữa, BE chặn bằng permission ở tầng Service).
   `OtFormTabsPage.tsx`: tab "Chờ tôi ký duyệt" trước đây ẩn cho ai không giữ Role `Trưởng nhóm`, nay
   hiện cho mọi người có `Attendance.OTForm.Create` (không còn cách nào tra "là Trưởng nhóm" từ FE).
+
+### §Báo cáo dưới chuyền theo ngày (2026-08-28)
+
+2 báo cáo cho đơn "dưới chuyền" (`IsProductionForm=true`) đã **Hoàn tất** (`Status=Completed` — qua
+đủ mọi cấp duyệt, không chỉ riêng Trưởng phòng), theo yêu cầu người dùng khớp `docs/Note_OT.txt` mục
+1 dòng 10 và mục 2 (người dùng đưa 2 file mẫu từ hệ cũ `docs/Data/Reports/22-08.pdf`/`.xlsx` để đối
+chiếu cột). Code mới: `MealTicketCalculator.cs` (tách `IsEarlyMealWindowOt`/`CalculateOtHours`/
+`CalculateMealTicketType` ra khỏi `OtFormService` để dùng chung — `OtFormService` gọi lại qua
+`using static`), `Dtos/Reports/ProductionTicketReportDto.cs`, `ProductionOtReportService.cs`,
+`ProductionOtReportController.cs`, permission `Attendance.ProductionOtReport.View` (migration
+`AddProductionOtReportPermission`, gán theo Role đang giữ `Attendance.Employee.Create`, cùng cách
+`AddProductionEmployeeImportPermissions`). FE: `modules/attendance/components/reports/
+ProductionOtReportPanel.tsx` (2026-08-28b: đổi từ trang riêng ở sidebar sang tab "Báo cáo" trong
+`CategoryManagement.tsx` (`/ot/categories`), theo yêu cầu người dùng gom lại + bỏ hẳn mục "Lũy kế
+nhân viên" khỏi sidebar — route `/ot/accumulation`/`AccumulationLookupPage.tsx` vẫn còn, chỉ không
+còn link trực tiếp).
+
+**1. `GET /api/ProductionOtReport/ticket-report?date=yyyy-MM-dd`** — "Xuất số lượng phiếu đã sử
+dụng" (mục 2 Note_OT.txt). Trả JSON (`ApiResponse<ProductionTicketReportDto>`), FE tự dựng PDF bằng
+jsPDF/jspdf-autotable (BE không sinh PDF) — cùng pattern `DeviceListReportPrintDialog.tsx`.
+- Gom mọi `OtForm` Completed đúng ngày theo tổ hợp (`CongDoanSnapshot`, `TeamCodeSnapshot`,
+  `BlockCodeSnapshot`, `ShiftTeamCodeSnapshot`, `StartTime`, `EndTime` CHÍNH XÁC — không chỉ theo CA,
+  vì cùng 1 Line/CA có thể có nhiều dòng khác giờ do người về sớm/vào trễ, khớp đúng cách hệ cũ tách
+  dòng trong file mẫu). Nhiều đơn trùng đúng tổ hợp thì **cộng dồn**.
+- Phiếu Chính/Phụ/Sữa đọc **THẲNG** từ `ProcessPart.MainTicketCount/SecondaryTicketCount/MilkCount`
+  của từng đơn — **KHÔNG** suy luận lại từ `MealTicketType` từng nhân viên (chốt lại với người dùng
+  sau khi họ chỉ ra `MilkCount` đã là số liệu thật lưu sẵn per-đơn, tính lại sẽ sai nếu có sửa tay).
+- CA (A/B/C/H) suy từ `StartTime`/`EndTime` của đơn theo khung giờ cố định (người dùng chốt
+  2026-08-28): H=6-8h, B=10-14h, A=14-18h, C=18-22h — khớp khi `StartTime >= khung.Start && EndTime
+  <= khung.End` (không cần trùng khớp tuyệt đối, vì về sớm/vào trễ vẫn thuộc đúng CA gốc). Không khớp
+  khung nào → nhãn "Khac" (chưa gặp trong dữ liệu thật, chỉ phòng hờ).
+- "Line_ca" hiển thị = `BlockCodeSnapshot + "-" + ShiftTeamCodeSnapshot` — hậu tố G/O/HC là mã
+  **Nhóm màu** (`ProductionShiftTeam` Green/Orange/HC), **KHÔNG phải giờ ca** (nhầm lẫn ban đầu đã
+  sửa lại sau khi đọc code `ProductionShiftTeam.cs`).
+- Verify bằng dữ liệu thật (2026-08-28, đơn #47+#48 cùng ngày 2026-08-29): tổng khớp đúng
+  (Phụ=1+1=2, Chính=3+2=5, Sữa=2+0=2), tách đúng 2 dòng theo Line khác nhau (`4S-HC`/`HL-HC`), CA
+  suy đúng "A" cho khung 14:00-18:00.
+
+**2. `GET /api/ProductionOtReport/hours-report-excel?date=yyyy-MM-dd`** — "Tổng số giờ tăng ca 1
+người trong 1 ngày" (mục 1 dòng 10 Note_OT.txt). Trả file `.xlsx` trực tiếp (`ClosedXML`, không qua
+`ApiResponse<T>` — cùng pattern `ProductionEmployeeExportController`).
+- **Gộp 1 dòng/người/ngày** (chốt với người dùng — báo cáo "số LƯỢT tăng ca" ở Note_OT.txt mục 1 dòng
+  9 là báo cáo khác, **chưa làm**): cộng tổng giờ OT thực tính (`MealTicketCalculator.CalculateOtHours`,
+  cùng công thức trừ 30 phút ăn với mọi nơi khác) của mọi lượt trong ngày; Giờ bắt đầu/kết thúc lấy
+  sớm nhất/muộn nhất trong ngày; Lý do/Công việc/Block/Nhóm gộp distinct nếu nhiều lượt khác nhau.
+- Cột "Lũy kế tháng"/"Lũy kế năm" scope theo **Năm/Tháng của `date` báo cáo** (không phải "hôm nay"
+  thực tế như `MonthToDate`/`YearToDate` ở màn danh sách nhân viên) — hợp lý hơn cho báo cáo về 1
+  ngày cụ thể trong quá khứ/tương lai; đọc từ `EmployeeAccumulationHistories` (Year=date.Year,
+  Month<=date.Month cho Năm, Month=date.Month cho Tháng).
+- Verify bằng dữ liệu thật (2026-08-29): 9 nhân viên, tổng giờ đúng công thức trừ 30 phút ăn (VD
+  14:00-18:00 có ăn → 3.5h), Lũy kế tháng/năm = tổng giờ (đúng vì đây là lượt OT đầu trong tháng/năm
+  của họ).
+
+**Vị trí UI (sửa 2026-08-28b, theo yêu cầu người dùng)**: KHÔNG còn là mục riêng ở sidebar — chuyển
+thành tab "Báo cáo" trong `CategoryManagement.tsx` (`/ot/categories`). Cùng đợt, bỏ hẳn mục "Lũy kế
+nhân viên" khỏi sidebar (route `/ot/accumulation` vẫn còn, chỉ không còn link trực tiếp).
+
+**Group Leader tự xem được báo cáo (2026-08-28b, theo yêu cầu người dùng)**: đã thêm
+`Attendance.ProductionOtReport.View` vào `JobTitlePermissionWhitelist.AllowedCodes` (nhóm "tham gia
+quy trình", không phải "quản trị") rồi gán cho Chức vụ **Group Leader** (`JobTitle.Code="GL"`, Id=16
+trên DB thật lúc gán) qua `PUT /api/JobTitlePermission/by-job-title/16` — verify lại bằng SQL:
+2 nhân viên thật đang giữ Chức vụ này (`m.cuong.da.pcd.it`, `TEST\gl_shido`) đã có
+`UserPermissions.IsAutoGranted=1` cho permission này ngay sau khi gọi API (không cần đăng nhập lại).
+- Vì tab "Báo cáo" nằm chung trang với 8 tab quản trị (Department/Group/Reason/OtCase/JobTitle/
+  JobTitlePermission/ApprovalStep/Employee/Settings — vốn chỉ Admin/Người phụ trách Cây duyệt được
+  vào), `CategoryManagement.tsx` phải tự lọc tab hiển thị theo permission: ai chỉ có
+  `ProductionOtReport.View` (không có `Department.Create`/`*ApprovalStep.Update`) vào "Danh mục" vẫn
+  chỉ thấy đúng 1 tab "Báo cáo", không lộ UI CRUD của 8 tab kia. Sidebar mục "otCategories" cũng thêm
+  `ProductionOtReport.View` vào danh sách OR-permission để Group Leader thấy được mục "Danh mục".
+- Muốn gán quyền này cho Chức vụ khác (VD Team Leader) hoặc gỡ khỏi Group Leader: vào "Danh mục" →
+  tab "Quyền theo Chức vụ" (`JobTitlePermissionManager.tsx`), không cần sửa code.
+
+**Format xuất chưa giống file mẫu — đã sửa (2026-08-28c, theo phản hồi người dùng)**:
+- PDF thiếu hẳn khối bảng tổng hợp đầu trang so với `22-08.pdf` — đã thêm lại (`buildPivotRows` trong
+  `ProductionOtReportPanel.tsx`, tự gộp từ `report.rows` đã có, không cần BE trả thêm dữ liệu): nhóm
+  theo CA (thứ tự cố định A→B→C→H, không phải alphabet) rồi tới CA_Dãy bên trong, có dòng tổng mỗi CA
+  (tô đậm/nền xám) và dòng "TỔNG" cuối cùng (tô hồng). Có 1 điểm khác biệt CÓ CHỦ ĐÍCH so với mẫu: bỏ
+  cột "giờ" ở từng dòng CA_Dãy (mẫu gốc chỉ hiện 1 giờ dù 1 CA_Dãy có thể gồm nhiều Line với giờ khác
+  nhau do người về sớm/vào trễ — hiện 1 giờ sẽ sai/gây hiểu lầm, xem đủ giờ ở bảng chi tiết bên dưới).
+- Excel đổi tên cột về đúng chữ trong `22-08.xlsx` (`MNV/BOPHAN/HO/TEN/Ngay_TC/Gio_BD/Gio_KT/Lydo/
+  CONGVIEC/OT_Thang/OT_Nam/BLOCK/NHOM`) thay vì tên tiếng Việt tự đặt trước đó — không đổi Ý NGHĨA dữ
+  liệu (vẫn gộp 1 dòng/người/ngày như đã chốt), chỉ đổi CHỮ hiển thị cho quen mắt.
+
+**Đợt sửa tiếp theo (2026-08-28d, người dùng gửi lại ảnh chụp file mẫu)** — bản trên vẫn thiếu khung
+viền + màu sắc giống bản gốc, đã làm lại `buildTicketReportPdf`/`buildPivotRows` trong
+`ProductionOtReportPanel.tsx` cho khớp ảnh chụp:
+- Khung viền cyan (`doc.rect`, màu `[77,208,225]`) bao quanh tiêu đề + bảng tổng hợp, độ rộng khung tự
+  co theo độ dài tiêu đề (`doc.getTextWidth`) để không bị cắt chữ khi tên ngày dài.
+- Bảng tổng hợp thêm lại cột "giờ đại diện" mỗi dòng CA_Dãy (bỏ ở đợt trước, người dùng muốn giữ đúng
+  bản gốc) — lấy `StartTime` của dòng chi tiết ĐẦU TIÊN trong nhóm (`teamRows[0]`), chấp nhận không
+  hoàn toàn chính xác nếu 1 CA_Dãy gồm nhiều Line lệch giờ nhau (hiếm, xem đủ giờ ở bảng chi tiết).
+- Dòng đầu bảng tổng hợp lặp lại 3 số tổng cộng (đỏ đậm) làm "tiêu đề số" — giữ đúng quirk hiển thị
+  gốc thay vì đổi thành chữ "Phiếu Phụ/Chính/Sữa".
+  Màu: nhóm CA tím đậm `[106,27,154]`, dòng CA_Dãy xanh lá `[46,125,50]` + nền xám nhạt
+  `[241,245,249]`, tiêu đề+TỔNG đỏ `[211,47,47]`, tiêu đề trang xanh dương đậm `[21,67,96]`.
+- "TỔNG :" tách RIÊNG ra ngoài khung (dưới khung, không phải dòng cuối trong bảng) — đúng vị trí bản
+  gốc.
+- Bảng chi tiết bên dưới cũng đổi qua `theme: "grid"` viền cyan + header chữ xanh dương, khớp phong
+  cách viền ô của ảnh chụp.
+- Verify bằng script Node độc lập (`jsPDF`/`jspdf-autotable` chạy trực tiếp trong `node`, dựng PDF từ
+  dữ liệu mẫu rồi đọc lại bằng công cụ đọc PDF) trước khi báo xong — không chỉ tin code review, đã
+  thấy đúng bố cục khung/màu/cột trước khi coi là hoàn tất.
+
+**Đợt sửa cuối cùng khớp bản gốc (2026-08-29, đọc trực tiếp `docs/Data/Reports/22-08.pdf` thay vì ảnh
+chụp)** — 2 lỗi màu/khổ giấy do đọc nhầm ảnh mờ ở đợt trước:
+- **Khổ giấy: A4 DỌC** (`orientation: "portrait"`), không phải ngang như đợt trước.
+- Màu đúng bản gốc: nhóm CA **tím** `[106,61,154]` (giữ nguyên); dòng CA_Dãy — nhãn/giờ/cột "Phiếu
+  Phụ" chữ **đen** `[0,0,0]` trên nền xám nhạt `[242,242,242]`, riêng 2 cột **"Chính"/"Sữa" chữ xanh
+  lá** `[46,125,50]` (quirk màu của file mẫu, không phải lỗi — chỉ 2/3 cột số ở dòng leaf tô xanh);
+  tiêu đề trang + header bảng chi tiết đổi từ xanh navy sang **xanh lam đậm** `[26,115,140]`.
+- Thêm chân trang lặp lại mọi trang: ngày giờ in (trái) + "Page X of Y" (phải) — dùng
+  `doc.getNumberOfPages()`/`doc.setPage(i)`, khớp bản gốc tự ngắt trang khi nhiều dòng (file mẫu thật
+  ra tới `Page 1 of 3`).
+- Verify: render script Node với 120 dòng giả (ép ngắt 6 trang, kiểm chân trang lặp đúng mỗi trang) +
+  đối chiếu trực tiếp ảnh render với `22-08.pdf` gốc (không phải ảnh chụp lại).
+
+### §Excel "Tổng số giờ tăng ca" — mở rộng đủ 23 cột + lọc theo Phòng ban (2026-08-29)
+
+Người dùng gửi ảnh chụp bản Excel gốc đầy đủ hơn (23 cột, không phải 13 cột đã làm ở đợt trước) và yêu
+cầu thêm bộ lọc Phòng ban ("chọn chuyền ở phòng ban nào"). Cột mới bổ sung vào `ExportHoursReportAsync`
+(`ProductionOtReportService.cs`), tất cả vẫn theo đúng quy tắc **gộp 1 dòng/người/ngày** đã chốt —
+field nào ở cấp ĐƠN (không phải cấp nhân viên) mà 1 người có thể có nhiều đơn khác nhau trong ngày thì
+gộp `string.Join("; ", ...Distinct())` giống `Block`/`ShiftTeam` đã làm trước đó:
+
+| Cột | Nguồn dữ liệu |
+|---|---|
+| `LYDO_JP` | `Reason.ReasonNameJp` |
+| `Lydo_phu` | `OtForm.SubReason` (tách riêng khỏi `Lydo`, KHÔNG còn gộp chung như bản 13 cột cũ) |
+| `An` | `OtFormEmployee.DidEat` — gộp `g.Any(x => x.DidEat)` nếu nhiều lượt/ngày |
+| `NOTE` | `OtFormEmployee.NoteVn` |
+| `Gio_Hienta` | Giờ OT thực tính CỦA NGÀY ĐÓ — cùng giá trị `TotalHours` đang cộng vào lũy kế (đặt
+  cạnh `OT_Thang`/`OT_Nam` theo mạch ngày→tháng→năm), người dùng xác nhận 2026-08-29 |
+| `Line_Muon` | `BlockCodeSnapshot + "-" + ShiftTeamCodeSnapshot` (đúng công thức `LineCa` dùng ở PDF) |
+| `MNV_LC` | Mã nhân viên người **lập** đơn — tra `OtForm.CreatedByUserName` → `Employee.Code` qua
+  `Employee.UserName` |
+| `MNV_SC` | Mã nhân viên **sửa gần nhất** đúng dòng nhân viên đó trong đúng đơn đó — tra bảng
+  `OtFormEditLog` (lấy `ActionAt` mới nhất khớp `(OtFormId, EmployeeId)`, resolve `ActionByUserName` →
+  `Employee.Code`), người dùng xác nhận "Đồng ý" 2026-08-29 |
+| `BP` | `OtForm.Department.DepartmentCode` |
+| `Ngay_lap` | `OtForm.CreatedAt` (sớm nhất nếu nhiều đơn/ngày), format `dd-MMM-yy` (`InvariantCulture`
+  để luôn ra tháng viết tắt tiếng Anh khớp mẫu, không phụ thuộc locale server) |
+
+**Lưu ý quan trọng đã verify bằng dữ liệu thật (2026-08-29, đơn #46-57, DepartmentId=7)**: người dùng
+kỳ vọng cột `BP` ra chữ **"SX"** cho đơn của "Chế tạo" (dựa theo file mẫu cũ), nhưng
+`Department.DepartmentCode` thật của "Chế tạo" trong hệ thống là **`"CT"`**, không phải `"SX"` — không
+có Phòng ban nào tên mã `"SX"` trong bảng `Departments` hiện tại (8 Phòng ban:
+MN/TV/QLCL/KT/CV/CT/CBSX/QL). Export hiện ra đúng `"CT"` cho đơn của Chế tạo (đã verify qua file thật
+tải về, đọc `sheet1.xml`) — đây là lựa chọn có chủ đích (đọc thẳng mã Phòng ban thật, tự đổi đúng khi
+dùng bộ lọc Phòng ban mới, không hardcode `"SX"`) vì `"SX"` là nhãn hệ CŨ không map 1-1 với mã hệ mới.
+Người dùng xác nhận 2026-08-29 **giữ nguyên `"CT"`** (không dịch riêng về `"SX"`) — chốt, không cần
+thêm bước map nhãn hiển thị.
+
+**Bộ lọc Phòng ban** (đơn "dưới chuyền" có thể tạo dưới BẤT KỲ Phòng ban nào —
+`OtFormService.CreateProductionFormAsync` nhận `request.DepartmentId` tự do, không khoá cứng về "Chế
+tạo"): cả 2 endpoint (`GET ticket-report`, `GET hours-report-excel`) thêm query param `departmentId`
+(`int?`, null = không lọc, giữ hành vi cũ). FE (`ProductionOtReportPanel.tsx`) thêm dropdown "Phòng ban
+(chuyền)" bên cạnh ô chọn ngày, tải danh sách qua `DepartmentApi.getAllDepartments()` (đã có sẵn, dùng
+lại nguyên `useFetchEffect`), mặc định "Tất cả".
+
+Verify: build BE sạch; smoke test + gọi tay `ticket-report`/`hours-report-excel` với `departmentId=7`
+(khớp 2 dòng đúng dữ liệu thật) và `departmentId=3` (Tổng vụ, không có đơn dưới chuyền → 0 dòng, không
+lỗi); tải file `.xlsx` thật, giải nén đọc `sheet1.xml`/`sharedStrings.xml` xác nhận đủ 23 cột đúng thứ
+tự, `MNV_SC` có giá trị ở dòng có sửa đơn thật và trống ở dòng chưa sửa, `Line_Muon`/`BP`/`Ngay_lap`
+đúng công thức. FE `npx tsc --noEmit` + `pnpm lint` sạch (còn 2 cảnh báo/lỗi cũ không liên quan ở
+`CreateOtFormPage.tsx`/`OtFormPrintView.tsx`, đã có từ trước).
+
+### §Excel "Số LƯỢT tăng ca 1 người/1 ngày" — báo cáo thứ 3 (2026-08-29)
+
+Note_OT.txt mục 1 dòng 9 — **khác hẳn** báo cáo "tổng giờ" (§Excel ở trên): report đó CỐ Ý gộp 1 dòng/
+người/ngày; report này ngược lại, **KHÔNG gộp** — người dùng gửi file mẫu
+`docs/Data/Reports/Qry_So_lan_tang_Ca_trong_ngay_sx_2026-08-1_CV.xlsx` (chỉ có dòng tiêu đề, không có
+dữ liệu mẫu, nên chốt cấu trúc qua trao đổi trực tiếp + ví dụ cụ thể) xác nhận: **mỗi dòng = 1 lượt**
+(1 `OtFormEmployee`, tức 1 đơn/1 ngày của người đó), không merge lại. 2 cột số (`LAN_TANG_CA_TRONG_
+NGAY`, `Gio_Hientai`) là tổng hợp CẢ NGÀY, lặp lại giống nhau trên mọi dòng của người đó trong ngày.
+
+`GET /api/ProductionOtReport/times-report-excel?date=&departmentId=` (`ExportTimesReportAsync` trong
+`ProductionOtReportService.cs`, cùng gate permission, cùng pattern trả `.xlsx` trực tiếp). 9 cột đúng
+tên trong file mẫu, theo thứ tự:
+
+| Cột | Nguồn dữ liệu |
+|---|---|
+| `MNV` | `Employee.Code` |
+| `BLOCK` | `OtFormEmployee.BlockCodeSnapshot` — của ĐÚNG lượt đó, không gộp |
+| `NHOM` | `OtFormEmployee.ShiftTeamCodeSnapshot` — của ĐÚNG lượt đó |
+| `NOTE` | `OtFormEmployee.NoteVn` — của ĐÚNG lượt đó |
+| `Ngay_TC` | `date` (tham số báo cáo) |
+| `LAN_TANG_CA_TRONG_NGAY` | Số `OtFormId` PHÂN BIỆT của người đó trong ngày — tổng hợp cả ngày, lặp
+  lại trên mọi dòng |
+| `Gio_Hientai` | Tổng giờ OT thực tính CẢ NGÀY (`MealTicketCalculator.CalculateOtHours` cộng dồn) —
+  tổng hợp cả ngày, lặp lại trên mọi dòng (CÙNG định nghĩa với `Gio_Hientai` ở báo cáo tổng giờ) |
+| `BP` | `OtForm.Department.DepartmentCode` — của ĐÚNG lượt đó (đơn nào tạo dưới Phòng ban nào) |
+| `MNV_TP` | **Mới** — mã nhân viên Trưởng Phòng đã **duyệt (Approved)** đúng đơn đó, tra qua
+  `OtFormApprovalHistory` join `OtFormApprovalStep` lọc `TerminalLevelSnapshot ==
+  JobTitleTerminalLevel.DepartmentManager && Action == Approved`, resolve `ApproverUserName` →
+  `Employee.Code` (cùng cơ chế UserName→Code với `MNV_LC`/`MNV_SC`). Người dùng xác nhận 2026-08-29
+  "MNV_TP là mã TP đã ký duyệt đơn đó". |
+
+Verify bằng dữ liệu thật (2026-08-29, `departmentId=7`): tải file thật, giải nén đọc `sheet1.xml`/
+`sharedStrings.xml` — ra đúng 9 dòng (9 nhân viên, mỗi người đúng 1 lượt hôm đó nên
+`LAN_TANG_CA_TRONG_NGAY=1` mọi dòng), `BP="CT"` mọi dòng, `MNV_TP="T-MGR-CT"` mọi dòng (khớp đúng 1
+Trưởng phòng duy nhất đã duyệt hết các đơn hôm đó). FE thêm nút "Xuất Excel — Số lượt tăng ca theo
+ngày" cạnh 2 nút xuất đã có trong `ProductionOtReportPanel.tsx`, dùng chung ô chọn ngày/Phòng ban.
+`npx tsc --noEmit` + `pnpm lint` sạch.
+
+### §Phân quyền theo Phòng ban — mở rộng vai trò Coordinator (2026-08-29)
+
+Người dùng muốn "người phụ trách 1 Phòng ban" tự làm được, KHÔNG cần Admin: cập nhật nhân sự dưới
+chuyền, cập nhật lũy kế, sửa giới hạn OT/tháng/năm riêng từng người — TẤT CẢ chỉ giới hạn trong ĐÚNG
+Phòng ban họ phụ trách (không phải toàn công ty). Đã có sẵn "cây duyệt" dùng cơ chế tương tự — TÁI SỬ
+DỤNG nguyên khái niệm `DepartmentApprovalStepCoordinator` (Admin gán tay qua UI "Cây duyệt", KHÔNG
+suy luận theo Chức vụ) thay vì phát minh khái niệm mới hay dùng `JobTitlePermissionWhitelist` (whitelist
+đó cố tình loại trừ permission "quản trị" để tránh 1 người tự leo thang quyền qua đổi Chức vụ).
+
+- **`IDepartmentAccessGuard`** (`Attendance.Application/Interfaces/Service/IDepartmentAccessGuard.cs` +
+  `DepartmentAccessGuardService.cs`) — trích ra từ logic riêng lẻ trước đó của
+  `DepartmentApprovalStepService.EnsureCanManageDepartmentAsync`, dùng CHUNG cho mọi tính năng scope
+  theo Phòng ban: `EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId)` (Admin bỏ qua, else
+  bắt buộc có dòng Coordinator đúng Phòng ban) + `GetManagedDepartmentIdsAsync(userName)` (dùng khi cần
+  scope THEO TỪNG DÒNG dữ liệu tự do, không hardcode 1 Phòng ban).
+- **Tự động cấp quyền cho Coordinator** — mở rộng `ApprovalStepCoordinatorPermissions` (đã có sẵn cơ
+  chế `SyncAutoGrantedPermissionsCoreAsync` cấp `DepartmentApprovalStep.Update` cho Coordinator từ
+  trước) thêm 3 permission mới, TẤT CẢ tự cấp NGAY khi Admin gán ai đó làm Coordinator của 1 Phòng ban
+  (không cần bước gán Role riêng): `Attendance.ProductionEmployee.Import`,
+  `Attendance.EmployeeAccumulation.Import`, `Attendance.Employee.UpdateOtLimit` (mới, xem dưới) — hiệu
+  lực ngay, không cần đăng nhập lại (cùng cơ chế `SyncAutoGrantedPermissionsAsync` đã có).
+- **`ProductionEmployeeImportService.PreviewAsync`/`ConfirmAsync`** — thêm `(userName, isAdmin)`, check
+  1 LẦN cho cả file qua `EnsureManufacturingDepartmentAccessAsync` (đích đã hardcode cứng vào Phòng ban
+  "CT" — `ManufacturingDepartmentCode`, nên không cần scope theo dòng).
+- **`ApplyAccumulationAsync`** — khác ở trên (nhận `EmployeeCode` TỰ DO từ Excel, không hardcode 1
+  Phòng ban): scope THEO TỪNG DÒNG — lấy trước `GetManagedDepartmentIdsAsync`, mỗi dòng resolve Phòng
+  ban thật của nhân viên đó (`employee.DepartmentId ?? employee.Group.DepartmentId`, projection
+  `int?` an toàn — KHÔNG dùng `x.Group!.DepartmentId` trực tiếp, dễ vỡ khi Group null), dòng ngoài phạm
+  vi bị skip với lý do "Nhân viên không thuộc Phòng ban bạn phụ trách." (không throw huỷ cả file).
+- **`Attendance.Employee.UpdateOtLimit`** (permission MỚI, migration `AddEmployeeUpdateOtLimitPermission`
+  — Identity DB, gán thêm cho Role đang giữ `Attendance.Employee.Update`) — tách RIÊNG khỏi
+  `Attendance.Employee.Update` (permission đó còn cho sửa Code/Tên/Group/... của MỌI nhân viên, quá
+  rộng để cấp cho người phụ trách 1 Phòng ban). Endpoint mới `PUT /api/Employee/{id}/ot-limit`
+  (`EmployeeService.UpdateOtLimitAsync`) — CHỈ set `CustomMonthlyOtHourLimit`/`CustomYearlyOtHourLimit`,
+  scope qua `IDepartmentAccessGuard` (resolve Phòng ban nhân viên đó rồi check). `UpdateEmployeeDto`/
+  `EmployeeService.UpdateAsync` (PUT /{id} chung) KHÔNG còn đụng 2 field này nữa (cố ý — tránh
+  wipe về null mỗi khi Admin sửa thông tin cơ bản qua form chung) — đã verify sống: set giá trị test
+  qua endpoint mới → gọi PUT /{id} chung với dữ liệu khác không đổi → xác nhận 2 field KHÔNG bị mất →
+  khôi phục lại giá trị gốc.
+- **`EmployeeImportController.ImportOtHourLimits`/`DownloadOtHourLimitTemplate`** — đổi permission gate
+  từ `Attendance.Employee.Update` sang `Attendance.Employee.UpdateOtLimit`;
+  `EmployeeImportService.ImportOtHourLimitsAsync` thêm scope THEO TỪNG DÒNG (cùng cách `ApplyAccumulationAsync`
+  — `FindAsync` không include navigation nên tra riêng 1 lượt `Group.DepartmentId` cho các dòng
+  `DepartmentId=null`).
+- **FE**: `EmployeeForm.tsx` bỏ 2 field giới hạn OT khỏi form Sửa nhân viên chung, CHỈ còn hiện lúc Tạo
+  mới; sửa sau này đi qua dialog mới `EmployeeOtLimitDialog.tsx` (gọi `PUT /{id}/ot-limit`), nút mở
+  dialog + nút Sửa/Xoá nhân viên + các mục trong menu Excel (Import/Xuất nhân sự dưới chuyền, Import
+  giới hạn OT) đều gate RIÊNG theo đúng permission tương ứng trong `EmployeeList.tsx` (không còn dùng
+  chung 1 điều kiện hiển thị) — người chỉ có 1-2 trong các quyền trên sẽ chỉ thấy đúng hành động họ
+  được phép.
+- **KHÔNG cần sửa `CategoryManagement.tsx`/`OtManagerSidebar.tsx`** — cả 2 nơi đã gate tab "Nhân viên"/
+  mục sidebar "Danh mục" theo `hasAnyPermission([...,"Attendance.DepartmentApprovalStep.Update",...])`
+  từ trước; vì Coordinator ĐÃ được tự động cấp permission đó, họ tự động thấy được tab/mục nav này mà
+  không cần sửa gì thêm — kiểm tra kỹ trước khi định thêm điều kiện mới, tránh trùng lặp không cần thiết.
+- **Giới hạn đã biết của lượt verify này**: `windows-login` chỉ đăng nhập được bằng Windows Negotiate
+  của user hiện tại (không có cách lấy JWT cho 1 tài khoản khác để giả lập không phải Admin) — nên
+  CHƯA test sống được đường non-Admin bị chặn đúng khi thao tác ngoài phạm vi Phòng ban của họ
+  (chỉ verify được: Admin vẫn hoạt động bình thường qua mọi endpoint đã sửa, và logic scope đã review
+  kỹ qua code). Nên test tay qua UI thật với 1 tài khoản Coordinator thật trước khi coi là ổn định.
+
+### §Vá lỗ hổng: `Employee.View` theo Chức vụ trả nguyên danh sách TOÀN CÔNG TY (2026-09-03)
+
+Rà soát lại phân quyền Attendance theo yêu cầu người dùng, phát hiện `Attendance.Employee.View`
+(permission nằm trong `JobTitlePermissionWhitelist` — tức MỌI nhân viên từ Staff trở lên đều có) gate
+2 endpoint trả **nguyên danh sách nhân viên cả công ty**, không hề scope theo Phòng ban/Nhóm của người
+gọi: `GET /api/Employee/grid-list` (`departmentId`/`groupId` chỉ là filter TUỲ CHỌN, không enforce) và
+`GET /api/Employee/all`. `EmployeeDto` trả cả `MonthToDate`/`YearToDate` (lũy kế giờ OT thật) và
+`CustomMonthlyOtHourLimit`/`CustomYearlyOtHourLimit` — dữ liệu nhạy cảm hơn nhiều so với danh mục
+Department/Group thuần tuý, nên 1 nhân viên Staff bất kỳ trước đây xem được lũy kế/giới hạn OT của
+TOÀN BỘ nhân viên công ty, không riêng gì phòng ban mình. (Đối chiếu: `Attendance.OTForm.Approve` cũng
+cấp toàn công ty qua Chức vụ nhưng AN TOÀN vì `OtFormService.ApproveAsync` còn 1 lớp kiểm tra riêng qua
+`LoadFormAndCurrentStepAsync` — phải đúng người trong danh sách candidate của bước duyệt mới approve
+được; 2 endpoint Employee ở trên KHÔNG có lớp kiểm tra tương đương.)
+
+- **Đã có sẵn logic phạm vi đúng ý** ở `EmployeeService.GetInScopeAsync` (dùng cho `GET /in-my-scope`,
+  Giai đoạn 8) — suy theo ĐÚNG vị trí Cây chức vụ của người gọi (Admin: không giới hạn; Trưởng
+  Xưởng/Giám đốc: toàn công ty; có `DepartmentId` (Manager): theo Phòng ban; còn lại: theo `GroupId`).
+  Trích logic này ra 2 helper dùng chung trong `EmployeeService`: `ResolveCallerScopeAsync(callerUserName)`
+  (trả `EmployeeScope { CompanyWide, DepartmentId, GroupId }`, throw `DomainException` nếu người gọi
+  chưa liên kết Employee hoặc chưa gán Nhóm/Bộ phận) + `ApplyScope(query, scope)` (áp lên
+  `IQueryable<Employee>`). `GetInScopeAsync` đổi sang gọi qua 2 helper này (hành vi không đổi).
+- **`GetPagedAsync`/`GetAllActiveAsync`** — thêm tham số `(callerUserName, isAdmin)`, không phải Admin
+  thì áp `ApplyScope` TRƯỚC khi áp filter `departmentId`/`groupId` tuỳ chọn (2 filter đó giờ chỉ còn
+  tác dụng thu hẹp THÊM trong đúng phạm vi, không mở rộng ra ngoài được). `EmployeeController.GetPaged`/
+  `GetAllActive` truyền `CurrentUserName, User.IsInRole("Admin")` — cùng pattern `GetInMyScope` đã có.
+  Không đổi route/param/response shape nên KHÔNG cần sửa gì ở FE (`employee.api.ts`) — chỉ đổi ai xem
+  được gì, hoàn toàn phía BE.
+- **Không đụng** `GetByDepartmentIdAsync`/`GetByGroupIdAsync` (nhận thẳng Id, dùng cho màn Cây duyệt/lập
+  đơn — phạm vi do route quyết định, không phải liệt kê tự do) hay `GetByIdAsync`/`GetByUserNameAsync`
+  (tra 1 người, rủi ro thấp hơn nhiều so với xuất hàng loạt).
+- Verify: build sạch; smoke test 7 check pass; gọi tay `grid-list`/`all` bằng JWT Admin thật xác nhận
+  vẫn ra đúng `totalCount=3386`/`count=3386` (không regression cho Admin, vì Admin bypass hoàn toàn).
+  **Chưa verify sống đường non-Admin bị scope đúng** — cùng giới hạn đã ghi ở mục Coordinator ngay
+  trên (không có JWT của 1 tài khoản Staff thật để gọi thử ngoài Windows Negotiate của user hiện tại,
+  vốn luôn là Admin). Nên test tay qua UI thật với 1 tài khoản Staff/Nhóm cụ thể trước khi coi ổn định.
+
+- **UX đi kèm (cùng ngày, theo yêu cầu người dùng)** — dropdown lọc Phòng ban/Nhóm ở `EmployeeList.tsx`
+  trước đó vẫn gọi `DepartmentApi.getAllDepartments()`/`GroupApi.getAllGroups()` vô điều kiện (liệt kê
+  TOÀN CÔNG TY), nên non-Admin bị scope ở BE chọn nhầm 1 Phòng ban/Nhóm ngoài phạm vi sẽ ra bảng rỗng
+  không rõ lý do. Thêm endpoint mới **`GET /api/Employee/my-scope`** (`Attendance.Employee.View`,
+  `EmployeeService.GetMyScopeAsync`, DTO `EmployeeScopeDto { CompanyWide, DepartmentId,
+  DepartmentNameVn, GroupId, GroupNameVn }`) — tái dùng nguyên `ResolveCallerScopeAsync`, CHỈ phục vụ
+  UX (không phải lớp chặn bảo mật, lớp đó đã có ở `GetPagedAsync`/`GetAllActiveAsync`). `EmployeeList.tsx`
+  gọi 1 lần lúc mount: `companyWide=true` → giữ nguyên hành vi cũ (dropdown đầy đủ); có `DepartmentId`
+  (Manager) → khoá dropdown Phòng ban còn đúng 1 lựa chọn, dropdown Nhóm tải qua
+  `GroupApi.getGroupsByDepartment(departmentId)` (vẫn thấy hết Nhóm CON của Phòng ban mình, không phải
+  chỉ 1 Nhóm); chỉ có `GroupId` (Staff/GL/TL...) → **ẩn hẳn** dropdown Phòng ban (không có gì để lọc
+  thêm), dropdown Nhóm khoá còn đúng 1 lựa chọn. `handleSelectDepartment` khi gỡ lựa chọn cũng đổi sang
+  gọi lại `getGroupsByDepartment(scope.departmentId)` thay vì `getAllGroups()` cho case bị giới hạn,
+  tránh nạp lại toàn bộ Nhóm công ty vào dropdown làm mất tác dụng thu hẹp.
+- Verify: `npx tsc --noEmit` sạch, `pnpm lint` không phát sinh lỗi mới (3 lỗi/cảnh báo còn lại thuộc
+  `CreateOtFormPage.tsx`/`OtFormPrintView.tsx`, có từ trước, không liên quan). Gọi tay
+  `GET /api/Employee/my-scope` bằng JWT Admin xác nhận đúng `companyWide: true`. **Chưa test sống UI
+  bằng 1 tài khoản Staff/Manager thật** (cùng giới hạn ở trên) — nên bấm thử màn "Nhân viên" bằng 1 tài
+  khoản không phải Admin để xác nhận dropdown thu hẹp đúng trước khi coi ổn định.
+
+### §Line Leader phải tự ký bước của mình trước khi đơn "theo chuyền" gửi lên cấp trên (2026-09-03)
+
+**Lỗi gốc**: `JobTitleApprovalChainService.ResolveChainForProductionCreationAsync` lọc
+`configuredSteps.Where(x => x.RankOrder > creatorRank)` — Line Leader tạo đơn thì `creatorRank` =
+đúng `RankOrder` của bước Line Leader, nên `>` (không phải `>=`) loại luôn bước của CHÍNH họ khỏi
+chuỗi. Hệ quả: `OtFormApprovalStep` đầu tiên tạo ra là bước Group Leader, `FinalizeCreateAsync` gửi
+mail thông báo thẳng cho Group Leader ngay lúc tạo đơn — Line Leader không có bước Pending nào của
+riêng mình để tự duyệt/sửa trước khi đơn "gửi lên trên" (đúng yêu cầu người dùng: đơn phải dừng ở
+bước Line Leader tới khi họ tự ký).
+
+**Sửa**: đổi `>` thành `>=`, CHỈ trong `ResolveChainForProductionCreationAsync` (dòng ~337) — không
+đụng `ResolveChainCoreAsync` (đơn "theo Nhóm", dòng ~161, cùng pattern nhưng khác method). An toàn vì
+người tạo đơn "theo chuyền" không phải Admin bắt buộc là Line Leader thật của Line trong đơn
+(`OtFormService.CreateProductionFormAsync`) — `creatorRank` ở hàm này chỉ có 2 khả năng: `0` (Admin,
+không đổi hành vi vì không JobTitle nào có RankOrder=0) hoặc đúng RankOrder Line Leader. `StepOrder`
+tự renumber lại sau filter nên Group Leader tự lùi xuống đúng vị trí kế tiếp, không cần sửa gì thêm;
+candidate của bước Line Leader (suy từ `ProductionEmployee.IsLeader`) đã tự động đúng, không cần thêm
+plumbing. Không đổi FE — quyền sửa theo từng bước (Giai đoạn 10) tự áp dụng đúng.
+
+**Lưu ý phụ (chưa sửa)**: `ResolveChainCoreAsync` (đơn "theo Nhóm") có cùng pattern lý thuyết có thể
+gặp lỗi tương tự nếu Group Leader/Team Leader tạo đơn cho đúng cấp của họ — người dùng chỉ yêu cầu sửa
+cho Line Leader/"theo chuyền" lần này, chưa đụng nhánh kia.
+
+**Verify**: build sạch. **Chưa test sống** bằng tài khoản Line Leader thật (account TEST `ll_shido`
+hoặc 1 trong 10 Line Leader TEST khác có sẵn) — nên tạo 1 đơn thật để xác nhận đơn dừng đúng ở bước
+Line Leader, Group Leader chỉ thấy được sau khi Line Leader tự ký.
+
+### §Import lũy kế OT theo tháng — tổng quát cho MỌI Phòng ban (2026-09-03)
+
+Theo yêu cầu người dùng (xem file `docs/Data/phép năm và tăng ca 062026- Công Vụ.xlsx`, đọc trực tiếp
+bằng cách giải nén xlsx đọc XML — 3 sheet: `062026(tc)` = tổng giờ OT riêng tháng 6/2026,
+`luytien(tc)` = luỹ kế từ đầu năm (không tách được từng tháng, chỉ dùng đối chiếu), `phep nam con lai
+062026` = phép năm — NGOÀI PHẠM VI, hệ thống chưa có tính năng phép năm). Chỉ lấy đúng 2 cột cần thiết
+(MNV + Tổng giờ tháng) theo FORMAT RIÊNG của hệ thống (không khớp 9 cột tách loại giờ của file gốc —
+ledger hiện chỉ lưu tổng giờ/tháng).
+
+- **Tái dùng 90% hạ tầng có sẵn** — permission `Attendance.EmployeeAccumulation.Import` **đã tồn tại**
+  và **đã tự động cấp cho Coordinator của BẤT KỲ Phòng ban nào** (không hardcode "Chế tạo", xem §Phân
+  quyền theo Phòng ban ở trên) — KHÔNG cần permission/migration mới.
+- Method mới `EmployeeImportService.ImportMonthlyAccumulationAsync(Stream, year, month, userName,
+  isAdmin)` (đặt cạnh `ImportOtHourLimitsAsync`, mirror pattern 1-bước-upload-áp-dụng-luôn, KHÔNG có
+  Preview riêng) — cùng logic delta-upsert với `ProductionEmployeeImportService.ApplyAccumulationAsync`
+  (unique index `(EmployeeId, Year, Month)` buộc cộng dồn CHÊNH LỆCH thay vì ghi đè) + cùng cơ chế scope
+  theo từng dòng qua `IDepartmentAccessGuard.GetManagedDepartmentIdsAsync`. Không trích thành helper
+  dùng chung (2 service khác lớp cha) — chấp nhận lặp ~15 dòng logic, cùng tinh thần các `ParseXlsx`
+  khác trong module không share code.
+- File: cột A bỏ trống, B=MNV, C=Tổng giờ OT tháng đó. `Year`/`Month` là query param riêng (không đọc
+  từ cột file).
+- Endpoint mới `POST /api/EmployeeImport/monthly-accumulation?year=&month=` (multipart, field `file`)
+  + `GET .../monthly-accumulation/template`, dùng lại đúng permission trên. FE: dialog mới
+  `EmployeeMonthlyAccumulationImportDialog.tsx`, mở từ menu Excel trong `ProductionEmployeeList`
+  (`EmployeeList.tsx`, cùng ActionMenu với "Import giới hạn OT"), gate hiện nút theo
+  `hasPermission(user, "Attendance.EmployeeAccumulation.Import")` — không cần sửa gì ở tầng ẩn/hiện
+  tab/sidebar vì permission đó đã có từ trước.
+- **Verify**: build BE sạch, `npx tsc --noEmit`/`pnpm lint` sạch (3 lỗi/cảnh báo cũ không liên quan).
+  **Phát hiện + sửa 1 lỗi có sẵn** khi test sống (xem mục riêng ngay dưới về lỗi ClosedXML
+  range-relative indexing) — sau khi sửa, gọi tay endpoint `ot-hour-limits` (import khác, cùng lỗi) qua
+  `curl` với chính file mẫu `GenerateOtHourLimitTemplate()` sinh ra xác nhận đọc đúng header/dữ liệu.
+  **Chưa nạp dữ liệu thật Công Vụ tháng 6/2026** — đã chuẩn bị xong tính năng, còn chờ xác nhận trước
+  khi ghi thật (dữ liệu OT ảnh hưởng lương của ~164 người).
+
+### §Phát hiện + sửa lỗi ClosedXML đọc sai cột khi cột A trống hoàn toàn (2026-09-03)
+
+Khi test sống 2 tính năng mới ở trên, phát hiện: `usedRange.RowsUsed()` rồi đọc `row.Cell(n)`
+(range-relative) — nếu cột A của file **trống hoàn toàn** (đúng quy ước "cột A bỏ trống" nhiều import
+trong module dùng, VD file mẫu do chính `GenerateTemplate()`/`GenerateOtHourLimitTemplate()` sinh ra),
+ClosedXML tự thu hẹp `usedRange` bắt đầu từ cột B — khiến `Cell(2)` (tưởng là cột B) thực ra trỏ sang
+cột C, làm mọi cột đọc sai 1 vị trí. Lỗi này đã tồn tại từ trước (không phải do các tính năng mới ở
+trên gây ra) nhưng **chưa từng bị phát hiện** vì file thật của "Nhân sự dưới chuyền"
+(`ProductionEmployeeImportService`) luôn có cột A = "KHOI SU" (không trống) nên không trúng lỗi; còn
+`EmployeeImportService` (import Nhân viên + Giới hạn OT, cột A cố tình để trống) thì trước giờ có lẽ
+chưa từng test bằng ĐÚNG file mẫu tự sinh ra — tái hiện được ngay khi gọi live `ot-hour-limits` bằng
+chính `Mau_Import_GioiHanOT.xlsx` vừa tải xuống.
+
+**Sửa**: đổi mọi chỗ đọc `xlRow.Cell(n)`/`r.Cell(n)` sang `worksheet.Cell(xlRow.RowNumber(), n)`
+(tuyệt đối theo worksheet, không phụ thuộc `usedRange` bắt đầu từ cột nào) — áp dụng cho
+`EmployeeImportService.ParseXlsx` (import Nhân viên), `ImportOtHourLimitsAsync`, và
+`ImportMonthlyAccumulationAsync`/`EmployeeIdentityLinkImportService.ParseXlsx` (2 tính năng mới ở
+trên, viết đúng ngay từ đầu theo phát hiện này). `ProductionEmployeeImportService.ParseXlsx` KHÔNG cần
+sửa (cột A luôn có dữ liệu thật, không trúng lỗi) — để nguyên, tránh đụng code đang chạy ổn định không
+cần thiết.
+
+**Verify**: tái hiện lỗi + xác nhận đã sửa bằng dữ liệu thật qua `curl` (POST file mẫu tới
+`/api/EmployeeImport/ot-hour-limits` — trước khi sửa báo "không tìm thấy dòng tiêu đề", sau khi sửa đọc
+đúng header + dòng `NV001`, báo đúng "không tìm thấy nhân viên" vì mã đó không tồn tại thật — đúng hành
+vi mong đợi, không ghi gì vào DB).
+
+### §Import Excel liên kết Identity ↔ Attendance + tự tạo tài khoản + gán chữ ký (2026-09-03)
+
+Theo yêu cầu người dùng: Admin import Excel hàng loạt để (a) liên kết `Employee.UserName` với tài
+khoản đăng nhập, (b) **tự tạo tài khoản Identity nếu UserName đó chưa tồn tại**, (c) gán luôn chữ ký —
+sau khi import xong người đó dùng được hệ thống ngay (kể cả quyền theo Chức vụ có hiệu lực ngay lập
+tức, không cần đăng nhập lại).
+
+- **Định dạng file**: cột A bỏ trống, B=MNV, C=UserName (không kèm domain, khớp đúng cách lưu hiện
+  tại), D=RoleName (để trống = mặc định "Basic", khớp đúng hành vi JIT-provision hiện có ở
+  `MyClaimsTransformation`). Ảnh chữ ký **nhúng trực tiếp vào Excel**, neo theo đúng hàng của mỗi nhân
+  viên (đọc qua `IXLPicture.TopLeftCell.Address.RowNumber` để map ảnh ↔ đúng dòng, `ImageStream` lấy
+  bytes).
+- **Cross-module** (Identity User ở DB `YevIdentityManagement`, Employee/UserSignature ở
+  `YevOTManagement` — không transaction chung được):
+  - `IUserDirectoryService` (Shared.Application) thêm method mới **`EnsureUserExistsAsync(userName,
+    fullName, roleName)`** — idempotent (UserName đã có thì no-op, GIỮ NGUYÊN Role hiện tại, khác
+    `UserService.CreateUserAsync` throw nếu trùng). Implement ở `Identity.Application/Services/
+    UserDirectoryService.cs`.
+  - `IUserSignatureService` thêm method mới **`AdminSetSignatureAsync(userName, signatureImage)`** —
+    set thẳng, KHÔNG qua luồng email-confirm tự phục vụ (`RequestUpdateAsync`/`ConfirmAsync` vẫn giữ
+    nguyên là đường DUY NHẤT cho người dùng tự đổi chữ ký của chính mình — đây là đánh đổi bảo mật CÓ
+    CHỦ ĐÍCH, chỉ Admin gọi được qua đúng 1 luồng import này).
+- **Service mới `EmployeeIdentityLinkImportService`** (Preview→Confirm, nhưng khác các import khác:
+  **CẢ 2 bước đều nhận lại NGUYÊN file** thay vì Rows qua JSON — vì mỗi dòng có thể kèm ảnh nhị phân,
+  không tiện round-trip qua JSON; Confirm tự đọc + re-validate lại từ đầu, không tin gì từ Preview).
+  Thứ tự ghi mỗi dòng: `EnsureUserExistsAsync` (Identity) TRƯỚC → nếu lỗi (VD RoleName không tồn tại)
+  thì KHÔNG ghi gì xuống Attendance DB cho dòng đó (tránh nửa vời) → set `Employee.UserName` (thu hồi
+  quyền tự động của UserName CŨ nếu đổi sang UserName khác, cùng nguyên tắc
+  `EmployeeService.UpdateAsync`) → `EmployeeService.SyncAutoGrantedPermissionsForEmployeeAsync` (hàm
+  PUBLIC có sẵn) → `AdminSetSignatureAsync` nếu dòng có ảnh. Mỗi dòng độc lập, lỗi 1 dòng không huỷ
+  file.
+- **Permission mới `Identity.User.BulkImport`** (migration `AddIdentityUserBulkImportPermission`, DB
+  `YevIdentityManagement`, seed + gán **CHỈ** Role Admin — hành động nhạy cảm nhất hệ thống, KHÔNG
+  auto-grant qua JobTitle/Coordinator) — **đã chạy migration lên DB thật**, verify bằng SQL đọc
+  `RolePermissions` xác nhận đúng gán cho Admin.
+- Controller mới `EmployeeIdentityLinkImportController` — `POST preview`, `POST confirm`, `GET
+  template`, cùng gate permission trên. FE: dialog mới `EmployeeIdentityLinkImportDialog.tsx`, nút mở
+  cạnh "Import Excel" trong `EmployeeList.tsx`, gate `hasPermission(user, "Identity.User.BulkImport")`.
+- **Verify**: build BE sạch (cả 2 project Identity + Attendance), `npx tsc --noEmit`/`pnpm lint` sạch.
+  Gọi tay sống qua `curl`: tải file mẫu → gọi `preview` với chính file mẫu (dòng ví dụ mã "NV001" —
+  đúng ra báo "không tìm thấy nhân viên", xác nhận parser đọc đúng header/cột sau khi sửa lỗi
+  ClosedXML ở mục trên) — **hoàn toàn read-only, không ghi gì**. JWT sau khi gọi lại `windows-login`
+  xác nhận permission `Identity.User.BulkImport` đã có ngay trong claim, không cần chờ gì thêm.
+  **Chưa test sống luồng Confirm thật** (tạo User mới/set chữ ký) — cố tình không test bằng dữ liệu
+  thật vì đây là hành động ghi (tạo tài khoản đăng nhập + đổi chữ ký), không phải thao tác read-only —
+  nên test tay bằng 1 UserName test trước khi coi ổn định (VD 1 trong các tài khoản TEST có sẵn).
+
+**Mở rộng 2026-09-03b — thêm cột Chức vụ + Người phụ trách Cây duyệt.** Theo yêu cầu người dùng (dùng
+import này ngay tại màn "Nhân viên dưới chuyền" — Role mặc định đã là "quản lý tăng ca" — nên cần import
+kèm luôn Chức vụ hoặc gán họ làm Người phụ trách Cây duyệt của Bộ phận/Nhóm họ đang thuộc):
+
+- **Cột mới**: E=MaChucVu (mã `JobTitle.Code`, để trống = không đổi Chức vụ), F=NguoiPhuTrach (nhập
+  `"1"` = có, để trống/khác = không — mirror đúng quy ước cột `LEADER` của
+  `ProductionEmployeeImportService`, KHÔNG tự nghĩ ra convention mới).
+- **Phạm vi LUÔN suy ra từ tổ chức HIỆN TẠI của Employee** (`Employee.DepartmentId`/`GroupId`, đã có sẵn
+  từ import nhân sự trước đó) — file này **không** cho đổi Bộ phận/Nhóm của ai, chỉ gán Chức vụ/người
+  phụ trách đúng nơi họ đang thuộc về. Employee có `DepartmentId` (Trưởng phòng) → thao tác ở khối Bộ
+  phận; có `GroupId` (nhân viên thường) → thao tác ở khối Nhóm; không có cả 2 → lỗi dòng.
+- **Chức vụ**: tái dùng NGUYÊN 2 hàm có sẵn `EmployeeService.AssignDepartmentJobTitleAsync`/
+  `AssignGroupJobTitleAsync` (vốn dựng sẵn cho đúng use-case "gán Chức vụ có phạm vi", đã tự validate
+  TerminalLevel — VD không cho gán Chức vụ Trưởng phòng cho người đang ở trong 1 Nhóm) — gọi với
+  `isAdmin=true` (import chỉ Admin mới gọi được) nên bỏ qua check "phải là Coordinator của đúng Bộ
+  phận/Nhóm đó", `userName` truyền rỗng vì không dùng tới khi `isAdmin=true`. KHÔNG viết lại logic
+  validate mới.
+- **Người phụ trách Cây duyệt**: đây là khái niệm **khác** Chức vụ — `DepartmentApprovalStepCoordinator`/
+  `GroupApprovalStepCoordinator` (người được chỉ định tay cấu hình Cây duyệt của 1 Bộ phận/Nhóm, xem
+  §Cây chức vụ). 2 service quản lý coordinator hiện có (`DepartmentApprovalStepCoordinatorService`/
+  `GroupApprovalStepCoordinatorService`) chỉ có `ReplaceAsync` (**thay NGUYÊN danh sách** — gọi trực
+  tiếp từ import sẽ XOÁ MẤT mọi người phụ trách khác đã gán từ trước qua màn hình quản lý). Thêm method
+  MỚI **`EnsureCoordinatorAsync(scopeId, employeeId)`** ở cả 2 interface/service — CHỈ THÊM nếu chưa có
+  (no-op nếu đã là coordinator), validate employee thuộc đúng phạm vi (mirror check của `ReplaceAsync`),
+  rồi gọi lại `SyncAutoGrantedPermissionsForEmployeeAsync` — dùng đúng cho trường hợp "thêm dần từng
+  người qua import" khác hẳn "thay nguyên danh sách qua UI quản lý Cây duyệt".
+- DTO/Preview: thêm `resolvedJobTitleName`, `coordinatorScopeDescription` (VD "Nhóm ABC"/"Bộ phận XYZ"),
+  đếm `rowsWithJobTitleCount`/`rowsWithCoordinatorCount` (Preview) và
+  `jobTitleAssignedCount`/`coordinatorAddedCount` (Confirm).
+- Template (`GenerateTemplate()`) thêm 2 cột E/F, dòng ví dụ đặt sẵn `NguoiPhuTrach = "1"`.
+- **Verify**: build BE sạch. Chưa test sống Confirm thật (cùng lý do như phần gốc ở trên — hành động
+  ghi, không phải read-only) — cần test tay bằng 1 Employee test trước khi dùng thật, đặc biệt kiểm tra
+  đúng: (1) gán Chức vụ Trưởng phòng cho người đang ở Nhóm bị từ chối đúng như mong đợi; (2) import lại
+  cùng 1 người 2 lần với `NguoiPhuTrach=1` không tạo trùng dòng coordinator (idempotent).
 
 ## 2. Wiring Host — đã xong
 1. `Configurations/DependencyInjection.cs`: `AddDbContext<AttendanceDbContext>` với `OTManagementConnection`.

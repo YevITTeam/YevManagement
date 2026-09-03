@@ -98,6 +98,8 @@ public partial class OtForm
 
     public virtual ICollection<OtFormApprovalHistory> OtFormApprovalHistories { get; set; } = new List<OtFormApprovalHistory>();
 
+    public virtual ICollection<OtFormEditLog> OtFormEditLogs { get; set; } = new List<OtFormEditLog>();
+
     public virtual ICollection<OtFormApprovalEmailToken> OtFormApprovalEmailTokens { get; set; } = new List<OtFormApprovalEmailToken>();
 
     // Chuỗi bước duyệt đã snapshot lúc tạo đơn (2026-08-07, Giai đoạn 3.1) — xem OtFormApprovalStep.

@@ -63,8 +63,10 @@
 - **Cập nhật 2026-08-26 (mới, giới hạn OT/tháng/năm RIÊNG theo nhân viên)**: `Employee` thêm
   `customMonthlyOtHourLimit`/`customYearlyOtHourLimit` (`decimal?`, nullable — null = dùng mặc định
   chung) — cho phép "gia hạn" giờ OT cao hơn mặc định cho từng người (thường dùng công nhân dưới
-  chuyền). Sửa qua `PUT/POST /api/Employee` (`EmployeeForm.tsx`), KHÔNG có Ngày riêng (Ngày luôn dùng
-  chung 1 mốc cho mọi người). Field mới xuất hiện trên `EmployeeDto`, `OtFormEmployeeDto`,
+  chuyền). Sửa lúc Tạo mới qua `POST /api/Employee` (`EmployeeForm.tsx`); sửa sau này (2026-08-29, xem
+  bản cập nhật cùng ngày bên dưới) tách RIÊNG qua `PUT /api/Employee/{id}/ot-limit`, không còn qua
+  `PUT /api/Employee/{id}` chung nữa. KHÔNG có Ngày riêng (Ngày luôn dùng chung 1 mốc cho mọi người).
+  Field mới xuất hiện trên `EmployeeDto`, `OtFormEmployeeDto`,
   `ProductionEmployeeSearchItemDto`. `OtFormService.ValidateOtHourLimitsAsync` ưu tiên mốc riêng nếu
   có gán, message đổi thành `"Nhân viên mã {code} quá giới hạn OT {ngày/tháng/năm} ({sau}h > {mốc}h)"`.
   Xem §3.5, §3.5b, §4.3, `attendance-module.md` §Giới hạn OT/tháng/năm RIÊNG theo từng nhân viên.
@@ -106,6 +108,32 @@
   thêm query `DepartmentId` (optional, lọc theo `Employee.Group.DepartmentId`) + đổi nhãn cột/filter
   FE cho khớp thuật ngữ màn "chọn nhân viên" (Line/Team/Nhóm ca/Công đoạn thay vì BLOCK/GROUP/NHOM
   thô). Xem `attendance-module.md` §Giai đoạn 10.
+- **Cập nhật 2026-08-28 (thêm nhân viên vào đơn + mật khẩu cấp 2 khi Tạo/Sửa + Lịch sử chỉnh sửa)**:
+  `CreateOtFormDto`/`UpdateOtFormDto` thêm field bắt buộc `secondaryPassword` (giống
+  `ApproveOtFormDto`) — `POST /api/OtForm`/`PUT /api/OtForm/{id}` giờ đều re-verify mật khẩu cấp 2.
+  `RemoveOtFormEmployeeDto` (`POST /api/OtForm/{id}/employees/remove`) **đảo ngược quyết định
+  2026-07-31** — nay CŨNG bắt buộc `secondaryPassword`; kênh email
+  (`RemoveOtFormEmployeeByEmailTokenDto`) giữ nguyên KHÔNG cần. Thêm
+  `POST /api/OtForm/{id}/employees/add` (permission mới `Attendance.OTForm.AddEmployee`, body
+  `AddOtFormEmployeeDto = {employeeId, endTime, didEat, noteVn, noteJp, secondaryPassword}`) — chiều
+  ngược của `.../employees/remove`, cùng điều kiện phân quyền (candidate bước Pending hiện tại/Admin).
+  `OtFormDto` thêm `editLogs: OtFormEditLogDto[]` (mới nhất trước) —
+  `{actionByUserName, actionByFullName, actionAt, actionType (0=TimeChanged/1=NoteChanged/
+  2=EmployeeAdded/3=EmployeeRemoved), employeeId, employeeCodeSnapshot, fieldName, oldValue,
+  newValue}`, không có endpoint riêng, đọc chung với `GET /api/OtForm/{id}`. Xem `attendance-module.md`
+  §Giai đoạn 11.
+- **Cập nhật 2026-08-29 (Phân quyền theo Phòng ban — mở rộng vai trò Coordinator)**: `DepartmentApprovalStepCoordinator`
+  (đã có sẵn cho "Cây duyệt") giờ tự động cấp thêm 3 permission khi Admin gán ai đó phụ trách 1 Phòng
+  ban: `Attendance.ProductionEmployee.Import`, `Attendance.EmployeeAccumulation.Import`,
+  **`Attendance.Employee.UpdateOtLimit`** (permission MỚI). `ProductionEmployeeImport.Preview/Confirm`
+  và `.ApplyAccumulation` giờ chặn theo ĐÚNG Phòng ban người gọi phụ trách (Admin không bị ảnh hưởng).
+  **Endpoint mới**: `PUT /api/Employee/{id}/ot-limit` (body `{customMonthlyOtHourLimit, customYearlyOtHourLimit}`,
+  permission `Attendance.Employee.UpdateOtLimit`) — sửa RIÊNG 2 field giới hạn OT, TÁCH khỏi
+  `PUT /api/Employee/{id}` (`UpdateEmployeeDto` **KHÔNG còn 2 field này nữa** — breaking nếu FE cũ còn
+  gửi lên, BE sẽ bỏ qua không lỗi nhưng cũng không áp dụng). `POST /api/EmployeeImport/ot-hour-limits`/
+  `GET .../ot-hour-limits/template` đổi permission gate từ `Attendance.Employee.Update` sang
+  `Attendance.Employee.UpdateOtLimit`, và scope theo dòng giống trên. Xem `attendance-module.md`
+  §Phân quyền theo Phòng ban.
 
 ## 1. Tổng quan nghiệp vụ, vai trò & luồng UI (đọc trước khi code màn hình)
 
@@ -933,9 +961,11 @@ chung `Attendance.Employee.View` (chỉ là 1 view khác của cùng dữ liệu
 | GET | `/api/OtForm/pending-approvals/count` | `Attendance.OTForm.Approve` | Đếm nhanh cho badge sidebar (mới 2026-08-19) — trả về `data:int`, cùng logic lọc "bước hiện tại" với `pending-approvals` nhưng KHÔNG phân trang/không map DTO danh sách. Xem §4.2d. |
 | GET | `/api/OtForm/my-actions?pageIndex=&pageSize=` | `Attendance.OTForm.View` | Lịch sử đơn **chính mình đã xử lý** (Ký/Duyệt/Từ chối) ở bất kỳ bước nào (§4.2b) |
 | GET | `/api/OtForm/{id}` | `Attendance.OTForm.View` | Chi tiết đầy đủ 1 đơn, gồm `approvalSteps[]` (mới) |
-| PUT | `/api/OtForm/{id}` | `Attendance.OTForm.Create` | Sửa đơn — chỉ còn giờ kết thúc từng nhân viên, chỉ chính người tạo, chỉ khi `status=InApproval` VÀ chưa bước nào `Approved` (§4.1b) |
+| PUT | `/api/OtForm/{id}` | `Attendance.OTForm.Create` | Sửa giờ/`didEat`/ghi chú từng nhân viên đang active + `secondaryPassword` [Required] — đơn theo Nhóm chỉ chính người tạo, đơn theo chuyền theo TỪNG BƯỚC (§4.1b) |
+| POST | `/api/OtForm/{id}/employees/add` | `Attendance.OTForm.AddEmployee` | Thêm 1 nhân viên vào đơn — chiều ngược của `.../employees/remove` (§4.5b, mới 2026-08-28) |
 | POST | `/api/OtForm/{id}/approve` | `Attendance.OTForm.Approve` | Duyệt "bước đang chờ" hiện tại — tự cộng lũy kế nhân viên nếu đạt Completed |
 | POST | `/api/OtForm/{id}/reject` | `Attendance.OTForm.Approve` | Từ chối đơn ở bước đang chờ (dừng luồng, các bước Pending còn lại chuyển Skipped) |
+| POST | `/api/OtForm/{id}/employees/remove` | `Attendance.OTForm.RemoveEmployee` | Loại 1 nhân viên khỏi đơn + `secondaryPassword` [Required] từ 2026-08-28 (§4.5a) |
 | POST | `/api/OtForm/{id}/delete` | `Attendance.OTForm.Delete` (Admin only) | Xoá đơn kẹt vĩnh viễn — 400 nếu `Completed` (§4.1c, mới 2026-08-08) |
 | GET | `/api/OtForm/email-confirm/{token}` | Không cần (`[AllowAnonymous]`) | Xem trước đơn để duyệt qua link email — xem §4.6 |
 | POST | `/api/OtForm/email-confirm/{token}/approve` | Không cần (`[AllowAnonymous]`) | Duyệt qua link email — xem §4.6 |
@@ -970,7 +1000,8 @@ chung `Attendance.Employee.View` (chỉ là 1 view khác của cùng dữ liệu
   ],
   "processPart": { "isEat": true, "mainTicketCount": 3, "secondaryTicketCount": 1, "milkCount": 0,
                     "isTransportation": false, "isUseCopyRoom": false,
-                    "anotherSuggestionVn": null, "anotherSuggestionJp": null } // optional, cả object hoặc null
+                    "anotherSuggestionVn": null, "anotherSuggestionJp": null }, // optional, cả object hoặc null
+  "secondaryPassword": "..."                                                  // [Required], mới 2026-08-28 — xem §4.4
 }
 ```
 - **`employees[].startTime` KHÔNG còn tồn tại** (bỏ từ 2026-07-16) — giờ bắt đầu của từng nhân viên LUÔN bằng `startTime` của đơn, BE tự set, FE không gửi lên nữa.
@@ -990,6 +1021,8 @@ chung `Attendance.Employee.View` (chỉ là 1 view khác của cùng dữ liệu
 - **Điều kiện được phép tạo** (đổi 2026-08-07, Giai đoạn 3.1 — bỏ nhánh `UserApprovalScope(Submitter)`): tài khoản đang gọi API phải được liên kết với 1 `Employee` (`Employee.UserName`) có **đúng `groupId` với đơn**, hoặc là Admin (không giới hạn phạm vi). Không thoả → 400 (`DomainException` "Bạn chỉ được tạo/sửa đơn cho đúng Nhóm/Bộ phận của mình..."). Employee liên kết với người tạo cũng chính là cơ sở để suy luận chuỗi duyệt (Admin tạo hộ thì coi như cấp thấp nhất — chuỗi vẫn chạy đầy đủ từ bước đầu của Department).
 - **Chuỗi duyệt không đủ KHÔNG chặn tạo đơn** — nếu Department chưa cấu hình cây duyệt, hoặc thiếu người giữ đúng Chức vụ ở 1 bước nào đó, đơn vẫn được tạo với chuỗi cắt cụt tới đâu hay tới đó; `response.data.approvalChainWarning` (string, `null` nếu đủ) cho biết lý do cụ thể — FE hiện banner cảnh báo trên màn chi tiết đơn khi field này khác `null` (xem §4.3).
 - Response `201 Created` (Location header trỏ `GET /{id}`), `data` = `OtFormDto` (§4.3) đầy đủ luôn — không cần gọi lại `GetById`.
+- **`secondaryPassword` bắt buộc (mới 2026-08-28)** — re-verify NGAY ĐẦU hàm (trước khi làm bất kỳ việc gì khác), cùng cơ chế `ApproveOtFormDto.secondaryPassword` (§4.4). Sai/chưa đăng ký → 400.
+- **Đơn theo chuyền (`isProductionForm=true`) — Nhóm ca bắt buộc (mới 2026-08-28)**: mỗi `employees[].employeeId` phải có `ProductionEmployee.ShiftTeamId != null`, thiếu thì 400 liệt kê đúng mã nhân viên (phòng vệ thêm — Import đã chặn từ 2026-08-24, xem `attendance-module.md` §Giai đoạn 11).
 
 ### 4.1a `POST /api/OtForm/{id}/submit` — ĐÃ XOÁ (2026-08-07, Giai đoạn 3.1)
 
@@ -1001,18 +1034,19 @@ còn gọi endpoint này sẽ nhận 404.
 
 **Breaking 2026-07-31**: trước đây `UpdateOtFormDto` giống hệt `CreateOtFormDto` (sửa được toàn bộ đơn). Người dùng chốt lại: đơn chỉ nên sửa được **"thực tích của nhân viên"** (giờ kết thúc OT thực tế từng người) — mọi field khác và cả danh sách nhân viên đều khoá cứng sau khi tạo. Body giờ CHỈ còn:
 ```jsonc
-// UpdateOtFormDto — CHỈ còn field này, không còn groupId/departmentId/reasonId/otCaseId/date/
-// startTime/endTime/subReason/totalHour/processPart/noteVn/noteJp nào nữa.
+// UpdateOtFormDto — không còn groupId/departmentId/reasonId/otCaseId/date/startTime/endTime/
+// subReason/totalHour/processPart nào nữa. noteVn/noteJp trở lại 2026-08-27 (Giai đoạn 5).
 {
   "employees": [
-    { "employeeId": 100, "endTime": "20:00:00" },
-    { "employeeId": 101, "endTime": "19:30:00" }
-  ]
+    { "employeeId": 100, "endTime": "20:00:00", "didEat": true, "noteVn": null, "noteJp": null },
+    { "employeeId": 101, "endTime": "19:30:00", "didEat": true, "noteVn": null, "noteJp": null }
+  ],
+  "secondaryPassword": "..."   // [Required], mới 2026-08-28 — xem §4.4
 }
 ```
-- Chỉ **chính người tạo đơn** (`createdByUserName` khớp user gọi) mới gọi được — người khác gọi (kể cả Admin) → 400.
-- Chỉ khi `status == InApproval` **VÀ chưa bước nào trong `approvalSteps[]` có `status=Approved`** (2026-08-07, Giai đoạn 3.1 — thay cho điều kiện `Draft/PendingGroupHead/Pending` cũ) — đã có bước nào duyệt xong thì 400 "Đơn đã có bước duyệt được xử lý, không thể sửa nữa." FE nên chặn từ trước bằng `isEditable` (xem §1.2/§4.3), không đợi BE trả lỗi.
-- **`employees[]` phải khớp CHÍNH XÁC tập nhân viên đang active của đơn** (`OtFormEmployee.IsRemoved == false`) — thiếu người, thừa người, gửi trùng `employeeId`, hoặc gửi `employeeId` đã bị 1 cấp duyệt loại khỏi đơn (§4.5a) đều bị từ chối 400 ngay ("Danh sách nhân viên trong đơn đã thay đổi — không thể thêm/bớt người khi sửa đơn, chỉ được sửa giờ kết thúc của từng người."). Muốn bớt người dùng riêng `POST /{id}/employees/remove` (§4.5a), **không** qua endpoint này nữa.
+- **Ai gọi được**: đơn theo Nhóm (`isProductionForm=false`) — chỉ **chính người tạo đơn** (`createdByUserName` khớp user gọi), người khác gọi (kể cả Admin) → 400, và phải chưa bước nào trong `approvalSteps[]` có `status=Approved`. Đơn theo chuyền (`isProductionForm=true`, Giai đoạn 5, 2026-08-27) — sửa theo TỪNG BƯỚC: candidate của bước `Pending` hiện tại thì sửa được (không giới hạn chỉ người tạo), bước NÀO đã ký thì chính bước đó bị khoá còn các bước sau vẫn sửa được tới khi tự họ ký. Cả 2 nhánh đều yêu cầu `status == InApproval`. FE nên chặn từ trước bằng `isEditable` (xem §1.2/§4.3), không đợi BE trả lỗi.
+- **`secondaryPassword` bắt buộc (mới 2026-08-28)** — cùng cơ chế `ApproveOtFormDto.secondaryPassword` (§4.4).
+- **`employees[]` phải khớp CHÍNH XÁC tập nhân viên đang active của đơn** (`OtFormEmployee.IsRemoved == false`) — thiếu người, thừa người, gửi trùng `employeeId`, hoặc gửi `employeeId` đã bị 1 cấp duyệt loại khỏi đơn (§4.5a) đều bị từ chối 400 ngay ("Danh sách nhân viên trong đơn đã thay đổi — không thể thêm/bớt người khi sửa đơn, chỉ được sửa giờ kết thúc của từng người."). Endpoint này **KHÔNG** đổi được danh sách nhân viên — bớt người dùng `POST /{id}/employees/remove` (§4.5a), thêm người dùng `POST /{id}/employees/add` (§4.5b, mới 2026-08-28).
 - Mỗi `endTime` vẫn validate `> otForm.StartTime && <= otForm.EndTime` — dùng giờ **hiện có của đơn** (không nhận từ request nữa, vì không đổi được nữa).
 - Response `data` = `OtFormDto` (§4.3) đầy đủ sau khi sửa — không cần gọi lại `GetById`.
 - Permission: `Attendance.OTForm.Create` (dùng chung với quyền tạo đơn, không có permission riêng).
@@ -1126,6 +1160,11 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
       "requiresSignatureSnapshot": true, "isResponsibleSnapshot": true, "terminalLevelSnapshot": 1,
       "status": 1,
       "candidates": [ { "employeeId": 12, "userName": "YEV\\n.van.a", "fullName": "Nguyễn Văn A" } ] }
+  ],
+  "editLogs": [
+    { "actionByUserName": "YEV\\n.van.a", "actionByFullName": "Nguyễn Văn A", "actionAt": "2026-08-28T02:10:00Z",
+      "actionType": 0, "employeeId": 100, "employeeCodeSnapshot": "NV001",
+      "fieldName": "EndTime", "oldValue": "19:30", "newValue": "20:00" }
   ]
 }
 ```
@@ -1166,6 +1205,12 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
   dùng field này để hiển thị cột giờ + tổng giờ OT của form — **không** tự trừ `startTime`/`endTime`
   nữa. `mealTicketType` cũng tính trên chính `actualHours` này (khác bản cũ tính trên giờ thô).
 - **`groupNameJp`/`departmentNameJp`/`reasonNameJp`** — song ngữ Việt/Nhật (nullable), lấy thẳng từ `Group`/`Department`/`Reason` tương ứng. FE (`OtFormDetail.tsx`, `OtFormEmailConfirmPage.tsx`) hiện `"{Vn} / {Jp}"` cho Phòng ban/Bộ phận/Lý do, tương tự cho `employees[].noteJp`/`processPart.anotherSuggestionJp`.
+- **`editLogs[]` (MỚI, 2026-08-28)** — nhật ký chỉnh sửa đơn (sửa giờ/`didEat`/ghi chú qua §4.1b, thêm
+  người qua §4.5b, loại người qua §4.5a), mới nhất trước. `actionType`: `0`=TimeChanged,
+  `1`=NoteChanged, `2`=EmployeeAdded, `3`=EmployeeRemoved. `fieldName` chỉ có giá trị khi
+  `actionType` là `0`/`1` (`"EndTime"`/`"DidEat"`/`"NoteVn"`/`"NoteJp"`) — `null` khi là hành động
+  Thêm/Loại. KHÔNG ghi gì cho hành động Tạo đơn (`CreatedByUserName`/`createdAt` đã là log riêng).
+  Xem `attendance-module.md` §Giai đoạn 11.
 - **`employees[].isRemoved`/`removedByUserName`/`removedByFullName`/`removedAtLevel`/`removedAt`/`removeReason` (xem §4.5a)** — người bị 1 bước duyệt loại khỏi đơn qua `POST /{id}/employees/remove` **vẫn nằm trong mảng `employees[]`** (BE cố tình KHÔNG lọc bỏ) để giữ dấu vết ai loại/lúc nào/lý do gì trên màn chi tiết — FE tự lọc `isRemoved === true` ra khỏi (1) tổng giờ OT hiển thị, (2) bản in PDF/A4/A5, (3) trang xem trước qua email. **`removedAtLevel` đổi ý nghĩa 2026-08-07**: giờ là `OtFormApprovalStep.stepOrder` (trước là số `ApprovalLevel`) — tra tên bước bằng cách tìm phần tử `approvalSteps[]` có `stepOrder` khớp, lấy `jobTitleNameSnapshot`, KHÔNG map qua `approvalLevelLabels` nữa. `numberOfEmployee` (cả `OtFormDto` lẫn `OtFormListItemDto`) chỉ đếm người **chưa** bị loại, không cần FE tự trừ.
 
 ### 4.4 `POST /api/OtForm/{id}/approve`
@@ -1193,17 +1238,41 @@ Bước đang chờ chuyển `Rejected`, mọi bước `Pending` còn lại (Ste
 
 ```jsonc
 // body — RemoveOtFormEmployeeDto
-{ "employeeId": 100, "reason": "Không đủ điều kiện tăng ca đợt này." }   // cả 2 field [Required], KHÔNG có secondaryPassword
+{ "employeeId": 100, "reason": "Không đủ điều kiện tăng ca đợt này.", "secondaryPassword": "..." }   // cả 3 field [Required]
 ```
 
 - **Permission riêng `Attendance.OTForm.RemoveEmployee`** (KHÔNG dùng chung `.Create`/`.Approve`).
 - **Ai loại được, đơn nào** (đổi 2026-08-07, Giai đoạn 3.1): người gọi phải nằm trong `candidates[]` của bước đang chờ (`OtFormApprovalStep.status=Pending`, `stepOrder` nhỏ nhất) — **Admin luôn bypass** (mở rộng so với trước, vì Submitter/"Admin bypass chỉ ở cấp tạo đơn" không còn tồn tại).
-- **KHÔNG cần `secondaryPassword`** — loại người không phải hành động ký/duyệt, khác §4.4/§4.5 vẫn giữ nguyên mật khẩu cấp 2.
+- **`secondaryPassword` bắt buộc (mới 2026-08-28, ĐẢO NGƯỢC quyết định 2026-07-31 dưới đây)** — cùng cơ chế §4.4. **CHỈ áp dụng kênh trong app** — kênh email (`RemoveOtFormEmployeeByEmailTokenDto`, cuối mục này) vẫn giữ nguyên KHÔNG cần, quyết định riêng không đổi.
 - **KHÔNG đổi `status` của đơn, KHÔNG xoá/vô hiệu chữ ký các cấp đã ký trước đó** — người dùng đã chốt "duyệt tiếp bình thường", không bắt ký lại từ đầu. Loại người xong, đơn vẫn ở nguyên `status` hiện tại, chờ đúng cấp đó tự bấm Duyệt/Ký tiếp (2 hành động tách biệt, KHÔNG gộp vào `/approve` — xem lý do UX ở đầu file).
 - 400 nếu: nhân viên không có trong đơn; nhân viên đã bị loại từ trước; đơn chỉ còn 1 người CHƯA bị loại (dùng "Từ chối đơn" thay vì loại nốt người cuối); đơn đã `Completed`/`Rejected`; user không đúng cấp/scope (cùng lỗi như §4.4).
 - Thành công → trả `data: OtFormDto` đầy đủ đã cập nhật (khác `/approve`/`/reject` chỉ trả `true`) — FE **không cần** gọi lại `GET /{id}`, dùng thẳng response để refresh màn chi tiết.
-- **FE**: nút "Loại khỏi đơn" đặt trên từng dòng nhân viên ở màn Chi tiết đơn (`OtFormDetail.tsx`, trong app) — ẩn khi chỉ còn 1 người chưa bị loại, mở modal riêng (chỉ có ô lý do, không có mật khẩu cấp 2) tách biệt hoàn toàn khỏi modal Duyệt/Từ chối/Ký duyệt.
-- **Kênh email cũng có hành động này (2026-07-31, mở rộng)** — `OtFormEmailConfirmPage.tsx` có cùng nút/modal, gọi `POST /email-confirm/{token}/employees/remove` (`RemoveOtFormEmployeeByEmailTokenDto { EmployeeId, Reason }`) — cùng shape với DTO kênh JWT ở trên (cả 2 kênh đều không có `secondaryPassword`, khác 2 action Duyệt/Từ chối qua email vẫn giữ mật khẩu cấp 2). `OtFormService.RemoveEmployeeByEmailTokenAsync` KHÔNG tiêu (consume) token — người duyệt có thể loại nhiều người rồi mới Duyệt/Từ chối bằng đúng token đó.
+- Mỗi lần loại thành công ghi thêm 1 dòng `OtFormEditLog` (`actionType=EmployeeRemoved`) — xem §4.3, `attendance-module.md` §Giai đoạn 11.
+- **FE**: nút "Loại khỏi đơn" đặt trên từng dòng nhân viên ở màn Chi tiết đơn (`OtFormDetail.tsx`, trong app) — ẩn khi chỉ còn 1 người chưa bị loại, mở modal riêng (ô lý do + ô mật khẩu cấp 2 từ 2026-08-28) tách biệt hoàn toàn khỏi modal Duyệt/Từ chối/Ký duyệt.
+- **Kênh email cũng có hành động này (2026-07-31, mở rộng)** — `OtFormEmailConfirmPage.tsx` có cùng nút/modal, gọi `POST /email-confirm/{token}/employees/remove` (`RemoveOtFormEmployeeByEmailTokenDto { EmployeeId, Reason }`, **KHÔNG** có `secondaryPassword` — quyết định riêng cho kênh email không đổi dù kênh JWT ở trên đã đổi 2026-08-28). `OtFormService.RemoveEmployeeByEmailTokenAsync` KHÔNG tiêu (consume) token — người duyệt có thể loại nhiều người rồi mới Duyệt/Từ chối bằng đúng token đó.
+
+### 4.5b `POST /api/OtForm/{id}/employees/add` — Thêm nhân viên vào đơn (mới, 2026-08-28)
+
+**Nghiệp vụ**: chiều ngược của §4.5a — cấp đang xử lý phát hiện thiếu 1 người cần thêm vào đơn (thay vì phải huỷ đơn lập lại từ đầu).
+
+```jsonc
+// body — AddOtFormEmployeeDto
+{
+  "employeeId": 100, "endTime": "20:00:00", "didEat": true,
+  "noteVn": null, "noteJp": null,
+  "secondaryPassword": "..."
+}   // employeeId + secondaryPassword [Required]
+```
+
+- **Permission riêng `Attendance.OTForm.AddEmployee`** (mirror `.RemoveEmployee`, gán cho đúng các Role đang giữ `.RemoveEmployee`).
+- **Điều kiện y hệt §4.5a**: candidate của bước `Pending` hiện tại (hoặc Admin), đơn phải `InApproval`.
+- Nhân viên **chưa active** trong đơn — nếu trước đó từng bị loại khỏi CHÍNH đơn này thì được **thêm lại** (tái dùng đúng dòng cũ, không tạo dòng mới); đã active rồi → 400.
+- `endTime` phải nằm trong `[otForm.startTime, otForm.endTime]` — cùng luật §4.1.
+- Đơn theo chuyền (`isProductionForm=true`): nhân viên phải có `ProductionEmployee` tương ứng **và** `ShiftTeamId != null` (xem §4.1 bullet Nhóm ca). Đơn theo Nhóm: nhân viên phải cùng `groupId` với đơn.
+- Check **trùng giờ OT trong ngày** + **giới hạn ngày/tháng/năm** — 400 nếu vi phạm, cùng message mẫu với §4.1/§4.1b.
+- Thành công → trả `data: OtFormDto` đầy đủ đã cập nhật (không cần gọi lại `GET /{id}`), ghi 1 dòng `OtFormEditLog` (`actionType=EmployeeAdded`).
+- **FE**: nút "Thêm nhân viên" ở màn Chi tiết đơn (`OtFormDetail.tsx`), điều kiện hiện giống hệt nút Loại. Modal 2 bước: tìm theo Mã/Tên (đơn theo chuyền gọi `ProductionEmployeeApi.search`, đơn theo Nhóm gọi `EmployeeApi.getEmployeesByGroup` rồi lọc client-side) → chọn người → nhập Giờ kết thúc/Có ăn/Ghi chú/Mật khẩu cấp 2.
+- **Không có kênh email** cho hành động này (khác §4.5a).
 
 ### 4.6 Duyệt/Từ chối qua email (2026-07-16) — kênh BỔ SUNG, không thay thế §4.4/§4.5
 
@@ -1500,10 +1569,12 @@ gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
 | `/api/SecondaryPassword` | `me` (GET/PUT), `confirm/{token}` (GET/POST, public — §6c) |
 | `/api/AttendanceSetting` | GET (mọi tài khoản), PUT (Admin — §6d) |
 | `/api/OtForm` | `my-forms`, `pending-approvals` (`currentStepCandidateCount`, mới 2026-08-08), `my-actions` (§4.2b), `my-participations` (§4.2c), `{id}` (GET/PUT), POST, `{id}/approve`, `{id}/reject`, `{id}/delete` (Admin only, mới 2026-08-08, §4.1c), `{id}/employees/remove` (§4.5a), `email-confirm/{token}` (GET), `email-confirm/{token}/approve`, `email-confirm/{token}/reject`, `email-confirm/{token}/employees/remove` (public, không mật khẩu cấp 2 — §4.6). **KHÔNG còn `{id}/submit`** (xoá 2026-08-07) lẫn `pending-submissions` (xoá 2026-08-08, xem §4.2a) |
-| `/api/EmployeeImport` | `preview`, `confirm` (Admin, §3.7) |
+| `/api/EmployeeImport` | `preview`, `confirm` (Admin, §3.7); `ot-hour-limits`/`ot-hour-limits/template` (gate `Employee.UpdateOtLimit`, §Phân quyền theo Phòng ban); `monthly-accumulation?year=&month=`/`monthly-accumulation/template` (multipart, gate `EmployeeAccumulation.Import` — TỔNG QUÁT mọi Phòng ban, mới 2026-09-03) |
 | `/api/ProductionEmployeeImport` | `preview`, `confirm`, `apply-accumulation` (quyền riêng, ảnh hưởng lương — §3.8) |
 | `/api/ProductionEmployeeExport` | `export` (GET, trả file .xlsx — §3.8) |
 | `/api/ProductionEmployee` | `search`, `line-options`, `team-options`, `shift-team-options` (màn "Theo chuyền" tạo đơn OT, gate `OTForm.Create`), `page-nation` (màn "Nhân viên dưới chuyền" đọc-only, gate `Employee.View` — mới 2026-08-27b, §3.8b) |
+| `/api/ProductionOtReport` | `ticket-report?date=&departmentId=` (JSON), `hours-report-excel?date=&departmentId=` (file .xlsx, gộp/người/ngày), `times-report-excel?date=&departmentId=` (file .xlsx, KHÔNG gộp — 1 dòng/lượt) — báo cáo dưới chuyền theo ngày, gate `Attendance.ProductionOtReport.View` — mới 2026-08-28, §11 |
+| `/api/EmployeeIdentityLinkImport` | `preview`, `confirm` (CẢ 2 nhận file trực tiếp, không phải rows JSON — có thể kèm ảnh chữ ký nhúng), `template` — liên kết Employee↔Identity User + tự tạo tài khoản nếu chưa có + gán chữ ký + gán Chức vụ/Người phụ trách Cây duyệt (cột B=MNV, C=UserName, D=RoleName, E=MaChucVu, F=NguoiPhuTrach="1", phạm vi Chức vụ/Người phụ trách LUÔN suy theo Bộ phận/Nhóm hiện tại của Employee — mở rộng 2026-09-03b), gate `Identity.User.BulkImport` (Admin-only, mới 2026-09-03, xem `attendance-module.md §Import Excel liên kết Identity ↔ Attendance`) |
 
 ## 8. Checklist FE — màn hình chính
 
@@ -1619,3 +1690,49 @@ Trợ lý AI hỗ trợ lập đơn tăng ca qua hội thoại — thiết kế 
   > tức, xem §4.1) nhưng bản thân code/prompt của AI Chat (đặt tên tool, mô tả "Draft" trong system
   > prompt) CHƯA được rà lại cho khớp — cần kiểm tra kỹ trước khi coi tính năng này hoạt động đúng ý,
   > xem [attendance-aichat-be-huong-dan.md §B3](attendance-aichat-be-huong-dan.md).
+
+## 11. ProductionOtReport (`/api/ProductionOtReport`) — báo cáo dưới chuyền theo ngày (mới, 2026-08-28;
+mở rộng 2026-08-29 — thêm `departmentId` + đủ 23 cột Excel)
+
+Gate cả 2 route bằng `Attendance.ProductionOtReport.View`. Chỉ tính đơn `isProductionForm=true` +
+`status=Completed` (Hoàn tất — qua đủ mọi cấp duyệt) đúng ngày truyền vào. Cả 2 route đều nhận thêm
+query param **`departmentId`** (`int?`, optional — không truyền = không lọc, mọi Phòng ban). Đơn "dưới
+chuyền" có thể tạo dưới BẤT KỲ Phòng ban nào (không chỉ riêng "Chế tạo"), nên FE nên luôn cho chọn
+Phòng ban qua `DepartmentApi.getAllDepartments()`. Xem thiết kế đầy đủ + kết quả verify dữ liệu thật ở
+[attendance-module.md §Báo cáo dưới chuyền theo ngày](attendance-module.md).
+
+- **`GET /api/ProductionOtReport/ticket-report?date=yyyy-MM-dd&departmentId=`** — "Xuất số lượng phiếu
+  đã sử dụng" (PDF). Trả JSON bọc `ApiResponse<ProductionTicketReportDto>`:
+  ```json
+  {
+    "date": "2026-08-29",
+    "totalSecondaryTicketCount": 2,
+    "totalMainTicketCount": 5,
+    "totalMilkCount": 2,
+    "rows": [
+      {
+        "congDoan": "GT", "ca": "A", "team": "HC", "lineCa": "4S-HC",
+        "secondaryTicketCount": 1, "mainTicketCount": 3, "milkCount": 2,
+        "totalHour": 4.00, "startTime": "14:00:00", "endTime": "18:00:00"
+      }
+    ]
+  }
+  ```
+  FE tự dựng PDF (A4 dọc) từ JSON này bằng `jsPDF` + `jspdf-autotable` (font Roboto nhúng qua VFS, tái
+  dùng `modules/pc-management/lib/pdf-fonts.ts`) — BE không sinh PDF. Xem
+  `modules/attendance/components/reports/ProductionOtReportPanel.tsx`.
+- **`GET /api/ProductionOtReport/hours-report-excel?date=yyyy-MM-dd&departmentId=`** — "Tổng số giờ
+  tăng ca 1 người trong 1 ngày" (Excel). Trả file `.xlsx` trực tiếp (KHÔNG bọc `ApiResponse<T>` — đọc
+  bằng `getForBlob`, cùng pattern `ProductionEmployeeExportApi.exportExcel`), **gộp 1 dòng/người/
+  ngày**. Đủ **23 cột** khớp file mẫu gốc (thứ tự đúng như xuất ra):
+  `MNV, BOPHAN, HO, TEN, Ngay_TC, Gio_BD, Gio_KT, Lydo, LYDO_JP, Lydo_phu, An, CONGVIEC, OT_Thang,
+  OT_Nam, BLOCK, NHOM, NOTE, Gio_Hienta, Line_Muon, MNV_LC, MNV_SC, BP, Ngay_lap`.
+  Chi tiết nguồn từng cột + lưu ý `BP` ra `"CT"` (mã Phòng ban thật) chứ không phải `"SX"` (nhãn hệ cũ)
+  — xem attendance-module.md.
+- **`GET /api/ProductionOtReport/times-report-excel?date=yyyy-MM-dd&departmentId=`** — "Số LƯỢT tăng
+  ca 1 người trong 1 ngày" (Excel, mới 2026-08-29) — **KHÔNG gộp dòng** (khác hẳn báo cáo trên): mỗi
+  dòng = 1 lượt (1 đơn/1 ngày của người đó). Trả file `.xlsx` trực tiếp, cùng pattern. 9 cột:
+  `MNV, BLOCK, NHOM, NOTE, Ngay_TC, LAN_TANG_CA_TRONG_NGAY, Gio_Hientai, BP, MNV_TP`. 2 cột
+  `LAN_TANG_CA_TRONG_NGAY`/`Gio_Hientai` là tổng hợp CẢ NGÀY (lặp lại trên mọi dòng của người đó);
+  `MNV_TP` = mã Trưởng Phòng đã duyệt đúng đơn đó (tra `OtFormApprovalHistory`). Chi tiết nguồn từng
+  cột — xem attendance-module.md.

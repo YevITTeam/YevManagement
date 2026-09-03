@@ -17,5 +17,7 @@ namespace Identity.Application.Interfaces.Service
         IPermissionRepository Permissions { get; }
 
         IUserPermissionRepository UserPermissions { get; }
+
+        ITestLoginAccountRepository TestLoginAccounts { get; }
     }
 }

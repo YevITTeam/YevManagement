@@ -5,7 +5,7 @@ import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, FileSpreadsheet, Inbox } from "lucide-react";
 
-import { EmployeeApi } from "@/modules/attendance/api/employee.api";
+import { EmployeeApi, type EmployeeScopeDto } from "@/modules/attendance/api/employee.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -16,6 +16,9 @@ import ActionMenu from "@/components/ui/ActionMenu";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
 import EmployeeImportDialog from "./EmployeeImportDialog";
 import EmployeeOtHourLimitImportDialog from "./EmployeeOtHourLimitImportDialog";
+import EmployeeMonthlyAccumulationImportDialog from "./EmployeeMonthlyAccumulationImportDialog";
+import EmployeeIdentityLinkImportDialog from "./EmployeeIdentityLinkImportDialog";
+import EmployeeOtLimitDialog from "./EmployeeOtLimitDialog";
 import ProductionEmployeeImportDialog from "./ProductionEmployeeImportDialog";
 import ProductionEmployeeList, { type ProductionEmployeeListHandle } from "./ProductionEmployeeList";
 import AccumulationHistoryModal from "./AccumulationHistoryModal";
@@ -25,6 +28,8 @@ import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { ProductionEmployeeExportApi } from "@/modules/attendance/api/production-employee-import.api";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 
 const PAGE_SIZE = 10;
 type ViewMode = "employee" | "production";
@@ -32,6 +37,13 @@ type ViewMode = "employee" | "production";
 const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeList({ onLoadingChange }, ref) {
     const t = useTranslations("Attendance.Employee");
     const tCommon = useTranslations("Common");
+    const { user } = useAuth();
+    const canUpdateEmployee = hasPermission(user, "Attendance.Employee.Update");
+    const canDeleteEmployee = hasPermission(user, "Attendance.Employee.Delete");
+    const canUpdateOtLimit = hasPermission(user, "Attendance.Employee.UpdateOtLimit");
+    // Import liên kết Identity ↔ Attendance + tự tạo tài khoản + chữ ký (2026-09-03) — permission riêng
+    // CHỈ Admin có sẵn (không auto-grant qua JobTitle/Coordinator), xem docs/docs-be/attendance-module.md.
+    const canImportIdentityLink = hasPermission(user, "Identity.User.BulkImport");
     const [employees, setEmployees] = useState<EmployeeDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -43,6 +55,14 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [departmentId, setDepartmentId] = useState<number | "">("");
     const [groupId, setGroupId] = useState<number | "">("");
+
+    // Phạm vi xem của người gọi (2026-09-03, xem EmployeeService.GetMyScopeAsync) — non-Admin không
+    // phải Trưởng Xưởng/Giám đốc chỉ được thu hẹp dropdown lọc đúng phần họ thật sự xem được, tránh
+    // hiện toàn bộ Phòng ban/Nhóm công ty rồi chọn ra bảng rỗng không rõ lý do (BE đã tự scope
+    // GetPagedAsync/GetAllActiveAsync từ trước — đây chỉ là UX, không phải lớp chặn bảo mật).
+    const [scope, setScope] = useState<EmployeeScopeDto | null>(null);
+    const isScopeRestricted = scope !== null && !scope.companyWide;
+    const showDepartmentFilter = scope === null || scope.companyWide || scope.departmentId !== null;
 
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -61,9 +81,15 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     // Xem lịch sử lũy kế theo tháng/năm (2026-08-11d) — modal dùng chung, xem AccumulationHistoryModal.tsx.
     const [historyEmployee, setHistoryEmployee] = useState<EmployeeDto | null>(null);
 
+    // Sửa RIÊNG giới hạn OT (2026-08-29) — permission hẹp Attendance.Employee.UpdateOtLimit, dành cho
+    // Người phụ trách Bộ phận không có Attendance.Employee.Update, xem EmployeeOtLimitDialog.tsx.
+    const [otLimitEmployee, setOtLimitEmployee] = useState<EmployeeDto | null>(null);
+
     const [importOpen, setImportOpen] = useState(false);
+    const [identityLinkImportOpen, setIdentityLinkImportOpen] = useState(false);
     const [productionImportOpen, setProductionImportOpen] = useState(false);
     const [otHourLimitImportOpen, setOtHourLimitImportOpen] = useState(false);
+    const [monthlyAccumulationImportOpen, setMonthlyAccumulationImportOpen] = useState(false);
     const [isExportingProduction, setIsExportingProduction] = useState(false);
     // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
     const { setting } = useAttendanceSetting();
@@ -75,13 +101,23 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const productionListRef = useRef<ProductionEmployeeListHandle>(null);
 
     useEffect(() => {
-        DepartmentApi.getAllDepartments()
-            .then(setDepartments)
-            .catch((err) => console.error(err));
-        GroupApi.getAllGroups()
-            .then(setGroups)
+        EmployeeApi.getMyScope()
+            .then(setScope)
             .catch((err) => console.error(err));
     }, []);
+
+    // Chờ biết phạm vi trước khi tải dropdown — tránh chớp hiện đủ Phòng ban/Nhóm công ty rồi mới rút
+    // gọn lại. Trường hợp bị giới hạn theo Phòng ban vẫn tải danh sách Nhóm CON của đúng Phòng ban đó
+    // (không phải chỉ 1 Nhóm) — họ được xem cả Phòng ban, chỉ riêng dropdown Phòng ban mới khoá cứng.
+    useEffect(() => {
+        if (scope === null) return;
+        if (scope.companyWide) {
+            DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
+            GroupApi.getAllGroups().then(setGroups).catch((err) => console.error(err));
+        } else if (scope.departmentId !== null) {
+            GroupApi.getGroupsByDepartment(scope.departmentId).then(setGroups).catch((err) => console.error(err));
+        }
+    }, [scope]);
 
     const handleSelectDepartment = (nextId: number | "") => {
         setDepartmentId(nextId);
@@ -91,8 +127,14 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
             GroupApi.getGroupsByDepartment(nextId)
                 .then(setGroups)
                 .catch((err) => console.error(err));
-        } else {
+        } else if (!isScopeRestricted) {
             GroupApi.getAllGroups()
+                .then(setGroups)
+                .catch((err) => console.error(err));
+        } else if (scope?.departmentId !== null && scope?.departmentId !== undefined) {
+            // Bị giới hạn theo Phòng ban, người dùng gỡ lựa chọn đang chọn — quay về đúng Nhóm con của
+            // Phòng ban mình, KHÔNG tải toàn bộ Nhóm công ty (sẽ phá mất phần thu hẹp ở trên).
+            GroupApi.getGroupsByDepartment(scope.departmentId)
                 .then(setGroups)
                 .catch((err) => console.error(err));
         }
@@ -103,16 +145,35 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         setPageIndex(1);
     };
 
-    const departmentOptions: SelectOption[] = departments.map((d) => ({
-        value: d.id,
-        label: d.departmentNameVn,
-        searchText: d.departmentNameVn.toLowerCase(),
-    }));
-    const groupOptions: SelectOption[] = groups.map((g) => ({
-        value: g.id,
-        label: g.groupNameVn,
-        searchText: g.groupNameVn.toLowerCase(),
-    }));
+    const departmentOptions: SelectOption[] = isScopeRestricted
+        ? scope!.departmentId !== null
+            ? [
+                  {
+                      value: scope!.departmentId,
+                      label: scope!.departmentNameVn ?? "",
+                      searchText: (scope!.departmentNameVn ?? "").toLowerCase(),
+                  },
+              ]
+            : []
+        : departments.map((d) => ({
+              value: d.id,
+              label: d.departmentNameVn,
+              searchText: d.departmentNameVn.toLowerCase(),
+          }));
+    const groupOptions: SelectOption[] =
+        isScopeRestricted && scope!.groupId !== null
+            ? [
+                  {
+                      value: scope!.groupId,
+                      label: scope!.groupNameVn ?? "",
+                      searchText: (scope!.groupNameVn ?? "").toLowerCase(),
+                  },
+              ]
+            : groups.map((g) => ({
+                  value: g.id,
+                  label: g.groupNameVn,
+                  searchText: g.groupNameVn.toLowerCase(),
+              }));
 
     const { isLoading, error, refetch: fetchEmployees } = useFetchEffect(
         () =>
@@ -226,18 +287,34 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         }
     };
 
+    // Người phụ trách Bộ phận (không phải Admin) có thể chỉ giữ 1-2 trong 3 quyền này — lọc đúng theo
+    // permission thật sự có, tránh hiện nút bấm vào sẽ 403 (2026-08-29).
+    const canImportProduction = hasPermission(user, "Attendance.ProductionEmployee.Import");
+    const canExportProduction = hasPermission(user, "Attendance.ProductionEmployee.Export");
+    // Import lũy kế OT theo THÁNG, tổng quát cho MỌI Phòng ban (2026-09-03) — dùng lại đúng permission
+    // đã tự động cấp cho Người phụ trách Bộ phận từ trước, không phải permission mới.
+    const canImportMonthlyAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Import");
     const productionExcelActions = (
         <ActionMenu
             label={t("excelActionsLabel")}
             icon={<FileSpreadsheet className="h-3.5 w-3.5" />}
             items={[
-                { label: t("importProductionExcel"), onClick: () => setProductionImportOpen(true) },
-                {
-                    label: isExportingProduction ? t("exportingProduction") : t("exportProductionExcel"),
-                    onClick: handleExportProduction,
-                    disabled: isExportingProduction,
-                },
-                { label: t("otHourLimitImportMenuLabel"), onClick: () => setOtHourLimitImportOpen(true) },
+                ...(canImportProduction ? [{ label: t("importProductionExcel"), onClick: () => setProductionImportOpen(true) }] : []),
+                ...(canExportProduction
+                    ? [
+                          {
+                              label: isExportingProduction ? t("exportingProduction") : t("exportProductionExcel"),
+                              onClick: handleExportProduction,
+                              disabled: isExportingProduction,
+                          },
+                      ]
+                    : []),
+                ...(canUpdateOtLimit
+                    ? [{ label: t("otHourLimitImportMenuLabel"), onClick: () => setOtHourLimitImportOpen(true) }]
+                    : []),
+                ...(canImportMonthlyAccumulation
+                    ? [{ label: t("monthlyAccumulationImportMenuLabel"), onClick: () => setMonthlyAccumulationImportOpen(true) }]
+                    : []),
             ]}
         />
     );
@@ -285,13 +362,15 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         >
                             {tCommon("search")}
                         </button>
-                        <SearchableSelect
-                            options={departmentOptions}
-                            value={departmentId}
-                            onChange={handleSelectDepartment}
-                            placeholder={t("filterDepartmentPlaceholder")}
-                            triggerClassName="h-10 w-56 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
+                        {showDepartmentFilter && (
+                            <SearchableSelect
+                                options={departmentOptions}
+                                value={departmentId}
+                                onChange={handleSelectDepartment}
+                                placeholder={t("filterDepartmentPlaceholder")}
+                                triggerClassName="h-10 w-56 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            />
+                        )}
                         <SearchableSelect
                             options={groupOptions}
                             value={groupId}
@@ -305,6 +384,14 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         >
                             {t("importExcel")}
                         </button>
+                        {canImportIdentityLink && (
+                            <button
+                                onClick={() => setIdentityLinkImportOpen(true)}
+                                className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            >
+                                {t("identityLinkMenuLabel")}
+                            </button>
+                        )}
                     </div>
                     <div className="shrink-0 whitespace-nowrap text-sm text-[#5e3f3a]">
                         {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
@@ -391,20 +478,33 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                             >
                                                 {t("viewAccumulationHistory")}
                                             </button>
-                                            <button
-                                                onClick={() => openEditForm(employee)}
-                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                title={tCommon("edit")}
-                                            >
-                                                {tCommon("edit")}
-                                            </button>
-                                            <button
-                                                onClick={() => setDeletingEmployee(employee)}
-                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
-                                                title={tCommon("delete")}
-                                            >
-                                                {tCommon("delete")}
-                                            </button>
+                                            {canUpdateOtLimit && (
+                                                <button
+                                                    onClick={() => setOtLimitEmployee(employee)}
+                                                    className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                    title={t("otLimitEditAction")}
+                                                >
+                                                    {t("otLimitEditAction")}
+                                                </button>
+                                            )}
+                                            {canUpdateEmployee && (
+                                                <button
+                                                    onClick={() => openEditForm(employee)}
+                                                    className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                    title={tCommon("edit")}
+                                                >
+                                                    {tCommon("edit")}
+                                                </button>
+                                            )}
+                                            {canDeleteEmployee && (
+                                                <button
+                                                    onClick={() => setDeletingEmployee(employee)}
+                                                    className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                    title={tCommon("delete")}
+                                                >
+                                                    {tCommon("delete")}
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -442,6 +542,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 onImported={fetchEmployees}
             />
 
+            <EmployeeIdentityLinkImportDialog
+                isOpen={identityLinkImportOpen}
+                onClose={() => setIdentityLinkImportOpen(false)}
+                onImported={fetchEmployees}
+            />
+
             <ProductionEmployeeImportDialog
                 isOpen={productionImportOpen}
                 onClose={() => setProductionImportOpen(false)}
@@ -454,6 +560,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
             <EmployeeOtHourLimitImportDialog
                 isOpen={otHourLimitImportOpen}
                 onClose={() => setOtHourLimitImportOpen(false)}
+                onImported={fetchEmployees}
+            />
+
+            <EmployeeMonthlyAccumulationImportDialog
+                isOpen={monthlyAccumulationImportOpen}
+                onClose={() => setMonthlyAccumulationImportOpen(false)}
                 onImported={fetchEmployees}
             />
 
@@ -489,6 +601,15 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     onClose={() => setHistoryEmployee(null)}
                 />
             )}
+
+            <EmployeeOtLimitDialog
+                employee={otLimitEmployee}
+                onClose={() => setOtLimitEmployee(null)}
+                onSaved={() => {
+                    setOtLimitEmployee(null);
+                    fetchEmployees();
+                }}
+            />
         </div>
     );
 });

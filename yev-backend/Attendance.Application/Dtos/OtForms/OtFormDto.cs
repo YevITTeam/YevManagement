@@ -53,6 +53,9 @@ namespace Attendance.Application.Dtos.OtForms
         public ProcessPartDto? ProcessPart { get; set; }
         public List<OtFormApprovalHistoryDto> ApprovalHistories { get; set; } = new();
 
+        // Lịch sử chỉnh sửa (sửa giờ/ghi chú, thêm/loại nhân viên) — mới nhất trước, xem OtFormEditLog.
+        public List<OtFormEditLogDto> EditLogs { get; set; } = new();
+
         // Chuỗi bước duyệt đã snapshot lúc tạo đơn, sắp theo StepOrder — xem OtFormApprovalStepDto.
         public List<OtFormApprovalStepDto> ApprovalSteps { get; set; } = new();
     }

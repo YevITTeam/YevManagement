@@ -16,6 +16,7 @@ public static class JobTitlePermissionWhitelist
         "Attendance.OTForm.Create",
         "Attendance.OTForm.Approve",
         "Attendance.OTForm.RemoveEmployee",
+        "Attendance.OTForm.AddEmployee",
         "Attendance.UserSignature.View",
         "Attendance.UserSignature.Update",
         "Attendance.SecondaryPassword.Update",
@@ -25,5 +26,6 @@ public static class JobTitlePermissionWhitelist
         "Attendance.Reason.View",
         "Attendance.Employee.View",
         "Attendance.JobTitle.View",
+        "Attendance.ProductionOtReport.View",
     };
 }

@@ -820,6 +820,58 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("OtFormBatchEmailTokens");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormEditLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ActionAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ActionByFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ActionByUserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("ActionType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EmployeeCodeSnapshot")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FieldName")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("OtFormId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "OtFormId" }, "IX_OtFormEditLogs_OtFormId");
+
+                    b.ToTable("OtFormEditLogs");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormEmployee", b =>
                 {
                     b.Property<int>("OtFormId")
@@ -1589,6 +1641,18 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtFormBatch");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormEditLog", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.OtForm", "OtForm")
+                        .WithMany("OtFormEditLogs")
+                        .HasForeignKey("OtFormId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormEditLogs_OtForms_OtFormId");
+
+                    b.Navigation("OtForm");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormEmployee", b =>
                 {
                     b.HasOne("Attendance.Domain.Entities.Employee", "Employee")
@@ -1748,6 +1812,8 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtFormApprovalEmailTokens");
 
                     b.Navigation("OtFormApprovalHistories");
+
+                    b.Navigation("OtFormEditLogs");
 
                     b.Navigation("OtFormEmployees");
 

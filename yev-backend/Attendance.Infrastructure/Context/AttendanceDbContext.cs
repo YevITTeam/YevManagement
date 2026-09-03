@@ -45,6 +45,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<ProductionTeam> ProductionTeams { get; set; }
     public virtual DbSet<ProductionEmployee> ProductionEmployees { get; set; }
     public virtual DbSet<ProductionApprovalStep> ProductionApprovalSteps { get; set; }
+    public virtual DbSet<OtFormEditLog> OtFormEditLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -321,6 +322,22 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.OtFormApprovalStepId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_OtFormApprovalHistories_OtFormApprovalSteps_OtFormApprovalStepId");
+        });
+
+        modelBuilder.Entity<OtFormEditLog>(entity =>
+        {
+            entity.HasIndex(e => e.OtFormId, "IX_OtFormEditLogs_OtFormId");
+
+            entity.Property(e => e.ActionByUserName).HasMaxLength(100);
+            entity.Property(e => e.ActionByFullName).HasMaxLength(255);
+            entity.Property(e => e.EmployeeCodeSnapshot).HasMaxLength(50);
+            entity.Property(e => e.FieldName).HasMaxLength(50);
+            entity.Property(e => e.OldValue).HasMaxLength(500);
+            entity.Property(e => e.NewValue).HasMaxLength(500);
+
+            entity.HasOne(d => d.OtForm).WithMany(p => p.OtFormEditLogs)
+                .HasForeignKey(d => d.OtFormId)
+                .HasConstraintName("FK_OtFormEditLogs_OtForms_OtFormId");
         });
 
         modelBuilder.Entity<UserSignature>(entity =>

@@ -1,4 +1,5 @@
 using Attendance.Application.Dtos.EmployeeImports;
+using Attendance.Application.Dtos.ProductionEmployeeImports;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
 using ClosedXML.Excel;
@@ -14,7 +15,13 @@ namespace Attendance.Application.Services
     // same row as the employee, with no separate file).
     public class EmployeeImportService : BaseService<IAttendanceUnitOfWork>, IEmployeeImportService
     {
-        public EmployeeImportService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
+        private readonly IDepartmentAccessGuard _departmentAccessGuard;
+
+        public EmployeeImportService(IAttendanceUnitOfWork unitOfWork, IDepartmentAccessGuard departmentAccessGuard)
+            : base(unitOfWork)
+        {
+            _departmentAccessGuard = departmentAccessGuard;
+        }
 
         public async Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream)
         {
@@ -377,21 +384,25 @@ namespace Attendance.Application.Services
             var rows = new List<EmployeeImportRowDto>();
             if (usedRange == null) return rows;
 
+            // worksheet.Cell(row, col) — KHÔNG dùng xlRow.Cell(col) (range-relative: nếu cột A trống
+            // hoàn toàn, ClosedXML tự thu hẹp usedRange bắt đầu từ cột B, khiến Cell(2) trỏ nhầm sang
+            // cột C) — đã tái hiện lỗi thật với chính file mẫu do GenerateTemplate() sinh ra (cột A cố
+            // tình để trống theo quy ước), xem docs/docs-be/attendance-module.md (2026-09-03).
             var allUsedRows = usedRange.RowsUsed().ToList();
             var headerRow = allUsedRows.FirstOrDefault(r =>
-                string.Equals(r.Cell(2).GetString().Trim(), HeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
+                string.Equals(worksheet.Cell(r.RowNumber(), 2).GetString().Trim(), HeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
 
             if (headerRow == null)
                 throw new DomainException($"Không tìm thấy dòng tiêu đề (cột B = \"{HeaderMarkerCellB}\") trong file — kiểm tra lại đúng mẫu file nhân sự.");
 
             foreach (var xlRow in allUsedRows.Where(r => r.RowNumber() > headerRow.RowNumber()))
             {
-                var employeeCode = xlRow.Cell(2).GetString().Trim();
-                var fullName = xlRow.Cell(3).GetString().Trim();
-                var departmentCode = xlRow.Cell(4).GetString().Trim();
-                var departmentName = xlRow.Cell(5).GetString().Trim();
-                var groupCode = xlRow.Cell(6).GetString().Trim();
-                var groupName = xlRow.Cell(7).GetString().Trim();
+                var employeeCode = worksheet.Cell(xlRow.RowNumber(), 2).GetString().Trim();
+                var fullName = worksheet.Cell(xlRow.RowNumber(), 3).GetString().Trim();
+                var departmentCode = worksheet.Cell(xlRow.RowNumber(), 4).GetString().Trim();
+                var departmentName = worksheet.Cell(xlRow.RowNumber(), 5).GetString().Trim();
+                var groupCode = worksheet.Cell(xlRow.RowNumber(), 6).GetString().Trim();
+                var groupName = worksheet.Cell(xlRow.RowNumber(), 7).GetString().Trim();
 
                 var isRowEmpty = string.IsNullOrWhiteSpace(employeeCode) && string.IsNullOrWhiteSpace(fullName) &&
                     string.IsNullOrWhiteSpace(departmentCode) && string.IsNullOrWhiteSpace(departmentName) &&
@@ -422,7 +433,7 @@ namespace Attendance.Application.Services
         // nhân viên đó (không phải xoá) — đã chốt với người dùng 2026-08-27.
         private const string OtHourLimitHeaderMarkerCellB = "MNV";
 
-        public async Task<EmployeeOtHourLimitImportResultDto> ImportOtHourLimitsAsync(Stream excelFileStream)
+        public async Task<EmployeeOtHourLimitImportResultDto> ImportOtHourLimitsAsync(Stream excelFileStream, string userName, bool isAdmin)
         {
             XLWorkbook workbook;
             try
@@ -443,9 +454,11 @@ namespace Attendance.Application.Services
             var result = new EmployeeOtHourLimitImportResultDto();
             if (usedRange == null) return result;
 
+            // worksheet.Cell(row, col) tuyệt đối — KHÔNG dùng r.Cell(col) range-relative, xem chú thích ở
+            // ParseXlsx phía trên (2026-09-03).
             var allUsedRows = usedRange.RowsUsed().ToList();
             var headerRow = allUsedRows.FirstOrDefault(r =>
-                string.Equals(r.Cell(2).GetString().Trim(), OtHourLimitHeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
+                string.Equals(worksheet.Cell(r.RowNumber(), 2).GetString().Trim(), OtHourLimitHeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
             if (headerRow == null)
                 throw new DomainException(
                     $"Không tìm thấy dòng tiêu đề (cột B = \"{OtHourLimitHeaderMarkerCellB}\") trong file — đúng mẫu là cột B=MNV, C=Giới hạn Tháng, D=Giới hạn Năm.");
@@ -455,9 +468,9 @@ namespace Attendance.Application.Services
                 .Select(r => new
                 {
                     RowNumber = r.RowNumber(),
-                    EmployeeCode = r.Cell(2).GetString().Trim(),
-                    MonthlyLimit = r.Cell(3).TryGetValue<decimal>(out var m) ? (decimal?)m : null,
-                    YearlyLimit = r.Cell(4).TryGetValue<decimal>(out var y) ? (decimal?)y : null
+                    EmployeeCode = worksheet.Cell(r.RowNumber(), 2).GetString().Trim(),
+                    MonthlyLimit = worksheet.Cell(r.RowNumber(), 3).TryGetValue<decimal>(out var m) ? (decimal?)m : null,
+                    YearlyLimit = worksheet.Cell(r.RowNumber(), 4).TryGetValue<decimal>(out var y) ? (decimal?)y : null
                 })
                 .Where(r => !string.IsNullOrWhiteSpace(r.EmployeeCode))
                 .ToList();
@@ -465,6 +478,21 @@ namespace Attendance.Application.Services
             var codes = dataRows.Select(r => r.EmployeeCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var employeesByCode = (await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && codes.Contains(x.Code)))
                 .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
+
+            // Scope THEO TỪNG DÒNG (2026-08-29) — file này nhận EmployeeCode tự do, không hardcode 1
+            // Phòng ban như ProductionEmployeeImportService. Admin bỏ qua hoàn toàn; non-Admin phải là
+            // Coordinator đúng Phòng ban thật của nhân viên đó (trực tiếp qua DepartmentId, hoặc gián
+            // tiếp qua Group.DepartmentId — FindAsync không include navigation nên tra riêng 1 lượt) —
+            // xem docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban.
+            var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
+            var groupIdsNeeded = employeesByCode.Values
+                .Where(x => x.DepartmentId == null && x.GroupId.HasValue)
+                .Select(x => x.GroupId!.Value)
+                .ToHashSet();
+            var departmentIdByGroupId = groupIdsNeeded.Count == 0
+                ? new Dictionary<int, int>()
+                : (await _unitOfWork.Groups.SelectAsync(x => groupIdsNeeded.Contains(x.Id), x => new { x.Id, x.DepartmentId }))
+                    .ToDictionary(x => x.Id, x => x.DepartmentId);
 
             foreach (var row in dataRows)
             {
@@ -481,6 +509,29 @@ namespace Attendance.Application.Services
                     continue;
                 }
 
+                if (managedDepartmentIds != null)
+                {
+                    int? resolvedDepartmentId = employee.DepartmentId;
+                    if (resolvedDepartmentId == null && employee.GroupId.HasValue
+                        && departmentIdByGroupId.TryGetValue(employee.GroupId.Value, out var deptFromGroup))
+                    {
+                        resolvedDepartmentId = deptFromGroup;
+                    }
+
+                    if (resolvedDepartmentId == null || !managedDepartmentIds.Contains(resolvedDepartmentId.Value))
+                    {
+                        result.SkippedCount++;
+                        result.Rows.Add(new EmployeeOtHourLimitImportRowResultDto
+                        {
+                            RowNumber = row.RowNumber,
+                            EmployeeCode = row.EmployeeCode,
+                            Success = false,
+                            Error = "Nhân viên không thuộc Phòng ban bạn phụ trách."
+                        });
+                        continue;
+                    }
+                }
+
                 if (row.MonthlyLimit.HasValue) employee.CustomMonthlyOtHourLimit = row.MonthlyLimit;
                 if (row.YearlyLimit.HasValue) employee.CustomYearlyOtHourLimit = row.YearlyLimit;
                 _unitOfWork.Employees.Update(employee);
@@ -494,6 +545,142 @@ namespace Attendance.Application.Services
                     MonthlyLimit = employee.CustomMonthlyOtHourLimit,
                     YearlyLimit = employee.CustomYearlyOtHourLimit
                 });
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+            return result;
+        }
+
+        // Import lũy kế OT theo THÁNG cho MỌI Phòng ban (2026-09-03, theo yêu cầu người dùng — nguồn dữ
+        // liệu ban đầu là file HR ngoài "phép năm và tăng ca 062026- Công Vụ.xlsx", nhưng hệ thống dùng
+        // FORMAT RIÊNG đơn giản hơn thay vì khớp cột file gốc: file gốc tách 7 loại giờ (đêm/CN/Lễ...)
+        // phục vụ tính lương, còn EmployeeAccumulationHistory hiện chỉ lưu TỔNG giờ/tháng — chỉ lấy đúng
+        // 2 cột cần thiết). Cùng logic delta-upsert + scope theo từng dòng với
+        // ProductionEmployeeImportService.ApplyAccumulationAsync (unique index (EmployeeId,Year,Month)
+        // trên EmployeeAccumulationHistories buộc phải cộng dồn CHÊNH LỆCH thay vì ghi đè — xem file đó
+        // để biết đầy đủ lý do; không trích thành helper dùng chung vì 2 service không cùng 1 lớp cha
+        // chứa logic, và đoạn này đủ ngắn để giữ độc lập, cùng tinh thần các ParseXlsx của module này).
+        private const string MonthlyAccumulationHeaderMarkerCellB = "MNV";
+
+        public async Task<ProductionEmployeeAccumulationResultDto> ImportMonthlyAccumulationAsync(
+            Stream excelFileStream, int year, int month, string userName, bool isAdmin)
+        {
+            XLWorkbook workbook;
+            try
+            {
+                workbook = new XLWorkbook(excelFileStream);
+            }
+            catch (Exception ex) when (ex is not DomainException)
+            {
+                throw new DomainException(
+                    "File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx).",
+                    new List<string> { $"{ex.GetType().Name}: {ex.Message}" });
+            }
+
+            using var _ = workbook;
+            var worksheet = workbook.Worksheets.First();
+            var usedRange = worksheet.RangeUsed();
+
+            var result = new ProductionEmployeeAccumulationResultDto();
+            if (usedRange == null) return result;
+
+            // worksheet.Cell(row, col) tuyệt đối — KHÔNG dùng r.Cell(col) range-relative, xem chú thích ở
+            // ParseXlsx phía trên (2026-09-03).
+            var allUsedRows = usedRange.RowsUsed().ToList();
+            var headerRow = allUsedRows.FirstOrDefault(r =>
+                string.Equals(worksheet.Cell(r.RowNumber(), 2).GetString().Trim(), MonthlyAccumulationHeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
+            if (headerRow == null)
+                throw new DomainException(
+                    $"Không tìm thấy dòng tiêu đề (cột B = \"{MonthlyAccumulationHeaderMarkerCellB}\") trong file — đúng mẫu là cột B=MNV, C=Tổng giờ OT tháng.");
+
+            var dataRows = allUsedRows
+                .Where(r => r.RowNumber() > headerRow.RowNumber())
+                .Select(r => new
+                {
+                    RowNumber = r.RowNumber(),
+                    EmployeeCode = worksheet.Cell(r.RowNumber(), 2).GetString().Trim(),
+                    TotalHours = worksheet.Cell(r.RowNumber(), 3).TryGetValue<decimal>(out var h) ? (decimal?)h : null
+                })
+                .Where(r => !string.IsNullOrWhiteSpace(r.EmployeeCode) && r.TotalHours.HasValue)
+                .ToList();
+
+            if (dataRows.Count == 0) return result;
+
+            var codes = dataRows.Select(r => r.EmployeeCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var employeesByCode = (await _unitOfWork.Employees.SelectAsync(
+                x => !x.IsDeleted && codes.Contains(x.Code),
+                x => new { x.Id, x.Code, DepartmentId = x.DepartmentId ?? (x.Group != null ? (int?)x.Group.DepartmentId : null) }))
+                .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
+
+            // Scope THEO TỪNG DÒNG (EmployeeCode tự do, không hardcode 1 Phòng ban) — cùng nguyên tắc
+            // ImportOtHourLimitsAsync/ApplyAccumulationAsync, xem docs/docs-be/attendance-module.md
+            // §Phân quyền theo Phòng ban.
+            var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
+
+            var employeeIds = employeesByCode.Values.Select(x => x.Id).ToList();
+            var existingLedgerRows = employeeIds.Count == 0
+                ? new Dictionary<int, EmployeeAccumulationHistory>()
+                : (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
+                    x => employeeIds.Contains(x.EmployeeId) && x.Year == year && x.Month == month))
+                    .ToDictionary(x => x.EmployeeId);
+
+            var note = $"Điều chỉnh từ import lũy kế OT theo tháng ngày {TimeHelper.GetCurrentUtcTime():dd/MM/yyyy HH:mm}";
+
+            foreach (var row in dataRows)
+            {
+                if (!employeesByCode.TryGetValue(row.EmployeeCode, out var employee))
+                {
+                    result.SkippedCount++;
+                    result.SkippedRows.Add(new ProductionEmployeeAccumulationSkippedRowDto
+                    {
+                        EmployeeCode = row.EmployeeCode,
+                        Reason = "Không tìm thấy nhân viên trong hệ thống."
+                    });
+                    continue;
+                }
+
+                if (managedDepartmentIds != null && (employee.DepartmentId == null || !managedDepartmentIds.Contains(employee.DepartmentId.Value)))
+                {
+                    result.SkippedCount++;
+                    result.SkippedRows.Add(new ProductionEmployeeAccumulationSkippedRowDto
+                    {
+                        EmployeeCode = row.EmployeeCode,
+                        Reason = "Nhân viên không thuộc Phòng ban bạn phụ trách."
+                    });
+                    continue;
+                }
+
+                var targetHours = row.TotalHours!.Value;
+                var hasLedgerRow = existingLedgerRows.TryGetValue(employee.Id, out var ledgerRow);
+                var currentHours = hasLedgerRow ? ledgerRow!.TotalHours : 0m;
+                var delta = targetHours - currentHours;
+
+                if (delta == 0)
+                {
+                    result.UnchangedCount++;
+                    continue;
+                }
+
+                if (hasLedgerRow)
+                {
+                    ledgerRow!.TotalHours += delta;
+                    ledgerRow.Note = string.IsNullOrEmpty(ledgerRow.Note) ? note : ledgerRow.Note + "; " + note;
+                    _unitOfWork.EmployeeAccumulationHistories.Update(ledgerRow);
+                }
+                else
+                {
+                    await _unitOfWork.EmployeeAccumulationHistories.AddAsync(new EmployeeAccumulationHistory
+                    {
+                        EmployeeId = employee.Id,
+                        Year = year,
+                        Month = month,
+                        TotalHours = delta,
+                        Note = note
+                    });
+                }
+
+                result.AdjustedCount++;
+                result.TotalDeltaHours += delta;
             }
 
             await _unitOfWork.SaveChangesAsync();
@@ -549,6 +736,29 @@ namespace Attendance.Application.Services
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             return (stream.ToArray(), "Mau_Import_GioiHanOT.xlsx");
+        }
+
+        // File mẫu cho import lũy kế OT theo tháng (2026-09-03) — cột khớp ĐÚNG
+        // ImportMonthlyAccumulationAsync ở trên: B=MNV, C=Tổng giờ OT tháng. Năm/Tháng áp dụng chọn
+        // riêng ở màn import (không phải cột trong file), giống ApplyProductionEmployeeAccumulationDto.
+        public (byte[] Content, string FileName) GenerateMonthlyAccumulationTemplate()
+        {
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("Luy ke OT");
+
+            string[] headers = { "", "MNV", "Tổng giờ OT tháng" };
+            for (var col = 0; col < headers.Length; col++)
+                sheet.Cell(1, col + 1).Value = headers[col];
+            sheet.Row(1).Style.Font.Bold = true;
+
+            sheet.Cell(2, 2).Value = "NV001";
+            sheet.Cell(2, 3).Value = 16.25;
+
+            sheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return (stream.ToArray(), "Mau_Import_LuyKeOT.xlsx");
         }
     }
 }

@@ -303,48 +303,54 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                         </p>
                     )}
 
-                    {/* Giới hạn OT riêng — "gia hạn" cao hơn mặc định chung cho từng người (2026-08-26,
-                        theo yêu cầu người dùng, thường dùng cho công nhân dưới chuyền). Để trống = dùng
-                        mặc định hệ thống. Không có Ngày riêng — Ngày luôn dùng chung 1 mốc cho mọi người. */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldCustomMonthlyOtHourLimit")}</span>
-                            <input
-                                type="number"
-                                step="1"
-                                min={1}
-                                value={values.customMonthlyOtHourLimit ?? ""}
-                                onChange={(event) =>
-                                    setValues((current) => ({
-                                        ...current,
-                                        customMonthlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
-                                    }))
-                                }
-                                placeholder={String(setting.monthlyOtHourLimit)}
-                                disabled={loading}
-                                className={fieldClassName}
-                            />
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldCustomYearlyOtHourLimit")}</span>
-                            <input
-                                type="number"
-                                step="1"
-                                min={1}
-                                value={values.customYearlyOtHourLimit ?? ""}
-                                onChange={(event) =>
-                                    setValues((current) => ({
-                                        ...current,
-                                        customYearlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
-                                    }))
-                                }
-                                placeholder={String(setting.yearlyOtHourLimit)}
-                                disabled={loading}
-                                className={fieldClassName}
-                            />
-                        </label>
-                    </div>
-                    <p className="-mt-2 text-xs text-[#8a8f94]">{t("fieldCustomOtHourLimitHint")}</p>
+                    {/* Giới hạn OT riêng — CHỈ hiện lúc Tạo mới (2026-08-29, đã tách khỏi PUT /{id} —
+                        sửa sau này đi qua EmployeeOtLimitDialog.tsx, permission hẹp
+                        Attendance.Employee.UpdateOtLimit, không gộp vào form Sửa nhân viên chung này
+                        nữa). "gia hạn" cao hơn mặc định chung cho từng người (2026-08-26, theo yêu cầu
+                        người dùng, thường dùng cho công nhân dưới chuyền). */}
+                    {mode === "create" && (
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("fieldCustomMonthlyOtHourLimit")}</span>
+                                    <input
+                                        type="number"
+                                        step="1"
+                                        min={1}
+                                        value={values.customMonthlyOtHourLimit ?? ""}
+                                        onChange={(event) =>
+                                            setValues((current) => ({
+                                                ...current,
+                                                customMonthlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
+                                            }))
+                                        }
+                                        placeholder={String(setting.monthlyOtHourLimit)}
+                                        disabled={loading}
+                                        className={fieldClassName}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("fieldCustomYearlyOtHourLimit")}</span>
+                                    <input
+                                        type="number"
+                                        step="1"
+                                        min={1}
+                                        value={values.customYearlyOtHourLimit ?? ""}
+                                        onChange={(event) =>
+                                            setValues((current) => ({
+                                                ...current,
+                                                customYearlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
+                                            }))
+                                        }
+                                        placeholder={String(setting.yearlyOtHourLimit)}
+                                        disabled={loading}
+                                        className={fieldClassName}
+                                    />
+                                </label>
+                            </div>
+                            <p className="-mt-2 text-xs text-[#8a8f94]">{t("fieldCustomOtHourLimitHint")}</p>
+                        </>
+                    )}
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

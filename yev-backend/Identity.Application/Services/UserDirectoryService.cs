@@ -1,7 +1,9 @@
 using Identity.Application.Interfaces.Service;
 using Identity.Domain.Entities;
+using Shared.Application.Helper;
 using Shared.Application.Interfaces;
 using Shared.Application.Services;
+using Shared.Core.Exceptions;
 
 namespace Identity.Application.Services
 {
@@ -84,6 +86,33 @@ namespace Identity.Application.Services
             }
 
             await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Idempotent — dùng bởi EmployeeIdentityLinkImportService (import hàng loạt liên kết
+        // Identity↔Attendance, 2026-09-03). Khác UserService.CreateUserAsync (throw nếu UserName đã
+        // tồn tại, dùng cho form "Tạo user" tay từng người) — ở đây UserName đã tồn tại là chuyện BÌNH
+        // THƯỜNG (nhiều dòng import có thể trỏ tới người đã có tài khoản từ trước), nên no-op thay vì lỗi.
+        public async Task<bool> EnsureUserExistsAsync(string userName, string? fullName, string? roleName)
+        {
+            var trimmedUserName = userName.Trim();
+            var existingUser = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == trimmedUserName);
+            if (existingUser != null) return false;
+
+            var resolvedRoleName = string.IsNullOrWhiteSpace(roleName) ? "Basic" : roleName.Trim();
+            var role = await _unitOfWork.Roles.FirstOrDefaultAsync(r => r.RoleName == resolvedRoleName && !r.IsDeleted);
+            if (role == null)
+                throw new DomainException($"Không tìm thấy Role '{resolvedRoleName}'.");
+
+            var newUser = new User
+            {
+                UserName = trimmedUserName,
+                FullName = fullName,
+                CreatedAt = TimeHelper.GetCurrentUtcTime(),
+                Roles = new List<Role> { role }
+            };
+            await _unitOfWork.Users.AddAsync(newUser);
+            await _unitOfWork.SaveChangesAsync();
+            return true;
         }
     }
 }

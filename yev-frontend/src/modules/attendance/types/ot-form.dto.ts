@@ -99,6 +99,8 @@ export interface MyCreateScopeItemDto {
 // Body POST /api/OtForm — §4.1. Không còn field chữ ký (BE tự lấy từ UserSignature/me).
 // groupId/isProductionForm (2026-08-24): đơn "theo Nhóm" (mặc định) bắt buộc groupId, isProductionForm
 // = false; đơn "theo chuyền" (Chế tạo) groupId = null, isProductionForm = true — xem CreateOtFormPage.tsx.
+// secondaryPassword (2026-08-28): mật khẩu cấp 2, BE re-verify trước khi tạo đơn — cùng cơ chế với
+// ApproveOtFormDto.secondaryPassword.
 export interface CreateOtFormDto {
     groupId: number | null;
     isProductionForm: boolean;
@@ -112,6 +114,7 @@ export interface CreateOtFormDto {
     date: string;
     employees: OtFormEmployeeInputDto[];
     processPart: ProcessPartDto | null;
+    secondaryPassword: string;
 }
 
 // Item của UpdateOtFormDto.employees — sửa 2026-07-31: chỉ còn EmployeeId + EndTime (bỏ NoteVn/NoteJp).
@@ -129,10 +132,24 @@ export interface UpdateOtFormEmployeeTimeDto {
 // Body PUT /api/OtForm/{id} — §4.1b. Sửa lại 2026-07-31 (breaking): trước đây giống hệt
 // CreateOtFormDto (sửa được toàn bộ field + thêm/bớt nhân viên), nay CHỈ còn sửa được giờ kết thúc
 // thực tế + didEat (mới 2026-08-06) của từng nhân viên ĐANG có trong đơn — mọi field khác
-// (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart) và việc thêm/bớt
-// người đều bị khoá sau khi tạo đơn (xem docs/attendance-module.md — Sửa đơn: giới hạn chỉ sửa thực tích).
+// (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart) bị khoá sau khi tạo
+// đơn (xem docs/attendance-module.md — Sửa đơn: giới hạn chỉ sửa thực tích). Thêm/loại nhân viên đi
+// qua 2 action riêng (AddOtFormEmployeeDto/RemoveOtFormEmployeeDto, 2026-08-28) — employees ở đây vẫn
+// phải khớp ĐÚNG danh sách active hiện có. secondaryPassword (2026-08-28): mật khẩu cấp 2, cùng cơ
+// chế với ApproveOtFormDto.secondaryPassword.
 export interface UpdateOtFormDto {
     employees: UpdateOtFormEmployeeTimeDto[];
+    secondaryPassword: string;
+}
+
+// Body POST /api/OtForm/{id}/employees/add — mới 2026-08-28, chiều ngược của RemoveOtFormEmployeeDto.
+export interface AddOtFormEmployeeDto {
+    employeeId: number;
+    endTime: string;
+    didEat: boolean;
+    noteVn: string | null;
+    noteJp: string | null;
+    secondaryPassword: string;
 }
 
 // Rút gọn của OtFormApprovalHistoryDto — có mặt trên cả 5 endpoint danh sách (my-forms/
@@ -207,6 +224,21 @@ export interface OtFormApprovalStepDto {
     candidates: OtFormApprovalStepCandidateDto[];
 }
 
+// 1 dòng lịch sử chỉnh sửa đơn (mới 2026-08-28) — actionType: enum OtFormEditActionType
+// (0=TimeChanged, 1=NoteChanged, 2=EmployeeAdded, 3=EmployeeRemoved). fieldName null khi
+// actionType là EmployeeAdded/EmployeeRemoved (hành động, không phải đổi 1 field cụ thể).
+export interface OtFormEditLogDto {
+    actionByUserName: string;
+    actionByFullName: string | null;
+    actionAt: string;
+    actionType: number;
+    employeeId: number | null;
+    employeeCodeSnapshot: string | null;
+    fieldName: string | null;
+    oldValue: string | null;
+    newValue: string | null;
+}
+
 // Chi tiết GET /api/OtForm/{id} (và GET /OtForm/email-confirm/{token}) — §4.3.
 export interface OtFormDto {
     id: number;
@@ -247,6 +279,8 @@ export interface OtFormDto {
     approvalHistories: OtFormApprovalHistoryDto[];
     // Chuỗi bước duyệt đã snapshot lúc tạo đơn, sắp theo stepOrder.
     approvalSteps: OtFormApprovalStepDto[];
+    // Lịch sử chỉnh sửa (sửa giờ/ghi chú, thêm/loại nhân viên) — mới nhất trước, mới 2026-08-28.
+    editLogs: OtFormEditLogDto[];
 }
 
 // Body POST /api/OtForm/{id}/approve — §4.4. Không còn signatureImage (BE tự lấy từ UserSignature/me).
@@ -293,9 +327,13 @@ export interface DeleteOtFormDto {
 // cấp 2 — user chốt hành động loại nhân viên không cần xác thực lại, khác Duyệt/Từ chối). Loại 1 nhân
 // viên khỏi đơn để duyệt được phần còn lại thay vì từ chối cả đơn — endpoint riêng, tách biệt khỏi
 // approve (xem docs/attendance-module.md — Loại nhân viên khỏi đơn).
+// secondaryPassword (2026-08-28): mật khẩu cấp 2 — đảo ngược quyết định 2026-07-31 (theo yêu cầu
+// người dùng, mọi thao tác thay đổi đơn đều cần nhập mật khẩu). CHỈ áp dụng kênh trong app — kênh
+// email (RemoveOtFormEmployeeByEmailTokenDto bên dưới) vẫn không cần.
 export interface RemoveOtFormEmployeeDto {
     employeeId: number;
     reason: string;
+    secondaryPassword: string;
 }
 
 // Body POST /api/OtForm/email-confirm/{token}/employees/remove — §4.5a, mới 2026-07-31. Cùng shape với

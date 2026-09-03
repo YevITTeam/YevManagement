@@ -25,12 +25,9 @@ namespace Attendance.Application.Dtos.Employees
 
         public int? JobTitleId { get; set; }
 
-        // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — nullable, để trống = dùng mặc định chung
-        // (2026-08-26, xem Employee.cs).
-        [Range(1, 744, ErrorMessage = "Giới hạn giờ OT/tháng riêng phải từ 1 đến 744")]
-        public decimal? CustomMonthlyOtHourLimit { get; set; }
-
-        [Range(1, 8784, ErrorMessage = "Giới hạn giờ OT/năm riêng phải từ 1 đến 8784")]
-        public decimal? CustomYearlyOtHourLimit { get; set; }
+        // KHÔNG có CustomMonthlyOtHourLimit/CustomYearlyOtHourLimit ở đây (2026-08-29, cố ý tách khỏi
+        // DTO này) — sửa riêng qua PUT /api/Employee/{id}/ot-limit (permission hẹp hơn
+        // Attendance.Employee.UpdateOtLimit, scope theo Phòng ban), xem
+        // docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban.
     }
 }

@@ -25,4 +25,15 @@ public static class ApprovalStepCoordinatorPermissions
     public const string DepartmentUpdateCode = "Attendance.DepartmentApprovalStep.Update";
 
     public const string GroupUpdateCode = "Attendance.GroupApprovalStep.Update";
+
+    // Cấp thêm cho Người phụ trách Bộ phận (2026-08-29, theo yêu cầu người dùng — "mọi quyền đó mình
+    // sẽ giao cho người phụ trách của cái phòng ban đó"): nhân sự dưới chuyền + lũy kế + giới hạn OT,
+    // TẤT CẢ đều tự scope theo ĐÚNG Bộ phận qua IDepartmentAccessGuard (không phải toàn công ty) — xem
+    // ProductionEmployeeImportService/EmployeeService.UpdateOtLimitAsync. Chỉ gắn với isDeptCoordinator
+    // (không phải isGroupCoordinator — 3 việc này là cấp Bộ phận, không phải cấp Nhóm).
+    public const string ProductionEmployeeImportCode = "Attendance.ProductionEmployee.Import";
+
+    public const string EmployeeAccumulationImportCode = "Attendance.EmployeeAccumulation.Import";
+
+    public const string EmployeeUpdateOtLimitCode = "Attendance.Employee.UpdateOtLimit";
 }

@@ -29,5 +29,12 @@ namespace Shared.Application.Interfaces
         //   - Chỉ ghi/xoá các dòng UserPermission có IsAutoGranted=true — KHÔNG BAO GIỜ đụng tới dòng
         //     Admin cấp tay qua "Tuỳ chỉnh quyền" (IsAutoGranted=false), dù trùng permission.
         Task SyncAutoGrantedPermissionsAsync(string? userName, IReadOnlyCollection<string> desiredPermissionCodes);
+
+        // Tạo User Identity mới nếu UserName CHƯA tồn tại (2026-09-03, dùng bởi import liên kết
+        // Identity↔Attendance hàng loạt) — idempotent: UserName đã có sẵn thì no-op, GIỮ NGUYÊN Role
+        // hiện tại (không ghi đè), trả về false. roleName rỗng/null → mặc định "Basic" (khớp đúng hành
+        // vi JIT-provision hiện tại khi 1 tài khoản Windows đăng nhập lần đầu chưa có sẵn User row).
+        // Trả về true nếu vừa tạo User mới.
+        Task<bool> EnsureUserExistsAsync(string userName, string? fullName, string? roleName);
     }
 }

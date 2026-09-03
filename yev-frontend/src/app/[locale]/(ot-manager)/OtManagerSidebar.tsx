@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { Bot, FilePlus2, ClipboardList, FolderCog, History, PenTool, KeyRound, PanelLeftClose, Layers } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, Layers } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -35,10 +35,8 @@ const navItems: OtNavItem[] = [
     // Phòng ban để duyệt 1 lần. Đã redesign theo Cây chức vụ ở Giai đoạn 3.2 (2026-08-07, xem
     // docs/attendance-module.md §Đơn tổng).
     { key: "otBatches", href: "/ot/batches", icon: Layers, permissions: ["Attendance.OTForm.Approve"] },
-    // "Lũy kế nhân viên" (2026-08-11d) — tra cứu lịch sử lũy kế theo tháng/năm, không cần mở sẵn 1 đơn
-    // như ở OtFormDetail.tsx. Cùng điều kiện quyền với "Đơn tổng" (OTForm.Approve) — BE tự giới hạn
-    // danh sách nhân viên theo phạm vi Cây chức vụ của người gọi (xem GET /Employee/in-my-scope).
-    { key: "otAccumulation", href: "/ot/accumulation", icon: History, permissions: ["Attendance.OTForm.Approve"] },
+    // "Lũy kế nhân viên" (/ot/accumulation, AccumulationLookupPage.tsx) — đã bỏ khỏi sidebar
+    // (2026-08-28, theo yêu cầu người dùng), route vẫn còn, chỉ không còn link trực tiếp.
     // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này —
     // dùng .Create (không phải .View) vì đợt 2026-07-17 đã cấp thêm Department.View/Group.View/... cho
     // Role Trưởng Nhóm/Nhân viên (chỉ để load dropdown lúc tạo đơn), gate bằng .View sẽ lộ nhầm mục
@@ -46,12 +44,20 @@ const navItems: OtNavItem[] = [
     // *ApprovalStep.Update (2026-08-11) — Người phụ trách Cây duyệt (được gán tay qua
     // DepartmentApprovalStepCoordinator/GroupApprovalStepCoordinator, xem
     // docs/docs-be/attendance-module.md §Cây chức vụ) không phải Admin nhưng vẫn cần thấy mục này để
-    // vào tab "Cây duyệt" tự cấu hình đơn vị mình phụ trách.
+    // vào tab "Cây duyệt" tự cấu hình đơn vị mình phụ trách. Thêm ProductionOtReport.View (2026-08-28b)
+    // — Group Leader (qua JobTitlePermission, xem docs/attendance-module.md §Cây chức vụ) chỉ có
+    // permission này, không có 3 permission admin trên, vẫn cần thấy mục "Danh mục" để vào ĐÚNG tab
+    // "Báo cáo" — CategoryManagement.tsx tự ẩn 8 tab quản trị còn lại với người chỉ có permission này.
     {
         key: "otCategories",
         href: "/ot/categories",
         icon: FolderCog,
-        permissions: ["Attendance.Department.Create", "Attendance.DepartmentApprovalStep.Update", "Attendance.GroupApprovalStep.Update"],
+        permissions: [
+            "Attendance.Department.Create",
+            "Attendance.DepartmentApprovalStep.Update",
+            "Attendance.GroupApprovalStep.Update",
+            "Attendance.ProductionOtReport.View",
+        ],
     },
     { key: "otSignature", href: "/ot/signature", icon: PenTool, permissions: ["Attendance.UserSignature.Update"] },
     {

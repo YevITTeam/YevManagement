@@ -3,7 +3,9 @@ using Identity.Application.Dtos.UserDto;
 using Identity.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
@@ -19,6 +21,7 @@ namespace Identity.Api.Controllers
         private readonly IClaimsTransformation _claimsTransformation;
         private readonly IActiveDirectoryAuthService _adAuthService;
         private readonly IConfiguration _configuration;
+        private readonly IWebHostEnvironment _webHostEnvironment;
 
         public AuthController(
             ITokenService tokenService,
@@ -26,7 +29,8 @@ namespace Identity.Api.Controllers
             IRoleService roleService,
             IClaimsTransformation claimsTransformation,
             IActiveDirectoryAuthService adAuthService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IWebHostEnvironment webHostEnvironment)
         {
             _tokenService = tokenService;
             _service = service;
@@ -34,7 +38,12 @@ namespace Identity.Api.Controllers
             _claimsTransformation = claimsTransformation;
             _adAuthService = adAuthService;
             _configuration = configuration;
+            _webHostEnvironment = webHostEnvironment;
         }
+
+        // Prefix bắt buộc của mọi UserName trong TestLoginAccount — xem
+        // Identity.Domain.Entities.TestLoginAccount.
+        private const string TestLoginPrefix = "TEST\\";
 
         [Authorize(AuthenticationSchemes = "Negotiate")]
         [HttpPost("windows-login")]
@@ -58,6 +67,26 @@ namespace Identity.Api.Controllers
         [HttpPost("login")]
         public async Task<ActionResult<ApiResponse<LoginResponseDto>>> Login([FromBody] LoginRequestDto request)
         {
+            // Đăng nhập TEST (2026-08-28, theo yêu cầu người dùng — phục vụ test nhanh Cây duyệt Chuyền
+            // khi nhân viên thật chưa có tài khoản AD): UserName bắt đầu bằng "TEST\" → xác thực bằng
+            // TestLoginAccount.PasswordHash, KHÔNG gọi AD. Chỉ hoạt động khi Development — tự động vô
+            // hiệu hoá đường bypass này nếu server chạy môi trường khác (khớp cách /scalar/v1 hiện có).
+            if (request.UserName != null && request.UserName.StartsWith(TestLoginPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!_webHostEnvironment.IsDevelopment())
+                    return Fail<LoginResponseDto>("Đăng nhập TEST chỉ khả dụng ở môi trường Development.");
+
+                var isTestValid = await _service.ValidateTestLoginAsync(request.UserName, request.Password);
+                if (!isTestValid)
+                    return Fail<LoginResponseDto>("Tên đăng nhập hoặc mật khẩu không đúng.");
+
+                var testSeedPrincipal = new ClaimsPrincipal(new ClaimsIdentity(
+                    new[] { new Claim(ClaimTypes.Name, request.UserName) }));
+                var testTransformedPrincipal = await _claimsTransformation.TransformAsync(testSeedPrincipal);
+
+                return Success(BuildSession(testTransformedPrincipal), "Đăng nhập thành công (tài khoản TEST)!");
+            }
+
             var domain = _configuration["ActiveDirectory:Domain"] ?? "YEV";
 
             bool isValid;

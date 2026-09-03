@@ -15,26 +15,24 @@ namespace Attendance.Application.Services
     // chỉ thay NGUYÊN danh sách 1 lần (khớp UI kiểu "sắp xếp rồi Lưu").
     public class DepartmentApprovalStepService : BaseService<IAttendanceUnitOfWork>, IDepartmentApprovalStepService
     {
-        public DepartmentApprovalStepService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
+        private readonly IDepartmentAccessGuard _departmentAccessGuard;
+
+        public DepartmentApprovalStepService(IAttendanceUnitOfWork unitOfWork, IDepartmentAccessGuard departmentAccessGuard)
+            : base(unitOfWork)
+        {
+            _departmentAccessGuard = departmentAccessGuard;
+        }
 
         // Admin xem/sửa được mọi Bộ phận; không phải Admin thì phải có tên trong
         // DepartmentApprovalStepCoordinators của ĐÚNG Bộ phận này (gán tay bởi Admin — xem
         // docs/docs-be/attendance-module.md §Cây chức vụ, mục "Người phụ trách Cây duyệt"). KHÔNG suy
         // luận theo Chức vụ (Trưởng phòng không tự động có quyền — thực tế việc này thường giao cho
-        // người khác phụ trách).
-        private async Task EnsureCanManageDepartmentAsync(string userName, bool isAdmin, int departmentId)
-        {
-            if (isAdmin) return;
-
-            var isCoordinator = (await _unitOfWork.DepartmentApprovalStepCoordinators.FindAsync(
-                x => x.DepartmentId == departmentId && x.Employee.UserName == userName && !x.IsDeleted)).Count > 0;
-            if (!isCoordinator)
-                throw new DomainException("Bạn không được phân công phụ trách Cây duyệt của Bộ phận này.");
-        }
-
+        // người khác phụ trách). Logic chuyển sang IDepartmentAccessGuard (2026-08-29) để dùng chung với
+        // các tính năng khác cũng scope theo Phòng ban — xem docs/docs-be/attendance-module.md §Phân
+        // quyền theo Phòng ban.
         public async Task<List<DepartmentApprovalStepDto>> GetByDepartmentAsync(string userName, bool isAdmin, int departmentId)
         {
-            await EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId);
+            await _departmentAccessGuard.EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId);
             return await GetByDepartmentCoreAsync(departmentId);
         }
 
@@ -63,7 +61,7 @@ namespace Attendance.Application.Services
 
         public async Task<List<DepartmentApprovalStepDto>> ReplaceAsync(string userName, bool isAdmin, int departmentId, ReplaceDepartmentApprovalStepsDto request)
         {
-            await EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId);
+            await _departmentAccessGuard.EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId);
 
             var department = await _unitOfWork.Departments.GetByIdAsync(departmentId);
             department.OrThrowNotFound("Phòng ban", departmentId);

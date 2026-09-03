@@ -125,8 +125,12 @@ namespace Attendance.Application.Services
             return pending;
         }
 
-        // Logic upsert thật — tái dùng nội bộ bởi ConfirmAsync, không expose ra ngoài interface nữa
-        // vì Controller không còn gọi thẳng (luôn phải qua request+confirm).
+        public async Task<UserSignatureDto> AdminSetSignatureAsync(string userName, byte[] signatureImage)
+        {
+            return await UpsertAsync(userName, signatureImage);
+        }
+
+        // Logic upsert thật — tái dùng nội bộ bởi ConfirmAsync/AdminSetSignatureAsync.
         private async Task<UserSignatureDto> UpsertAsync(string userName, byte[] signatureImage)
         {
             var signature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == userName);

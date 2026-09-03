@@ -3,6 +3,8 @@ import { useCallback, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import DepartmentList from "./departments/DepartmentList";
 import GroupList from "./groups/GroupList";
 import ReasonList from "./reasons/ReasonList";
@@ -11,6 +13,7 @@ import JobTitleList from "./job-titles/JobTitleList";
 import JobTitlePermissionManager from "./job-titles/JobTitlePermissionManager";
 import ApprovalStepManager from "./job-titles/ApprovalStepManager";
 import EmployeeList from "./employees/EmployeeList";
+import ProductionOtReportPanel from "./reports/ProductionOtReportPanel";
 import AttendanceSettingPanel from "./settings/AttendanceSettingPanel";
 import type { ListHandle } from "./list-toolbar";
 
@@ -23,30 +26,58 @@ type CategoryTab =
     | "job-title-permissions"
     | "approval-steps"
     | "employees"
+    | "reports"
     | "settings";
 
 export default function CategoryManagement() {
     const t = useTranslations("Attendance.CategoryManagement");
     const tCommon = useTranslations("Common");
+    const { user } = useAuth();
+    // "Danh mục" vốn chỉ dành cho Admin/Người phụ trách Cây duyệt — 8 tab quản trị vẫn gate chung theo
+    // 3 permission này (giữ nguyên hành vi cũ). Riêng tab "Báo cáo" (2026-08-28b, theo yêu cầu người
+    // dùng cho Group Leader tự xem) gate RIÊNG bằng ProductionOtReport.View — ai chỉ có permission này
+    // (không có 3 permission trên) vẫn vào được "Danh mục" nhưng CHỈ thấy đúng 1 tab "Báo cáo", không
+    // thấy 8 tab quản trị còn lại (tránh lộ UI CRUD Department/Group/... cho người không có quyền).
+    const canManageCategories = hasAnyPermission(user, [
+        "Attendance.Department.Create",
+        "Attendance.DepartmentApprovalStep.Update",
+        "Attendance.GroupApprovalStep.Update",
+    ]);
+    const canViewReports = hasPermission(user, "Attendance.ProductionOtReport.View");
     // "settings" không có addLabel — tab này không phải danh sách CRUD nên không có nút "Thêm mới"
     // (xem chỗ ẩn nút bên dưới).
-    const tabs: { key: CategoryTab; label: string; addLabel: string | null }[] = [
-        { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments") },
-        { key: "groups", label: t("tabGroups"), addLabel: t("addGroups") },
-        { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons") },
-        { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases") },
-        { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles") },
-        { key: "job-title-permissions", label: t("tabJobTitlePermissions"), addLabel: null },
-        { key: "approval-steps", label: t("tabApprovalSteps"), addLabel: null },
-        { key: "employees", label: t("tabEmployees"), addLabel: t("addEmployees") },
-        { key: "settings", label: t("tabSettings"), addLabel: null },
+    const allTabs: { key: CategoryTab; label: string; addLabel: string | null; visible: boolean }[] = [
+        { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments"), visible: canManageCategories },
+        { key: "groups", label: t("tabGroups"), addLabel: t("addGroups"), visible: canManageCategories },
+        { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons"), visible: canManageCategories },
+        { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases"), visible: canManageCategories },
+        { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles"), visible: canManageCategories },
+        { key: "job-title-permissions", label: t("tabJobTitlePermissions"), addLabel: null, visible: canManageCategories },
+        { key: "approval-steps", label: t("tabApprovalSteps"), addLabel: null, visible: canManageCategories },
+        { key: "employees", label: t("tabEmployees"), addLabel: t("addEmployees"), visible: canManageCategories },
+        { key: "reports", label: t("tabReports"), addLabel: null, visible: canViewReports },
+        { key: "settings", label: t("tabSettings"), addLabel: null, visible: canManageCategories },
     ];
-    const [activeTab, setActiveTab] = useState<CategoryTab>("departments");
-    // Tab nào đã từng được xem thì mới mount (và giữ mounted luôn sau đó) — chỉ tab "departments"
-    // (mặc định) mount ngay từ đầu. Tránh gọi song song cả 9 API mỗi lần vào màn "Danh mục" trong khi
-    // đa số user chỉ xem 1-2 tab/lượt, nhưng vẫn giữ được lợi ích "chuyển tab tức thì, không tải lại"
-    // cho những tab đã ghé qua trong phiên này.
-    const [visitedTabs, setVisitedTabs] = useState<Set<CategoryTab>>(() => new Set(["departments"]));
+    const tabs = allTabs.filter((tab) => tab.visible);
+    const defaultTabKey: CategoryTab = canManageCategories ? "departments" : canViewReports ? "reports" : "departments";
+    const [activeTab, setActiveTabState] = useState<CategoryTab>(defaultTabKey);
+    // Nếu tab đang chọn không còn nằm trong danh sách thấy được (vd permission user thay đổi giữa
+    // chừng, hoặc lần render đầu "user" từ AuthContext chưa kịp có) thì tự chuyển về tab mặc định phù
+    // hợp — so sánh snapshot ngay trong render, không dùng effect (xem CLAUDE.md "Reset state khi 1
+    // giá trị đổi").
+    const [prevDefaultTabKey, setPrevDefaultTabKey] = useState(defaultTabKey);
+    if (prevDefaultTabKey !== defaultTabKey && !tabs.some((tab) => tab.key === activeTab)) {
+        setPrevDefaultTabKey(defaultTabKey);
+        setActiveTabState(defaultTabKey);
+    } else if (prevDefaultTabKey !== defaultTabKey) {
+        setPrevDefaultTabKey(defaultTabKey);
+    }
+    const setActiveTab = setActiveTabState;
+    // Tab nào đã từng được xem thì mới mount (và giữ mounted luôn sau đó) — chỉ tab mặc định mount
+    // ngay từ đầu. Tránh gọi song song cả 10 API mỗi lần vào màn "Danh mục" trong khi đa số user chỉ
+    // xem 1-2 tab/lượt, nhưng vẫn giữ được lợi ích "chuyển tab tức thì, không tải lại" cho những tab
+    // đã ghé qua trong phiên này.
+    const [visitedTabs, setVisitedTabs] = useState<Set<CategoryTab>>(() => new Set([defaultTabKey]));
     // Cả 9 tab giờ mounted song song (xem ghi chú bên dưới) nên mỗi tab phải báo loading vào
     // đúng slot riêng của nó — nếu dùng chung 1 state boolean, tab nào báo xong (setLoading(false))
     // sau cùng sẽ đè mất trạng thái loading thật của tab đang xem.
@@ -59,6 +90,7 @@ export default function CategoryManagement() {
         "job-title-permissions": false,
         "approval-steps": false,
         employees: false,
+        reports: false,
         settings: false,
     });
     const loading = loadingByTab[activeTab];
@@ -71,6 +103,7 @@ export default function CategoryManagement() {
     const jobTitlePermissionRef = useRef<ListHandle>(null);
     const approvalStepRef = useRef<ListHandle>(null);
     const employeeRef = useRef<ListHandle>(null);
+    const reportsRef = useRef<ListHandle>(null);
     const settingRef = useRef<ListHandle>(null);
 
     const refByTab: Record<CategoryTab, React.RefObject<ListHandle | null>> = {
@@ -82,11 +115,14 @@ export default function CategoryManagement() {
         "job-title-permissions": jobTitlePermissionRef,
         "approval-steps": approvalStepRef,
         employees: employeeRef,
+        reports: reportsRef,
         settings: settingRef,
     };
 
     const activeRef = refByTab[activeTab];
-    const activeTabMeta = tabs.find((tab) => tab.key === activeTab)!;
+    // Fallback rỗng cho trường hợp hiếm: user không giữ permission nào trong 4 permission gate cả 10
+    // tab (vào thẳng URL, không qua sidebar — sidebar đã tự ẩn mục "Danh mục" nếu không đủ quyền).
+    const activeTabMeta = tabs.find((tab) => tab.key === activeTab) ?? tabs[0] ?? { label: "", addLabel: null };
 
     // onLoadingChange phải giữ nguyên identity qua các lần render — nếu truyền inline
     // arrow function, effect trong mỗi List (dep [isLoading, onLoadingChange]) sẽ nghĩ prop
@@ -122,6 +158,10 @@ export default function CategoryManagement() {
     );
     const handleEmployeeLoadingChange = useCallback(
         (value: boolean) => setLoadingByTab((current) => ({ ...current, employees: value })),
+        []
+    );
+    const handleReportsLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, reports: value })),
         []
     );
     const handleSettingLoadingChange = useCallback(
@@ -222,6 +262,11 @@ export default function CategoryManagement() {
             {visitedTabs.has("employees") && (
                 <div className={activeTab === "employees" ? "" : "hidden"}>
                     <EmployeeList ref={employeeRef} onLoadingChange={handleEmployeeLoadingChange} />
+                </div>
+            )}
+            {visitedTabs.has("reports") && (
+                <div className={activeTab === "reports" ? "" : "hidden"}>
+                    <ProductionOtReportPanel ref={reportsRef} onLoadingChange={handleReportsLoadingChange} />
                 </div>
             )}
             {visitedTabs.has("settings") && (

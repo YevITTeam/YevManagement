@@ -26,10 +26,30 @@ namespace Attendance.Application.Services
         private static readonly Dictionary<string, string> TeamCodeTranslation =
             new(StringComparer.OrdinalIgnoreCase) { ["A"] = "1", ["B"] = "2", ["HC"] = "HC" };
 
-        public ProductionEmployeeImportService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
+        private readonly IDepartmentAccessGuard _departmentAccessGuard;
 
-        public async Task<ProductionEmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream)
+        public ProductionEmployeeImportService(IAttendanceUnitOfWork unitOfWork, IDepartmentAccessGuard departmentAccessGuard)
+            : base(unitOfWork)
         {
+            _departmentAccessGuard = departmentAccessGuard;
+        }
+
+        // Đích của import này đã hardcode cứng vào ĐÚNG 1 Phòng ban (ManufacturingDepartmentCode) —
+        // khác ApplyAccumulationAsync (nhận EmployeeCode tự do, phải scope theo TỪNG dòng) — nên chỉ
+        // cần check 1 lần cho cả file (2026-08-29, xem docs/docs-be/attendance-module.md §Phân quyền
+        // theo Phòng ban).
+        private async Task EnsureManufacturingDepartmentAccessAsync(string userName, bool isAdmin)
+        {
+            var department = (await _unitOfWork.Departments.FirstOrDefaultAsync(
+                x => !x.IsDeleted && x.DepartmentCode == ManufacturingDepartmentCode))
+                .OrThrowNotFound($"Phòng ban mã '{ManufacturingDepartmentCode}'", ManufacturingDepartmentCode);
+            await _departmentAccessGuard.EnsureCanManageDepartmentAsync(userName, isAdmin, department.Id);
+        }
+
+        public async Task<ProductionEmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string userName, bool isAdmin)
+        {
+            await EnsureManufacturingDepartmentAccessAsync(userName, isAdmin);
+
             var rawRows = ParseXlsx(excelFileStream);
             var (validatedRows, removedRows) = await ValidateAndResolveRowsAsync(rawRows);
 
@@ -48,8 +68,10 @@ namespace Attendance.Application.Services
             };
         }
 
-        public async Task<ProductionEmployeeImportConfirmResultDto> ConfirmAsync(ConfirmProductionEmployeeImportDto request)
+        public async Task<ProductionEmployeeImportConfirmResultDto> ConfirmAsync(ConfirmProductionEmployeeImportDto request, string userName, bool isAdmin)
         {
+            await EnsureManufacturingDepartmentAccessAsync(userName, isAdmin);
+
             // Re-validate từ đầu theo dữ liệu DB hiện tại — không tin Resolved*/Is* mà client gửi lại,
             // đề phòng dữ liệu đã đổi kể từ lúc xem Preview (cùng nguyên tắc EmployeeImportService).
             var (validatedRows, removedRows) = await ValidateAndResolveRowsAsync(request.Rows);
@@ -202,7 +224,7 @@ namespace Attendance.Application.Services
         // tự chọn tay Year/Month áp dụng. (EmployeeId, Year, Month) có unique index trên
         // EmployeeAccumulationHistories nên không tách được 1 dòng riêng cho phần điều chỉnh — chỉ có
         // thể cộng thêm CHÊNH LỆCH vào đúng dòng của tháng đó rồi ghi chú lại nguồn gốc (Note).
-        public async Task<ProductionEmployeeAccumulationResultDto> ApplyAccumulationAsync(ApplyProductionEmployeeAccumulationDto request)
+        public async Task<ProductionEmployeeAccumulationResultDto> ApplyAccumulationAsync(ApplyProductionEmployeeAccumulationDto request, string userName, bool isAdmin)
         {
             var result = new ProductionEmployeeAccumulationResultDto();
 
@@ -211,8 +233,18 @@ namespace Attendance.Application.Services
                 .ToList();
             if (candidateRows.Count == 0) return result;
 
+            // Khác ConfirmAsync (1 Phòng ban cố định) — file này nhận EmployeeCode TỰ DO, phải scope
+            // THEO TỪNG DÒNG: lấy trước danh sách Phòng ban người gọi phụ trách (Admin bỏ qua hoàn
+            // toàn), rồi so với Phòng ban thật của từng nhân viên trong vòng lặp bên dưới (2026-08-29,
+            // xem docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban).
+            var managedDepartmentIds = isAdmin
+                ? null
+                : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
+
             var codes = candidateRows.Select(r => r.EmployeeCode!.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var employeesByCode = (await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && codes.Contains(x.Code)))
+            var employeesByCode = (await _unitOfWork.Employees.SelectAsync(
+                x => !x.IsDeleted && codes.Contains(x.Code),
+                x => new { x.Id, x.Code, DepartmentId = x.DepartmentId ?? (x.Group != null ? (int?)x.Group.DepartmentId : null) }))
                 .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
 
             var employeeIds = employeesByCode.Values.Select(x => x.Id).ToList();
@@ -234,6 +266,17 @@ namespace Attendance.Application.Services
                     {
                         EmployeeCode = code,
                         Reason = "Không tìm thấy nhân viên trong hệ thống."
+                    });
+                    continue;
+                }
+
+                if (managedDepartmentIds != null && (employee.DepartmentId == null || !managedDepartmentIds.Contains(employee.DepartmentId.Value)))
+                {
+                    result.SkippedCount++;
+                    result.SkippedRows.Add(new ProductionEmployeeAccumulationSkippedRowDto
+                    {
+                        EmployeeCode = code,
+                        Reason = "Nhân viên không thuộc Phòng ban bạn phụ trách."
                     });
                     continue;
                 }

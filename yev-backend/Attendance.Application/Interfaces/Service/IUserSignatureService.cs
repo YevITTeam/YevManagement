@@ -15,5 +15,12 @@ namespace Attendance.Application.Interfaces.Service
         // is the sole piece of verification.
         Task<SignatureConfirmationPreviewDto> GetPendingConfirmationAsync(string token);
         Task<UserSignatureDto> ConfirmAsync(string token);
+
+        // Admin đặt THẲNG chữ ký cho người khác, KHÔNG qua email-confirm (2026-09-03) — CHỈ gọi được
+        // từ EmployeeIdentityLinkImportService (import hàng loạt, permission Identity.User.BulkImport,
+        // Admin-only). Luồng tự phục vụ (RequestUpdateAsync/ConfirmAsync) vẫn là đường DUY NHẤT để 1
+        // người tự đổi chữ ký của chính mình — đánh đổi bảo mật này CÓ CHỦ ĐÍCH, chỉ dành riêng cho
+        // import hàng loạt lúc Admin thiết lập tài khoản mới.
+        Task<UserSignatureDto> AdminSetSignatureAsync(string userName, byte[] signatureImage);
     }
 }

@@ -111,6 +111,55 @@ Admin tạo trước User cho người **chưa từng đăng nhập Windows**. L
 ### 5.5. Sửa tên hiển thị User *(2026-08-21)*
 `PUT /api/Auth/update-user-fullname` (`Identity.User.UpdateFullName`, seed migration `AddIdentityUserUpdateFullNamePermission`) — body `UpdateUserFullNameDto { UserId, FullName[Required] }`. `UserService.UpdateUserFullNameAsync` chỉ ghi đè `FullName`; **`UserName` (định danh đăng nhập Windows) và `DeviceName` không sửa được qua endpoint này** — có chủ đích, vì `UserName` là khóa khớp duy nhất lúc login (§5). 404 nếu `UserId` sai.
 
+### 5.6. Đăng nhập TEST (bypass AD, chỉ Development) *(2026-08-28)*
+Phục vụ test nhanh các luồng cần nhiều vai trò (VD Cây duyệt Chuyền Attendance) khi nhân viên thật
+chưa có tài khoản AD — theo yêu cầu người dùng. Entity mới `TestLoginAccount`
+(`Identity.Domain/Entities/TestLoginAccount.cs`, bảng `TestLoginAccounts`, migration
+`AddTestLoginAccounts`): `{ UserName [unique, PHẢI bắt đầu "TEST\\"], FullName, PasswordHash
+[PasswordHasher<object>, cùng cơ chế SecondaryPasswordService], IsDeleted, CreatedAt }`.
+
+`POST /api/Auth/login` (dùng chung endpoint với §5.4) kiểm tra `UserName` bắt đầu bằng `"TEST\"`
+(không phân biệt hoa/thường) → rẽ nhánh xác thực bằng `TestLoginAccount.PasswordHash` qua
+`IUserService.ValidateTestLoginAsync`, **KHÔNG gọi AD**. Nhánh này **chỉ hoạt động khi
+`IWebHostEnvironment.IsDevelopment()`** (`AuthController.Login`) — tự động vô hiệu hoá nếu server chạy
+môi trường khác, tránh trở thành lỗ hổng bypass xác thực nếu sau này có Production thật. Xác thực
+thành công → dựng `ClaimsPrincipal` mồi `Name = UserName` gốc (giữ nguyên `"TEST\..."`, không ghép
+domain như nhánh AD), chạy qua đúng `MyClaimsTransformation` như mọi luồng khác → JIT-provision
+`Identity.User` + Role "Basic" nếu chưa có.
+
+**Quan trọng — permission KHÔNG tự có ngay sau khi tạo `Employee.UserName`/`TestLoginAccount`:**
+`IUserDirectoryService.SyncAutoGrantedPermissionsAsync` (permission theo Chức vụ, xem
+`attendance-module.md §Cây chức vụ`) chỉ ghi được nếu `Identity.User` ứng với `UserName` đó **đã tồn
+tại**. Thứ tự đúng khi tạo 1 tài khoản TEST mới: (1) thêm dòng `TestLoginAccount`; (2) tạo
+`Employee` tương ứng (`UserName` + `GroupId`/`DepartmentId`/`JobTitleId` phù hợp cấp cần test); (3)
+đăng nhập TEST 1 lần (JIT-provision `Identity.User`); (4) trigger sync permission — cách nhanh nhất
+hiện tại là gọi lại `PUT /api/Employee/{id}` (Admin) hoặc
+`PUT /api/Employee/{id}/group-job-title`/`department-job-title` với đúng dữ liệu hiện có (không cần
+đổi gì, chỉ cần Service chạy qua `SyncAutoGrantedPermissionsCoreAsync`); chưa có endpoint "sync lại
+permission" độc lập.
+
+6 tài khoản TEST đã seed sẵn (migration `AddTestLoginAccounts`, mật khẩu dùng chung
+**`Test@2026`**) — phủ đủ Cây duyệt Chuyền của Line SHIDO/Team HC (Bộ phận Chế tạo, xem
+`attendance-module.md §Cây duyệt Chuyền` để biết vì sao dữ liệu thật ở đây trống hoàn toàn, không ai
+có UserName): `TEST\ll_shido` (Line Leader), `TEST\gl_shido` (Group Leader), `TEST\tl_shido` (Team
+Leader), `TEST\mgr_ct` (Manager), `TEST\fm_01` (Factory Manager), `TEST\dir_01` (Director) — đã gán
+đủ 12 permission Attendance tương ứng Chức vụ của từng người (qua `UserPermissions`,
+`IsAutoGranted=true`, seed tay 1 lần vì lúc tạo dữ liệu chưa gọi được API — sau này sửa Chức vụ của
+các Employee này qua UI bình thường sẽ tự sync lại đúng cơ chế).
+
+### 5.7. `EnsureUserExistsAsync` — tạo User idempotent cho import cross-module *(2026-09-03)*
+Thêm method mới vào `IUserDirectoryService` (`Shared.Application/Interfaces/`, contract dùng chung để
+module khác gọi vào Identity mà không cần ProjectReference trực tiếp):
+`Task<bool> EnsureUserExistsAsync(string userName, string? fullName, string? roleName)`. Khác
+`UserService.CreateUserAsync` (throw nếu `UserName` đã tồn tại, dùng cho form "Tạo user" tay từng
+người, §5.1) — ở đây `UserName` đã tồn tại là chuyện BÌNH THƯỜNG (import hàng loạt có thể trỏ tới
+người đã có tài khoản), nên **no-op** thay vì lỗi (trả `false`, giữ nguyên Role hiện có). Chưa tồn tại
+→ tạo mới với Role theo `roleName` (rỗng/null → mặc định `"Basic"`, khớp đúng hành vi JIT-provision
+hiện có ở `MyClaimsTransformation`), trả `true`. Implement ở
+`Identity.Application/Services/UserDirectoryService.cs`. Người gọi đầu tiên:
+`EmployeeIdentityLinkImportService` bên Attendance (permission mới `Identity.User.BulkImport`, chỉ
+Admin) — xem `docs/docs-be/attendance-module.md §Import Excel liên kết Identity ↔ Attendance`.
+
 ## 6. API Endpoints
 ### `AuthController` — `/api/Auth`
 | Method | Route | Permission |
@@ -174,7 +223,7 @@ Mỗi action ↔ 1 mã `Module.Entity.Action`. Role sở hữu tập Permission 
 | `Asset.TransferHistory` | View, Create |
 | `Asset.Setting` | View, Update |
 | `Asset.AuditTrail` | View (seed migration `AddAssetAuditTrailPermission`, 2026-07-16 — **CHƯA apply**) |
-| `Identity.User` | View, UpdateRoles, UpdatePermissions, UpdateFullName, Create, Delete |
+| `Identity.User` | View, UpdateRoles, UpdatePermissions, UpdateFullName, Create, Delete, **BulkImport** (mới 2026-09-03, migration `AddIdentityUserBulkImportPermission` — chỉ gán Admin, xem §5.7) |
 | `Identity.Role` | View, Create, Update, Delete |
 | `Identity.Permission` | View |
 

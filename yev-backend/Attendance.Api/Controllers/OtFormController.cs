@@ -128,7 +128,7 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<OtFormDto>>> Update(int id, [FromBody] UpdateOtFormDto request)
         {
             var isAdmin = User.IsInRole(AdminRole);
-            var result = await _otFormService.UpdateAsync(id, CurrentUserName, isAdmin, request);
+            var result = await _otFormService.UpdateAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
             return Success(result, "Cập nhật đơn tăng ca thành công.");
         }
 
@@ -191,6 +191,18 @@ namespace Attendance.Api.Controllers
             var isAdmin = User.IsInRole(AdminRole);
             var result = await _otFormService.RemoveEmployeeAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
             return Success(result, "Đã loại nhân viên khỏi đơn.");
+        }
+
+        // Thêm 1 nhân viên vào đơn — chiều ngược của RemoveEmployee ở trên (2026-08-28, theo yêu cầu
+        // người dùng). Permission riêng, seed gán cho đúng các Role đang giữ RemoveEmployee (xem
+        // Identity.Infrastructure migration AddOtFormAddEmployeePermission).
+        [RequirePermission("Attendance.OTForm.AddEmployee")]
+        [HttpPost("{id}/employees/add")]
+        public async Task<ActionResult<ApiResponse<OtFormDto>>> AddEmployee(int id, [FromBody] AddOtFormEmployeeDto request)
+        {
+            var isAdmin = User.IsInRole(AdminRole);
+            var result = await _otFormService.AddEmployeeAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
+            return Success(result, "Đã thêm nhân viên vào đơn.");
         }
 
         // The 3 public actions below serve the small confirmation page the FE opens when an approver
