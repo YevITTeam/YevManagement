@@ -13,7 +13,8 @@ export interface EmployeeAccumulationHistoryYearDto {
     year: number;
     // Luôn đủ 12 phần tử (tháng 1..12), tháng chưa có đơn Hoàn tất nào = totalHours 0.
     months: EmployeeAccumulationHistoryMonthDto[];
-    // = tổng months[].totalHours — với năm CŨ (đã rollover) đây là nguồn DUY NHẤT để biết tổng giờ cả
+    // = tổng months[].totalHours + initialBalanceHours — với năm CŨ (đã rollover) đây là nguồn DUY NHẤT để biết tổng giờ cả
     // năm, vì Employee.yearToDate chỉ còn phản ánh năm hiện tại.
     yearTotalHours: number;
+    initialBalanceHours?: number;
 }

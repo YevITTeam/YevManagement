@@ -73,4 +73,6 @@ export interface ProductionEmployeeAccumulationResultDto {
     skippedCount: number;
     skippedRows: ProductionEmployeeAccumulationSkippedRowDto[];
     totalDeltaHours: number;
+    adjustedYearCount?: number;
+    totalDeltaYearHours?: number;
 }

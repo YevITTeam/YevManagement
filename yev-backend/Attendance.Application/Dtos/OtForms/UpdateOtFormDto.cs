@@ -2,18 +2,25 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Attendance.Application.Dtos.OtForms
 {
-    // Edit an existing form — restricted to ONLY each active employee's actual OT end time ("thực
-    // tích", chốt lại 2026-07-31, see docs/attendance-module.md — Sửa đơn: giới hạn chỉ sửa thực
-    // tích). Every other field (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/
-    // ProcessPart) and the employee list itself (thêm/bớt người) are fixed after creation — see
-    // OtFormService.UpdateAsync. Thêm/loại nhân viên đi qua 2 action riêng (AddOtFormEmployeeDto/
-    // RemoveOtFormEmployeeDto, 2026-08-28) — Employees ở đây vẫn phải khớp ĐÚNG danh sách active hiện
-    // có, không đổi qua PUT này.
+    // Edit an existing form — mỗi nhân viên trong Employees có thể là NGƯỜI CŨ (sửa "thực tích" — giờ
+    // kết thúc/DidEat/Note, chốt 2026-07-31) hoặc NGƯỜI MỚI (thêm vào đơn) — OtFormService.UpdateAsync
+    // tự suy diff so với danh sách active hiện có. Loại người ra khỏi đơn đi qua RemovedEmployees (bắt
+    // buộc khai lý do), không còn qua 2 action riêng AddOtFormEmployeeDto/RemoveOtFormEmployeeDto như
+    // trước 2026-09-04 (đã gộp hết vào PUT này — xem docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa
+    // đơn). Mọi field khác (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart)
+    // vẫn cố định sau khi tạo.
     public class UpdateOtFormDto
     {
         [Required(ErrorMessage = "Danh sách nhân viên không được để trống")]
         [MinLength(1, ErrorMessage = "Phải có ít nhất 1 nhân viên")]
         public List<UpdateOtFormEmployeeTimeDto> Employees { get; set; } = new();
+
+        // Nhân viên bị loại khỏi đơn trong lượt sửa này (2026-09-04, theo yêu cầu người dùng — gộp
+        // thêm/xóa nhân viên vào Sửa đơn thay vì thao tác riêng ở OtFormDetail). Nhân viên KHÔNG có mặt
+        // trong Employees NHƯNG cũng KHÔNG có mặt ở đây bị coi là dữ liệu không hợp lệ (OtFormService
+        // bắt lỗi) — mọi nhân viên bị bớt đi đều phải khai lý do. Nhân viên MỚI (chưa từng có trong đơn)
+        // chỉ cần xuất hiện trong Employees, không cần khai báo gì thêm ở đây.
+        public List<UpdateOtFormRemovedEmployeeDto> RemovedEmployees { get; set; } = new();
 
         // Second-factor password — bắt buộc từ 2026-08-28 (theo yêu cầu người dùng, lưu thay đổi
         // chỉnh sửa cũng phải nhập mật khẩu cấp 2), cùng cơ chế với ApproveOtFormDto.SecondaryPassword.

@@ -1632,10 +1632,11 @@ nhận lại còn đúng 5 Role: `Admin`, `Basic`, `Quản lý Hợp Đồng`, `
      (Chức vụ)" (đọc-only cho tới khi Admin chủ động bấm đổi), không đi vào payload `PUT` nếu không bị
      đụng tới, tránh mỗi lần lưu vô tình "khoá cứng" toàn bộ quyền tự động thành quyền tay.
 
-5. **FE Attendance**: tab mới "Quyền theo Chức vụ" trong `CategoryManagement.tsx`
-   (`JobTitlePermissionManager.tsx`, `components/job-titles/`) — chọn 1 Chức vụ, tick permission từ
-   đúng danh sách `GET /allowed-codes` (mô tả tiếng Việt lấy từ `PermissionApi.getAll()` có sẵn, không
-   hardcode song song 2 nơi), "Lưu" gọi `PUT /by-job-title/{id}`.
+5. **FE Attendance**: tick permission từ đúng danh sách `GET /allowed-codes` (mô tả tiếng Việt lấy từ
+   `PermissionApi.getAll()` có sẵn, không hardcode song song 2 nơi), "Lưu" gọi `PUT /by-job-title/{id}`.
+   ~~Tab riêng "Quyền theo Chức vụ" trong `CategoryManagement.tsx`~~ (`JobTitlePermissionManager.tsx`)
+   — **đã bỏ, gộp thẳng vào modal Sửa chức vụ (2026-09-03d, theo yêu cầu người dùng)**, xem
+   `JobTitlePermissionSection.tsx` bên dưới.
 
 6. **Verify sống 2026-08-10** (dùng tài khoản Admin thật + 1 Employee/User thật đang có sẵn Chức vụ
    test từ trước, hoàn tác đầy đủ sau khi xong — không để lại dữ liệu rác):
@@ -2494,14 +2495,16 @@ quy trình", không phải "quản trị") rồi gán cho Chức vụ **Group Le
 trên DB thật lúc gán) qua `PUT /api/JobTitlePermission/by-job-title/16` — verify lại bằng SQL:
 2 nhân viên thật đang giữ Chức vụ này (`m.cuong.da.pcd.it`, `TEST\gl_shido`) đã có
 `UserPermissions.IsAutoGranted=1` cho permission này ngay sau khi gọi API (không cần đăng nhập lại).
-- Vì tab "Báo cáo" nằm chung trang với 8 tab quản trị (Department/Group/Reason/OtCase/JobTitle/
-  JobTitlePermission/ApprovalStep/Employee/Settings — vốn chỉ Admin/Người phụ trách Cây duyệt được
-  vào), `CategoryManagement.tsx` phải tự lọc tab hiển thị theo permission: ai chỉ có
+- Vì tab "Báo cáo" nằm chung trang với các tab quản trị khác (Department/Group/Reason/OtCase/JobTitle/
+  ApprovalStep/Employee/Settings — vốn chỉ Admin/Người phụ trách Cây duyệt được vào; tab
+  JobTitlePermission RIÊNG đã bỏ từ 2026-09-03d, gộp vào modal Sửa chức vụ, xem bên dưới),
+  `CategoryManagement.tsx` phải tự lọc tab hiển thị theo permission: ai chỉ có
   `ProductionOtReport.View` (không có `Department.Create`/`*ApprovalStep.Update`) vào "Danh mục" vẫn
-  chỉ thấy đúng 1 tab "Báo cáo", không lộ UI CRUD của 8 tab kia. Sidebar mục "otCategories" cũng thêm
+  chỉ thấy đúng 1 tab "Báo cáo", không lộ UI CRUD của các tab kia. Sidebar mục "otCategories" cũng thêm
   `ProductionOtReport.View` vào danh sách OR-permission để Group Leader thấy được mục "Danh mục".
 - Muốn gán quyền này cho Chức vụ khác (VD Team Leader) hoặc gỡ khỏi Group Leader: vào "Danh mục" →
-  tab "Quyền theo Chức vụ" (`JobTitlePermissionManager.tsx`), không cần sửa code.
+  tab "Chức vụ" → bấm "Sửa" đúng Chức vụ đó, phần "Quyền tự động cấp theo Chức vụ này" ngay trong
+  modal (2026-09-03d) — không cần sửa code.
 
 **Format xuất chưa giống file mẫu — đã sửa (2026-08-28c, theo phản hồi người dùng)**:
 - PDF thiếu hẳn khối bảng tổng hợp đầu trang so với `22-08.pdf` — đã thêm lại (`buildPivotRows` trong
@@ -2634,6 +2637,249 @@ Verify bằng dữ liệu thật (2026-08-29, `departmentId=7`): tải file th�
 Trưởng phòng duy nhất đã duyệt hết các đơn hôm đó). FE thêm nút "Xuất Excel — Số lượt tăng ca theo
 ngày" cạnh 2 nút xuất đã có trong `ProductionOtReportPanel.tsx`, dùng chung ô chọn ngày/Phòng ban.
 `npx tsc --noEmit` + `pnpm lint` sạch.
+
+### §3 export mới + phiếu PDF hàng loạt theo Line/Nhóm (2026-09-03c)
+
+Người dùng gửi 6 file thật (`docs/Data/Reports/`, trừ `22-08.pdf`/`22-08.xlsx` — 2 file đó là tham
+chiếu khác, không thuộc bộ deliverable hàng ngày) — đúng nguyên văn các file kế toán lương nhận được
+mỗi ngày SAU KHI Trưởng phòng ký: 3 Excel + N PDF (N = số Block-Nhóm có OT hôm đó). Phân tích tên file +
+đối chiếu dữ liệu thật rồi chốt với người dùng (không tự bịa — CLAUDE.md §2 luật 2):
+
+**Quy tắc đặt tên (áp dụng cho MỌI export mới ở mục này)**:
+- Excel: `"{TenQuery}_{yyyy-MM-d}_{MaPhongBan}.xlsx"` — ngày dùng đặc tả `"yyyy-MM-d"` (`d` KHÔNG
+  `dd`): tháng có số 0 đầu, NGÀY thì KHÔNG (`2026-08-1`, không phải `2026-08-01`). `MaPhongBan` =
+  `Department.DepartmentCode` của `departmentId` dùng lọc report (không lọc thì bỏ hẳn hậu tố).
+  Implement ở `ProductionOtReportService.BuildRealFileNameAsync`.
+- PDF phiếu: `"{SoLuongNhanVien}-SAN XUAT TANG CA {BLOCK}-{NHOM} ngay {dd-MM-yyyy}.pdf"` — NGƯỢC LẠI
+  với Excel, ngày ở đây CÓ số 0 đầu cả tháng lẫn ngày.
+
+**3 export mới** (`ProductionOtReportService.cs`, `ProductionOtReportController.cs`) — người dùng xác
+nhận CẢ 3 ĐỘC LẬP với `hours-report-excel` (23 cột) đã có từ trước, KHÔNG thay thế/gộp cột dù cùng kiểu
+gộp 1 dòng/người/ngày (giữ nguyên `hours-report-excel`, không đụng):
+
+1. **`GET qry-export-excel?date=&departmentId=`** — "Qry_EXPORT_EXCEL", 17 cột đúng nguyên văn file
+   thật: `MNV/BOPHAN/HO/TEN/Ngay_TC/Gio_BD/Gio_KT/Lydo/Lydo_phu/An/BLOCK/NHOM/NOTE/Gio_Thuc_Te/BP/
+   QUAN_LY_TC_SX/MNV_TP`. `QUAN_LY_TC_SX` = mã nhân viên đã **duyệt (Approved) ở bước Chức vụ "TL"**
+   (Team Leader — người dùng xác nhận "MNV team leader"), tra qua
+   `OtFormApprovalStep.JobTitleCodeSnapshot == "TL"` (mirror cách `MNV_TP` đã tra theo
+   `TerminalLevelSnapshot=DepartmentManager`) — 2 hàm dùng chung
+   `ResolveApprovalCodesByJobTitleCodeAsync`/`ResolveApprovalCodesByTerminalLevelAsync`.
+2. **`GET sum-export-data?date=&departmentId=`** — "SUM_EXPORT_DATA", 7 cột tóm tắt
+   `MNV/BOPHAN/HO/TEN/Ngay_TC/Gio_thuc_te/BP` — người dùng xác nhận **độc lập mục đích** với
+   Qry_EXPORT_EXCEL (không phải bản rút gọn thay thế).
+3. `times-report-excel` (đã có, 9 cột đã khớp sẵn "Qry_So_lan_tang_Ca_trong_ngay_sx") — CHỈ sửa lại
+   đúng tên file theo quy tắc thật ở trên (trước đó tự đặt `SoLuotTangCa_yyyyMMdd.xlsx`), không đổi cột.
+
+Cả 3 dùng chung 1 hàm nền `BuildGroupedDailyRowsAsync` (gộp 1 dòng/người/ngày, KHÔNG dùng lại
+`ExportHoursReportAsync`'s pipeline để tránh đụng logic 23-cột đang chạy ổn định — chấp nhận trùng 1
+phần logic).
+
+**Verify bằng dữ liệu thật** (`departmentId=7` Chế tạo, `date=2026-08-29`, đơn #47/#48 đã biết từ trước):
+tải cả 3 file qua `curl` + JWT thật, giải nén đọc `sheet1.xml` — đúng 10 dòng/file, đúng thứ tự 17/7
+cột, `QUAN_LY_TC_SX="T-TL-SHIDO"` mọi dòng (đúng 1 Team Leader TEST duy nhất đã duyệt), `MNV_TP=
+"T-MGR-CT"` mọi dòng (khớp lại đúng giá trị đã verify ở báo cáo Số lượt trước đó) — xác nhận cơ chế
+đúng. Tên file test với ngày `2026-08-1` (ngày 1, không phải 29) ra đúng `..._2026-08-1_CT.xlsx` —
+khớp quy tắc không số 0 đầu ở phần ngày.
+
+**Phiếu PDF hàng loạt theo Line/Nhóm** (`GET ticket-batch?date=&departmentId=`, trả JSON
+`ProductionTicketBatchGroupDto[]` — 1 phần tử/tổ hợp Block-Nhóm có OT Hoàn tất trong ngày, gộp đúng
+tổ hợp với `GetTicketReportAsync` nhưng trả DANH SÁCH TỪNG NGƯỜI thay vì chỉ đếm). Đây là phiếu
+"Giấy đề nghị làm ngoài giờ" mẫu YEV-22-024 THẬT — KHÁC hẳn PDF pivot tổng hợp `ticket-report` hiện có
+(dựng theo mẫu `22-08.pdf`, KHÔNG phải phiếu từng Line):
+- BE chỉ trả phần "nền" (danh sách nhân viên gộp + `PrimaryOtFormId` đại diện) — phần chữ ký/lý do/
+  ProcessPart FE lấy lại qua `GET /api/OtForm/{PrimaryOtFormId}` đã có sẵn (dùng đúng data
+  `OtFormPrintView.tsx` đang dùng để in 1 đơn lẻ), chỉ override `employees`/`numberOfEmployee` bằng
+  dữ liệu gộp ở `ticket-batch`.
+- FE (`src/modules/attendance/lib/productionTicketBatchPdf.tsx`, mới) — TÁI DÙNG NGUYÊN layout %
+  toạ độ đã đo sẵn ở `OtFormPrintView.tsx` (export thêm `PageFrame`/`FormHeaderFields`/
+  `EmployeeRowFields`/`buildEmployeePages`/`HEADER_LAYOUTS`/`A4_PAGE1_EMPLOYEE`/`A4_PAGE2_EMPLOYEE` —
+  chỉ thêm từ khoá `export`, KHÔNG đổi logic bên trong) thay vì vẽ lại bằng jsPDF thô: render off-screen
+  từng trang (`createRoot` vào 1 `<div>` đặt ngoài màn hình), chụp qua `html2canvas` (2x scale), nhúng
+  ảnh chụp vào `jsPDF` (khổ Letter 612x792pt, khớp đúng khổ giấy thật của mẫu) — mỗi tổ hợp 1 file PDF
+  riêng, gộp tất cả vào 1 file `.zip` (`jszip`, **thư viện MỚI thêm vào FE**, chưa dùng ở đâu khác)
+  rồi tải về 1 lần. Luôn khổ A4 (không tự chọn A5 như bản in đơn lẻ — khớp khổ giấy thật của 3 file mẫu
+  đã đọc).
+- Chỉ tính đơn **Hoàn tất (Completed)** — người dùng xác nhận "vẫn sẽ xuất ra được nhưng chỉ những đơn
+  mà đã hoàn tất tức được kí duyệt đã không còn bước tiếp theo nữa" — cùng bộ lọc `Status=Completed`
+  đã dùng cho mọi report khác trong màn này, không cần logic mới.
+- Nút "Xuất phiếu theo Line/Nhóm (zip)" trong `ProductionOtReportPanel.tsx`, hiện tiến độ
+  "Đang xuất X/Y..." (mỗi tổ hợp xử lý tuần tự, không song song — tránh quá tải trình duyệt khi nhiều
+  tổ hợp/nhiều trang).
+- **Verify**: BE `ticket-batch` gọi tay qua JWT thật (`departmentId=7`, `date=2026-08-29`) ra đúng 2
+  nhóm (`4S-HC` 5 người, `HL-HC` 4 người — khớp đúng dữ liệu đơn #47/#48 đã biết từ trước). Build BE +
+  `npx tsc --noEmit`/`pnpm lint` FE sạch, trang "Báo cáo" (`/ot/categories`) tải lại được sau khi
+  Turbopack hot-reload (không lỗi compile). **CHƯA bấm thử nút xuất zip thật trên trình duyệt** — đây
+  là kỹ thuật MỚI trong dự án (`html2canvas` lần đầu thực sự được dùng, dù đã khai báo sẵn trong
+  `package.json` từ trước) nên rủi ro cao nhất nằm ở bước render off-screen + chụp canvas, không thể
+  verify qua API call thuần — cần người dùng tự bấm thử trong trình duyệt (nút "Xuất phiếu theo
+  Line/Nhóm (zip)" trong tab Báo cáo) và mở thử vài file PDF trong zip trước khi coi là ổn định.
+
+### §Fix chữ tràn ô trong PDF hàng loạt theo Line/Nhóm (2026-09-03e)
+
+Người dùng bấm thử nút "Xuất phiếu theo Line/Nhóm (zip)" (mục §3 ở trên, lúc đó còn ghi "CHƯA bấm thử")
+— báo lỗi kèm ảnh chụp: nhiều ô chữ (tên "Trưởng phòng", "Người chịu trách nhiệm", "Người đề nghị"...)
+bị tràn ra ngoài viền ô in sẵn, đè lên nội dung xung quanh.
+
+**Nguyên nhân**: `OtFormPrintView.tsx` trước đó dùng `nowrapBoxStyle()` (CSS `overflow:hidden` +
+`white-space:nowrap`) để cắt chữ dài không vừa ô — cách này CHỈ đúng khi trình duyệt tự render (bản in
+đơn lẻ qua `window.print()`, đã verify ổn định từ trước). Đường xuất PDF hàng loạt lại chụp trang qua
+`html2canvas` rồi nhúng ảnh vào `jsPDF` (xem §3) — `html2canvas` KHÔNG cắt `overflow:hidden` đáng tin
+cậy trên các ô `position:absolute`/`flex` chứa `white-space:nowrap` (giới hạn đã biết của thư viện này),
+nên chữ dài vẫn bị vẽ tràn ra ngoài dù CSS khai đúng. Bằng chứng: ô "Lý do" (dùng `ReasonAutoFit` — tự
+đo `scrollHeight` THẬT trên DOM rồi thu nhỏ cỡ chữ cho vừa, KHÔNG dựa vào CSS clip) là ô DUY NHẤT không
+bị lỗi trong ảnh chụp.
+
+**Fix**: bỏ hẳn `nowrapBoxStyle`, thay bằng kỹ thuật giống `ReasonAutoFit` nhưng cho 1 dòng — component
+mới `AutoFitLine` + hook `useAutoFitLineWidth` (đo `scrollWidth`/`clientWidth` THẬT, tự thu nhỏ cỡ chữ
+tới khi vừa khít, sàn 55% cỡ gốc) — áp dụng cho MỌI ô 1 dòng trong `FormHeaderFields`/`EmployeeRowFields`
+(tên công đoạn, số lượng NV, người chịu trách nhiệm, giờ/ngày, đề nghị khác, và toàn bộ cột trong bảng
+nhân viên). Riêng dòng tên trong `SignatureCell` (ô chữ ký) tách thành `SignatureNameLine` — thêm
+`width:100%` cho wrapper (trước đó là `div` co theo nội dung bên trong `flex-column, alignItems:center`
+nên không bị ép theo bề rộng ô, đây là phần lộ rõ nhất trong ảnh lỗi) rồi áp dụng cùng kỹ thuật tự co.
+Vì fix ở tầng component DÙNG CHUNG cho cả 2 đường (in đơn lẻ + xuất hàng loạt), bản in đơn lẻ cũng được
+lợi (trước đây chữ tràn sẽ bị cắt mất, giờ tự co nhỏ để hiện đủ) — không có rủi ro thụt lùi vì chữ vừa
+sẵn thì hiển thị y hệt như cũ (cùng cỡ chữ gốc).
+
+**Verify**: `npx tsc --noEmit` + `pnpm lint` sạch (`OtFormPrintView.tsx` không còn cảnh báo mới).
+
+### §Fix dữ liệu sai trong PDF hàng loạt (Tên công đoạn trống + lũy kế + thứ tự NV) (2026-09-03f)
+
+Người dùng bấm thử lại sau fix format ở trên, báo "vẫn lỗi format" — gửi kèm 2 ảnh so sánh (bản in đơn
+lẻ vs bản xuất qua zip cùng 1 đơn thật, `departmentId=7`, `date=2026-08-29`, nhóm `HL`). Lần này KHÔNG
+còn tràn chữ (đúng như fix trước) nhưng lộ ra 3 chỗ SAI DỮ LIỆU: ô "Tên công đoạn" trống trơn, lũy kế
+Tháng/Năm khác hẳn (đơn thật toàn `0`, zip ra `2.5/1.75/3.5/3.5`), và thứ tự 4 nhân viên trong bảng
+đảo lộn so với đơn thật. Yêu cầu người dùng ("lấy cái logic in đơn... để làm phần xuất báo cáo pdf phiếu
+đó") xác nhận hướng sửa: PHẢI lấy đúng dữ liệu snapshot đã đóng băng trên `OtFormEmployee` — y hệt cách
+`OtFormService.GetOtFormByIdAsync` đang trả cho bản in đơn lẻ — thay vì để `GetTicketBatchAsync` tự tính
+lại/tự sắp xếp khác đi.
+
+**Nguyên nhân cả 3, cùng 1 gốc**: `ProductionOtReportService.GetTicketBatchAsync` (thêm mới ở §3) không
+tái dùng đúng field/cách sắp xếp của bản in đơn:
+- `ProductionTicketBatchEmployeeDto` thiếu hẳn `CongDoanSnapshot/TaskNameSnapshot/BlockCodeSnapshot/
+  TeamCodeSnapshot/ShiftTeamCodeSnapshot` — FE `toPrintableEmployee()` phải set `null` cho đủ field,
+  khiến `getProductionCongDoanLabel()` (OtFormPrintView.tsx, đọc đúng các field này) không có gì để ghép.
+- `MonthToDate/YearToDate` bị TÍNH LẠI từ `EmployeeAccumulationHistories` (ledger SỐNG tại thời điểm xuất
+  báo cáo) thay vì đọc thẳng cột `OtFormEmployee.MonthToDate/YearToDate` (snapshot ĐÓNG BĂNG lúc lập đơn
+  — đúng số đã ký trên giấy thật, xem comment gốc ở `OtFormEmployee.cs` dòng 29-34).
+- Danh sách nhân viên bị `.OrderBy(EmployeeCode, OrdinalIgnoreCase)` (sắp lại theo chuỗi mã NV) trong khi
+  bản in đơn không sắp gì cả — giữ nguyên thứ tự tự nhiên `OtFormEmployees.FindWithIncludesAsync` trả về.
+
+**Fix**: `GetTicketBatchAsync` — thêm `x.StartTime/x.MonthToDate/x.YearToDate/x.TaskNameSnapshot` vào
+projection ban đầu (trước chỉ có `EndTime`), dùng `first.StartTime/first.MonthToDate/first.YearToDate`
+thay cho `FormStartTime`/tính ledger; đổi `.OrderBy(EmployeeCode)` thành `.OrderBy(eg => eg.Key)`
+(EmployeeId, khớp thứ tự tự nhiên); bỏ hẳn khối tính `ledgerByEmployee` (không còn dùng). Thêm 5 field
+snapshot còn thiếu vào `ProductionTicketBatchGroupDto.cs`. FE: thêm 5 field tương ứng vào
+`production-ot-report.dto.ts`, sửa `toPrintableEmployee()` (productionTicketBatchPdf.tsx) truyền thẳng
+`e.congDoanSnapshot`/... thay vì `null`.
+
+**Verify bằng dữ liệu thật** (`GET ticket-batch?date=2026-08-29&departmentId=7`, JWT thật): nhóm `HL`
+trả đúng thứ tự nhân viên `634→787→3128→T-LL-HL` (khớp ảnh đơn thật), `monthToDate`/`yearToDate` đều
+`0.00` (khớp), `teamCodeSnapshot="HC", blockCodeSnapshot="HL", shiftTeamCodeSnapshot="HC"` (ghép đúng ra
+"HC   HL   HC", khớp "Tên công đoạn" trên đơn thật). Backend build sạch, `npx tsc --noEmit` +
+`pnpm lint` FE sạch. **CHƯA bấm thử lại nút xuất zip trên trình duyệt sau fix lần này** — cần người dùng
+tự kiểm tra lại file PDF trong zip.
+
+### §Fix chữ đè lên viền dòng trong bảng nhân viên (PDF hàng loạt) (2026-09-03g)
+
+Sau 2 fix trên (§...e format, §...f dữ liệu), người dùng bấm thử lại — báo "vẫn bị lỗi như vậy" kèm ảnh:
+dữ liệu đã đúng (Tên công đoạn/lũy kế/thứ tự đều khớp bản in đơn) nhưng chữ ở CỘT "Họ và tên" trong bảng
+danh sách nhân viên bị đè lên đúng đường viền ngang bên dưới mỗi dòng, trông như bị gạch ngang qua chữ.
+
+**Nguyên nhân**: `AutoFitLine` (fix ở §...e) dùng `display:flex; alignItems:center` để canh giữa dọc chữ
+trong ô. Dòng nhân viên rất mỏng (~16pt cao ở trang 1 A4) — `html2canvas` không tính đúng
+`alignItems:center` trên ô `position:absolute` mỏng như vậy, đẩy chữ lệch xuống sát đáy ô, chạm/đè lên
+viền dòng ngay bên dưới (viền này nằm sẵn trong ảnh nền). Cùng HỌ lỗi với vụ `overflow:hidden` ở §...e —
+`html2canvas` hỗ trợ CSS flexbox không đầy đủ, lần này là thuộc tính canh giữa chứ không phải cắt tràn.
+
+**Fix lần 1**: đổi `AutoFitLine` VÀ `SignatureCell` (ô chữ ký, dùng flex column tương tự để canh giữa
+khối ảnh+tên) từ `display:flex` sang `display:table` + `display:table-cell; verticalAlign:middle`.
+Người dùng bấm thử lại — **VẪN Y HỆT LỖI CŨ** (chữ đè viền dòng). `display:table > display:table-cell`
+thiếu hẳn `display:table-row` tường minh dựa vào trình duyệt tự sinh "anonymous table-row" — 1 tính
+năng CSS nâng cao khác mà `html2canvas` cũng không tính đúng, cùng họ lỗi hỗ trợ layout không đầy đủ với
+flexbox trước đó.
+
+**Fix lần 2 (đã xác nhận đúng hướng)**: bỏ hẳn CẢ flexbox LẪN CSS table ở `AutoFitLine` — chỉ dùng
+`line-height` bằng ĐÚNG chiều cao thật của ô (đo qua `wrapper.clientHeight`, set trực tiếp bằng JS trong
+`useAutoFitLineWidth`, cùng vòng đo/set đang dùng để tự co chữ theo bề rộng). Đây là kỹ thuật canh giữa
+dọc CŨ NHẤT (có từ trước cả CSS table lẫn flexbox) — chỉ dựa vào text-flow bình thường của 1 dòng chữ
+trong khối `block`, không phụ thuộc bất kỳ layout model nào mà `html2canvas` có thể tính sai. CHƯA đổi
+`SignatureCell` (vẫn đang ở bản `table`/`table-cell` — không bị người dùng báo lỗi cụ thể trong 2 lần
+test gần nhất, để nguyên tránh sửa lan man khi chưa có bằng chứng).
+
+**Verify**: `npx tsc --noEmit` + `pnpm lint` sạch. CHƯA bấm thử lại trên trình duyệt sau fix lần 2 —
+cần người dùng tự kiểm tra lại (nhớ hard-refresh tab trước khi bấm xuất, vì FE dev server hot-reload
+nhưng tab có thể đang giữ bundle cũ).
+
+### §Bỏ html2canvas, tự vẽ PDF hàng loạt trực tiếp bằng jsPDF (2026-09-03h)
+
+Sau 3 lần vá `html2canvas` (§...e format, §...f dữ liệu, §...g canh giữa) người dùng vẫn báo Y HỆT lỗi
+chữ đè viền dòng bảng nhân viên — đổi cả 3 kỹ thuật canh giữa dọc (`flex`, `table-cell`, `line-height`)
+đều ra kết quả giống hệt nhau. Việc đổi kỹ thuật canh giữa không sửa được gì chứng tỏ gốc vấn đề KHÔNG
+nằm ở cách canh giữa — quan sát thêm: các ô phía trên (Tên công đoạn, Người chịu trách nhiệm, Thời
+gian...) đều đúng vị trí, chỉ bảng nhân viên (nằm cuối trang, hàng rất sát nhau, 10 dòng chỉ trong
+~18% chiều cao trang) mới lệch — dấu hiệu của lỗi LỆCH TỶ LỆ TOÀN TRANG tích luỹ theo chiều dọc (càng
+xuống dưới càng lệch nhiều), khả năng cao do CSS `aspect-ratio` (dùng để tự tính chiều cao khung trang
+off-screen) — thuộc tính mà `html2canvas` cũng hỗ trợ không đầy đủ.
+
+Người dùng đề xuất: bỏ hẳn việc chụp lại giao diện, tự vẽ trực tiếp ra PDF. Đây là hướng ĐÚNG và dứt
+điểm — loại bỏ hoàn toàn `html2canvas` khỏi luồng này thay vì tiếp tục vá từng lỗi CSS lộ ra.
+
+**Kiến trúc mới** (`productionTicketBatchPdf.tsx`, viết lại toàn bộ):
+- KHÔNG còn render React/DOM off-screen, KHÔNG còn `html2canvas`/`createRoot`. Vẽ thẳng lên `jsPDF`:
+  `doc.addImage()` cho ảnh nền (`/ot-form/a4-page1.png`/`a4-page2.png`, y hệt ảnh nền cũ), `doc.text()`
+  cho mọi ô chữ, `doc.line()` cho dấu ✓ (vẽ tay 2 đoạn thẳng — KHÔNG dùng ký tự Unicode "✓" vì font
+  Roboto nhúng không chắc có glyph khối Dingbats).
+- **Vẫn tái dùng đúng toạ độ % + business logic** của `OtFormPrintView.tsx` — KHÔNG chép lại: export
+  thêm `formatDate/formatTime/formatDateTime/findHistory/findStepByTerminalLevel/getGivenName/
+  getProductionCongDoanLabel/columnBox` (trước đó private) + các hằng `REASON_*`/`HEADER_LAYOUTS`/
+  `A4_PAGE1_EMPLOYEE`/`A4_PAGE2_EMPLOYEE` (đã export sẵn) — chỉ đổi "vẽ ra" bằng jsPDF thay vì
+  React DOM + html2canvas, field nào hiện giá trị gì giữ nguyên 100%.
+- Font tiếng Việt: nhúng Roboto qua VFS (`registerVietnameseFont`, cùng pattern
+  `ProductionOtReportPanel.tsx`/`DeviceListReportPrintDialog.tsx` đã dùng cho PDF khác trong dự án —
+  KHÔNG tạo helper dùng chung mới, giữ đúng convention hiện có là mỗi nơi tự có bản nhỏ).
+  `ROBOTO_REGULAR_BASE64`/`ROBOTO_BOLD_BASE64` từ `modules/pc-management/lib/pdf-fonts.ts`.
+  Import font qua base64 thay vì URL.
+- Tự co chữ 1 dòng (`drawAutoFitText`) và tự ngắt dòng/co chữ "Lý do" (`drawReason`) đều đo bằng CHÍNH
+  `doc.getTextWidth`/`doc.splitTextToSize` của jsPDF — cùng 1 engine đo VÀ vẽ, không còn khoảng lệch
+  giữa "đo" (DOM/canvas cũ) và "vẽ" (jsPDF) như trước — triệt tiêu luôn cả lớp lỗi lệch tỷ lệ.
+- Ảnh chữ ký: load qua `Image().decode()` lấy đúng tỉ lệ thật (`naturalWidth/naturalHeight`) trước khi
+  `addImage` (tương đương `object-contain` cũ) — 1 request ảnh/chữ ký, không dùng chung cache như ảnh
+  nền tĩnh (nội dung khác nhau mỗi đơn).
+
+**Lợi ích**: KHÔNG còn phụ thuộc `html2canvas` cho tính năng này (hết luôn cả lớp lỗi CSS-support từ
+§...e/f/g) — chữ là vector thật trong PDF (không phải ảnh chụp raster), file nhẹ hơn, chất lượng in nét
+hơn.
+
+**Verify**: `npx tsc --noEmit` + `pnpm lint` sạch. Người dùng đã bấm thử lại trên trình duyệt — XÁC NHẬN
+ỔN, hết lỗi hiển thị. Tính năng "Xuất phiếu theo Line/Nhóm (zip)" coi như HOÀN TẤT.
+
+### §Gộp tab "Quyền theo Chức vụ" vào modal Sửa chức vụ (2026-09-03d)
+
+Theo yêu cầu người dùng ("tích hợp nó vào chỗ chức vụ luôn"): bỏ hẳn tab riêng "Quyền theo Chức vụ"
+(vốn phải chọn lại đúng Chức vụ 1 lần nữa từ dropdown, tách rời khỏi tab "Chức vụ") — chuyển thẳng
+thành 1 section BÊN TRONG modal Sửa chức vụ (`JobTitleForm.tsx`, chỉ hiện khi `mode="edit"`, vì phần
+quyền cần Id của Chức vụ đã tồn tại).
+
+- **`JobTitlePermissionSection.tsx`** (mới, `components/job-titles/`) — rút gọn từ
+  `JobTitlePermissionManager.tsx` cũ (đã XOÁ): bỏ phần chọn Chức vụ (nhận thẳng `jobTitleId` từ
+  `JobTitleForm`), giữ nguyên 100% nguồn dữ liệu/logic tick-lưu (`GET .../allowed-codes`,
+  `GET .../by-job-title/{id}`, `PUT .../by-job-title/{id}`). Có nút "Lưu" RIÊNG, độc lập với nút Lưu
+  của phần thông tin cơ bản (Code/Tên/Cấp duyệt cuối) phía trên — 2 API khác nhau, không gộp chung 1
+  lần submit.
+- `JobTitleForm.tsx` nới rộng modal (`max-w-lg` khi edit, `max-w-md` khi create) + thêm scroll
+  (`max-h-[85vh] overflow-y-auto`) để chứa vừa cả 2 phần.
+- `CategoryManagement.tsx`: bỏ hẳn tab `job-title-permissions` (key, ref, loading handler, khối mount) —
+  còn lại các tab quản trị khác giữ nguyên vị trí.
+- Đổi `useEffect` gọi trực tiếp `Promise.all().then()` (bản `JobTitlePermissionManager.tsx` cũ) sang
+  **`useFetchEffect`** khi viết lại — bản cũ set `setIsLoading(true)` NGAY ĐẦU effect (đồng bộ) từng
+  lọt qua vì chưa từng bật React Compiler lint kiểm tra file này, nhưng khi viết file MỚI thì
+  `react-hooks/set-state-in-effect` chặn ngay (đúng luật CLAUDE.md §4.3 "Fetch dữ liệu — luôn dùng
+  useFetchEffect") — sửa bằng cách gộp cả 3 nguồn dữ liệu (`allowed-codes`/`PermissionApi.getAll`/
+  `by-job-title`) vào 1 `Promise.all` làm fetcher duy nhất truyền cho hook.
+- **Verify**: `npx tsc --noEmit` + `pnpm lint` sạch (2 cảnh báo/lỗi cũ ở `CreateOtFormPage.tsx`/
+  `OtFormPrintView.tsx` không liên quan, có từ trước). Chưa test sống thao tác tick/lưu quyền trong
+  modal mới trên trình duyệt (chỉ đổi UI, không đổi API/logic quyền nào — rủi ro thấp, nhưng cần bấm
+  thử 1 lần trước khi coi ổn định).
 
 ### §Phân quyền theo Phòng ban — mở rộng vai trò Coordinator (2026-08-29)
 
@@ -2919,6 +3165,93 @@ kèm luôn Chức vụ hoặc gán họ làm Người phụ trách Cây duyệt 
   ghi, không phải read-only) — cần test tay bằng 1 Employee test trước khi dùng thật, đặc biệt kiểm tra
   đúng: (1) gán Chức vụ Trưởng phòng cho người đang ở Nhóm bị từ chối đúng như mong đợi; (2) import lại
   cùng 1 người 2 lần với `NguoiPhuTrach=1` không tạo trùng dòng coordinator (idempotent).
+
+### §Gộp thêm/xóa NV vào Sửa đơn + khóa phạm vi Line/Nhóm ca (2026-09-04)
+
+Thay thế kênh trong-app của §Loại nhân viên khỏi đơn (2026-07-30) và §Giai đoạn 11 — Thêm nhân viên vào
+đơn (2026-08-28): 2 action riêng `POST {id}/employees/add`/`POST {id}/employees/remove` (mỗi thao tác
+gọi API + xác nhận mật khẩu cấp 2 riêng, hiện ngay ở `OtFormDetail.tsx`) đã **XOÁ HẲN**, gộp toàn bộ vào
+`PUT /api/OtForm/{id}` (`UpdateAsync`) — người dùng chốt: thêm/xóa NV chỉ là thay đổi TẠM ở màn "Sửa
+đơn" (`CreateOtFormPage.tsx` edit mode), chỉ áp dụng thật + log lại khi bấm "Lưu thay đổi" (1 lần nhập
+mật khẩu cấp 2 cho TOÀN BỘ thay đổi trong phiên sửa, không hỏi lại riêng từng thao tác nữa).
+
+- **Kênh email KHÔNG đổi** — `RemoveEmployeeByEmailTokenAsync`/`RemoveEmployeeCoreAsync` vẫn y nguyên,
+  chỉ refactor `RemoveEmployeeCoreAsync` để dùng lại được từ `UpdateAsync` (tham số
+  `secondaryPassword: null` để bỏ qua verify khi gọi từ trong 1 giao dịch đã verify sẵn ở đầu).
+- **`UpdateOtFormDto`** thêm `RemovedEmployees: List<UpdateOtFormRemovedEmployeeDto>` (`EmployeeId` +
+  `Reason` bắt buộc). `Employees` giờ có thể chứa NV MỚI (không có trong đơn trước đó) — `UpdateAsync` tự
+  diff `requested vs active` để suy `toAdd`/`toKeep`/`toRemove` (từ `RemovedEmployees`), validate
+  `toKeepIds ⊆ requestedEmployeeIds` (thiếu ai → lỗi "dùng chức năng Loại khỏi đơn"), tổng NV còn lại
+  phải ≥ 1.
+- **Luật phạm vi MỚI khi thêm NV vào đơn theo chuyền** (trước đây KHÔNG hề kiểm tra — xác nhận đúng báo
+  cáo người dùng "nhân viên Line khác vẫn thêm được"): so `(ProductionEmployee.BlockCode, ShiftTeamCode)`
+  SỐNG của người mới với tập `(BlockCodeSnapshot, ShiftTeamCodeSnapshot)` DISTINCT của NV còn lại (sau
+  khi trừ người bị xóa cùng lượt lưu) — khớp ít nhất 1 cặp là được, không ép cả đơn cùng 1 Line (giữ tinh
+  thần multi-Line đã có sẵn từ `CreateProductionFormAsync`). Đơn theo Nhóm giữ nguyên check cũ
+  `employee.GroupId != otForm.GroupId`. Nếu đơn trống người "gốc" sau khi trừ xóa (hiếm) thì bỏ qua check.
+- **Quyền thêm/xóa NV** giờ dùng ĐÚNG quyền sửa đơn hiện có của `UpdateAsync` (đơn theo Nhóm: chỉ người
+  tạo + chưa có bước Approved; đơn theo chuyền: candidate của bước Pending hiện tại) — không còn quyền
+  riêng "candidate bước hiện tại cho MỌI loại đơn" mà 2 action cũ dùng (thu hẹp có chủ đích cho đơn theo
+  Nhóm, khớp đúng "1 cổng, 1 luật" người dùng yêu cầu).
+- **`OtFormEditLog`** (đã có sẵn từ Giai đoạn 11) tiếp tục ghi đủ `EmployeeAdded`/`EmployeeRemoved`/
+  `TimeChanged`/`NoteChanged` — nhiều dòng log cùng 1 lượt Lưu giờ có `ActionAt` xấp xỉ nhau (tự nhiên
+  "gộp phiên" mà không cần thêm field session-id nào).
+- Xóa code chết: `AddEmployeeAsync`/`RemoveEmployeeAsync` (public, in-app) khỏi `OtFormService.cs` +
+  `IOtFormService.cs`; 2 route `{id}/employees/add`/`{id}/employees/remove` (bản in-app, KHÔNG phải
+  email-token) khỏi `OtFormController.cs`; DTO `AddOtFormEmployeeDto.cs`/`RemoveOtFormEmployeeDto.cs`
+  (bản in-app — `RemoveOtFormEmployeeByEmailTokenDto` vẫn còn, dùng cho kênh email). Permission
+  `Attendance.OTForm.AddEmployee`/`Attendance.OTForm.RemoveEmployee` vẫn còn trong seed (không xoá
+  migration) nhưng không còn action nào check nữa — coi như treo, vô hại.
+- `ProcessBatchAsync` ("Đơn tổng") trước đó gọi `RemoveEmployeeAsync` nội bộ khi loại NV lúc duyệt gộp —
+  sửa gọi thẳng `RemoveEmployeeCoreAsync` (private, cùng class), không đổi hành vi.
+- **FE `CreateOtFormPage.tsx` edit mode**: bỏ giới hạn "danh sách NV cố định" — thêm khối tìm NV mới
+  (keyword-only search qua `ProductionEmployeeApi.search`/`EmployeeApi.getEmployeesByGroup`, KHÔNG lọc
+  Line/Nhóm ca ở FE — BE mới là nơi chặn thật, chọn sai sẽ báo lỗi rõ khi Lưu) + nút "Loại khỏi đơn" trên
+  từng dòng NV cũ (yêu cầu lý do qua 1 panel nhỏ, lưu tạm vào state `pendingRemovals`, KHÔNG gọi API
+  ngay). `selectedEmployeeIds`/`employeeOverrides` (đã có sẵn, vốn dùng cho cả 2 mode) tự phản ánh đúng
+  roster cuối cùng — submit build `Employees` + `RemovedEmployees` gộp 1 lần.
+- **FE `OtFormDetail.tsx`**: xóa hẳn 2 modal + nút "Thêm nhân viên"/"Loại khỏi đơn" — nút "Sửa đơn" có
+  sẵn (trỏ `/ot/forms/edit`) là lối duy nhất để đổi nhân viên.
+- **Verify**: `dotnet build` sạch (0 warning), `npx tsc --noEmit`/`pnpm lint` sạch (2 warning +1 lỗi lint
+  còn lại đều CÓ TRƯỚC, không liên quan thay đổi này — xem `overlappingEmployeeIds` effect trong
+  `CreateOtFormPage.tsx`). Smoke test 7 check qua `smoke.ps1` PASS hết; xác nhận route cũ
+  `{id}/employees/add` trả 404. **Chưa test tay** luồng thêm/xóa NV thật trong Sửa đơn qua UI (cần tài
+  khoản TEST có đơn theo chuyền đang chờ duyệt) — người dùng tự kiểm khi dùng thử.
+
+### §Nâng cấp màn Duyệt hàng loạt — lịch ngày chưa duyệt + lọc Line/Ca + xem/sửa trước khi xác nhận (2026-09-04)
+
+`OtFormListPage.tsx` (mode `pending-approvals`, dùng chung khung sườn với 3 tab khác) thêm:
+
+- **`GET /api/OtForm/pending-approvals/dates?fromDate&toDate`** (permission `Attendance.OTForm.Approve`,
+  service `GetPendingApprovalDatesAsync` — tái dùng đúng scoping `GetMyCurrentPendingFormIdsAsync` của
+  `GetPendingApprovalsAsync`) → `List<PendingApprovalDateCountDto {Date, Count}>`, group theo `Date`. FE
+  hiện lịch mini (điều hướng tháng bằng nút trước/sau, không phải lưới ngày-trong-tuần đầy đủ — đơn giản
+  hoá cho gọn) với badge số đơn trên mỗi ngày có dữ liệu; bấm 1 ngày → set `fromDate=toDate=ngày đó` rồi
+  tự tìm lại.
+- **Filter mới** trên `GET pending-approvals`: `productionLineId`/`productionTeamId`/`productionShiftTeamId`
+  (int?, cùng nguồn dropdown Line/Team/ShiftTeam dùng ở `CreateOtFormPage`) — service resolve mỗi ID sang
+  `Code` (qua `ProductionLines`/`ProductionTeams`/`ProductionShiftTeams` repo) rồi lọc
+  `x.OtFormEmployees.Any(e => !e.IsRemoved && e.BlockCodeSnapshot == lineCode)` (tương tự Team/ShiftTeam)
+  — so trực tiếp snapshot code đã lưu trên `OtFormEmployee`, KHÔNG join `ProductionEmployee` sống. Chỉ
+  `pending-approvals` hỗ trợ (3 tab kia chưa cần, theo đúng yêu cầu).
+- **`OtFormListItemDto`** thêm `ProductionLineNames`/`ProductionShiftTeamNames` (string?, distinct
+  `BlockCodeSnapshot`/`ShiftTeamCodeSnapshot` nối `", "`) — tính ở `EnrichWithProductionLineInfoAsync`
+  (query RIÊNG sau khi đã phân trang, gộp Distinct ở C# thay vì nhét `string.Join`/`Distinct` vào
+  `ToListItemDto` — expression đó dùng chung cho 4 endpoint danh sách, rủi ro không dịch được sang SQL
+  nếu thêm logic phức tạp). Chỉ `GetPendingApprovalsAsync` gọi enrich này — 3 tab kia field này luôn
+  `null`. FE thêm cột "Line/Nhóm ca" vào bảng (hiện `—` khi không phải đơn theo chuyền hoặc field null).
+- **Xem/sửa trước khi xác nhận duyệt hàng loạt**: modal "Ký/Từ chối hàng loạt" hiện có (Comment +
+  SecondaryPassword, không đổi API `bulkApprove`/`bulkReject`) thêm 1 khối review NGAY TRONG modal đó,
+  liệt kê các đơn đã chọn (lấy từ `forms` đang có sẵn trên trang, không gọi API thêm) — mỗi dòng có link
+  "Sửa" mở `/ot/forms/edit?id=` ở **TAB MỚI** (`target="_blank"`, dùng `getPathname` để giữ đúng tiền tố
+  locale) thay vì nhúng cả `CreateOtFormPage` vào trong dialog (giảm độ phức tạp, không mất lựa chọn/
+  modal hàng loạt đang mở ở tab gốc) — sửa xong (kể cả thêm/xóa NV, §Gộp thêm/xóa NV ở trên) đóng tab đó,
+  quay lại tab gốc bấm tiếp Comment/Password để xác nhận duyệt như cũ.
+- **Verify**: BE build sạch. Gọi tay `GET pending-approvals` (không lỗi, `productionLineNames` có mặt
+  trong response dù tài khoản test hiện tại 0 đơn chờ duyệt nên chưa thấy giá trị thật) và `GET
+  pending-approvals/dates` (không lỗi) qua JWT thật. FE `tsc`/`lint` sạch (cùng 1 lỗi lint có-trước-đó,
+  không liên quan). **Chưa test tay** lịch/filter/review-trước-khi-duyệt qua UI thật với tài khoản có đơn
+  theo chuyền đang chờ — người dùng tự kiểm khi dùng thử.
 
 ## 2. Wiring Host — đã xong
 1. `Configurations/DependencyInjection.cs`: `AddDbContext<AttendanceDbContext>` với `OTManagementConnection`.

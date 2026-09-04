@@ -365,8 +365,9 @@ namespace Attendance.Application.Services
             var rows = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(x => x.EmployeeId == employeeId && x.Year == year);
             var hoursByMonth = rows.ToDictionary(x => x.Month, x => x.TotalHours);
 
+            var initialBalance = hoursByMonth.GetValueOrDefault(0, 0m);
             var months = new List<EmployeeAccumulationHistoryDto>();
-            decimal yearTotal = 0;
+            decimal yearTotal = initialBalance;
             for (var month = 1; month <= 12; month++)
             {
                 var hours = hoursByMonth.GetValueOrDefault(month, 0m);
@@ -381,6 +382,7 @@ namespace Attendance.Application.Services
                 EmployeeFullName = $"{employee.LastName} {employee.FirstName}",
                 Year = year,
                 Months = months,
+                InitialBalanceHours = initialBalance,
                 YearTotalHours = yearTotal
             };
         }

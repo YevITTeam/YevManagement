@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Inbox, RefreshCw, X } from "lucide-react";
+import { Calendar, Check, ChevronLeft, ChevronRight, Inbox, RefreshCw, X } from "lucide-react";
 import { toast } from "react-toastify";
-import { useTranslations } from "next-intl";
-import { useRouter } from "@/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { getPathname, useRouter } from "@/navigation";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
-import type { OtFormApprovalSummaryItemDto, OtFormListItemDto } from "@/modules/attendance/types/ot-form.dto";
+import type { OtFormApprovalSummaryItemDto, OtFormListItemDto, PendingApprovalDateCountDto } from "@/modules/attendance/types/ot-form.dto";
+import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
+import type { ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import { otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -16,6 +18,19 @@ import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 const PAGE_SIZE = 10;
+
+function toDateStr(d: Date): string {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+// [ngày-đầu-tháng, ngày-cuối-tháng] của (year, month 0-indexed) — dùng cho lịch mini + gọi
+// GET /pending-approvals/dates.
+function monthRange(year: number, month: number): { from: string; to: string } {
+    return { from: toDateStr(new Date(year, month, 1)), to: toDateStr(new Date(year, month + 1, 0)) };
+}
 
 type OtFormListMode = "my-forms" | "pending-approvals" | "my-actions" | "my-participations";
 
@@ -81,6 +96,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const t = useTranslations("Attendance.OtFormList");
     const tCommon = useTranslations("Common");
     const router = useRouter();
+    const locale = useLocale();
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canBulkApprove = mode === "pending-approvals" && hasPermission(user, "Attendance.OTForm.Approve");
@@ -106,7 +122,19 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const [fromDateInput, setFromDateInput] = useState("");
     const [toDateInput, setToDateInput] = useState("");
     const [statusInput, setStatusInput] = useState("");
-    const [appliedFilters, setAppliedFilters] = useState({ fromDate: "", toDate: "", status: "" });
+    // Lọc theo Line/Team/Nhóm ca cho đơn dưới chuyền (2026-09-04) — chỉ BE endpoint pending-approvals
+    // hỗ trợ (xem GetOtFormListParams), các tab khác gửi kèm cũng vô hại (BE bỏ qua param lạ).
+    const [productionTeamId, setProductionTeamId] = useState<number | "">("");
+    const [productionLineId, setProductionLineId] = useState<number | "">("");
+    const [productionShiftTeamId, setProductionShiftTeamId] = useState<number | "">("");
+    const [appliedFilters, setAppliedFilters] = useState({
+        fromDate: "",
+        toDate: "",
+        status: "",
+        productionTeamId: "" as number | "",
+        productionLineId: "" as number | "",
+        productionShiftTeamId: "" as number | "",
+    });
 
     // Đổi mode (chuyển menu) → về trang 1 + xoá bộ lọc, phát hiện bằng so sánh snapshot ngay trong
     // render (React khuyến khích thay effect chỉ để "phản ứng" theo prop/state khác đổi).
@@ -117,7 +145,10 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         setFromDateInput("");
         setToDateInput("");
         setStatusInput("");
-        setAppliedFilters({ fromDate: "", toDate: "", status: "" });
+        setProductionTeamId("");
+        setProductionLineId("");
+        setProductionShiftTeamId("");
+        setAppliedFilters({ fromDate: "", toDate: "", status: "", productionTeamId: "", productionLineId: "", productionShiftTeamId: "" });
     }
 
     const listParams = {
@@ -126,6 +157,98 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         fromDate: appliedFilters.fromDate || undefined,
         toDate: appliedFilters.toDate || undefined,
         status: appliedFilters.status !== "" ? Number(appliedFilters.status) : undefined,
+        productionTeamId: appliedFilters.productionTeamId !== "" ? appliedFilters.productionTeamId : undefined,
+        productionLineId: appliedFilters.productionLineId !== "" ? appliedFilters.productionLineId : undefined,
+        productionShiftTeamId: appliedFilters.productionShiftTeamId !== "" ? appliedFilters.productionShiftTeamId : undefined,
+    };
+
+    // ── Chọn Team → Line đang chọn (nếu có) có thể không còn thuộc Team mới, reset — snapshot render
+    // (CLAUDE.md §4.5), cùng pattern CreateOtFormPage.tsx. ──
+    const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
+    const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
+    const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
+    const showProductionFilter = mode === "pending-approvals";
+
+    useFetchEffect(
+        () => (showProductionFilter ? ProductionEmployeeApi.getTeamOptions() : Promise.resolve([])),
+        [showProductionFilter],
+        setTeamOptions,
+        t("productionFilterLoadError")
+    );
+
+    const [prevFilterTeamId, setPrevFilterTeamId] = useState(productionTeamId);
+    if (prevFilterTeamId !== productionTeamId) {
+        setPrevFilterTeamId(productionTeamId);
+        setProductionLineId("");
+    }
+
+    useFetchEffect(
+        () => (showProductionFilter ? ProductionEmployeeApi.getLineOptions(productionTeamId === "" ? undefined : productionTeamId) : Promise.resolve([])),
+        [showProductionFilter, productionTeamId],
+        setLineOptions,
+        t("productionFilterLoadError")
+    );
+
+    const filterShiftTeamKey = `${productionLineId}|${productionTeamId}`;
+    const [prevFilterShiftTeamKey, setPrevFilterShiftTeamKey] = useState(filterShiftTeamKey);
+    if (prevFilterShiftTeamKey !== filterShiftTeamKey) {
+        setPrevFilterShiftTeamKey(filterShiftTeamKey);
+        setProductionShiftTeamId("");
+    }
+
+    useFetchEffect(
+        () =>
+            showProductionFilter
+                ? ProductionEmployeeApi.getShiftTeamOptions(
+                      productionLineId === "" ? undefined : productionLineId,
+                      productionTeamId === "" ? undefined : productionTeamId
+                  )
+                : Promise.resolve([]),
+        [showProductionFilter, productionLineId, productionTeamId],
+        setShiftTeamOptions,
+        t("productionFilterLoadError")
+    );
+
+    // ── Lịch mini "ngày nào có đơn chưa duyệt" (2026-09-04) — chỉ tab "Chờ tôi duyệt". ──
+    const today = new Date();
+    const [calendarYear, setCalendarYear] = useState(today.getFullYear());
+    const [calendarMonthIndex, setCalendarMonthIndex] = useState(today.getMonth());
+    const [calendarCounts, setCalendarCounts] = useState<PendingApprovalDateCountDto[]>([]);
+    const calendarRange = monthRange(calendarYear, calendarMonthIndex);
+
+    useFetchEffect(
+        () =>
+            mode === "pending-approvals"
+                ? OtFormApi.getPendingApprovalDates(calendarRange.from, calendarRange.to)
+                : Promise.resolve([]),
+        [mode, calendarRange.from, calendarRange.to],
+        setCalendarCounts,
+        t("calendarLoadError")
+    );
+
+    const goToPreviousMonth = () => {
+        if (calendarMonthIndex === 0) {
+            setCalendarYear((y) => y - 1);
+            setCalendarMonthIndex(11);
+        } else {
+            setCalendarMonthIndex((m) => m - 1);
+        }
+    };
+
+    const goToNextMonth = () => {
+        if (calendarMonthIndex === 11) {
+            setCalendarYear((y) => y + 1);
+            setCalendarMonthIndex(0);
+        } else {
+            setCalendarMonthIndex((m) => m + 1);
+        }
+    };
+
+    const pickCalendarDate = (dateStr: string) => {
+        setFromDateInput(dateStr);
+        setToDateInput(dateStr);
+        setPageIndex(1);
+        setAppliedFilters((current) => ({ ...current, fromDate: dateStr, toDate: dateStr }));
     };
 
     const { isLoading, error, refetch: fetchForms } = useFetchEffect(
@@ -152,15 +275,25 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
 
     const handleSearch = () => {
         setPageIndex(1);
-        setAppliedFilters({ fromDate: fromDateInput, toDate: toDateInput, status: statusInput });
+        setAppliedFilters({
+            fromDate: fromDateInput,
+            toDate: toDateInput,
+            status: statusInput,
+            productionTeamId,
+            productionLineId,
+            productionShiftTeamId,
+        });
     };
 
     const handleResetFilter = () => {
         setFromDateInput("");
         setToDateInput("");
         setStatusInput("");
+        setProductionTeamId("");
+        setProductionLineId("");
+        setProductionShiftTeamId("");
         setPageIndex(1);
-        setAppliedFilters({ fromDate: "", toDate: "", status: "" });
+        setAppliedFilters({ fromDate: "", toDate: "", status: "", productionTeamId: "", productionLineId: "", productionShiftTeamId: "" });
     };
 
     // Xoá lựa chọn khi danh sách đổi (đổi trang/lọc/mode, hoặc sau khi xử lý xong) — so sánh snapshot
@@ -251,7 +384,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             : mode === "my-actions"
             ? t("descMyActions")
             : t("descMyParticipations");
-    const columnCount = (mode === "my-forms" ? 9 : 8) + (canBulkApprove ? 1 : 0);
+    const columnCount = (mode === "my-forms" ? 10 : 9) + (canBulkApprove ? 1 : 0);
 
     return (
         <div className="space-y-8">
@@ -319,7 +452,110 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                             {tCommon("search")}
                         </button>
                     </div>
+                    {showProductionFilter && (
+                        <>
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("filterProductionTeamLabel")}
+                                </span>
+                                <select
+                                    value={productionTeamId}
+                                    onChange={(event) => setProductionTeamId(event.target.value ? Number(event.target.value) : "")}
+                                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                >
+                                    <option value="">{t("filterAllProductionTeam")}</option>
+                                    {teamOptions.map((option) => (
+                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("filterProductionLineLabel")}
+                                </span>
+                                <select
+                                    value={productionLineId}
+                                    onChange={(event) => setProductionLineId(event.target.value ? Number(event.target.value) : "")}
+                                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                >
+                                    <option value="">{t("filterAllProductionLine")}</option>
+                                    {lineOptions.map((option) => (
+                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("filterProductionShiftTeamLabel")}
+                                </span>
+                                <select
+                                    value={productionShiftTeamId}
+                                    onChange={(event) => setProductionShiftTeamId(event.target.value ? Number(event.target.value) : "")}
+                                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                >
+                                    <option value="">{t("filterAllProductionShiftTeam")}</option>
+                                    {shiftTeamOptions.map((option) => (
+                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        </>
+                    )}
                 </div>
+
+                {mode === "pending-approvals" && (
+                    <div className="mt-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                <Calendar className="h-3.5 w-3.5" /> {t("calendarTitle")}
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={goToPreviousMonth}
+                                    className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                    aria-label={t("calendarPrevMonth")}
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </button>
+                                <span className="min-w-[80px] text-center text-sm font-semibold text-[#191c1e]">
+                                    {t("calendarMonthLabel", { month: calendarMonthIndex + 1, year: calendarYear })}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={goToNextMonth}
+                                    className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                    aria-label={t("calendarNextMonth")}
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                        {calendarCounts.length === 0 ? (
+                            <p className="text-xs text-[#9aa0a6]">{t("calendarEmpty")}</p>
+                        ) : (
+                            <div className="flex flex-wrap gap-2">
+                                {calendarCounts.map((item) => (
+                                    <button
+                                        key={item.date}
+                                        type="button"
+                                        onClick={() => pickCalendarDate(item.date)}
+                                        className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                                            appliedFilters.fromDate === item.date && appliedFilters.toDate === item.date
+                                                ? "border-[#e3000f] bg-[#fff4f2] text-[#e3000f]"
+                                                : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
+                                        }`}
+                                    >
+                                        {formatDate(item.date)}
+                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#e3000f] px-1 text-[10px] font-bold text-white">
+                                            {item.count}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
             </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
@@ -375,6 +611,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                     </th>
                                 )}
                                 <th className="px-4 py-2.5">{t("colDepartmentGroup")}</th>
+                                <th className="px-4 py-2.5">{t("colProductionLine")}</th>
                                 <th className="px-4 py-2.5">{t("colOtCase")}</th>
                                 <th className="px-4 py-2.5">{t("colDate")}</th>
                                 <th className="px-4 py-2.5">{t("colTotalHour")}</th>
@@ -418,6 +655,18 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                             {bilingualText(form.departmentNameVn, form.departmentNameJp)}
                                         </div>
                                         <div className="text-xs text-[#5e3f3a]">{bilingualText(form.groupNameVn, form.groupNameJp)}</div>
+                                    </td>
+                                    <td className="px-4 py-3 align-top text-xs text-[#5e3f3a]">
+                                        {form.isProductionForm ? (
+                                            <>
+                                                <div>{form.productionLineNames || "—"}</div>
+                                                {form.productionShiftTeamNames && (
+                                                    <div className="text-[#9aa0a6]">{form.productionShiftTeamNames}</div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            "—"
+                                        )}
                                     </td>
                                     <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{form.otCaseCode}</td>
                                     <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
@@ -510,6 +759,43 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                         </div>
 
                         <div className="space-y-4">
+                            {/* Xem/sửa từng đơn trước khi xác nhận hàng loạt (2026-09-04, theo yêu cầu người
+                                dùng) — "Sửa" mở đúng màn Sửa đơn (đã gộp thêm/xóa NV, Phần 1) ở TAB MỚI để
+                                không mất lựa chọn/modal hàng loạt đang mở; sửa xong tự refetch danh sách khi
+                                đóng modal như bình thường. */}
+                            <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("bulkReviewTitle", { count: selectedIds.length })}
+                                </p>
+                                <div className="max-h-40 space-y-1 overflow-y-auto">
+                                    {forms
+                                        .filter((form) => selectedIds.includes(form.id))
+                                        .map((form) => (
+                                            <div
+                                                key={form.id}
+                                                className="flex items-center justify-between gap-2 rounded-md border border-[#e0e3e5] bg-white px-2.5 py-1.5 text-xs"
+                                            >
+                                                <span className="text-[#191c1e]">
+                                                    #{form.id} — {bilingualText(form.departmentNameVn, form.departmentNameJp)}
+                                                    {form.groupNameVn ? ` / ${bilingualText(form.groupNameVn, form.groupNameJp)}` : ""}{" "}
+                                                    ({formatDate(form.date)})
+                                                </span>
+                                                {form.isEditable && (
+                                                    <a
+                                                        href={getPathname({ href: { pathname: "/ot/forms/edit", query: { id: String(form.id) } }, locale })}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={(event) => event.stopPropagation()}
+                                                        className="shrink-0 cursor-pointer font-semibold text-[#5e3f3a] underline transition hover:text-[#191c1e]"
+                                                    >
+                                                        {tCommon("edit")}
+                                                    </a>
+                                                )}
+                                            </div>
+                                        ))}
+                                </div>
+                            </div>
+
                             <label className="block">
                                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                     {t("commentLabel")} {bulkAction === "reject" && <span className="text-[#930006]">*</span>}

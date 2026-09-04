@@ -41,6 +41,16 @@ export default function AccumulationHistoryTable({ data, setting }: Accumulation
                     </tr>
                 </thead>
                 <tbody>
+                    {data.initialBalanceHours !== undefined && data.initialBalanceHours !== 0 && (
+                        <tr className="border-b border-[#e0e3e5] bg-[#f8fafc]/60 font-medium">
+                            <td className="px-4 py-2 text-sm text-[#191c1e]">{t("initialBalanceLabel")}</td>
+                            <td className="px-4 py-2 text-sm">
+                                <span className={badgeClass(false)}>
+                                    {data.initialBalanceHours}h
+                                </span>
+                            </td>
+                        </tr>
+                    )}
                     {data.months.map((month) => {
                         const isOverLimit = month.totalHours > setting.monthlyOtHourLimit;
                         return (

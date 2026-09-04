@@ -14,19 +14,22 @@ interface OtFormPrintViewProps {
     id: number;
 }
 
-type PaperSize = "a4" | "a5";
+export type PaperSize = "a4" | "a5";
 
-function formatDate(value: string) {
+// Xuất thêm (export) các hàm thuần bên dưới — dùng chung với productionTicketBatchPdf.tsx (vẽ PDF
+// hàng loạt trực tiếp bằng jsPDF, không qua html2canvas nữa, xem file đó) để tránh chép lại logic
+// nghiệp vụ (field nào hiện giá trị gì) — CHỈ thêm `export`, không đổi hành vi.
+export function formatDate(value: string) {
     if (!value) return "……………………";
     return new Date(value).toLocaleDateString("vi-VN");
 }
 
-function formatTime(value: string) {
+export function formatTime(value: string) {
     return value?.slice(0, 5) ?? "-";
 }
 
 // Thời gian ký in dưới mỗi chữ ký (2026-08-20, yêu cầu người dùng) — "dd/mm/yyyy hh:mm".
-function formatDateTime(value: string | null | undefined) {
+export function formatDateTime(value: string | null | undefined) {
     if (!value) return null;
     const d = new Date(value);
     const datePart = d.toLocaleDateString("vi-VN");
@@ -36,20 +39,20 @@ function formatDateTime(value: string | null | undefined) {
 
 // Tra lịch sử ký/duyệt theo StepOrder (2026-08-07, Giai đoạn 3.1) — trước đây tra theo ApprovalLevel
 // cố định, nay chuỗi bước là động theo Cây chức vụ, xem docs §Cây chức vụ.
-function findHistory(histories: OtFormApprovalHistoryDto[], stepOrder: number) {
+export function findHistory(histories: OtFormApprovalHistoryDto[], stepOrder: number) {
     return histories.find((item) => item.stepOrder === stepOrder && item.action !== 2) ?? null;
 }
 
 // 3 ô ký cuối trên giấy in (Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc) vẫn là 3 Chức vụ CỐ ĐỊNH
 // (TerminalLevelSnapshot 1/2/3, xem docs §Cây chức vụ) dù số bước trung gian trước đó co giãn theo
 // Phòng ban — tra đúng bước snapshot của ĐÚNG đơn này theo TerminalLevelSnapshot thay vì StepOrder cố định.
-function findStepByTerminalLevel(form: OtFormDto, terminalLevel: number) {
+export function findStepByTerminalLevel(form: OtFormDto, terminalLevel: number) {
     return form.approvalSteps.find((s) => s.terminalLevelSnapshot === terminalLevel);
 }
 
 // Ô "Người đề nghị" quá hẹp (chia đôi cho 2 chữ ký) nên chỉ in "tên" (từ cuối) thay vì đầy đủ họ tên,
 // tránh tràn/đè chữ giữa 2 ô (yêu cầu người dùng).
-function getGivenName(fullName: string | null | undefined) {
+export function getGivenName(fullName: string | null | undefined) {
     if (!fullName) return fullName;
     const parts = fullName.trim().split(/\s+/);
     return parts[parts.length - 1];
@@ -63,7 +66,7 @@ function getGivenName(fullName: string | null | undefined) {
 // xác nhận công thức đúng là Team + Line + Nhóm Ca. Người bị loại (isRemoved) không tính. Gộp theo giá
 // trị PHÂN BIỆT (thường cả đơn chỉ 1 Team/1 Line/1 Nhóm ca vì chọn qua bộ lọc cascading ở
 // CreateOtFormPage, nhưng vẫn gộp phòng trường hợp khác nhau giữa từng người) — khớp mẫu giấy in thật.
-function getProductionCongDoanLabel(form: OtFormDto) {
+export function getProductionCongDoanLabel(form: OtFormDto) {
     const activeEmployees = form.employees.filter((e) => !e.isRemoved);
     const distinct = (values: (string | null)[]) => Array.from(new Set(values.filter((v): v is string => !!v)));
     const teamCodes = distinct(activeEmployees.map((e) => e.teamCodeSnapshot));
@@ -84,7 +87,7 @@ function getProductionCongDoanLabel(form: OtFormDto) {
 //        cho mỗi 30 người tiếp theo nếu > 40 người, dù thực tế hiếm gặp).
 // - A5 (ngang): trang 1 = tiêu đề + ký duyệt + thông tin + lý do/xử lý (KHÔNG có bảng nhân viên).
 //        trang 2 = DS nhân viên dòng 1-12 (lặp lại ảnh trang 2 cho mỗi 12 người tiếp theo nếu > 12).
-interface FieldBox {
+export interface FieldBox {
     left: number;
     top: number;
     width: number;
@@ -114,18 +117,18 @@ interface HeaderLayout {
     checkbox: { an: FieldBox; khongAn: FieldBox; coXe: FieldBox; khongXe: FieldBox; coCopy: FieldBox; khongCopy: FieldBox; deNghiKhac: FieldBox };
 }
 
-const HEADER_LAYOUTS: Record<PaperSize, HeaderLayout> = {
+export const HEADER_LAYOUTS: Record<PaperSize, HeaderLayout> = {
     a4: {
         image: "/ot-form/a4-page1.png",
         aspect: "612 / 792",
         signature: [
-            { level: 3, box: { left: 7.353, top: 17.614, width: 21.471, height: 5.221 } }, // Tổng Giám Đốc
-            { level: 2, box: { left: 28.824, top: 17.614, width: 22.794, height: 5.221 } }, // Trưởng xưởng
-            { level: 1, box: { left: 51.618, top: 17.614, width: 23.529, height: 5.221 } }, // Trưởng phòng
+            { level: 3, box: { left: 6.536, top: 17.519, width: 21.446, height: 6.944 } }, // Tổng Giám Đốc
+            { level: 2, box: { left: 28.023, top: 17.519, width: 22.753, height: 6.944 } }, // Trưởng xưởng
+            { level: 1, box: { left: 50.817, top: 17.519, width: 23.489, height: 6.944 } }, // Trưởng phòng
         ],
         requester: [
-            { slot: "first", box: { left: 75.147, top: 17.614, width: 9.926, height: 5.221 } },
-            { slot: "last", box: { left: 85.074, top: 17.614, width: 9.926, height: 5.221 } },
+            { slot: "first", box: { left: 74.346, top: 17.519, width: 9.906, height: 6.944 } },
+            { slot: "last", box: { left: 84.252, top: 17.519, width: 9.906, height: 6.944 } },
         ],
         tenCongDoan: { left: 34.706, top: 26.61, width: 60.294, height: 2.727 },
         soLuongNhanVien: { left: 34.706, top: 29.545, width: 15, height: 2.727 },
@@ -148,13 +151,13 @@ const HEADER_LAYOUTS: Record<PaperSize, HeaderLayout> = {
         image: "/ot-form/a5-page1.png",
         aspect: "595.3 / 419.55",
         signature: [
-            { level: 3, box: { left: 5.165, top: 27.887, width: 21.804, height: 7.401 } },
-            { level: 2, box: { left: 26.97, top: 27.887, width: 25.701, height: 7.401 } },
-            { level: 1, box: { left: 52.671, top: 27.887, width: 22.678, height: 7.401 } },
+            { level: 3, box: { left: 4.326, top: 27.771, width: 21.797, height: 9.833 } },
+            { level: 2, box: { left: 26.165, top: 27.771, width: 25.662, height: 9.833 } },
+            { level: 1, box: { left: 51.869, top: 27.771, width: 22.638, height: 9.833 } },
         ],
         requester: [
-            { slot: "first", box: { left: 75.349, top: 27.887, width: 10.747, height: 7.401 } },
-            { slot: "last", box: { left: 86.095, top: 27.887, width: 10.747, height: 7.401 } },
+            { slot: "first", box: { left: 74.549, top: 27.771, width: 10.709, height: 9.833 } },
+            { slot: "last", box: { left: 85.258, top: 27.771, width: 10.710, height: 9.833 } },
         ],
         tenCongDoan: { left: 33.286, top: 41.831, width: 63.556, height: 4.374 },
         soLuongNhanVien: { left: 33.286, top: 46.657, width: 15, height: 5.148 },
@@ -184,12 +187,12 @@ interface EmployeeColumns {
     ghiChu: FieldBox;
 }
 
-interface RowSlot {
+export interface RowSlot {
     top: number;
     height: number;
 }
 
-interface EmployeePageLayout {
+export interface EmployeePageLayout {
     image: string;
     aspect: string;
     columns: EmployeeColumns;
@@ -197,11 +200,11 @@ interface EmployeePageLayout {
 }
 
 // Cột dùng chung 1 hàng (top/height lấy từ rows[i]) — Stt đã in sẵn trong ảnh nên không cần đè.
-function columnBox(col: FieldBox, row: RowSlot): FieldBox {
+export function columnBox(col: FieldBox, row: RowSlot): FieldBox {
     return { left: col.left, width: col.width, top: row.top, height: row.height };
 }
 
-const A4_PAGE1_EMPLOYEE: EmployeePageLayout = {
+export const A4_PAGE1_EMPLOYEE: EmployeePageLayout = {
     image: "/ot-form/a4-page1.png",
     aspect: "612 / 792",
     columns: {
@@ -226,7 +229,7 @@ const A4_PAGE1_EMPLOYEE: EmployeePageLayout = {
     ],
 };
 
-const A4_PAGE2_EMPLOYEE: EmployeePageLayout = {
+export const A4_PAGE2_EMPLOYEE: EmployeePageLayout = {
     image: "/ot-form/a4-page2.png",
     aspect: "612 / 792",
     columns: {
@@ -271,7 +274,7 @@ const A4_PAGE2_EMPLOYEE: EmployeePageLayout = {
     ],
 };
 
-const A5_PAGE2_EMPLOYEE: EmployeePageLayout = {
+export const A5_PAGE2_EMPLOYEE: EmployeePageLayout = {
     image: "/ot-form/a5-page2.png",
     aspect: "595.3 / 419.55",
     columns: {
@@ -298,7 +301,7 @@ const A5_PAGE2_EMPLOYEE: EmployeePageLayout = {
     ],
 };
 
-const EMPLOYEE_PAGE_CAPACITY: Record<PaperSize, { first: number; rest: number }> = {
+export const EMPLOYEE_PAGE_CAPACITY: Record<PaperSize, { first: number; rest: number }> = {
     a4: { first: 10, rest: 30 },
     a5: { first: 0, rest: 12 },
 };
@@ -313,24 +316,92 @@ function boxStyle(box: FieldBox): React.CSSProperties {
     };
 }
 
-// Như boxStyle() nhưng khoá cứng "1 dòng, không xuống dòng, canh giữa dọc" cho ô đè dữ liệu.
-function nowrapBoxStyle(box: FieldBox): React.CSSProperties {
-    return {
-        ...boxStyle(box),
-        display: "flex",
-        alignItems: "center",
-        overflow: "hidden",
-        whiteSpace: "nowrap",
-    };
+const AUTOFIT_LINE_MIN_SCALE = 0.55;
+const AUTOFIT_LINE_SCALE_STEP = 0.05;
+
+// Tự thu nhỏ cỡ chữ 1 dòng (đo scrollWidth/clientWidth THẬT trên DOM, cùng kỹ thuật với
+// ReasonAutoFit ở trên) cho tới khi vừa khít bề rộng ô — dùng thay cho cách cũ "khoá overflow:hidden +
+// white-space:nowrap rồi để CSS tự cắt chữ tràn". html2canvas (dùng khi xuất PDF hàng loạt theo
+// Line/Nhóm, xem productionTicketBatchPdf.tsx) KHÔNG cắt được overflow:hidden một cách đáng tin cậy
+// trên các ô flex/absolute — chữ dài (vd tên "[TEST] Manager - Che tao") vẫn bị vẽ tràn ra ngoài ô dù
+// CSS khai overflow:hidden, trong khi bản in trực tiếp qua window.print() (trình duyệt thật) thì vẫn
+// cắt đúng — đây là lý do lỗi chỉ lộ ra ở file PDF xuất hàng loạt, không lộ khi in đơn lẻ (lỗi người
+// dùng báo 2026-09-03). Đo bằng DOM thật thì luôn ra đúng kết quả ở cả 2 đường, không phụ thuộc
+// html2canvas có hỗ trợ clip hay không.
+function useAutoFitLineWidth(
+    textRef: React.RefObject<HTMLElement | null>,
+    wrapperRef: React.RefObject<HTMLElement | null>,
+    basePt: number,
+    deps: React.DependencyList
+) {
+    useLayoutEffect(() => {
+        function fit() {
+            const wrapper = wrapperRef.current;
+            const el = textRef.current;
+            if (!wrapper || !el) return;
+            let scale = 1;
+            el.style.fontSize = `${basePt * scale}pt`;
+            while (el.scrollWidth > wrapper.clientWidth && scale > AUTOFIT_LINE_MIN_SCALE) {
+                scale = Math.max(AUTOFIT_LINE_MIN_SCALE, scale - AUTOFIT_LINE_SCALE_STEP);
+                el.style.fontSize = `${basePt * scale}pt`;
+            }
+            // Canh giữa dọc bằng line-height = chiều cao THẬT của ô (đo bằng clientHeight, KHÔNG
+            // dùng display:flex/table): 2 kỹ thuật đó html2canvas đều tính sai trên ô tuyệt đối định vị
+            // nhỏ (chữ bị đẩy lệch xuống đáy, đè lên viền dòng bên dưới — lỗi người dùng báo 2026-09-03,
+            // đã thử table-cell vẫn còn y hệt). line-height là cách canh giữa dọc CŨ NHẤT (không phụ
+            // thuộc flexbox/table layout), chỉ dựa vào text-flow bình thường — html2canvas render đúng.
+            el.style.lineHeight = `${wrapper.clientHeight}px`;
+        }
+        fit();
+        window.addEventListener("beforeprint", fit);
+        window.addEventListener("resize", fit);
+        return () => {
+            window.removeEventListener("beforeprint", fit);
+            window.removeEventListener("resize", fit);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- deps do caller truyền vào (nội dung + cỡ chữ gốc), refs cố ý không đưa vào deps
+    }, deps);
 }
 
-const REASON_BASE_FONT_PT = 9;
-const REASON_JP_RATIO = 0.85;
+// Ô đè dữ liệu "1 dòng, tự thu nhỏ cỡ chữ nếu tràn" — thay cho nowrapBoxStyle cũ, xem
+// useAutoFitLineWidth ở trên.
+function AutoFitLine({
+    box,
+    text,
+    fontPt,
+    align = "left",
+    wrapperClassName,
+    textClassName,
+}: {
+    box: FieldBox;
+    text: string | number;
+    fontPt: number;
+    align?: "left" | "center";
+    wrapperClassName?: string;
+    textClassName?: string;
+}) {
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const textRef = useRef<HTMLSpanElement>(null);
+    useAutoFitLineWidth(textRef, wrapperRef, fontPt, [text, fontPt]);
+
+    // Căn giữa dọc bằng line-height (xem useAutoFitLineWidth) — KHÔNG dùng flexbox lẫn CSS table, cả 2
+    // đều bị html2canvas tính sai trên ô nhỏ (đã thử cả 2, cùng lỗi chữ đè viền dòng).
+    return (
+        <div ref={wrapperRef} style={{ ...boxStyle(box), overflow: "hidden", textAlign: align === "center" ? "center" : "left" }} className={wrapperClassName}>
+            <span ref={textRef} style={{ whiteSpace: "nowrap", fontSize: `${fontPt}pt` }} className={textClassName}>
+                {text}
+            </span>
+        </div>
+    );
+}
+
+export const REASON_BASE_FONT_PT = 9;
+export const REASON_JP_RATIO = 0.85;
 // Sàn thu nhỏ: 60% cỡ chữ gốc (~5.4pt) — nhỏ hơn nữa thì khó đọc, chấp nhận tràn nhẹ (box cha vẫn có
 // overflow:hidden chặn không cho vẽ đè lên nội dung khác trên giấy).
-const REASON_MIN_SCALE = 0.6;
-const REASON_SCALE_STEP = 0.05;
-const REASON_LINE_HEIGHT = 1.15;
+export const REASON_MIN_SCALE = 0.6;
+export const REASON_SCALE_STEP = 0.05;
+export const REASON_LINE_HEIGHT = 1.15;
 
 // Đè 2 dòng lý do (VN + bản dịch JP) lên đúng ô "Lý do" — cho ngắt dòng THẬT (không còn ép 1 dòng như
 // trước) rồi tự thu nhỏ cỡ chữ dựa trên chiều cao THỰC ĐO ĐƯỢC của DOM (scrollHeight so với clientHeight
@@ -392,51 +463,63 @@ function ReasonAutoFit({ box, vnText, jpText }: { box: FieldBox; vnText: string;
 // Chỉ 4 field thật sự cần để vẽ 1 ô chữ ký — tách khỏi OtFormApprovalHistoryDto đầy đủ để SignatureCell
 // dùng chung được cho cả lịch sử duyệt thật (findHistory) LẪN chữ ký tự ký của người tạo đơn (không có
 // OtFormApprovalHistory tương ứng, xem selfSignDisplay bên dưới).
-type SignatureDisplay = Pick<OtFormApprovalHistoryDto, "approverFullName" | "approverUserName" | "hasSignature" | "signatureImage" | "actionAt">;
+export type SignatureDisplay = Pick<OtFormApprovalHistoryDto, "approverFullName" | "approverUserName" | "hasSignature" | "signatureImage" | "actionAt">;
+
+export function getSignatureDataUrl(signatureImage: string | null | undefined): string | null {
+    if (!signatureImage) return null;
+    const trimmed = signatureImage.trim();
+    if (trimmed.startsWith("data:")) return trimmed;
+    const isJpeg = trimmed.startsWith("/9j/") || trimmed.startsWith("/9j");
+    const mime = isJpeg ? "image/jpeg" : "image/png";
+    return `data:${mime};base64,${trimmed}`;
+}
 
 function SignatureCell({ box, history, nameOnly }: { box: FieldBox; history: SignatureDisplay | null; nameOnly?: boolean }) {
-    const displayName = history && (history.approverFullName ?? history.approverUserName);
-    const signedAt = history ? formatDateTime(history.actionAt) : null;
-    // Thời gian ký nằm ở 1 dải RIÊNG cố định ở đáy ô (absolute, tách khỏi flex ảnh+tên) — trước đó gộp
-    // chung 1 cột flex khiến ảnh chữ ký bị co/đè lên khi tổng chiều cao 3 dòng vượt quá ô nhỏ trên giấy
-    // in, cắt mất nét chữ ký (2026-08-20, lỗi người dùng báo). Tách riêng để ảnh+tên luôn giữ đúng tỉ lệ
-    // như trước khi thêm thời gian ký, chỉ nhường đúng dải đáy cho dòng giờ.
+    if (!history) return null;
+
+    const displayName = history.approverFullName ?? history.approverUserName;
+    const displayText = nameOnly ? getGivenName(displayName) : displayName;
+    const signedAt = formatDateTime(history.actionAt);
+    const dataUrl = history.hasSignature ? getSignatureDataUrl(history.signatureImage) : null;
+
     return (
-        <div style={{ ...boxStyle(box), overflow: "hidden" }} className="relative text-center">
-            <div
-                style={{
-                    position: "absolute",
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    bottom: signedAt ? "14%" : 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    overflow: "hidden",
-                }}
-                className="gap-0"
-            >
-                {history?.hasSignature && history.signatureImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với overlay fluid ở đây
+        <div
+            style={boxStyle(box)}
+            className={`flex flex-col items-center overflow-hidden px-1 py-0.5 select-none ${
+                dataUrl ? "justify-between" : "justify-center gap-1"
+            }`}
+        >
+            {/* 1. Vùng ảnh chữ ký (nếu có) */}
+            {dataUrl ? (
+                <div className="flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                        src={`data:image/png;base64,${history.signatureImage}`}
-                        alt={`Chữ ký ${displayName}`}
-                        className="max-h-[80%] object-contain"
+                        src={dataUrl}
+                        alt={`Chữ ký ${displayText}`}
+                        className="max-h-full max-w-[85%] object-contain block mx-auto pointer-events-none"
                     />
-                ) : null}
-                {history && (
-                    <div style={{ whiteSpace: "nowrap" }} className="text-[7pt] leading-none text-black">
-                        {nameOnly ? getGivenName(displayName) : displayName}
-                    </div>
-                )}
-            </div>
+                </div>
+            ) : null}
+
+            {/* 2. Dòng tên người ký */}
+            {displayText && (
+                <div className="w-full shrink-0 overflow-hidden text-center">
+                    <span
+                        style={{
+                            fontSize: displayText.length > 25 ? "5.5pt" : displayText.length > 18 ? "6.5pt" : "7pt",
+                            whiteSpace: "nowrap",
+                        }}
+                        className="block truncate font-semibold text-black leading-tight"
+                        title={displayText}
+                    >
+                        {displayText}
+                    </span>
+                </div>
+            )}
+
+            {/* 3. Dòng ngày giờ ký (ở đáy) */}
             {signedAt && (
-                <div
-                    style={{ position: "absolute", left: 0, right: 0, bottom: 0, whiteSpace: "nowrap" }}
-                    className="text-[5.5pt] leading-none text-black"
-                >
+                <div className="w-full shrink-0 text-center text-[5.5pt] text-black leading-none pb-0.5">
                     {signedAt}
                 </div>
             )}
@@ -448,7 +531,7 @@ function SignatureCell({ box, history, nameOnly }: { box: FieldBox; history: Sig
 // (FormHeaderFields/EmployeeRowFields bên dưới) vì trang 1 khổ A4 dùng CHUNG 1 ảnh nền cho cả phần
 // đầu (ký duyệt/thông tin) lẫn 10 dòng nhân viên đầu tiên — không được vẽ ảnh nền 2 lần cho 2 trang
 // riêng biệt.
-function PageFrame({
+export function PageFrame({
     image,
     aspect,
     alt,
@@ -472,7 +555,7 @@ function PageFrame({
 // đường kẻ/border/ô nào ngoài ảnh. Chỉ có phần "Người đề nghị" thêm 1 đường kẻ dọc mảnh để phân tách
 // rõ 2 chữ ký (Trưởng nhóm | Trưởng Bộ phận) cùng chia sẻ 1 ô trên giấy gốc. KHÔNG tự vẽ <img> — dùng
 // bên trong PageFrame vì trang 1 khổ A4 chia sẻ ảnh nền chung với EmployeeRowFields.
-function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: PaperSize }) {
+export function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: PaperSize }) {
     const layout = HEADER_LAYOUTS[paperSize];
     const processPart = form.processPart;
 
@@ -517,42 +600,51 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
                 const step = findStepByTerminalLevel(form, level);
                 return <SignatureCell key={level} box={box} history={step ? findHistory(form.approvalHistories, step.stepOrder) : null} />;
             })}
-            {/* Ô "Người đề nghị" gộp chung 2 chữ ký trên giấy gốc — thêm đường kẻ dọc mảnh để phân tách,
-                tiêu đề ô giữ nguyên "Người đề nghị" như bản in gốc. */}
-            {layout.requester.map(({ slot, box }, index) => {
-                const step = slot === "first" ? firstIntermediate : lastIntermediate;
-                // Chỉ 1 bước trung gian → không lặp lại cùng 1 người ở cả 2 ô.
-                const effectiveStep = slot === "last" && lastIntermediate === firstIntermediate ? undefined : step;
-                const display = effectiveStep
-                    ? findHistory(form.approvalHistories, effectiveStep.stepOrder)
-                    : slot === "first" && intermediateSteps.length === 0
+            {/* Ô "Người đề nghị" gộp chung 2 chữ ký trên giấy gốc — thêm đường kẻ dọc mảnh để phân tách khi
+                CÓ đủ 2 người ký. Nếu dưới cấp trưởng phòng chỉ có 1 người ký (1 bước trung gian, hoặc tự
+                ký khi không còn bước trung gian nào), bỏ đường kẻ và gộp 2 ô thành 1 ô rộng bằng cả 2 ô
+                cộng lại để chữ ký/tên hiển thị đầy đủ thay vì bị ép vào nửa ô (yêu cầu người dùng 2026-09-04). */}
+            {(() => {
+                const firstBox = layout.requester.find((r) => r.slot === "first")!.box;
+                const lastBox = layout.requester.find((r) => r.slot === "last")!.box;
+                // Chỉ 1 bước trung gian (hoặc 0 bước trung gian / tự ký) → gộp cả 2 ô thành 1 ô rộng, bỏ vạch kẻ.
+                const isSingleRequester = intermediateSteps.length <= 1;
+                const effectiveLastStep = isSingleRequester ? undefined : lastIntermediate;
+                const firstDisplay = firstIntermediate
+                    ? findHistory(form.approvalHistories, firstIntermediate.stepOrder)
+                    : intermediateSteps.length === 0
                     ? selfSignDisplay
                     : null;
-                return (
-                    <div key={slot} style={{ ...boxStyle(box), borderRight: index === 0 ? "1px solid #000" : undefined }}>
-                        <SignatureCell box={{ left: 0, top: 0, width: 100, height: 100 }} history={display} nameOnly />
-                    </div>
-                );
-            })}
+                const lastDisplay = effectiveLastStep ? findHistory(form.approvalHistories, effectiveLastStep.stepOrder) : null;
 
-            <div style={nowrapBoxStyle(layout.tenCongDoan)} className="pl-1">
-                {form.isProductionForm ? getProductionCongDoanLabel(form) : `${form.departmentNameVn} — ${form.groupNameVn}`}
-            </div>
-            <div style={nowrapBoxStyle(layout.soLuongNhanVien)} className="pl-1">
-                {form.numberOfEmployee}
-            </div>
-            <div style={nowrapBoxStyle(layout.nguoiChiuTrachNhiem)} className="pl-1">
-                {nguoiChiuTrachNhiemName}
-            </div>
-            <div style={nowrapBoxStyle(layout.tuGio)} className="pl-1">
-                {formatTime(form.startTime)}
-            </div>
-            <div style={nowrapBoxStyle(layout.denGio)} className="pl-1">
-                {formatTime(form.endTime)} ({form.totalHour}h)
-            </div>
-            <div style={nowrapBoxStyle(layout.ngay)} className="pl-1">
-                {formatDate(form.date)}
-            </div>
+                if (isSingleRequester) {
+                    const mergedBox: FieldBox = { ...firstBox, width: lastBox.left + lastBox.width - firstBox.left };
+                    return <SignatureCell box={mergedBox} history={firstDisplay} nameOnly={false} />;
+                }
+
+                return (
+                    <>
+                        <div style={{ ...boxStyle(firstBox), borderRight: "1px solid #000" }}>
+                            <SignatureCell box={{ left: 0, top: 0, width: 100, height: 100 }} history={firstDisplay} nameOnly />
+                        </div>
+                        <div style={boxStyle(lastBox)}>
+                            <SignatureCell box={{ left: 0, top: 0, width: 100, height: 100 }} history={lastDisplay} nameOnly />
+                        </div>
+                    </>
+                );
+            })()}
+
+            <AutoFitLine
+                box={layout.tenCongDoan}
+                fontPt={9}
+                wrapperClassName="pl-1"
+                text={form.isProductionForm ? getProductionCongDoanLabel(form) : `${form.departmentNameVn} — ${form.groupNameVn}`}
+            />
+            <AutoFitLine box={layout.soLuongNhanVien} fontPt={9} wrapperClassName="pl-1" text={form.numberOfEmployee} />
+            <AutoFitLine box={layout.nguoiChiuTrachNhiem} fontPt={9} wrapperClassName="pl-1" text={nguoiChiuTrachNhiemName ?? ""} />
+            <AutoFitLine box={layout.tuGio} fontPt={9} wrapperClassName="pl-1" text={formatTime(form.startTime)} />
+            <AutoFitLine box={layout.denGio} fontPt={9} wrapperClassName="pl-1" text={`${formatTime(form.endTime)} (${form.totalHour}h)`} />
+            <AutoFitLine box={layout.ngay} fontPt={9} wrapperClassName="pl-1" text={formatDate(form.date)} />
 
             <ReasonAutoFit box={layout.lyDo} vnText={reasonVnText} jpText={form.reasonNameJp ?? ""} />
 
@@ -599,9 +691,7 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
             <div style={boxStyle(layout.checkbox.khongCopy)} className="flex items-center justify-center text-[13pt]">
                 {!processPart?.isUseCopyRoom ? "✓" : ""}
             </div>
-            <div style={nowrapBoxStyle(layout.checkbox.deNghiKhac)} className="pl-1 text-[8pt]">
-                {processPart?.anotherSuggestionVn || ""}
-            </div>
+            <AutoFitLine box={layout.checkbox.deNghiKhac} fontPt={8} wrapperClassName="pl-1" text={processPart?.anotherSuggestionVn || ""} />
         </div>
     );
 }
@@ -609,7 +699,7 @@ function FormHeaderFields({ form, paperSize }: { form: OtFormDto; paperSize: Pap
 // Đè danh sách nhân viên lên đúng dòng in sẵn (Stt đã in sẵn trong ảnh nên không đè). KHÔNG tự vẽ
 // <img> — dùng bên trong PageFrame để tận dụng chung ảnh nền với FormHeaderFields khi cùng 1 trang
 // (trang 1 khổ A4) hoặc dùng ảnh nền riêng của trang tiếp theo.
-function EmployeeRowFields({
+export function EmployeeRowFields({
     layout,
     employees,
     setting = DEFAULT_ATTENDANCE_SETTING,
@@ -628,30 +718,29 @@ function EmployeeRowFields({
                 const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
                 return (
                     <div key={employee.employeeId}>
-                        <div style={nowrapBoxStyle(columnBox(layout.columns.hoTen, row))} className="pl-1">
-                            {employee.fullName}
-                        </div>
-                        <div style={nowrapBoxStyle(columnBox(layout.columns.maNV, row))} className="pl-1">
-                            {employee.employeeCode}
-                        </div>
-                        <div style={nowrapBoxStyle(columnBox(layout.columns.thoiGian, row))} className="pl-1">
-                            {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
-                        </div>
-                        <div
-                            style={{ ...nowrapBoxStyle(columnBox(layout.columns.thang, row)), justifyContent: "center" }}
-                            className={isMonthOverLimit ? "font-bold text-[#930006] underline" : ""}
-                        >
-                            {employee.monthToDate}
-                        </div>
-                        <div
-                            style={{ ...nowrapBoxStyle(columnBox(layout.columns.nam, row)), justifyContent: "center" }}
-                            className={isYearOverLimit ? "font-bold text-[#930006] underline" : ""}
-                        >
-                            {employee.yearToDate}
-                        </div>
-                        <div style={nowrapBoxStyle(columnBox(layout.columns.ghiChu, row))} className="pl-1">
-                            {employee.noteVn || ""}
-                        </div>
+                        <AutoFitLine box={columnBox(layout.columns.hoTen, row)} fontPt={8} wrapperClassName="pl-1" text={employee.fullName} />
+                        <AutoFitLine box={columnBox(layout.columns.maNV, row)} fontPt={8} wrapperClassName="pl-1" text={employee.employeeCode} />
+                        <AutoFitLine
+                            box={columnBox(layout.columns.thoiGian, row)}
+                            fontPt={8}
+                            wrapperClassName="pl-1"
+                            text={`${formatTime(employee.startTime)} — ${formatTime(employee.endTime)}`}
+                        />
+                        <AutoFitLine
+                            box={columnBox(layout.columns.thang, row)}
+                            fontPt={8}
+                            align="center"
+                            textClassName={isMonthOverLimit ? "font-bold text-[#930006] underline" : ""}
+                            text={employee.monthToDate}
+                        />
+                        <AutoFitLine
+                            box={columnBox(layout.columns.nam, row)}
+                            fontPt={8}
+                            align="center"
+                            textClassName={isYearOverLimit ? "font-bold text-[#930006] underline" : ""}
+                            text={employee.yearToDate}
+                        />
+                        <AutoFitLine box={columnBox(layout.columns.ghiChu, row)} fontPt={8} wrapperClassName="pl-1" text={employee.noteVn || ""} />
                     </div>
                 );
             })}
@@ -662,7 +751,7 @@ function EmployeeRowFields({
 // Chia nhân viên vào từng trang khớp đúng sức chứa in sẵn trên giấy: A4 trang 1 chứa tối đa 10 người,
 // các trang sau (dùng lại ảnh trang 2) mỗi trang tối đa 30 người. A5 trang 1 không có bảng nhân viên,
 // trang 2 (lặp lại nếu cần) mỗi trang tối đa 12 người. Không đủ người thì chỉ in đúng số trang cần thiết.
-function buildEmployeePages(employees: OtFormEmployeeDto[], paperSize: PaperSize): OtFormEmployeeDto[][] {
+export function buildEmployeePages(employees: OtFormEmployeeDto[], paperSize: PaperSize): OtFormEmployeeDto[][] {
     const { first, rest } = EMPLOYEE_PAGE_CAPACITY[paperSize];
     const pages: OtFormEmployeeDto[][] = [];
     let remaining = employees;

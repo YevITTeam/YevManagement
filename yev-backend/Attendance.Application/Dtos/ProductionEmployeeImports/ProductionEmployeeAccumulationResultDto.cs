@@ -14,6 +14,9 @@ namespace Attendance.Application.Dtos.ProductionEmployeeImports
 
         // Tổng số giờ đã điều chỉnh (có thể âm nếu số hệ thống đang cao hơn số trong file).
         public decimal TotalDeltaHours { get; set; }
+
+        public int AdjustedYearCount { get; set; }
+        public decimal TotalDeltaYearHours { get; set; }
     }
 
     public class ProductionEmployeeAccumulationSkippedRowDto

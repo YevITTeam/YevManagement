@@ -174,6 +174,11 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                             <span className="font-semibold text-emerald-600">
                                 {t("monthlyAccumulationAdjustedCount", { count: result.adjustedCount })}
                             </span>
+                            {result.adjustedYearCount !== undefined && result.adjustedYearCount > 0 && (
+                                <span className="font-semibold text-teal-600">
+                                    {t("monthlyAccumulationAdjustedYearCount", { count: result.adjustedYearCount })}
+                                </span>
+                            )}
                             <span className="text-[#5e3f3a]">
                                 {t("monthlyAccumulationUnchangedCount", { count: result.unchangedCount })}
                             </span>
@@ -183,6 +188,11 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                             <span className="text-[#5e3f3a]">
                                 {t("monthlyAccumulationTotalDelta", { hours: result.totalDeltaHours.toFixed(2) })}
                             </span>
+                            {result.totalDeltaYearHours !== undefined && result.totalDeltaYearHours !== 0 && (
+                                <span className="text-[#5e3f3a]">
+                                    {t("monthlyAccumulationTotalDeltaYear", { hours: result.totalDeltaYearHours.toFixed(2) })}
+                                </span>
+                            )}
                         </div>
 
                         {result.skippedRows.length > 0 && (

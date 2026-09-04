@@ -42,5 +42,33 @@ namespace Attendance.Api.Controllers
             var (content, fileName) = await _productionOtReportService.ExportTimesReportAsync(date, departmentId);
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
+
+        // 2 export mới (2026-09-03c) — độc lập với 2 export ở trên, tên file theo đúng quy tắc thật
+        // (xem ProductionOtReportService.BuildRealFileNameAsync).
+        [RequirePermission("Attendance.ProductionOtReport.View")]
+        [HttpGet("qry-export-excel")]
+        public async Task<IActionResult> ExportQryExportExcel([FromQuery] DateOnly date, [FromQuery] int? departmentId)
+        {
+            var (content, fileName) = await _productionOtReportService.ExportQryExportExcelAsync(date, departmentId);
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        [RequirePermission("Attendance.ProductionOtReport.View")]
+        [HttpGet("sum-export-data")]
+        public async Task<IActionResult> ExportSumExportData([FromQuery] DateOnly date, [FromQuery] int? departmentId)
+        {
+            var (content, fileName) = await _productionOtReportService.ExportSumExportDataAsync(date, departmentId);
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        // Dữ liệu nền cho phiếu YEV-22-024 xuất hàng loạt — FE tự gọi GET /api/OtForm/{PrimaryOtFormId}
+        // cho phần chữ ký/lý do, chỉ lấy danh sách nhân viên gộp từ đây (2026-09-03c).
+        [RequirePermission("Attendance.ProductionOtReport.View")]
+        [HttpGet("ticket-batch")]
+        public async Task<ActionResult<ApiResponse<List<ProductionTicketBatchGroupDto>>>> GetTicketBatch([FromQuery] DateOnly date, [FromQuery] int? departmentId)
+        {
+            var result = await _productionOtReportService.GetTicketBatchAsync(date, departmentId);
+            return Success(result);
+        }
     }
 }

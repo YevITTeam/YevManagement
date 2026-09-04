@@ -147,6 +147,38 @@ Leader), `TEST\mgr_ct` (Manager), `TEST\fm_01` (Factory Manager), `TEST\dir_01` 
 `IsAutoGranted=true`, seed tay 1 lần vì lúc tạo dữ liệu chưa gọi được API — sau này sửa Chức vụ của
 các Employee này qua UI bình thường sẽ tự sync lại đúng cơ chế).
 
+**+4 tài khoản TEST cho Nhóm "Công vụ - IT"** (`GroupId=6`, Bộ phận Công vụ `DepartmentId=6`; migration
+`AddTestAccountsCongVuIT`, cùng mật khẩu `Test@2026`, theo yêu cầu người dùng 2026-09-04) — phủ đủ
+Cây duyệt của Nhóm này (đọc từ `GroupApprovalStep`/`DepartmentApprovalStep` sống lúc tạo, KHÔNG suy
+đoán): `TEST\st_cvit` (Staff, stepOrder 1, không cần chữ ký), `TEST\gl_cvit` (Group Leader, stepOrder
+2, cần chữ ký), `TEST\tl_cvit` (Team Leader, stepOrder 3, `IsResponsible=true`, cần chữ ký), `TEST\mgr_cv`
+(Manager — `DepartmentManager`/terminal=1, scope `DepartmentId=6` chứ KHÔNG phải `GroupId`, cần chữ
+ký). Chuỗi duyệt của Công vụ chỉ có 2 cấp cuối (Manager rồi dừng, KHÔNG có Factory Manager/Director —
+`DepartmentApprovalStep` của `DepartmentId=6` chỉ có 2 dòng) nên **không cần** thêm tài khoản Factory
+Manager/Director riêng cho Công vụ — cấp đó dùng chung toàn công ty, TÁI DÙNG thẳng `TEST\fm_01`/
+`TEST\dir_01` có sẵn nếu sau này Công vụ cấu hình thêm cấp đó.
+
+Cách tạo (không qua migration seed tay như 6 tài khoản đầu — lần này dùng đúng luồng API thật, xem
+`EmployeeIdentityLinkImportService`/`5.7` để hiểu vì sao thứ tự tạo User TRƯỚC Employee giúp sync
+permission tự động ngay, không cần bước "gọi lại PUT Employee" thủ công):
+1. Migration `AddTestAccountsCongVuIT` (Identity DB) — 4 dòng `TestLoginAccounts`.
+2. `POST /api/Auth/create-user` (Admin) tạo trước `Identity.User` cho cả 4 (Role `Basic`) — **TRƯỚC**
+   khi tạo Employee, để `EmployeeService.CreateAsync` tự `SyncAutoGrantedPermissionsCoreAsync` thành
+   công ngay lần tạo đầu (không no-op như trường hợp User chưa tồn tại, xem cảnh báo ở đầu mục 5.6).
+3. `POST /api/Employee` (Admin) tạo 4 Employee: `T-ST-CVIT`/`T-GL-CVIT`/`T-TL-CVIT` (`GroupId=6`,
+   `JobTitleId` tương ứng ST=15/GL=16/TL=17), `T-MGR-CV` (`DepartmentId=6`, `JobTitleId=18`).
+4. Mật khẩu cấp 2 + chữ ký (ảnh PNG 1x1 placeholder, chỉ 3 tài khoản `RequiresSignature=true`) — cả 2
+   đều là luồng self-service + xác nhận email (`SecondaryPasswordController`/`UserSignatureController`),
+   không áp dụng được cho tài khoản TEST không có hộp thư thật. Bypass bằng 1 controller Admin TẠM THỜI
+   (`TempSeedCongVuItController`, viết → build → gọi 2 action `secondary-password`/`signature` → xoá
+   file → build lại → xác nhận route trả 404) — cùng kỹ thuật đã dùng để backfill chữ ký
+   `OtFormApprovalHistory` trước đó, KHÔNG để lại code tạm trong repo.
+5. Verify sống: `POST /api/Auth/login` bằng cả 4 `UserName`/`Test@2026` — login OK, `data.user.permissions`
+   đúng theo Chức vụ (`gl_cvit`/`tl_cvit`/`mgr_cv` có `Attendance.OTForm.Approve` +
+   `Attendance.UserSignature.Update` + `Attendance.SecondaryPassword.Update`; `st_cvit` không có
+   `Approve` — khớp đúng cấu hình `JobTitlePermission` hiện có của Chức vụ "Staff", không phải lỗi mới).
+   **Chưa test tay qua UI thật** việc tạo + duyệt hết 1 đơn "theo Nhóm" bằng đủ 4 cấp này.
+
 ### 5.7. `EnsureUserExistsAsync` — tạo User idempotent cho import cross-module *(2026-09-03)*
 Thêm method mới vào `IUserDirectoryService` (`Shared.Application/Interfaces/`, contract dùng chung để
 module khác gọi vào Identity mà không cần ProjectReference trực tiếp):

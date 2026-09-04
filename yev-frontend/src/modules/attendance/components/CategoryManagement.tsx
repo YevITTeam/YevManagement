@@ -10,7 +10,6 @@ import GroupList from "./groups/GroupList";
 import ReasonList from "./reasons/ReasonList";
 import OtCaseList from "./ot-cases/OtCaseList";
 import JobTitleList from "./job-titles/JobTitleList";
-import JobTitlePermissionManager from "./job-titles/JobTitlePermissionManager";
 import ApprovalStepManager from "./job-titles/ApprovalStepManager";
 import EmployeeList from "./employees/EmployeeList";
 import ProductionOtReportPanel from "./reports/ProductionOtReportPanel";
@@ -23,7 +22,6 @@ type CategoryTab =
     | "reasons"
     | "ot-cases"
     | "job-titles"
-    | "job-title-permissions"
     | "approval-steps"
     | "employees"
     | "reports"
@@ -52,7 +50,6 @@ export default function CategoryManagement() {
         { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons"), visible: canManageCategories },
         { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases"), visible: canManageCategories },
         { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles"), visible: canManageCategories },
-        { key: "job-title-permissions", label: t("tabJobTitlePermissions"), addLabel: null, visible: canManageCategories },
         { key: "approval-steps", label: t("tabApprovalSteps"), addLabel: null, visible: canManageCategories },
         { key: "employees", label: t("tabEmployees"), addLabel: t("addEmployees"), visible: canManageCategories },
         { key: "reports", label: t("tabReports"), addLabel: null, visible: canViewReports },
@@ -87,7 +84,6 @@ export default function CategoryManagement() {
         reasons: false,
         "ot-cases": false,
         "job-titles": false,
-        "job-title-permissions": false,
         "approval-steps": false,
         employees: false,
         reports: false,
@@ -100,7 +96,6 @@ export default function CategoryManagement() {
     const reasonRef = useRef<ListHandle>(null);
     const otCaseRef = useRef<ListHandle>(null);
     const jobTitleRef = useRef<ListHandle>(null);
-    const jobTitlePermissionRef = useRef<ListHandle>(null);
     const approvalStepRef = useRef<ListHandle>(null);
     const employeeRef = useRef<ListHandle>(null);
     const reportsRef = useRef<ListHandle>(null);
@@ -112,7 +107,6 @@ export default function CategoryManagement() {
         reasons: reasonRef,
         "ot-cases": otCaseRef,
         "job-titles": jobTitleRef,
-        "job-title-permissions": jobTitlePermissionRef,
         "approval-steps": approvalStepRef,
         employees: employeeRef,
         reports: reportsRef,
@@ -146,10 +140,6 @@ export default function CategoryManagement() {
     );
     const handleJobTitleLoadingChange = useCallback(
         (value: boolean) => setLoadingByTab((current) => ({ ...current, "job-titles": value })),
-        []
-    );
-    const handleJobTitlePermissionLoadingChange = useCallback(
-        (value: boolean) => setLoadingByTab((current) => ({ ...current, "job-title-permissions": value })),
         []
     );
     const handleApprovalStepLoadingChange = useCallback(
@@ -247,11 +237,6 @@ export default function CategoryManagement() {
             {visitedTabs.has("job-titles") && (
                 <div className={activeTab === "job-titles" ? "" : "hidden"}>
                     <JobTitleList ref={jobTitleRef} onLoadingChange={handleJobTitleLoadingChange} />
-                </div>
-            )}
-            {visitedTabs.has("job-title-permissions") && (
-                <div className={activeTab === "job-title-permissions" ? "" : "hidden"}>
-                    <JobTitlePermissionManager ref={jobTitlePermissionRef} onLoadingChange={handleJobTitlePermissionLoadingChange} />
                 </div>
             )}
             {visitedTabs.has("approval-steps") && (

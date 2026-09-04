@@ -291,6 +291,20 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // sửa thực tích.
     const [editEmployees, setEditEmployees] = useState<OtFormEmployeeDto[]>([]);
 
+    // Thêm/loại nhân viên trong Sửa đơn (2026-09-04, gộp từ OtFormDetail cũ — xem
+    // docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn). Cả 2 đều TẠM — chỉ áp dụng thật khi bấm
+    // Lưu (PUT gộp 1 lần), không gọi API riêng ngay khi bấm. selectedEmployeeIds/employeeOverrides ở
+    // trên tự phản ánh đúng người còn lại (thêm → toggleEmployee thêm vào, loại → lọc bớt khỏi đó) —
+    // employeeAddedMeta chỉ lưu mã/tên để hiển thị (người mới thêm chưa có OtFormEmployeeDto đầy đủ từ
+    // BE, không có lũy kế tháng/năm cho tới khi Lưu thật).
+    const [employeeAddedMeta, setEmployeeAddedMeta] = useState<Record<number, { employeeCode: string; fullName: string }>>({});
+    const [addSearchKeyword, setAddSearchKeyword] = useState("");
+    const [addSearchResults, setAddSearchResults] = useState<{ employeeId: number; employeeCode: string; fullName: string }[]>([]);
+    const [isSearchingAddEmployee, setIsSearchingAddEmployee] = useState(false);
+    const [pendingRemovals, setPendingRemovals] = useState<Record<number, string>>({});
+    const [removeTarget, setRemoveTarget] = useState<{ employeeId: number; employeeCode: string; fullName: string } | null>(null);
+    const [removeReasonInput, setRemoveReasonInput] = useState("");
+
     const [processPartEnabled, setProcessPartEnabled] = useState(false);
     const [processPart, setProcessPart] = useState<ProcessPartDto>(emptyProcessPart);
     // true = số phiếu chính/phụ đang do HỆ THỐNG tự tính; chuyển false vĩnh viễn ngay khi người dùng
@@ -698,6 +712,90 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }));
     };
 
+    // Tìm nhân viên để thêm vào đơn đang sửa (2026-09-04) — chỉ theo từ khoá, KHÔNG lọc theo Line/Nhóm
+    // ca ở FE (khác bảng chọn lúc Tạo mới): BE (UpdateAsync) mới là nơi chặn thật nhân viên khác Line/
+    // Nhóm ca của đơn, ở đây giữ đơn giản như search cũ của OtFormDetail — chọn sai sẽ bị BE báo lỗi rõ
+    // ràng khi Lưu.
+    const handleSearchAddEmployee = async () => {
+        setIsSearchingAddEmployee(true);
+        try {
+            const activeIds = new Set(selectedEmployeeIds);
+            const keyword = addSearchKeyword.trim();
+            if (formMode === "production") {
+                const results = await ProductionEmployeeApi.search({ keyword: keyword || undefined, date: date || undefined });
+                setAddSearchResults(
+                    results
+                        .filter((item) => !activeIds.has(item.employeeId))
+                        .map((item) => ({ employeeId: item.employeeId, employeeCode: item.employeeCode, fullName: item.fullName }))
+                );
+            } else if (groupId) {
+                const results = await EmployeeApi.getEmployeesByGroup(groupId, date || undefined);
+                const lowerKeyword = keyword.toLowerCase();
+                setAddSearchResults(
+                    results
+                        .filter((item) => !activeIds.has(item.id))
+                        .filter(
+                            (item) =>
+                                !lowerKeyword ||
+                                item.code.toLowerCase().includes(lowerKeyword) ||
+                                `${item.lastName} ${item.firstName}`.toLowerCase().includes(lowerKeyword)
+                        )
+                        .map((item) => ({ employeeId: item.id, employeeCode: item.code, fullName: `${item.lastName} ${item.firstName}` }))
+                );
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("productionSearchError")));
+        } finally {
+            setIsSearchingAddEmployee(false);
+        }
+    };
+
+    const handlePickAddEmployee = (item: { employeeId: number; employeeCode: string; fullName: string }) => {
+        toggleEmployee(item.employeeId);
+        setEmployeeAddedMeta((current) => ({ ...current, [item.employeeId]: { employeeCode: item.employeeCode, fullName: item.fullName } }));
+        setAddSearchResults((current) => current.filter((r) => r.employeeId !== item.employeeId));
+    };
+
+    // Bỏ 1 người vừa thêm TẠM (chưa Lưu) — chỉ là huỷ chọn, không cần lý do vì chưa từng ghi vào đơn.
+    const cancelAddedEmployee = (employeeId: number) => {
+        setSelectedEmployeeIds((current) => current.filter((id) => id !== employeeId));
+        setEmployeeAddedMeta((current) => {
+            const next = { ...current };
+            delete next[employeeId];
+            return next;
+        });
+    };
+
+    // Loại 1 người ĐÃ CÓ SẴN trong đơn — bắt buộc lý do (đơn là chứng từ), chỉ áp dụng TẠM cho tới khi
+    // Lưu (xem UpdateOtFormDto.removedEmployees).
+    const openRemoveEmployee = (employee: OtFormEmployeeDto) => {
+        setRemoveReasonInput("");
+        setRemoveTarget({ employeeId: employee.employeeId, employeeCode: employee.employeeCode, fullName: employee.fullName });
+    };
+
+    const closeRemoveEmployee = () => setRemoveTarget(null);
+
+    const confirmRemoveEmployee = () => {
+        if (!removeTarget) return;
+        if (!removeReasonInput.trim()) {
+            toast.error(t("removeReasonRequiredError"));
+            return;
+        }
+        setPendingRemovals((current) => ({ ...current, [removeTarget.employeeId]: removeReasonInput.trim() }));
+        setSelectedEmployeeIds((current) => current.filter((id) => id !== removeTarget.employeeId));
+        setRemoveTarget(null);
+    };
+
+    const undoRemoveEmployee = (employeeId: number) => {
+        setPendingRemovals((current) => {
+            const next = { ...current };
+            delete next[employeeId];
+            return next;
+        });
+        setSelectedEmployeeIds((current) => (current.includes(employeeId) ? current : [...current, employeeId]));
+    };
+
     const handleDepartmentChange = (nextId: number | "") => {
         setDepartmentId(nextId === "" ? null : nextId);
         setGroupId(null);
@@ -757,7 +855,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             const employeeEndMinutes = toMinutes(`${employeeEndTime}:00`);
             if (employeeEndMinutes <= orderStartMinutes || employeeEndMinutes > orderEndMinutes) {
                 const code = isEditMode
-                    ? editEmployees.find((e) => e.employeeId === employeeId)?.employeeCode
+                    ? (editEmployees.find((e) => e.employeeId === employeeId)?.employeeCode ??
+                      employeeAddedMeta[employeeId]?.employeeCode)
                     : groupEmployees.find((e) => e.id === employeeId)?.code;
                 toast.error(t("employeeEndTimeError", { code: code ?? String(employeeId) }));
                 return;
@@ -775,7 +874,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
                     noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
                 }));
-                result = await OtFormApi.updateOtForm(otFormId, { employees, secondaryPassword });
+                // Thêm/loại nhân viên đã gộp vào đây (2026-09-04) — selectedEmployeeIds đã tự phản ánh
+                // đúng người còn lại (toggleEmployee/pendingRemovals cùng cập nhật nó), removedEmployees
+                // build từ pendingRemovals (lý do bắt buộc, xem openRemoveEmployee/confirmRemoveEmployee).
+                const removedEmployees = Object.entries(pendingRemovals).map(([employeeId, reason]) => ({
+                    employeeId: Number(employeeId),
+                    reason,
+                }));
+                result = await OtFormApi.updateOtForm(otFormId, { employees, removedEmployees, secondaryPassword });
             } else {
                 const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
                     employeeId,
@@ -1038,10 +1144,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </span>
                     </div>
                     {isEditMode ? (
-                        // Sửa đơn: danh sách CỐ ĐỊNH (editEmployees, lấy thẳng từ đơn) — không có ô
-                        // tick/thêm người, chỉ còn sửa được "Giờ kết thúc" của từng người đã có sẵn
-                        // (thực tích). Muốn bớt người dùng riêng chức năng "Loại khỏi đơn" ở màn Chi
-                        // tiết, không qua màn này.
+                        // Sửa đơn (2026-09-04, gộp thêm/xóa nhân viên từ OtFormDetail cũ — xem
+                        // docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn): editEmployees vẫn là
+                        // danh sách GỐC lúc tải đơn — thêm/loại ở đây chỉ TẠM (selectedEmployeeIds/
+                        // pendingRemovals), áp dụng thật + log lại 1 lần khi bấm "Lưu thay đổi" bên dưới
+                        // (1 lần nhập mật khẩu cấp 2 cho toàn bộ thay đổi trong phiên sửa).
+                        <div className="space-y-4">
                         <div className="overflow-x-auto">
                             <table className="min-w-full border-collapse text-left">
                                 <thead>
@@ -1060,10 +1168,37 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <th className="px-3 py-2">{t("colDidEat")}</th>
                                         <th className="px-3 py-2">{t("colMealTicketType")}</th>
                                         <th className="px-3 py-2">{t("colNote")}</th>
+                                        <th className="px-3 py-2" />
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {editEmployees.map((employee) => {
+                                        const removalReason = pendingRemovals[employee.employeeId];
+                                        if (removalReason) {
+                                            return (
+                                                <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#fff4f2] opacity-70">
+                                                    <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e] line-through">
+                                                        {employee.employeeCode}
+                                                    </td>
+                                                    <td
+                                                        className="px-3 py-2 align-top text-sm text-[#930006]"
+                                                        colSpan={formMode === "production" ? 8 : 5}
+                                                    >
+                                                        <span className="line-through">{employee.fullName}</span> —{" "}
+                                                        {t("willBeRemovedNote", { reason: removalReason })}
+                                                    </td>
+                                                    <td className="px-3 py-2 align-top text-right">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => undoRemoveEmployee(employee.employeeId)}
+                                                            className="cursor-pointer text-xs font-semibold text-[#5e3f3a] underline transition hover:text-[#191c1e]"
+                                                        >
+                                                            {t("undoRemoveButton")}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
                                         // Không có dữ liệu "ngày" ở bảng này (monthToDate/yearToDate là lũy kế
                                         // THẬT, không phải Dự kiến theo ngày) — chỉ cảnh báo tháng/năm, ưu tiên
                                         // mốc riêng của nhân viên nếu đã gán (2026-08-26).
@@ -1153,11 +1288,175 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                                     />
                                                 </td>
+                                                <td className="px-3 py-2 align-top text-right">
+                                                    {selectedEmployeeIds.length > 1 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openRemoveEmployee(employee)}
+                                                            disabled={isSubmitting}
+                                                            className="cursor-pointer whitespace-nowrap text-xs font-semibold text-[#930006] underline transition hover:text-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
+                                                        >
+                                                            {t("removeEmployeeButton")}
+                                                        </button>
+                                                    )}
+                                                </td>
                                             </tr>
                                         );
                                     })}
+                                    {selectedEmployeeIds
+                                        .filter((employeeId) => !editEmployees.some((e) => e.employeeId === employeeId))
+                                        .map((employeeId) => {
+                                            const meta = employeeAddedMeta[employeeId];
+                                            if (!meta) return null;
+                                            const currentEndTime = employeeOverrides[employeeId]?.endTime ?? endTime;
+                                            const currentDidEat = employeeOverrides[employeeId]?.didEat ?? true;
+                                            const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
+                                            const mealTicketType = computeMealTicketType(startTime, currentEndTime, currentDidEat, setting);
+                                            return (
+                                                <tr key={employeeId} className="border-b border-[#f1f5f9] bg-emerald-50/40">
+                                                    <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">{meta.employeeCode}</td>
+                                                    <td className="px-3 py-2 align-top text-sm text-[#191c1e]">
+                                                        {meta.fullName}{" "}
+                                                        <span className="ml-1 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                            {t("newlyAddedBadge")}
+                                                        </span>
+                                                    </td>
+                                                    {formMode === "production" && (
+                                                        <>
+                                                            <td className="px-3 py-2 align-top text-sm text-[#8a8f94]">—</td>
+                                                            <td className="px-3 py-2 align-top text-sm text-[#8a8f94]">—</td>
+                                                            <td className="px-3 py-2 align-top text-sm text-[#8a8f94]">—</td>
+                                                        </>
+                                                    )}
+                                                    <td className="px-3 py-2 align-top text-sm text-[#8a8f94]">—</td>
+                                                    <td className="px-3 py-2 align-top">
+                                                        <TimePicker24h
+                                                            value={currentEndTime}
+                                                            onChange={(value) => handleEmployeeOverrideChange(employeeId, "endTime", value)}
+                                                            disabled={isSubmitting}
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-2 align-top">
+                                                        {earlyWindow ? (
+                                                            <span className="text-xs text-[#8a8f94]">{t("didEatNotApplicableEarlyWindow")}</span>
+                                                        ) : (
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={currentDidEat}
+                                                                onChange={(event) => handleEmployeeDidEatChange(employeeId, event.target.checked)}
+                                                                disabled={isSubmitting}
+                                                                aria-label={t("didEatLabel")}
+                                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                            />
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 align-top">
+                                                        <MealTicketTypeBadge
+                                                            type={mealTicketType}
+                                                            labels={{ main: t("mealTicketTypeMain"), secondary: t("mealTicketTypeSecondary"), none: t("mealTicketTypeNone") }}
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-2 align-top">
+                                                        <input
+                                                            value={employeeOverrides[employeeId]?.noteVn ?? ""}
+                                                            onChange={(event) => handleEmployeeOverrideChange(employeeId, "noteVn", event.target.value)}
+                                                            placeholder={t("notePlaceholder")}
+                                                            disabled={isSubmitting}
+                                                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-2 align-top text-right">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => cancelAddedEmployee(employeeId)}
+                                                            disabled={isSubmitting}
+                                                            className="cursor-pointer whitespace-nowrap text-xs font-semibold text-[#5e3f3a] underline transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
+                                                        >
+                                                            {t("cancelAddButton")}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                 </tbody>
                             </table>
+                        </div>
+
+                        <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-4">
+                            <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                {t("addEmployeeSectionTitle")}
+                            </h3>
+                            <div className="flex gap-2">
+                                <input
+                                    value={addSearchKeyword}
+                                    onChange={(event) => setAddSearchKeyword(event.target.value)}
+                                    onKeyDown={(event) => event.key === "Enter" && handleSearchAddEmployee()}
+                                    placeholder={t("addSearchPlaceholder")}
+                                    disabled={isSubmitting}
+                                    className={`${fieldClassName} flex-1`}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleSearchAddEmployee}
+                                    disabled={isSubmitting || isSearchingAddEmployee}
+                                    className="h-10 shrink-0 cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isSearchingAddEmployee ? tCommon("loading") : tCommon("search")}
+                                </button>
+                            </div>
+                            {addSearchResults.length > 0 && (
+                                <div className="mt-3 max-h-56 space-y-1 overflow-y-auto">
+                                    {addSearchResults.map((item) => (
+                                        <button
+                                            key={item.employeeId}
+                                            type="button"
+                                            onClick={() => handlePickAddEmployee(item)}
+                                            className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-left text-sm transition hover:border-[#e3000f] hover:bg-[#fff4f2]"
+                                        >
+                                            <span className="font-medium text-[#191c1e]">{item.fullName}</span>
+                                            <span className="font-mono text-xs text-[#5e3f3a]">{item.employeeCode}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {removeTarget && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+                                <div className="fixed inset-0 bg-black/40" onClick={closeRemoveEmployee} />
+                                <div role="dialog" aria-modal="true" className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
+                                    <h3 className="mb-3 text-lg font-semibold text-[#191c1e]">
+                                        {t("removeModalTitle", { name: removeTarget.fullName })}
+                                    </h3>
+                                    <p className="mb-3 text-sm text-[#5e3f3a]">{t("removeModalDesc")}</p>
+                                    <label className={fieldLabelClassName}>
+                                        {t("removeReasonLabel")} <span className="text-[#930006]">*</span>
+                                    </label>
+                                    <textarea
+                                        value={removeReasonInput}
+                                        onChange={(event) => setRemoveReasonInput(event.target.value)}
+                                        rows={3}
+                                        className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                    />
+                                    <div className="mt-4 flex justify-end gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={closeRemoveEmployee}
+                                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                        >
+                                            {tCommon("cancel")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={confirmRemoveEmployee}
+                                            className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005]"
+                                        >
+                                            {t("confirmRemove")}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         </div>
                     ) : formMode === "production" ? (
                         <div className="space-y-4">

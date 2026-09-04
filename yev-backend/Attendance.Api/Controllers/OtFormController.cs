@@ -38,9 +38,12 @@ namespace Attendance.Api.Controllers
         [HttpGet("pending-approvals")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingApprovals(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
-            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
         {
-            var result = await _otFormService.GetPendingApprovalsAsync(CurrentUserName, pageIndex, pageSize, fromDate, toDate, status);
+            var result = await _otFormService.GetPendingApprovalsAsync(
+                CurrentUserName, pageIndex, pageSize, fromDate, toDate, status,
+                productionLineId, productionTeamId, productionShiftTeamId);
             return Success(result);
         }
 
@@ -50,6 +53,17 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<int>>> GetPendingApprovalsCount()
         {
             var result = await _otFormService.GetPendingApprovalsCountAsync(CurrentUserName);
+            return Success(result);
+        }
+
+        // Lịch mini ở màn Duyệt hàng loạt — số đơn chưa duyệt theo TỪNG ngày (2026-09-04, xem
+        // docs/attendance-module.md §Nâng cấp màn Duyệt hàng loạt).
+        [RequirePermission("Attendance.OTForm.Approve")]
+        [HttpGet("pending-approvals/dates")]
+        public async Task<ActionResult<ApiResponse<List<PendingApprovalDateCountDto>>>> GetPendingApprovalDates(
+            [FromQuery] DateOnly fromDate, [FromQuery] DateOnly toDate)
+        {
+            var result = await _otFormService.GetPendingApprovalDatesAsync(CurrentUserName, fromDate, toDate);
             return Success(result);
         }
 
@@ -178,32 +192,9 @@ namespace Attendance.Api.Controllers
             return Success(true, "Đã xoá đơn.");
         }
 
-        // Drop ONE employee from the form so the rest of it can still be approved, instead of having to
-        // reject the whole form over a single person (see docs/attendance-module.md — Loại nhân viên
-        // khỏi đơn). Its own permission because the callers span BOTH sides of the existing split: the
-        // Team Leader signing a Draft holds OTForm.Create but NOT .Approve, while the levels above hold
-        // .Approve but not .Create. The Service re-validates that the caller is genuinely entitled to
-        // act at the level the form is currently sitting at.
-        [RequirePermission("Attendance.OTForm.RemoveEmployee")]
-        [HttpPost("{id}/employees/remove")]
-        public async Task<ActionResult<ApiResponse<OtFormDto>>> RemoveEmployee(int id, [FromBody] RemoveOtFormEmployeeDto request)
-        {
-            var isAdmin = User.IsInRole(AdminRole);
-            var result = await _otFormService.RemoveEmployeeAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
-            return Success(result, "Đã loại nhân viên khỏi đơn.");
-        }
-
-        // Thêm 1 nhân viên vào đơn — chiều ngược của RemoveEmployee ở trên (2026-08-28, theo yêu cầu
-        // người dùng). Permission riêng, seed gán cho đúng các Role đang giữ RemoveEmployee (xem
-        // Identity.Infrastructure migration AddOtFormAddEmployeePermission).
-        [RequirePermission("Attendance.OTForm.AddEmployee")]
-        [HttpPost("{id}/employees/add")]
-        public async Task<ActionResult<ApiResponse<OtFormDto>>> AddEmployee(int id, [FromBody] AddOtFormEmployeeDto request)
-        {
-            var isAdmin = User.IsInRole(AdminRole);
-            var result = await _otFormService.AddEmployeeAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
-            return Success(result, "Đã thêm nhân viên vào đơn.");
-        }
+        // Thêm/loại nhân viên khỏi đơn trong-app đã gộp vào PUT {id} (UpdateAsync) — 2026-09-04, xem
+        // docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn. Route "{id}/employees/remove" (kênh
+        // email, KHÔNG cần mật khẩu cấp 2) vẫn còn — xem RemoveEmployeeByEmailToken bên dưới.
 
         // The 3 public actions below serve the small confirmation page the FE opens when an approver
         // (Department Manager/Workshop Manager/General Director) clicks the Approve/Reject link in the

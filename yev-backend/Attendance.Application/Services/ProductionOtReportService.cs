@@ -380,8 +380,336 @@ namespace Attendance.Application.Services
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
 
-            var fileName = $"SoLuotTangCa_{date:yyyyMMdd}.xlsx";
+            var fileName = await BuildRealFileNameAsync("Qry_So_lan_tang_Ca_trong_ngay_sx", date, departmentId);
             return (stream.ToArray(), fileName);
+        }
+
+        // "Qry_EXPORT_EXCEL" (2026-09-03c) — 17 cột, gộp 1 dòng/người/ngày, ĐỘC LẬP với
+        // ExportHoursReportAsync (23 cột, người dùng xác nhận giữ nguyên cả 2, không gộp/thay thế nhau
+        // dù cùng kiểu gộp/người/ngày). Thứ tự cột đúng nguyên văn file thật:
+        // MNV/BOPHAN/HO/TEN/Ngay_TC/Gio_BD/Gio_KT/Lydo/Lydo_phu/An/BLOCK/NHOM/NOTE/Gio_Thuc_Te/BP/
+        // QUAN_LY_TC_SX/MNV_TP.
+        public async Task<(byte[] Content, string FileName)> ExportQryExportExcelAsync(DateOnly date, int? departmentId)
+        {
+            var settings = await _attendanceSettingService.GetAsync();
+            var grouped = await BuildGroupedDailyRowsAsync(date, departmentId, settings);
+            var otFormIds = grouped.SelectMany(x => x.OtFormIds).Distinct().ToList();
+
+            // QUAN_LY_TC_SX — mã nhân viên đã DUYỆT (Approved) ở bước Chức vụ "TL" (Team Leader,
+            // JobTitles.Code="TL") — người dùng xác nhận 2026-09-03c ("MNV team leader"). MNV_TP — cùng
+            // cơ chế đã có ở ExportTimesReportAsync (bước TerminalLevel=DepartmentManager), tách hàm
+            // dùng chung ResolveApprovalCodesByJobTitleCodeAsync/ResolveApprovalCodesByTerminalLevelAsync
+            // ở dưới để không lặp code.
+            var teamLeaderCodeByForm = await ResolveApprovalCodesByJobTitleCodeAsync(otFormIds, "TL");
+            var managerCodeByForm = await ResolveApprovalCodesByTerminalLevelAsync(otFormIds, (int)JobTitleTerminalLevel.DepartmentManager);
+
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("Qry_EXPORT_EXCEL");
+
+            string[] headers =
+            {
+                "MNV", "BOPHAN", "HO", "TEN", "Ngay_TC", "Gio_BD", "Gio_KT", "Lydo", "Lydo_phu", "An",
+                "BLOCK", "NHOM", "NOTE", "Gio_Thuc_Te", "BP", "QUAN_LY_TC_SX", "MNV_TP"
+            };
+            for (var col = 0; col < headers.Length; col++)
+                sheet.Cell(1, col + 1).Value = headers[col];
+            sheet.Row(1).Style.Font.Bold = true;
+
+            var rowIndex = 2;
+            foreach (var item in grouped)
+            {
+                var teamLeaderCode = ResolveDistinctCode(item.OtFormIds, teamLeaderCodeByForm);
+                var managerCode = ResolveDistinctCode(item.OtFormIds, managerCodeByForm);
+
+                sheet.Cell(rowIndex, 1).Value = item.EmployeeCode;
+                sheet.Cell(rowIndex, 2).Value = item.CongDoan;
+                sheet.Cell(rowIndex, 3).Value = item.LastName;
+                sheet.Cell(rowIndex, 4).Value = item.FirstName;
+                sheet.Cell(rowIndex, 5).Value = date.ToString("dd/MM/yyyy");
+                sheet.Cell(rowIndex, 6).Value = item.StartTime.ToString("HH:mm");
+                sheet.Cell(rowIndex, 7).Value = item.EndTime.ToString("HH:mm");
+                sheet.Cell(rowIndex, 8).Value = item.Reason;
+                sheet.Cell(rowIndex, 9).Value = item.SubReason;
+                sheet.Cell(rowIndex, 10).Value = item.DidEat;
+                sheet.Cell(rowIndex, 11).Value = item.Block;
+                sheet.Cell(rowIndex, 12).Value = item.ShiftTeam;
+                sheet.Cell(rowIndex, 13).Value = item.Note;
+                sheet.Cell(rowIndex, 14).Value = item.TotalHours;
+                sheet.Cell(rowIndex, 15).Value = item.DepartmentCode;
+                sheet.Cell(rowIndex, 16).Value = teamLeaderCode;
+                sheet.Cell(rowIndex, 17).Value = managerCode;
+                rowIndex++;
+            }
+
+            sheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+
+            var fileName = await BuildRealFileNameAsync("Qry_EXPORT_EXCEL", date, departmentId);
+            return (stream.ToArray(), fileName);
+        }
+
+        // "SUM_EXPORT_DATA" (2026-09-03c) — 7 cột, bản tóm tắt riêng biệt (KHÔNG phải rút gọn của
+        // Qry_EXPORT_EXCEL — người dùng xác nhận 2 báo cáo phục vụ 2 mục đích khác nhau).
+        public async Task<(byte[] Content, string FileName)> ExportSumExportDataAsync(DateOnly date, int? departmentId)
+        {
+            var settings = await _attendanceSettingService.GetAsync();
+            var grouped = await BuildGroupedDailyRowsAsync(date, departmentId, settings);
+
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("SUM_EXPORT_DATA");
+
+            string[] headers = { "MNV", "BOPHAN", "HO", "TEN", "Ngay_TC", "Gio_thuc_te", "BP" };
+            for (var col = 0; col < headers.Length; col++)
+                sheet.Cell(1, col + 1).Value = headers[col];
+            sheet.Row(1).Style.Font.Bold = true;
+
+            var rowIndex = 2;
+            foreach (var item in grouped)
+            {
+                sheet.Cell(rowIndex, 1).Value = item.EmployeeCode;
+                sheet.Cell(rowIndex, 2).Value = item.CongDoan;
+                sheet.Cell(rowIndex, 3).Value = item.LastName;
+                sheet.Cell(rowIndex, 4).Value = item.FirstName;
+                sheet.Cell(rowIndex, 5).Value = date.ToString("dd/MM/yyyy");
+                sheet.Cell(rowIndex, 6).Value = item.TotalHours;
+                sheet.Cell(rowIndex, 7).Value = item.DepartmentCode;
+                rowIndex++;
+            }
+
+            sheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+
+            var fileName = await BuildRealFileNameAsync("SUM_EXPORT_DATA", date, departmentId);
+            return (stream.ToArray(), fileName);
+        }
+
+        private sealed class GroupedDailyRow
+        {
+            public List<int> OtFormIds { get; set; } = new();
+            public string EmployeeCode { get; set; } = null!;
+            public string LastName { get; set; } = null!;
+            public string FirstName { get; set; } = null!;
+            public string CongDoan { get; set; } = null!;
+            public TimeOnly StartTime { get; set; }
+            public TimeOnly EndTime { get; set; }
+            public string Reason { get; set; } = null!;
+            public string SubReason { get; set; } = null!;
+            public bool DidEat { get; set; }
+            public string Note { get; set; } = null!;
+            public string Block { get; set; } = null!;
+            public string ShiftTeam { get; set; } = null!;
+            public decimal TotalHours { get; set; }
+            public string DepartmentCode { get; set; } = null!;
+        }
+
+        // Nền chung cho 3 báo cáo "gộp 1 dòng/người/ngày" (ExportQryExportExcelAsync/
+        // ExportSumExportDataAsync) — KHÔNG dùng lại cho ExportHoursReportAsync (23 cột, đã chốt trước
+        // đó, có thêm lũy kế Tháng/Năm + MNV_LC/MNV_SC không cần ở đây) để tránh đụng logic đang chạy
+        // ổn định — chấp nhận trùng 1 phần logic gộp giữa 2 nơi.
+        private async Task<List<GroupedDailyRow>> BuildGroupedDailyRowsAsync(DateOnly date, int? departmentId, Dtos.AttendanceSettings.AttendanceSettingDto settings)
+        {
+            var entries = await _unitOfWork.OtFormEmployees.SelectAsync(
+                x => x.OtForm.IsProductionForm && !x.OtForm.IsDeleted
+                     && x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date == date && !x.IsRemoved
+                     && (departmentId == null || x.OtForm.DepartmentId == departmentId),
+                x => new
+                {
+                    x.OtFormId,
+                    x.EmployeeId,
+                    EmployeeCode = x.Employee.Code,
+                    x.Employee.LastName,
+                    x.Employee.FirstName,
+                    x.StartTime,
+                    x.EndTime,
+                    x.DidEat,
+                    x.NoteVn,
+                    x.CongDoanSnapshot,
+                    x.BlockCodeSnapshot,
+                    x.ShiftTeamCodeSnapshot,
+                    ReasonNameVn = x.OtForm.Reason.ReasonNameVn,
+                    x.OtForm.SubReason,
+                    DepartmentCode = x.OtForm.Department.DepartmentCode,
+                });
+
+            return entries
+                .GroupBy(x => x.EmployeeId)
+                .Select(g =>
+                {
+                    var first = g.First();
+                    return new GroupedDailyRow
+                    {
+                        OtFormIds = g.Select(x => x.OtFormId).Distinct().ToList(),
+                        EmployeeCode = first.EmployeeCode,
+                        LastName = first.LastName,
+                        FirstName = first.FirstName,
+                        CongDoan = g.Select(x => x.CongDoanSnapshot).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? UnknownLabel,
+                        StartTime = g.Min(x => x.StartTime),
+                        EndTime = g.Max(x => x.EndTime),
+                        Reason = string.Join("; ", g.Select(x => x.ReasonNameVn).Distinct()),
+                        SubReason = string.Join("; ", g.Select(x => x.SubReason).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()),
+                        DidEat = g.Any(x => x.DidEat),
+                        Note = string.Join("; ", g.Select(x => x.NoteVn).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()),
+                        Block = string.Join("; ", g.Select(x => x.BlockCodeSnapshot).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()),
+                        ShiftTeam = string.Join("; ", g.Select(x => x.ShiftTeamCodeSnapshot).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()),
+                        TotalHours = g.Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, settings)),
+                        DepartmentCode = string.Join("; ", g.Select(x => x.DepartmentCode).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()),
+                    };
+                })
+                .OrderBy(x => x.EmployeeCode, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        // Mã nhân viên đã DUYỆT (Approved) đúng OtForm đó ở bước có JobTitleCodeSnapshot khớp — dùng
+        // cho QUAN_LY_TC_SX (lọc "TL"). Trả về theo OtFormId để chỗ gọi tự resolve theo nhóm/người.
+        private async Task<Dictionary<int, string>> ResolveApprovalCodesByJobTitleCodeAsync(List<int> otFormIds, string jobTitleCode)
+        {
+            if (otFormIds.Count == 0) return new Dictionary<int, string>();
+
+            var approvals = (await _unitOfWork.OtFormApprovalHistories.SelectAsync(
+                h => otFormIds.Contains(h.OtFormId) && h.Action == (int)ApprovalAction.Approved
+                     && h.OtFormApprovalStep.JobTitleCodeSnapshot == jobTitleCode,
+                h => new { h.OtFormId, h.ApproverUserName }))
+                .GroupBy(h => h.OtFormId)
+                .ToDictionary(g => g.Key, g => g.First().ApproverUserName);
+
+            return await ResolveUserNamesToEmployeeCodesAsync(approvals);
+        }
+
+        // Cùng cơ chế nhưng lọc theo TerminalLevelSnapshot (dùng cho MNV_TP — bước Trưởng phòng, mirror
+        // ExportTimesReportAsync).
+        private async Task<Dictionary<int, string>> ResolveApprovalCodesByTerminalLevelAsync(List<int> otFormIds, int terminalLevel)
+        {
+            if (otFormIds.Count == 0) return new Dictionary<int, string>();
+
+            var approvals = (await _unitOfWork.OtFormApprovalHistories.SelectAsync(
+                h => otFormIds.Contains(h.OtFormId) && h.Action == (int)ApprovalAction.Approved
+                     && h.OtFormApprovalStep.TerminalLevelSnapshot == terminalLevel,
+                h => new { h.OtFormId, h.ApproverUserName }))
+                .GroupBy(h => h.OtFormId)
+                .ToDictionary(g => g.Key, g => g.First().ApproverUserName);
+
+            return await ResolveUserNamesToEmployeeCodesAsync(approvals);
+        }
+
+        private async Task<Dictionary<int, string>> ResolveUserNamesToEmployeeCodesAsync(Dictionary<int, string> approverUserNameByOtFormId)
+        {
+            var userNames = approverUserNameByOtFormId.Values.Where(u => !string.IsNullOrWhiteSpace(u)).Distinct().ToList();
+            var employeeCodeByUserName = userNames.Count == 0
+                ? new Dictionary<string, string>()
+                : (await _unitOfWork.Employees.SelectAsync(
+                    e => e.UserName != null && userNames.Contains(e.UserName),
+                    e => new { e.UserName, e.Code }))
+                    .Where(e => e.UserName != null)
+                    .ToDictionary(e => e.UserName!, e => e.Code);
+
+            return approverUserNameByOtFormId
+                .Where(kv => !string.IsNullOrWhiteSpace(kv.Value) && employeeCodeByUserName.ContainsKey(kv.Value))
+                .ToDictionary(kv => kv.Key, kv => employeeCodeByUserName[kv.Value]);
+        }
+
+        // 1 người có thể có nhiều OtForm/ngày — nếu mã người duyệt khác nhau giữa các đơn thì gộp
+        // distinct bằng "; " (hiếm, cùng nguyên tắc join các field cấp-đơn khác trong module).
+        private static string? ResolveDistinctCode(List<int> otFormIds, Dictionary<int, string> codeByOtFormId)
+        {
+            var codes = otFormIds.Where(codeByOtFormId.ContainsKey).Select(id => codeByOtFormId[id]).Distinct().ToList();
+            return codes.Count == 0 ? null : string.Join("; ", codes);
+        }
+
+        // Tên file ĐÚNG quy tắc thật (2026-09-03c, xem docs/Data/Reports/): "{TenQuery}_{yyyy-MM-d}_
+        // {MaPhongBan}.xlsx" — ngày KHÔNG có số 0 đầu ở phần ngày (dùng đặc tả "d", KHÁC "dd"). Không
+        // lọc theo Phòng ban (departmentId=null) thì bỏ hẳn phần hậu tố mã Phòng ban.
+        private async Task<string> BuildRealFileNameAsync(string queryName, DateOnly date, int? departmentId)
+        {
+            var datePart = date.ToString("yyyy-MM-d");
+            var suffix = "";
+            if (departmentId.HasValue)
+            {
+                var department = await _unitOfWork.Departments.GetByIdAsync(departmentId.Value);
+                if (department != null) suffix = $"_{department.DepartmentCode}";
+            }
+            return $"{queryName}_{datePart}{suffix}.xlsx";
+        }
+
+        public async Task<List<ProductionTicketBatchGroupDto>> GetTicketBatchAsync(DateOnly date, int? departmentId)
+        {
+            var entries = await _unitOfWork.OtFormEmployees.SelectAsync(
+                x => x.OtForm.IsProductionForm && !x.OtForm.IsDeleted
+                     && x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date == date && !x.IsRemoved
+                     && (departmentId == null || x.OtForm.DepartmentId == departmentId),
+                x => new
+                {
+                    x.OtFormId,
+                    x.EmployeeId,
+                    EmployeeCode = x.Employee.Code,
+                    FullName = x.Employee.LastName + " " + x.Employee.FirstName,
+                    x.StartTime,
+                    x.EndTime,
+                    x.NoteVn,
+                    // MonthToDate/YearToDate: LẤY ĐÚNG snapshot đã đóng băng trên OtFormEmployee (y hệt
+                    // OtFormService.GetOtFormByIdAsync đang trả cho bản in đơn lẻ) — KHÔNG tự tính lại từ
+                    // EmployeeAccumulationHistory (bản trước làm vậy, ra số khác hẳn con số đã ký trên đơn
+                    // thật vì ledger là số SỐNG tại thời điểm xuất báo cáo, còn cột này mới là số ĐÚNG lúc
+                    // lập đơn — lỗi người dùng báo 2026-09-03: bản xuất zip ra lũy kế khác bản in đơn).
+                    x.MonthToDate,
+                    x.YearToDate,
+                    x.CongDoanSnapshot,
+                    x.TaskNameSnapshot,
+                    x.TeamCodeSnapshot,
+                    x.BlockCodeSnapshot,
+                    x.ShiftTeamCodeSnapshot,
+                    FormStartTime = x.OtForm.StartTime,
+                    FormEndTime = x.OtForm.EndTime,
+                });
+
+            // Cùng tổ hợp gộp với GetTicketReportAsync (Công đoạn/Team/Line-Nhóm màu/khung giờ CHÍNH
+            // XÁC của đơn) — chỉ khác là gộp ở cấp OtFormEmployee để lấy được danh sách TỪNG người thay
+            // vì chỉ đếm số lượng như báo cáo pivot.
+            var groups = entries
+                .GroupBy(x => new { x.CongDoanSnapshot, x.TeamCodeSnapshot, x.BlockCodeSnapshot, x.ShiftTeamCodeSnapshot, x.FormStartTime, x.FormEndTime })
+                .Select(g => new ProductionTicketBatchGroupDto
+                {
+                    PrimaryOtFormId = g.Select(x => x.OtFormId).Min(),
+                    Block = string.IsNullOrWhiteSpace(g.Key.BlockCodeSnapshot) ? UnknownLabel : g.Key.BlockCodeSnapshot!,
+                    ShiftTeam = string.IsNullOrWhiteSpace(g.Key.ShiftTeamCodeSnapshot) ? UnknownLabel : g.Key.ShiftTeamCodeSnapshot!,
+                    EmployeeCount = g.Select(x => x.EmployeeId).Distinct().Count(),
+                    // Giữ nguyên thứ tự EmployeeId (khớp thứ tự tự nhiên OtFormEmployees.FindWithIncludesAsync
+                    // đang trả cho bản in đơn lẻ — không có OrderBy) thay vì sắp lại theo EmployeeCode như
+                    // bản trước (khiến thứ tự danh sách nhân viên khác hẳn bản in đơn — cùng lỗi báo cáo
+                    // 2026-09-03).
+                    Employees = g
+                        .GroupBy(x => x.EmployeeId)
+                        .OrderBy(eg => eg.Key)
+                        .Select(eg =>
+                        {
+                            var first = eg.First();
+                            return new ProductionTicketBatchEmployeeDto
+                            {
+                                EmployeeId = eg.Key,
+                                EmployeeCode = first.EmployeeCode,
+                                FullName = first.FullName,
+                                StartTime = first.StartTime,
+                                EndTime = eg.Max(x => x.EndTime),
+                                MonthToDate = first.MonthToDate,
+                                YearToDate = first.YearToDate,
+                                NoteVn = eg.Select(x => x.NoteVn).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+                                CongDoanSnapshot = first.CongDoanSnapshot,
+                                TaskNameSnapshot = first.TaskNameSnapshot,
+                                BlockCodeSnapshot = first.BlockCodeSnapshot,
+                                TeamCodeSnapshot = first.TeamCodeSnapshot,
+                                ShiftTeamCodeSnapshot = first.ShiftTeamCodeSnapshot,
+                            };
+                        })
+                        .ToList(),
+                })
+                .OrderBy(x => x.Block, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.ShiftTeam, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return groups;
         }
 
         private static string ResolveCa(TimeOnly startTime, TimeOnly endTime)

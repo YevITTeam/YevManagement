@@ -129,26 +129,24 @@ export interface UpdateOtFormEmployeeTimeDto {
     noteJp: string | null;
 }
 
-// Body PUT /api/OtForm/{id} — §4.1b. Sửa lại 2026-07-31 (breaking): trước đây giống hệt
-// CreateOtFormDto (sửa được toàn bộ field + thêm/bớt nhân viên), nay CHỈ còn sửa được giờ kết thúc
-// thực tế + didEat (mới 2026-08-06) của từng nhân viên ĐANG có trong đơn — mọi field khác
-// (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart) bị khoá sau khi tạo
-// đơn (xem docs/attendance-module.md — Sửa đơn: giới hạn chỉ sửa thực tích). Thêm/loại nhân viên đi
-// qua 2 action riêng (AddOtFormEmployeeDto/RemoveOtFormEmployeeDto, 2026-08-28) — employees ở đây vẫn
-// phải khớp ĐÚNG danh sách active hiện có. secondaryPassword (2026-08-28): mật khẩu cấp 2, cùng cơ
-// chế với ApproveOtFormDto.secondaryPassword.
-export interface UpdateOtFormDto {
-    employees: UpdateOtFormEmployeeTimeDto[];
-    secondaryPassword: string;
+// 1 nhân viên bị loại khỏi đơn trong lượt Sửa đơn (2026-09-04) — xem UpdateOtFormDto.removedEmployees.
+export interface UpdateOtFormRemovedEmployeeDto {
+    employeeId: number;
+    reason: string;
 }
 
-// Body POST /api/OtForm/{id}/employees/add — mới 2026-08-28, chiều ngược của RemoveOtFormEmployeeDto.
-export interface AddOtFormEmployeeDto {
-    employeeId: number;
-    endTime: string;
-    didEat: boolean;
-    noteVn: string | null;
-    noteJp: string | null;
+// Body PUT /api/OtForm/{id} — §4.1b. Sửa lại 2026-09-04 (gộp thêm/xóa nhân viên vào Sửa đơn, thay cho
+// 2 action riêng AddOtFormEmployeeDto/RemoveOtFormEmployeeDto trước đó — xem docs/attendance-module.md
+// §Gộp thêm/xóa NV vào Sửa đơn): mỗi phần tử employees có thể là NGƯỜI CŨ (sửa giờ kết thúc/didEat/
+// note) hoặc NGƯỜI MỚI (BE tự suy diff so với danh sách active hiện có) — nhân viên MỚI thêm vào đơn
+// dưới chuyền phải cùng Line/Nhóm ca với người còn lại của đơn (BE tự kiểm, FE chỉ nên tự khoá dropdown
+// tìm kiếm cho gọn UX). removedEmployees: nhân viên bị loại (bắt buộc kèm lý do) — người đang có trong
+// đơn mà KHÔNG có mặt ở cả employees LẪN removedEmployees sẽ bị BE báo lỗi (dữ liệu không hợp lệ). Mọi
+// field khác (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart) vẫn khoá
+// sau khi tạo đơn. secondaryPassword: 1 lần cho TOÀN BỘ thay đổi trong lượt lưu này.
+export interface UpdateOtFormDto {
+    employees: UpdateOtFormEmployeeTimeDto[];
+    removedEmployees: UpdateOtFormRemovedEmployeeDto[];
     secondaryPassword: string;
 }
 
@@ -186,6 +184,17 @@ export interface OtFormListItemDto {
     // Số người đủ điều kiện xử lý bước đang chờ HIỆN TẠI (0 nếu không còn InApproval) — >1 nghĩa là
     // "đang chờ 1 trong N người", không phải riêng bạn (2026-08-08, Giai đoạn 3.2).
     currentStepCandidateCount: number;
+    // Line/Nhóm ca của đơn theo chuyền (2026-09-04) — distinct, nối bằng ", " (đơn có thể gồm nhiều
+    // Line). Null với đơn theo Nhóm.
+    productionLineNames: string | null;
+    productionShiftTeamNames: string | null;
+}
+
+// GET /api/OtForm/pending-approvals/dates — lịch mini ở màn Duyệt hàng loạt (2026-09-04). date:
+// DateOnly "yyyy-MM-dd".
+export interface PendingApprovalDateCountDto {
+    date: string;
+    count: number;
 }
 
 // ApprovalAction (docs §2): 0=Submitted, 1=Approved, 2=Rejected.
@@ -323,21 +332,9 @@ export interface DeleteOtFormDto {
     reason: string;
 }
 
-// Body POST /api/OtForm/{id}/employees/remove — §4.5a, mới 2026-07-30, sửa 2026-07-31 (bỏ mật khẩu
-// cấp 2 — user chốt hành động loại nhân viên không cần xác thực lại, khác Duyệt/Từ chối). Loại 1 nhân
-// viên khỏi đơn để duyệt được phần còn lại thay vì từ chối cả đơn — endpoint riêng, tách biệt khỏi
-// approve (xem docs/attendance-module.md — Loại nhân viên khỏi đơn).
-// secondaryPassword (2026-08-28): mật khẩu cấp 2 — đảo ngược quyết định 2026-07-31 (theo yêu cầu
-// người dùng, mọi thao tác thay đổi đơn đều cần nhập mật khẩu). CHỈ áp dụng kênh trong app — kênh
-// email (RemoveOtFormEmployeeByEmailTokenDto bên dưới) vẫn không cần.
-export interface RemoveOtFormEmployeeDto {
-    employeeId: number;
-    reason: string;
-    secondaryPassword: string;
-}
-
-// Body POST /api/OtForm/email-confirm/{token}/employees/remove — §4.5a, mới 2026-07-31. Cùng shape với
-// RemoveOtFormEmployeeDto — không endpoint nào yêu cầu mật khẩu cấp 2 cho hành động loại nhân viên.
+// Body POST /api/OtForm/email-confirm/{token}/employees/remove — §4.5a. Kênh email KHÔNG cần mật khẩu
+// cấp 2 (token tự nó là thông tin xác thực) — kênh trong-app đã gộp vào PUT /api/OtForm/{id}
+// (UpdateOtFormDto.removedEmployees) từ 2026-09-04, không còn endpoint riêng nữa.
 export interface RemoveOtFormEmployeeByEmailTokenDto {
     employeeId: number;
     reason: string;

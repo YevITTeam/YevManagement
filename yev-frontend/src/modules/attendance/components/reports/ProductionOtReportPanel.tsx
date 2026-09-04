@@ -7,6 +7,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { ROBOTO_REGULAR_BASE64, ROBOTO_BOLD_BASE64 } from "@/modules/pc-management/lib/pdf-fonts";
+import { buildProductionTicketZip } from "@/modules/attendance/lib/productionTicketBatchPdf";
 import { ProductionOtReportApi } from "@/modules/attendance/api/production-ot-report.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { ProductionTicketReportDto, ProductionTicketReportRowDto } from "@/modules/attendance/types/production-ot-report.dto";
@@ -280,6 +281,10 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
     const [isLoading, setIsLoading] = useState(false);
     const [isExportingExcel, setIsExportingExcel] = useState(false);
     const [isExportingTimes, setIsExportingTimes] = useState(false);
+    const [isExportingQry, setIsExportingQry] = useState(false);
+    const [isExportingSum, setIsExportingSum] = useState(false);
+    const [isExportingTickets, setIsExportingTickets] = useState(false);
+    const [ticketExportProgress, setTicketExportProgress] = useState<{ done: number; total: number } | null>(null);
     const [report, setReport] = useState<ProductionTicketReportDto | null>(null);
 
     useEffect(() => {
@@ -368,6 +373,76 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         }
     };
 
+    // 2 export mới (2026-09-03c) — độc lập với 2 export ở trên, KHÔNG dùng chung state/handler dù cùng
+    // pattern tải blob, để lỗi/loading của từng nút tách biệt nhau.
+    const handleExportQry = async () => {
+        setIsExportingQry(true);
+        try {
+            const { blob, fileName } = await ProductionOtReportApi.exportQryExportExcel(
+                date,
+                departmentId === "" ? undefined : departmentId
+            );
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName ?? `Qry_EXPORT_EXCEL_${date.replace(/-/g, "")}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, "Không thể xuất báo cáo Qry_EXPORT_EXCEL."));
+        } finally {
+            setIsExportingQry(false);
+        }
+    };
+
+    const handleExportSum = async () => {
+        setIsExportingSum(true);
+        try {
+            const { blob, fileName } = await ProductionOtReportApi.exportSumExportData(
+                date,
+                departmentId === "" ? undefined : departmentId
+            );
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName ?? `SUM_EXPORT_DATA_${date.replace(/-/g, "")}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, "Không thể xuất báo cáo SUM_EXPORT_DATA."));
+        } finally {
+            setIsExportingSum(false);
+        }
+    };
+
+    // Xuất hàng loạt phiếu YEV-22-024 theo Line/Nhóm, đóng gói zip (2026-09-03c) — chỉ tính đơn Hoàn
+    // tất (đã tự lọc sẵn ở BE GetTicketBatchAsync, cùng bộ lọc Status=Completed với mọi báo cáo khác
+    // trong màn này, theo đúng xác nhận người dùng "chỉ những đơn đã hoàn tất").
+    const handleExportTicketZip = async () => {
+        setIsExportingTickets(true);
+        setTicketExportProgress(null);
+        try {
+            const groups = await ProductionOtReportApi.getTicketBatch(date, departmentId === "" ? undefined : departmentId);
+            if (groups.length === 0) {
+                toast.error("Không có Line/Nhóm nào có đơn dưới chuyền hoàn tất đúng ngày này.");
+                return;
+            }
+            const result = await buildProductionTicketZip(groups, date, (done, total) => setTicketExportProgress({ done, total }));
+            if (!result) return;
+            const url = URL.createObjectURL(result.blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = result.fileName;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, "Không thể xuất phiếu tăng ca hàng loạt."));
+        } finally {
+            setIsExportingTickets(false);
+            setTicketExportProgress(null);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
@@ -432,6 +507,44 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                     >
                         <FileSpreadsheet className="h-3.5 w-3.5" />
                         {isExportingTimes ? "Đang xuất..." : "Số lượt theo ngày"}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleExportQry}
+                        disabled={isExportingQry || !date}
+                        title="Qry_EXPORT_EXCEL — 17 cột, gộp 1 dòng/người/ngày"
+                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        {isExportingQry ? "Đang xuất..." : "Qry_EXPORT_EXCEL"}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleExportSum}
+                        disabled={isExportingSum || !date}
+                        title="SUM_EXPORT_DATA — 7 cột tóm tắt"
+                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        {isExportingSum ? "Đang xuất..." : "SUM_EXPORT_DATA"}
+                    </button>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[#f1f5f9] pt-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Xuất phiếu (PDF)</span>
+                    <button
+                        type="button"
+                        onClick={handleExportTicketZip}
+                        disabled={isExportingTickets || !date}
+                        title="Mỗi Line/Nhóm có OT trong ngày ra 1 phiếu YEV-22-024, đóng gói vào 1 file zip"
+                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <FileText className="h-3.5 w-3.5" />
+                        {isExportingTickets
+                            ? ticketExportProgress
+                                ? `Đang xuất ${ticketExportProgress.done}/${ticketExportProgress.total}...`
+                                : "Đang chuẩn bị..."
+                            : "Xuất phiếu theo Line/Nhóm (zip)"}
                     </button>
                 </div>
             </div>

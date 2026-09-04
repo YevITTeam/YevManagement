@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import { jobTitleTerminalLevelLabels } from "@/modules/attendance/types/enums";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import JobTitlePermissionSection from "./JobTitlePermissionSection";
 
 export interface JobTitleFormValues {
     code: string;
@@ -63,7 +64,9 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="job-title-form-title"
-                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className={`z-60 mx-4 flex max-h-[85vh] w-full flex-col overflow-y-auto rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl ${
+                    mode === "edit" ? "max-w-lg" : "max-w-md"
+                }`}
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="job-title-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -145,6 +148,8 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                         </button>
                     </div>
                 </form>
+
+                {mode === "edit" && initial && <JobTitlePermissionSection jobTitleId={initial.id} />}
             </div>
         </div>
     );

@@ -15,5 +15,8 @@ namespace Attendance.Application.Dtos.EmployeeAccumulationHistories
         // năm đó, vì Employee.YearToDate chỉ còn phản ánh năm hiện tại. Cho năm hiện tại, giá trị này
         // luôn khớp Employee.YearToDate (cùng 1 điểm ghi — AccumulateEmployeeHoursAsync).
         public decimal YearTotalHours { get; set; }
+
+        // Số dư lũy kế đầu kỳ/các tháng trước chốt từ import (lưu ở Month = 0)
+        public decimal InitialBalanceHours { get; set; }
     }
 }

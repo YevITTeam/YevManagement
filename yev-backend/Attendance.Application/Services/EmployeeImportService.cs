@@ -591,7 +591,7 @@ namespace Attendance.Application.Services
                 string.Equals(worksheet.Cell(r.RowNumber(), 2).GetString().Trim(), MonthlyAccumulationHeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
             if (headerRow == null)
                 throw new DomainException(
-                    $"Không tìm thấy dòng tiêu đề (cột B = \"{MonthlyAccumulationHeaderMarkerCellB}\") trong file — đúng mẫu là cột B=MNV, C=Tổng giờ OT tháng.");
+                    $"Không tìm thấy dòng tiêu đề (cột B = \"{MonthlyAccumulationHeaderMarkerCellB}\") trong file — đúng mẫu là cột B=MNV, C=Tổng giờ OT tháng, D=Tổng giờ OT năm (tuỳ chọn).");
 
             var dataRows = allUsedRows
                 .Where(r => r.RowNumber() > headerRow.RowNumber())
@@ -599,9 +599,10 @@ namespace Attendance.Application.Services
                 {
                     RowNumber = r.RowNumber(),
                     EmployeeCode = worksheet.Cell(r.RowNumber(), 2).GetString().Trim(),
-                    TotalHours = worksheet.Cell(r.RowNumber(), 3).TryGetValue<decimal>(out var h) ? (decimal?)h : null
+                    TotalHours = worksheet.Cell(r.RowNumber(), 3).TryGetValue<decimal>(out var h) ? (decimal?)h : null,
+                    YearHours = worksheet.Cell(r.RowNumber(), 4).TryGetValue<decimal>(out var y) ? (decimal?)y : null
                 })
-                .Where(r => !string.IsNullOrWhiteSpace(r.EmployeeCode) && r.TotalHours.HasValue)
+                .Where(r => !string.IsNullOrWhiteSpace(r.EmployeeCode) && (r.TotalHours.HasValue || r.YearHours.HasValue))
                 .ToList();
 
             if (dataRows.Count == 0) return result;
@@ -619,12 +620,19 @@ namespace Attendance.Application.Services
 
             var employeeIds = employeesByCode.Values.Select(x => x.Id).ToList();
             var existingLedgerRows = employeeIds.Count == 0
-                ? new Dictionary<int, EmployeeAccumulationHistory>()
+                ? new List<EmployeeAccumulationHistory>()
                 : (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
-                    x => employeeIds.Contains(x.EmployeeId) && x.Year == year && x.Month == month))
-                    .ToDictionary(x => x.EmployeeId);
+                    x => employeeIds.Contains(x.EmployeeId) && x.Year == year));
 
-            var note = $"Điều chỉnh từ import lũy kế OT theo tháng ngày {TimeHelper.GetCurrentUtcTime():dd/MM/yyyy HH:mm}";
+            var ledgerRowsByEmployeeAndMonth = existingLedgerRows
+                .GroupBy(x => (x.EmployeeId, x.Month))
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var ledgerRowsByEmployee = existingLedgerRows
+                .GroupBy(x => x.EmployeeId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var note = $"Điều chỉnh từ import lũy kế OT theo tháng/năm ngày {TimeHelper.GetCurrentUtcTime():dd/MM/yyyy HH:mm}";
 
             foreach (var row in dataRows)
             {
@@ -650,37 +658,100 @@ namespace Attendance.Application.Services
                     continue;
                 }
 
-                var targetHours = row.TotalHours!.Value;
-                var hasLedgerRow = existingLedgerRows.TryGetValue(employee.Id, out var ledgerRow);
-                var currentHours = hasLedgerRow ? ledgerRow!.TotalHours : 0m;
-                var delta = targetHours - currentHours;
+                var changedMonth = false;
+                var changedYear = false;
 
-                if (delta == 0)
+                // 1. Cập nhật lũy kế Tháng (nếu có giá trị cột C)
+                if (row.TotalHours.HasValue)
+                {
+                    var targetMonthHours = row.TotalHours.Value;
+                    var hasMonthRow = ledgerRowsByEmployeeAndMonth.TryGetValue((employee.Id, month), out var monthRow);
+                    var currentMonthHours = hasMonthRow ? monthRow!.TotalHours : 0m;
+                    var deltaMonth = targetMonthHours - currentMonthHours;
+
+                    if (deltaMonth != 0)
+                    {
+                        if (hasMonthRow)
+                        {
+                            monthRow!.TotalHours += deltaMonth;
+                            monthRow.Note = string.IsNullOrEmpty(monthRow.Note) ? note : monthRow.Note + "; " + note;
+                            _unitOfWork.EmployeeAccumulationHistories.Update(monthRow);
+                        }
+                        else
+                        {
+                            var newMonthRow = new EmployeeAccumulationHistory
+                            {
+                                EmployeeId = employee.Id,
+                                Year = year,
+                                Month = month,
+                                TotalHours = deltaMonth,
+                                Note = note
+                            };
+                            await _unitOfWork.EmployeeAccumulationHistories.AddAsync(newMonthRow);
+                            ledgerRowsByEmployeeAndMonth[(employee.Id, month)] = newMonthRow;
+                            if (!ledgerRowsByEmployee.TryGetValue(employee.Id, out var list))
+                            {
+                                list = new List<EmployeeAccumulationHistory>();
+                                ledgerRowsByEmployee[employee.Id] = list;
+                            }
+                            list.Add(newMonthRow);
+                        }
+
+                        result.AdjustedCount++;
+                        result.TotalDeltaHours += deltaMonth;
+                        changedMonth = true;
+                    }
+                }
+
+                // 2. Cập nhật lũy kế Năm độc lập (nếu có giá trị cột D) vào dòng số dư đầu kỳ (Month = 0)
+                if (row.YearHours.HasValue)
+                {
+                    var targetYearHours = row.YearHours.Value;
+                    // Lũy kế năm hiện tại sau khi đã tính cả điều chỉnh tháng ở trên
+                    var employeeYearRows = ledgerRowsByEmployee.TryGetValue(employee.Id, out var yRows) ? yRows : new List<EmployeeAccumulationHistory>();
+                    var currentYearHours = employeeYearRows.Sum(x => x.TotalHours);
+                    var deltaYear = targetYearHours - currentYearHours;
+
+                    if (deltaYear != 0)
+                    {
+                        // Lưu phần chênh lệch vào dòng số dư đầu kỳ (Month = 0) để không làm sai lệch số giờ thực tế của từng tháng 1..12
+                        var hasInitialRow = ledgerRowsByEmployeeAndMonth.TryGetValue((employee.Id, 0), out var initialRow);
+                        if (hasInitialRow)
+                        {
+                            initialRow!.TotalHours += deltaYear;
+                            initialRow.Note = string.IsNullOrEmpty(initialRow.Note) ? note : initialRow.Note + "; " + note;
+                            _unitOfWork.EmployeeAccumulationHistories.Update(initialRow);
+                        }
+                        else
+                        {
+                            var newInitialRow = new EmployeeAccumulationHistory
+                            {
+                                EmployeeId = employee.Id,
+                                Year = year,
+                                Month = 0,
+                                TotalHours = deltaYear,
+                                Note = $"Số dư lũy kế đầu kỳ/các tháng trước từ import ngày {TimeHelper.GetCurrentUtcTime():dd/MM/yyyy HH:mm}"
+                            };
+                            await _unitOfWork.EmployeeAccumulationHistories.AddAsync(newInitialRow);
+                            ledgerRowsByEmployeeAndMonth[(employee.Id, 0)] = newInitialRow;
+                            if (!ledgerRowsByEmployee.TryGetValue(employee.Id, out var list))
+                            {
+                                list = new List<EmployeeAccumulationHistory>();
+                                ledgerRowsByEmployee[employee.Id] = list;
+                            }
+                            list.Add(newInitialRow);
+                        }
+
+                        result.AdjustedYearCount++;
+                        result.TotalDeltaYearHours += deltaYear;
+                        changedYear = true;
+                    }
+                }
+
+                if (!changedMonth && !changedYear)
                 {
                     result.UnchangedCount++;
-                    continue;
                 }
-
-                if (hasLedgerRow)
-                {
-                    ledgerRow!.TotalHours += delta;
-                    ledgerRow.Note = string.IsNullOrEmpty(ledgerRow.Note) ? note : ledgerRow.Note + "; " + note;
-                    _unitOfWork.EmployeeAccumulationHistories.Update(ledgerRow);
-                }
-                else
-                {
-                    await _unitOfWork.EmployeeAccumulationHistories.AddAsync(new EmployeeAccumulationHistory
-                    {
-                        EmployeeId = employee.Id,
-                        Year = year,
-                        Month = month,
-                        TotalHours = delta,
-                        Note = note
-                    });
-                }
-
-                result.AdjustedCount++;
-                result.TotalDeltaHours += delta;
             }
 
             await _unitOfWork.SaveChangesAsync();
@@ -738,21 +809,22 @@ namespace Attendance.Application.Services
             return (stream.ToArray(), "Mau_Import_GioiHanOT.xlsx");
         }
 
-        // File mẫu cho import lũy kế OT theo tháng (2026-09-03) — cột khớp ĐÚNG
-        // ImportMonthlyAccumulationAsync ở trên: B=MNV, C=Tổng giờ OT tháng. Năm/Tháng áp dụng chọn
-        // riêng ở màn import (không phải cột trong file), giống ApplyProductionEmployeeAccumulationDto.
+        // File mẫu cho import lũy kế OT theo tháng và năm (2026-09-04) — cột khớp ĐÚNG
+        // ImportMonthlyAccumulationAsync ở trên: B=MNV, C=Tổng giờ OT tháng, D=Tổng giờ OT năm.
+        // Năm/Tháng áp dụng chọn riêng ở màn import (không phải cột trong file).
         public (byte[] Content, string FileName) GenerateMonthlyAccumulationTemplate()
         {
             using var workbook = new XLWorkbook();
             var sheet = workbook.Worksheets.Add("Luy ke OT");
 
-            string[] headers = { "", "MNV", "Tổng giờ OT tháng" };
+            string[] headers = { "", "MNV", "Tổng giờ OT tháng", "Tổng giờ OT năm" };
             for (var col = 0; col < headers.Length; col++)
                 sheet.Cell(1, col + 1).Value = headers[col];
             sheet.Row(1).Style.Font.Bold = true;
 
             sheet.Cell(2, 2).Value = "NV001";
             sheet.Cell(2, 3).Value = 16.25;
+            sheet.Cell(2, 4).Value = 120.50;
 
             sheet.Columns().AdjustToContents();
 

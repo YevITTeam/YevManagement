@@ -81,7 +81,11 @@ namespace Attendance.Api.Controllers
 
             await using var stream = file.OpenReadStream();
             var result = await _employeeImportService.ImportMonthlyAccumulationAsync(stream, year, month, CurrentUserName, User.IsInRole(AdminRole));
-            var message = $"Đã điều chỉnh lũy kế cho {result.AdjustedCount} nhân viên" +
+            var messageParts = new List<string>();
+            if (result.AdjustedCount > 0) messageParts.Add($"tháng cho {result.AdjustedCount} nhân viên");
+            if (result.AdjustedYearCount > 0) messageParts.Add($"năm cho {result.AdjustedYearCount} nhân viên");
+            var detail = messageParts.Count > 0 ? string.Join(", ", messageParts) : "0 nhân viên";
+            var message = $"Đã điều chỉnh lũy kế {detail}" +
                 (result.SkippedCount > 0 ? $", bỏ qua {result.SkippedCount} dòng." : ".");
             return Success(result, message);
         }

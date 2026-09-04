@@ -14,11 +14,18 @@ namespace Attendance.Application.Interfaces.Service
 
         Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
             string approverUserName, int pageIndex, int pageSize,
-            DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
+            DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
 
         // Đếm nhanh cho badge sidebar FE — cùng logic lọc "bước hiện tại" với GetPendingApprovalsAsync
         // nhưng không phân trang/không map DTO (2026-08-19).
         Task<int> GetPendingApprovalsCountAsync(string approverUserName);
+
+        // Số đơn chưa duyệt (candidate bước hiện tại) theo TỪNG ngày, trong khoảng fromDate..toDate —
+        // phục vụ lịch mini ở màn Duyệt hàng loạt (2026-09-04, xem docs/attendance-module.md §Nâng cấp
+        // màn Duyệt hàng loạt). Cùng scoping GetMyCurrentPendingFormIdsAsync với GetPendingApprovalsAsync.
+        Task<List<PendingApprovalDateCountDto>> GetPendingApprovalDatesAsync(
+            string approverUserName, DateOnly fromDate, DateOnly toDate);
 
         // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 vai trò
         // (Trưởng nhóm/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc), gate bằng Attendance.OTForm.View.
@@ -54,17 +61,11 @@ namespace Attendance.Application.Interfaces.Service
         Task<List<BulkOtFormActionResultItemDto>> BulkRejectAsync(
             string approverUserName, string? approverFullName, BulkRejectOtFormDto request);
 
-        // Loại 1 nhân viên khỏi đơn để duyệt được phần còn lại thay vì từ chối cả đơn — xem
-        // docs/attendance-module.md § Loại nhân viên khỏi đơn.
-        Task<OtFormDto> RemoveEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request);
-
         // Kênh bổ sung qua email ([AllowAnonymous] ở Controller) — token tự nó là thông tin xác thực,
         // KHÔNG cần mật khẩu cấp 2 (khác Approve/Reject qua email vẫn giữ) — xem docs/attendance-module.md.
+        // Kênh trong-app (thêm/loại nhân viên) đã gộp vào UpdateAsync (2026-09-04) — xem
+        // docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn.
         Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request);
-
-        // Thêm 1 nhân viên vào đơn — chiều ngược của RemoveEmployeeAsync (2026-08-28, theo yêu cầu
-        // người dùng). Cùng điều kiện phân quyền (candidate của bước Pending hiện tại/Admin).
-        Task<OtFormDto> AddEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, AddOtFormEmployeeDto request);
 
         // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate, không resolve lại được) — soft-delete,
         // chặn nếu đơn đã Completed (đã cộng lũy kế thật). Xem docs/attendance-module.md §Cây chức vụ.

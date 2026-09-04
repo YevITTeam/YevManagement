@@ -1,6 +1,5 @@
 import { api } from "@/lib/client";
 import type {
-    AddOtFormEmployeeDto,
     ApproveOtFormDto,
     BulkApproveOtFormDto,
     BulkOtFormActionResultItemDto,
@@ -11,9 +10,9 @@ import type {
     MyCreateScopeItemDto,
     OtFormDto,
     OtFormListItemDto,
+    PendingApprovalDateCountDto,
     RejectOtFormDto,
     RemoveOtFormEmployeeByEmailTokenDto,
-    RemoveOtFormEmployeeDto,
     UpdateOtFormDto,
 } from "@/modules/attendance/types/ot-form.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
@@ -27,6 +26,7 @@ const ENDPOINTS = {
         getMyForms: "/OtForm/my-forms",
         getPendingApprovals: "/OtForm/pending-approvals",
         getPendingApprovalsCount: "/OtForm/pending-approvals/count",
+        getPendingApprovalDates: "/OtForm/pending-approvals/dates",
         getMyActions: "/OtForm/my-actions",
         getMyParticipations: "/OtForm/my-participations",
         getOtFormById: (id: number) => `/OtForm/${id}`,
@@ -36,8 +36,6 @@ const ENDPOINTS = {
         bulkApprove: "/OtForm/bulk-approve",
         bulkReject: "/OtForm/bulk-reject",
         deleteOtForm: (id: number) => `/OtForm/${id}/delete`,
-        removeOtFormEmployee: (id: number) => `/OtForm/${id}/employees/remove`,
-        addOtFormEmployee: (id: number) => `/OtForm/${id}/employees/add`,
         emailConfirmGet: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}`,
         emailConfirmApprove: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/approve`,
         emailConfirmReject: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/reject`,
@@ -53,6 +51,11 @@ export interface GetOtFormListParams {
     fromDate?: string;
     toDate?: string;
     status?: number;
+    // Lọc theo Line/Team/Nhóm ca cho đơn dưới chuyền (2026-09-04) — chỉ getPendingApprovals dùng, các
+    // hàm danh sách khác bỏ qua nếu có truyền (BE không nhận tham số này ở endpoint khác).
+    productionLineId?: number;
+    productionTeamId?: number;
+    productionShiftTeamId?: number;
 }
 
 function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListParams) {
@@ -62,6 +65,9 @@ function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListPa
     if (params?.toDate) query.set("ToDate", params.toDate);
     // status=0 (Pending) là giá trị hợp lệ — không được dùng truthy check kẻo rớt mất (CLAUDE.md §4.4).
     if (params?.status !== undefined) query.set("Status", String(params.status));
+    if (params?.productionLineId !== undefined) query.set("ProductionLineId", String(params.productionLineId));
+    if (params?.productionTeamId !== undefined) query.set("ProductionTeamId", String(params.productionTeamId));
+    if (params?.productionShiftTeamId !== undefined) query.set("ProductionShiftTeamId", String(params.productionShiftTeamId));
 }
 
 export const OtFormApi = {
@@ -110,6 +116,14 @@ export const OtFormApi = {
         const response = await api.get<ApiResponse<number>>(ENDPOINTS.OT_FORM.getPendingApprovalsCount);
         return response.data;
     },
+    // Lịch mini ở màn Duyệt hàng loạt — số đơn chưa duyệt theo TỪNG ngày (2026-09-04).
+    getPendingApprovalDates: async (fromDate: string, toDate: string) => {
+        const query = new URLSearchParams({ fromDate, toDate });
+        const response = await api.get<ApiResponse<PendingApprovalDateCountDto[]>>(
+            `${ENDPOINTS.OT_FORM.getPendingApprovalDates}?${query.toString()}`
+        );
+        return response.data;
+    },
     // Lịch sử đơn CHÍNH user gọi đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 Role,
     // vá lỗ hổng UX đơn biến mất khỏi pending-submissions/pending-approvals sau khi xử lý (docs §4.2b).
     getMyActions: async (params?: GetOtFormListParams) => {
@@ -155,19 +169,6 @@ export const OtFormApi = {
     // Admin xoá đơn kẹt vĩnh viễn trong chuỗi duyệt — chặn ở BE nếu đơn đã Completed (2026-08-08).
     deleteOtForm: async (id: number, data: DeleteOtFormDto) => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.deleteOtForm(id), data);
-        return response.data;
-    },
-    // Loại 1 nhân viên khỏi đơn (cấp đang chờ duyệt của đơn) để duyệt được phần còn lại — endpoint
-    // riêng, KHÔNG đổi Status/không ký lại các cấp trước đó (docs §4.5a). Trả về OtFormDto đầy đủ đã
-    // cập nhật, không cần gọi lại getOtFormById.
-    removeOtFormEmployee: async (id: number, data: RemoveOtFormEmployeeDto) => {
-        const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.removeOtFormEmployee(id), data);
-        return response.data;
-    },
-    // Thêm 1 nhân viên vào đơn — chiều ngược của removeOtFormEmployee (mới 2026-08-28). Trả về
-    // OtFormDto đầy đủ đã cập nhật, không cần gọi lại getOtFormById.
-    addOtFormEmployee: async (id: number, data: AddOtFormEmployeeDto) => {
-        const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.addOtFormEmployee(id), data);
         return response.data;
     },
     // Duyệt/Từ chối qua link email — public, [AllowAnonymous] (docs §4.6).

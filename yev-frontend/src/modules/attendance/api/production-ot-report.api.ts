@@ -1,5 +1,5 @@
 import { api, getForBlob, type BlobDownloadResult } from "@/lib/client";
-import type { ProductionTicketReportDto } from "@/modules/attendance/types/production-ot-report.dto";
+import type { ProductionTicketBatchGroupDto, ProductionTicketReportDto } from "@/modules/attendance/types/production-ot-report.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
@@ -7,6 +7,9 @@ const ENDPOINTS = {
         ticketReport: "/ProductionOtReport/ticket-report",
         hoursReportExcel: "/ProductionOtReport/hours-report-excel",
         timesReportExcel: "/ProductionOtReport/times-report-excel",
+        qryExportExcel: "/ProductionOtReport/qry-export-excel",
+        sumExportData: "/ProductionOtReport/sum-export-data",
+        ticketBatch: "/ProductionOtReport/ticket-batch",
     },
 } as const;
 
@@ -30,6 +33,24 @@ export const ProductionOtReportApi = {
         const params = new URLSearchParams({ date });
         if (departmentId !== undefined) params.set("departmentId", String(departmentId));
         return getForBlob(`${ENDPOINTS.PRODUCTION_OT_REPORT.timesReportExcel}?${params.toString()}`);
+    },
+    exportQryExportExcel: async (date: string, departmentId?: number): Promise<BlobDownloadResult> => {
+        const params = new URLSearchParams({ date });
+        if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        return getForBlob(`${ENDPOINTS.PRODUCTION_OT_REPORT.qryExportExcel}?${params.toString()}`);
+    },
+    exportSumExportData: async (date: string, departmentId?: number): Promise<BlobDownloadResult> => {
+        const params = new URLSearchParams({ date });
+        if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        return getForBlob(`${ENDPOINTS.PRODUCTION_OT_REPORT.sumExportData}?${params.toString()}`);
+    },
+    getTicketBatch: async (date: string, departmentId?: number) => {
+        const params = new URLSearchParams({ date });
+        if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        const response = await api.get<ApiResponse<ProductionTicketBatchGroupDto[]>>(
+            `${ENDPOINTS.PRODUCTION_OT_REPORT.ticketBatch}?${params.toString()}`
+        );
+        return response.data;
     },
 };
 

@@ -34,5 +34,11 @@ namespace Attendance.Application.Dtos.OtForms
         // rỗng) — cho FE hiện "đang chờ 1 trong N người" khi bước có nhiều candidate cùng giữ 1 Chức vụ
         // (2026-08-08, Giai đoạn 3.2 — polish UX "Chờ tôi duyệt", xem docs §Cây chức vụ).
         public int CurrentStepCandidateCount { get; set; }
+
+        // Line/Nhóm ca của đơn theo chuyền (2026-09-04) — distinct BlockCodeSnapshot/ShiftTeamCodeSnapshot
+        // trong các OtFormEmployee còn active, nối bằng ", " (đơn có thể gồm nhiều Line — xem
+        // CreateProductionFormAsync). Null với đơn theo Nhóm.
+        public string? ProductionLineNames { get; set; }
+        public string? ProductionShiftTeamNames { get; set; }
     }
 }
