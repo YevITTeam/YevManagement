@@ -21,6 +21,15 @@ export interface ProductionEmployeeSearchItemDto {
     customYearlyOtHourLimit: number | null;
 }
 
+// Sửa tay Line/Team/Nhóm ca/Trưởng nhóm của 1 dòng (2026-09-04) — 3 Id đều nullable (bỏ chọn = gỡ về
+// trạm hành chính/không xác định, khớp đúng field nullable trên ProductionEmployee).
+export interface UpdateProductionEmployeeDto {
+    productionLineId: number | null;
+    teamId: number | null;
+    shiftTeamId: number | null;
+    isLeader: boolean;
+}
+
 export interface ProductionOptionDto {
     id: number;
     code: string;
@@ -37,10 +46,13 @@ export interface ProductionEmployeeListItemDto {
     congDoan: string | null;
     taskName: string | null;
     blockCode: string | null;
+    productionLineId: number | null;
     teamCode: string | null;
     teamNameVn: string | null;
+    teamId: number | null;
     shiftTeamCode: string | null;
     shiftTeamNameVn: string | null;
+    shiftTeamId: number | null;
     isLeader: boolean;
     departmentNameVn: string | null;
     monthToDate: number;

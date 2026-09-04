@@ -595,7 +595,18 @@
       "noData": "製造ライン従業員データがありません。",
       "loadError": "製造ライン従業員リストを読み込めませんでした。",
       "filterDepartmentPlaceholder": "すべての部門",
-      "colCongDoan": "工程"
+      "colCongDoan": "工程",
+      "editDialogTitle": "製造ライン従業員を編集",
+      "editDialogHint": "Team/Line/勤務班/リーダーのみ編集可能です — ここでの変更は次回Excelインポート時に上書きされる場合があります。",
+      "fieldTeam": "Team",
+      "fieldLine": "Line",
+      "fieldShiftTeam": "勤務班",
+      "fieldIsLeader": "ラインリーダーである",
+      "editSubmit": "変更を保存",
+      "editSuccess": "製造ライン従業員を更新しました。",
+      "editError": "製造ライン従業員を更新できませんでした。",
+      "saving": "保存中...",
+      "editAction": "編集"
     },
     "AccumulationHistory": {
       "pageTitle": "社員の累計時間",

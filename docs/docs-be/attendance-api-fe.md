@@ -931,10 +931,11 @@ xem `attendance-module.md` §Import/Export nhân sự dưới chuyền.
 
 ### 3.8b `GET /api/ProductionEmployee/page-nation` — Màn "Nhân viên dưới chuyền" (2026-08-27b, mới)
 
-View đọc-only riêng, đọc thẳng bảng `ProductionEmployees` (KHÁC `Employee/grid-list` §3.1 đọc bảng
-`Employees`) — hiển thị đúng dữ liệu chuyền mới nhất (Line/Team/Nhóm ca/Công đoạn/Trưởng nhóm) thay vì
-Nhóm/Phòng ban/Chức vụ tổ chức. Không có Sửa/Xoá — chỉnh dữ liệu qua Import lại (§3.8). Permission dùng
-chung `Attendance.Employee.View` (chỉ là 1 view khác của cùng dữ liệu nhân sự).
+View đọc thẳng bảng `ProductionEmployees` (KHÁC `Employee/grid-list` §3.1 đọc bảng `Employees`) — hiển
+thị đúng dữ liệu chuyền mới nhất (Line/Team/Nhóm ca/Công đoạn/Trưởng nhóm) thay vì Nhóm/Phòng ban/Chức
+vụ tổ chức. Nguồn chính vẫn là Import lại Excel (§3.8, nạp đè hết mỗi tháng) — `PUT /{id}` bên dưới
+(2026-09-04) chỉ để sửa nhanh 1 dòng giữa 2 đợt import. Permission xem dùng chung
+`Attendance.Employee.View` (chỉ là 1 view khác của cùng dữ liệu nhân sự).
 
 ```jsonc
 // GET /api/ProductionEmployee/page-nation?PageIndex=1&PageSize=10&Keyword=&ProductionLineId=&TeamId=&ShiftTeamId=
@@ -942,8 +943,9 @@ chung `Attendance.Employee.View` (chỉ là 1 view khác của cùng dữ liệu
 {
   "data": [
     { "id": 12, "employeeId": 46, "employeeCode": "46", "fullName": "LIỆT PHAN OANH",
-      "congDoan": "GT", "taskName": "FUKU KJC", "blockCode": "CT",
-      "teamCode": "HC", "teamNameVn": "Hành chính", "shiftTeamCode": "HC", "shiftTeamNameVn": "Hành chính",
+      "congDoan": "GT", "taskName": "FUKU KJC", "blockCode": "CT", "productionLineId": 7,
+      "teamCode": "HC", "teamNameVn": "Hành chính", "teamId": 3,
+      "shiftTeamCode": "HC", "shiftTeamNameVn": "Hành chính", "shiftTeamId": 9,
       "isLeader": false, "departmentNameVn": "Chế Tạo", "monthToDate": 12.5, "yearToDate": 88.0 }
   ],
   "pageIndex": 1, "pageSize": 10, "totalCount": 1688, "totalPages": 169,
@@ -954,6 +956,19 @@ chung `Attendance.Employee.View` (chỉ là 1 view khác của cùng dữ liệu
   màn "Theo chuyền" khi tạo đơn OT: `GET /api/ProductionEmployee/line-options|team-options|shift-team-options`.
 - `monthToDate`/`yearToDate` là lũy kế THẬT (từ `EmployeeAccumulationHistory`, scope theo năm/tháng
   thực tế hôm nay) — cùng công thức `EmployeeService.GetPagedAsync`, không phải số tĩnh từ file import.
+- `productionLineId`/`teamId`/`shiftTeamId` (mới 2026-09-04) — dùng để FE chọn sẵn đúng giá trị hiện tại
+  khi mở form sửa (`PUT` bên dưới), trước đó chỉ có 3 field Code (chỉ để hiển thị).
+
+**`PUT /api/ProductionEmployee/{id}`** (permission RIÊNG `Attendance.ProductionEmployee.Update`, khác
+`.Import` — mới 2026-09-04) — sửa Team/Line/Nhóm ca/Trưởng nhóm của 1 dòng:
+```jsonc
+// body — UpdateProductionEmployeeDto (3 Id đều nullable — null = gỡ về không xác định)
+{ "productionLineId": 7, "teamId": 3, "shiftTeamId": 9, "isLeader": true }
+```
+BE tự tra lại `LineCode`/`TeamCode`/`ShiftTeamCode` từ đúng Id gửi lên (FE không gửi Code tay) để 2
+field Id/Code không bao giờ lệch nhau. **Lưu ý**: dữ liệu sửa ở đây sẽ bị **ghi đè lại** đúng theo file
+ở lần Import Excel kế tiếp; `isLeader=true` có hiệu lực NGAY cho luồng duyệt "theo chuyền" của Line đó
+(đọc sống, không cache) — xem `attendance-module.md §Import nhân sự dưới chuyền`.
 
 ## 4. OtForm (`/api/OtForm`) — nghiệp vụ chính
 

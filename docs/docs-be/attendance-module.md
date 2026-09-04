@@ -498,7 +498,38 @@ Confirm dùng lại được mỗi tháng, cộng thêm vài thay đổi nghiệ
   `GET /api/ProductionEmployee/page-nation` (`ProductionEmployeeService.GetPagedAsync`, dùng chung
   quyền `Attendance.Employee.View` — chỉ là 1 view khác của cùng dữ liệu nhân sự, không cần permission
   riêng). Lọc theo Line(BLOCK)/Team(GROUP)/Nhóm ca(NHOM) tái dùng 3 API option đã có sẵn cho màn "Theo
-  chuyền" khi tạo đơn OT. Đọc-only — chỉnh dữ liệu qua Import lại file Excel, không có Sửa/Xoá.
+  chuyền" khi tạo đơn OT. Nguồn chính dữ liệu CẤU TRÚC (Line/Team/Nhóm ca/Trưởng nhóm) vẫn là Import
+  Excel (nạp lại đè hết mỗi tháng theo `EmployeeCode`) — 2 mục bổ sung bên dưới chỉ để sửa nhanh giữa 2
+  đợt import, KHÔNG thay thế import.
+  **+2026-09-04a**: lũy kế thao tác được trực tiếp trên từng dòng — cột "Thao tác" thêm 2 icon button
+  tái dùng nguyên xi `AccumulationHistoryModal`/`EmployeeOtLimitDialog` đã có ở view "Nhân viên" (cùng
+  permission `Attendance.Employee.UpdateOtLimit` cho nút Giới hạn OT, nút Lịch sử không gate riêng — BE
+  tự scope qua `EnsureInAccumulationScopeAsync`). Cả 2 thao tác trên `Employee` gốc qua
+  `ProductionEmployeeListItemDto.EmployeeId` (ẩn nút nếu `null`), KHÔNG đụng bảng `ProductionEmployees`.
+  Dialog Giới hạn OT cần `EmployeeDto` đầy đủ (họ/tên tách riêng, giới hạn hiện tại) không có sẵn trong
+  `ProductionEmployeeListItemDto` → gọi thêm `GET /api/Employee/{id}` đúng lúc bấm nút, không tải trước
+  cho cả danh sách. Đồng thời bổ sung mục "Áp dụng lũy kế OT theo tháng" vào menu Excel của view "Nhân
+  viên" (trước đó chỉ có ở view "Nhân viên dưới chuyền" dù BE đã tổng quát cho mọi Phòng ban — thiếu sót
+  phát hiện khi người dùng hỏi lại).
+  **+2026-09-04b**: sửa tay Team/Line/Nhóm ca/Trưởng nhóm ngay trên UI (theo yêu cầu người dùng "cho
+  thêm chức năng chỉnh sửa... team line ca các kiểu nữa rồi có phải leader line hay không") — nút Sửa
+  (icon `Pencil`) mở `ProductionEmployeeEditDialog.tsx` (3 dropdown cascading Team→Line→Nhóm ca mirror
+  đúng bộ lọc phía trên + checkbox "Là Trưởng nhóm"). BE: `PUT /api/ProductionEmployee/{id}`
+  (`UpdateProductionEmployeeDto { ProductionLineId?, TeamId?, ShiftTeamId?, IsLeader }`,
+  `ProductionEmployeeService.UpdateAsync`) — LUÔN ghi lại cả cặp Id+Code từ đúng entity đang chọn (tra
+  `ProductionLine.LineCode`/`ProductionTeam.Code`/`ProductionShiftTeam.Code`), không nhận Code tay từ
+  FE, để BlockCode/TeamCode/ShiftTeamCode không bao giờ lệch khỏi FK. Permission mới, RIÊNG với Import
+  (migration `AddProductionEmployeeUpdatePermission`, gán theo Role đang giữ
+  `Attendance.ProductionEmployee.Import`): `Attendance.ProductionEmployee.Update`.
+  `ProductionEmployeeListItemDto` thêm `ProductionLineId`/`TeamId`/`ShiftTeamId` (trước đó chỉ có Code)
+  để FE chọn sẵn đúng giá trị hiện tại khi mở dialog.
+  **Quan trọng — IsLeader ảnh hưởng LUỒNG DUYỆT thật**: `ProductionEmployee.IsLeader` là nguồn xác định
+  Line Leader của 1 Line cho `JobTitleApprovalChainService` (candidate duyệt đơn "theo chuyền", xem
+  §Cây duyệt Chuyền) — đọc SỐNG lúc resolve chuỗi duyệt, không cache ở đâu khác nên sửa có hiệu lực
+  ngay, không cần đăng nhập lại hay sync gì thêm. **Cảnh báo UX**: dữ liệu sửa tay ở đây sẽ bị GHI ĐÈ
+  lại đúng theo file ở lần Import Excel kế tiếp (đã có hint trong dialog) — chỉ dùng để sửa tạm/gấp,
+  không thay thế việc chỉnh sửa file gốc trước khi import tháng sau.
+  **Chưa test tay qua UI thật** cả 3 điểm bổ sung (2026-09-04a/b) — mới build/`tsc`/lint sạch.
 - **FE**: `ProductionEmployeeImportDialog.tsx` (mirror `EmployeeImportDialog.tsx`, thêm khối "Áp dụng
   lũy kế" hiện sau khi Confirm cấu trúc xong). Bản xem trước (Preview) tách thành **6 tab** (Tất cả/
   Mới/Cập nhật/Không đổi/Lỗi/Bị gỡ, mỗi tab có số đếm) thay vì 1 bảng dài duy nhất (2026-08-27, theo
@@ -3053,6 +3084,33 @@ ledger hiện chỉ lưu tổng giờ/tháng).
   tab/sidebar vì permission đó đã có từ trước.
 - **Verify**: build BE sạch, `npx tsc --noEmit`/`pnpm lint` sạch (3 lỗi/cảnh báo cũ không liên quan).
   **Phát hiện + sửa 1 lỗi có sẵn** khi test sống (xem mục riêng ngay dưới về lỗi ClosedXML
+
+#### §Mở rộng — cột D "Tổng giờ OT năm" cũng được ghi (2026-09-04)
+
+Khác hẳn cột "OT year" của `ProductionEmployeeImportService` ở mục **§Import nhân sự dưới chuyền**
+phía trên (đó vẫn CHỈ tham khảo, không ghi gì) — cột D của **chính import này** (`ImportMonthlyAccumulationAsync`)
+đã được nối dây để ghi thật, độc lập với cột C:
+
+- Cột D **tuỳ chọn** (bỏ trống = không đụng gì tới lũy kế năm). Có giá trị → tính
+  `deltaYear = D trong file − tổng lũy kế NĂM hệ thống đang có` (tổng này đã gồm cả điều chỉnh cột C
+  vừa áp cùng lượt, do 2 bước dùng chung 1 danh sách `EmployeeAccumulationHistory` nạp 1 lần rồi sửa
+  tại chỗ) — cộng thẳng `deltaYear` vào 1 dòng ledger đặc biệt **`Month = 0`** ("số dư đầu kỳ/các
+  tháng trước"), KHÔNG đụng số liệu của 12 tháng thật. Idempotent — chạy lại cùng file ra delta = 0.
+- `Month = 0` đã được `EmployeeService` xử lý đúng ở **mọi** nơi tính `MonthToDate`/`YearToDate` (6 chỗ
+  trong `EmployeeService.cs` + `GetRealAccumulationAsync`): lọt vào `YearToDate` (điều kiện `Month <=
+  todayMonth` luôn đúng với 0) nhưng **không** lọt vào `MonthToDate` (`Month == todayMonth`) — đúng ý
+  nghĩa "số dư đầu kỳ", không phải giờ của riêng tháng nào.
+- **Xem lại**: `AccumulationHistoryModal`/`AccumulationHistoryTable.tsx` đã có sẵn dòng riêng "Số dư đầu
+  kỳ" (field `EmployeeAccumulationHistoryYearDto.InitialBalanceHours`, tính ở
+  `EmployeeService.GetAccumulationHistoryAsync`) hiển thị đúng dòng `Month=0` này, tách biệt khỏi 12
+  tháng — không bị ẩn.
+- **Lưu ý khi dùng** (giới hạn có sẵn của TOÀN hệ thống lũy kế, không riêng cột D): mọi cột lũy kế hiển
+  thị ở danh sách Nhân viên chỉ tính theo **năm hiện tại thực tế** (`todayYear`, so bằng đồng hồ server)
+  — import cho 1 `year` khác năm nay (backfill năm cũ) vẫn ghi đúng vào ledger nhưng **không hiện** ở
+  cột danh sách, chỉ xem được qua "Xem lịch sử lũy kế" rồi chọn đúng năm đó.
+- **Kết quả trả về** thêm `AdjustedYearCount`/`TotalDeltaYearHours` (`ProductionEmployeeAccumulationResultDto`),
+  FE dialog hiện thêm khi có giá trị (`!== undefined`).
+- **Chưa verify sống** riêng cột D (build sạch, đã review logic — chưa gọi tay bằng file thật có cột D).
   range-relative indexing) — sau khi sửa, gọi tay endpoint `ot-hour-limits` (import khác, cùng lỗi) qua
   `curl` với chính file mẫu `GenerateOtHourLimitTemplate()` sinh ra xác nhận đọc đúng header/dữ liệu.
   **Chưa nạp dữ liệu thật Công Vụ tháng 6/2026** — đã chuẩn bị xong tính năng, còn chờ xác nhận trước

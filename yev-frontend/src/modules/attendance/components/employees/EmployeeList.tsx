@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, FileSpreadsheet, Inbox } from "lucide-react";
+import { AlertTriangle, FileSpreadsheet, History, Inbox, Pencil, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 
 import { EmployeeApi, type EmployeeScopeDto } from "@/modules/attendance/api/employee.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
@@ -319,6 +319,25 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         />
     );
 
+    // Gom "Import Excel" + "Liên kết tài khoản đăng nhập" + "Áp dụng lũy kế OT theo tháng" vào 1 menu
+    // (mirror productionExcelActions ở trên) thay vì nhiều nút rời — giảm số nút tràn hàng trên toolbar
+    // view "Nhân viên" (2026-09-04, theo yêu cầu người dùng "làm lại giao diện cho đẹp lại"). Mục lũy kế
+    // trước đó CHỈ có ở menu Excel của tab "Nhân viên dưới chuyền" dù BE đã tổng quát cho mọi Phòng ban
+    // (kể cả văn phòng) — thiếu sót phát hiện khi người dùng hỏi lại, bổ sung nốt ở đây.
+    const employeeExcelActions = (
+        <ActionMenu
+            label={t("excelActionsLabel")}
+            icon={<FileSpreadsheet className="h-3.5 w-3.5" />}
+            items={[
+                { label: t("importExcel"), onClick: () => setImportOpen(true) },
+                ...(canImportIdentityLink ? [{ label: t("identityLinkMenuLabel"), onClick: () => setIdentityLinkImportOpen(true) }] : []),
+                ...(canImportMonthlyAccumulation
+                    ? [{ label: t("monthlyAccumulationImportMenuLabel"), onClick: () => setMonthlyAccumulationImportOpen(true) }]
+                    : []),
+            ]}
+        />
+    );
+
     return (
         <div className="space-y-4">
             <div className="inline-flex rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-1">
@@ -358,8 +377,9 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            className="cursor-pointer inline-flex h-10 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
+                            <Search className="h-3.5 w-3.5" />
                             {tCommon("search")}
                         </button>
                         {showDepartmentFilter && (
@@ -378,20 +398,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             placeholder={t("filterGroupPlaceholder")}
                             triggerClassName="h-10 w-56 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
-                        <button
-                            onClick={() => setImportOpen(true)}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                        >
-                            {t("importExcel")}
-                        </button>
-                        {canImportIdentityLink && (
-                            <button
-                                onClick={() => setIdentityLinkImportOpen(true)}
-                                className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                            >
-                                {t("identityLinkMenuLabel")}
-                            </button>
-                        )}
+                        {employeeExcelActions}
                     </div>
                     <div className="shrink-0 whitespace-nowrap text-sm text-[#5e3f3a]">
                         {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
@@ -470,39 +477,43 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-right text-sm">
-                                        <div className="inline-flex items-center gap-3">
+                                        <div className="inline-flex items-center gap-1.5">
                                             <button
                                                 onClick={() => setHistoryEmployee(employee)}
-                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                 title={t("viewAccumulationHistory")}
+                                                aria-label={t("viewAccumulationHistory")}
                                             >
-                                                {t("viewAccumulationHistory")}
+                                                <History className="h-3.5 w-3.5" />
                                             </button>
                                             {canUpdateOtLimit && (
                                                 <button
                                                     onClick={() => setOtLimitEmployee(employee)}
-                                                    className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                    className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                     title={t("otLimitEditAction")}
+                                                    aria-label={t("otLimitEditAction")}
                                                 >
-                                                    {t("otLimitEditAction")}
+                                                    <SlidersHorizontal className="h-3.5 w-3.5" />
                                                 </button>
                                             )}
                                             {canUpdateEmployee && (
                                                 <button
                                                     onClick={() => openEditForm(employee)}
-                                                    className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                    className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                     title={tCommon("edit")}
+                                                    aria-label={tCommon("edit")}
                                                 >
-                                                    {tCommon("edit")}
+                                                    <Pencil className="h-3.5 w-3.5" />
                                                 </button>
                                             )}
                                             {canDeleteEmployee && (
                                                 <button
                                                     onClick={() => setDeletingEmployee(employee)}
-                                                    className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                    className="cursor-pointer rounded-md border border-[#e9bcb6] p-2 text-[#930006] transition hover:bg-[#fff4f2]"
                                                     title={tCommon("delete")}
+                                                    aria-label={tCommon("delete")}
                                                 >
-                                                    {tCommon("delete")}
+                                                    <Trash2 className="h-3.5 w-3.5" />
                                                 </button>
                                             )}
                                         </div>

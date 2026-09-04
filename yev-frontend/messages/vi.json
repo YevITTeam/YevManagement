@@ -595,7 +595,18 @@
       "noData": "Không có dữ liệu nhân sự dưới chuyền.",
       "loadError": "Không thể tải danh sách nhân sự dưới chuyền.",
       "filterDepartmentPlaceholder": "Tất cả Bộ phận",
-      "colCongDoan": "Công đoạn"
+      "colCongDoan": "Công đoạn",
+      "editDialogTitle": "Sửa nhân viên dưới chuyền",
+      "editDialogHint": "Chỉ sửa được Team/Line/Nhóm ca/Trưởng nhóm — thay đổi ở đây có thể bị ghi đè lại đúng theo file khi Import Excel lần kế tiếp.",
+      "fieldTeam": "Team",
+      "fieldLine": "Line",
+      "fieldShiftTeam": "Nhóm ca",
+      "fieldIsLeader": "Là Trưởng nhóm (Line Leader)",
+      "editSubmit": "Lưu thay đổi",
+      "editSuccess": "Cập nhật nhân viên dưới chuyền thành công.",
+      "editError": "Không thể cập nhật nhân viên dưới chuyền.",
+      "saving": "Đang lưu...",
+      "editAction": "Sửa"
     },
     "AccumulationHistory": {
       "pageTitle": "Lũy kế nhân viên",

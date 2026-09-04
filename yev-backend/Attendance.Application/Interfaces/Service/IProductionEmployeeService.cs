@@ -18,5 +18,9 @@ namespace Attendance.Application.Interfaces.Service
         // tạo", dù thực tế thường chỉ có 1).
         Task<PagedResponse<ProductionEmployeeListItemDto>> GetPagedAsync(
             int pageIndex, int pageSize, string? keyword, int? productionLineId, int? teamId, int? shiftTeamId, int? departmentId);
+
+        // Sửa tay Line/Team/Nhóm ca/Trưởng nhóm — bổ sung cho Import Excel (2026-09-04), xem
+        // UpdateProductionEmployeeDto.
+        Task UpdateAsync(int id, UpdateProductionEmployeeDto request);
     }
 }

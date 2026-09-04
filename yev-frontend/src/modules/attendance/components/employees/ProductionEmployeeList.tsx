@@ -3,15 +3,23 @@
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Inbox } from "lucide-react";
+import { AlertTriangle, History, Inbox, Pencil, SlidersHorizontal } from "lucide-react";
 
 import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
+import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { ProductionEmployeeListItemDto, ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
+import { getApiErrorMessage } from "@/lib/apiError";
+import AccumulationHistoryModal from "./AccumulationHistoryModal";
+import EmployeeOtLimitDialog from "./EmployeeOtLimitDialog";
+import ProductionEmployeeEditDialog from "./ProductionEmployeeEditDialog";
 
 const PAGE_SIZE = 10;
 
@@ -25,18 +33,35 @@ interface ProductionEmployeeListProps {
     actions?: ReactNode;
 }
 
-// Màn "Nhân viên dưới chuyền" — view riêng đọc thẳng ProductionEmployees, chỉ hiển thị (đọc-only,
-// chỉnh dữ liệu qua Import lại file Excel) — xem docs/docs-be/attendance-module.md §Import nhân sự
-// dưới chuyền. Bộ lọc dùng đúng 3 dropdown Line/Team/Nhóm ca đã có sẵn cho màn tạo đơn "Theo chuyền".
+// Màn "Nhân viên dưới chuyền" — view riêng đọc thẳng ProductionEmployees. Dữ liệu CẤU TRÚC
+// (Line/Team/Nhóm ca) vẫn đọc-only, chỉnh qua Import lại file Excel — xem docs/docs-be/attendance-module.md
+// §Import nhân sự dưới chuyền. Riêng lũy kế (Xem lịch sử/Giới hạn OT) sửa được trực tiếp tại đây từ
+// 2026-09-04, xem comment ở khối state bên dưới. Bộ lọc dùng đúng 3 dropdown Line/Team/Nhóm ca đã có
+// sẵn cho màn tạo đơn "Theo chuyền".
 const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, ProductionEmployeeListProps>(function ProductionEmployeeList(
     { actions },
     ref
 ) {
     const t = useTranslations("Attendance.ProductionEmployeeList");
+    // Tái dùng nguyên xi text + 2 dialog "Xem lịch sử lũy kế"/"Giới hạn OT" đã có ở EmployeeList.tsx
+    // (view "Nhân viên") — cả 2 đều thao tác trên Employee gốc (qua ProductionEmployee.EmployeeId), không
+    // đụng dữ liệu cấu trúc ProductionEmployee (Line/Team/Nhóm ca vẫn đọc-only, chỉnh qua Import Excel
+    // như cũ) nên đưa thêm vào đây không phá nguyên tắc "màn này chỉ đọc" (2026-09-04, theo yêu cầu
+    // người dùng "cho thêm chức năng chỉnh sửa xem lũy kế giống bên văn phòng").
+    const tEmployee = useTranslations("Attendance.Employee");
     const tCommon = useTranslations("Common");
     const { setting } = useAttendanceSetting();
+    const { user } = useAuth();
+    const canUpdateOtLimit = hasPermission(user, "Attendance.Employee.UpdateOtLimit");
+    // Sửa tay Team/Line/Nhóm ca/Trưởng nhóm (2026-09-04) — permission RIÊNG với Import (khác population:
+    // Import nạp cả file, Update sửa nhanh 1 người), xem ProductionEmployeeEditDialog.tsx.
+    const canUpdateProduction = hasPermission(user, "Attendance.ProductionEmployee.Update");
 
     const [items, setItems] = useState<ProductionEmployeeListItemDto[]>([]);
+    const [historyItem, setHistoryItem] = useState<{ employeeId: number; label: string } | null>(null);
+    const [otLimitEmployee, setOtLimitEmployee] = useState<EmployeeDto | null>(null);
+    const [loadingOtLimitFor, setLoadingOtLimitFor] = useState<number | null>(null);
+    const [editingItem, setEditingItem] = useState<ProductionEmployeeListItemDto | null>(null);
 
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -137,6 +162,22 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
         setAppliedKeyword(keyword.trim());
     };
 
+    // EmployeeOtLimitDialog cần EmployeeDto đầy đủ (họ/tên tách riêng, giới hạn hiện tại) — dữ liệu
+    // dòng ProductionEmployee không có sẵn nên gọi thêm 1 lượt GET đúng lúc bấm, không tải trước cho
+    // toàn bộ danh sách.
+    const openOtLimitDialog = async (employeeId: number) => {
+        setLoadingOtLimitFor(employeeId);
+        try {
+            const employee = await EmployeeApi.getEmployeeById(employeeId);
+            setOtLimitEmployee(employee);
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, tEmployee("loadError")));
+        } finally {
+            setLoadingOtLimitFor(null);
+        }
+    };
+
     return (
         <div>
             <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
@@ -207,12 +248,13 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                             <th className="px-4 py-2.5">{t("colLeader")}</th>
                             <th className="px-4 py-2.5">{t("colMonthToDate")}</th>
                             <th className="px-4 py-2.5">{t("colYearToDate")}</th>
+                            <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {!isLoading && items.length === 0 && (
                             <tr>
-                                <td colSpan={11} className="px-4 py-12">
+                                <td colSpan={12} className="px-4 py-12">
                                     <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                         <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                         {t("noData")}
@@ -260,6 +302,41 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                                             {item.yearToDate}h
                                         </span>
                                     </td>
+                                    <td className="px-4 py-3 text-right text-sm">
+                                        {item.employeeId !== null && (
+                                            <div className="inline-flex items-center gap-1.5">
+                                                <button
+                                                    onClick={() => setHistoryItem({ employeeId: item.employeeId!, label: `${item.fullName} (${item.employeeCode})` })}
+                                                    className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                    title={tEmployee("viewAccumulationHistory")}
+                                                    aria-label={tEmployee("viewAccumulationHistory")}
+                                                >
+                                                    <History className="h-3.5 w-3.5" />
+                                                </button>
+                                                {canUpdateOtLimit && (
+                                                    <button
+                                                        onClick={() => openOtLimitDialog(item.employeeId!)}
+                                                        disabled={loadingOtLimitFor === item.employeeId}
+                                                        className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e] disabled:opacity-50"
+                                                        title={tEmployee("otLimitEditAction")}
+                                                        aria-label={tEmployee("otLimitEditAction")}
+                                                    >
+                                                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
+                                                {canUpdateProduction && (
+                                                    <button
+                                                        onClick={() => setEditingItem(item)}
+                                                        className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                        title={t("editAction")}
+                                                        aria-label={t("editAction")}
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </td>
                                 </tr>
                             );
                         })}
@@ -286,6 +363,32 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                     {tCommon("nextPage")}
                 </button>
             </div>
+
+            {historyItem && (
+                <AccumulationHistoryModal
+                    employeeId={historyItem.employeeId}
+                    employeeLabel={historyItem.label}
+                    onClose={() => setHistoryItem(null)}
+                />
+            )}
+
+            <EmployeeOtLimitDialog
+                employee={otLimitEmployee}
+                onClose={() => setOtLimitEmployee(null)}
+                onSaved={() => {
+                    setOtLimitEmployee(null);
+                    refetch();
+                }}
+            />
+
+            <ProductionEmployeeEditDialog
+                item={editingItem}
+                onClose={() => setEditingItem(null)}
+                onSaved={() => {
+                    setEditingItem(null);
+                    refetch();
+                }}
+            />
         </div>
     );
 });

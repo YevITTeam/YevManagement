@@ -6,6 +6,7 @@ using Attendance.Domain.Enums;
 using Shared.Application.Helper;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
+using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
@@ -127,8 +128,10 @@ namespace Attendance.Application.Services
         }
 
         // Màn "Nhân viên dưới chuyền" — view riêng đọc thẳng ProductionEmployees (khác EmployeeService,
-        // đọc bảng Employees) để hiển thị đúng dữ liệu chuyền mới nhất (Line/Team/Nhóm ca/Công đoạn),
-        // chỉ hiển thị (2026-08-27, theo yêu cầu người dùng) — không có Sửa/Xoá, chỉnh qua import lại.
+        // đọc bảng Employees) để hiển thị đúng dữ liệu chuyền mới nhất (Line/Team/Nhóm ca/Công đoạn)
+        // (2026-08-27, theo yêu cầu người dùng). Nguồn chính vẫn là Import Excel (nạp lại đè hết mỗi
+        // tháng) — UpdateAsync bên dưới (2026-09-04) chỉ để sửa nhanh Line/Team/Nhóm ca/Trưởng nhóm
+        // giữa 2 đợt import, sẽ bị GHI ĐÈ lại đúng theo file ở lần import kế tiếp.
         public async Task<PagedResponse<ProductionEmployeeListItemDto>> GetPagedAsync(
             int pageIndex, int pageSize, string? keyword, int? productionLineId, int? teamId, int? shiftTeamId, int? departmentId)
         {
@@ -159,10 +162,13 @@ namespace Attendance.Application.Services
                     CongDoan = x.CongDoan,
                     TaskName = x.TaskName,
                     BlockCode = x.BlockCode,
+                    ProductionLineId = x.ProductionLineId,
                     TeamCode = x.TeamCode,
                     TeamNameVn = x.Team != null ? x.Team.NameVn : null,
+                    TeamId = x.TeamId,
                     ShiftTeamCode = x.ShiftTeamCode,
                     ShiftTeamNameVn = x.ShiftTeam != null ? x.ShiftTeam.NameVn : null,
+                    ShiftTeamId = x.ShiftTeamId,
                     IsLeader = x.IsLeader,
                     DepartmentNameVn = x.Employee != null && x.Employee.Group != null && x.Employee.Group.Department != null
                         ? x.Employee.Group.Department.DepartmentNameVn
@@ -181,6 +187,61 @@ namespace Attendance.Application.Services
         {
             var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
             return (today.Year, today.Month);
+        }
+
+        // Sửa tay Line/Team/Nhóm ca/Trưởng nhóm (2026-09-04) — bổ sung cho Import Excel, dùng khi cần
+        // sửa nhanh 1-2 người giữa 2 đợt import. LUÔN ghi lại cả cặp Id+Code từ đúng entity đang chọn
+        // (không nhận Code tay từ FE) để BlockCode/TeamCode/ShiftTeamCode không bao giờ lệch khỏi FK —
+        // IsLeader ảnh hưởng trực tiếp candidate duyệt "theo chuyền" của Line này
+        // (JobTitleApprovalChainService, xem docs §Cây duyệt Chuyền), ghi thẳng không cần đồng bộ gì
+        // thêm (đọc SỐNG lúc resolve chuỗi duyệt, không cache ở đâu khác).
+        public async Task UpdateAsync(int id, UpdateProductionEmployeeDto request)
+        {
+            var entity = (await _unitOfWork.ProductionEmployees.GetByIdAsync(id)).OrThrowNotFound("Nhân viên dưới chuyền", id);
+
+            if (request.ProductionLineId.HasValue)
+            {
+                var line = (await _unitOfWork.ProductionLines.GetByIdAsync(request.ProductionLineId.Value))
+                    .OrThrowNotFound("Line", request.ProductionLineId.Value);
+                entity!.ProductionLineId = line!.Id;
+                entity.BlockCode = line.LineCode;
+            }
+            else
+            {
+                entity!.ProductionLineId = null;
+                entity.BlockCode = null;
+            }
+
+            if (request.TeamId.HasValue)
+            {
+                var team = (await _unitOfWork.ProductionTeams.GetByIdAsync(request.TeamId.Value))
+                    .OrThrowNotFound("Team", request.TeamId.Value);
+                entity.TeamId = team!.Id;
+                entity.TeamCode = team.Code;
+            }
+            else
+            {
+                entity.TeamId = null;
+                entity.TeamCode = null;
+            }
+
+            if (request.ShiftTeamId.HasValue)
+            {
+                var shiftTeam = (await _unitOfWork.ProductionShiftTeams.GetByIdAsync(request.ShiftTeamId.Value))
+                    .OrThrowNotFound("Nhóm ca", request.ShiftTeamId.Value);
+                entity.ShiftTeamId = shiftTeam!.Id;
+                entity.ShiftTeamCode = shiftTeam.Code;
+            }
+            else
+            {
+                entity.ShiftTeamId = null;
+                entity.ShiftTeamCode = null;
+            }
+
+            entity.IsLeader = request.IsLeader;
+
+            _unitOfWork.ProductionEmployees.Update(entity);
+            await _unitOfWork.SaveChangesAsync();
         }
     }
 }

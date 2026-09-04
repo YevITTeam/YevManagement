@@ -64,5 +64,15 @@ namespace Attendance.Api.Controllers
                 pageIndex, pageSize, keyword, productionLineId, teamId, shiftTeamId, departmentId);
             return Success(result);
         }
+
+        // Sửa tay Line/Team/Nhóm ca/Trưởng nhóm giữa 2 đợt import (2026-09-04) — permission RIÊNG với
+        // Import (khác population: Import là nạp cả file, Update là sửa nhanh 1 người ngay trên UI).
+        [RequirePermission("Attendance.ProductionEmployee.Update")]
+        [HttpPut("{id}")]
+        public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateProductionEmployeeDto request)
+        {
+            await _productionEmployeeService.UpdateAsync(id, request);
+            return Success(true, "Cập nhật nhân viên dưới chuyền thành công.");
+        }
     }
 }

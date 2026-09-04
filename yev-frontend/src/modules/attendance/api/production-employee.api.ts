@@ -3,6 +3,7 @@ import type {
     ProductionEmployeeListItemDto,
     ProductionEmployeeSearchItemDto,
     ProductionOptionDto,
+    UpdateProductionEmployeeDto,
 } from "@/modules/attendance/types/production-employee.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
@@ -13,6 +14,7 @@ const ENDPOINTS = {
         teamOptions: "/ProductionEmployee/team-options",
         shiftTeamOptions: "/ProductionEmployee/shift-team-options",
         pageNation: "/ProductionEmployee/page-nation",
+        update: (id: number) => `/ProductionEmployee/${id}`,
     },
 } as const;
 
@@ -84,6 +86,10 @@ export const ProductionEmployeeApi = {
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.PRODUCTION_EMPLOYEE.pageNation}?${queryString}` : ENDPOINTS.PRODUCTION_EMPLOYEE.pageNation;
         const response = await api.get<ApiResponseWithPageNation<ProductionEmployeeListItemDto>>(url);
+        return response.data;
+    },
+    update: async (id: number, data: UpdateProductionEmployeeDto) => {
+        const response = await api.put<ApiResponse<boolean>>(ENDPOINTS.PRODUCTION_EMPLOYEE.update(id), data);
         return response.data;
     },
 };
