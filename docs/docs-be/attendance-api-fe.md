@@ -1507,25 +1507,36 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
   là gợi ý hiển thị, không phải số liệu quyết định nghiệp vụ.
 - Thành công → `data` = `AttendanceSettingDto` đầy đủ (cả GET lẫn PUT), không cần gọi lại `GetById`.
 
-## 6e. Đơn tổng (`/api/OtFormBatch`) — gom nhiều đơn theo Phòng ban, duyệt 1 lần (mới, 2026-08-06; redesign 2026-08-07 Giai đoạn 3.2)
+## 6e. Đơn tổng (`/api/OtFormBatch`) — gom nhiều đơn theo cấp quản lý, duyệt 1 lần (mới, 2026-08-06; redesign 2026-08-07 Giai đoạn 3.2; mở rộng sang cả 3 cấp quản lý 2026-09-05)
 
-> **✅ Đã redesign theo Cây chức vụ (2026-08-07)** — route/DTO không đổi so với thiết kế gốc, chỉ đổi
-> điều kiện xác định "đang chờ Trưởng phòng" (xem `attendance-module.md` §Đơn tổng để biết chi tiết ánh
-> xạ sang model bước động). Đã hoạt động lại bình thường, nav FE đã hiện lại mục "Đơn tổng".
+> **✅ Đã redesign theo Cây chức vụ (2026-08-07)** — route không đổi so với thiết kế gốc, chỉ đổi điều
+> kiện xác định "đang chờ đúng cấp quản lý" (xem `attendance-module.md` §Đơn tổng để biết chi tiết ánh
+> xạ sang model bước động).
+> **Mở rộng sang cả 3 cấp quản lý (2026-09-05)** — trước đây CHỈ gom cấp Trưởng phòng
+> (`TerminalLevel=DepartmentManager`); người ở cấp Trưởng Xưởng/Giám đốc vẫn nhận mail duyệt riêng
+> từng đơn, gây quá tải. Giờ cả 3 cấp đều CHỈ nhận đúng 1 mail tổng hợp/ngày (không còn mail riêng
+> từng đơn ở cả 3 cấp này — xem `attendance-module.md` §Bỏ mail riêng ở 3 cấp quản lý). Schema đổi:
+> `departmentId`/`departmentNameVn`/`departmentNameJp` → `departmentId` (nullable) +
+> `scopeNameVn`/`scopeNameJp` + `terminalLevel` mới (xem bên dưới) — **breaking change** cho FE nào còn
+> đọc field cũ.
 
-**Lý do**: đơn tăng ca tới đúng bước Trưởng phòng (`OtFormApprovalStep` có `TerminalLevelSnapshot=1`,
-đang `Pending`) trước đây phải duyệt riêng lẻ từng đơn. Mỗi ngày, vào giờ đọc từ
-`AttendanceSetting.batchAutoSendTime` (mặc định **15:00**, Admin tự đổi qua tab Cấu hình — xem §6d),
-hệ thống tự gom **các đơn MỚI, chưa từng vào batch nào** của cùng 1 Phòng ban thành 1 "Đơn tổng", gửi
-mail cho Trưởng phòng — bấm vào duyệt 1 lần là cả loạt được xử lý. Batch cũ chưa xử lý xong (từ ngày
-trước) được gửi **mail nhắc lại mỗi ngày** (không tạo batch mới, không gộp thêm đơn — 1 đơn chỉ thuộc
-đúng 1 batch). Đơn còn kẹt ở bước trung gian (SUP/CHIEF...) trước khi tới Trưởng phòng thì KHÔNG được
-gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
-[attendance-module.md §Đơn tổng](attendance-module.md).
+**Lý do**: đơn tăng ca tới đúng bước ở 1 trong 3 TerminalLevel quản lý (`OtFormApprovalStep.
+TerminalLevelSnapshot` = DepartmentManager(1)/WorkshopManager(2)/GeneralDirector(3), đang `Pending`)
+trước đây phải duyệt riêng lẻ từng đơn VÀ còn nhận thêm mail riêng ngay lúc đó — 2 lần mail cho cùng 1
+đơn. Mỗi ngày, vào giờ đọc từ `AttendanceSetting.batchAutoSendTime` (mặc định **15:00**, Admin tự đổi
+qua tab Cấu hình — xem §6d), hệ thống tự gom **các đơn MỚI, chưa từng vào batch nào**: cấp
+DepartmentManager gom theo từng Phòng ban (`departmentId` có giá trị); cấp WorkshopManager/
+GeneralDirector gom **company-wide** — 1 batch/cấp/ngày cho toàn công ty (`departmentId=null`, vì
+candidate 2 cấp này vốn không lọc theo Department, xem Cây chức vụ) — thành 1 "Đơn tổng", gửi mail cho
+người duyệt — bấm vào duyệt 1 lần là cả loạt được xử lý. Batch cũ chưa xử lý xong (từ ngày trước) được
+gửi **mail nhắc lại mỗi ngày** (không tạo batch mới, không gộp thêm đơn — 1 đơn chỉ thuộc đúng 1 batch).
+Đơn còn kẹt ở bước trung gian (SUP/CHIEF...) trước khi tới 1 trong 3 cấp trên thì KHÔNG được gom, vẫn
+duyệt lẻ (và vẫn nhận mail riêng ngay — cấp trung gian chưa có cơ chế gom) như bình thường. Chi tiết
+thiết kế BE ở [attendance-module.md §Đơn tổng](attendance-module.md).
 
 | Method | Route | Permission | Việc gì |
 |---|---|---|---|
-| GET | `/api/OtFormBatch/grid-list?pageIndex&pageSize` | `Attendance.OTForm.Approve` | Danh sách batch (Admin thấy tất cả; còn lại chỉ thấy batch thuộc Department mình là candidate ở bước Chức vụ `TerminalLevel=DepartmentManager`, xem Cây chức vụ) |
+| GET | `/api/OtFormBatch/grid-list?pageIndex&pageSize` | `Attendance.OTForm.Approve` | Danh sách batch (Admin thấy tất cả; còn lại chỉ thấy batch mình là candidate hợp lệ — DepartmentManager so theo đúng Department, WorkshopManager/GeneralDirector company-wide nên chỉ cần khớp cấp) |
 | GET | `/api/OtFormBatch/{id}` | `Attendance.OTForm.Approve` | Chi tiết 1 batch |
 | POST | `/api/OtFormBatch/{id}/approve` | `Attendance.OTForm.Approve` | Duyệt/Từ chối hàng loạt |
 | GET | `/api/OtFormBatch/email-confirm/{token}` | `[AllowAnonymous]` | Chi tiết qua link email |
@@ -1533,9 +1544,12 @@ gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
 | POST | `/api/OtFormBatch/run-now` | `Attendance.Setting.Update` | Chạy ngay đợt gom hằng ngày, không đợi tới giờ cấu hình (mới 2026-08-08, nút "Gửi ngay" ở tab Cấu hình — dùng khi test/cần gấp; body rỗng, response `data: true`) |
 
 ```jsonc
-// OtFormBatchListItemDto — item của grid-list
+// OtFormBatchListItemDto — item của grid-list. terminalLevel: enum JobTitleTerminalLevel
+// (1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector). departmentId chỉ có giá trị khi
+// terminalLevel=1 (DepartmentManager) — null nghĩa là batch company-wide; scopeNameVn/Jp lúc đó là
+// tên Chức vụ ứng với cấp đó (JobTitle không có bản Jp nên scopeNameJp luôn null trong trường hợp này).
 {
-  "id": 12, "departmentId": 1, "departmentNameVn": "Xưởng lắp ráp", "departmentNameJp": null,
+  "id": 12, "terminalLevel": 1, "departmentId": 1, "scopeNameVn": "Xưởng lắp ráp", "scopeNameJp": null,
   "batchDate": "2026-08-06", "status": 0,           // OtFormBatchStatus: 0=Pending, 1=Processed
   "formCount": 3, "employeeCount": 8, "totalHour": 14.5,
   "createdAt": "2026-08-06T15:00:00", "processedAt": null, "processedByFullName": null
@@ -1543,7 +1557,7 @@ gom, vẫn duyệt lẻ như bình thường. Chi tiết thiết kế BE ở
 
 // OtFormBatchDto — response GET /{id} (và /email-confirm/{token})
 {
-  "id": 12, "departmentId": 1, "departmentNameVn": "Xưởng lắp ráp", "departmentNameJp": null,
+  "id": 12, "terminalLevel": 1, "departmentId": 1, "scopeNameVn": "Xưởng lắp ráp", "scopeNameJp": null,
   "batchDate": "2026-08-06", "status": 0,
   "createdAt": "2026-08-06T15:00:00", "processedAt": null, "processedByUserName": null, "processedByFullName": null,
   "otForms": [   // CHỈ gồm đơn vẫn còn status==Pending (còn hiệu lực xử lý)
@@ -1731,8 +1745,12 @@ Trợ lý AI hỗ trợ lập đơn tăng ca qua hội thoại — thiết kế 
   `otform`: emit đúng 1 lần/lượt hỏi, ngay sau khi tool `create_ot_form_draft` tạo THẬT 1 đơn Draft —
   FE dùng để hiện nút "Xem đơn vừa tạo" điều hướng `/ot/forms/edit?id={otFormId}` (đơn Draft sửa được).
 - **Quan trọng — đây là tool GHI dữ liệu đầu tiên của toàn bộ tính năng AI Chat** (khác các tool
-  tra cứu read-only của Asset): xác nhận sẽ tạo THẬT 1 bản ghi + gửi THẬT 1 email cho candidate của
-  bước đầu tiên trong chuỗi duyệt (`NotifyEligibleApproversAsync`, không có cách tắt).
+  tra cứu read-only của Asset): xác nhận sẽ tạo THẬT 1 bản ghi + (nếu bước đầu tiên trong chuỗi duyệt
+  là cấp trung gian, `TerminalLevelSnapshot=None`) gửi THẬT 1 email ngay cho candidate bước đó
+  (`NotifyEligibleApproversAsync`, không có cách tắt). Nếu bước đầu tiên đã là 1 trong 3 cấp quản lý
+  (DepartmentManager/WorkshopManager/GeneralDirector) thì KHÔNG gửi mail ngay nữa (2026-09-05, xem
+  `attendance-module.md` §Bỏ mail riêng ở 3 cấp quản lý) — người duyệt chỉ nhận mail tổng hợp ở lần
+  chạy `OtFormBatchBackgroundService` kế tiếp (mặc định 15:00 hằng ngày).
   > **⚠ Chưa verify lại sau Giai đoạn 3.1 (2026-08-07)** — tool `create_ot_form_draft` gọi thẳng
   > `OtFormService.CreateAsync` đã redesign (không còn Draft, vào chuỗi duyệt Cây chức vụ ngay lập
   > tức, xem §4.1) nhưng bản thân code/prompt của AI Chat (đặt tên tool, mô tả "Draft" trong system

@@ -1046,8 +1046,8 @@
     },
     "OtFormBatchList": {
       "title": "Đơn tổng",
-      "description": "Danh sách đơn tổng gom nhiều đơn tăng ca đang chờ Trưởng phòng theo Bộ phận, duyệt 1 lần/ngày.",
-      "colDepartment": "Bộ phận",
+      "description": "Danh sách đơn tổng gom nhiều đơn tăng ca đang chờ Trưởng phòng/Trưởng Xưởng/Giám đốc, duyệt 1 lần/ngày.",
+      "colScope": "Phạm vi",
       "colBatchDate": "Ngày gom",
       "colFormCount": "Số đơn",
       "colEmployeeCount": "Số NV",

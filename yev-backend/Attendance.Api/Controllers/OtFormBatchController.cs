@@ -7,10 +7,11 @@ using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
 {
-    // "Đơn tổng" — gom nhiều OtForm đang chờ đúng cấp DepartmentManager của cùng 1 Department, duyệt 1
-    // lần thay vì từng đơn (see docs/attendance-module.md — §Đơn tổng). Tái dùng permission
-    // Attendance.OTForm.Approve đã gán sẵn cho Trưởng phòng — không cần permission mới, gate dữ liệu vẫn
-    // qua UserApprovalScope(DepartmentManager) như mọi nơi khác.
+    // "Đơn tổng" — gom nhiều OtForm đang chờ đúng 1 trong 3 cấp quản lý (DepartmentManager theo từng
+    // Department, WorkshopManager/GeneralDirector company-wide), duyệt 1 lần thay vì từng đơn (see
+    // docs/attendance-module.md — §Đơn tổng). Tái dùng permission Attendance.OTForm.Approve đã gán sẵn
+    // cho 3 cấp này — không cần permission mới, gate dữ liệu vẫn qua candidate của đúng bước như mọi
+    // nơi khác.
     public class OtFormBatchController : BaseController
     {
         private readonly IOtFormService _otFormService;

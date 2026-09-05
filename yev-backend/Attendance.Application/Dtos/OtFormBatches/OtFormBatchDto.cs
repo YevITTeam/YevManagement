@@ -3,9 +3,19 @@ namespace Attendance.Application.Dtos.OtFormBatches
     public class OtFormBatchDto
     {
         public int Id { get; set; }
-        public int DepartmentId { get; set; }
-        public string DepartmentNameVn { get; set; } = null!;
-        public string? DepartmentNameJp { get; set; }
+
+        // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — cấp duyệt của batch này.
+        public int TerminalLevel { get; set; }
+
+        // Chỉ có giá trị khi TerminalLevel=DepartmentManager — WorkshopManager/GeneralDirector là
+        // batch toàn công ty (DepartmentId=null), xem OtFormBatch.
+        public int? DepartmentId { get; set; }
+
+        // Tên hiển thị phạm vi batch — Department (bilingual) nếu TerminalLevel=DepartmentManager,
+        // ngược lại là tên JobTitle ứng với TerminalLevel đó (JobTitle không có bản Jp).
+        public string ScopeNameVn { get; set; } = null!;
+        public string? ScopeNameJp { get; set; }
+
         public DateOnly BatchDate { get; set; }
 
         // Enum Attendance.Domain.Enums.OtFormBatchStatus.

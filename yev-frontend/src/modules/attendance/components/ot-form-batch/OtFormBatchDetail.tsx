@@ -192,7 +192,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{t("titleWithId", { id: batch.id })}</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        {bilingualText(batch.departmentNameVn, batch.departmentNameJp)} — {t("batchDateLabel", { date: formatDate(batch.batchDate) })}
+                        {bilingualText(batch.scopeNameVn, batch.scopeNameJp)} — {t("batchDateLabel", { date: formatDate(batch.batchDate) })}
                     </p>
                 </div>
                 {isDone && (

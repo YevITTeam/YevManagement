@@ -423,6 +423,7 @@ public partial class AttendanceDbContext : DbContext
             entity.HasKey(e => e.Id).HasName("PK_OtFormBatches");
             entity.HasIndex(e => e.DepartmentId, "IX_OtFormBatches_DepartmentId");
             entity.HasIndex(e => e.Status, "IX_OtFormBatches_Status");
+            entity.HasIndex(e => e.TerminalLevel, "IX_OtFormBatches_TerminalLevel");
 
             entity.Property(e => e.ProcessedByUserName).HasMaxLength(100);
             entity.Property(e => e.ProcessedByFullName).HasMaxLength(255);

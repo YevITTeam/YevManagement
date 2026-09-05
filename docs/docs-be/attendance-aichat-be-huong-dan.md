@@ -31,9 +31,12 @@ Rủi ro khác hẳn tra cứu sai:
 - **`OtForm` không có endpoint xoá** — đơn tạo sai chỉ sửa được (`PUT /api/OtForm/{id}`, còn Draft/Pending),
   không xoá được. Đây là lý do cơ chế xác nhận trước khi ghi (§4) phải là **cấu trúc**, không chỉ dựa
   system prompt.
-- **`NotifyEligibleApproversAsync` chạy vô điều kiện sau mọi lần tạo thành công** — gửi email THẬT cho
-  Trưởng nhóm phụ trách Group/Department đó (best-effort, nuốt lỗi SMTP, nhưng không có cách tắt).
-  Đơn Draft **không hề "im lặng"**.
+- **`NotifyEligibleApproversAsync` chạy sau mọi lần tạo thành công NẾU bước đầu tiên là cấp trung gian**
+  — gửi email THẬT cho Trưởng nhóm phụ trách Group/Department đó (best-effort, nuốt lỗi SMTP, nhưng
+  không có cách tắt). Nếu bước đầu tiên đã là 1 trong 3 cấp quản lý (DepartmentManager/WorkshopManager/
+  GeneralDirector) thì KHÔNG gửi mail ngay nữa (2026-09-05, xem `attendance-module.md` §Bỏ mail riêng ở
+  3 cấp quản lý) — chỉ gửi ở lần chạy mail tổng hợp hằng ngày kế tiếp. Dù vậy đơn Draft **vẫn không hề
+  "im lặng"** — luôn tạo THẬT 1 bản ghi nghiệp vụ, chỉ khác thời điểm gửi mail.
 - **Model nội bộ đã chứng minh không đáng tin cậy nhiều lần** khi xây Asset AI Chat: từ chối gọi tool
   khi cần (`ai-chat-be-huong-dan.md §13`), bịa kết quả sau khi hứa suông không thực hiện (`§14`). Với
   các tool đọc, hậu quả tệ nhất là câu trả lời sai. Với tool ghi này, hậu quả tệ nhất là 1 bản ghi

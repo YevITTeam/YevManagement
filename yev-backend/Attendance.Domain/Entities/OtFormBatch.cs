@@ -3,15 +3,22 @@ using System.Collections.Generic;
 
 namespace Attendance.Domain.Entities;
 
-// "Đơn tổng" — a daily bundle of individual OT Forms sitting at the DepartmentManager level
-// (OtFormStatus.Pending) for the same Department, so the Department Manager can approve/reject all
-// of them in a single action instead of one form at a time (see docs/attendance-module.md — §Đơn
-// tổng). No IsDeleted — a system-managed table, same as OtFormApprovalEmailToken.
+// "Đơn tổng" — a daily bundle of individual OT Forms sitting at a manager terminal level
+// (JobTitleTerminalLevel.DepartmentManager/WorkshopManager/GeneralDirector) so the approver at that
+// level can approve/reject all of them in a single action instead of one form at a time (see
+// docs/attendance-module.md — §Đơn tổng). No IsDeleted — a system-managed table, same as
+// OtFormApprovalEmailToken.
 public partial class OtFormBatch
 {
     public int Id { get; set; }
 
-    public int DepartmentId { get; set; }
+    // Stores Attendance.Domain.Enums.JobTitleTerminalLevel — which manager level this batch is for.
+    public int TerminalLevel { get; set; }
+
+    // Only set when TerminalLevel=DepartmentManager (candidates are scoped to 1 Department). Null for
+    // WorkshopManager/GeneralDirector — those 2 levels are company-wide (see
+    // JobTitleApprovalChainService), so 1 batch per level per day covers the whole company.
+    public int? DepartmentId { get; set; }
 
     // The calendar day the daily sweep created this batch — NOT the day it gets processed.
     public DateOnly BatchDate { get; set; }
@@ -29,7 +36,7 @@ public partial class OtFormBatch
 
     public string? ProcessedByFullName { get; set; }
 
-    public virtual Department Department { get; set; } = null!;
+    public virtual Department? Department { get; set; }
 
     public virtual ICollection<OtForm> OtForms { get; set; } = new List<OtForm>();
 

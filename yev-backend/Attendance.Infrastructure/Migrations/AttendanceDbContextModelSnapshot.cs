@@ -745,7 +745,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("DepartmentId")
+                    b.Property<int?>("DepartmentId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ProcessedAt")
@@ -762,12 +762,17 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<int>("TerminalLevel")
+                        .HasColumnType("int");
+
                     b.HasKey("Id")
                         .HasName("PK_OtFormBatches");
 
                     b.HasIndex(new[] { "DepartmentId" }, "IX_OtFormBatches_DepartmentId");
 
                     b.HasIndex(new[] { "Status" }, "IX_OtFormBatches_Status");
+
+                    b.HasIndex(new[] { "TerminalLevel" }, "IX_OtFormBatches_TerminalLevel");
 
                     b.ToTable("OtFormBatches");
                 });
@@ -1623,7 +1628,6 @@ namespace Attendance.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("FK_OtFormBatches_Departments_DepartmentId");
 
                     b.Navigation("Department");

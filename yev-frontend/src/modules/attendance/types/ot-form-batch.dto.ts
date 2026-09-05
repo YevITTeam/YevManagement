@@ -1,17 +1,22 @@
-// "Đơn tổng" — gom nhiều OtForm mà bước đang chờ HIỆN TẠI đúng là bước Trưởng phòng
-// (TerminalLevelSnapshot=DepartmentManager, xem OtFormApprovalStepDto) của cùng 1 Phòng ban, duyệt 1
-// lần (2026-08-07, Giai đoạn 3.2 — redesign theo Cây chức vụ). Đơn còn kẹt ở bước trung gian trước đó
-// (SUP/CHIEF...) KHÔNG được gom, vẫn duyệt lẻ tới khi tự nó tới lượt Trưởng phòng. Schema theo
-// docs/attendance-api-fe.md §Đơn tổng.
+// "Đơn tổng" — gom nhiều OtForm mà bước đang chờ HIỆN TẠI đúng là 1 trong 3 cấp quản lý
+// (TerminalLevelSnapshot=DepartmentManager/WorkshopManager/GeneralDirector, xem OtFormApprovalStepDto),
+// duyệt 1 lần (2026-08-07, Giai đoạn 3.2 — redesign theo Cây chức vụ; mở rộng sang cả 3 cấp 2026-09-05).
+// Cấp DepartmentManager gom theo từng Phòng ban; WorkshopManager/GeneralDirector gom company-wide (1
+// batch/cấp/ngày). Đơn còn kẹt ở bước trung gian trước đó (SUP/CHIEF...) KHÔNG được gom, vẫn duyệt lẻ
+// tới khi tự nó tới lượt 1 trong 3 cấp trên. Schema theo docs/attendance-api-fe.md §Đơn tổng.
 
 import type { OtFormEmployeeDto, ProcessPartDto } from "@/modules/attendance/types/ot-form.dto";
 
 // OtFormBatchStatus: 0=Pending (còn đơn chờ xử lý), 1=Processed (đã xử lý xong hoặc tự đóng vì hết đơn hiệu lực).
+// TerminalLevel: enum Attendance.Domain.Enums.JobTitleTerminalLevel (1=DepartmentManager,
+// 2=WorkshopManager, 3=GeneralDirector). departmentId chỉ có giá trị khi TerminalLevel=DepartmentManager
+// — null nghĩa là batch company-wide, khi đó scopeNameVn là tên Chức vụ ứng với cấp đó thay vì Phòng ban.
 export interface OtFormBatchListItemDto {
     id: number;
-    departmentId: number;
-    departmentNameVn: string;
-    departmentNameJp: string | null;
+    terminalLevel: number;
+    departmentId: number | null;
+    scopeNameVn: string;
+    scopeNameJp: string | null;
     batchDate: string;
     status: number;
     formCount: number;
@@ -48,9 +53,10 @@ export interface OtFormBatchItemDto {
 // bước đang chờ hiện tại VẪN CÒN đúng là Trưởng phòng (còn hiệu lực xử lý qua Đơn tổng).
 export interface OtFormBatchDto {
     id: number;
-    departmentId: number;
-    departmentNameVn: string;
-    departmentNameJp: string | null;
+    terminalLevel: number;
+    departmentId: number | null;
+    scopeNameVn: string;
+    scopeNameJp: string | null;
     batchDate: string;
     status: number;
     createdAt: string;

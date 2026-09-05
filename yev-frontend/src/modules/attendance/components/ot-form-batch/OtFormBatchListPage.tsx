@@ -28,9 +28,10 @@ function formatDateTime(value: string) {
     return new Date(value).toLocaleString("vi-VN");
 }
 
-// Màn "Đơn tổng" trong app (dự phòng khi Trưởng phòng mất/quên link email) — docs/attendance-api-fe.md
-// §Đơn tổng. Danh sách gồm cả batch đang chờ (Pending) lẫn đã xử lý (Processed), BE tự lọc theo
-// UserApprovalScope(DepartmentManager) của người gọi (Admin thấy tất cả).
+// Màn "Đơn tổng" trong app (dự phòng khi người duyệt mất/quên link email) — docs/attendance-api-fe.md
+// §Đơn tổng. Danh sách gồm cả batch đang chờ (Pending) lẫn đã xử lý (Processed), của cả 3 cấp quản lý
+// (DepartmentManager/WorkshopManager/GeneralDirector) — BE tự lọc theo candidate hợp lệ của người gọi
+// (Admin thấy tất cả).
 export default function OtFormBatchListPage() {
     const t = useTranslations("Attendance.OtFormBatchList");
     const tCommon = useTranslations("Common");
@@ -87,7 +88,7 @@ export default function OtFormBatchListPage() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-4 py-2.5">{t("colDepartment")}</th>
+                                <th className="px-4 py-2.5">{t("colScope")}</th>
                                 <th className="px-4 py-2.5">{t("colBatchDate")}</th>
                                 <th className="px-4 py-2.5">{t("colFormCount")}</th>
                                 <th className="px-4 py-2.5">{t("colEmployeeCount")}</th>
@@ -114,7 +115,7 @@ export default function OtFormBatchListPage() {
                                     className="cursor-pointer border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]"
                                 >
                                     <td className="px-4 py-3 align-top text-sm font-semibold text-[#191c1e]">
-                                        {bilingualText(batch.departmentNameVn, batch.departmentNameJp)}
+                                        {bilingualText(batch.scopeNameVn, batch.scopeNameJp)}
                                     </td>
                                     <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{formatDate(batch.batchDate)}</td>
                                     <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{batch.formCount}</td>

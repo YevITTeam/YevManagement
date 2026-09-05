@@ -1045,8 +1045,8 @@
     },
     "OtFormBatchList": {
       "title": "一括申請",
-      "description": "部署ごとに部長の承認待ちの残業申請をまとめた一括申請の一覧 — 1日1回まとめて承認できます。",
-      "colDepartment": "部署",
+      "description": "部長・工場長・社長の承認待ちの残業申請をまとめた一括申請の一覧 — 1日1回まとめて承認できます。",
+      "colScope": "承認範囲",
       "colBatchDate": "取りまとめ日",
       "colFormCount": "申請件数",
       "colEmployeeCount": "対象人数",

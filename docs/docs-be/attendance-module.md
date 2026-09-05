@@ -630,6 +630,10 @@ từng đơn, không phụ thuộc thứ tự xử lý) — không cần sửa g
 > hành vi hiện tại. Bản gốc (2026-08-06) gắn chặt vào `OtFormStatus.Pending` cố định (đã xoá ở Giai
 > đoạn 3.1); redesign chỉ đổi **điều kiện xác định "đang chờ Trưởng phòng"**, giữ nguyên toàn bộ ý
 > tưởng/entity/API gốc.
+>
+> **✅ Mở rộng sang WorkshopManager/GeneralDirector (2026-09-05)** — mọi chỗ nói "Trưởng phòng"/"Phòng
+> ban" dưới đây giờ áp dụng cho CẢ 3 cấp quản lý (Trưởng phòng theo Department, Trưởng Xưởng/Giám đốc
+> company-wide — 1 batch/cấp/ngày). Chi tiết đổi gì ở §Bỏ mail riêng ở 3 cấp quản lý bên dưới.
 
 **Yêu cầu người dùng**: Trưởng phòng phải duyệt từng đơn một, rất mất công khi 1 Phòng ban có nhiều Bộ
 phận cùng gửi đơn trong ngày. Chốt qua AskUserQuestion (CLAUDE.md §2 luật 2):
@@ -721,11 +725,76 @@ chối/loại nhân viên):
   `Attendance.OtFormDetail.*` qua `useTranslations` thứ 2, không tạo trùng key). Áp dụng cho CẢ 2 kênh
   (trong app + trang public qua email) vì dùng chung 1 component.
 
+### §Bỏ mail riêng ở 3 cấp quản lý — chỉ còn mail tổng hợp hằng ngày (2026-09-05)
+
+**Yêu cầu người dùng**: Trưởng phòng/Trưởng Xưởng/Giám đốc quá tải vì vừa nhận mail riêng NGAY khi 1
+đơn tới lượt họ (`NotifyEligibleApproversAsync`, xem §Xác thực qua email bên dưới) VỪA nhận mail tổng
+hợp mỗi ngày 15:00 (§Đơn tổng ở trên) — trùng lặp cho cùng 1 đơn. Chốt qua AskUserQuestion (CLAUDE.md
+§2 luật 2): bỏ hẳn mail riêng ở **cả 3 cấp quản lý** (DepartmentManager/WorkshopManager/GeneralDirector),
+chỉ giữ đúng 1 kênh mail tổng hợp/ngày cho cả 3 cấp. Cấp trung gian (`TerminalLevel=None` — Staff/Group
+Leader/Team Leader/SUP/CHIEF...) **không đổi gì** — vẫn nhận mail riêng ngay như cũ vì chưa có cơ chế
+gom cho cấp đó và không nằm trong yêu cầu.
+
+Trước đó "Đơn tổng" (§Đơn tổng) CHỈ gom được cấp DepartmentManager (theo Department) — muốn bỏ mail
+riêng ở cả 3 cấp thì phải mở rộng chính cơ chế gom đó sang WorkshopManager/GeneralDirector, KHÔNG viết
+thêm 1 cơ chế song song. 2 cấp này company-wide (candidate không lọc theo Department, xem
+`JobTitleApprovalChainService`) → gom **1 batch/cấp/ngày cho toàn công ty** thay vì theo Department.
+
+**Thay đổi BE**:
+- `OtFormBatch`: thêm cột `TerminalLevel:int` (enum `JobTitleTerminalLevel`, batch nào cũng có, không
+  còn ngầm định DepartmentManager); `DepartmentId` đổi thành `int?` — chỉ có giá trị khi
+  `TerminalLevel=DepartmentManager`, `null` cho 2 cấp company-wide. Migration `AddOtFormBatchTerminalLevel`
+  backfill `TerminalLevel=1` (DepartmentManager) cho mọi batch cũ (trước migration này chỉ có loại đó).
+- `OtFormService.CreateAsync`/`ApproveAsync`: điểm gọi `QueueStepApprovalNotification` giờ có thêm điều
+  kiện `step.TerminalLevelSnapshot == JobTitleTerminalLevel.None` — bỏ mail riêng đúng 3 cấp quản lý,
+  giữ nguyên cho cấp trung gian. Không đổi gì ở `RejectAsync` (Reject không gửi mail cấp kế tiếp).
+- Đổi tên/generalize các hàm nội bộ dùng để "Đơn tổng" hoạt động với nhiều TerminalLevel:
+  - `GetFormIdsAtDepartmentManagerStepAsync` (cũ, hardcode DepartmentManager) → tách làm 2:
+    `GetActiveFormIdsForBatchAsync(formFilter, terminalLevel)` (còn hiệu lực của 1 batch cụ thể, dùng ở
+    `BuildBatchDtoAsync`/`ProcessBatchAsync`/vòng "nhắc lại" của `RunDailyBatchSweepAsync`) và
+    `GetNewFormsAtManagerStepAsync()` (đơn MỚI chưa vào batch nào, trả kèm `DepartmentId`/`TerminalLevel`
+    để nhóm đúng phạm vi ở bước tạo batch mới).
+  - `RunDailyBatchSweepAsync` bước (a): nhóm đơn mới theo `(TerminalLevel, DepartmentId)` — riêng
+    DepartmentManager giữ `DepartmentId` thật, 2 cấp company-wide ép `DepartmentId=null` trước khi nhóm
+    (nên tự động gộp thành đúng 1 batch/cấp dù đơn thuộc nhiều Department khác nhau).
+  - `NotifyBatchApproversAsync`: điều kiện lọc candidate đổi từ hardcode `TerminalLevelSnapshot==
+    DepartmentManager` sang `== batch.TerminalLevel`.
+  - `ResolveBatchScopeNameAsync` (mới) — tên hiển thị phạm vi batch: Department (bilingual) nếu
+    `TerminalLevel=DepartmentManager`, ngược lại tra `JobTitle.Name` theo đúng `TerminalLevel` (company-
+    wide, JobTitle không có bản Jp nên `ScopeNameJp=null` trong trường hợp này). Dùng ở cả
+    `BuildBatchDtoAsync` (chi tiết 1 batch) và email tóm tắt (`NotifyBatchApproversAsync`).
+  - `GetBatchesAsync` (phân trang danh sách): scoping cho non-Admin đổi từ "chỉ so DepartmentId" sang so
+    theo `(TerminalLevel, DepartmentId)` — DepartmentManager so đúng Department mình từng là candidate,
+    2 cấp company-wide chỉ cần từng là candidate ở đúng TerminalLevel đó (không lọc Department). Tên
+    hiển thị công ty-wide tra riêng qua `FillCompanyWideBatchScopeNamesAsync` (1 query gộp cho cả trang,
+    không N+1 như query từng dòng).
+- **DTO đổi tên field (breaking change, không cần tương thích ngược — dữ liệu OT là dev)**:
+  `OtFormBatchListItemDto`/`OtFormBatchDto` bỏ `departmentNameVn`/`departmentNameJp`, thêm `terminalLevel`
+  + `scopeNameVn`/`scopeNameJp` (bilingual khi DepartmentManager, chỉ có bản Vn khi company-wide);
+  `departmentId` đổi `int` → `int?`. Xem schema mới ở `attendance-api-fe.md §6e`.
+- Email `EmailTemplates/OtForm/BatchApprovalNotification.html`: placeholder `{{DepartmentName}}` (nhãn
+  "PHÒNG BAN / 部署") đổi thành `{{ScopeName}}` (nhãn "PHẠM VI DUYỆT / 承認範囲") — vẫn 1 template dùng
+  chung cho cả 3 cấp, chỉ khác giá trị truyền vào.
+- FE: `ot-form-batch.dto.ts` đổi field khớp DTO mới; `OtFormBatchListPage.tsx`/`OtFormBatchDetail.tsx`
+  đổi `bilingualText(batch.departmentNameVn, ...)` → `bilingualText(batch.scopeNameVn, batch.scopeNameJp)`,
+  cột "Bộ phận" đổi thành "Phạm vi" (`colScope`, message keys `vi.json`/`ja.json`).
+- Đã build BE sạch (0 lỗi), tạo + áp dụng migration `AddOtFormBatchTerminalLevel` lên DB thật (dev), FE
+  `npx tsc --noEmit` sạch cho các file đã sửa (lỗi `jszip` module hiện ra là môi trường thiếu
+  dependency, không liên quan tới thay đổi này). Chưa verify end-to-end mail thật cho WorkshopManager/
+  GeneralDirector company-wide (cần dữ liệu Employee thật giữ 2 Chức vụ đó + `run-now` để kiểm tra).
+
 ### §Xác thực qua email — cập nhật chữ ký & duyệt đơn (2026-07-16)
 Bổ sung 1 kênh xác nhận qua email (nút bấm mở trang xác nhận nhỏ) cho 2 hành động nhạy cảm — **không thay thế** luồng trong app, chỉ là kênh phụ vì cấp quản lý ít khi mở app:
 
 - **Cập nhật chữ ký** (`UserSignatureService`): `PUT /api/UserSignature/me` **không còn áp dụng ngay** — tạo 1 dòng `PendingSignatureConfirmation` (Token, ExpiresAt = +30 phút, ConfirmedAt) rồi gửi email cho **chính người gọi** (chống chiếm phiên đăng nhập đổi chữ ký hộ). `GET/POST /api/UserSignature/confirm/{token}` (`[AllowAnonymous]`) — GET trả preview, POST áp dụng thật (gọi lại đúng logic upsert cũ) + set `ConfirmedAt` (chống dùng lại token).
 - **Duyệt/Từ chối đơn qua email** (`OtFormService`): sau `CreateAsync` (cần DepartmentManager) và sau `ApproveAsync` khi còn cấp kế tiếp (`ApprovedByDepartment`→cần WorkshopManager, `ApprovedByWorkshop`→cần GeneralDirector), hàm `NotifyEligibleApproversAsync` tự tra người đủ quyền ở đúng cấp đó (qua `UserApprovalScope` như `GetPendingApprovalsAsync`, hoặc qua Role `"Tổng Giám Đốc"` nếu là GeneralDirector — không có UserApprovalScope) rồi tạo 1 `OtFormApprovalEmailToken` + gửi mail **cho từng người** (1 đơn có thể có nhiều người cùng phạm vi → nhiều token, nhiều mail). `GET /api/OtForm/email-confirm/{token}` (preview), `POST .../approve`, `POST .../reject` (`[AllowAnonymous]`) — cả 2 action đều gọi thẳng `ApproveAsync`/`RejectAsync` **đã có sẵn** (không viết logic duyệt mới), nên tự động thừa hưởng mọi validate cũ (đơn đã xử lý xong thì tự chặn — token cũ tự nhiên vô hiệu, không cần logic hủy token anh em thủ công) + tự cascade gửi mail tiếp cho cấp sau nếu còn.
+  > **⚠ Cập nhật 2026-09-05** — mô tả trên vẫn đúng cho bước ở cấp trung gian (`TerminalLevel=None`).
+  > Với bước ở 1 trong 3 cấp quản lý (DepartmentManager/WorkshopManager/GeneralDirector),
+  > `NotifyEligibleApproversAsync` **không còn được gọi ngay** sau `CreateAsync`/`ApproveAsync` nữa —
+  > xem §Bỏ mail riêng ở 3 cấp quản lý bên dưới. Kênh `email-confirm/{token}` của `OtFormController` vẫn
+  > tồn tại y nguyên (đơn lẻ, dùng chung `ApproveAsync`/`RejectAsync`) nhưng từ giờ chỉ CÒN được tạo token
+  > qua nhánh cấp trung gian — người ở 3 cấp quản lý nhận link duyệt qua kênh "Đơn tổng"
+  > (`email-confirm/{token}` của `OtFormBatchController`, xem §Đơn tổng) thay vì kênh đơn lẻ này.
 - **Bề mặt `[AllowAnonymous]` đầu tiên và thứ 2 của toàn hệ thống** (trước đó không controller nào dùng, chỉ 2 dòng dev-only cho Scalar/OpenAPI) — bảo mật hoàn toàn dựa vào token ngẫu nhiên 256-bit (`Shared.Application.Helper.TokenHelper.GenerateSecureToken`), không dựa JWT/Permission. Token single-use (`ConfirmedAt`/`UsedAt`) + có hạn (`ExpiresAt`) — không cần logic thu hồi thủ công vì `LoadFormAndValidateAuthorityAsync`/status check tự nhiên chặn token cũ.
 - **Cross-module không qua HTTP**: `Shared.Application.Interfaces.IUserDirectoryService`/`IEmailService` là contract đặt ở `Shared.Application` (2 module đều đã reference sẵn); implementation thật (`Identity.Application.Services.UserDirectoryService`, `Shared.Infrastructure.Services.EmailService`) được Scrutor tự nối dây lúc runtime — `Attendance.Application` **không cần** ProjectReference tới `Identity.Application` dù cần đọc Email/FullName/Role của User (nằm DB khác).
 - **`Identity.User.Email`** (migration `AddEmailToUser`, DB `YevIdentityManagement`): tự resolve từ thuộc tính AD `mail` qua `MyClaimsTransformation.GetActualEmail` (dùng `UserPrincipal.EmailAddress`, cùng cơ chế `GetActualFullName`) — **chỉ set khi đang trống** (khác `DeviceName` vốn refresh mỗi lần đổi), tự "chữa lành" cho user cũ ở lần đăng nhập kế tiếp mà không cần Admin gán tay.

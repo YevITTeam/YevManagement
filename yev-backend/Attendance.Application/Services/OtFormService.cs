@@ -745,7 +745,12 @@ namespace Attendance.Application.Services
             {
                 var firstStepWithCandidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                     x => x.Id == firstCreatedStep.Id, x => x.Candidates)).FirstOrDefault();
-                if (firstStepWithCandidates != null)
+                // Bước ở cấp quản lý (DepartmentManager/WorkshopManager/GeneralDirector) KHÔNG còn gửi
+                // mail riêng từng đơn nữa (2026-09-05) — người ở 3 cấp này chỉ nhận đúng 1 mail tổng
+                // hợp/ngày qua OtFormBatchBackgroundService (xem RunDailyBatchSweepAsync), tránh gửi
+                // trùng 2 lần cho cùng 1 đơn. Cấp trung gian (TerminalLevel=None, Staff/Group
+                // Leader/Team Leader) chưa có cơ chế gom nên vẫn giữ mail tức thời như cũ.
+                if (firstStepWithCandidates != null && firstStepWithCandidates.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None)
                     QueueStepApprovalNotification(newOtForm.Id, firstStepWithCandidates.Id);
             }
 
@@ -1169,7 +1174,9 @@ namespace Attendance.Application.Services
                 var nextStepId = remainingPending.OrderBy(x => x.StepOrder).First().Id;
                 var nextStepWithCandidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                     x => x.Id == nextStepId, x => x.Candidates)).FirstOrDefault();
-                if (nextStepWithCandidates != null)
+                // Cùng lý do với CreateAsync — bỏ mail riêng cho bước ở cấp quản lý, chỉ còn mail tổng
+                // hợp hằng ngày (xem comment ở CreateAsync).
+                if (nextStepWithCandidates != null && nextStepWithCandidates.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None)
                     QueueStepApprovalNotification(otForm.Id, nextStepWithCandidates.Id);
             }
         }
@@ -1763,8 +1770,9 @@ namespace Attendance.Application.Services
         // fail-fast + gửi mail tóm tắt ở trên.
 
         // Id của các OtForm (thoả filter truyền vào) mà bước đang chờ HIỆN TẠI (Pending, StepOrder nhỏ
-        // nhất) đúng là bước "Trưởng phòng" — điều kiện chung cho gom mới/còn hiệu lực/tự đóng batch.
-        private async Task<List<int>> GetFormIdsAtDepartmentManagerStepAsync(Expression<Func<OtForm, bool>> formFilter)
+        // nhất) đúng là bước ở TerminalLevel truyền vào — điều kiện chung cho còn hiệu lực/tự đóng 1
+        // batch cụ thể (batch đã có sẵn TerminalLevel riêng, xem OtFormBatch).
+        private async Task<List<int>> GetActiveFormIdsForBatchAsync(Expression<Func<OtForm, bool>> formFilter, int terminalLevel)
         {
             var formIds = (await _unitOfWork.OtForms.SelectAsync(predicate: formFilter, selector: x => x.Id)).ToHashSet();
             if (formIds.Count == 0) return new List<int>();
@@ -1775,36 +1783,90 @@ namespace Attendance.Application.Services
 
             return pendingSteps
                 .GroupBy(s => s.OtFormId)
-                .Where(g => g.OrderBy(s => s.StepOrder).First().TerminalLevelSnapshot == (int)JobTitleTerminalLevel.DepartmentManager)
+                .Where(g => g.OrderBy(s => s.StepOrder).First().TerminalLevelSnapshot == terminalLevel)
                 .Select(g => g.Key)
                 .ToList();
         }
 
+        // Đơn CHƯA từng vào batch nào (OtFormBatchId==null) mà bước đang chờ hiện tại đúng là 1 trong 3
+        // cấp quản lý (DepartmentManager/WorkshopManager/GeneralDirector) — nền tảng cho bước (a) của
+        // RunDailyBatchSweepAsync. Trả kèm DepartmentId/TerminalLevel để nhóm batch đúng phạm vi: cấp
+        // DepartmentManager gom theo từng Phòng ban, 2 cấp còn lại gom company-wide (1 batch/cấp/ngày,
+        // vì candidate ở 2 cấp này vốn không lọc theo Department — xem JobTitleApprovalChainService).
+        private async Task<List<(int OtFormId, int DepartmentId, int TerminalLevel)>> GetNewFormsAtManagerStepAsync()
+        {
+            var candidateForms = await _unitOfWork.OtForms.SelectAsync(
+                predicate: x => !x.IsDeleted && x.OtFormBatchId == null && x.Status == (int)OtFormStatus.InApproval,
+                selector: x => new { x.Id, x.DepartmentId });
+            if (candidateForms.Count == 0) return new List<(int, int, int)>();
+
+            var formIds = candidateForms.Select(x => x.Id).ToHashSet();
+            var pendingSteps = await _unitOfWork.OtFormApprovalSteps.SelectAsync(
+                predicate: s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Pending && formIds.Contains(s.OtFormId),
+                selector: s => new { s.OtFormId, s.StepOrder, s.TerminalLevelSnapshot });
+
+            var levelByFormId = pendingSteps
+                .GroupBy(s => s.OtFormId)
+                .Select(g => new { g.Key, Level = g.OrderBy(s => s.StepOrder).First().TerminalLevelSnapshot })
+                .Where(x => x.Level != (int)JobTitleTerminalLevel.None)
+                .ToDictionary(x => x.Key, x => x.Level);
+
+            return candidateForms
+                .Where(f => levelByFormId.ContainsKey(f.Id))
+                .Select(f => (f.Id, f.DepartmentId, levelByFormId[f.Id]))
+                .ToList();
+        }
+
+        // Tên hiển thị phạm vi của 1 batch — Department (bilingual) nếu TerminalLevel=DepartmentManager,
+        // ngược lại là tên JobTitle ứng với TerminalLevel đó (company-wide, JobTitle không có bản Jp).
+        private async Task<(string ScopeNameVn, string? ScopeNameJp)> ResolveBatchScopeNameAsync(OtFormBatch batch)
+        {
+            if (batch.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager)
+            {
+                var department = batch.Department ?? await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == batch.DepartmentId!.Value);
+                return (department?.DepartmentNameVn ?? "", department?.DepartmentNameJp);
+            }
+
+            var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.TerminalLevel == batch.TerminalLevel && !x.IsDeleted);
+            return (jobTitle?.Name ?? "", null);
+        }
+
         public async Task<PagedResponse<OtFormBatchListItemDto>> GetBatchesAsync(string userName, bool isAdmin, int pageIndex, int pageSize)
         {
-            var query = _unitOfWork.OtFormBatches.GetQueryable(false, x => x.Department);
+            var query = _unitOfWork.OtFormBatches.GetQueryable(false, x => x.Department!);
 
             if (!isAdmin)
             {
-                // Chỉ Admin thấy hết — người thường chỉ thấy Đơn tổng của Phòng ban mà mình đang là
-                // candidate ở bước Trưởng phòng của ÍT NHẤT 1 đơn nào đó (không nhất thiết đơn còn
-                // trong batch này, chỉ cần từng là candidate hợp lệ ở đúng cấp đó).
-                var myDepartmentIds = (await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
-                    predicate: c => c.UserName == userName
-                        && c.OtFormApprovalStep.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.DepartmentManager,
-                    selector: c => c.OtFormApprovalStep.OtForm.DepartmentId))
-                    .Distinct().ToHashSet();
-                query = query.Where(x => myDepartmentIds.Contains(x.DepartmentId));
+                // Chỉ Admin thấy hết — người thường chỉ thấy Đơn tổng của phạm vi mà mình đang/đã từng
+                // là candidate hợp lệ ở đúng cấp đó (không nhất thiết đơn còn trong batch này): cấp
+                // DepartmentManager so theo đúng DepartmentId; WorkshopManager/GeneralDirector
+                // company-wide nên chỉ cần khớp TerminalLevel, không lọc Department.
+                var myCandidacies = (await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
+                    predicate: c => c.UserName == userName && c.OtFormApprovalStep.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None,
+                    selector: c => new { c.OtFormApprovalStep.TerminalLevelSnapshot, c.OtFormApprovalStep.OtForm.DepartmentId }))
+                    .Distinct().ToList();
+
+                var myDepartmentManagerDeptIds = myCandidacies
+                    .Where(x => x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.DepartmentManager)
+                    .Select(x => x.DepartmentId).ToHashSet();
+                var myCompanyWideLevels = myCandidacies
+                    .Where(x => x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.DepartmentManager)
+                    .Select(x => x.TerminalLevelSnapshot).ToHashSet();
+
+                query = query.Where(x =>
+                    (x.DepartmentId != null && myDepartmentManagerDeptIds.Contains(x.DepartmentId.Value))
+                    || (x.DepartmentId == null && myCompanyWideLevels.Contains(x.TerminalLevel)));
             }
 
             query = query.OrderByDescending(x => x.Id);
 
-            return await _unitOfWork.OtFormBatches.ToPagedResponseAsync(query, pageIndex, pageSize, x => new OtFormBatchListItemDto
+            var page = await _unitOfWork.OtFormBatches.ToPagedResponseAsync(query, pageIndex, pageSize, x => new OtFormBatchListItemDto
             {
                 Id = x.Id,
+                TerminalLevel = x.TerminalLevel,
                 DepartmentId = x.DepartmentId,
-                DepartmentNameVn = x.Department.DepartmentNameVn,
-                DepartmentNameJp = x.Department.DepartmentNameJp,
+                ScopeNameVn = x.Department != null ? x.Department.DepartmentNameVn : "",
+                ScopeNameJp = x.Department != null ? x.Department.DepartmentNameJp : null,
                 BatchDate = x.BatchDate,
                 Status = x.Status,
                 FormCount = x.OtForms.Count(f => !f.IsDeleted),
@@ -1814,22 +1876,42 @@ namespace Attendance.Application.Services
                 ProcessedAt = x.ProcessedAt,
                 ProcessedByFullName = x.ProcessedByFullName
             });
+
+            await FillCompanyWideBatchScopeNamesAsync(page.Data);
+            return page;
+        }
+
+        // ScopeNameVn ở trên chỉ điền được ngay trong query cho batch có Department (TerminalLevel=
+        // DepartmentManager) — 2 cấp company-wide (WorkshopManager/GeneralDirector) không có Department
+        // để join, phải tra riêng qua JobTitle.TerminalLevel (1 query gộp cho cả trang, không N+1).
+        private async Task FillCompanyWideBatchScopeNamesAsync(IReadOnlyList<OtFormBatchListItemDto> items)
+        {
+            var levels = items.Where(x => x.DepartmentId == null).Select(x => x.TerminalLevel).Distinct().ToList();
+            if (levels.Count == 0) return;
+
+            var nameByLevel = (await _unitOfWork.JobTitles.SelectAsync(
+                predicate: x => !x.IsDeleted && levels.Contains(x.TerminalLevel),
+                selector: x => new { x.TerminalLevel, x.Name }))
+                .ToDictionary(x => x.TerminalLevel, x => x.Name);
+
+            foreach (var item in items.Where(x => x.DepartmentId == null))
+                item.ScopeNameVn = nameByLevel.GetValueOrDefault(item.TerminalLevel, "");
         }
 
         public async Task<OtFormBatchDto> GetBatchByIdAsync(int id)
         {
-            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == id, x => x.Department);
+            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == id, x => x.Department!);
             batch.OrThrowNotFound("Đơn tổng", id);
             return await BuildBatchDtoAsync(batch!);
         }
 
-        // otForms chỉ còn các đơn VẪN CÒN hiệu lực xử lý (đang chờ đúng bước Trưởng phòng) — đơn nào đã
-        // bị duyệt/từ chối lẻ tay ngoài luồng batch thì rơi khỏi danh sách này (không xoá liên kết
-        // OtFormBatchId, chỉ đơn giản không còn hiển thị như "chờ xử lý" ở đây nữa).
+        // otForms chỉ còn các đơn VẪN CÒN hiệu lực xử lý (đang chờ đúng bước ở TerminalLevel của batch)
+        // — đơn nào đã bị duyệt/từ chối lẻ tay ngoài luồng batch thì rơi khỏi danh sách này (không xoá
+        // liên kết OtFormBatchId, chỉ đơn giản không còn hiển thị như "chờ xử lý" ở đây nữa).
         private async Task<OtFormBatchDto> BuildBatchDtoAsync(OtFormBatch batch)
         {
-            var activeFormIds = await GetFormIdsAtDepartmentManagerStepAsync(
-                x => !x.IsDeleted && x.OtFormBatchId == batch.Id && x.Status == (int)OtFormStatus.InApproval);
+            var activeFormIds = await GetActiveFormIdsForBatchAsync(
+                x => !x.IsDeleted && x.OtFormBatchId == batch.Id && x.Status == (int)OtFormStatus.InApproval, batch.TerminalLevel);
 
             var otForms = activeFormIds.Count == 0
                 ? new List<OtForm>()
@@ -1852,13 +1934,15 @@ namespace Attendance.Application.Services
                     .ToDictionary(x => x.OtFormId);
 
             var mealSettings = await _attendanceSettingService.GetAsync();
+            var (scopeNameVn, scopeNameJp) = await ResolveBatchScopeNameAsync(batch);
 
             return new OtFormBatchDto
             {
                 Id = batch.Id,
+                TerminalLevel = batch.TerminalLevel,
                 DepartmentId = batch.DepartmentId,
-                DepartmentNameVn = batch.Department.DepartmentNameVn,
-                DepartmentNameJp = batch.Department.DepartmentNameJp,
+                ScopeNameVn = scopeNameVn,
+                ScopeNameJp = scopeNameJp,
                 BatchDate = batch.BatchDate,
                 Status = batch.Status,
                 CreatedAt = batch.CreatedAt,
@@ -1929,14 +2013,14 @@ namespace Attendance.Application.Services
 
         public async Task<OtFormBatchDto> ProcessBatchAsync(int batchId, string approverUserName, string? approverFullName, ProcessOtFormBatchDto request)
         {
-            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == batchId, x => x.Department);
+            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == batchId, x => x.Department!);
             batch.OrThrowNotFound("Đơn tổng", batchId);
 
             if (batch!.Status != (int)OtFormBatchStatus.Pending)
                 throw new DomainException("Đơn tổng này đã được xử lý xong.");
 
-            var activeFormIds = await GetFormIdsAtDepartmentManagerStepAsync(
-                x => !x.IsDeleted && x.OtFormBatchId == batchId && x.Status == (int)OtFormStatus.InApproval);
+            var activeFormIds = await GetActiveFormIdsForBatchAsync(
+                x => !x.IsDeleted && x.OtFormBatchId == batchId && x.Status == (int)OtFormStatus.InApproval, batch.TerminalLevel);
 
             if (activeFormIds.Count == 0)
             {
@@ -2068,9 +2152,9 @@ namespace Attendance.Application.Services
             return emailToken;
         }
 
-        // Gửi mail tóm tắt cho TẤT CẢ candidate của bước Trưởng phòng, gộp theo UserName (1 người có
-        // thể là candidate của nhiều đơn trong cùng batch — chỉ nhận 1 mail, không lặp lại) — mirror
-        // NotifyEligibleApproversAsync (đơn lẻ) nhưng gộp nhiều đơn vào 1 email.
+        // Gửi mail tóm tắt cho TẤT CẢ candidate của bước ở TerminalLevel của batch, gộp theo UserName
+        // (1 người có thể là candidate của nhiều đơn trong cùng batch — chỉ nhận 1 mail, không lặp
+        // lại) — mirror NotifyEligibleApproversAsync (đơn lẻ) nhưng gộp nhiều đơn vào 1 email.
         private async Task NotifyBatchApproversAsync(OtFormBatch batch, List<OtForm> activeForms, bool isReminder)
         {
             if (activeForms.Count == 0) return;
@@ -2078,7 +2162,7 @@ namespace Attendance.Application.Services
             var formIds = activeForms.Select(x => x.Id).ToHashSet();
             var candidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                 x => formIds.Contains(x.OtFormId) && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending
-                    && x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.DepartmentManager,
+                    && x.TerminalLevelSnapshot == batch.TerminalLevel,
                 x => x.Candidates))
                 .SelectMany(x => x.Candidates)
                 .GroupBy(x => x.UserName)
@@ -2087,8 +2171,8 @@ namespace Attendance.Application.Services
 
             if (candidates.Count == 0) return;
 
-            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == batch.DepartmentId);
-            var departmentName = FormatBilingual(department?.DepartmentNameVn, department?.DepartmentNameJp);
+            var (scopeNameVn, scopeNameJp) = await ResolveBatchScopeNameAsync(batch);
+            var scopeName = FormatBilingual(scopeNameVn, scopeNameJp);
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
             var now = TimeHelper.GetCurrentUtcTime();
             var employeeCount = (await _unitOfWork.OtFormEmployees.FindAsync(x => formIds.Contains(x.OtFormId) && !x.IsRemoved)).Count;
@@ -2122,7 +2206,7 @@ namespace Attendance.Application.Services
                         ["OtFormBatchId"] = batch.Id.ToString(),
                         ["ApproverFullName"] = fullName ?? candidate.UserName,
                         ["FormCount"] = activeForms.Count.ToString(),
-                        ["DepartmentName"] = departmentName,
+                        ["ScopeName"] = scopeName,
                         ["BatchDate"] = batch.BatchDate.ToString("dd/MM/yyyy"),
                         ["EmployeeCount"] = employeeCount.ToString(),
                         ["TotalHour"] = totalHour.ToString("0.##"),
@@ -2146,35 +2230,45 @@ namespace Attendance.Application.Services
         }
 
         // Gọi bởi OtFormBatchBackgroundService (mặc định 15:00 hằng ngày, xem Program.cs):
-        // (a) gom đơn CHƯA từng vào batch, hiện đúng bước Trưởng phòng → tạo batch mới theo Department,
-        //     gửi mail lần đầu; (b) với batch cũ còn Pending: hết đơn hiệu lực → tự đóng (không mail),
-        //     còn đơn hiệu lực → gửi mail nhắc (IsReminder=true), KHÔNG gộp thêm đơn mới vào batch cũ.
+        // (a) gom đơn CHƯA từng vào batch, hiện đúng 1 trong 3 bước quản lý → tạo batch mới (Department
+        //     Manager gom theo từng Department; WorkshopManager/GeneralDirector gom company-wide, 1
+        //     batch/cấp/ngày vì candidate 2 cấp này vốn không lọc theo Department), gửi mail lần đầu;
+        //     (b) với batch cũ còn Pending: hết đơn hiệu lực → tự đóng (không mail), còn đơn hiệu lực →
+        //     gửi mail nhắc (IsReminder=true), KHÔNG gộp thêm đơn mới vào batch cũ.
         public async Task RunDailyBatchSweepAsync()
         {
             var now = TimeHelper.GetCurrentUtcTime();
             var today = DateOnly.FromDateTime(now);
 
-            var newFormIds = await GetFormIdsAtDepartmentManagerStepAsync(
-                x => !x.IsDeleted && x.OtFormBatchId == null && x.Status == (int)OtFormStatus.InApproval);
+            var newFormRows = await GetNewFormsAtManagerStepAsync();
 
             var newBatches = new List<(OtFormBatch Batch, List<OtForm> Forms)>();
 
-            if (newFormIds.Count > 0)
+            if (newFormRows.Count > 0)
             {
-                var newForms = (await _unitOfWork.OtForms.FindAsync(x => newFormIds.Contains(x.Id))).ToList();
+                var newFormIds = newFormRows.Select(x => x.OtFormId).ToHashSet();
+                var newFormsById = (await _unitOfWork.OtForms.FindAsync(x => newFormIds.Contains(x.Id))).ToDictionary(x => x.Id);
 
-                foreach (var group in newForms.GroupBy(x => x.DepartmentId))
+                // DepartmentManager gom theo (TerminalLevel, DepartmentId); WorkshopManager/GeneralDirector
+                // company-wide nên nhóm theo TerminalLevel với DepartmentId=null (key dùng int.MinValue để
+                // đại diện "null" trong GroupBy, không ảnh hưởng gì ngoài phạm vi vòng lặp này).
+                var groups = newFormRows.GroupBy(r => (
+                    TerminalLevel: r.TerminalLevel,
+                    DepartmentId: r.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager ? r.DepartmentId : (int?)null));
+
+                foreach (var group in groups)
                 {
                     var newBatch = new OtFormBatch
                     {
-                        DepartmentId = group.Key,
+                        TerminalLevel = group.Key.TerminalLevel,
+                        DepartmentId = group.Key.DepartmentId,
                         BatchDate = today,
                         Status = (int)OtFormBatchStatus.Pending,
                         CreatedAt = now
                     };
                     await _unitOfWork.OtFormBatches.AddAsync(newBatch);
 
-                    var groupForms = group.ToList();
+                    var groupForms = group.Select(r => newFormsById[r.OtFormId]).ToList();
                     foreach (var form in groupForms)
                     {
                         form.OtFormBatch = newBatch;
@@ -2198,8 +2292,8 @@ namespace Attendance.Application.Services
                 // Batch vừa tạo ở bước (a) trong CHÍNH lần chạy này đã nhận mail lần đầu rồi, khỏi nhắc lại ngay.
                 if (newBatchIds.Contains(batch.Id)) continue;
 
-                var activeFormIds = await GetFormIdsAtDepartmentManagerStepAsync(
-                    x => !x.IsDeleted && x.OtFormBatchId == batch.Id && x.Status == (int)OtFormStatus.InApproval);
+                var activeFormIds = await GetActiveFormIdsForBatchAsync(
+                    x => !x.IsDeleted && x.OtFormBatchId == batch.Id && x.Status == (int)OtFormStatus.InApproval, batch.TerminalLevel);
 
                 if (activeFormIds.Count == 0)
                 {
