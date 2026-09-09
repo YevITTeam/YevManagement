@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AuthApi } from "@/modules/auth/api/auth.api";
-import { getAuthToken, clearAuthToken } from "@/lib/client";
+import { getAuthToken, clearAuthToken, setOnUnauthorized } from "@/lib/client";
 import type { LoginRequestDto, UserDto } from "@/modules/auth/types/auth.dto";
 
 interface AuthContextValue {
@@ -44,14 +44,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refreshUser = useCallback(async () => {
         setIsLoading(true);
         try {
-            const current = await AuthApi.getCurrentUser();
+            const current = await AuthApi.me();
             setUser(current);
         } catch {
+            clearAuthToken();
             setUser(null);
             throw new Error("Không thể làm mới phiên đăng nhập. Vui lòng thử lại.");
         } finally {
             setIsLoading(false);
         }
+    }, []);
+
+    useEffect(() => {
+        const handleUnauthorized = () => {
+            clearAuthToken();
+            setUser(null);
+        };
+        setOnUnauthorized(handleUnauthorized);
+        window.addEventListener("auth:unauthorized", handleUnauthorized);
+        return () => {
+            setOnUnauthorized(null);
+            window.removeEventListener("auth:unauthorized", handleUnauthorized);
+        };
     }, []);
 
     useEffect(() => {
@@ -72,7 +86,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (!isCancelled) setUser(current);
             })
             .catch(() => {
-                if (!isCancelled) setUser(null);
+                if (!isCancelled) {
+                    clearAuthToken();
+                    setUser(null);
+                }
             })
             .finally(() => {
                 if (!isCancelled) setIsLoading(false);

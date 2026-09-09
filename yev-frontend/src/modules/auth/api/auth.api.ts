@@ -52,17 +52,16 @@ export const AuthApi = {
     return payload.data.user;
   },
 
-  // ĐÃ có token → lấy hồ sơ qua `/Auth/me`; CHƯA có mới gọi `windows-login`.
-  // Lý do không gọi thẳng windows-login như trước: mỗi lời gọi là một handshake Negotiate/NTLM mới.
-  // Trên máy đã bật SSO cho origin của BE (site nằm trong vùng Local Intranet / AuthServerAllowlist)
-  // thì handshake này âm thầm; máy CHƯA bật thì trình duyệt hỏi lại tài khoản domain — nên mỗi lần
-  // F5 trang là một lần bị bắt đăng nhập lại dù vừa đăng nhập đúng.
-  // Token hỏng/hết hạn → `/Auth/me` trả 401 → `client.ts` tự re-login (đúng 1 lần) rồi retry.
-  // KHÔNG cache profile user ở localStorage (permissions/roles là dữ liệu nhạy cảm) — nơi cache hợp lý là
-  // AuthContext (React state, chỉ tồn tại trong bộ nhớ JS của tab hiện tại), không phải ở đây.
+  // Lấy hồ sơ user hiện tại nếu đang có JWT token. Tuyệt đối KHÔNG tự động gọi windowsLogin()
+  // vì request Negotiate sẽ làm trình duyệt bật popup Windows Security mặc định khi chưa có SSO.
   getCurrentUser: async (): Promise<UserDto | null> => {
     if (typeof window === "undefined") return null;
-    return getAuthToken() ? AuthApi.me() : AuthApi.windowsLogin();
+    if (!getAuthToken()) return null;
+    try {
+      return await AuthApi.me();
+    } catch {
+      return null;
+    }
   },
 
   // Chuẩn bị trước 1 user cho UserName cụ thể — dùng khi nhân viên mới chưa từng đăng nhập Windows

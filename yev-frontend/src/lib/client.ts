@@ -27,6 +27,23 @@ const persistToken = (token: string | null) => {
   window.localStorage.removeItem(AUTH_TOKEN_KEY);
 };
 
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export const setOnUnauthorized = (handler: UnauthorizedHandler | null) => {
+  unauthorizedHandler = handler;
+};
+
+const handleUnauthorized = () => {
+  persistToken(null);
+  if (unauthorizedHandler) {
+    unauthorizedHandler();
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+  }
+};
+
 const WINDOWS_LOGIN_ENDPOINT = "/Auth/windows-login";
 
 // Windows Negotiate/NTLM là handshake gắn với 1 kết nối — nếu nhiều request cùng lúc bị 401 (vd trang
@@ -142,7 +159,6 @@ const fetchWithAuth = async (
   options: RequestInit = {}
 ): Promise<Response> => {
   const url = `${BASE_URL}${endpoint}`;
-  // Giữ lại ĐÚNG token đã gắn cho lần gọi này để so ở nhánh xử lý 401 bên dưới.
   const token = getStoredToken();
   const headers = new Headers(options.headers);
 
@@ -156,44 +172,15 @@ const fetchWithAuth = async (
 
   const defaultOptions: RequestInit = {
     ...options,
-    credentials: "include", // Cờ này giúp gửi Windows Credentials
+    credentials: options.credentials ?? "same-origin",
     headers,
   };
 
-  let response = await fetch(url, defaultOptions);
+  const response = await fetch(url, defaultOptions);
 
-  // -----------------------------------------------------------
-  // XỬ LÝ AUTO RE-LOGIN KHI GẶP LỖI 401 (TOKEN HẾT HẠN)
-  // Đi qua requestWindowsLogin() (single-flight) thay vì tự fetch riêng — nhiều API gọi song song
-  // cùng bị 401 (vd trang Quản lý PC) sẽ gộp chung về đúng 1 request Negotiate thật sự.
-  // -----------------------------------------------------------
   if (response.status === 401 && !endpoint.includes("windows-login")) {
-    try {
-      // Single-flight `pendingWindowsLogin` chỉ gộp được các lời gọi TRÙNG THỜI ĐIỂM. Một request chậm
-      // (đi kèm token cũ) trả 401 SAU khi phiên đăng nhập kia đã kết thúc sẽ thấy `pendingWindowsLogin`
-      // đã null → tự mở thêm 1 handshake Negotiate nữa, và trên máy chưa bật SSO cho origin của BE thì
-      // đó là popup hỏi mật khẩu domain lần 2 dù người dùng vừa nhập đúng xong.
-      // Vì vậy: token trong localStorage đã KHÁC token vừa gắn ⇒ ai đó đã đăng nhập lại xong rồi,
-      // chỉ cần thử lại với token mới, KHÔNG gọi thêm windows-login.
-      let latestToken = getStoredToken();
-
-      if (latestToken === token) {
-        await requestWindowsLogin();
-        latestToken = getStoredToken();
-      }
-
-      if (latestToken && latestToken !== token) {
-        headers.set("Authorization", `Bearer ${latestToken}`);
-        defaultOptions.headers = headers;
-
-        // THỰC HIỆN GỌI LẠI (RETRY) REQUEST BAN ĐẦU
-        response = await fetch(url, defaultOptions);
-      }
-    } catch (error) {
-      console.error("Auto re-login failed:", error);
-    }
+    handleUnauthorized();
   }
-  // -----------------------------------------------------------
 
   return response;
 };
@@ -220,7 +207,7 @@ const fetchClient = async <T>(
   // KHÔNG xoá token, vì đăng nhập lại (cùng user Windows) sẽ vẫn ra permission y hệt, chỉ gây mất session vô ích.
   if (!response.ok) {
     if (response.status === 401) {
-      persistToken(null);
+      handleUnauthorized();
     }
     const errorBody = typeof payload === "string" ? payload : JSON.stringify(payload ?? {});
     throw new Error(errorBody || `API Error: ${response.status}`);
@@ -254,7 +241,7 @@ export const postStream = async (
 
   if (!response.ok) {
     if (response.status === 401) {
-      persistToken(null);
+      handleUnauthorized();
     }
 
     const contentType = response.headers.get("content-type") ?? "";
@@ -304,7 +291,7 @@ export const postFormForBlob = async (
 
   if (!response.ok) {
     if (response.status === 401) {
-      persistToken(null);
+      handleUnauthorized();
     }
 
     const contentType = response.headers.get("content-type") ?? "";
@@ -329,7 +316,7 @@ export const getForBlob = async (url: string, options?: RequestInit): Promise<Bl
 
   if (!response.ok) {
     if (response.status === 401) {
-      persistToken(null);
+      handleUnauthorized();
     }
 
     const contentType = response.headers.get("content-type") ?? "";
