@@ -20,11 +20,21 @@ public static class ApprovalStepCoordinatorPermissions
         "Attendance.Employee.View",
         "Attendance.DepartmentApprovalStep.View",
         "Attendance.GroupApprovalStep.View",
+        // Khối "Theo chuyền" (ProductionApprovalStep) cũng scope theo DepartmentId như khối Bộ phận
+        // — BỊ QUÊN khi thêm tab này (2026-08-24), khiến Người phụ trách Bộ phận không xem/sửa được
+        // tab "Theo chuyền" trên màn Cây duyệt dù tab "Theo Nhóm" vẫn hoạt động bình thường. Sửa
+        // 2026-09-04. View cấp cho cả 2 vai (giống DepartmentApprovalStep.View/GroupApprovalStep.View
+        // ở trên) để màn không lỗi khi tải dù chỉ phụ trách 1 phía; quyền GHI vẫn tách riêng theo
+        // isDeptCoordinator bên dưới (đúng scope Bộ phận của khối Chuyền).
+        "Attendance.ProductionApprovalStep.View",
     };
 
     public const string DepartmentUpdateCode = "Attendance.DepartmentApprovalStep.Update";
 
     public const string GroupUpdateCode = "Attendance.GroupApprovalStep.Update";
+
+    // Cùng scope Bộ phận với DepartmentUpdateCode — xem ghi chú BaseViewCodes ở trên (2026-09-04).
+    public const string ProductionUpdateCode = "Attendance.ProductionApprovalStep.Update";
 
     // Cấp thêm cho Người phụ trách Bộ phận (2026-08-29, theo yêu cầu người dùng — "mọi quyền đó mình
     // sẽ giao cho người phụ trách của cái phòng ban đó"): nhân sự dưới chuyền + lũy kế + giới hạn OT,

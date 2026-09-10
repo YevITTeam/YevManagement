@@ -35,6 +35,7 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { MEAL_TICKET_MAIN, MEAL_TICKET_SECONDARY, computeMealTicketType, isEarlyMealWindowOt } from "@/modules/attendance/lib/mealTicket";
+import { MealTicketTypeBadge } from "./MealTicketTypeBadge";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -83,26 +84,6 @@ function buildOtLimitWarning(
     if (monthHours > monthLimit) return t("employeeOverMonthlyLimit", { code, hours: monthHours, limit: monthLimit });
     if (yearHours > yearLimit) return t("employeeOverYearlyLimit", { code, hours: yearHours, limit: yearLimit });
     return null;
-}
-
-// Badge "Loại phiếu ăn" dùng chung cho cả 3 bảng chọn nhân viên (Sửa đơn/Theo chuyền/Theo Nhóm) —
-// preview lúc đang tạo/sửa đơn, mirror màu badge "Có ăn"/"Không ăn" ở OtFormDetail.tsx cho nhất quán.
-function MealTicketTypeBadge({ type, labels }: { type: number; labels: { main: string; secondary: string; none: string } }) {
-    if (type === MEAL_TICKET_MAIN) {
-        return (
-            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                {labels.main}
-            </span>
-        );
-    }
-    if (type === MEAL_TICKET_SECONDARY) {
-        return (
-            <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-semibold text-[#5e3f3a]">
-                {labels.secondary}
-            </span>
-        );
-    }
-    return <span className="text-xs text-[#9aa0a6]">{labels.none}</span>;
 }
 
 const emptyProcessPart: ProcessPartDto = {
@@ -1274,7 +1255,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 <td className="px-3 py-2 align-top">
                                                     <MealTicketTypeBadge
                                                         type={mealTicketType}
-                                                        labels={{ main: t("mealTicketTypeMain"), secondary: t("mealTicketTypeSecondary"), none: t("mealTicketTypeNone") }}
+                                                        t={t}
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
@@ -1353,7 +1334,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     <td className="px-3 py-2 align-top">
                                                         <MealTicketTypeBadge
                                                             type={mealTicketType}
-                                                            labels={{ main: t("mealTicketTypeMain"), secondary: t("mealTicketTypeSecondary"), none: t("mealTicketTypeNone") }}
+                                                            t={t}
                                                         />
                                                     </td>
                                                     <td className="px-3 py-2 align-top">
@@ -1464,17 +1445,17 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 {/* Team PHẢI chọn trước Line — Line là con thật của Team (ProductionLine.TeamId
                                     là FK), đặt Team lên trước + khoá Line tới khi có Team để không còn ai hiểu
                                     nhầm Line là bộ lọc chọn đầu tiên (2026-08-26, yêu cầu người dùng). */}
-                                <select
+                                <SearchableSelect
+                                    options={teamOptions.map((option) => ({
+                                        value: option.id,
+                                        label: option.nameVn || option.code,
+                                        searchText: `${option.code} ${option.nameVn ?? ""}`.toLowerCase(),
+                                    }))}
                                     value={productionTeamId}
-                                    onChange={(event) => setProductionTeamId(event.target.value ? Number(event.target.value) : "")}
+                                    onChange={setProductionTeamId}
+                                    placeholder={t("productionFilterTeamPlaceholder")}
                                     disabled={!isCoreFormInfoFilled}
-                                    className={fieldClassName}
-                                >
-                                    <option value="">{t("productionFilterTeamPlaceholder")}</option>
-                                    {teamOptions.map((option) => (
-                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
-                                    ))}
-                                </select>
+                                />
                                 <SearchableSelect
                                     options={lineOptions.map((option) => ({
                                         value: option.id,
@@ -1488,17 +1469,17 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     }
                                     disabled={!isCoreFormInfoFilled || productionTeamId === ""}
                                 />
-                                <select
+                                <SearchableSelect
+                                    options={shiftTeamOptions.map((option) => ({
+                                        value: option.id,
+                                        label: option.nameVn || option.code,
+                                        searchText: `${option.code} ${option.nameVn ?? ""}`.toLowerCase(),
+                                    }))}
                                     value={productionShiftTeamId}
-                                    onChange={(event) => setProductionShiftTeamId(event.target.value ? Number(event.target.value) : "")}
+                                    onChange={setProductionShiftTeamId}
+                                    placeholder={t("productionFilterShiftTeamPlaceholder")}
                                     disabled={!isCoreFormInfoFilled}
-                                    className={fieldClassName}
-                                >
-                                    <option value="">{t("productionFilterShiftTeamPlaceholder")}</option>
-                                    {shiftTeamOptions.map((option) => (
-                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
-                                    ))}
-                                </select>
+                                />
                                 <input
                                     value={productionKeyword}
                                     onChange={(event) => setProductionKeyword(event.target.value)}
@@ -1640,7 +1621,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         <td className="px-3 py-2 align-top">
                                                             <MealTicketTypeBadge
                                                                 type={mealTicketType}
-                                                                labels={{ main: t("mealTicketTypeMain"), secondary: t("mealTicketTypeSecondary"), none: t("mealTicketTypeNone") }}
+                                                                t={t}
                                                             />
                                                         </td>
                                                         <td className="px-3 py-2 align-top">
@@ -1781,7 +1762,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 <td className="px-3 py-2 align-top">
                                                     <MealTicketTypeBadge
                                                         type={mealTicketType}
-                                                        labels={{ main: t("mealTicketTypeMain"), secondary: t("mealTicketTypeSecondary"), none: t("mealTicketTypeNone") }}
+                                                        t={t}
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2 align-top">

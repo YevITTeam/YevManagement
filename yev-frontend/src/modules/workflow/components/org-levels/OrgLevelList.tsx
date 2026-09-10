@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Layers } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -10,6 +10,8 @@ import type { OrgLevelDto } from "@/modules/workflow/types/org-level.dto";
 import OrgLevelForm, { type OrgLevelFormValues } from "./OrgLevelForm";
 import OrgLevelJobTitleSuggestionsDialog from "./OrgLevelJobTitleSuggestionsDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { EmptyState } from "@/components/common/EmptyState";
+import { TableSkeletonRows } from "@/components/common/TableSkeletonRows";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -139,14 +141,15 @@ export default function OrgLevelList() {
                             </tr>
                         </thead>
                         <tbody>
+                            {isLoading && <TableSkeletonRows rows={5} columns={canManage ? 4 : 3} />}
                             {!isLoading && orgLevels.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={canManage ? 4 : 3}>
+                                        <EmptyState icon={Layers} title={t("noData")} />
                                     </td>
                                 </tr>
                             )}
-                            {orgLevels.map((item) => (
+                            {!isLoading && orgLevels.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.levelNumber}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{item.nameVn}</td>

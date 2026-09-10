@@ -156,6 +156,8 @@ export interface FormSchemaConditionSnapshot {
 export interface FormSchemaSnapshot {
     fields: FormSchemaFieldSnapshot[];
     conditions: FormSchemaConditionSnapshot[];
+    // Layout .docx đã snapshot lúc nộp (workflow-module.md §1.5) — NULL nếu form ở chế độ lưới.
+    layoutHtml: string | null;
 }
 
 export interface WorkflowRequestListItemDto {

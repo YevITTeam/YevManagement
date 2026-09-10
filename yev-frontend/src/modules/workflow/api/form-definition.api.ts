@@ -15,6 +15,7 @@ const ENDPOINTS = {
         deleteFormDefinition: (id: number) => `/Workflow/FormDefinition/${id}`,
         getFields: (id: number) => `/Workflow/FormDefinition/${id}/fields`,
         replaceFields: (id: number) => `/Workflow/FormDefinition/${id}/fields`,
+        updateLayout: (id: number) => `/Workflow/FormDefinition/${id}/layout`,
         getConditions: (id: number) => `/Workflow/FormDefinition/${id}/conditions`,
         replaceConditions: (id: number) => `/Workflow/FormDefinition/${id}/conditions`,
         getAccesses: (id: number) => `/Workflow/FormDefinition/${id}/accesses`,
@@ -75,6 +76,11 @@ export const FormDefinitionApi = {
 
     replaceFields: async (id: number, items: ReplaceFormFieldItemDto[]) => {
         const response = await api.put<ApiResponse<FormFieldDto[]>>(ENDPOINTS.FORM_DEFINITION.replaceFields(id), { items });
+        return response.data;
+    },
+
+    updateLayout: async (id: number, layoutHtml: string | null) => {
+        const response = await api.put<ApiResponse<FormDefinitionDto>>(ENDPOINTS.FORM_DEFINITION.updateLayout(id), { layoutHtml });
         return response.data;
     },
 

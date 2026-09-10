@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, Plus } from "lucide-react";
+import { RefreshCw, Plus, Inbox } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
 import { WorkflowRequestApi } from "@/modules/workflow/api/workflow-request.api";
 import type { WorkflowRequestListItemDto } from "@/modules/workflow/types/workflow-request.dto";
 import { RequestStatus } from "@/modules/workflow/types/workflow-request.dto";
+import { EmptyState } from "@/components/common/EmptyState";
+import { TableSkeletonRows } from "@/components/common/TableSkeletonRows";
+import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -16,14 +19,14 @@ const PAGE_SIZE = 10;
 
 type TabKey = "mine" | "pending" | "all";
 
-const STATUS_META: Record<number, { labelKey: string; className: string }> = {
-    [RequestStatus.Draft]: { labelKey: "statusDraft", className: "bg-[#f2f4f6] text-[#5e3f3a]" },
-    [RequestStatus.Submitted]: { labelKey: "statusSubmitted", className: "bg-[#e8f0fe] text-[#1a56db]" },
-    [RequestStatus.InProgress]: { labelKey: "statusInProgress", className: "bg-[#e8f0fe] text-[#1a56db]" },
-    [RequestStatus.Approved]: { labelKey: "statusApproved", className: "bg-[#e6f4ea] text-[#1e7a34]" },
-    [RequestStatus.Rejected]: { labelKey: "statusRejected", className: "bg-[#fde8e8] text-[#930006]" },
-    [RequestStatus.SentBack]: { labelKey: "statusSentBack", className: "bg-[#fff8ee] text-[#8a5a00]" },
-    [RequestStatus.Cancelled]: { labelKey: "statusCancelled", className: "bg-[#f2f4f6] text-[#8a8f94]" },
+const STATUS_META: Record<number, { labelKey: string; variant: BadgeVariant }> = {
+    [RequestStatus.Draft]: { labelKey: "statusDraft", variant: "neutral" },
+    [RequestStatus.Submitted]: { labelKey: "statusSubmitted", variant: "info" },
+    [RequestStatus.InProgress]: { labelKey: "statusInProgress", variant: "info" },
+    [RequestStatus.Approved]: { labelKey: "statusApproved", variant: "success" },
+    [RequestStatus.Rejected]: { labelKey: "statusRejected", variant: "danger" },
+    [RequestStatus.SentBack]: { labelKey: "statusSentBack", variant: "warning" },
+    [RequestStatus.Cancelled]: { labelKey: "statusCancelled", variant: "neutral" },
 };
 
 export default function WorkflowRequestList() {
@@ -153,14 +156,15 @@ export default function WorkflowRequestList() {
                             </tr>
                         </thead>
                         <tbody>
+                            {isLoading && <TableSkeletonRows rows={5} columns={5} />}
                             {!isLoading && items.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={5}>
+                                        <EmptyState icon={Inbox} title={t("noData")} />
                                     </td>
                                 </tr>
                             )}
-                            {items.map((item) => {
+                            {!isLoading && items.map((item) => {
                                 const meta = STATUS_META[item.status];
                                 return (
                                     <tr
@@ -172,9 +176,9 @@ export default function WorkflowRequestList() {
                                         <td className="px-6 py-4 text-sm text-[#191c1e]">{item.formDefinitionNameVn}</td>
                                         <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.createdByEmployeeName}</td>
                                         <td className="px-6 py-4 text-sm">
-                                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${meta?.className ?? ""}`}>
+                                            <Badge variant={meta?.variant ?? "neutral"} withDot>
                                                 {meta ? t(meta.labelKey) : item.status}
-                                            </span>
+                                            </Badge>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-[#5e3f3a]">
                                             {item.submittedAt ? new Date(item.submittedAt).toLocaleString("vi-VN") : "—"}

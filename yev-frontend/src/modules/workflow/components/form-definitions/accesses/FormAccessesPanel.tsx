@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Save } from "lucide-react";
+import { Plus, Trash2, Save, ShieldCheck } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { FormDefinitionApi } from "@/modules/workflow/api/form-definition.api";
@@ -11,6 +11,8 @@ import { AuthApi } from "@/modules/auth/api/auth.api";
 import { AccessTargetType, type ReplaceFormAccessItemDto } from "@/modules/workflow/types/form-access.dto";
 import type { OrgUnitTreeDto } from "@/modules/workflow/types/org-unit.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/common/EmptyState";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { getApiErrorMessage } from "@/lib/apiError";
 
@@ -102,7 +104,13 @@ export default function FormAccessesPanel({ formDefinitionId }: FormAccessesPane
     };
 
     if (isLoading) {
-        return <div className="py-10 text-center text-sm text-[#5e3f3a]">{t("loading")}</div>;
+        return (
+            <div className="space-y-3">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+            </div>
+        );
     }
 
     if (error) {
@@ -133,8 +141,8 @@ export default function FormAccessesPanel({ formDefinitionId }: FormAccessesPane
             </div>
 
             {items.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-[#e0e3e5] px-4 py-8 text-center text-sm text-[#8a8f94]">
-                    {t("noAccesses")}
+                <div className="rounded-lg border border-dashed border-[#e0e3e5]">
+                    <EmptyState icon={ShieldCheck} title={t("noAccesses")} />
                 </div>
             ) : (
                 <div className="space-y-3">

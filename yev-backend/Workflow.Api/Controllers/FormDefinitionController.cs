@@ -78,6 +78,14 @@ namespace Workflow.Api.Controllers
             return Success(result, "Cập nhật ô nhập thành công.");
         }
 
+        [RequirePermission("Workflow.FormDesign.Manage")]
+        [HttpPut("{id}/layout")]
+        public async Task<ActionResult<ApiResponse<FormDefinitionDto>>> UpdateLayout(int id, [FromBody] UpdateFormDefinitionLayoutDto request)
+        {
+            var result = await _formDefinitionService.UpdateLayoutAsync(id, request, CurrentUserId);
+            return Success(result, "Cập nhật layout thành công.");
+        }
+
         [RequirePermission("Workflow.FormDesign.View")]
         [HttpGet("{id}/conditions")]
         public async Task<ActionResult<ApiResponse<List<FormFieldConditionDto>>>> GetConditions(int id)

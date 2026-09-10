@@ -32,5 +32,17 @@ namespace Attendance.Api.Controllers
             var result = await _attendanceSettingService.UpdateAsync(request);
             return Success(result, "Cập nhật cấu hình thành công.");
         }
+
+        // Cùng quyền với sửa cấu hình — đây là công cụ kiểm tra SMTP/hiển thị email, không phải cấu hình
+        // nghiệp vụ, nhưng vẫn chỉ nên để đúng người đang quản trị "Cài đặt" dùng (2026-09-05).
+        [RequirePermission("Attendance.Setting.Update")]
+        [HttpPost("test-email")]
+        public async Task<ActionResult<ApiResponse<bool>>> SendTestEmail([FromBody] SendTestEmailDto request)
+        {
+            var sent = await _attendanceSettingService.SendTestEmailAsync(request, CurrentFullName ?? CurrentUserName);
+            return sent
+                ? Success(true, "Đã gửi email kiểm tra.")
+                : Fail<bool>("Gửi email thất bại — kiểm tra lại cấu hình SMTP (EmailSettings trong appsettings.json).");
+        }
     }
 }

@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 import { Download, FileSpreadsheet, FileText, Search } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -15,6 +16,7 @@ import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 
 // Thứ tự CA cố định khớp file mẫu 22-08.pdf (A → B → C → H), không phải alphabet mặc định.
 const CA_ORDER = ["A", "B", "C", "H"];
@@ -275,6 +277,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
     { onLoadingChange },
     ref
 ) {
+    const t = useTranslations("Attendance.ProductionOtReport");
     const [date, setDate] = useState(todayIso());
     const [departmentId, setDepartmentId] = useState<number | "">("");
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
@@ -297,7 +300,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         () => DepartmentApi.getAllDepartments(),
         [],
         (result) => setDepartments(result),
-        "Không thể tải danh sách phòng ban."
+        t("loadDepartmentsError")
     );
 
     const handleSearch = async () => {
@@ -306,7 +309,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
             const result = await ProductionOtReportApi.getTicketReport(date, departmentId === "" ? undefined : departmentId);
             setReport(result);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Không thể tải báo cáo phiếu tăng ca."));
+            toast.error(getApiErrorMessage(err, t("loadReportError")));
         } finally {
             setIsLoading(false);
         }
@@ -321,7 +324,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
 
     const handleExportPdf = () => {
         if (!report || report.rows.length === 0) {
-            toast.error("Không có dữ liệu để xuất PDF.");
+            toast.error(t("exportPdfNoDataError"));
             return;
         }
         try {
@@ -329,7 +332,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
             doc.save(`BaoCaoPhieuTangCa_${date.replace(/-/g, "")}.pdf`);
         } catch (err) {
             console.error("Export PDF failed:", err);
-            toast.error("Xuất file PDF thất bại. Vui lòng thử lại.");
+            toast.error(t("exportPdfFailedError"));
         }
     };
 
@@ -347,7 +350,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
             link.click();
             URL.revokeObjectURL(url);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Không thể xuất báo cáo tổng giờ tăng ca."));
+            toast.error(getApiErrorMessage(err, t("exportHoursError")));
         } finally {
             setIsExportingExcel(false);
         }
@@ -367,7 +370,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
             link.click();
             URL.revokeObjectURL(url);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Không thể xuất báo cáo số lượt tăng ca."));
+            toast.error(getApiErrorMessage(err, t("exportTimesError")));
         } finally {
             setIsExportingTimes(false);
         }
@@ -389,7 +392,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
             link.click();
             URL.revokeObjectURL(url);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Không thể xuất báo cáo Qry_EXPORT_EXCEL."));
+            toast.error(getApiErrorMessage(err, t("exportDetailError")));
         } finally {
             setIsExportingQry(false);
         }
@@ -409,7 +412,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
             link.click();
             URL.revokeObjectURL(url);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Không thể xuất báo cáo SUM_EXPORT_DATA."));
+            toast.error(getApiErrorMessage(err, t("exportSummaryError")));
         } finally {
             setIsExportingSum(false);
         }
@@ -424,7 +427,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         try {
             const groups = await ProductionOtReportApi.getTicketBatch(date, departmentId === "" ? undefined : departmentId);
             if (groups.length === 0) {
-                toast.error("Không có Line/Nhóm nào có đơn dưới chuyền hoàn tất đúng ngày này.");
+                toast.error(t("exportTicketZipNoDataError"));
                 return;
             }
             const result = await buildProductionTicketZip(groups, date, (done, total) => setTicketExportProgress({ done, total }));
@@ -436,12 +439,18 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
             link.click();
             URL.revokeObjectURL(url);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Không thể xuất phiếu tăng ca hàng loạt."));
+            toast.error(getApiErrorMessage(err, t("exportTicketZipError")));
         } finally {
             setIsExportingTickets(false);
             setTicketExportProgress(null);
         }
     };
+
+    const departmentOptions: SelectOption[] = departments.map((dept) => ({
+        value: dept.id,
+        label: dept.departmentNameVn,
+        searchText: `${dept.departmentNameVn} ${dept.departmentCode}`.toLowerCase(),
+    }));
 
     return (
         <div className="space-y-6">
@@ -449,7 +458,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                 <div className="flex flex-wrap items-end gap-3">
                     <label className="block">
                         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            Ngày trên đơn
+                            {t("fieldDateLabel")}
                         </span>
                         <input
                             type="date"
@@ -458,22 +467,16 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                             className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                     </label>
-                    <label className="block">
+                    <label className="block w-56">
                         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            Phòng ban (chuyền)
+                            {t("fieldDepartmentLabel")}
                         </span>
-                        <select
+                        <SearchableSelect
+                            options={departmentOptions}
                             value={departmentId}
-                            onChange={(e) => setDepartmentId(e.target.value === "" ? "" : Number(e.target.value))}
-                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">Tất cả</option>
-                            {departments.map((dept) => (
-                                <option key={dept.id} value={dept.id}>
-                                    {dept.departmentNameVn}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={setDepartmentId}
+                            placeholder={t("filterAllDepartment")}
+                        />
                     </label>
                     <button
                         type="button"
@@ -481,70 +484,70 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                         disabled={isLoading || !date}
                         className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        <Search className="h-3.5 w-3.5" /> {isLoading ? "Đang tải..." : "Xem báo cáo phiếu"}
+                        <Search className="h-3.5 w-3.5" /> {isLoading ? t("searching") : t("searchButton")}
                     </button>
                 </div>
-                <p className="mt-2 text-xs text-[#8a8f94]">Chỉ tính đơn dưới chuyền đã hoàn tất, đúng ngày trên đơn.</p>
+                <p className="mt-2 text-xs text-[#8a8f94]">{t("searchHint")}</p>
 
                 <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[#f1f5f9] pt-3">
-                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Xuất Excel</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("exportExcelGroupLabel")}</span>
                     <button
                         type="button"
                         onClick={handleExportExcel}
                         disabled={isExportingExcel || !date}
-                        title="Tổng giờ tăng ca theo người"
+                        title={t("exportHoursTitle")}
                         className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <FileSpreadsheet className="h-3.5 w-3.5" />
-                        {isExportingExcel ? "Đang xuất..." : "Tổng giờ theo người"}
+                        {isExportingExcel ? t("exporting") : t("exportHoursButton")}
                     </button>
                     <button
                         type="button"
                         onClick={handleExportTimes}
                         disabled={isExportingTimes || !date}
-                        title="Số lượt tăng ca theo ngày"
+                        title={t("exportTimesTitle")}
                         className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <FileSpreadsheet className="h-3.5 w-3.5" />
-                        {isExportingTimes ? "Đang xuất..." : "Số lượt theo ngày"}
+                        {isExportingTimes ? t("exporting") : t("exportTimesButton")}
                     </button>
                     <button
                         type="button"
                         onClick={handleExportQry}
                         disabled={isExportingQry || !date}
-                        title="Qry_EXPORT_EXCEL — 17 cột, gộp 1 dòng/người/ngày"
+                        title={t("exportDetailTitle")}
                         className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <FileSpreadsheet className="h-3.5 w-3.5" />
-                        {isExportingQry ? "Đang xuất..." : "Qry_EXPORT_EXCEL"}
+                        {isExportingQry ? t("exporting") : t("exportDetailButton")}
                     </button>
                     <button
                         type="button"
                         onClick={handleExportSum}
                         disabled={isExportingSum || !date}
-                        title="SUM_EXPORT_DATA — 7 cột tóm tắt"
+                        title={t("exportSummaryTitle")}
                         className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <FileSpreadsheet className="h-3.5 w-3.5" />
-                        {isExportingSum ? "Đang xuất..." : "SUM_EXPORT_DATA"}
+                        {isExportingSum ? t("exporting") : t("exportSummaryButton")}
                     </button>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[#f1f5f9] pt-3">
-                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Xuất phiếu (PDF)</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("exportTicketGroupLabel")}</span>
                     <button
                         type="button"
                         onClick={handleExportTicketZip}
                         disabled={isExportingTickets || !date}
-                        title="Mỗi Line/Nhóm có OT trong ngày ra 1 phiếu YEV-22-024, đóng gói vào 1 file zip"
+                        title={t("exportTicketZipTitle")}
                         className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <FileText className="h-3.5 w-3.5" />
                         {isExportingTickets
                             ? ticketExportProgress
-                                ? `Đang xuất ${ticketExportProgress.done}/${ticketExportProgress.total}...`
-                                : "Đang chuẩn bị..."
-                            : "Xuất phiếu theo Line/Nhóm (zip)"}
+                                ? t("exportTicketZipProgress", { done: ticketExportProgress.done, total: ticketExportProgress.total })
+                                : t("exportTicketZipPreparing")
+                            : t("exportTicketZipButton")}
                     </button>
                 </div>
             </div>
@@ -554,13 +557,13 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
                         <div className="flex flex-wrap gap-6 text-sm text-[#5e3f3a]">
                             <span>
-                                Phiếu Phụ: <strong className="text-[#191c1e]">{report.totalSecondaryTicketCount}</strong>
+                                {t("summarySecondaryLabel")} <strong className="text-[#191c1e]">{report.totalSecondaryTicketCount}</strong>
                             </span>
                             <span>
-                                Phiếu Chính: <strong className="text-[#191c1e]">{report.totalMainTicketCount}</strong>
+                                {t("summaryMainLabel")} <strong className="text-[#191c1e]">{report.totalMainTicketCount}</strong>
                             </span>
                             <span>
-                                Phiếu Sữa: <strong className="text-[#191c1e]">{report.totalMilkCount}</strong>
+                                {t("summaryMilkLabel")} <strong className="text-[#191c1e]">{report.totalMilkCount}</strong>
                             </span>
                         </div>
                         <button
@@ -569,7 +572,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                             disabled={report.rows.length === 0}
                             className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            <Download className="h-3.5 w-3.5" /> Xuất PDF
+                            <Download className="h-3.5 w-3.5" /> {t("exportPdfButton")}
                         </button>
                     </div>
 
@@ -577,23 +580,23 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                         <table className="min-w-full border-collapse text-left">
                             <thead>
                                 <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    <th className="whitespace-nowrap px-4 py-3">Bộ phận</th>
-                                    <th className="whitespace-nowrap px-4 py-3">Ca</th>
-                                    <th className="whitespace-nowrap px-4 py-3">Dãy</th>
-                                    <th className="whitespace-nowrap px-4 py-3">Line</th>
-                                    <th className="whitespace-nowrap px-4 py-3 text-right">Phiếu Phụ</th>
-                                    <th className="whitespace-nowrap px-4 py-3 text-right">Phiếu Chính</th>
-                                    <th className="whitespace-nowrap px-4 py-3 text-right">Phiếu Sữa</th>
-                                    <th className="whitespace-nowrap px-4 py-3 text-right">Số giờ</th>
-                                    <th className="whitespace-nowrap px-4 py-3">Giờ BĐ</th>
-                                    <th className="whitespace-nowrap px-4 py-3">Giờ KT</th>
+                                    <th className="whitespace-nowrap px-4 py-3">{t("colDepartment")}</th>
+                                    <th className="whitespace-nowrap px-4 py-3">{t("colCa")}</th>
+                                    <th className="whitespace-nowrap px-4 py-3">{t("colTeam")}</th>
+                                    <th className="whitespace-nowrap px-4 py-3">{t("colLine")}</th>
+                                    <th className="whitespace-nowrap px-4 py-3 text-right">{t("colSecondary")}</th>
+                                    <th className="whitespace-nowrap px-4 py-3 text-right">{t("colMain")}</th>
+                                    <th className="whitespace-nowrap px-4 py-3 text-right">{t("colMilk")}</th>
+                                    <th className="whitespace-nowrap px-4 py-3 text-right">{t("colHours")}</th>
+                                    <th className="whitespace-nowrap px-4 py-3">{t("colStartTime")}</th>
+                                    <th className="whitespace-nowrap px-4 py-3">{t("colEndTime")}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {report.rows.length === 0 && (
                                     <tr>
                                         <td colSpan={10} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
-                                            Không có đơn dưới chuyền nào hoàn tất đúng ngày này.
+                                            {t("noData")}
                                         </td>
                                     </tr>
                                 )}
@@ -622,7 +625,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
 
             {!report && (
                 <div className="flex items-center gap-2 rounded-xl border border-dashed border-[#e0e3e5] bg-white p-8 text-sm text-[#5e3f3a]">
-                    <FileText className="h-4 w-4" /> Chọn ngày rồi bấm &quot;Xem báo cáo phiếu&quot; để xem số liệu.
+                    <FileText className="h-4 w-4" /> {t("emptyStateHint")}
                 </div>
             )}
         </div>

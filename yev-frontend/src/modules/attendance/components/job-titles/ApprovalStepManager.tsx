@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Check, GripVertical, Plus, Star, Trash2, X } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { DepartmentApprovalStepApi } from "@/modules/attendance/api/department-approval-step.api";
 import { GroupApprovalStepApi } from "@/modules/attendance/api/group-approval-step.api";
@@ -27,10 +27,21 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { useDragReorder } from "./useDragReorder";
+import StepCard, { type StepCardLabels } from "./StepCard";
+import StepHolders, { type StepHoldersLabels } from "./StepHolders";
+import CoordinatorsBox, { type CoordinatorsBoxLabels } from "./CoordinatorsBox";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
-const sectionTitleClassName = "text-sm font-bold uppercase tracking-[0.1em] text-[#191c1e]";
+const sectionTitleClassName = "text-base font-semibold text-[#191c1e]";
+
+const toJobTitleOptions = (jobTitles: JobTitleDto[]): SelectOption[] =>
+    jobTitles.map((jt) => ({
+        value: jt.id,
+        label: `${jt.name} (${jt.code}, cấp ${jt.rankOrder})`,
+        searchText: `${jt.name} ${jt.code}`.toLowerCase(),
+    }));
 
 // Tab "Cây duyệt" (2026-08-10) — hợp nhất 2 tab trước đó ("Cây duyệt Bộ phận" + "Cây duyệt Nhóm")
 // vào cùng 1 màn cho dễ cấu hình liền mạch: chọn 1 Bộ phận, rồi cấu hình lần lượt (1) cấp trung
@@ -40,6 +51,12 @@ const sectionTitleClassName = "text-sm font-bold uppercase tracking-[0.1em] text
 // duyệt" (ApprovalChainPreviewPanel) đã bị bỏ hẳn khỏi màn Danh mục — endpoint BE
 // GET /api/JobTitle/resolve-chain vẫn còn, chỉ không còn UI xem trước ở FE.
 // Không phải màn CRUD chuẩn nên implement ListHandle tối giản (openCreate no-op).
+//
+// Đợt polish giao diện (2026-09-05): 3 khối "danh sách bước" (Nhóm/Bộ phận/Chuyền) và 2 khối "Người
+// phụ trách" (Nhóm/Bộ phận) trước đây copy gần y hệt JSX cho nhau (~110 dòng/khối bước, ~60 dòng/khối
+// phụ trách) — tách ra dùng chung `StepCard`/`StepHolders`/`CoordinatorsBox` (cùng thư mục job-titles/),
+// chỉ còn phần KHÁC BIỆT thật giữa 3 khối (khối Bộ phận không có "Người chịu trách nhiệm"; khối Chuyền
+// có 3 nhánh nội dung "đang giữ" khác hẳn) nằm lại ở đây.
 const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function ApprovalStepManager(
     { onLoadingChange },
     ref
@@ -68,7 +85,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     // chung 1 tab vì đơn đi xuyên qua CẢ 2 liền mạch (Nhóm trước, Bộ phận sau); "Theo chuyền" = khối
     // Chuyền (1 danh sách duy nhất, dùng cho đơn OT "theo chuyền" Chế tạo) tách tab riêng vì đây là
     // 1 luồng độc lập, không liên quan gì tới cấu hình Nhóm/Bộ phận — khớp đúng 2 chế độ tạo đơn ở
-    // CreateOtFormPage.tsx (formMode "group"/"production").
+    // CreateOtFormPage.tsx (formMode "group"/"production"). Đổi tab CHỈ đổi phần hiển thị — state của
+    // cả 2 tab đều nằm ở component này (không mất gì khi đổi qua lại), nên KHÔNG cần xác nhận huỷ.
     const [activeTab, setActiveTab] = useState<"group" | "production">("group");
 
     // ── Khối Chuyền (Bộ phận, 1 danh sách duy nhất — 2026-08-24) ─────────────
@@ -108,6 +126,18 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [isLoadingGroupCoordinators, setIsLoadingGroupCoordinators] = useState(false);
     const [isSavingGroupCoordinators, setIsSavingGroupCoordinators] = useState(false);
     const [addingGroupCoordinatorEmployeeId, setAddingGroupCoordinatorEmployeeId] = useState<number | "">("");
+
+    // Xác nhận huỷ thay đổi chưa lưu (2026-09-05) — đổi Bộ phận/Nhóm trước đây xoá thẳng state của
+    // khối đang xem dù đang dirty, không cảnh báo gì. `pendingAction` giữ đúng thao tác đổi (đã biết
+    // giá trị mới) để chạy khi người dùng xác nhận "Huỷ thay đổi" ở ConfirmDialog bên dưới.
+    const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+    const applyOrConfirmDiscard = (isDirty: boolean, action: () => void) => {
+        if (isDirty) {
+            setPendingAction(() => action);
+        } else {
+            action();
+        }
+    };
 
     useEffect(() => {
         setIsLoadingOptions(true);
@@ -241,7 +271,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         openCreate: () => {},
     }));
 
-    const handleSelectDepartment = (value: number | "") => {
+    const selectDepartmentNow = (value: number | "") => {
         setDepartmentId(value);
         setDeptSteps([]);
         setDeptEmployees([]);
@@ -266,7 +296,11 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
-    const handleSelectGroup = (value: number | "") => {
+    const handleSelectDepartment = (value: number | "") => {
+        applyOrConfirmDiscard(isDeptDirty || isProductionDirty || isGroupDirty, () => selectDepartmentNow(value));
+    };
+
+    const selectGroupNow = (value: number | "") => {
         setGroupId(value);
         setGroupSteps([]);
         setGroupEmployees([]);
@@ -278,6 +312,10 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             fetchGroupEmployees(value);
             fetchGroupCoordinators(value);
         }
+    };
+
+    const handleSelectGroup = (value: number | "") => {
+        applyOrConfirmDiscard(isGroupDirty, () => selectGroupNow(value));
     };
 
     // Gán nhanh Chức vụ CẤP CUỐI ngay tại khối Bộ phận — dùng endpoint riêng
@@ -703,10 +741,91 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
+    // ── Nhãn dùng chung cho StepCard/StepHolders/CoordinatorsBox — gom 1 lần ở đây thay vì gọi t(...)
+    // rải rác trong vòng lặp render bên dưới. ──
+    const groupStepLabels: StepCardLabels = {
+        dragHandleLabel: tGroup("dragHandleLabel"),
+        toggleSignatureHint: tGroup("toggleSignatureHint"),
+        requiresSignatureYes: tGroup("requiresSignatureYes"),
+        requiresSignatureNo: tGroup("requiresSignatureNo"),
+        removeStep: tGroup("removeStep"),
+        toggleResponsibleHint: tGroup("toggleResponsibleHint"),
+        isResponsibleYes: tGroup("isResponsibleYes"),
+        isResponsibleNo: tGroup("isResponsibleNo"),
+    };
+    const deptStepLabels: StepCardLabels = {
+        dragHandleLabel: tDept("dragHandleLabel"),
+        toggleSignatureHint: tDept("toggleSignatureHint"),
+        requiresSignatureYes: tDept("requiresSignatureYes"),
+        requiresSignatureNo: tDept("requiresSignatureNo"),
+        removeStep: tDept("removeStep"),
+    };
+    const productionStepLabels: StepCardLabels = {
+        dragHandleLabel: tProd("dragHandleLabel"),
+        toggleSignatureHint: tProd("toggleSignatureHint"),
+        requiresSignatureYes: tProd("requiresSignatureYes"),
+        requiresSignatureNo: tProd("requiresSignatureNo"),
+        removeStep: tProd("removeStep"),
+        toggleResponsibleHint: tProd("toggleResponsibleHint"),
+        isResponsibleYes: tProd("isResponsibleYes"),
+        isResponsibleNo: tProd("isResponsibleNo"),
+    };
+    const groupHoldersLabels: StepHoldersLabels = {
+        holdersLabel: tGroup("holdersLabel"),
+        loadingEmployees: tGroup("loadingEmployees"),
+        noHolders: tGroup("noHolders"),
+        removeHolderHint: tGroup("removeHolderHint"),
+        addHolderPlaceholder: tGroup("addHolderPlaceholder"),
+    };
+    const deptHoldersLabels: StepHoldersLabels = {
+        holdersLabel: tDept("holdersLabel"),
+        loadingEmployees: tDept("loadingEmployees"),
+        noHolders: tDept("noHolders"),
+        removeHolderHint: tDept("removeHolderHint"),
+        addHolderPlaceholder: tDept("addHolderPlaceholder"),
+    };
+    const groupCoordinatorLabels: CoordinatorsBoxLabels = {
+        title: tGroup("coordinatorsTitle"),
+        hint: tGroup("coordinatorsHint"),
+        label: tGroup("coordinatorsLabel"),
+        loading: tGroup("loadingCoordinators"),
+        noCoordinators: tGroup("noCoordinators"),
+        notLinked: tGroup("coordinatorNotLinked"),
+        notLinkedHint: tGroup("coordinatorNotLinkedHint"),
+        removeHint: tGroup("removeCoordinatorHint"),
+        addPlaceholder: tGroup("addCoordinatorPlaceholder"),
+    };
+    const deptCoordinatorLabels: CoordinatorsBoxLabels = {
+        title: tDept("coordinatorsTitle"),
+        hint: tDept("coordinatorsHint"),
+        label: tDept("coordinatorsLabel"),
+        loading: tDept("loadingCoordinators"),
+        noCoordinators: tDept("noCoordinators"),
+        notLinked: tDept("coordinatorNotLinked"),
+        notLinkedHint: tDept("coordinatorNotLinkedHint"),
+        removeHint: tDept("removeCoordinatorHint"),
+        addPlaceholder: tDept("addCoordinatorPlaceholder"),
+    };
+
+    // Số thứ tự HIỂN THỊ của khối Bộ phận nối tiếp ngay sau khối Nhóm — đơn đi qua Nhóm TRƯỚC, Bộ phận
+    // SAU (comment đầu file) nên đây là 1 chuỗi duyệt liền mạch, không phải 2 chuỗi độc lập đánh số
+    // riêng (2026-09-05, trước đây cả 2 khối cùng đánh lại từ 1, dễ hiểu lầm là 2 chuỗi tách biệt).
+    const deptStepNumberOffset = groupSteps.length;
+
+    const loadingStepsSkeleton = (
+        <div className="space-y-2">
+            <div className="h-14 animate-pulse rounded-lg bg-[#f1f5f9]" />
+            <div className="h-14 animate-pulse rounded-lg bg-[#f1f5f9]" />
+        </div>
+    );
+
     return (
         <div className="space-y-4">
             <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <p className="text-sm text-[#5e3f3a]">{tDept("intro")}</p>
+                <div className="space-y-1">
+                    <h3 className={sectionTitleClassName}>{tDept("fieldDepartment")}</h3>
+                    <p className="text-sm text-[#5e3f3a]">{tDept("intro")}</p>
+                </div>
 
                 <label className="block max-w-sm">
                     <span className={fieldLabelClassName}>{tDept("fieldDepartment")}</span>
@@ -764,68 +883,21 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         )}
 
                         {typeof groupId === "number" && canManageGroupCoordinators && (
-                            <div className="space-y-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
-                                <div className="space-y-0.5">
-                                    <span className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                        {tGroup("coordinatorsTitle")}
-                                    </span>
-                                    <p className="text-xs text-[#8a8f94]">{tGroup("coordinatorsHint")}</p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="text-xs font-semibold text-[#8a8f94]">{tGroup("coordinatorsLabel")}</span>
-                                    {isLoadingGroupCoordinators ? (
-                                        <span className="text-xs text-[#8a8f94]">{tGroup("loadingCoordinators")}</span>
-                                    ) : (
-                                        <>
-                                            {groupCoordinators.length === 0 ? (
-                                                <span className="text-xs italic text-[#8a8f94]">{tGroup("noCoordinators")}</span>
-                                            ) : (
-                                                groupCoordinators.map((coordinator) => (
-                                                    <span
-                                                        key={coordinator.employeeId}
-                                                        className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-white py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
-                                                    >
-                                                        {coordinator.fullName} ({coordinator.employeeCode})
-                                                        {!coordinator.userName && (
-                                                            <span className="text-[#9a5b00]" title={tGroup("coordinatorNotLinkedHint")}>
-                                                                — {tGroup("coordinatorNotLinked")}
-                                                            </span>
-                                                        )}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemoveGroupCoordinator(coordinator.employeeId)}
-                                                            disabled={isSavingGroupCoordinators}
-                                                            title={tGroup("removeCoordinatorHint")}
-                                                            aria-label={tGroup("removeCoordinatorHint")}
-                                                            className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
-                                                        >
-                                                            <X size={10} />
-                                                        </button>
-                                                    </span>
-                                                ))
-                                            )}
-                                            <div className="w-56 shrink-0">
-                                                <SearchableSelect
-                                                    options={buildCoordinatorOptions(
-                                                        groupEmployees,
-                                                        new Set(groupCoordinators.map((c) => c.employeeId))
-                                                    )}
-                                                    value={addingGroupCoordinatorEmployeeId}
-                                                    onChange={handleAddGroupCoordinator}
-                                                    placeholder={tGroup("addCoordinatorPlaceholder")}
-                                                    disabled={isSavingGroupCoordinators || isLoadingGroupEmployees}
-                                                    triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
-                                                />
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
+                            <CoordinatorsBox
+                                isLoading={isLoadingGroupCoordinators}
+                                coordinators={groupCoordinators}
+                                onRemove={handleRemoveGroupCoordinator}
+                                isSaving={isSavingGroupCoordinators}
+                                addOptions={buildCoordinatorOptions(groupEmployees, new Set(groupCoordinators.map((c) => c.employeeId)))}
+                                addingValue={addingGroupCoordinatorEmployeeId}
+                                onAddChange={handleAddGroupCoordinator}
+                                labels={groupCoordinatorLabels}
+                            />
                         )}
 
                         {typeof groupId === "number" && (
                             isLoadingGroupSteps ? (
-                                <p className="text-sm text-[#5e3f3a]">{tGroup("loadingSteps")}</p>
+                                loadingStepsSkeleton
                             ) : (
                                 <>
                                     {groupSteps.length === 0 && <p className="text-sm text-[#5e3f3a]">{tGroup("noSteps")}</p>}
@@ -833,135 +905,49 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                     {groupSteps.length > 0 && (
                                         <ol className="space-y-2">
                                             {groupSteps.map((step, index) => (
-                                                <li
+                                                <StepCard
                                                     key={step.jobTitleId}
-                                                    ref={groupDrag.registerNode(step.jobTitleId)}
-                                                    draggable
+                                                    registerNodeRef={groupDrag.registerNode(step.jobTitleId)}
+                                                    isDragging={groupDrag.dragIndex === index}
                                                     onDragStart={groupDrag.handleDragStart(index)}
                                                     onDragOver={groupDrag.handleDragOver(index)}
                                                     onDragEnd={groupDrag.handleDragEnd}
-                                                    className={`relative space-y-2 rounded-lg border p-3 transition-[box-shadow,border-color,background-color] duration-150 ${
-                                                        groupDrag.dragIndex === index
-                                                            ? "z-10 scale-[1.01] border-[#e3000f] bg-[#fff4f2] shadow-lg ring-2 ring-[#e3000f]/25"
-                                                            : "border-[#e0e3e5] bg-white"
-                                                    }`}
-                                                >
-                                                    <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
-                                                        <span
-                                                            title={tGroup("dragHandleLabel")}
-                                                            aria-label={tGroup("dragHandleLabel")}
-                                                            className="shrink-0 cursor-grab text-[#8a8f94] active:cursor-grabbing"
-                                                        >
-                                                            <GripVertical className="h-4 w-4" />
-                                                        </span>
-                                                        <div className="flex w-[230px] shrink-0 items-center gap-2" title={`${step.jobTitleName} (${step.jobTitleCode}, cấp ${step.rankOrder})`}>
-                                                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-xs font-bold text-white">
-                                                                {index + 1}
-                                                            </span>
-                                                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#191c1e]">{step.jobTitleName}</span>
-                                                            <span className="shrink-0 whitespace-nowrap text-xs text-[#8a8f94]">({step.jobTitleCode}, cấp {step.rankOrder})</span>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleToggleGroupSignature(index)}
-                                                            title={tGroup("toggleSignatureHint")}
-                                                            className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
-                                                                step.requiresSignature
-                                                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                                                    : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
-                                                            }`}
-                                                        >
-                                                            {step.requiresSignature ? <Check size={11} /> : <X size={11} />}
-                                                            {step.requiresSignature ? tGroup("requiresSignatureYes") : tGroup("requiresSignatureNo")}
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleSetGroupResponsible(index)}
-                                                            title={tGroup("toggleResponsibleHint")}
-                                                            className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
-                                                                step.isResponsible
-                                                                    ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                                                                    : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
-                                                            }`}
-                                                        >
-                                                            <Star size={11} fill={step.isResponsible ? "currentColor" : "none"} />
-                                                            {step.isResponsible ? tGroup("isResponsibleYes") : tGroup("isResponsibleNo")}
-                                                        </button>
-                                                        <div className="ml-auto flex shrink-0 items-center gap-1">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleRemoveGroupStep(index)}
-                                                                title={tGroup("removeStep")}
-                                                                aria-label={tGroup("removeStep")}
-                                                                className="cursor-pointer rounded-lg border border-[#e9bcb6] bg-white p-1.5 text-[#930006] transition hover:bg-[#fff4f2]"
-                                                            >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex flex-wrap items-center gap-1.5 pl-8">
-                                                        <span className="text-xs font-semibold text-[#8a8f94]">{tGroup("holdersLabel")}</span>
-                                                        {isLoadingGroupEmployees ? (
-                                                            <span className="text-xs text-[#8a8f94]">{tGroup("loadingEmployees")}</span>
-                                                        ) : (
-                                                            <>
-                                                                {(() => {
-                                                                    const holders = groupEmployees.filter((e) => e.jobTitleId === step.jobTitleId);
-                                                                    return holders.length === 0 ? (
-                                                                        <span className="text-xs italic text-[#8a8f94]">{tGroup("noHolders")}</span>
-                                                                    ) : (
-                                                                        holders.map((holder) => (
-                                                                            <span
-                                                                                key={holder.id}
-                                                                                className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-[#f8fafc] py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
-                                                                            >
-                                                                                {holder.lastName} {holder.firstName} ({holder.code})
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => handleAssignGroupJobTitle(holder, "")}
-                                                                                    disabled={assigningGroupEmployeeId === holder.id}
-                                                                                    title={tGroup("removeHolderHint")}
-                                                                                    aria-label={tGroup("removeHolderHint")}
-                                                                                    className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
-                                                                                >
-                                                                                    <X size={10} />
-                                                                                </button>
-                                                                            </span>
-                                                                        ))
-                                                                    );
-                                                                })()}
-                                                                <div className="w-56 shrink-0">
-                                                                    <SearchableSelect
-                                                                        options={buildHolderOptions(groupEmployees, step.jobTitleId)}
-                                                                        value={addingGroupHolderByJobTitle[step.jobTitleId] ?? ""}
-                                                                        onChange={(v) => handlePickGroupHolder(step.jobTitleId, v)}
-                                                                        placeholder={tGroup("addHolderPlaceholder")}
-                                                                        disabled={assigningGroupEmployeeId !== null}
-                                                                        triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
-                                                                    />
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </li>
+                                                    displayNumber={index + 1}
+                                                    jobTitleName={step.jobTitleName}
+                                                    jobTitleCode={step.jobTitleCode}
+                                                    rankOrder={step.rankOrder}
+                                                    requiresSignature={step.requiresSignature}
+                                                    onToggleSignature={() => handleToggleGroupSignature(index)}
+                                                    isResponsible={step.isResponsible}
+                                                    onToggleResponsible={() => handleSetGroupResponsible(index)}
+                                                    onRemove={() => handleRemoveGroupStep(index)}
+                                                    labels={groupStepLabels}
+                                                    footer={
+                                                        <StepHolders
+                                                            holders={groupEmployees.filter((e) => e.jobTitleId === step.jobTitleId)}
+                                                            isLoadingEmployees={isLoadingGroupEmployees}
+                                                            removingHolderId={assigningGroupEmployeeId}
+                                                            onRemoveHolder={(holder) => handleAssignGroupJobTitle(holder as EmployeeDto, "")}
+                                                            addOptions={buildHolderOptions(groupEmployees, step.jobTitleId)}
+                                                            addingValue={addingGroupHolderByJobTitle[step.jobTitleId] ?? ""}
+                                                            onAddChange={(v) => handlePickGroupHolder(step.jobTitleId, v)}
+                                                            labels={groupHoldersLabels}
+                                                        />
+                                                    }
+                                                />
                                             ))}
                                         </ol>
                                     )}
 
                                     <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
-                                        <select
-                                            value={addingGroupJobTitleId}
-                                            onChange={(event) => setAddingGroupJobTitleId(event.target.value ? Number(event.target.value) : "")}
-                                            className="h-10 flex-1 min-w-[220px] rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                                        >
-                                            <option value="">{tGroup("fieldAddJobTitlePlaceholder")}</option>
-                                            {availableGroupJobTitles.map((jobTitle) => (
-                                                <option key={jobTitle.id} value={jobTitle.id}>
-                                                    {jobTitle.name} ({jobTitle.code}, cấp {jobTitle.rankOrder})
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <div className="flex-1 min-w-[220px]">
+                                            <SearchableSelect
+                                                options={toJobTitleOptions(availableGroupJobTitles)}
+                                                value={addingGroupJobTitleId}
+                                                onChange={setAddingGroupJobTitleId}
+                                                placeholder={tGroup("fieldAddJobTitlePlaceholder")}
+                                            />
+                                        </div>
                                         <button
                                             type="button"
                                             onClick={handleAddGroupStep}
@@ -997,67 +983,20 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         </div>
 
                         {canManageDeptCoordinators && (
-                        <div className="space-y-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
-                            <div className="space-y-0.5">
-                                <span className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {tDept("coordinatorsTitle")}
-                                </span>
-                                <p className="text-xs text-[#8a8f94]">{tDept("coordinatorsHint")}</p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="text-xs font-semibold text-[#8a8f94]">{tDept("coordinatorsLabel")}</span>
-                                {isLoadingDeptCoordinators ? (
-                                    <span className="text-xs text-[#8a8f94]">{tDept("loadingCoordinators")}</span>
-                                ) : (
-                                    <>
-                                        {deptCoordinators.length === 0 ? (
-                                            <span className="text-xs italic text-[#8a8f94]">{tDept("noCoordinators")}</span>
-                                        ) : (
-                                            deptCoordinators.map((coordinator) => (
-                                                <span
-                                                    key={coordinator.employeeId}
-                                                    className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-white py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
-                                                >
-                                                    {coordinator.fullName} ({coordinator.employeeCode})
-                                                    {!coordinator.userName && (
-                                                        <span className="text-[#9a5b00]" title={tDept("coordinatorNotLinkedHint")}>
-                                                            — {tDept("coordinatorNotLinked")}
-                                                        </span>
-                                                    )}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleRemoveDeptCoordinator(coordinator.employeeId)}
-                                                        disabled={isSavingDeptCoordinators}
-                                                        title={tDept("removeCoordinatorHint")}
-                                                        aria-label={tDept("removeCoordinatorHint")}
-                                                        className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
-                                                    >
-                                                        <X size={10} />
-                                                    </button>
-                                                </span>
-                                            ))
-                                        )}
-                                        <div className="w-56 shrink-0">
-                                            <SearchableSelect
-                                                options={buildCoordinatorOptions(
-                                                    deptEmployees,
-                                                    new Set(deptCoordinators.map((c) => c.employeeId))
-                                                )}
-                                                value={addingDeptCoordinatorEmployeeId}
-                                                onChange={handleAddDeptCoordinator}
-                                                placeholder={tDept("addCoordinatorPlaceholder")}
-                                                disabled={isSavingDeptCoordinators || isLoadingDeptEmployees}
-                                                triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
-                                            />
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </div>
+                            <CoordinatorsBox
+                                isLoading={isLoadingDeptCoordinators}
+                                coordinators={deptCoordinators}
+                                onRemove={handleRemoveDeptCoordinator}
+                                isSaving={isSavingDeptCoordinators}
+                                addOptions={buildCoordinatorOptions(deptEmployees, new Set(deptCoordinators.map((c) => c.employeeId)))}
+                                addingValue={addingDeptCoordinatorEmployeeId}
+                                onAddChange={handleAddDeptCoordinator}
+                                labels={deptCoordinatorLabels}
+                            />
                         )}
 
                         {isLoadingDeptSteps ? (
-                            <p className="text-sm text-[#5e3f3a]">{tDept("loadingSteps")}</p>
+                            loadingStepsSkeleton
                         ) : (
                             <>
                                 {deptSteps.length === 0 && <p className="text-sm text-[#5e3f3a]">{tDept("noSteps")}</p>}
@@ -1065,122 +1004,47 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                 {deptSteps.length > 0 && (
                                     <ol className="space-y-2">
                                         {deptSteps.map((step, index) => (
-                                            <li
+                                            <StepCard
                                                 key={step.jobTitleId}
-                                                ref={deptDrag.registerNode(step.jobTitleId)}
-                                                draggable
+                                                registerNodeRef={deptDrag.registerNode(step.jobTitleId)}
+                                                isDragging={deptDrag.dragIndex === index}
                                                 onDragStart={deptDrag.handleDragStart(index)}
                                                 onDragOver={deptDrag.handleDragOver(index)}
                                                 onDragEnd={deptDrag.handleDragEnd}
-                                                className={`relative space-y-2 rounded-lg border p-3 transition-[box-shadow,border-color,background-color] duration-150 ${
-                                                    deptDrag.dragIndex === index
-                                                        ? "z-10 scale-[1.01] border-[#e3000f] bg-[#fff4f2] shadow-lg ring-2 ring-[#e3000f]/25"
-                                                        : "border-[#e0e3e5] bg-white"
-                                                }`}
-                                            >
-                                                <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
-                                                    <span
-                                                        title={tDept("dragHandleLabel")}
-                                                        aria-label={tDept("dragHandleLabel")}
-                                                        className="shrink-0 cursor-grab text-[#8a8f94] active:cursor-grabbing"
-                                                    >
-                                                        <GripVertical className="h-4 w-4" />
-                                                    </span>
-                                                    <div className="flex w-[230px] shrink-0 items-center gap-2" title={`${step.jobTitleName} (${step.jobTitleCode}, cấp ${step.rankOrder})`}>
-                                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-xs font-bold text-white">
-                                                            {index + 1}
-                                                        </span>
-                                                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#191c1e]">{step.jobTitleName}</span>
-                                                        <span className="shrink-0 whitespace-nowrap text-xs text-[#8a8f94]">({step.jobTitleCode}, cấp {step.rankOrder})</span>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleToggleDeptSignature(index)}
-                                                        title={tDept("toggleSignatureHint")}
-                                                        className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
-                                                            step.requiresSignature
-                                                                ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                                                : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
-                                                        }`}
-                                                    >
-                                                        {step.requiresSignature ? <Check size={11} /> : <X size={11} />}
-                                                        {step.requiresSignature ? tDept("requiresSignatureYes") : tDept("requiresSignatureNo")}
-                                                    </button>
-                                                    <div className="ml-auto flex shrink-0 items-center gap-1">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemoveDeptStep(index)}
-                                                            title={tDept("removeStep")}
-                                                            aria-label={tDept("removeStep")}
-                                                            className="cursor-pointer rounded-lg border border-[#e9bcb6] bg-white p-1.5 text-[#930006] transition hover:bg-[#fff4f2]"
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex flex-wrap items-center gap-1.5 pl-8">
-                                                    <span className="text-xs font-semibold text-[#8a8f94]">{tDept("holdersLabel")}</span>
-                                                    {isLoadingDeptEmployees ? (
-                                                        <span className="text-xs text-[#8a8f94]">{tDept("loadingEmployees")}</span>
-                                                    ) : (
-                                                        <>
-                                                            {(() => {
-                                                                const holders = deptEmployees.filter((e) => e.jobTitleId === step.jobTitleId);
-                                                                return holders.length === 0 ? (
-                                                                    <span className="text-xs italic text-[#8a8f94]">{tDept("noHolders")}</span>
-                                                                ) : (
-                                                                    holders.map((holder) => (
-                                                                        <span
-                                                                            key={holder.id}
-                                                                            className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-[#f8fafc] py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
-                                                                        >
-                                                                            {holder.lastName} {holder.firstName} ({holder.code})
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => handleAssignDeptJobTitle(holder, "")}
-                                                                                disabled={assigningDeptEmployeeId === holder.id}
-                                                                                title={tDept("removeHolderHint")}
-                                                                                aria-label={tDept("removeHolderHint")}
-                                                                                className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
-                                                                            >
-                                                                                <X size={10} />
-                                                                            </button>
-                                                                        </span>
-                                                                    ))
-                                                                );
-                                                            })()}
-                                                            <div className="w-56 shrink-0">
-                                                                <SearchableSelect
-                                                                    options={buildHolderOptions(deptEmployees, step.jobTitleId)}
-                                                                    value={addingDeptHolderByJobTitle[step.jobTitleId] ?? ""}
-                                                                    onChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
-                                                                    placeholder={tDept("addHolderPlaceholder")}
-                                                                    disabled={assigningDeptEmployeeId !== null}
-                                                                    triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
-                                                                />
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </li>
+                                                displayNumber={deptStepNumberOffset + index + 1}
+                                                jobTitleName={step.jobTitleName}
+                                                jobTitleCode={step.jobTitleCode}
+                                                rankOrder={step.rankOrder}
+                                                requiresSignature={step.requiresSignature}
+                                                onToggleSignature={() => handleToggleDeptSignature(index)}
+                                                onRemove={() => handleRemoveDeptStep(index)}
+                                                labels={deptStepLabels}
+                                                footer={
+                                                    <StepHolders
+                                                        holders={deptEmployees.filter((e) => e.jobTitleId === step.jobTitleId)}
+                                                        isLoadingEmployees={isLoadingDeptEmployees}
+                                                        removingHolderId={assigningDeptEmployeeId}
+                                                        onRemoveHolder={(holder) => handleAssignDeptJobTitle(holder as EmployeeDto, "")}
+                                                        addOptions={buildHolderOptions(deptEmployees, step.jobTitleId)}
+                                                        addingValue={addingDeptHolderByJobTitle[step.jobTitleId] ?? ""}
+                                                        onAddChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
+                                                        labels={deptHoldersLabels}
+                                                    />
+                                                }
+                                            />
                                         ))}
                                     </ol>
                                 )}
 
                                 <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
-                                    <select
-                                        value={addingDeptJobTitleId}
-                                        onChange={(event) => setAddingDeptJobTitleId(event.target.value ? Number(event.target.value) : "")}
-                                        className="h-10 flex-1 min-w-[220px] rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                                    >
-                                        <option value="">{tDept("fieldAddJobTitlePlaceholder")}</option>
-                                        {availableDeptJobTitles.map((jobTitle) => (
-                                            <option key={jobTitle.id} value={jobTitle.id}>
-                                                {jobTitle.name} ({jobTitle.code}, cấp {jobTitle.rankOrder})
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div className="flex-1 min-w-[220px]">
+                                        <SearchableSelect
+                                            options={toJobTitleOptions(availableDeptJobTitles)}
+                                            value={addingDeptJobTitleId}
+                                            onChange={setAddingDeptJobTitleId}
+                                            placeholder={tDept("fieldAddJobTitlePlaceholder")}
+                                        />
+                                    </div>
                                     <button
                                         type="button"
                                         onClick={handleAddDeptStep}
@@ -1219,7 +1083,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         </div>
 
                         {isLoadingProductionSteps ? (
-                            <p className="text-sm text-[#5e3f3a]">{tProd("loadingSteps")}</p>
+                            loadingStepsSkeleton
                         ) : (
                             <>
                                 {productionSteps.length === 0 && <p className="text-sm text-[#5e3f3a]">{tProd("noSteps")}</p>}
@@ -1227,145 +1091,55 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                 {productionSteps.length > 0 && (
                                     <ol className="space-y-2">
                                         {productionSteps.map((step, index) => (
-                                            <li
+                                            <StepCard
                                                 key={step.jobTitleId}
-                                                ref={productionDrag.registerNode(step.jobTitleId)}
-                                                draggable
+                                                registerNodeRef={productionDrag.registerNode(step.jobTitleId)}
+                                                isDragging={productionDrag.dragIndex === index}
                                                 onDragStart={productionDrag.handleDragStart(index)}
                                                 onDragOver={productionDrag.handleDragOver(index)}
                                                 onDragEnd={productionDrag.handleDragEnd}
-                                                className={`relative space-y-2 rounded-lg border p-3 transition-[box-shadow,border-color,background-color] duration-150 ${
-                                                    productionDrag.dragIndex === index
-                                                        ? "z-10 scale-[1.01] border-[#e3000f] bg-[#fff4f2] shadow-lg ring-2 ring-[#e3000f]/25"
-                                                        : "border-[#e0e3e5] bg-white"
-                                                }`}
-                                            >
-                                                <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
-                                                <span
-                                                    title={tProd("dragHandleLabel")}
-                                                    aria-label={tProd("dragHandleLabel")}
-                                                    className="shrink-0 cursor-grab text-[#8a8f94] active:cursor-grabbing"
-                                                >
-                                                    <GripVertical className="h-4 w-4" />
-                                                </span>
-                                                <div className="flex w-[230px] shrink-0 items-center gap-2" title={`${step.jobTitleName} (${step.jobTitleCode}, cấp ${step.rankOrder})`}>
-                                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-xs font-bold text-white">
-                                                        {index + 1}
-                                                    </span>
-                                                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#191c1e]">{step.jobTitleName}</span>
-                                                    <span className="shrink-0 whitespace-nowrap text-xs text-[#8a8f94]">({step.jobTitleCode}, cấp {step.rankOrder})</span>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleProductionSignature(index)}
-                                                    title={tProd("toggleSignatureHint")}
-                                                    className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
-                                                        step.requiresSignature
-                                                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                                            : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
-                                                    }`}
-                                                >
-                                                    {step.requiresSignature ? <Check size={11} /> : <X size={11} />}
-                                                    {step.requiresSignature ? tProd("requiresSignatureYes") : tProd("requiresSignatureNo")}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleSetProductionResponsible(index)}
-                                                    title={tProd("toggleResponsibleHint")}
-                                                    className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
-                                                        step.isResponsible
-                                                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                                                            : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
-                                                    }`}
-                                                >
-                                                    <Star size={11} fill={step.isResponsible ? "currentColor" : "none"} />
-                                                    {step.isResponsible ? tProd("isResponsibleYes") : tProd("isResponsibleNo")}
-                                                </button>
-                                                <div className="ml-auto flex shrink-0 items-center gap-1">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleRemoveProductionStep(index)}
-                                                        title={tProd("removeStep")}
-                                                        aria-label={tProd("removeStep")}
-                                                        className="cursor-pointer rounded-lg border border-[#e9bcb6] bg-white p-1.5 text-[#930006] transition hover:bg-[#fff4f2]"
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </button>
-                                                </div>
-                                                </div>
-
-                                                {step.terminalLevel === 0 && step.isLineScoped && (
-                                                    <p className="pl-8 text-xs italic text-[#8a8f94]">{tProd("lineLeaderAutoHint")}</p>
-                                                )}
-
-                                                {step.terminalLevel === 0 && !step.isLineScoped && (
-                                                    <div className="flex flex-wrap items-center gap-1.5 pl-8">
-                                                        <span className="text-xs font-semibold text-[#8a8f94]">{tDept("holdersLabel")}</span>
-                                                        {isLoadingDeptEmployees ? (
-                                                            <span className="text-xs text-[#8a8f94]">{tDept("loadingEmployees")}</span>
-                                                        ) : (
-                                                            <>
-                                                                {(() => {
-                                                                    const holders = deptEmployees.filter((e) => e.jobTitleId === step.jobTitleId);
-                                                                    return holders.length === 0 ? (
-                                                                        <span className="text-xs italic text-[#8a8f94]">{tDept("noHolders")}</span>
-                                                                    ) : (
-                                                                        holders.map((holder) => (
-                                                                            <span
-                                                                                key={holder.id}
-                                                                                className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-[#f8fafc] py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
-                                                                            >
-                                                                                {holder.lastName} {holder.firstName} ({holder.code})
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => handleAssignDeptJobTitle(holder, "")}
-                                                                                    disabled={assigningDeptEmployeeId === holder.id}
-                                                                                    title={tDept("removeHolderHint")}
-                                                                                    aria-label={tDept("removeHolderHint")}
-                                                                                    className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
-                                                                                >
-                                                                                    <X size={10} />
-                                                                                </button>
-                                                                            </span>
-                                                                        ))
-                                                                    );
-                                                                })()}
-                                                                <div className="w-56 shrink-0">
-                                                                    <SearchableSelect
-                                                                        options={buildHolderOptions(deptEmployees, step.jobTitleId)}
-                                                                        value={addingDeptHolderByJobTitle[step.jobTitleId] ?? ""}
-                                                                        onChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
-                                                                        placeholder={tDept("addHolderPlaceholder")}
-                                                                        disabled={assigningDeptEmployeeId !== null}
-                                                                        triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
-                                                                    />
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                                {step.terminalLevel !== 0 && (
-                                                    <p className="pl-8 text-xs italic text-[#8a8f94]">{tProd("finalStepManagedElsewhereHint")}</p>
-                                                )}
-                                            </li>
+                                                displayNumber={index + 1}
+                                                jobTitleName={step.jobTitleName}
+                                                jobTitleCode={step.jobTitleCode}
+                                                rankOrder={step.rankOrder}
+                                                requiresSignature={step.requiresSignature}
+                                                onToggleSignature={() => handleToggleProductionSignature(index)}
+                                                isResponsible={step.isResponsible}
+                                                onToggleResponsible={() => handleSetProductionResponsible(index)}
+                                                onRemove={() => handleRemoveProductionStep(index)}
+                                                labels={productionStepLabels}
+                                                footer={
+                                                    step.terminalLevel === 0 && step.isLineScoped ? (
+                                                        <p className="pl-8 text-xs italic text-[#8a8f94]">{tProd("lineLeaderAutoHint")}</p>
+                                                    ) : step.terminalLevel === 0 && !step.isLineScoped ? (
+                                                        <StepHolders
+                                                            holders={deptEmployees.filter((e) => e.jobTitleId === step.jobTitleId)}
+                                                            isLoadingEmployees={isLoadingDeptEmployees}
+                                                            removingHolderId={assigningDeptEmployeeId}
+                                                            onRemoveHolder={(holder) => handleAssignDeptJobTitle(holder as EmployeeDto, "")}
+                                                            addOptions={buildHolderOptions(deptEmployees, step.jobTitleId)}
+                                                            addingValue={addingDeptHolderByJobTitle[step.jobTitleId] ?? ""}
+                                                            onAddChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
+                                                            labels={deptHoldersLabels}
+                                                        />
+                                                    ) : (
+                                                        <p className="pl-8 text-xs italic text-[#8a8f94]">{tProd("finalStepManagedElsewhereHint")}</p>
+                                                    )
+                                                }
+                                            />
                                         ))}
                                     </ol>
                                 )}
 
                                 <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
-                                    <select
-                                        value={addingProductionJobTitleId}
-                                        onChange={(event) => setAddingProductionJobTitleId(event.target.value ? Number(event.target.value) : "")}
-                                        className="h-10 flex-1 min-w-[220px] rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                                    >
-                                        <option value="">{tProd("fieldAddJobTitlePlaceholder")}</option>
-                                        {availableProductionJobTitles.map((jobTitle) => (
-                                            <option key={jobTitle.id} value={jobTitle.id}>
-                                                {jobTitle.name} ({jobTitle.code}, cấp {jobTitle.rankOrder})
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div className="flex-1 min-w-[220px]">
+                                        <SearchableSelect
+                                            options={toJobTitleOptions(availableProductionJobTitles)}
+                                            value={addingProductionJobTitleId}
+                                            onChange={setAddingProductionJobTitleId}
+                                            placeholder={tProd("fieldAddJobTitlePlaceholder")}
+                                        />
+                                    </div>
                                     <button
                                         type="button"
                                         onClick={handleAddProductionStep}
@@ -1394,6 +1168,18 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                     )}
                 </>
             )}
+
+            <ConfirmDialog
+                isOpen={pendingAction !== null}
+                title={tDept("discardChangesTitle")}
+                message={tDept("discardChangesMessage")}
+                approveLabel={tDept("discardChangesConfirm")}
+                onApprove={() => {
+                    pendingAction?.();
+                    setPendingAction(null);
+                }}
+                onDenied={() => setPendingAction(null)}
+            />
         </div>
     );
 });

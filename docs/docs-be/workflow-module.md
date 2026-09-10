@@ -127,12 +127,27 @@ thô. Cây tổ chức, chức danh, nhân sự đều thuộc Workflow DB.
 - `Employees.UserId` → `Identity.Users.Id` (**nullable**)
 - `FormAccesses.RoleId` → `Identity.Roles.Id` (nullable)
 
-### 1.5 In phiếu — không mô phỏng mẫu giấy (chốt 2026-08-20)
+### 1.5 In phiếu — 2 chế độ: lưới (mặc định) hoặc layout Word gốc (sửa 2026-09-05)
 
-**Bản in = chính layout form trên màn hình.** KHÔNG mô phỏng biểu mẫu giấy chính thức có mã số như
-OT Form đang làm với `YEV-22-024`.
+**Đảo ngược một phần quyết định chốt 2026-08-20** ("bản in = chính layout màn hình, KHÔNG mô phỏng
+mẫu giấy chính thức"). Lý do đảo ngược: một số phòng ban đã có sẵn mẫu giấy Word chính thức và cần
+**in đơn ra đúng y hệt layout đó**, không chấp nhận quy về lưới generic. Xem log ở §10 (2026-09-05).
 
-Hệ quả: **không cần bảng nào cho việc in.** Chi tiết ở §5.7.
+Cơ chế: cộng thêm, không thay chỗ cũ. `FormDefinitions.LayoutHtml` (nvarchar(max), NULL) — NULL thì
+mọi thứ y hệt trước đây (bản in = layout màn hình, dựng từ `FormFields`+`ColumnSpan`, hệ quả "không
+cần bảng nào cho việc in" ở §5.7 vẫn đúng cho form này). Có giá trị thì đây là HTML `docx-preview`
+render từ file `.docx` admin tải lên lúc thiết kế form ("Nhập từ Word", field-designer), nhúng sẵn
+`<span data-field-key="...">` ngay tại vị trí field trong văn bản.
+
+Điểm mấu chốt: **`FormFields` vẫn là nguồn chân lý duy nhất cho field** dù ở chế độ nào — validate
+`DataJson`, `FormFieldConditions`, luồng duyệt, `FormAccesses`, permission... không đổi gì.
+`LayoutHtml` chỉ là 1 cách khác để nói "field này nằm ở đâu" (vị trí trong HTML thay vì
+`SortOrder`+`ColumnSpan`). `data-field-key` khớp đúng `FormFields.FieldKey` (không phải id riêng).
+`FormSchemaJson` (snapshot lúc nộp, §5.7) snapshot thêm cả `LayoutHtml` — đơn cũ luôn in đúng layout
+tại thời điểm nộp dù `FormDefinitions.LayoutHtml` sau này bị sửa/xoá.
+
+Hệ quả: **không cần bảng mới nào cho việc in** (chỉ thêm 1 cột), field-designer/renderer FE tự chọn
+lưới hay tài liệu theo `LayoutHtml` có NULL hay không, xem chi tiết implementation ở §5.7.
 
 ### 1.6 Không có kiểu duyệt "tự leo lên cấp trên"
 
@@ -329,6 +344,7 @@ sửa khi nhân sự thay đổi.
 | `RouteConditionType` | int | enum `RouteConditionType`. **KHÔNG đổi được sau khi tạo** |
 | `RouteNumericFieldKey` | nvarchar(50) NULL | `FieldKey` của ô mang giá trị số để rẽ nhánh |
 | `RouteClassFieldKey` | nvarchar(50) NULL | `FieldKey` của ô mang giá trị phân loại |
+| `LayoutHtml` | nvarchar(max) NULL | HTML `docx-preview` từ file Word đã nhập, nhúng `<span data-field-key>`. NULL = chế độ lưới (§1.5, thêm 2026-09-05) |
 | `CreatedByEmployeeId` | int | FK → `Employees`, **Restrict** |
 | `UpdatedByEmployeeId` | int NULL | FK → `Employees`, **Restrict** |
 | `CreatedAt` / `UpdatedAt` | datetime2 | |
@@ -837,16 +853,26 @@ runtime nộp/duyệt đơn không đổi gì.
 - Đã kiểm tra dữ liệu sống (`YevWorkflowManagement`) trước khi triển khai: **không có route nào hiện
   có ≥ 2 bước Fixed**, nên luật mới không phá cấu hình cũ nào đang có.
 
-### 5.7 In phiếu (chốt 2026-08-20)
+### 5.7 In phiếu (chốt 2026-08-20, sửa 2026-09-05 — thêm chế độ layout Word)
 
-**Bản in = chính layout form trên màn hình.** Không mô phỏng biểu mẫu giấy chính thức.
+**Mặc định: bản in = chính layout form trên màn hình.** Không mô phỏng biểu mẫu giấy chính thức.
+**Trừ khi** form được thiết kế qua "Nhập từ Word" (§1.5) — khi đó bản in = đúng layout file `.docx`
+đã nhập, snapshot trong `FormSchemaJson.layoutHtml`.
 
 | Phần trên bản in | Nguồn |
 |---|---|
-| Đầu phiếu | `RequestCode`, tên form, người nộp, ngày nộp, trạng thái |
-| Thân phiếu | dựng từ **`FormSchemaJson`** (snapshot) + **`DataJson`**, theo `SortOrder` và `ColumnSpan` |
-| Khối chữ ký | dựng từ `WorkflowRequestSteps` + `WorkflowRequestHistories.SignatureImage` |
+| Đầu phiếu | `RequestCode`, tên form, người nộp, ngày nộp, trạng thái — luôn giống nhau ở cả 2 chế độ |
+| Thân phiếu | chế độ lưới: dựng từ **`FormSchemaJson.fields`** + **`DataJson`**, theo `SortOrder`/`ColumnSpan`. Chế độ tài liệu: `FormSchemaJson.layoutHtml` (html-react-parser thay `<span data-field-key>` bằng giá trị đã điền) |
+| Khối chữ ký | dựng từ `WorkflowRequestSteps` + `WorkflowRequestHistories.SignatureImage` — **không đổi ở cả 2 chế độ**, luôn là khối riêng sau thân phiếu |
 | Đính kèm | danh sách tên file từ `WorkflowAttachments` |
+
+**FE implementation** (2026-09-05): `WorkflowRequestDataView.tsx` là nơi DUY NHẤT rẽ nhánh 2 chế độ
+(theo `schema.layoutHtml` có NULL hay không) — `WorkflowRequestPrintView.tsx` gọi thẳng component này
+cho phần thân, không cần biết chế độ nào đang chạy. Màn điền đơn lúc Draft (trước khi có
+`FormSchemaJson`) rẽ nhánh tương tự ở `WorkflowRequestDetail.tsx`, giữa `DynamicFormRenderer.tsx`
+(lưới) và `DocumentFormRenderer.tsx` (tài liệu, mới) — 2 renderer dùng chung đúng 1 bản
+`evaluateFlags`/`parseOptions`/`inputClassName` (export từ `DynamicFormRenderer.tsx`) để không lệch
+logic điều kiện ẩn/hiện giữa 2 chế độ.
 
 **Không cần bảng nào cho việc in.** Ba hệ quả tốt của quyết định này:
 
@@ -977,6 +1003,11 @@ dù có vẻ đơn giản hơn, sẽ làm gãy tham chiếu của `FormFieldCond
 nhưng validate: field thuộc đúng form, `Target ≠ Source`, giá trị so sánh đủ theo `Operator`, và
 **chặn vòng lặp** bằng DFS 3 màu trên đồ thị `SourceFieldId → TargetFieldId` dựng từ toàn bộ danh
 sách gửi lên trong 1 lượt lưu (không chỉ từng cặp riêng lẻ).
+
+**Đã scaffold (2026-09-05, §1.5):** `PUT api/Workflow/FormDefinition/{id}/layout` — set thẳng
+`LayoutHtml` (opaque, không validate nội dung), cùng permission `Workflow.FormDesign.Manage`.
+`GetByIdAsync`/`CloneAsync` trả/copy kèm `LayoutHtml`. `GET .../form-schema/{formDefinitionId}`
+(§6, Pha 3B-2, phục vụ điền Draft) cũng trả kèm `LayoutHtml` sống.
 
 **Đã scaffold (Pha 2D):**
 `GET/PUT api/Workflow/FormDefinition/{id}/accesses`, `POST api/Workflow/FormDefinition/{id}/publish`,
@@ -1247,3 +1278,5 @@ loại đơn cộng hai giao diện designer (form và luồng duyệt) — hãy
 | 2026-08-27 | **Hiện "ai đang giữ chức gì" ngay trên Cây tổ chức.** Người dùng phản ánh: gán xong ở dialog mới vẫn phải qua tab Nhân sự mới xem được ai đang giữ chức nào tại 1 đơn vị — bất tiện. Mở rộng `OrgUnitService.GetTreeAsync()`: nạp thêm 1 lượt `EmployeeOrgUnits` (chỉ nhân sự `IsActive=true` và chưa xoá), gom nhóm theo `OrgUnitId`, gắn vào `OrgUnitTreeDto.Members` (DTO mới `OrgUnitTreeMemberDto`: `EmployeeId/EmployeeFullName/EmployeeCode/JobTitleId/JobTitleNameVn/IsPrimary`, sort theo `JobTitle.RankOrder` rồi tên) — 1 lần gọi cây vẫn trả đủ dữ liệu, không N+1, không endpoint mới. FE: `OrgUnitList.tsx` hiện 1 hàng chip nhỏ dưới mỗi node (`"{Chức danh}: {Tên nhân sự}"`, hoặc "Không chức danh" nếu `jobTitleId=null`) khi `members.length > 0`. **Verify**: `dotnet build` sạch, `npx tsc --noEmit`/`pnpm lint` sạch, smoke test HTTP xác nhận `GET .../OrgUnit/tree` trả đúng field `members` (mảng rỗng cho đơn vị chưa gán ai, không vỡ response cũ). |
 | 2026-08-27 | **Hiện danh sách nhân sự kiểu cây thư mục (folder) thay vì 1 hàng phẳng.** Người dùng muốn: cùng 1 đơn vị, người chức vụ cao hơn nằm ngoài, thấp hơn thụt vào trong, cùng cấp thẳng hàng, gộp/mở được như Windows Explorer. Thêm `OrgUnitTreeMemberDto.JobTitleRankOrder` (chiếu thẳng `JobTitles.RankOrder`, không thêm cột DB nào). FE (`OrgUnitMemberTree.tsx`, component mới, tách khỏi `OrgUnitList.tsx`): gom nhân sự theo `jobTitleRankOrder` thành từng "cấp" (số nhỏ hơn = ngoài cùng, `null` coi như cấp thấp nhất), người CÙNG cấp render thẳng hàng ở cùng 1 mức thụt lề, cấp sau thụt thêm; nút mũi tên gắn ở dòng ĐẦU của mỗi cấp để gộp/mở toàn bộ các cấp lồng bên trong — gắn theo CẢ CỤM cấp bậc chứ không theo từng cá nhân, vì `RankOrder` chỉ để sắp xếp hiển thị (workflow-module.md §3.1), không mang quan hệ báo cáo người-với-người cụ thể nào để gán chevron riêng từng người. |
 | 2026-08-29 | **Bắt buộc duyệt đủ cấp tổ chức khi cấu hình route (§5.6a).** Người dùng phản ánh: chọn duyệt là Tổng giám đốc thì phải duyệt tuần tự từ cấp thấp (Team Leader) lên, không phải chỉ mỗi Tổng giám đốc; chỉ định chức cao nhất duyệt thì chức thấp hơn cũng phải duyệt. Đụng trực tiếp quyết định "ĐỪNG LẬT LẠI" ở §1.6 (đã bỏ kiểu duyệt tự leo cấp trên vì Attendance từng gặp lỗi bắc cầu sinh quá nhiều bước). Đã hỏi và chốt 3 điểm để KHÔNG lật lại §1.6: (1) chỉ là ràng buộc lúc THIẾT KẾ form (lưu `FormApprovalSteps`), không suy luận runtime — `ResolveStepParticipantsAsync` (§5.5) không đổi gì; (2) cấp bậc xác định theo cây tổ chức thật (`OrgUnits.ParentId`+`OrgLevels.LevelNumber`), không dùng `JobTitles.RankOrder`; (3) bắt buộc, chặn lưu nếu thiếu cấp trung gian (không chỉ gợi ý). Cài `GuardOrgLevelChainAsync` (`FormDefinitionService.ReplaceRoutesAsync`) — chi tiết thuật toán ở §5.6a. Không bảng/migration mới. FE thêm nút "Điền chuỗi duyệt đủ cấp" ở `RouteCard.tsx` (chọn Từ/Đến đơn vị, tự động thêm bước Fixed cho từng cấp còn thiếu trên đúng nhánh cây, dùng lại `OrgLevelApi.getJobTitleSuggestions` để pre-select chức danh) — thuần trợ giúp, không bắt buộc dùng, lỗi thiếu cấp/sai thứ tự nếu tự chỉnh tay sai vẫn hiện qua toast lúc Lưu. Đã kiểm tra dữ liệu sống trước khi triển khai: không có route nào hiện có ≥2 bước Fixed nên không phá cấu hình cũ. **Verify**: `dotnet build` sạch, `npx tsc --noEmit`/`eslint` sạch. **Không tự test luồng ghi** (không tự lưu route thật) — để người dùng tự bấm thử qua UI. |
+| 2026-09-05 | **Nhập mẫu đơn từ file Word — in đúng layout giấy gốc, đảo ngược một phần §1.5 chốt 2026-08-20.** Một số phòng ban đã có sẵn mẫu giấy Word chính thức và cần in đơn ra đúng y hệt layout đó, không chấp nhận quy về lưới generic như mọi form khác. Tham khảo 1 dự án thử nghiệm nội bộ (`Test-drag-drop-form/`, .NET+SQLite+Next.js độc lập) chứng minh khả thi cơ chế `docx-preview` (render `.docx` giữ nguyên layout) + `contentEditable`/native drag-drop (đặt field ngay trên văn bản) + `html-react-parser` (thay placeholder bằng input/giá trị lúc điền/xem) — nhưng **backend của POC đó là demo tối giản** (không snapshot lúc nộp, không validate field server-side, duyệt 1 cấp, auth giả header) nên **chỉ lấy phần cơ chế xử lý file ở client, không lấy mô hình lưu trữ**. Quyết định kiến trúc: cộng thêm, không thay thế — `FormFields`/`FormFieldConditions`/duyệt nhiều cấp/`FormAccesses`/permission/snapshot `FormSchemaJson` giữ nguyên 100%; chỉ thêm 1 cột `FormDefinitions.LayoutHtml` (nvarchar(max) NULL, migration `AddFormDefinitionLayoutHtml`) là HTML `docx-preview` nhúng `<span data-field-key>` khớp đúng `FormFields.FieldKey` thật (không phải id riêng như POC). BE: `UpdateLayoutAsync` (set thẳng, opaque, không validate nội dung) + endpoint `PUT .../layout`; `CloneAsync` copy `LayoutHtml` verbatim (FieldKey giữ nguyên khi clone nên vẫn khớp); `BuildFormSchemaJson` (`WorkflowRequestService`) snapshot thêm `LayoutHtml` — đơn cũ luôn in đúng layout lúc nộp dù `FormDefinitions.LayoutHtml` sau này đổi; `WorkflowRequestFormSchemaDto` (Draft, field sống) cũng trả kèm. FE: thêm `docx-preview`/`vietnamese-conversion` (jszip đã có sẵn) + `html-react-parser`; port gần nguyên vẹn từ POC 2 helper thuần `lib/caret.ts` (tìm điểm chèn caret từ toạ độ chuột) và `lib/vniFix.ts` (tự sửa font VNI-Times/VNI-Helve-Condense cũ, chỉ áp dụng cho run có khai `rFonts` là `VNI-*`, không sửa tràn lan). Field-designer thêm chế độ "Nhập từ Word" (`document-designer/`: `DocumentImportDropzone`/`DocumentFieldPalette`/`DocumentFieldCanvas`) song song chế độ kéo-khối-vào-canvas-trống hiện có (`@dnd-kit`) — cả 2 chế độ cùng ghi ra đúng 1 kiểu `FormFields` qua `replaceFields` sẵn có, khác nhau ở chỗ chế độ tài liệu tự tính `SortOrder` theo thứ tự field xuất hiện trong văn bản (đọc DOM lúc Lưu) thay vì kéo-sắp-xếp thủ công, và ẩn control `ColumnSpan` (vô nghĩa khi vị trí đã nằm trong layoutHtml) qua prop `hideColumnSpan` mới trên `FormFieldEditDialog`. Màn điền/xem/in đơn: `WorkflowRequestDataView.tsx` là nơi DUY NHẤT rẽ nhánh chế độ (theo `layoutHtml` có NULL hay không) nên `WorkflowRequestPrintView.tsx` không cần đổi gì; Draft rẽ nhánh tương tự giữa `DynamicFormRenderer.tsx` (lưới, không đổi) và `DocumentFormRenderer.tsx` (tài liệu, mới) — export thêm `evaluateFlags`/`toDateTimeLocalValue` từ `DynamicFormRenderer.tsx` để 2 renderer dùng chung đúng 1 thuật toán điều kiện ẩn/hiện, tránh lệch dần. Xoá layout (nút "Xoá layout, quay lại canvas trống") chỉ set `LayoutHtml=NULL`, giữ nguyên toàn bộ `FormFields`. **Verify**: `dotnet build`/`dotnet ef database update` (migration áp vào `YevWorkflowManagement` sống) sạch; `npx tsc --noEmit`/`pnpm lint` sạch (2 lỗi lint tồn tại từ trước ở `CreateOtFormPage.tsx`/module Attendance, không liên quan). **Chưa tự bấm thử qua UI thật** (không có công cụ điều khiển trình duyệt trong phiên này) — cần người dùng tự nhập 1 file `.docx` mẫu, đặt field, publish, nộp/duyệt/in thử trước khi coi là hoàn tất 100%, đặc biệt xác nhận đơn cũ vẫn giữ đúng layout khi sửa/xoá `LayoutHtml` của form sau đó (test cách ly qua snapshot). |
+| 2026-09-07 | **Sửa `vniFix.ts`: chữ đúng nhưng vẫn hiện sai font ở trang có bảng dày đặc (bug người dùng báo, tự test lại bằng chính `docs/OT_Form.docx` thật).** Giải nén trực tiếp `OT_Form.docx` đối chiếu `document.xml`/`styles.xml`/`fontTable.xml` xác nhận: (1) mọi run khai VNI đều khai `rFonts` NGAY TRÊN run đó (không qua style/table-style kế thừa — không phải lỗi thiếu quét); (2) `applyVniFix` tự nó dịch đúng 100% các đoạn có byte VNI thật (`"Ban haønh laøn 5"` → `"Ban hành lần 5"` đúng); (3) `fontTable.xml` khai `VNI-Times`/`VNI-Helve-Condense` **không kèm font nhúng** (`w:family="auto"`, không có `word/fonts/*.fntdata`) — nghĩa là 2 font này CHƯA TỪNG có thật trên máy đọc file trừ khi máy đó tự cài legacy font. **Bug thật**: `fixVniDocx` chỉ sửa BYTE của chữ, không sửa tên font khai trong `w:rFonts` — sau khi sửa xong, run vẫn khai `ascii/hAnsi="VNI-Times"`, `docx-preview` truyền thẳng tên đó vào CSS `font-family`, trình duyệt không có font này nên tự chọn font thay thế không kiểm soát được — đây mới là nguồn "lỗi font chữ", không phải encoding. Sửa: sau khi sửa byte, ghi đè luôn `w:ascii`/`w:hAnsi` của run đó sang font Unicode thật luôn có sẵn (`VNI-Times*` → `"Times New Roman"`, `VNI-Helve*` → `"Arial"`) — áp dụng cho MỌI run có khai font VNI dù chữ có đổi byte hay không (run chữ thuần ASCII như "YAZAKI EDS VIETNAM CO., LTD." vẫn đổi font, vì giữ nguyên "VNI-Times" đằng nào cũng vô nghĩa). Điều kiện ghi đè file zip đổi từ `convertedCount === 0` sang `convertedCount === 0 && !didMutateFonts` để không bỏ sót trường hợp chỉ đổi font mà không đổi byte chữ nào. Xác minh bằng script Node đối chiếu logic (không phải test trình duyệt) trên đúng `docs/OT_Form.docx`: 69/214 run khai VNI, đúng 6 run có byte thật cần dịch (đều dịch đúng), có cả `VNI-Times` lẫn `VNI-Helve-Condense` trong file để xác nhận cả 2 nhánh thay font đều được kích hoạt. |

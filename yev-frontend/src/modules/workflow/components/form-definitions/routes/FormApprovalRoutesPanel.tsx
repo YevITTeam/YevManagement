@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Save } from "lucide-react";
+import { Plus, Save, Route } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { FormDefinitionApi } from "@/modules/workflow/api/form-definition.api";
@@ -12,6 +12,8 @@ import type { RouteConditionType } from "@/modules/workflow/types/form-definitio
 import { ParticipantRole } from "@/modules/workflow/types/form-route.dto";
 import type { OrgUnitTreeDto } from "@/modules/workflow/types/org-unit.dto";
 import type { SelectOption } from "@/components/ui/SearchableSelect";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/common/EmptyState";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { createDefaultRoute, fromRouteDto, toReplaceRouteItem, type EditableRoute } from "./editableRoute";
@@ -141,7 +143,12 @@ export default function FormApprovalRoutesPanel({ formDefinitionId, routeConditi
     };
 
     if (isLoading) {
-        return <div className="py-10 text-center text-sm text-[#5e3f3a]">{t("loading")}</div>;
+        return (
+            <div className="space-y-3">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+            </div>
+        );
     }
 
     if (error) {
@@ -172,7 +179,9 @@ export default function FormApprovalRoutesPanel({ formDefinitionId, routeConditi
             </div>
 
             {routes.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-[#e0e3e5] px-4 py-8 text-center text-sm text-[#8a8f94]">{t("noRoutes")}</div>
+                <div className="rounded-lg border border-dashed border-[#e0e3e5]">
+                    <EmptyState icon={Route} title={t("noRoutes")} />
+                </div>
             ) : (
                 <div className="space-y-3">
                     {routes.map((route, index) => (

@@ -46,7 +46,7 @@ export const COLUMN_SPAN_CLASS: Record<number, string> = {
 export const inputClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:text-[#8a8f94]";
 
-function toDateTimeLocalValue(iso: string | null | undefined): string {
+export function toDateTimeLocalValue(iso: string | null | undefined): string {
     if (!iso) return "";
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
@@ -58,7 +58,7 @@ function toDateTimeLocalValue(iso: string | null | undefined): string {
 // (WorkflowRequestService.EvaluateConditions/ValidateAndNormalizeDataJsonAsync), không tin FE. Mirror
 // đúng thuật toán BE: gom theo TargetFieldId rồi theo Effect, trong 1 Effect gom tiếp theo LogicGroup
 // (AND trong group, OR giữa group), Show/Hide/Require/ReadOnly đánh giá ĐỘC LẬP nhau.
-interface FieldFlags {
+export interface FieldFlags {
     visible: boolean;
     required: boolean;
     readOnly: boolean;
@@ -114,7 +114,9 @@ function evaluateSingleCondition(condition: FormFieldConditionDto, fieldsByKey: 
     }
 }
 
-function evaluateFlags(fields: FormFieldDto[], conditions: FormFieldConditionDto[], data: Record<string, JsonValue>): Map<number, FieldFlags> {
+// Exported để DocumentFormRenderer.tsx (chế độ tài liệu, workflow-module.md §1.5) dùng chung đúng 1
+// thuật toán — không chép lại, tránh lệch dần với BE.
+export function evaluateFlags(fields: FormFieldDto[], conditions: FormFieldConditionDto[], data: Record<string, JsonValue>): Map<number, FieldFlags> {
     const fieldsById = new Map(fields.map((f) => [f.id, f]));
     const result = new Map<number, FieldFlags>();
 

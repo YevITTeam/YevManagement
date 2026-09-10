@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { EmployeeSignatureApi } from "@/modules/workflow/api/employee-signature.api";
 import type { EmployeeSignatureDto } from "@/modules/workflow/types/employee-signature.dto";
 import SignatureUpload from "../requests/SignatureUpload";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
@@ -16,7 +17,6 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 // vẫn có hiệu lực cho tới khi tự bấm xác nhận qua link email (trang public /xac-nhan-chu-ky-quy-trinh).
 export default function EmployeeSignaturePanel() {
     const t = useTranslations("Workflow.EmployeeSignature");
-    const tCommon = useTranslations("Common");
     const [signature, setSignature] = useState<EmployeeSignatureDto | null>(null);
     const [draftBase64, setDraftBase64] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -58,7 +58,13 @@ export default function EmployeeSignaturePanel() {
 
             <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 {isLoading ? (
-                    <div className="py-8 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
+                    <div className="space-y-4">
+                        <div>
+                            <Skeleton className="mb-1.5 h-3 w-32" />
+                            <Skeleton className="h-24 w-48" />
+                        </div>
+                        <Skeleton className="h-4 w-48" />
+                    </div>
                 ) : (
                     <>
                         <div>

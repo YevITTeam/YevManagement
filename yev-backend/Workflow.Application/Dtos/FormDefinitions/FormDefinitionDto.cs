@@ -19,6 +19,7 @@ namespace Workflow.Application.Dtos.FormDefinitions
         public RouteConditionType RouteConditionType { get; set; }
         public string? RouteNumericFieldKey { get; set; }
         public string? RouteClassFieldKey { get; set; }
+        public string? LayoutHtml { get; set; }
         public int CreatedByEmployeeId { get; set; }
         public string CreatedByEmployeeName { get; set; } = null!;
         public int? UpdatedByEmployeeId { get; set; }

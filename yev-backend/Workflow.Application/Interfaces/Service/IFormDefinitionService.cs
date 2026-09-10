@@ -14,6 +14,7 @@ namespace Workflow.Application.Interfaces.Service
         Task<FormDefinitionDto> CreateAsync(CreateFormDefinitionDto request, int? currentUserId);
         Task UpdateAsync(UpdateFormDefinitionDto request, int? currentUserId);
         Task DeleteAsync(int id);
+        Task<FormDefinitionDto> UpdateLayoutAsync(int formDefinitionId, UpdateFormDefinitionLayoutDto request, int? currentUserId);
 
         Task<List<FormFieldDto>> GetFieldsAsync(int formDefinitionId);
         Task<List<FormFieldDto>> ReplaceFieldsAsync(int formDefinitionId, ReplaceFormFieldsDto request);

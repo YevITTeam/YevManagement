@@ -8,7 +8,7 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
 
-type OtFormTabKey = "my-forms" | "pending-approvals" | "my-actions" | "my-participations";
+type OtFormTabKey = "my-forms" | "pending-approvals" | "my-actions" | "my-participations" | "all-forms";
 
 // docs/attendance-api-fe.md §1.1/§1.3.B (gộp 2026-07-17) — gộp các màn danh sách cũ ("Đơn của tôi"/
 // "Chờ tôi duyệt"/"Đơn đã xử lý") + 1 tab "Đơn tôi tham gia" thành 1 màn "Đơn tăng ca" duy nhất. Chỉ
@@ -22,16 +22,20 @@ export default function OtFormTabsPage() {
         { key: "pending-approvals", label: t("tabPendingApprovals") },
         { key: "my-actions", label: t("tabMyActions") },
         { key: "my-participations", label: t("tabMyParticipations") },
+        { key: "all-forms", label: t("tabAllForms") },
     ];
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
+    // Tab "Tất cả đơn" — chỉ Admin (permission riêng Attendance.OTForm.ViewAll, 2026-09-04).
+    const canViewAll = hasPermission(user, "Attendance.OTForm.ViewAll");
     // Badge số đơn "Chờ tôi duyệt" ngay trên tab — dùng chung hook với badge sidebar (2026-08-19).
     const pendingApprovalsCount = usePendingApprovalsCount(canApprove);
 
     const visibleTabs = ALL_TABS.filter((tab) => {
         if (tab.key === "my-forms") return canCreate;
         if (tab.key === "pending-approvals") return canApprove;
+        if (tab.key === "all-forms") return canViewAll;
         return true; // "my-actions"/"my-participations" luôn hiện — chỉ cần OTForm.View để vào được cả màn
     });
 

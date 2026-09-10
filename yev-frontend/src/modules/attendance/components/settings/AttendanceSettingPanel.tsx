@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { Send, Ticket, TrendingUp } from "lucide-react";
+import { Mail, Send, Ticket, TrendingUp } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -40,6 +40,8 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
     const [values, setValues] = useState<AttendanceSettingDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isRunningNow, setIsRunningNow] = useState(false);
+    const [testEmail, setTestEmail] = useState("");
+    const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
 
     const { isLoading, refetch: fetchSetting } = useFetchEffect(
         () => AttendanceSettingApi.getSetting(),
@@ -87,6 +89,24 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
             toast.error(getApiErrorMessage(err, t("updateError")));
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleSendTestEmail = async () => {
+        const trimmed = testEmail.trim();
+        if (!trimmed) {
+            toast.error(t("testEmailRequiredError"));
+            return;
+        }
+        setIsSendingTestEmail(true);
+        try {
+            await AttendanceSettingApi.sendTestEmail({ email: trimmed });
+            toast.success(t("testEmailSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("testEmailError")));
+        } finally {
+            setIsSendingTestEmail(false);
         }
     };
 
@@ -280,6 +300,41 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                     </label>
                 </div>
                 <p className="text-xs text-[#5e3f3a]">{t("accumulationHint")}</p>
+            </section>
+
+            <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-2">
+                    <div className="rounded-md bg-[#fff4f2] p-2 text-[#e3000f]">
+                        <Mail size={18} />
+                    </div>
+                    <div>
+                        <h2 className="text-sm font-semibold text-[#191c1e]">{t("testEmailSectionTitle")}</h2>
+                        <p className="text-xs text-[#5e3f3a]">{t("testEmailSectionDesc")}</p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-end gap-3">
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldTestEmail")}</span>
+                        <input
+                            type="email"
+                            value={testEmail}
+                            onChange={(event) => setTestEmail(event.target.value)}
+                            placeholder={t("fieldTestEmailPlaceholder")}
+                            disabled={isSendingTestEmail}
+                            className={`${fieldClassName} w-72`}
+                        />
+                    </label>
+                    <button
+                        type="button"
+                        onClick={handleSendTestEmail}
+                        disabled={isSendingTestEmail}
+                        className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <Mail className="h-3.5 w-3.5" />
+                        {isSendingTestEmail ? t("testEmailSending") : t("testEmailButton")}
+                    </button>
+                </div>
             </section>
 
             <div className="flex justify-end">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, LayoutGrid } from "lucide-react";
+import { RefreshCw, LayoutGrid, Inbox } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
@@ -12,6 +12,9 @@ import type { FormDefinitionDto } from "@/modules/workflow/types/form-definition
 import type { FormCategoryDto } from "@/modules/workflow/types/form-category.dto";
 import FormDefinitionForm, { type FormDefinitionFormValues } from "./FormDefinitionForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { EmptyState } from "@/components/common/EmptyState";
+import { TableSkeletonRows } from "@/components/common/TableSkeletonRows";
+import { Badge } from "@/components/ui/Badge";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -215,27 +218,24 @@ export default function FormDefinitionList() {
                             </tr>
                         </thead>
                         <tbody>
+                            {isLoading && <TableSkeletonRows rows={5} columns={canManage ? 6 : 5} />}
                             {!isLoading && formDefinitions.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={canManage ? 6 : 5}>
+                                        <EmptyState icon={Inbox} title={t("noData")} />
                                     </td>
                                 </tr>
                             )}
-                            {formDefinitions.map((item) => (
+                            {!isLoading && formDefinitions.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.code}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{item.nameVn}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.formCategoryNameVn}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">v{item.version}</td>
                                     <td className="px-6 py-4 text-sm">
-                                        <span
-                                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                                item.isPublished ? "bg-[#e6f4ea] text-[#1e7a34]" : "bg-[#f2f4f6] text-[#5e3f3a]"
-                                            }`}
-                                        >
+                                        <Badge variant={item.isPublished ? "success" : "neutral"} withDot>
                                             {item.isPublished ? t("statusPublished") : t("statusDraft")}
-                                        </span>
+                                        </Badge>
                                     </td>
                                     {canManage && (
                                         <td className="px-6 py-4 text-right text-sm">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ChangeEvent } from "react";
-import { ArrowLeft, Save, Send, CheckCircle2, XCircle, RotateCcw, UserPlus, Ban, Printer, Paperclip, Download, Trash2, Eye } from "lucide-react";
+import { ArrowLeft, Save, Send, CheckCircle2, XCircle, RotateCcw, UserPlus, Ban, Printer, Paperclip, Download, Trash2, Eye, History } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/navigation";
@@ -16,11 +16,16 @@ import type { ApprovalDelegationDto } from "@/modules/workflow/types/approval-de
 import type { OrgUnitTreeDto } from "@/modules/workflow/types/org-unit.dto";
 import { ParticipantRole } from "@/modules/workflow/types/form-route.dto";
 import DynamicFormRenderer from "./DynamicFormRenderer";
+import DocumentFormRenderer from "./DocumentFormRenderer";
 import WorkflowRequestDataView from "./WorkflowRequestDataView";
 import WorkflowRequestPrintView from "./WorkflowRequestPrintView";
 import AttachmentPreviewDialog from "./AttachmentPreviewDialog";
 import SignatureUpload from "./SignatureUpload";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import FormDialog from "@/components/common/FormDialog";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -33,22 +38,22 @@ interface WorkflowRequestDetailProps {
     formDefinitionId?: number | null;
 }
 
-const STATUS_META: Record<number, { labelKey: string; className: string }> = {
-    [RequestStatus.Draft]: { labelKey: "statusDraft", className: "bg-[#f2f4f6] text-[#5e3f3a]" },
-    [RequestStatus.Submitted]: { labelKey: "statusSubmitted", className: "bg-[#e8f0fe] text-[#1a56db]" },
-    [RequestStatus.InProgress]: { labelKey: "statusInProgress", className: "bg-[#e8f0fe] text-[#1a56db]" },
-    [RequestStatus.Approved]: { labelKey: "statusApproved", className: "bg-[#e6f4ea] text-[#1e7a34]" },
-    [RequestStatus.Rejected]: { labelKey: "statusRejected", className: "bg-[#fde8e8] text-[#930006]" },
-    [RequestStatus.SentBack]: { labelKey: "statusSentBack", className: "bg-[#fff8ee] text-[#8a5a00]" },
-    [RequestStatus.Cancelled]: { labelKey: "statusCancelled", className: "bg-[#f2f4f6] text-[#8a8f94]" },
+const STATUS_META: Record<number, { labelKey: string; variant: BadgeVariant }> = {
+    [RequestStatus.Draft]: { labelKey: "statusDraft", variant: "neutral" },
+    [RequestStatus.Submitted]: { labelKey: "statusSubmitted", variant: "info" },
+    [RequestStatus.InProgress]: { labelKey: "statusInProgress", variant: "info" },
+    [RequestStatus.Approved]: { labelKey: "statusApproved", variant: "success" },
+    [RequestStatus.Rejected]: { labelKey: "statusRejected", variant: "danger" },
+    [RequestStatus.SentBack]: { labelKey: "statusSentBack", variant: "warning" },
+    [RequestStatus.Cancelled]: { labelKey: "statusCancelled", variant: "neutral" },
 };
 
-const STEP_STATUS_META: Record<number, { labelKey: string; className: string }> = {
-    [StepStatus.Waiting]: { labelKey: "stepWaiting", className: "bg-[#f2f4f6] text-[#8a8f94]" },
-    [StepStatus.Current]: { labelKey: "stepCurrent", className: "bg-[#e8f0fe] text-[#1a56db]" },
-    [StepStatus.Approved]: { labelKey: "stepApproved", className: "bg-[#e6f4ea] text-[#1e7a34]" },
-    [StepStatus.Rejected]: { labelKey: "stepRejected", className: "bg-[#fde8e8] text-[#930006]" },
-    [StepStatus.Skipped]: { labelKey: "stepSkipped", className: "bg-[#f2f4f6] text-[#8a8f94]" },
+const STEP_STATUS_META: Record<number, { labelKey: string; variant: BadgeVariant }> = {
+    [StepStatus.Waiting]: { labelKey: "stepWaiting", variant: "neutral" },
+    [StepStatus.Current]: { labelKey: "stepCurrent", variant: "info" },
+    [StepStatus.Approved]: { labelKey: "stepApproved", variant: "success" },
+    [StepStatus.Rejected]: { labelKey: "stepRejected", variant: "danger" },
+    [StepStatus.Skipped]: { labelKey: "stepSkipped", variant: "neutral" },
 };
 
 const ACTION_LABEL_KEY: Record<number, string> = {
@@ -236,7 +241,15 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
         "employee-signature"
     );
 
-    if (isLoading) return <div className="py-10 text-center text-sm text-[#5e3f3a]">{t("loading")}</div>;
+    if (isLoading) {
+        return (
+            <div className="space-y-3 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
+                <Skeleton className="h-7 w-56" />
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="mt-4 h-32 w-full" />
+            </div>
+        );
+    }
     if (error || !request) return <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error ?? t("loadError")}</div>;
 
     const statusMeta = STATUS_META[request.status];
@@ -470,9 +483,9 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                     </Link>
                     <div className="mt-2 flex items-center gap-3">
                         <h1 className="text-2xl font-semibold text-[#191c1e]">{request.requestCode ?? t("draftLabel")}</h1>
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusMeta?.className ?? ""}`}>
+                        <Badge variant={statusMeta?.variant ?? "neutral"} withDot>
                             {statusMeta ? t(statusMeta.labelKey) : request.status}
-                        </span>
+                        </Badge>
                     </div>
                     <p className="mt-1 text-sm text-[#5e3f3a]">{request.formDefinitionNameVn}</p>
                 </div>
@@ -503,7 +516,17 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("dataSectionTitle")}</h2>
-                {request.status === RequestStatus.Draft && formSchema ? (
+                {request.status === RequestStatus.Draft && formSchema?.layoutHtml ? (
+                    <DocumentFormRenderer
+                        layoutHtml={formSchema.layoutHtml}
+                        fields={formSchema.fields}
+                        conditions={formSchema.conditions}
+                        value={draftData}
+                        onChange={setDraftData}
+                        employeeOptions={employeeOptions}
+                        orgUnitOptions={orgUnitOptions}
+                    />
+                ) : request.status === RequestStatus.Draft && formSchema ? (
                     <DynamicFormRenderer
                         fields={formSchema.fields}
                         conditions={formSchema.conditions}
@@ -536,7 +559,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                         )}
                     </div>
                     {request.attachments.length === 0 ? (
-                        <p className="text-sm text-[#8a8f94]">{t("noAttachments")}</p>
+                        <EmptyState icon={Paperclip} title={t("noAttachments")} />
                     ) : (
                         <ul className="space-y-2">
                             {request.attachments.map((a) => (
@@ -612,7 +635,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                                                 {t("stepOrderLabel", { order: step.stepOrder })} — {step.stepNameSnapshot}
                                                 {step.isAdHoc && <span className="ml-1.5 text-xs font-normal text-[#8a8f94]">({t("adHocLabel")})</span>}
                                             </p>
-                                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${meta?.className ?? ""}`}>{meta ? t(meta.labelKey) : step.status}</span>
+                                            <Badge variant={meta?.variant ?? "neutral"}>{meta ? t(meta.labelKey) : step.status}</Badge>
                                         </div>
                                         <div className="mt-2 flex flex-wrap gap-2">
                                             {step.participants.map((p) => (
@@ -710,7 +733,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("historySectionTitle")}</h2>
                 {request.histories.length === 0 ? (
-                    <p className="text-sm text-[#8a8f94]">{t("noHistory")}</p>
+                    <EmptyState icon={History} title={t("noHistory")} />
                 ) : (
                     <div className="space-y-3">
                         {request.histories
@@ -756,82 +779,62 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                 }}
             />
 
-            {sendBackOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                    <div className="fixed inset-0 bg-black/40" onClick={() => !isSendingBack && setSendBackOpen(false)} />
-                    <div className="z-60 mx-4 w-full max-w-sm rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
-                        <h3 className="mb-4 text-lg font-semibold text-[#191c1e]">{t("sendBackDialogTitle")}</h3>
-                        <label className="mb-4 block">
-                            <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("sendBackTargetLabel")}</span>
-                            <select
-                                value={sendBackTarget}
-                                onChange={(e) => setSendBackTarget(Number(e.target.value))}
-                                className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm outline-none focus:border-[#e3000f]"
-                            >
-                                {sendBackOptions.map((order) => (
-                                    <option key={order} value={order}>
-                                        {order === 0 ? t("sendBackToSubmitter") : t("stepOrderLabel", { order })}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => !isSendingBack && setSendBackOpen(false)} className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] hover:bg-[#f2f4f6]">
-                                {tCommon("cancel")}
-                            </button>
-                            <button
-                                onClick={handleSendBack}
-                                disabled={isSendingBack}
-                                className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b40009] disabled:opacity-50"
-                            >
-                                {isSendingBack ? tCommon("processing") : tCommon("confirm")}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <FormDialog
+                isOpen={sendBackOpen}
+                title={t("sendBackDialogTitle")}
+                onClose={() => setSendBackOpen(false)}
+                onSubmit={handleSendBack}
+                loading={isSendingBack}
+                submitLabel={isSendingBack ? tCommon("processing") : tCommon("confirm")}
+                cancelLabel={tCommon("cancel")}
+            >
+                <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("sendBackTargetLabel")}</span>
+                    <select
+                        value={sendBackTarget}
+                        onChange={(e) => setSendBackTarget(Number(e.target.value))}
+                        className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm outline-none focus:border-[#e3000f]"
+                    >
+                        {sendBackOptions.map((order) => (
+                            <option key={order} value={order}>
+                                {order === 0 ? t("sendBackToSubmitter") : t("stepOrderLabel", { order })}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            </FormDialog>
 
-            {addApproverOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                    <div className="fixed inset-0 bg-black/40" onClick={() => !isAddingApprover && setAddApproverOpen(false)} />
-                    <div className="z-60 mx-4 w-full max-w-sm rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
-                        <h3 className="mb-4 text-lg font-semibold text-[#191c1e]">{t("addApproverDialogTitle")}</h3>
-                        <label className="mb-4 block">
-                            <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("addApproverEmployeeLabel")}</span>
-                            <SearchableSelect options={employeeOptions} value={addApproverEmployeeId} onChange={setAddApproverEmployeeId} placeholder={t("selectPlaceholder")} />
-                        </label>
-                        <label className="mb-4 block">
-                            <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("addApproverInsertAfterLabel")}</span>
-                            <select
-                                value={addApproverInsertAfter}
-                                onChange={(e) => setAddApproverInsertAfter(Number(e.target.value))}
-                                className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm outline-none focus:border-[#e3000f]"
-                            >
-                                {request.steps
-                                    .slice()
-                                    .sort((a, b) => a.stepOrder - b.stepOrder)
-                                    .map((s) => (
-                                        <option key={s.id} value={s.stepOrder}>
-                                            {t("stepOrderLabel", { order: s.stepOrder })} — {s.stepNameSnapshot}
-                                        </option>
-                                    ))}
-                            </select>
-                        </label>
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => !isAddingApprover && setAddApproverOpen(false)} className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] hover:bg-[#f2f4f6]">
-                                {tCommon("cancel")}
-                            </button>
-                            <button
-                                onClick={handleAddApprover}
-                                disabled={isAddingApprover}
-                                className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#b40009] disabled:opacity-50"
-                            >
-                                {isAddingApprover ? tCommon("processing") : tCommon("confirm")}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <FormDialog
+                isOpen={addApproverOpen}
+                title={t("addApproverDialogTitle")}
+                onClose={() => setAddApproverOpen(false)}
+                onSubmit={handleAddApprover}
+                loading={isAddingApprover}
+                submitLabel={isAddingApprover ? tCommon("processing") : tCommon("confirm")}
+                cancelLabel={tCommon("cancel")}
+            >
+                <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("addApproverEmployeeLabel")}</span>
+                    <SearchableSelect options={employeeOptions} value={addApproverEmployeeId} onChange={setAddApproverEmployeeId} placeholder={t("selectPlaceholder")} />
+                </label>
+                <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("addApproverInsertAfterLabel")}</span>
+                    <select
+                        value={addApproverInsertAfter}
+                        onChange={(e) => setAddApproverInsertAfter(Number(e.target.value))}
+                        className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm outline-none focus:border-[#e3000f]"
+                    >
+                        {request.steps
+                            .slice()
+                            .sort((a, b) => a.stepOrder - b.stepOrder)
+                            .map((s) => (
+                                <option key={s.id} value={s.stepOrder}>
+                                    {t("stepOrderLabel", { order: s.stepOrder })} — {s.stepNameSnapshot}
+                                </option>
+                            ))}
+                    </select>
+                </label>
+            </FormDialog>
 
         </div>
 

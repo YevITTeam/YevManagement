@@ -24,6 +24,9 @@ export interface FormDefinitionDto {
     routeConditionType: RouteConditionType;
     routeNumericFieldKey: string | null;
     routeClassFieldKey: string | null;
+    // HTML render từ .docx nhập vào, nhúng <span data-field-key> đánh dấu vị trí field. NULL = chế
+    // độ lưới hiện tại (workflow-module.md §1.5).
+    layoutHtml: string | null;
     createdByEmployeeId: number;
     createdByEmployeeName: string;
     updatedByEmployeeId: number | null;

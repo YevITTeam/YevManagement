@@ -9,12 +9,18 @@ namespace Attendance.Application.Interfaces.Service
         // fromDate/toDate lọc theo OtForm.Date (bao gồm cả 2 đầu mút), status lọc theo đúng giá trị
         // OtFormStatus — cả 3 đều optional, dùng chung cho mọi tab danh sách (2026-08-06, xem
         // docs/attendance-module.md §Lọc danh sách đơn).
+        // groupId/departmentId lọc đơn văn phòng; productionLineId/productionTeamId/productionShiftTeamId
+        // lọc đơn dưới chuyền — cả 5 field đều optional, dùng chung cho mọi tab danh sách (2026-09-04,
+        // trước đây chỉ GetPendingApprovalsAsync có 3 field production, riêng office chưa tab nào có).
         Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
-            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
 
         Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
             string approverUserName, int pageIndex, int pageSize,
             DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
             int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
 
         // Đếm nhanh cho badge sidebar FE — cùng logic lọc "bước hiện tại" với GetPendingApprovalsAsync
@@ -30,12 +36,23 @@ namespace Attendance.Application.Interfaces.Service
         // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 vai trò
         // (Trưởng nhóm/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc), gate bằng Attendance.OTForm.View.
         Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(
-            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
 
         // Đơn tôi CÓ TÊN trong danh sách nhân viên tăng ca (OtFormEmployee) — không nhất thiết là người
         // tạo/ký/duyệt. Dành cho mọi user (kể cả Role "Nhân viên"), gate bằng Attendance.OTForm.View.
         Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(
-            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null);
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
+
+        // "Tất cả đơn" — Admin xem/quản lý toàn bộ đơn, không lọc theo user gọi API. Gate bằng
+        // Attendance.OTForm.ViewAll (Admin-only, 2026-09-04, xem migration AddOtFormViewAllPermission).
+        Task<PagedResponse<OtFormListItemDto>> GetAllFormsAsync(
+            int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
 
         Task<OtFormDto> GetByIdAsync(int id);
 

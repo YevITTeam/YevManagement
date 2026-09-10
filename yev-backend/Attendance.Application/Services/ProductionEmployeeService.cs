@@ -98,10 +98,26 @@ namespace Attendance.Application.Services
         // Team chứa Line CHỨ KHÔNG PHẢI ngược lại, nên chỉ Line mới cần tham số cascade này (2026-08-25).
         public async Task<List<ProductionOptionDto>> GetLineOptionsAsync(int? teamId)
         {
-            var items = await _unitOfWork.ProductionLines.SelectAsync(
-                predicate: x => !x.IsDeleted && (teamId == null || x.TeamId == teamId),
-                selector: x => new ProductionOptionDto { Id = x.Id, Code = x.LineCode, NameVn = null });
-            return items.OrderBy(x => x.Code).ToList();
+            if (teamId == null)
+            {
+                var allItems = await _unitOfWork.ProductionLines.SelectAsync(
+                    predicate: x => !x.IsDeleted,
+                    selector: x => new ProductionOptionDto { Id = x.Id, Code = x.LineCode, NameVn = null });
+                return allItems.OrderBy(x => x.Code).ToList();
+            }
+
+            // ProductionLine.TeamId là snapshot TĨNH từ file tham chiếu gốc lúc dựng FK (2026-08-21,
+            // xem migration ConnectProductionLineToTeam), không cập nhật lại theo thời gian — trong khi
+            // Team thật của nhân viên (ProductionEmployee.TeamId) được nạp lại mỗi tháng, nên 1 Line có
+            // thể đã đổi Team thực tế mà FK tĩnh không biết. Lọc theo FK tĩnh khiến FE cho chọn 1 tổ hợp
+            // Team+Line rồi search ra danh sách rỗng. Suy Line có sẵn theo Team TỪ DỮ LIỆU THẬT
+            // (ProductionEmployees) — cùng cách đã áp dụng cho GetShiftTeamOptionsAsync bên dưới từ
+            // 2026-08-25 (2026-09-05, theo yêu cầu người dùng).
+            var items = await _unitOfWork.ProductionEmployees.SelectAsync(
+                predicate: x => !x.IsDeleted && x.EmployeeId != null && x.ProductionLineId != null && x.TeamId == teamId,
+                selector: x => new ProductionOptionDto { Id = x.ProductionLineId!.Value, Code = x.ProductionLine!.LineCode, NameVn = null });
+
+            return items.DistinctBy(x => x.Id).OrderBy(x => x.Code).ToList();
         }
 
         public async Task<List<ProductionOptionDto>> GetTeamOptionsAsync()

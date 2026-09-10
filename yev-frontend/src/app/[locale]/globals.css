@@ -22,3 +22,38 @@ input,
 select {
   font: inherit;
 }
+
+/* Render HTML từ docx-preview (Workflow — "Nhập từ Word", workflow-module.md §1.5), dùng chung cho
+   canvas thiết kế lẫn màn điền/xem/in đơn. */
+.workflow-document-canvas {
+  line-height: 1.7;
+}
+.workflow-document-canvas table {
+  border-collapse: collapse;
+}
+.workflow-document-canvas table td,
+.workflow-document-canvas table th {
+  border: 1px solid #e0e3e5;
+}
+
+.field-placeholder {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.35em;
+  padding: 0.05em 0.5em;
+  margin: 0 0.1em;
+  background: #fff4f2;
+  border: 1px dashed #e3000f;
+  color: #b40009;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+  white-space: nowrap;
+}
+.field-placeholder:hover {
+  background: #ffe0e3;
+}
+.field-placeholder:active {
+  cursor: grabbing;
+}

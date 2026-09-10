@@ -26,9 +26,13 @@ namespace Attendance.Api.Controllers
         [HttpGet("my-forms")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyForms(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
-            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
+            [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
         {
-            var result = await _otFormService.GetMyFormsAsync(CurrentUserName, pageIndex, pageSize, fromDate, toDate, status);
+            var result = await _otFormService.GetMyFormsAsync(
+                CurrentUserName, pageIndex, pageSize, fromDate, toDate, status,
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
             return Success(result);
         }
 
@@ -39,11 +43,12 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetPendingApprovals(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
             [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
+            [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
             [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
         {
             var result = await _otFormService.GetPendingApprovalsAsync(
                 CurrentUserName, pageIndex, pageSize, fromDate, toDate, status,
-                productionLineId, productionTeamId, productionShiftTeamId);
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
             return Success(result);
         }
 
@@ -75,9 +80,13 @@ namespace Attendance.Api.Controllers
         [HttpGet("my-actions")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyActions(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
-            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
+            [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
         {
-            var result = await _otFormService.GetMyActionsAsync(CurrentUserName, pageIndex, pageSize, fromDate, toDate, status);
+            var result = await _otFormService.GetMyActionsAsync(
+                CurrentUserName, pageIndex, pageSize, fromDate, toDate, status,
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
             return Success(result);
         }
 
@@ -88,9 +97,30 @@ namespace Attendance.Api.Controllers
         [HttpGet("my-participations")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyParticipations(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
-            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null)
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
+            [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
         {
-            var result = await _otFormService.GetMyParticipationsAsync(CurrentUserName, pageIndex, pageSize, fromDate, toDate, status);
+            var result = await _otFormService.GetMyParticipationsAsync(
+                CurrentUserName, pageIndex, pageSize, fromDate, toDate, status,
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
+            return Success(result);
+        }
+
+        // "Tất cả đơn" cho Admin quản lý toàn cục — không lọc theo user gọi API, chỉ áp dụng bộ lọc
+        // chung (2026-09-04). Permission riêng Attendance.OTForm.ViewAll, CHỈ gán cho Admin (xem migration
+        // AddOtFormViewAllPermission) — không phải quyền nghiệp vụ nào cũng thấy được toàn bộ đơn.
+        [RequirePermission("Attendance.OTForm.ViewAll")]
+        [HttpGet("all-forms")]
+        public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetAllForms(
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
+            [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
+            [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
+        {
+            var result = await _otFormService.GetAllFormsAsync(
+                pageIndex, pageSize, fromDate, toDate, status,
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
             return Success(result);
         }
 

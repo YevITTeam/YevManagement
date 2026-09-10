@@ -372,14 +372,18 @@ namespace Attendance.Application.Services
 
                 int? teamId = null;
                 var teamCode = row.TeamCode?.Trim();
+                // Chuẩn hoá NGAY ở bước này (2026-09-05) — trước đây chỉ dùng translatedTeamCode để tra
+                // TeamId rồi vứt đi, còn TeamCode lưu xuống DB vẫn là chữ thô "A"/"B" dù TeamId đã trỏ
+                // đúng ProductionTeam "1"/"2", gây lệch giữa 2 cột. Từ giờ TeamCode trong DTO (và vì vậy
+                // cả trong ProductionEmployee) LUÔN là mã đã dịch, khớp ProductionTeam.Code.
+                var translatedTeamCode = teamCode != null && TeamCodeTranslation.TryGetValue(teamCode, out var translated) ? translated : teamCode;
                 if (string.IsNullOrWhiteSpace(teamCode))
                 {
                     errors.Add("Thiếu mã GROUP.");
                 }
                 else
                 {
-                    var translatedTeamCode = TeamCodeTranslation.TryGetValue(teamCode, out var translated) ? translated : teamCode;
-                    if (teamsByCode.TryGetValue(translatedTeamCode, out var foundTeamId))
+                    if (teamsByCode.TryGetValue(translatedTeamCode!, out var foundTeamId))
                         teamId = foundTeamId;
                     else
                         errors.Add($"Mã GROUP '{teamCode}' không khớp Team nào trong hệ thống.");
@@ -406,7 +410,7 @@ namespace Attendance.Application.Services
                         !string.Equals(existingPe.TaskName, row.TaskName, StringComparison.Ordinal) ||
                         !string.Equals(existingPe.BlockCode, blockCode, StringComparison.Ordinal) ||
                         existingPe.ProductionLineId != lineId ||
-                        !string.Equals(existingPe.TeamCode, teamCode, StringComparison.Ordinal) ||
+                        !string.Equals(existingPe.TeamCode, translatedTeamCode, StringComparison.Ordinal) ||
                         existingPe.TeamId != teamId ||
                         !string.Equals(existingPe.ShiftTeamCode, shiftTeamCode, StringComparison.Ordinal) ||
                         existingPe.ShiftTeamId != shiftTeamId ||
@@ -423,7 +427,7 @@ namespace Attendance.Application.Services
                     CongDoan = row.CongDoan,
                     TaskName = row.TaskName,
                     BlockCode = blockCode,
-                    TeamCode = teamCode,
+                    TeamCode = translatedTeamCode,
                     ShiftTeamCode = shiftTeamCode,
                     IsLeader = row.IsLeader,
                     OtMonthHours = row.OtMonthHours,

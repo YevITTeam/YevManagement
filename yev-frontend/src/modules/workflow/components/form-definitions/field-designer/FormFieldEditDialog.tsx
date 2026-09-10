@@ -19,6 +19,9 @@ interface FormFieldEditDialogProps {
     field: EditableField;
     onClose: () => void;
     onSave: (updated: EditableField) => void;
+    // true ở chế độ tài liệu (workflow-module.md §1.5) — ColumnSpan không có tác dụng khi vị trí field
+    // đã nằm sẵn trong layoutHtml, ẩn đi để khỏi gây hiểu lầm.
+    hideColumnSpan?: boolean;
 }
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
@@ -41,7 +44,7 @@ function parseOptions(json: string | null): OptionRow[] {
 // Sửa chi tiết 1 field trong bộ nhớ cục bộ — KHÔNG gọi API, chỉ trả field đã sửa về cho FieldCanvas.
 // Trường hiện thêm tuỳ DataType: Dropdown/Radio/MultiSelect có bảng Options + chọn FormDataSource
 // thay thế; Number/Decimal có Min/Max; Text/TextArea có MaxLength.
-export default function FormFieldEditDialog({ field, onClose, onSave }: FormFieldEditDialogProps) {
+export default function FormFieldEditDialog({ field, onClose, onSave, hideColumnSpan }: FormFieldEditDialogProps) {
     const t = useTranslations("Workflow.FormDefinition");
     const tCommon = useTranslations("Common");
 
@@ -116,7 +119,7 @@ export default function FormFieldEditDialog({ field, onClose, onSave }: FormFiel
                 </div>
 
                 <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className={hideColumnSpan ? "grid grid-cols-1 gap-4" : "grid grid-cols-2 gap-4"}>
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldFieldKey")}</span>
                             <input
@@ -129,18 +132,20 @@ export default function FormFieldEditDialog({ field, onClose, onSave }: FormFiel
                             />
                         </label>
 
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldColumnSpan")}</span>
-                            <select
-                                value={values.columnSpan}
-                                onChange={(event) => setValues((current) => ({ ...current, columnSpan: Number(event.target.value) }))}
-                                className={fieldClassName}
-                            >
-                                <option value={1}>{t("columnSpan1")}</option>
-                                <option value={2}>{t("columnSpan2")}</option>
-                                <option value={3}>{t("columnSpan3")}</option>
-                            </select>
-                        </label>
+                        {!hideColumnSpan && (
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldColumnSpan")}</span>
+                                <select
+                                    value={values.columnSpan}
+                                    onChange={(event) => setValues((current) => ({ ...current, columnSpan: Number(event.target.value) }))}
+                                    className={fieldClassName}
+                                >
+                                    <option value={1}>{t("columnSpan1")}</option>
+                                    <option value={2}>{t("columnSpan2")}</option>
+                                    <option value={3}>{t("columnSpan3")}</option>
+                                </select>
+                            </label>
+                        )}
                     </div>
 
                     <label className="block">

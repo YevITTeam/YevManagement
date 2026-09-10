@@ -35,6 +35,10 @@ public partial class FormDefinition
 
     public string? RouteClassFieldKey { get; set; }
 
+    // HTML render từ file .docx nhập vào, có nhúng <span data-field-key="..."> đánh dấu vị trí field
+    // (workflow-module.md §1.5). NULL = chế độ lưới hiện tại, không đổi hành vi gì.
+    public string? LayoutHtml { get; set; }
+
     public int CreatedByEmployeeId { get; set; }
 
     public int? UpdatedByEmployeeId { get; set; }

@@ -1,6 +1,8 @@
 using Attendance.Application.Dtos.AttendanceSettings;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
+using Shared.Application.Helper;
+using Shared.Application.Interfaces;
 using Shared.Application.Services;
 
 namespace Attendance.Application.Services
@@ -9,6 +11,9 @@ namespace Attendance.Application.Services
     // Mirror Asset.Application.Services.AssetSettingService.
     public class AttendanceSettingService : BaseService<IAttendanceUnitOfWork>, IAttendanceSettingService
     {
+        private readonly IEmailService _emailService;
+        private readonly IEmailTemplateRenderer _emailTemplateRenderer;
+
         // Giá trị mặc định phải KHỚP với seed trong migration AddAttendanceSetting/tương ứng — dùng lại
         // ở đây làm fallback khi dòng cấu hình bị xoá tay trực tiếp dưới DB.
         // Đổi 2 -> 3.5 (2026-08-26, redesign 3 bậc phiếu ăn theo yêu cầu người dùng) — giờ so trên
@@ -23,7 +28,14 @@ namespace Attendance.Application.Services
         public const decimal DefaultYearlyOtHourLimit = 300m;
         public static readonly TimeOnly DefaultBatchAutoSendTime = new(15, 0);
 
-        public AttendanceSettingService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
+        public AttendanceSettingService(
+            IAttendanceUnitOfWork unitOfWork,
+            IEmailService emailService,
+            IEmailTemplateRenderer emailTemplateRenderer) : base(unitOfWork)
+        {
+            _emailService = emailService;
+            _emailTemplateRenderer = emailTemplateRenderer;
+        }
 
         public async Task<AttendanceSettingDto> GetAsync()
         {
@@ -54,6 +66,17 @@ namespace Attendance.Application.Services
         {
             var setting = await GetOrCreateSettingEntityAsync();
             return setting.BatchAutoSendTime;
+        }
+
+        public async Task<bool> SendTestEmailAsync(SendTestEmailDto request, string senderDisplayName)
+        {
+            var html = _emailTemplateRenderer.Render("Test/TestEmail.html", new Dictionary<string, string>
+            {
+                ["SenderDisplayName"] = senderDisplayName,
+                ["SentAtText"] = TimeHelper.GetCurrentUtcTime().ToString("dd/MM/yyyy HH:mm:ss"),
+            });
+
+            return await _emailService.SendAsync(request.Email, "Email kiểm tra - YevManagement", html);
         }
 
         private static AttendanceSettingDto ToDto(AttendanceSetting setting) => new()

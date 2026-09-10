@@ -1,3 +1,4 @@
+import parse, { Element, type HTMLReactParserOptions } from "html-react-parser";
 import type { FormSchemaSnapshot, JsonValue } from "@/modules/workflow/types/workflow-request.dto";
 import { FieldDataType } from "@/modules/workflow/types/form-field.dto";
 
@@ -87,6 +88,30 @@ function formatValue(dataType: number, raw: JsonValue, optionsJson: string | nul
 // sẵn (WorkflowRequestService.ValidateAndNormalizeDataJsonAsync), field null hiện "—" nên tự nhiên
 // không nổi bật, không cần logic ẩn thêm ở đây.
 export default function WorkflowRequestDataView({ schema, data, printMode }: WorkflowRequestDataViewProps) {
+    // Chế độ tài liệu (workflow-module.md §1.5) — layout đã snapshot lúc nộp, giữ y hệt file Word gốc.
+    // Thay mỗi <span data-field-key> bằng giá trị đã điền, KHÔNG cần lưới/ColumnSpan vì vị trí đã nằm
+    // sẵn trong chính layoutHtml.
+    if (schema.layoutHtml) {
+        const fieldsByKey = new Map(schema.fields.map((f) => [f.fieldKey, f]));
+        const options: HTMLReactParserOptions = {
+            replace: (domNode) => {
+                if (!(domNode instanceof Element) || domNode.name !== "span") return undefined;
+                const fieldKey = domNode.attribs?.["data-field-key"];
+                if (!fieldKey) return undefined;
+                const field = fieldsByKey.get(fieldKey);
+                if (!field || field.dataType === FieldDataType.Label) return undefined;
+
+                const formatted = formatValue(field.dataType, data[field.fieldKey] ?? null, field.optionsJson);
+                return (
+                    <span className="font-semibold text-[#191c1e] underline decoration-dotted underline-offset-2">
+                        {formatted}
+                    </span>
+                );
+            },
+        };
+        return <div className="workflow-document-canvas text-sm">{parse(schema.layoutHtml, options)}</div>;
+    }
+
     const sortedFields = [...schema.fields].sort((a, b) => a.sortOrder - b.sortOrder);
 
     return (

@@ -155,6 +155,7 @@ namespace Workflow.Application.Services
                 Description = form.Description,
                 AllowAttachment = form.AllowAttachment,
                 RequireAttachment = form.RequireAttachment,
+                LayoutHtml = form.LayoutHtml,
                 Fields = fields,
                 Conditions = conditions
             };
@@ -365,7 +366,7 @@ namespace Workflow.Application.Services
 
                 entity.DataJson = JsonSerializer.Serialize(normalizedData);
                 // 7. FormSchemaJson snapshot
-                entity.FormSchemaJson = BuildFormSchemaJson(fields, conditions);
+                entity.FormSchemaJson = BuildFormSchemaJson(fields, conditions, form.LayoutHtml);
                 entity.FormRouteId = selectedRoute.Id;
                 entity.RouteConditionSnapshot = routeSnapshot;
                 entity.FormVersion = form.Version;
@@ -1386,7 +1387,7 @@ namespace Workflow.Application.Services
 
         // FormSchemaJson snapshot theo FieldKey, không theo Id (Pha 3B-1 quyết định #7) — ổn định dù
         // FormFields đổi Id sau này.
-        private static string BuildFormSchemaJson(List<FormField> fields, IReadOnlyList<FormFieldCondition> conditions)
+        private static string BuildFormSchemaJson(List<FormField> fields, IReadOnlyList<FormFieldCondition> conditions, string? layoutHtml)
         {
             var fieldKeyById = fields.ToDictionary(f => f.Id, f => f.FieldKey);
 
@@ -1414,7 +1415,11 @@ namespace Workflow.Application.Services
                     c.CompareValue2,
                     c.Effect,
                     c.LogicGroup
-                }).ToList()
+                }).ToList(),
+                // Snapshot layout tại thời điểm nộp (workflow-module.md §1.5) — đơn cũ luôn in đúng
+                // layout đã dùng lúc nộp dù FormDefinition.LayoutHtml sau này bị sửa/xoá. NULL = form
+                // ở chế độ lưới, render theo Fields+ColumnSpan như trước đây (không đổi hành vi cũ).
+                LayoutHtml = layoutHtml
             };
             return JsonSerializer.Serialize(snapshot, CamelCaseOptions);
         }

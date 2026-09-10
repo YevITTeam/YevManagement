@@ -1,11 +1,12 @@
 import { api } from "@/lib/client";
-import type { AttendanceSettingDto, UpdateAttendanceSettingDto } from "@/modules/attendance/types/attendance-setting.dto";
+import type { AttendanceSettingDto, SendTestEmailDto, UpdateAttendanceSettingDto } from "@/modules/attendance/types/attendance-setting.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
     ATTENDANCE_SETTING: {
         get: "/AttendanceSetting",
         update: "/AttendanceSetting",
+        testEmail: "/AttendanceSetting/test-email",
     },
 } as const;
 
@@ -20,6 +21,12 @@ export const AttendanceSettingApi = {
     // BE vẫn enforce lại 403.
     updateSetting: async (data: UpdateAttendanceSettingDto) => {
         const response = await api.put<ApiResponse<AttendanceSettingDto>>(ENDPOINTS.ATTENDANCE_SETTING.update, data);
+        return response.data;
+    },
+    // Cùng permission với updateSetting (Attendance.Setting.Update) — BE trả false (không throw) nếu
+    // SMTP gửi thất bại, xem AttendanceSettingService.SendTestEmailAsync.
+    sendTestEmail: async (data: SendTestEmailDto) => {
+        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.ATTENDANCE_SETTING.testEmail, data);
         return response.data;
     },
 };

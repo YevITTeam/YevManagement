@@ -153,6 +153,25 @@ namespace Workflow.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
+        // LayoutHtml là lớp trình bày thuần tuý (workflow-module.md §1.5) — tách khỏi UpdateAsync để
+        // designer "Nhập từ Word" lưu layout độc lập với thông tin cơ bản của form, giống cách
+        // fields/conditions/accesses/routes đã có endpoint bulk-replace riêng.
+        public async Task<FormDefinitionDto> UpdateLayoutAsync(int formDefinitionId, UpdateFormDefinitionLayoutDto request, int? currentUserId)
+        {
+            var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
+
+            var entity = (await _unitOfWork.FormDefinitions.GetByIdAsync(formDefinitionId)).OrThrowNotFound("Form", formDefinitionId);
+
+            entity.LayoutHtml = request.LayoutHtml;
+            entity.UpdatedByEmployeeId = currentEmployeeId;
+            entity.UpdatedAt = TimeHelper.GetCurrentUtcTime();
+
+            _unitOfWork.FormDefinitions.Update(entity);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetByIdAsync(formDefinitionId);
+        }
+
         public async Task<List<FormFieldDto>> GetFieldsAsync(int formDefinitionId)
         {
             (await _unitOfWork.FormDefinitions.GetByIdAsync(formDefinitionId)).OrThrowNotFound("Form", formDefinitionId);
@@ -973,6 +992,7 @@ namespace Workflow.Application.Services
                 RouteConditionType = source.RouteConditionType,
                 RouteNumericFieldKey = source.RouteNumericFieldKey,
                 RouteClassFieldKey = source.RouteClassFieldKey,
+                LayoutHtml = source.LayoutHtml,
                 CreatedByEmployeeId = currentEmployeeId,
                 UpdatedByEmployeeId = null,
                 CreatedAt = now,
@@ -1099,6 +1119,7 @@ namespace Workflow.Application.Services
             RouteConditionType = x.RouteConditionType,
             RouteNumericFieldKey = x.RouteNumericFieldKey,
             RouteClassFieldKey = x.RouteClassFieldKey,
+            LayoutHtml = x.LayoutHtml,
             CreatedByEmployeeId = x.CreatedByEmployeeId,
             CreatedByEmployeeName = x.CreatedByEmployee?.FullName ?? "",
             UpdatedByEmployeeId = x.UpdatedByEmployeeId,

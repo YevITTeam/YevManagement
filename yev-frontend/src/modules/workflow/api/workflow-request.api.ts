@@ -47,6 +47,7 @@ export interface WorkflowRequestFormSchemaDto {
     description: string | null;
     allowAttachment: boolean;
     requireAttachment: boolean;
+    layoutHtml: string | null;
     fields: FormFieldDto[];
     conditions: FormFieldConditionDto[];
 }

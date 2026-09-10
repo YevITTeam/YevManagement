@@ -25,3 +25,9 @@ export interface AttendanceSettingDto {
 
 // Body PUT /api/AttendanceSetting — cùng shape với AttendanceSettingDto (không có field server tự tính).
 export type UpdateAttendanceSettingDto = AttendanceSettingDto;
+
+// Body POST /api/AttendanceSetting/test-email (2026-09-05) — gửi 1 email mẫu để tự kiểm tra cấu hình
+// SMTP + hiển thị đúng font/layout, không đụng gì tới AttendanceSettingDto.
+export interface SendTestEmailDto {
+    email: string;
+}

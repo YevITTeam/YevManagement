@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, Plus, Pencil, Trash2, UserPlus, ChevronRight, ChevronDown } from "lucide-react";
+import { RefreshCw, Plus, Pencil, Trash2, UserPlus, ChevronRight, ChevronDown, Building2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -13,6 +13,8 @@ import OrgUnitForm, { type OrgUnitFormValues, type FlatOrgUnitOption } from "./O
 import AssignEmployeeDialog from "./AssignEmployeeDialog";
 import OrgUnitMemberTree from "./OrgUnitMemberTree";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/common/EmptyState";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -273,9 +275,14 @@ export default function OrgUnitList() {
                 )}
 
                 <div className="p-3">
-                    {!isLoading && tree.length === 0 && (
-                        <div className="px-6 py-8 text-center text-sm text-[#5e3f3a]">{t("noData")}</div>
+                    {isLoading && tree.length === 0 && (
+                        <div className="space-y-2 p-2">
+                            <Skeleton className="h-8 w-full" />
+                            <Skeleton className="h-8 w-full" />
+                            <Skeleton className="h-8 w-full" />
+                        </div>
                     )}
+                    {!isLoading && tree.length === 0 && <EmptyState icon={Building2} title={t("noData")} />}
                     {tree.map((node) => (
                         <TreeNode
                             key={node.id}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Database } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -10,6 +10,8 @@ import type { FormDataSourceDto } from "@/modules/workflow/types/form-data-sourc
 import { DataSourceKind } from "@/modules/workflow/types/form-data-source.dto";
 import FormDataSourceForm, { type FormDataSourceFormValues } from "./FormDataSourceForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { EmptyState } from "@/components/common/EmptyState";
+import { TableSkeletonRows } from "@/components/common/TableSkeletonRows";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -199,14 +201,15 @@ export default function FormDataSourceList() {
                             </tr>
                         </thead>
                         <tbody>
+                            {isLoading && <TableSkeletonRows rows={5} columns={canManage ? 6 : 5} />}
                             {!isLoading && dataSources.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={canManage ? 6 : 5}>
+                                        <EmptyState icon={Database} title={t("noData")} />
                                     </td>
                                 </tr>
                             )}
-                            {dataSources.map((item) => (
+                            {!isLoading && dataSources.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.code}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{item.nameVn}</td>

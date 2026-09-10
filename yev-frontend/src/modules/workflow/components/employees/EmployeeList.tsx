@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, Building2 } from "lucide-react";
+import { RefreshCw, Building2, Users } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -10,6 +10,9 @@ import type { EmployeeDto } from "@/modules/workflow/types/employee.dto";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
 import EmployeeOrgUnitsDialog from "./EmployeeOrgUnitsDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { EmptyState } from "@/components/common/EmptyState";
+import { TableSkeletonRows } from "@/components/common/TableSkeletonRows";
+import { Badge } from "@/components/ui/Badge";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -184,25 +187,23 @@ export default function EmployeeList() {
                             </tr>
                         </thead>
                         <tbody>
+                            {isLoading && <TableSkeletonRows rows={5} columns={5} />}
                             {!isLoading && employees.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("noData")}
+                                    <td colSpan={5}>
+                                        <EmptyState icon={Users} title={t("noData")} />
                                     </td>
                                 </tr>
                             )}
-                            {employees.map((item) => (
+                            {!isLoading && employees.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{item.fullName}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.position || "—"}</td>
                                     <td className="px-6 py-4 text-sm">
-                                        <span
-                                            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.isActive ? "bg-[#e6f4ea] text-[#1e7e34]" : "bg-[#f2f4f6] text-[#5e3f3a]"
-                                                }`}
-                                        >
+                                        <Badge variant={item.isActive ? "success" : "neutral"} withDot>
                                             {item.isActive ? t("statusActive") : t("statusInactive")}
-                                        </span>
+                                        </Badge>
                                     </td>
                                     <td className="px-6 py-4 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">

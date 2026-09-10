@@ -88,14 +88,14 @@ export default function EmployeeMonthlyAccumulationImportDialog({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="fixed inset-0 bg-black/40" onClick={handleClose} />
             <div
                 role="dialog"
                 aria-modal="true"
-                className="z-60 mx-4 w-full max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl"
             >
-                <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                <div className="flex items-center justify-between border-b border-[#e0e3e5] p-6 pb-4">
                     <div>
                         <h3 className="text-lg font-semibold text-[#191c1e]">{t("monthlyAccumulationImportTitle")}</h3>
                         <p className="mt-1 text-sm text-[#5e3f3a]">{t("monthlyAccumulationImportDesc")}</p>
@@ -109,6 +109,7 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                     </button>
                 </div>
 
+                <div className="flex-1 overflow-auto p-6">
                 {!result ? (
                     <div className="space-y-4">
                         <div className="flex flex-wrap items-end gap-3">
@@ -226,6 +227,7 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                         </div>
                     </div>
                 )}
+                </div>
             </div>
         </div>
     );

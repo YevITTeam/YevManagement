@@ -75,6 +75,45 @@ namespace Attendance.Application.Services
             return query;
         }
 
+        // Lọc theo Bộ phận/Nhóm cho đơn văn phòng (2026-09-04) — song song ApplyProductionFilterAsync
+        // bên dưới, dùng chung cho mọi endpoint danh sách (trước đây không tab nào lọc được theo 2 field
+        // này dù OtFormListItemDto đã hiển thị sẵn). Vô hại với đơn theo chuyền (vẫn có DepartmentId).
+        private static IQueryable<OtForm> ApplyOfficeFilter(IQueryable<OtForm> query, int? groupId, int? departmentId)
+        {
+            if (groupId.HasValue) query = query.Where(x => x.GroupId == groupId.Value);
+            if (departmentId.HasValue) query = query.Where(x => x.DepartmentId == departmentId.Value);
+            return query;
+        }
+
+        // Lọc theo Line/Team/Nhóm ca cho đơn dưới chuyền — tách ra từ GetPendingApprovalsAsync
+        // (2026-09-04) để dùng chung cho MỌI endpoint danh sách, không riêng "Chờ tôi duyệt" nữa. So
+        // trực tiếp với BlockCodeSnapshot/TeamCodeSnapshot/ShiftTeamCodeSnapshot đã lưu trên
+        // OtFormEmployee (KHÔNG join ProductionEmployee sống, giữ đúng tinh thần snapshot-tại-thời-điểm-tạo).
+        private async Task<IQueryable<OtForm>> ApplyProductionFilterAsync(
+            IQueryable<OtForm> query, int? productionLineId, int? productionTeamId, int? productionShiftTeamId)
+        {
+            if (!productionLineId.HasValue && !productionTeamId.HasValue && !productionShiftTeamId.HasValue) return query;
+
+            var lineCode = productionLineId.HasValue
+                ? (await _unitOfWork.ProductionLines.FirstOrDefaultAsync(x => x.Id == productionLineId.Value && !x.IsDeleted))?.LineCode
+                : null;
+            var teamCode = productionTeamId.HasValue
+                ? (await _unitOfWork.ProductionTeams.FirstOrDefaultAsync(x => x.Id == productionTeamId.Value && !x.IsDeleted))?.Code
+                : null;
+            var shiftTeamCode = productionShiftTeamId.HasValue
+                ? (await _unitOfWork.ProductionShiftTeams.FirstOrDefaultAsync(x => x.Id == productionShiftTeamId.Value && !x.IsDeleted))?.Code
+                : null;
+
+            if (lineCode != null)
+                query = query.Where(x => x.OtFormEmployees.Any(e => !e.IsRemoved && e.BlockCodeSnapshot == lineCode));
+            if (teamCode != null)
+                query = query.Where(x => x.OtFormEmployees.Any(e => !e.IsRemoved && e.TeamCodeSnapshot == teamCode));
+            if (shiftTeamCode != null)
+                query = query.Where(x => x.OtFormEmployees.Any(e => !e.IsRemoved && e.ShiftTeamCodeSnapshot == shiftTeamCode));
+
+            return query;
+        }
+
         private readonly IUserDirectoryService _userDirectoryService;
         private readonly IEmailService _emailService;
         private readonly IEmailTemplateRenderer _emailTemplateRenderer;
@@ -133,13 +172,20 @@ namespace Attendance.Application.Services
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
-            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
         {
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && x.CreatedByUserName == userName);
-            query = ApplyListFilters(query, fromDate, toDate, status).OrderByDescending(x => x.Id);
+            query = ApplyListFilters(query, fromDate, toDate, status);
+            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
+            query = query.OrderByDescending(x => x.Id);
 
-            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
+            var result = await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
+            await EnrichWithProductionLineInfoAsync(result.Data);
+            return result;
         }
 
         // Đơn đang chờ CHÍNH người gọi duyệt — "bước đang chờ xử lý" của 1 đơn là bước Pending có
@@ -168,37 +214,17 @@ namespace Attendance.Application.Services
         public async Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
             string approverUserName, int pageIndex, int pageSize,
             DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
             int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
         {
             var myCurrentFormIds = await GetMyCurrentPendingFormIdsAsync(approverUserName);
 
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && x.Status == (int)OtFormStatus.InApproval && myCurrentFormIds.Contains(x.Id));
-            query = ApplyListFilters(query, fromDate, toDate, status).OrderBy(x => x.Date);
-
-            // Lọc theo Line/Team/Nhóm ca cho đơn dưới chuyền (2026-09-04, xem docs/attendance-module.md
-            // §Nâng cấp màn Duyệt hàng loạt) — so trực tiếp với BlockCodeSnapshot/TeamCodeSnapshot/
-            // ShiftTeamCodeSnapshot đã lưu trên OtFormEmployee (KHÔNG join ProductionEmployee sống, giữ
-            // đúng tinh thần snapshot-tại-thời-điểm-tạo của toàn bộ field này).
-            if (productionLineId.HasValue || productionTeamId.HasValue || productionShiftTeamId.HasValue)
-            {
-                var lineCode = productionLineId.HasValue
-                    ? (await _unitOfWork.ProductionLines.FirstOrDefaultAsync(x => x.Id == productionLineId.Value && !x.IsDeleted))?.LineCode
-                    : null;
-                var teamCode = productionTeamId.HasValue
-                    ? (await _unitOfWork.ProductionTeams.FirstOrDefaultAsync(x => x.Id == productionTeamId.Value && !x.IsDeleted))?.Code
-                    : null;
-                var shiftTeamCode = productionShiftTeamId.HasValue
-                    ? (await _unitOfWork.ProductionShiftTeams.FirstOrDefaultAsync(x => x.Id == productionShiftTeamId.Value && !x.IsDeleted))?.Code
-                    : null;
-
-                if (lineCode != null)
-                    query = query.Where(x => x.OtFormEmployees.Any(e => !e.IsRemoved && e.BlockCodeSnapshot == lineCode));
-                if (teamCode != null)
-                    query = query.Where(x => x.OtFormEmployees.Any(e => !e.IsRemoved && e.TeamCodeSnapshot == teamCode));
-                if (shiftTeamCode != null)
-                    query = query.Where(x => x.OtFormEmployees.Any(e => !e.IsRemoved && e.ShiftTeamCodeSnapshot == shiftTeamCode));
-            }
+            query = ApplyListFilters(query, fromDate, toDate, status);
+            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
+            query = query.OrderBy(x => x.Date);
 
             var result = await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
             await EnrichWithProductionLineInfoAsync(result.Data);
@@ -259,7 +285,9 @@ namespace Attendance.Application.Services
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(
-            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
         {
             var actedFormIds = await _unitOfWork.OtFormApprovalHistories.SelectAsync(
                 h => h.ApproverUserName == userName, h => h.OtFormId);
@@ -267,13 +295,20 @@ namespace Attendance.Application.Services
 
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id));
-            query = ApplyListFilters(query, fromDate, toDate, status).OrderByDescending(x => x.Id);
+            query = ApplyListFilters(query, fromDate, toDate, status);
+            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
+            query = query.OrderByDescending(x => x.Id);
 
-            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
+            var result = await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
+            await EnrichWithProductionLineInfoAsync(result.Data);
+            return result;
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(
-            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null)
+            string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
         {
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted);
             if (employee == null)
@@ -285,9 +320,34 @@ namespace Attendance.Application.Services
 
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id));
-            query = ApplyListFilters(query, fromDate, toDate, status).OrderByDescending(x => x.Id);
+            query = ApplyListFilters(query, fromDate, toDate, status);
+            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
+            query = query.OrderByDescending(x => x.Id);
 
-            return await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
+            var result = await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
+            await EnrichWithProductionLineInfoAsync(result.Data);
+            return result;
+        }
+
+        // "Tất cả đơn" — Admin xem/quản lý toàn bộ đơn tăng ca, không phân biệt người tạo hay phạm vi
+        // duyệt (2026-09-04, gate bằng Attendance.OTForm.ViewAll — CHỈ gán cho Admin, xem migration
+        // AddOtFormViewAllPermission, cùng cách làm với Attendance.OTForm.Delete).
+        public async Task<PagedResponse<OtFormListItemDto>> GetAllFormsAsync(
+            int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
+            int? groupId = null, int? departmentId = null,
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
+        {
+            var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
+                .Where(x => !x.IsDeleted);
+            query = ApplyListFilters(query, fromDate, toDate, status);
+            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
+            query = query.OrderByDescending(x => x.Id);
+
+            var result = await _unitOfWork.OtForms.ToPagedResponseAsync(query, pageIndex, pageSize, ToListItemDto);
+            await EnrichWithProductionLineInfoAsync(result.Data);
+            return result;
         }
 
         public async Task<OtFormDto> GetByIdAsync(int id)

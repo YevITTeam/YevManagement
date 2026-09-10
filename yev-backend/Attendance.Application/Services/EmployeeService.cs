@@ -627,6 +627,7 @@ namespace Attendance.Application.Services
             if (isDeptCoordinator)
             {
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.DepartmentUpdateCode);
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionUpdateCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeImportCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeAccumulationImportCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeUpdateOtLimitCode);

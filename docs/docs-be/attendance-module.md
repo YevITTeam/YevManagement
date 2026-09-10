@@ -3359,14 +3359,14 @@ mật khẩu cấp 2 cho TOÀN BỘ thay đổi trong phiên sửa, không hỏi
   (int?, cùng nguồn dropdown Line/Team/ShiftTeam dùng ở `CreateOtFormPage`) — service resolve mỗi ID sang
   `Code` (qua `ProductionLines`/`ProductionTeams`/`ProductionShiftTeams` repo) rồi lọc
   `x.OtFormEmployees.Any(e => !e.IsRemoved && e.BlockCodeSnapshot == lineCode)` (tương tự Team/ShiftTeam)
-  — so trực tiếp snapshot code đã lưu trên `OtFormEmployee`, KHÔNG join `ProductionEmployee` sống. Chỉ
-  `pending-approvals` hỗ trợ (3 tab kia chưa cần, theo đúng yêu cầu).
+  — so trực tiếp snapshot code đã lưu trên `OtFormEmployee`, KHÔNG join `ProductionEmployee` sống. **Mở
+  rộng ra cả 5 endpoint danh sách** (xem §Mở rộng filter bên dưới, 2026-09-04, cùng ngày).
 - **`OtFormListItemDto`** thêm `ProductionLineNames`/`ProductionShiftTeamNames` (string?, distinct
   `BlockCodeSnapshot`/`ShiftTeamCodeSnapshot` nối `", "`) — tính ở `EnrichWithProductionLineInfoAsync`
   (query RIÊNG sau khi đã phân trang, gộp Distinct ở C# thay vì nhét `string.Join`/`Distinct` vào
-  `ToListItemDto` — expression đó dùng chung cho 4 endpoint danh sách, rủi ro không dịch được sang SQL
-  nếu thêm logic phức tạp). Chỉ `GetPendingApprovalsAsync` gọi enrich này — 3 tab kia field này luôn
-  `null`. FE thêm cột "Line/Nhóm ca" vào bảng (hiện `—` khi không phải đơn theo chuyền hoặc field null).
+  `ToListItemDto` — expression đó dùng chung cho các endpoint danh sách, rủi ro không dịch được sang SQL
+  nếu thêm logic phức tạp). **Giờ cả 5 endpoint đều gọi enrich này** (trước đây chỉ `pending-approvals`).
+  FE thêm cột "Line/Nhóm ca" vào bảng (hiện `—` khi không phải đơn theo chuyền hoặc field null).
 - **Xem/sửa trước khi xác nhận duyệt hàng loạt**: modal "Ký/Từ chối hàng loạt" hiện có (Comment +
   SecondaryPassword, không đổi API `bulkApprove`/`bulkReject`) thêm 1 khối review NGAY TRONG modal đó,
   liệt kê các đơn đã chọn (lấy từ `forms` đang có sẵn trên trang, không gọi API thêm) — mỗi dòng có link
@@ -3379,6 +3379,241 @@ mật khẩu cấp 2 cho TOÀN BỘ thay đổi trong phiên sửa, không hỏi
   pending-approvals/dates` (không lỗi) qua JWT thật. FE `tsc`/`lint` sạch (cùng 1 lỗi lint có-trước-đó,
   không liên quan). **Chưa test tay** lịch/filter/review-trước-khi-duyệt qua UI thật với tài khoản có đơn
   theo chuyền đang chờ — người dùng tự kiểm khi dùng thử.
+
+### §Mở rộng filter (Bộ phận/Nhóm + Line/Team/Nhóm ca) ra mọi tab + tab "Tất cả đơn" cho Admin (2026-09-04)
+
+Theo yêu cầu người dùng sau khi dùng thử màn "Chờ tôi duyệt": filter Line/Team/Nhóm ca trước đó chỉ có ở
+`pending-approvals`, và không tab nào lọc được theo Bộ phận/Nhóm (đơn văn phòng) dù `OtFormListItemDto`
+đã hiển thị sẵn 2 field này.
+
+- **`OtFormService.cs`**: tách 2 helper filter dùng chung cho MỌI endpoint danh sách —
+  `ApplyOfficeFilter(query, groupId, departmentId)` (so trực tiếp `OtForm.GroupId`/`DepartmentId`, đơn
+  theo Nhóm có cả 2, đơn theo chuyền chỉ có `DepartmentId` — filter vô hại với loại kia) và
+  `ApplyProductionFilterAsync(...)` (tách nguyên logic resolve Id→Code cũ ra khỏi
+  `GetPendingApprovalsAsync`, không đổi hành vi). `GetMyFormsAsync`/`GetPendingApprovalsAsync`/
+  `GetMyActionsAsync`/`GetMyParticipationsAsync` đều nhận thêm 5 param optional
+  `groupId/departmentId/productionLineId/productionTeamId/productionShiftTeamId` và gọi cả 2 helper +
+  `EnrichWithProductionLineInfoAsync` (trước đây chỉ `GetPendingApprovalsAsync` enrich).
+- **Endpoint mới `GET /api/OtForm/all-forms`** (`GetAllFormsAsync`) — "Tất cả đơn" cho Admin, KHÔNG lọc
+  theo user gọi API (khác 4 endpoint kia), chỉ áp `ApplyListFilters`/`ApplyOfficeFilter`/
+  `ApplyProductionFilterAsync` như nhau. Gate bằng permission mới **`Attendance.OTForm.ViewAll`**
+  (migration `AddOtFormViewAllPermission`, piggyback insert vào `RolePermissions` của mọi role đang có
+  `Attendance.Department.Create` — cùng cách làm với `Attendance.OTForm.Delete` — **CHỈ Admin có**, không
+  thêm vào `JobTitlePermissionWhitelist` vì đây là quyền "xem toàn cục", không phải quyền tham gia quy
+  trình theo Chức vụ).
+- **FE `OtFormListPage.tsx`**: thêm dropdown "Bộ phận"/"Nhóm" (cascading, nguồn `DepartmentApi.getAllDepartments()`
+  + `GroupApi.getGroupsByDepartment(departmentId)`, cùng pattern Team→Line→Nhóm ca có sẵn) — hiện ở MỌI
+  tab (không riêng `pending-approvals` nữa, `showProductionFilter` đổi thành hằng `true`). Thêm mode
+  `"all-forms"` vào `OtFormListMode`, gọi `OtFormApi.getAllForms`.
+- **FE `OtFormTabsPage.tsx`**: thêm tab "Tất cả đơn", hiện khi `hasPermission(user, "Attendance.OTForm.ViewAll")`.
+- **`GetOtFormListParams`/`appendOtFormListParams`** (`ot-form.api.ts`): thêm `groupId`/`departmentId`,
+  gửi `GroupId`/`DepartmentId` — dùng chung cho cả 5 hàm gọi API (kể cả `getAllForms` mới).
+- **Verify**: `dotnet build` sạch. Gọi tay qua JWT Admin thật: `GET all-forms` trả đúng toàn bộ đơn
+  (21 đơn, kể cả đơn của user khác); `GET all-forms?departmentId=6` (Công vụ) trả đúng 6/21 đơn; `GET
+  my-forms` kèm param mới không lỗi. FE `npx tsc --noEmit` sạch; `pnpm lint` chỉ còn đúng 1 lỗi + 2
+  warning có-từ-trước (`CreateOtFormPage.tsx`/`OtFormPrintView.tsx`, không liên quan thay đổi này) —
+  riêng 3 file vừa sửa (`OtFormListPage.tsx`/`OtFormTabsPage.tsx`/`ot-form.api.ts`) lint sạch 100%.
+  **Chưa test tay UI thật** (chọn Bộ phận/Nhóm trên giao diện, xem tab "Tất cả đơn" hiện đúng cho Admin)
+  — người dùng tự kiểm khi dùng thử.
+
+### §Fix bug — Người phụ trách Bộ phận không sửa được Cây duyệt Chuyền (2026-09-05)
+
+Khi thêm tab "Theo chuyền" vào màn Cây duyệt (24/08, xem §Giai đoạn 7 phía trên), quyền tự động cấp cho
+"Người phụ trách Bộ phận" (`ApprovalStepCoordinatorPermissions.BaseViewCodes` + logic trong
+`EmployeeService.SyncAutoGrantedPermissionsCoreAsync`) chỉ được nối thêm `DepartmentApprovalStep.*` +
+`GroupApprovalStep.*` — **quên hẳn** `Attendance.ProductionApprovalStep.View/Update` — nên người phụ
+trách xem/sửa được khối "Theo Nhóm" nhưng bị 403 ở khối "Theo chuyền". Đã sửa: thêm
+`Attendance.ProductionApprovalStep.View` vào `BaseViewCodes` (cấp cho cả `isDeptCoordinator` lẫn
+`isGroupCoordinator`, giống 2 permission `.View` kia — màn không lỗi khi tải dù chỉ phụ trách 1 phía) +
+thêm hằng `ProductionUpdateCode` gán riêng cho `isDeptCoordinator` (cùng scope Bộ phận với
+`DepartmentUpdateCode`). **Chỉ có hiệu lực NGAY cho người phụ trách gán MỚI sau khi fix** — người đã
+được gán từ trước (đã xác nhận qua DB: `YEV\m.cuong.da.pcd.it` phụ trách Công vụ, `TEST\gl_shido`/
+`TEST\tl_shido` phụ trách Chế tạo) cần 1 lần re-save danh sách "Người phụ trách" của đúng Bộ phận đó
+(xoá rồi thêm lại, hoặc bất kỳ thao tác Lưu nào chạm vào `DepartmentApprovalStepCoordinatorApi.replaceByDepartment`)
+để `SyncAutoGrantedPermissionsForEmployeeAsync` chạy lại với bộ quyền mới — không có cách nào hồi tố tự
+động vì quyền chỉ tính lại đúng lúc danh sách được ghi.
+
+### §Polish giao diện màn Cây duyệt (2026-09-05)
+
+`ApprovalStepManager.tsx` (~1400 dòng) từng lặp gần y hệt JSX cho 3 khối "danh sách bước" (Nhóm/Bộ
+phận/Chuyền, ~110 dòng/khối) và 2 khối "Người phụ trách" (Nhóm/Bộ phận, ~60 dòng/khối) — tách ra 3
+component dùng chung, cùng thư mục `job-titles/`:
+- **`StepCard.tsx`** — thẻ 1 bước (drag handle, số thứ tự, tên/mã/cấp Chức vụ, pill "Cần ký", pill
+  "Chịu trách nhiệm" *(optional — khối Bộ phận không có)*, nút xoá). Phần "đang giữ chức vụ" bên dưới
+  KHÔNG nằm trong component này (khác nhau quá nhiều giữa 3 khối, đặc biệt khối Chuyền có 3 nhánh nội
+  dung tuỳ `terminalLevel`/`isLineScoped`) — truyền qua prop `footer: React.ReactNode`.
+- **`StepHolders.tsx`** — chip-list "đang giữ" + combobox thêm, dùng làm `footer` ở khối Nhóm/Bộ phận
+  và nhánh "không tự động theo Line Leader" của khối Chuyền.
+- **`CoordinatorsBox.tsx`** — khối "Người phụ trách" (tiêu đề/hint/chip list/combobox thêm), dùng chung
+  cho Nhóm + Bộ phận (2 DTO Coordinator khác tên nhưng CÙNG shape `{employeeId, employeeCode, fullName, userName}`).
+
+Sửa kèm theo (không đổi API/behavior, chỉ đổi UI):
+- 3 chỗ `<select>` thường ("chọn chức vụ để thêm bước") đổi sang `SearchableSelect` — đúng luật
+  DESIGN_SYSTEM §4.3, trước đó là 3 chỗ DUY NHẤT trong màn này không dùng combobox tìm kiếm.
+- **Sửa bug mất dữ liệu im lặng**: đổi Bộ phận/Nhóm ở dropdown trong khi đang có thay đổi chưa lưu
+  (`isDeptDirty`/`isGroupDirty`/`isProductionDirty`) trước đây xoá thẳng state, không cảnh báo gì — giờ
+  hiện `ConfirmDialog` ("Huỷ thay đổi chưa lưu?") trước khi đổi. Đổi TAB "Theo Nhóm"/"Theo chuyền" thì
+  KHÔNG cần confirm — state của cả 2 tab đều nằm ở component cha (không bị mất khi ẩn/hiện JSX).
+- **Đánh số liên tục** cho khối Bộ phận (tab "Theo Nhóm"): trước đây Nhóm đánh 1..N rồi Bộ phận đánh lại
+  từ 1 dù thực tế là 1 chuỗi duyệt liền mạch (Nhóm trước, Bộ phận sau) — giờ khối Bộ phận bắt đầu từ
+  `groupSteps.length + 1`.
+- `sectionTitleClassName` đổi từ `text-sm font-bold uppercase tracking-[0.1em]` sang đúng chuẩn tiêu đề
+  card DESIGN_SYSTEM §2.2 (`text-base font-semibold`, bỏ uppercase); thêm tiêu đề cho card chọn Bộ phận
+  đầu tiên (trước đây là card DUY NHẤT không có `h3`); nút "Xoá bước" đổi sang đúng biến thể Icon button
+  §4.2 (`rounded-md p-2` thay vì `rounded-lg p-1.5`); pill "Cần ký"/"Chịu trách nhiệm" đổi `px-2 py-0.5`
+  → `px-2.5 py-0.5` đúng chuẩn badge §4.6; dòng loading dạng `<p>` thuần đổi sang skeleton
+  `animate-pulse`.
+- Chính thức hoá màu "warning" (`bg-[#fff4e5]`/`border-[#f5d0a9]`/`text-[#9a5b00]`, đã dùng nhất quán ở
+  đây + `UserSignaturePanel.tsx`/`SecondaryPasswordPanel.tsx` cho "chưa liên kết tài khoản"/"đang chờ
+  xác nhận"/"sắp đạt giới hạn" nhưng doc chưa liệt kê) vào `DESIGN_SYSTEM.md` §1.3.
+- **Verify**: `npx tsc --noEmit` sạch, `pnpm lint` sạch 100% trên cả 4 file (`ApprovalStepManager.tsx` +
+  3 file mới). **Chưa test tay UI thật** (kéo-thả, xác nhận huỷ thay đổi, số thứ tự liên tục) — người
+  dùng tự kiểm khi dùng thử.
+
+### §Polish giao diện màn Báo cáo (2026-09-05)
+
+`ProductionOtReportPanel.tsx` là file DUY NHẤT trong module Attendance không dùng `useTranslations` —
+100% text hard-code tiếng Việt. Đã sửa:
+- Thêm `useTranslations("Attendance.ProductionOtReport")` + đủ key ở `messages/vi.json`/`ja.json`.
+- Đổi tên 2 nút xuất Excel đang lộ tên bảng/query nội bộ ra UI ("Qry_EXPORT_EXCEL" → "Chi tiết theo
+  người/ngày", "SUM_EXPORT_DATA" → "Tóm tắt theo ngày") — tên kỹ thuật cũ vẫn còn trong `title` tooltip
+  cho ai cần đối chiếu với hệ cũ.
+- Đổi filter "Phòng ban (chuyền)" từ `<select>` sang `SearchableSelect` — nhất quán với cách lọc Bộ
+  phận ở `CreateOtFormPage.tsx`/`EmployeeForm.tsx`.
+- **Verify**: `npx tsc --noEmit`/`pnpm lint` sạch. **Chưa test tay UI thật** (bấm từng nút xuất, xem
+  đúng file tải về) — người dùng tự kiểm khi dùng thử vì cần dữ liệu OT thật trong ngày để test có ý nghĩa.
+
+### §Dọn trùng lặp/nhất quán giao diện (2026-09-05)
+
+Tiếp tục đợt polish, dọn 3 chỗ trùng lặp/lệch nhau tìm được khi rà soát toàn module:
+
+- **Gộp `MealTicketTypeBadge`**: `CreateOtFormPage.tsx` từng tự định nghĩa 1 bản cục bộ (props
+  `{type, labels}`) song song bản dùng chung `ot-form/MealTicketTypeBadge.tsx` (props `{type, t}`, đã
+  dùng ở `OtFormDetail.tsx`/`OtFormBatchDetail.tsx`/`OtFormEmailConfirmPage.tsx`) — 2 component JSX y
+  hệt nhau, chỉ khác cách nhận label. Xoá bản cục bộ, đổi 4 chỗ gọi sang dùng thẳng
+  `t={t}` (namespace `Attendance.CreateOtForm` đã có sẵn đủ 3 key `mealTicketType*`, không cần thêm gì).
+- **Đồng bộ 3 dropdown "Theo chuyền" trong `CreateOtFormPage.tsx`**: `productionTeamId`/
+  `productionShiftTeamId` trước đây là `<select>` thường trong khi `productionLineId` ngay cạnh đã dùng
+  `SearchableSelect` — đổi cả 3 dùng chung `SearchableSelect`.
+- **Thống nhất khung cuộn modal của 5 dialog Import** (`EmployeeImportDialog.tsx`/
+  `ProductionEmployeeImportDialog.tsx`/`EmployeeIdentityLinkImportDialog.tsx` vs
+  `EmployeeOtHourLimitImportDialog.tsx`/`EmployeeMonthlyAccumulationImportDialog.tsx`): 3 dialog đầu dùng
+  `flex max-h-[85vh] flex-col` (header đứng yên, chỉ vùng nội dung `flex-1 overflow-auto` cuộn) — 2 dialog
+  sau trước đây cuộn cả trang (`overflow-y-auto py-8` ở wrapper ngoài cùng `max-w-2xl` không phải flex),
+  header có thể trôi mất nếu bảng kết quả dài. Đổi 2 dialog sau sang ĐÚNG cùng khung cuộn (header cố
+  định + 1 vùng `flex-1 overflow-auto` duy nhất) — **giữ nguyên `max-w-2xl`** (không ép rộng `max-w-6xl`
+  như 3 dialog kia vì bảng kết quả của 2 dialog này chỉ 2-4 cột, rộng hơn sẽ trống trải vô lý — khác biệt
+  chiều rộng là ĐÚNG theo nội dung, chỉ khung cuộn cần nhất quán).
+- **Verify**: `npx tsc --noEmit` sạch; `pnpm lint` sạch 100% trên cả 4 file vừa sửa. **Chưa test tay UI
+  thật** (mở từng dialog, kiểm tra header không trôi khi bảng kết quả dài) — người dùng tự kiểm khi
+  dùng thử.
+
+### §Fix bug — Team A/B lệch chuẩn hoá + dropdown Line theo Team lọc ra danh sách rỗng (2026-09-05)
+
+Người dùng báo: chọn Team A + 1 Line cụ thể ở màn "Nhân viên dưới chuyền" rồi search thì ra 0 kết quả dù
+Line đó có nhân viên thật. Rà ra 2 vấn đề độc lập:
+
+- **Dữ liệu**: `ProductionEmployee.TeamCode` lưu nguyên chữ thô từ cột GROUP trong file Excel (`A`/`B`)
+  thay vì mã đã chuẩn hoá khớp `ProductionTeam.Code` (`1`/`2`) — dù `TeamId` (FK dùng để lọc/join) đã
+  luôn đúng. `ProductionEmployeeImportService.TeamCodeTranslation` (A→1, B→2, HC→HC) trước đây chỉ dùng
+  để tra `TeamId` rồi vứt kết quả dịch, còn `TeamCode` ghi xuống DB vẫn là chữ thô — sửa: hoist biến
+  `translatedTeamCode` ra ngoài (`ValidateAndResolveRowsAsync`), dùng nó cho cả tra cứu `TeamId`, so
+  sánh dirty-check (`isUpdatedProductionEmployee`), và gán vào `TeamCode` trả về (thay vì `teamCode` thô)
+  — từ giờ mọi lần import lại (kể cả tháng sau) đều tự lưu đúng mã chuẩn hoá, không cần sửa tay nữa.
+  Đã chạy 1 lần `UPDATE ProductionEmployees SET TeamCode='1' WHERE TeamCode='A'` (784 dòng) và tương tự
+  `B`→`2` (823 dòng) trên DB thật để dọn sạch dữ liệu tồn cũ.
+- **Bug rỗng danh sách (nguyên nhân thật của báo lỗi)**: `ProductionEmployeeService.GetLineOptionsAsync`
+  lọc Line theo Team qua `ProductionLine.TeamId` — 1 FK **snapshot tĩnh** set 1 lần từ file tham chiếu
+  gốc lúc dựng quan hệ (2026-08-21, xem migration `ConnectProductionLineToTeam`), không cập nhật lại
+  theo thời gian. Trong khi đó Team thật của nhân viên được nạp lại MỖI THÁNG qua Import — 1 Line có thể
+  đã đổi Team thực tế (VD Line `TCA` snapshot ghi Team `"1"` nhưng toàn bộ nhân viên thật hiện tại trên
+  đó đã là Team `"ab"`) mà FK tĩnh không hề biết, khiến dropdown vẫn cho chọn tổ hợp Team+Line không còn
+  khớp thực tế → search ra rỗng. Sửa: đổi `GetLineOptionsAsync` sang suy Line có sẵn theo Team **từ dữ
+  liệu `ProductionEmployees` thật** (cùng cách `GetShiftTeamOptionsAsync` bên cạnh đã áp dụng từ
+  2026-08-25 cho đúng vấn đề tương tự ở Nhóm ca) thay vì theo FK tĩnh trên `ProductionLine`.
+- **Verify**: `dotnet build YevManagement.slnx` sạch (0 lỗi). Đã kiểm tra lại dữ liệu thật qua SQL sau
+  khi UPDATE — đúng 784/823 dòng đổi thành `1`/`2`, không đụng `AB`/`HC`. **Chưa test tay qua UI thật**
+  (mở màn "Nhân viên dưới chuyền", chọn lại đúng tổ hợp Team+Line từng bị rỗng để xác nhận ra kết quả).
+
+### §Fix font logo email — đồng bộ Arial cho mọi máy Windows (2026-09-05)
+
+Người dùng báo font chữ logo "YevManagement" trong email gửi đi không hiển thị đúng trên 1 số máy. Cả 6
+template email (`OtForm/ApprovalNotification.html`, `OtForm/BatchApprovalNotification.html`,
+`UserSignature/RequestUpdateConfirmation.html`, `SecondaryPassword/RequestUpdateConfirmation.html`, và
+2 bản tương ứng bên `Workflow.Infrastructure/EmailTemplates/`) đều dùng `font-family:Georgia, 'Times New
+Roman', serif` RIÊNG cho dòng logo, khác hẳn phần nội dung còn lại dùng `Arial, Helvetica, sans-serif` —
+Georgia không đảm bảo có sẵn trên mọi máy Windows (máy cấu hình rút gọn/Windows Server có thể thiếu),
+trong khi Arial là font duy nhất chắc chắn có mặt trên mọi bản Windows. Đổi dòng logo dùng chung Arial —
+nhất quán toàn bộ email, không còn phụ thuộc font nào ngoài Arial/Helvetica.
+
+### §Thêm chức năng gửi email kiểm tra (2026-09-05)
+
+Theo yêu cầu người dùng, thêm 1 nút "Gửi email kiểm tra" vào tab "Cấu hình" (trong "Danh mục" của module
+Attendance) — nhập tay 1 địa chỉ email bất kỳ để tự kiểm tra cấu hình SMTP còn hoạt động và email hiển
+thị đúng font/layout trên máy thật (liên quan trực tiếp tới fix font logo email ở mục trên).
+
+- **BE**: `POST /api/AttendanceSetting/test-email` (`[RequirePermission("Attendance.Setting.Update")]`
+  — cùng quyền với sửa cấu hình, không tạo permission mới). `SendTestEmailDto { Email }` (`[Required]` +
+  `[EmailAddress]`). `AttendanceSettingService.SendTestEmailAsync` inject thêm `IEmailService` +
+  `IEmailTemplateRenderer` (2 abstraction dùng chung `Shared.*`, không cần đăng ký DI tay — Scrutor tự
+  nhận vì class tên kết thúc `Service`), render template mới `Test/TestEmail.html` (mirror đúng
+  header/footer/font Arial của các template thật, KHÔNG có nút CTA/link nào để tránh gây hiểu lầm là
+  yêu cầu duyệt thật) rồi gọi `IEmailService.SendAsync` — trả về đúng `bool` (không throw khi SMTP lỗi,
+  theo hợp đồng `IEmailService`), Controller map `false` thành `Fail<bool>` với message gợi ý kiểm tra
+  `EmailSettings` trong `appsettings.json`.
+- **FE**: `AttendanceSettingPanel.tsx` thêm section mới (dưới "Giới hạn lũy kế", trên nút Lưu) — 1 input
+  email + nút gửi, dùng `AttendanceSettingApi.sendTestEmail`. i18n đầy đủ `Attendance.AttendanceSetting`
+  namespace (`testEmail*` keys) ở cả vi/ja.
+- **Verify**: `dotnet build` sạch, `npx tsc --noEmit` + `eslint` sạch. **Chưa gửi thử email thật** —
+  người dùng tự nhập 1 địa chỉ email của mình để kiểm tra khi dùng, vì đây là hành động gửi mail thật.
+
+### §Fix tiếp — email vẫn "vỡ font" trên 1 số máy dù đã đổi Arial (2026-09-05)
+
+Sau khi đổi font logo sang Arial (mục trên), người dùng test qua tính năng "Gửi email kiểm tra" mới thêm
+và báo: mở email ở Outlook Web (chế độ dark mode) vẫn thấy chữ hiển thị sai kiểu — **có máy đúng có máy
+không**, dù Arial chắc chắn có sẵn ở mọi máy Windows. "Có máy đúng có máy không" cho thấy đây KHÔNG phải
+vấn đề Arial thiếu (đã loại từ đầu), mà do **client tự động áp dark-mode xử lý lại font/màu** không nhất
+quán giữa các máy/thiết lập — gốc rễ: cả 7 template đều khai `<meta name="color-scheme" content="light
+dark">` + `<meta name="supported-color-schemes" content="light dark">`, tức là "tự nhận" hỗ trợ dark mode
+nhưng KHÔNG hề có khối `@media (prefers-color-scheme: dark)` cấp màu tối thật — client thấy khai báo này
+sẽ tự ý xử lý lại (đổi màu/thay font) theo cách riêng của từng client, không đoán trước được.
+
+- Đổi cả 7 template (`color-scheme` + `supported-color-schemes`) từ `"light dark"` xuống chỉ còn
+  `"light"` — khai đúng sự thật (chỉ có 1 giao diện sáng), buộc mọi client hiển thị ĐÚNG NHƯ THIẾT KẾ,
+  không tự ý xử lý lại nữa.
+- Thêm attribute HTML `bgcolor="#eef0f2"`/`bgcolor="#ffffff"` (song song CSS `background-color` đã có)
+  cho 2 bảng nền chính — một số engine (đặc biệt Outlook desktop dùng Word engine) chỉ tin
+  `bgcolor` thay vì CSS, thiếu `bgcolor` càng dễ bị coi là "chưa có nền cố định" nên càng dễ bị dark-mode
+  tự động ghi đè.
+- **Verify**: `dotnet build` sạch. **Chưa gửi thử lại email thật để xác nhận hết vỡ font** — người dùng
+  tự gửi lại qua nút "Gửi email kiểm tra" ở tab Cấu hình để kiểm tra trên đúng máy/Outlook Web đã gặp lỗi.
+
+### §Đổi thử font email sang Times New Roman (2026-09-05)
+
+Theo yêu cầu người dùng (thử đổi khác Arial xem có hết "vỡ font" không), đổi cả 7 template email từ
+`Arial, Helvetica, sans-serif` sang `'Times New Roman', Times, serif` — cũng là font lõi có sẵn trên mọi
+Windows như Arial, chỉ khác kiểu chữ (serif thay vì sans-serif). Fix thật cho vấn đề "vỡ font" nhiều khả
+năng vẫn là mục `color-scheme: light` + `bgcolor` ở trên; đổi font lần này là thử nghiệm bổ sung.
+
+### §Fix gốc rễ thật — Outlook Desktop không kế thừa font-family qua nhiều tầng bảng (2026-09-05)
+
+Đã loại bỏ dần các giả thuyết qua kiểm tra trực tiếp với người dùng: registry `FontSubstitutes` của
+Windows — bình thường, không map sai gì; bảng "Font Substitution" riêng của Word (Outlook Desktop) —
+báo "No font substitution is necessary. All fonts used in this email are available." Vậy không phải do
+thiếu font hay bị map sai ở bất kỳ cấp nào.
+
+**Nguyên nhân thật**: cả 7 template chỉ khai `font-family` ở `<body>` và 1-2 chỗ, còn lại dựa vào kế
+thừa CSS xuống các tầng `<table>`/`<td>`/`<p>`/`<span>` lồng nhau bên trong (email HTML bắt buộc dùng
+nhiều tầng bảng lồng để tương thích). Outlook Desktop dùng engine Word để render, vốn nổi tiếng
+**không đảm bảo kế thừa `font-family` qua nhiều tầng bảng** như trình duyệt/webmail — dễ "quên" và rơi
+về font mặc định riêng của Word (Normal style) ở những thẻ không tự khai font-family.
+
+- Chạy 1 script one-off (Node) thêm `font-family:'Times New Roman', 'Liberation Serif', Georgia, serif;`
+  TRỰC TIẾP vào MỌI thẻ `<p>`/`<span>`/`<strong>`/`<a>`/`<td>` có `style="..."` mà chưa tự khai
+  font-family — 239 chỗ trên cả 7 template (không dựa vào kế thừa từ `<body>`/`<table>` cha nữa).
+- **Verify**: `dotnet build` sạch; grep xác nhận 0 phần tử còn thiếu font-family trên cả 7 file.
+  **Chưa gửi thử lại email thật** — người dùng tự gửi qua nút "Gửi email kiểm tra" để xác nhận Outlook
+  Desktop hiển thị đúng font sau fix này.
 
 ## 2. Wiring Host — đã xong
 1. `Configurations/DependencyInjection.cs`: `AddDbContext<AttendanceDbContext>` với `OTManagementConnection`.

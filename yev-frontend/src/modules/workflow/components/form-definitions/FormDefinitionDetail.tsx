@@ -16,6 +16,9 @@ import FormFieldConditionsPanel from "./conditions/FormFieldConditionsPanel";
 import FormAccessesPanel from "./accesses/FormAccessesPanel";
 import FormApprovalRoutesPanel from "./routes/FormApprovalRoutesPanel";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { Tabs } from "@/components/ui/Tabs";
+import { Badge } from "@/components/ui/Badge";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -118,7 +121,13 @@ export default function FormDefinitionDetail({ id }: FormDefinitionDetailProps) 
     };
 
     if (isLoading) {
-        return <div className="py-10 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>;
+        return (
+            <div className="space-y-3 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                <Skeleton className="h-7 w-64" />
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-96" />
+            </div>
+        );
     }
 
     if (error || !formDefinition) {
@@ -146,13 +155,9 @@ export default function FormDefinitionDetail({ id }: FormDefinitionDetailProps) 
                 <div>
                     <div className="flex items-center gap-3">
                         <h1 className="text-2xl font-semibold text-[#191c1e]">{formDefinition.nameVn}</h1>
-                        <span
-                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                formDefinition.isPublished ? "bg-[#e6f4ea] text-[#1e7a34]" : "bg-[#f2f4f6] text-[#5e3f3a]"
-                            }`}
-                        >
+                        <Badge variant={formDefinition.isPublished ? "success" : "neutral"} withDot>
                             {formDefinition.isPublished ? t("statusPublished") : t("statusDraft")}
-                        </span>
+                        </Badge>
                     </div>
                     <p className="mt-1 text-sm text-[#5e3f3a]">
                         {formDefinition.code} · {formDefinition.formCategoryNameVn} · v{formDefinition.version}
@@ -184,22 +189,12 @@ export default function FormDefinitionDetail({ id }: FormDefinitionDetailProps) 
                 )}
             </div>
 
-            <div className="flex gap-1 border-b border-[#e0e3e5]">
-                {tabs.map((tab) => (
-                    <button
-                        key={tab.key}
-                        onClick={() => setActiveTab(tab.key)}
-                        className={`cursor-pointer border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
-                            activeTab === tab.key ? "border-[#e3000f] text-[#191c1e]" : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
-                        }`}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
+            <Tabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
 
             <div>
-                {activeTab === "fields" && <FormFieldDesigner formDefinitionId={formDefinition.id} />}
+                {activeTab === "fields" && (
+                    <FormFieldDesigner formDefinitionId={formDefinition.id} layoutHtml={formDefinition.layoutHtml} onLayoutChange={refetch} />
+                )}
                 {activeTab === "conditions" && <FormFieldConditionsPanel formDefinitionId={formDefinition.id} />}
                 {activeTab === "accesses" && <FormAccessesPanel formDefinitionId={formDefinition.id} />}
                 {activeTab === "routes" && (

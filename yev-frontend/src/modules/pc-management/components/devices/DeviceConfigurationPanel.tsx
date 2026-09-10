@@ -91,9 +91,9 @@ function ReadOnlyComponentGrid({ source }: { source: DeviceComponentFields & { o
 }
 
 export default function DeviceConfigurationPanel({ deviceId, deviceCode, configuration, onChanged }: DeviceConfigurationPanelProps) {
-    const [values, setValues] = useState<ComponentFormValues>(emptyComponentValues);
-    const [other, setOther] = useState("");
-    const [note, setNote] = useState("");
+    const [values, setValues] = useState<ComponentFormValues>(() => toFormValues(configuration));
+    const [other, setOther] = useState(() => configuration?.other ?? "");
+    const [note, setNote] = useState(() => configuration?.note ?? "");
     const [isSaving, setIsSaving] = useState(false);
     const [deletingConfig, setDeletingConfig] = useState(false);
     const [isDeletingConfig, setIsDeletingConfig] = useState(false);

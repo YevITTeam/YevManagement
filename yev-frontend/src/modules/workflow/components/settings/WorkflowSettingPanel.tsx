@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 
 import { WorkflowSettingApi } from "@/modules/workflow/api/workflow-setting.api";
 import type { WorkflowSettingDto } from "@/modules/workflow/types/workflow-setting.dto";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
@@ -59,7 +60,11 @@ export default function WorkflowSettingPanel() {
 
             <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 {isLoading || !values ? (
-                    <div className="py-8 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
+                    <div className="space-y-4">
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                    </div>
                 ) : (
                     <>
                         <label className="block">

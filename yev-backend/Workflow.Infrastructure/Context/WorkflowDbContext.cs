@@ -191,6 +191,7 @@ public partial class WorkflowDbContext : DbContext
             entity.Property(e => e.CodePrefix).HasMaxLength(20);
             entity.Property(e => e.RouteNumericFieldKey).HasMaxLength(50);
             entity.Property(e => e.RouteClassFieldKey).HasMaxLength(50);
+            entity.Property(e => e.LayoutHtml).HasColumnType("nvarchar(max)");
             entity.Property(e => e.Version).HasDefaultValue(1);
 
             entity.HasOne(d => d.FormCategory).WithMany(p => p.FormDefinitions)

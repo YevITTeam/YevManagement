@@ -221,6 +221,7 @@ FE dựng menu dựa vào `user.permissions` (không dựa `user.roles`, xem [id
 > | "Chờ tôi duyệt" | `GET /pending-approvals` (§4.2) | có `OTForm.Approve` |
 > | "Đơn đã xử lý" | `GET /my-actions` (§4.2b) | luôn hiện — chỉ cần `OTForm.View` |
 > | "Đơn tôi tham gia" (**mới**) | `GET /my-participations` (§4.2c) | luôn hiện — chỉ cần `OTForm.View` |
+> | "Tất cả đơn" (**mới, 2026-09-04**) | `GET /all-forms` (§4.2f) | có `OTForm.ViewAll` (Admin only) |
 >
 > Ẩn tab nào thì không gọi API tương ứng (tránh gọi API sẽ bị 403 vì thiếu permission). Mỗi dòng trong mọi tab đều có kèm `approvalSummary` (§4.2) để hiện ngay "đã được ai duyệt, đang chờ ai" trên danh sách, không cần bấm vào chi tiết.
 
@@ -980,11 +981,12 @@ field Id/Code không bao giờ lệch nhau. **Lưu ý**: dữ liệu sửa ở �
 |---|---|---|---|
 | GET | `/api/OtForm/my-create-scopes` | `Attendance.OTForm.Create` | Bộ phận/Phòng ban mà **chính mình** được phép tạo đơn (tối đa 1 phần tử) — gọi TRƯỚC khi mở màn "Tạo đơn tăng ca" (§4.0a) |
 | POST | `/api/OtForm` | `Attendance.OTForm.Create` | Tạo đơn — vào chuỗi duyệt Cây chức vụ **ngay lập tức** (`status=InApproval`, hoặc `Completed` nếu chuỗi rỗng), không còn Draft (§4.1) |
-| GET | `/api/OtForm/my-forms?pageIndex=&pageSize=` | `Attendance.OTForm.View` | Đơn do **chính mình** tạo |
-| GET | `/api/OtForm/pending-approvals?pageIndex=&pageSize=&productionLineId=&productionTeamId=&productionShiftTeamId=` | `Attendance.OTForm.Approve` | Đơn đang **chờ chính mình** xử lý — tự lọc theo bước hiện tại (`Status=Pending`, `StepOrder` nhỏ nhất) có mặt trong `Candidates`; mỗi item có `currentStepCandidateCount` (§4.2, mới 2026-08-08) + `productionLineNames`/`productionShiftTeamNames` (§4.2, mới 2026-09-04); 3 filter Line/Team/Nhóm ca mới 2026-09-04, chỉ endpoint này hỗ trợ |
+| GET | `/api/OtForm/my-forms?pageIndex=&pageSize=&groupId=&departmentId=&productionLineId=&productionTeamId=&productionShiftTeamId=` | `Attendance.OTForm.View` | Đơn do **chính mình** tạo |
+| GET | `/api/OtForm/pending-approvals?pageIndex=&pageSize=&groupId=&departmentId=&productionLineId=&productionTeamId=&productionShiftTeamId=` | `Attendance.OTForm.Approve` | Đơn đang **chờ chính mình** xử lý — tự lọc theo bước hiện tại (`Status=Pending`, `StepOrder` nhỏ nhất) có mặt trong `Candidates`; mỗi item có `currentStepCandidateCount` (§4.2, mới 2026-08-08) + `productionLineNames`/`productionShiftTeamNames` (§4.2, mới 2026-09-04) |
 | GET | `/api/OtForm/pending-approvals/count` | `Attendance.OTForm.Approve` | Đếm nhanh cho badge sidebar (mới 2026-08-19) — trả về `data:int`, cùng logic lọc "bước hiện tại" với `pending-approvals` nhưng KHÔNG phân trang/không map DTO danh sách. Xem §4.2d. |
 | GET | `/api/OtForm/pending-approvals/dates?fromDate=&toDate=` | `Attendance.OTForm.Approve` | Lịch mini "ngày nào có đơn chưa duyệt" (mới 2026-09-04) — trả `data: PendingApprovalDateCountDto[] {date, count}`, cùng scoping với `pending-approvals`. Xem §4.2e. |
-| GET | `/api/OtForm/my-actions?pageIndex=&pageSize=` | `Attendance.OTForm.View` | Lịch sử đơn **chính mình đã xử lý** (Ký/Duyệt/Từ chối) ở bất kỳ bước nào (§4.2b) |
+| GET | `/api/OtForm/my-actions?pageIndex=&pageSize=&groupId=&departmentId=&productionLineId=&productionTeamId=&productionShiftTeamId=` | `Attendance.OTForm.View` | Lịch sử đơn **chính mình đã xử lý** (Ký/Duyệt/Từ chối) ở bất kỳ bước nào (§4.2b) |
+| GET | `/api/OtForm/all-forms?pageIndex=&pageSize=&groupId=&departmentId=&productionLineId=&productionTeamId=&productionShiftTeamId=` | `Attendance.OTForm.ViewAll` (**Admin only**, mới 2026-09-04) | "Tất cả đơn" — toàn bộ đơn trong hệ thống, KHÔNG lọc theo user gọi API (khác 4 dòng trên). Xem §4.2f. |
 | GET | `/api/OtForm/{id}` | `Attendance.OTForm.View` | Chi tiết đầy đủ 1 đơn, gồm `approvalSteps[]` (mới) |
 | PUT | `/api/OtForm/{id}` | `Attendance.OTForm.Create` | Sửa giờ/`didEat`/ghi chú từng nhân viên đang active **+ thêm/loại nhân viên** (mới 2026-09-04) + `secondaryPassword` [Required] — đơn theo Nhóm chỉ chính người tạo, đơn theo chuyền theo TỪNG BƯỚC (§4.1b) |
 | POST | `/api/OtForm/{id}/approve` | `Attendance.OTForm.Approve` | Duyệt "bước đang chờ" hiện tại — tự cộng lũy kế nhân viên nếu đạt Completed |
@@ -1150,14 +1152,22 @@ FE: `OtFormApi.get*({ pageIndex, pageSize, fromDate, toDate, status })` (`ot-for
 - **`groupNameJp`/`departmentNameJp` (mới, 2026-07-29)** — song ngữ Việt/Nhật lấy thẳng từ `Group.GroupNameJp`/`Department.DepartmentNameJp` (nullable, `null` nếu master data chưa nhập tiếng Nhật). FE hiện dạng `"{Vn} / {Jp}"` khi có Jp, chỉ hiện Vn nếu không (xem `bilingualText` ở `modules/attendance/lib/bilingual.ts`).
 - **`productionLineNames`/`productionShiftTeamNames` (mới, 2026-09-04)** — string? distinct
   `BlockCodeSnapshot`/`ShiftTeamCodeSnapshot` của các `OtFormEmployee` còn active trong đơn, nối `", "`.
-  Chỉ có giá trị khi `isProductionForm=true`; **chỉ `pending-approvals` populate field này** (tính riêng
-  sau khi phân trang, xem `attendance-module.md` §Nâng cấp màn Duyệt hàng loạt) — 4 endpoint danh sách
-  còn lại trả `null` luôn dù đơn có phải theo chuyền hay không. FE hiện cột "Line/Nhóm ca" (`—` khi null).
-- **3 filter `productionLineId`/`productionTeamId`/`productionShiftTeamId` (mới, 2026-09-04, CHỈ
-  `pending-approvals`)** — int?, cùng nguồn ID với dropdown Line/Team/ShiftTeam ở `CreateOtFormPage`. BE
-  resolve ID → `Code` rồi lọc theo `OtFormEmployee.BlockCodeSnapshot`/`TeamCodeSnapshot`/
-  `ShiftTeamCodeSnapshot` (AND với nhau nếu truyền nhiều), đơn nào có ÍT NHẤT 1 nhân viên active khớp là
-  qua filter.
+  Chỉ có giá trị khi `isProductionForm=true`. Ban đầu chỉ `pending-approvals` populate field này, **mở
+  rộng ra CẢ 5 endpoint danh sách cùng ngày** (tính riêng sau khi phân trang, xem `attendance-module.md`
+  §Mở rộng filter ra mọi tab) — đơn không phải theo chuyền vẫn trả `null`.
+- **5 filter `groupId`/`departmentId`/`productionLineId`/`productionTeamId`/`productionShiftTeamId`**
+  (int?, optional, kết hợp AND với nhau và với `fromDate`/`toDate`/`status`) — dùng chung cho **CẢ 5
+  endpoint danh sách** (kể cả `all-forms`, mở rộng 2026-09-04, ban đầu 3 filter Line/Team/Nhóm ca chỉ có
+  ở `pending-approvals`):
+  - `groupId`/`departmentId` — lọc trực tiếp `OtForm.GroupId`/`DepartmentId` (đơn văn phòng theo Nhóm có
+    cả 2, đơn theo chuyền chỉ có `DepartmentId`), cùng nguồn dropdown Bộ phận/Nhóm ở `CreateOtFormPage`
+    (`Department/all` + `Group/by-department/{id}`, cascading).
+  - `productionLineId`/`productionTeamId`/`productionShiftTeamId` — cùng nguồn ID với dropdown
+    Line/Team/ShiftTeam ở `CreateOtFormPage`. BE resolve ID → `Code` rồi lọc theo
+    `OtFormEmployee.BlockCodeSnapshot`/`TeamCodeSnapshot`/`ShiftTeamCodeSnapshot`, đơn nào có ÍT NHẤT 1
+    nhân viên active khớp là qua filter.
+  FE (`OtFormListPage.tsx`) hiện cả 5 dropdown filter này ở MỌI tab (trước đây 3 filter Line/Team/Nhóm ca
+  chỉ hiện ở "Chờ tôi duyệt").
 
 ### 4.2d `GET /api/OtForm/pending-approvals/count` — Đếm badge sidebar (mới, 2026-08-19)
 Trả về `ApiResponse<int>` (`data` là số nguyên, KHÔNG bọc `PagedResponse`) — số đơn đang chờ CHÍNH
@@ -1176,6 +1186,15 @@ Candidates" với `pending-approvals`/`pending-approvals/count` — KHÔNG phân
 chưa duyệt thì không xuất hiện trong mảng (không trả `count: 0`). FE (`OtFormListPage.tsx`, chỉ tab "Chờ
 tôi duyệt") hiện widget lịch tháng nhỏ (điều hướng tháng bằng nút trước/sau, badge số đơn trên mỗi ngày
 có dữ liệu) — bấm 1 ngày sẽ set `fromDate=toDate=` đúng ngày đó rồi gọi lại `pending-approvals`.
+
+### 4.2f `GET /api/OtForm/all-forms` — "Tất cả đơn" cho Admin (mới, 2026-09-04)
+Cùng shape `OtFormListItemDto` + cùng 8 query param (`pageIndex/pageSize/fromDate/toDate/status/groupId/
+departmentId/productionLineId/productionTeamId/productionShiftTeamId`) như 4 endpoint kia, nhưng **KHÔNG
+lọc theo user gọi API** — trả về toàn bộ `OtForm` chưa xoá mềm trong hệ thống, sắp `OrderByDescending(Id)`.
+Gate bằng permission riêng **`Attendance.OTForm.ViewAll`** — migration `AddOtFormViewAllPermission` chỉ
+gán permission này cho role có sẵn `Attendance.Department.Create` (tức Admin), không role nghiệp vụ nào
+khác (kể cả Tổng Giám Đốc) có quyền xem toàn cục. FE: tab mới "Tất cả đơn" trong `OtFormTabsPage.tsx`,
+chỉ hiện khi `hasPermission(user, "Attendance.OTForm.ViewAll")`.
 
 ### 4.2c `GET /api/OtForm/my-participations` — Đơn tôi có tên trong danh sách tăng ca (mới, 2026-07-17)
 Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác hẳn: trả về **mọi đơn mà chính user gọi API được liệt kê là nhân viên tăng ca** (`OtFormEmployee`), **bất kể có phải người tạo/ký/duyệt đơn đó hay không**.
@@ -1459,6 +1478,14 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
 |---|---|---|---|
 | GET | `/api/AttendanceSetting` | **Không cần** (mọi tài khoản đăng nhập) | Đọc cấu hình hiện hành |
 | PUT | `/api/AttendanceSetting` | `Attendance.Setting.Update` (chỉ Admin) | Sửa cấu hình |
+| POST | `/api/AttendanceSetting/test-email` | `Attendance.Setting.Update` (chỉ Admin) | Gửi 1 email mẫu tới địa chỉ tự nhập, kiểm tra SMTP + font/layout (mới 2026-09-05) |
+
+```jsonc
+// SendTestEmailDto — body POST test-email
+{ "email": "ten@yev.vn" }  // string, [Required] + [EmailAddress]
+// Response data: boolean — luôn true nếu HTTP 200 (BE trả Fail (400) kèm message nếu SMTP gửi thất
+// bại, không có trường hợp response 200 với data=false).
+```
 
 ```jsonc
 // AttendanceSettingDto — response GET, body PUT (cùng shape). 4 field phiếu ăn đầu tiên: redesign 3

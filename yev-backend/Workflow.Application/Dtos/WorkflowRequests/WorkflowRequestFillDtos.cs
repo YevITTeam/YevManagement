@@ -28,6 +28,7 @@ namespace Workflow.Application.Dtos.WorkflowRequests
         public string? Description { get; set; }
         public bool AllowAttachment { get; set; }
         public bool RequireAttachment { get; set; }
+        public string? LayoutHtml { get; set; }
         public List<FormFieldDto> Fields { get; set; } = new();
         public List<FormFieldConditionDto> Conditions { get; set; } = new();
     }

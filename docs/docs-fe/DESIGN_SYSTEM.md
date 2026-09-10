@@ -62,6 +62,7 @@
 | **Error / cảnh báo** (dải thông báo) | `bg-[#fff4f2]` | `border-[#e9bcb6]` | `text-[#930006]` |
 | **Accent nhạt** (ô icon KPI, badge, avatar) | `bg-[#fff4f2]` | `border-[#e9bcb6]` | `text-[#e3000f]` |
 | **Success / online / delta dương** | `bg-emerald-50` | `border-emerald-200` | `text-emerald-600` · dot `bg-emerald-500` |
+| **Warning / cảnh báo nhẹ** (chưa liên kết tài khoản, đang chờ xác nhận, sắp đạt giới hạn) | `bg-[#fff4e5]` | `border-[#f5d0a9]` | `text-[#9a5b00]` |
 | Focus ring (input) | ring `#ffe0e3` | focus border `#e3000f` | — |
 
 > **Không dùng indigo** ở bất kỳ đâu — mọi điểm nhấn tương tác (avatar, active, focus, icon KPI) dùng họ đỏ nhạt `#fff4f2` / `#e3000f`.
@@ -273,8 +274,13 @@ Kết hợp: thead in hoa của DESIGN_GUIDE + hàng mềm `hover` của dashboa
 ```
 
 - Cột chính `font-semibold text-[#191c1e]`; cột phụ `text-[#5e3f3a]`; giá trị "tích cực" `text-emerald-600 font-semibold`.
-- **Empty:** `<td colSpan={N} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">Không có dữ liệu.</td>`
-- **Loading skeleton:** `bg-[#f1f5f9] rounded animate-pulse`.
+- **Empty:** dùng `<EmptyState icon={...} title="Không có dữ liệu." description="..." />`
+  (`src/components/common/EmptyState.tsx`) bọc trong `<td colSpan={N}>` — icon+tiêu đề+mô tả thay vì
+  chỉ 1 dòng chữ trơn. (Bản cũ `<td>Không có dữ liệu.</td>` vẫn chấp nhận được cho màn rất đơn giản.)
+- **Loading skeleton:** `bg-[#f1f5f9] rounded animate-pulse` — dùng
+  `<Skeleton className="h-4 w-32" />` (`src/components/ui/Skeleton.tsx`) cho khối lẻ, hoặc
+  `<TableSkeletonRows rows={5} columns={N} />` (`src/components/common/TableSkeletonRows.tsx`) để
+  render N hàng skeleton trong `<tbody>` thay cho dòng chữ "Đang tải...".
 
 ### 4.5. Pagination
 
@@ -290,12 +296,20 @@ Nếu dùng nút số trang: trang hiện tại `bg-[#191c1e] text-white rounded
 
 ### 4.6. Badge / Status pill
 
-```tsx
-<span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium">
-  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Đang hoạt động
-</span>
-```
-Chọn bộ `border/bg/text` theo ngữ nghĩa ở mục 1.3.
+Dùng `<Badge variant="..." withDot>Đang hoạt động</Badge>` (`src/components/ui/Badge.tsx`) thay vì
+tự chép `className` mỗi màn. 5 variant có sẵn, map đúng ngữ nghĩa ở mục 1.3:
+
+| `variant` | Màu | Dùng cho |
+|---|---|---|
+| `neutral` | `#f2f4f6` / `#5e3f3a` | Draft, chưa publish, đã huỷ |
+| `info` | `#e8f0fe` / `#1a56db` | Submitted, InProgress |
+| `success` | `#e6f4ea` / `#1e7a34` | Published, Approved, đang hoạt động |
+| `warning` | `#fff8ee` / `#8a5a00` | SentBack, cảnh báo nhẹ |
+| `danger` | `#fde8e8` / `#930006` | Rejected, lỗi |
+
+`withDot` thêm chấm tròn màu hiện hành trước chữ (`<span className="h-1.5 w-1.5 rounded-full bg-current" />`).
+Nếu variant/màu chưa đủ cho ca đặc thù, vẫn có thể tự viết `<span className="rounded-full ...">` như
+cũ — `Badge` không bắt buộc, chỉ để tránh lặp code cho 5 trạng thái phổ biến trên.
 
 ### 4.7. Modal / Popup form (tạo & sửa)
 
@@ -327,6 +341,19 @@ Một component dùng chung cho cả `create` và `edit` (props `mode` + `initia
 
 - Xoá / hành động nguy hiểm: **luôn** dùng `src/components/common/ConfirmDialog.tsx`, chỉ truyền `title/message/approveLabel/loading/onApprove/onDenied`. Không viết dialog riêng.
 - Thông báo: **luôn** dùng `react-toastify` (`ToastContainer` đã đặt ở `layout.tsx`): `toast.success(...)` / `toast.error(...)`. Mọi create/update/delete phải có toast thành công + toast lỗi (kèm `console.error`).
+
+### 4.9. Tabs (màn chi tiết có nhiều tab)
+
+Dùng `<Tabs tabs={[{key,label}, ...]} activeKey={activeTab} onChange={setActiveTab} />`
+(`src/components/ui/Tabs.tsx`) — component controlled, không tự giữ state, chỗ gọi giữ nguyên
+`useState` như cũ. Dạng viên thuốc/segmented (không phải gạch chân):
+
+```tsx
+<div className="inline-flex gap-1 rounded-lg bg-[#f8fafc] p-1">
+  <button className="rounded-md px-3 py-1.5 text-sm font-semibold bg-white text-[#191c1e] shadow-sm">Tab đang chọn</button>
+  <button className="rounded-md px-3 py-1.5 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">Tab khác</button>
+</div>
+```
 
 ---
 

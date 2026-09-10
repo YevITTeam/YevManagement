@@ -10,6 +10,10 @@ import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalSummaryItemDto, OtFormListItemDto, PendingApprovalDateCountDto } from "@/modules/attendance/types/ot-form.dto";
 import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
 import type { ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
+import { DepartmentApi } from "@/modules/attendance/api/department.api";
+import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import { GroupApi } from "@/modules/attendance/api/group.api";
+import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -32,7 +36,7 @@ function monthRange(year: number, month: number): { from: string; to: string } {
     return { from: toDateStr(new Date(year, month, 1)), to: toDateStr(new Date(year, month + 1, 0)) };
 }
 
-type OtFormListMode = "my-forms" | "pending-approvals" | "my-actions" | "my-participations";
+type OtFormListMode = "my-forms" | "pending-approvals" | "my-actions" | "my-participations" | "all-forms";
 
 interface OtFormListPageProps {
     mode: OtFormListMode;
@@ -122,8 +126,10 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const [fromDateInput, setFromDateInput] = useState("");
     const [toDateInput, setToDateInput] = useState("");
     const [statusInput, setStatusInput] = useState("");
-    // Lọc theo Line/Team/Nhóm ca cho đơn dưới chuyền (2026-09-04) — chỉ BE endpoint pending-approvals
-    // hỗ trợ (xem GetOtFormListParams), các tab khác gửi kèm cũng vô hại (BE bỏ qua param lạ).
+    // Lọc theo Bộ phận/Nhóm (đơn văn phòng) và Line/Team/Nhóm ca (đơn dưới chuyền) — 2026-09-04, BE hỗ
+    // trợ cả 5 param ở MỌI endpoint danh sách (xem GetOtFormListParams), nên hiện cùng lúc ở mọi tab.
+    const [departmentId, setDepartmentId] = useState<number | "">("");
+    const [groupId, setGroupId] = useState<number | "">("");
     const [productionTeamId, setProductionTeamId] = useState<number | "">("");
     const [productionLineId, setProductionLineId] = useState<number | "">("");
     const [productionShiftTeamId, setProductionShiftTeamId] = useState<number | "">("");
@@ -131,6 +137,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         fromDate: "",
         toDate: "",
         status: "",
+        departmentId: "" as number | "",
+        groupId: "" as number | "",
         productionTeamId: "" as number | "",
         productionLineId: "" as number | "",
         productionShiftTeamId: "" as number | "",
@@ -145,10 +153,21 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         setFromDateInput("");
         setToDateInput("");
         setStatusInput("");
+        setDepartmentId("");
+        setGroupId("");
         setProductionTeamId("");
         setProductionLineId("");
         setProductionShiftTeamId("");
-        setAppliedFilters({ fromDate: "", toDate: "", status: "", productionTeamId: "", productionLineId: "", productionShiftTeamId: "" });
+        setAppliedFilters({
+            fromDate: "",
+            toDate: "",
+            status: "",
+            departmentId: "",
+            groupId: "",
+            productionTeamId: "",
+            productionLineId: "",
+            productionShiftTeamId: "",
+        });
     }
 
     const listParams = {
@@ -157,17 +176,41 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         fromDate: appliedFilters.fromDate || undefined,
         toDate: appliedFilters.toDate || undefined,
         status: appliedFilters.status !== "" ? Number(appliedFilters.status) : undefined,
+        departmentId: appliedFilters.departmentId !== "" ? appliedFilters.departmentId : undefined,
+        groupId: appliedFilters.groupId !== "" ? appliedFilters.groupId : undefined,
         productionTeamId: appliedFilters.productionTeamId !== "" ? appliedFilters.productionTeamId : undefined,
         productionLineId: appliedFilters.productionLineId !== "" ? appliedFilters.productionLineId : undefined,
         productionShiftTeamId: appliedFilters.productionShiftTeamId !== "" ? appliedFilters.productionShiftTeamId : undefined,
     };
+
+    // ── Chọn Phòng ban → Nhóm đang chọn (nếu có) có thể không còn thuộc Phòng ban mới, reset —
+    // snapshot render (CLAUDE.md §4.5), cùng pattern Team→Line bên dưới. ──
+    const [departmentOptions, setDepartmentOptions] = useState<DepartmentDto[]>([]);
+    const [groupOptions, setGroupOptions] = useState<GroupDto[]>([]);
+
+    useFetchEffect(() => DepartmentApi.getAllDepartments(), [], setDepartmentOptions, t("officeFilterLoadError"));
+
+    const [prevFilterDepartmentId, setPrevFilterDepartmentId] = useState(departmentId);
+    if (prevFilterDepartmentId !== departmentId) {
+        setPrevFilterDepartmentId(departmentId);
+        setGroupId("");
+    }
+
+    useFetchEffect(
+        () => (departmentId === "" ? Promise.resolve([]) : GroupApi.getGroupsByDepartment(departmentId)),
+        [departmentId],
+        setGroupOptions,
+        t("officeFilterLoadError")
+    );
 
     // ── Chọn Team → Line đang chọn (nếu có) có thể không còn thuộc Team mới, reset — snapshot render
     // (CLAUDE.md §4.5), cùng pattern CreateOtFormPage.tsx. ──
     const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
     const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
     const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
-    const showProductionFilter = mode === "pending-approvals";
+    // Trước đây chỉ hiện ở "Chờ tôi duyệt" — mở rộng ra mọi tab (kể cả "Tất cả đơn") theo yêu cầu
+    // người dùng (2026-09-04), BE đã hỗ trợ filter này ở mọi endpoint danh sách.
+    const showProductionFilter = true;
 
     useFetchEffect(
         () => (showProductionFilter ? ProductionEmployeeApi.getTeamOptions() : Promise.resolve([])),
@@ -259,6 +302,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                 ? OtFormApi.getPendingApprovals(listParams)
                 : mode === "my-actions"
                 ? OtFormApi.getMyActions(listParams)
+                : mode === "all-forms"
+                ? OtFormApi.getAllForms(listParams)
                 : OtFormApi.getMyParticipations(listParams),
         [mode, pageIndex, appliedFilters],
         (result) => {
@@ -279,6 +324,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             fromDate: fromDateInput,
             toDate: toDateInput,
             status: statusInput,
+            departmentId,
+            groupId,
             productionTeamId,
             productionLineId,
             productionShiftTeamId,
@@ -289,11 +336,22 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         setFromDateInput("");
         setToDateInput("");
         setStatusInput("");
+        setDepartmentId("");
+        setGroupId("");
         setProductionTeamId("");
         setProductionLineId("");
         setProductionShiftTeamId("");
         setPageIndex(1);
-        setAppliedFilters({ fromDate: "", toDate: "", status: "", productionTeamId: "", productionLineId: "", productionShiftTeamId: "" });
+        setAppliedFilters({
+            fromDate: "",
+            toDate: "",
+            status: "",
+            departmentId: "",
+            groupId: "",
+            productionTeamId: "",
+            productionLineId: "",
+            productionShiftTeamId: "",
+        });
     };
 
     // Xoá lựa chọn khi danh sách đổi (đổi trang/lọc/mode, hoặc sau khi xử lý xong) — so sánh snapshot
@@ -375,6 +433,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             ? t("titlePendingApprovals")
             : mode === "my-actions"
             ? t("titleMyActions")
+            : mode === "all-forms"
+            ? t("titleAllForms")
             : t("titleMyParticipations");
     const description =
         mode === "my-forms"
@@ -383,6 +443,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             ? t("descPendingApprovals")
             : mode === "my-actions"
             ? t("descMyActions")
+            : mode === "all-forms"
+            ? t("descAllForms")
             : t("descMyParticipations");
     const columnCount = (mode === "my-forms" ? 10 : 9) + (canBulkApprove ? 1 : 0);
 
@@ -452,6 +514,37 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                             {tCommon("search")}
                         </button>
                     </div>
+                    <label className="block">
+                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            {t("filterDepartmentLabel")}
+                        </span>
+                        <select
+                            value={departmentId}
+                            onChange={(event) => setDepartmentId(event.target.value ? Number(event.target.value) : "")}
+                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        >
+                            <option value="">{t("filterAllDepartment")}</option>
+                            {departmentOptions.map((option) => (
+                                <option key={option.id} value={option.id}>{option.departmentNameVn}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            {t("filterGroupLabel")}
+                        </span>
+                        <select
+                            value={groupId}
+                            onChange={(event) => setGroupId(event.target.value ? Number(event.target.value) : "")}
+                            disabled={departmentId === ""}
+                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                        >
+                            <option value="">{t("filterAllGroup")}</option>
+                            {groupOptions.map((option) => (
+                                <option key={option.id} value={option.id}>{option.groupNameVn}</option>
+                            ))}
+                        </select>
+                    </label>
                     {showProductionFilter && (
                         <>
                             <label className="block">

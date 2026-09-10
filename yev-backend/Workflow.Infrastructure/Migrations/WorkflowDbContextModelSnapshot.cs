@@ -490,6 +490,9 @@ namespace Workflow.Infrastructure.Migrations
                     b.Property<bool>("IsPublished")
                         .HasColumnType("bit");
 
+                    b.Property<string>("LayoutHtml")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("NameJp")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");

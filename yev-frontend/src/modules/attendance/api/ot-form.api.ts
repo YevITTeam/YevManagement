@@ -29,6 +29,7 @@ const ENDPOINTS = {
         getPendingApprovalDates: "/OtForm/pending-approvals/dates",
         getMyActions: "/OtForm/my-actions",
         getMyParticipations: "/OtForm/my-participations",
+        getAllForms: "/OtForm/all-forms",
         getOtFormById: (id: number) => `/OtForm/${id}`,
         updateOtForm: (id: number) => `/OtForm/${id}`,
         approveOtForm: (id: number) => `/OtForm/${id}/approve`,
@@ -51,8 +52,10 @@ export interface GetOtFormListParams {
     fromDate?: string;
     toDate?: string;
     status?: number;
-    // Lọc theo Line/Team/Nhóm ca cho đơn dưới chuyền (2026-09-04) — chỉ getPendingApprovals dùng, các
-    // hàm danh sách khác bỏ qua nếu có truyền (BE không nhận tham số này ở endpoint khác).
+    // Lọc theo Bộ phận/Nhóm cho đơn văn phòng và Line/Team/Nhóm ca cho đơn dưới chuyền (2026-09-04) —
+    // cả 5 field optional, giờ dùng chung cho MỌI hàm danh sách bên dưới (kể cả getAllForms).
+    groupId?: number;
+    departmentId?: number;
     productionLineId?: number;
     productionTeamId?: number;
     productionShiftTeamId?: number;
@@ -65,6 +68,8 @@ function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListPa
     if (params?.toDate) query.set("ToDate", params.toDate);
     // status=0 (Pending) là giá trị hợp lệ — không được dùng truthy check kẻo rớt mất (CLAUDE.md §4.4).
     if (params?.status !== undefined) query.set("Status", String(params.status));
+    if (params?.groupId !== undefined) query.set("GroupId", String(params.groupId));
+    if (params?.departmentId !== undefined) query.set("DepartmentId", String(params.departmentId));
     if (params?.productionLineId !== undefined) query.set("ProductionLineId", String(params.productionLineId));
     if (params?.productionTeamId !== undefined) query.set("ProductionTeamId", String(params.productionTeamId));
     if (params?.productionShiftTeamId !== undefined) query.set("ProductionShiftTeamId", String(params.productionShiftTeamId));
@@ -143,6 +148,16 @@ export const OtFormApi = {
         const url = queryString
             ? `${ENDPOINTS.OT_FORM.getMyParticipations}?${queryString}`
             : ENDPOINTS.OT_FORM.getMyParticipations;
+        const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
+        return response.data;
+    },
+    // "Tất cả đơn" — Admin xem toàn bộ đơn tăng ca, không lọc theo user gọi API (2026-09-04, gate bằng
+    // Attendance.OTForm.ViewAll).
+    getAllForms: async (params?: GetOtFormListParams) => {
+        const query = new URLSearchParams();
+        appendOtFormListParams(query, params);
+        const queryString = query.toString();
+        const url = queryString ? `${ENDPOINTS.OT_FORM.getAllForms}?${queryString}` : ENDPOINTS.OT_FORM.getAllForms;
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
         return response.data;
     },
