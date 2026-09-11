@@ -13,10 +13,13 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { TableSkeletonRows } from "@/components/common/TableSkeletonRows";
 import { Badge } from "@/components/ui/Badge";
+import { type SelectOption } from "@/components/ui/SearchableSelect";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
+import { AuthApi } from "@/modules/auth/api/auth.api";
+import type { UserDto } from "@/modules/auth/types/auth.dto";
 
 const PAGE_SIZE = 10;
 
@@ -46,6 +49,20 @@ export default function EmployeeList() {
     const [isDeleting, setIsDeleting] = useState(false);
 
     const [orgUnitsFor, setOrgUnitsFor] = useState<EmployeeDto | null>(null);
+
+    const [identityUsers, setIdentityUsers] = useState<UserDto[]>([]);
+    const { isLoading: isLoadingUsers } = useFetchEffect(
+        () => AuthApi.getAllUsersWithRoles(),
+        [],
+        (result) => setIdentityUsers(result),
+        t("loadUsersError"),
+        (message) => toast.error(message)
+    );
+    const userOptions: SelectOption[] = identityUsers.map((u) => ({
+        value: u.id,
+        label: `${u.fullName} (${u.userName})`,
+        searchText: `${u.fullName} ${u.userName}`.toLowerCase(),
+    }));
 
     const { isLoading, error, refetch: fetchEmployees } = useFetchEffect(
         () => EmployeeApi.getEmployeePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
@@ -264,6 +281,8 @@ export default function EmployeeList() {
                 mode={formMode}
                 initial={editingItem}
                 loading={isSaving}
+                userOptions={userOptions}
+                isLoadingUsers={isLoadingUsers}
                 onClose={closeForm}
                 onSubmit={handleSubmitForm}
             />
