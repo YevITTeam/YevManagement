@@ -29,6 +29,7 @@ namespace Asset.Application.Dtos.Devices
         public string? Note { get; set; }
         public string? SerialNumber { get; set; }
         public bool IsUseUsb { get; set; }
+        public bool RequiresDailyCheck { get; set; }
         public int? SuggestedNewDeviceId { get; set; }
         public string? SuggestedNewDeviceCode { get; set; }
         public List<DeviceIpAddressDto> IpAddresses { get; set; } = new();

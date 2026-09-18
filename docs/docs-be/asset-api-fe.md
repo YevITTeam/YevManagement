@@ -43,6 +43,8 @@ GET /api/{Entity}/{id}   POST   PUT /{id} (body có Id khớp)   DELETE /{id} (x
 
 DTO: `{id, code, name}`. POST/PUT body có Code+Name (`[Required]`), PUT thêm `id` khớp URL. 400 nếu Code trùng.
 
+**`DeviceType` có thêm 2 field** (2026-09-16, phục vụ §7d): `serverCheckCategory?: number` (0=Server/1=Network/2=Ups/3=AirConditioner, `null`=không thuộc phạm vi kiểm tra hằng ngày) + `serverCheckCategoryText?: string` (read-only). POST/PUT `DeviceType` nhận thêm `serverCheckCategory?: number|null` — **ghi đè trực tiếp** (không phải "giữ nguyên nếu bỏ trống"): gửi `null`/bỏ field này (JS `undefined` serialize thành thiếu field, BE default `null`) sẽ **xóa** khỏi phạm vi kiểm tra hằng ngày nếu DeviceType đó từng được gán.
+
 ### 2.1 DeviceGroup (Nhóm) — thuộc 1 Bộ phận
 `/api/DeviceGroup`: grid-list, all, {id}, POST, PUT, DELETE. Mỗi Nhóm **bắt buộc thuộc 1 `DeviceDepartment`**.
 ```jsonc
@@ -114,7 +116,8 @@ Query: `pageIndex/pageSize`, `deviceCode/manager/supplierName`(Contains), `purch
 { "id":16925, "deviceCode":"YDF-216", "deviceName":"DA", "branchName":"...", "supplierName":"...",
   "deviceTypeName":"Desktop", "groupName":null, "departmentName":null, "ipAddresses":[],
   "purchaseDate":"...", "manager":"...", "expirationDate":"...", "note":"...", "emails":["..."],
-  "status":0, "statusText":"Chờ sử dụng", "isOutsourced":false, "serialNumber":null, "isUseUsb":false }
+  "status":0, "statusText":"Chờ sử dụng", "isOutsourced":false, "serialNumber":null, "isUseUsb":false,
+  "requiresDailyCheck":false }  // 2026-09-17: máy nằm trong phòng server, có dán QR → vào phiên quét ngày (7d.2)
 ```
 
 ### 5.2b `GET /available?keyword=`
@@ -128,7 +131,7 @@ Không phân trang, `data:DeviceGridDto[]`, lọc `status=0`+`!IsDeleted`, `keyw
   "manager":"...", "purchaseDate":"...", "depreciationMonths":36,
   "expirationDate":"...",  // server tự tính = purchaseDate + depreciationMonths
   "isOutsourced":false, "status":1, "statusText":"...", "note":"...",
-  "serialNumber":"SN-001", "isUseUsb":false,
+  "serialNumber":"SN-001", "isUseUsb":false, "requiresDailyCheck":false,
   "suggestedNewDeviceId":null,   // máy MỚI gợi ý thay CHÍNH máy này (khi xem máy CŨ), 5.9/5.10
   "suggestedNewDeviceCode":null,
   "ipAddresses":[{ "id":6989, "ipAddress":"1.1.1.104" }],  // nhiều IP
@@ -167,7 +170,9 @@ Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ 
   "isOutsourced":false, "status":0,  // [Range(0,3)], default 0
   "note":"...[Required]",  // bắt buộc (2026-08-01) — thay cho manager/emails, giải thích tình trạng máy
   "serialNumber":"...",  // nullable [StringLength(100)], unique nếu có
-  "isUseUsb":false, "ipAddressIds":[6989],  // IP đang Available, server tự set Assigned
+  "isUseUsb":false,
+  "requiresDailyCheck":false,  // 2026-09-17, default false — tick khi máy nằm trong phòng server & có dán QR (7d.2)
+  "ipAddressIds":[6989],  // IP đang Available, server tự set Assigned
   "suggestedNewDeviceId":null }  // Id máy MỚI thay chính device này (import tự set, xem 5.10)
 ```
 > **KHÔNG gửi `expirationDate`** (server tự tính). `ipAddressIds` chứa Id không `Available`/trùng → 400. `serialNumber` trùng (kể cả soft-deleted) → 400. `emails` không unique. `suggestedNewDeviceId` phải tồn tại `!IsDeleted` (404), không tự trỏ mình (400, chỉ PUT). `groupId`/`departmentId` tồn tại `!IsDeleted` (404); gửi `groupId` bắt buộc `departmentId` cha đúng (400).
@@ -415,6 +420,87 @@ Content-Type: application/json
 - BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm. **Từ 2026-07-30 catalogue rút còn 7 tool**, tập trung 2 nhóm việc: tra cứu thiết bị (đủ mọi field như màn hình danh sách) và tra cứu IP (IP trống / IP này ai đang dùng / tình trạng cả dải) — xem `ai-chat-be-huong-dan.md §16`. Gợi ý câu hỏi trên FE phải khớp đúng 2 nhóm này, lọc theo chi nhánh/nhóm/bộ phận nay truyền THẲNG TÊN (thêm 2026-07-30, xem §17) nên không cần đổi tên sang id.
 - Permission `Asset.AiChat.Use` — **đã gán sẵn cho role `Admin`**, role khác cần Admin gán thêm nếu muốn dùng chat AI. Nút "Xem chi tiết" từ dòng `"device"` là UX-only, ẩn ở FE nếu user không có `Asset.Device.View` — BE vẫn enforce permission đó khi FE thật sự điều hướng sang trang chi tiết thiết bị.
 
+## 7d. ServerCheck — `/api/ServerCheck` (2026-09-16, kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR)
+Thay checksheet giấy bằng quét QR trên máy TC21/TC22 — chi tiết nghiệp vụ: [asset-module.md §1.19](asset-module.md). Server/Máy lạnh/UPS/Network đều là `Device` bình thường (không entity riêng), QR dán lên vẫn dùng `POST /api/Device/qr-labels` (§5.4b) — điều kiện để vào phạm vi kiểm tra hằng ngày là `DeviceType` của nó có `serverCheckCategory` khác `null` (Admin tự cấu hình ở màn `DeviceType`, §2).
+
+**7d.1 `GET /today`** → `ServerCheckSessionDto | null`. `null` = hôm nay **chưa bấm "Bắt đầu"**. Có giá trị → xem `status` (`0`=`InProgress`, đang quét dở/vừa mới bắt đầu; `1`=`Completed`, đã khóa) để FE quyết định hiện màn "đang quét" hay "đã xong hôm nay".
+
+**7d.2 `POST /start`** (không body, permission `Asset.ServerCheck.Scan`) → `ServerCheckSessionDto`. Gọi khi user bấm "Bắt đầu phiên quét" trên TC21/22 (đã đăng nhập trước qua `/api/Auth/login`, xem identity-api-fe.md §2c). Nếu hôm nay đã có phiên `InProgress` (vd trình duyệt đóng giữa chừng) → trả lại nguyên phiên đó, **không** tạo mới/mất dữ liệu đã quét. Đã `Completed` → 400 "Đã hoàn thành phiên kiểm tra hôm nay." — FE hiện thông báo, điều hướng sang xem báo cáo thay vì cho quét tiếp (**chỉ 1 phiên/ngày**, khóa cứng). Danh sách thiết bị snapshot vào phiên = Device `InUse` có `deviceType.serverCheckCategory != null` **và** `requiresDailyCheck = true` (cờ Admin tick trong form Thiết bị, 5.5/5.6). Quét QR là thao tác **vật lý** nên chỉ máy thật sự nằm trong phòng server mới vào danh sách — máy cùng loại nhưng là server ảo hoặc switch rải khắp nhà máy để cờ `false`, chúng chỉ nằm trong phạm vi ping (7d.8). **Không** lọc theo chi nhánh ở bước này (`serverCheckBranchId` chỉ áp dụng cho `network-ping`). Chưa tick cờ cho máy nào → phiên tạo ra rỗng (`totalCount:0`), FE nên báo Admin đi cấu hình thay vì hiện danh sách trắng.
+
+```jsonc
+// ServerCheckSessionDto
+{
+  "id": 12, "checkDate": "2026-09-16T00:00:00", "startedAt": "2026-09-16T08:05:00", "startedBy": "n.van.a",
+  "endedAt": null, "endedBy": null, "status": 0, "statusText": "Đang quét",
+  "totalCount": 9, "scannedCount": 3,
+  "items": [
+    { "id": 101, "deviceId": 55, "deviceCode": "SRV-01", "deviceName": "Server File", "category": 0, "categoryText": "Server",
+      "scannedAt": "2026-09-16T08:06:12", "scannedBy": "n.van.a", "status": 1, "statusText": "OK", "note": null },
+    { "id": 102, "deviceId": 60, "deviceCode": "AC-01", "deviceName": "Điều hòa phòng server", "category": 3, "categoryText": "Máy lạnh",
+      "scannedAt": null, "scannedBy": null, "status": 0, "statusText": "Chưa quét", "note": null }
+  ],
+  "manualResults": [
+    { "manualItemId": 1, "manualItemName": "Tình trạng âm thanh, mùi, nhiệt độ", "status": 0, "statusText": "Chưa quét", "note": null, "confirmedBy": null, "confirmedAt": null }
+  ]
+}
+```
+`items`/`manualResults` **luôn có mặt đầy đủ ngay từ lúc `start`** (snapshot toàn bộ thiết bị + 4 mục thủ công), không phải chỉ những gì đã quét — FE render list đủ, cập nhật từng dòng khi quét.
+
+**7d.3 `POST /{id}/scan`** (`{ "deviceCode": "SRV-01" }`, permission `Asset.ServerCheck.Scan`) → `ServerCheckItemDto` (dòng vừa cập nhật). Đây là API **duy nhất** cần gọi lặp lại khi quét — trang "Quét kiểm tra" nên có 1 ô input luôn giữ focus, TC21/22 quét QR gõ ra `deviceCode` (dòng 1 QR) + Enter → submit ngay, xoá ô, focus lại. Quét lại 1 máy đã `OK` vẫn **200 OK** (idempotent, chỉ cập nhật giờ). Mã không thuộc phạm vi hôm nay (sai mã, hoặc DeviceType không bật `serverCheckCategory`) → 400, FE nên phát âm báo lỗi/rung máy vì user đang thao tác nhanh không nhìn màn hình liên tục.
+
+**7d.4 `POST /{id}/end`** (permission `Asset.ServerCheck.Scan`) — bấm "Kết thúc phiên quét". Trước khi gọi, FE lấy `items` còn `status=0` (Pending, tức đối chiếu với `GET /{id}` mới nhất) hiện form cho user ghi chú lý do NG, và bắt buộc hiện đủ 4 mục từ `GET /manual-items` để user chọn OK/NG:
+```jsonc
+{
+  "items": [ { "serverCheckItemId": 102, "note": "Không thấy đèn nguồn, nghi hỏng dây" } ],  // chỉ cần gửi item còn Pending; item đã OK bỏ qua không cần gửi
+  "manualResults": [
+    { "manualItemId": 1, "status": 1, "note": null },
+    { "manualItemId": 2, "status": 1, "note": null },
+    { "manualItemId": 3, "status": 1, "note": null },
+    { "manualItemId": 4, "status": 2, "note": "Không gửi được mail ra ngoài lúc 8h20" }
+  ]
+}
+```
+Thiếu 1 trong 4 `manualItemId` đang active → 400 "Vui lòng xác nhận đủ toàn bộ mục kiểm tra thủ công." → response thành công trả `ServerCheckSessionDto` đã `status=1` (`Completed`), mọi item còn Pending đã chuyển `Ng`. **Sau khi gọi thành công, khóa hẳn** — gọi lại `/scan` hay `/end` trên session này đều 400.
+
+**7d.5 `GET /manual-items`** → `List<{id, name, displayOrder, usesNetworkPing}>` — hiện **7 dòng** (2026-09-17 thêm 3 mục `Backup - File Srv`/`Backup - OES`/`Backup - Domain` cho khớp cột Backup trên tờ giấy), gọi lúc build form "Kết thúc phiên" (không đổi giữa các ngày, FE có thể cache trong phiên làm việc). `usesNetworkPing=true` chỉ ở đúng 2 dòng "Network - Factory"/"Network - Server" (§1.20) — FE dùng cờ này để hiện nút "Kiểm tra network" thay vì so khớp `name`. **FE phải render động theo danh sách trả về**, không hardcode số mục — mục mới có thể được seed thêm bằng migration mà không đổi API.
+
+**7d.6 `GET /grid-list?pageIndex=&pageSize=&fromDate=&toDate=`** (permission `Asset.ServerCheck.View`) → phân trang chuẩn (§1.2) danh sách `ServerCheckSessionDto` **nhưng `items`/`manualResults` rỗng** (grid chỉ cần `checkDate/status/startedBy/endedBy/totalCount/scannedCount`) — bấm vào 1 dòng thì gọi tiếp `GET /{id}` lấy đủ chi tiết.
+
+**7d.7 `GET /report?fromDate=&toDate=`** (permission `Asset.ServerCheck.View`) → `List<ServerCheckReportRowDto>`, dùng cho màn "In báo cáo" khớp layout Sheet1 gốc:
+```jsonc
+{
+  "checkDate": "2026-09-16T00:00:00", "sessionId": 12, "sessionStatus": 1, "sessionStatusText": "Đã hoàn thành",
+  "serverStatus": true, "serverNote": null,
+  "networkStatus": null, "networkNote": null,           // null = chưa khai báo Device nào loại Network, KHÔNG phải lỗi
+  "upsStatus": null, "upsNote": null,
+  "airConditionerStatus": false, "airConditionerNote": "AC-01: Không thấy đèn nguồn, nghi hỏng dây",
+  "manualResults": [ /* 4 dòng, cấu trúc như ServerCheckManualResultDto ở 7d.2 */ ],
+  "checkedBy": "n.van.a"
+}
+```
+`*Status: boolean | null` — `null` = không áp dụng (chưa có thiết bị loại đó, **hoặc** phiên ngày đó còn `InProgress`/chưa kết thúc nên chưa có kết luận cuối); `true` = **toàn bộ** thiết bị loại đó trong ngày được quét; `false` = còn ít nhất 1 máy NG, `*Note` liệt kê `"{mã máy}: {ghi chú}"` các máy NG cách nhau `"; "`. FE tự map 4 cột `bool?` + `manualResults` vào đúng vị trí cột trên layout in Sheet1 (đèn báo Server/Network/UPS, Máy lạnh, rồi tới 4 mục thủ công theo `displayOrder`).
+
+**7d.8 `GET /network-ping`** (không query, permission `Asset.ServerCheck.Scan`, 2026-09-17) → `NetworkPingResultDto`, gọi khi user bấm nút "Kiểm tra network" trong dialog "Kết thúc phiên" (thay xác nhận tay 2 mục "Network - Factory"/"Network - Server", §1.20). Backend tự ping IP của Device Server/Network/UPS đang `InUse` (bỏ Máy lạnh), lọc theo chi nhánh cấu hình ở `AssetSetting.serverCheckBranchId` (`null`=mọi chi nhánh, cùng field dùng cho `POST /start`, 7d.2) — FE không truyền tham số nào, chỉ hiện kết quả. Không ghi DB, có thể gọi lại nhiều lần ("Kiểm tra lại" sau khi xử lý tại chỗ):
+```jsonc
+{
+  "totalCount": 55, "reachableCount": 29, "allReachable": false,
+  "items": [
+    { "ipAddress": "10.45.1.4", "deviceId": 3, "deviceCode": "SERVER-003", "deviceName": "vndahubcas001",
+      "category": 0, "categoryText": "Server", "reachable": false, "roundtripMs": null },
+    { "ipAddress": "10.45.1.16", "deviceId": 10, "deviceCode": "SERVER-010", "deviceName": "vndamb002",
+      "category": 0, "categoryText": "Server", "reachable": true, "roundtripMs": 2 }
+  ]
+}
+```
+FE: `allReachable=true` → tự gán `status=1`(OK) cho **cả 2** mục `usesNetworkPing`; `false` → tự gán `status=2`(NG) + ghi chú liệt kê `"{deviceCode} ({ipAddress})"` các IP `reachable=false`, người dùng vẫn sửa tay được (OK/NG/note) trước khi bấm "Xác nhận kết thúc". Xem `AssetSetting` (§8) để đổi phạm vi chi nhánh.
+
+**7d.9 `GET /report/export?fromDate=&toDate=`** (permission `Asset.ServerCheck.View`, 2026-09-18) — nút "Xuất Excel" trên màn báo cáo (7d.7). **Không phải `ApiResponse<T>`** (giống `missing-devices-report` ở §6.3) — trả thẳng file `.xlsx`, FE đọc bằng `getForBlob()` rồi tự tạo link tải (`URL.createObjectURL`). BE điền dữ liệu từ đúng logic `GetReportAsync` (7d.7) vào **file mẫu giấy gốc** `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (`Asset.Infrastructure/Templates/CheckSheetKiemTraHangNgayIT.xlsx`), không tự dựng bảng mới:
+- Cột cố định theo đúng layout in sẵn: B/C/D = Đèn cảnh báo Server/Network/UPS (category aggregate), E = Máy lạnh, F..L = 7 mục thủ công theo **DisplayOrder** (không theo tên hay Id cụ thể — Id do DB sinh, có thể khác nhau giữa môi trường), M = Người kiểm, N = Ghi chú (tự gộp mọi lý do NG trong ngày, có prefix tên hạng mục).
+- Số dòng dữ liệu (mẫu gốc có sẵn 26 dòng trống) được **co giãn động** theo đúng số ngày có phiên trong khoảng lọc — ít hơn 26 thì xoá bớt dòng thừa (phần chú thích/chữ ký ở cuối tự trồi lên), nhiều hơn thì tự chèn thêm dòng (copy style dòng cuối).
+- Nếu `fromDate`/`toDate` nằm gọn trong **cùng 1 tháng**: cột ngày chỉ ghi số ngày (1, 2, 3...) và điền sẵn ô "Tháng"/"Năm" ở góc trên khớp bản gốc; trải dài nhiều tháng thì cột ngày ghi đủ `dd/MM/yyyy`, bỏ trống "Tháng"/"Năm" (không có chỗ cho khoảng nhiều tháng trên form 1 trang).
+- Giá trị mỗi ô category/mục thủ công chỉ là `"OK"`/`"NG"`/rỗng (rỗng = phiên `InProgress` hoặc chưa có thiết bị loại đó/mục đó chưa tồn tại lúc phiên đó kết thúc) — không dùng ký hiệu ✓/× để tránh đoán sai quy ước, có thể đổi sau nếu người dùng muốn.
+- Tên file gợi ý: `CheckSheet_KiemTraServer_{yyyyMMdd}.xlsx` (1 ngày) hoặc `..._{from}-{to}.xlsx` (khoảng ngày).
+
 ## 8. Tổng hợp endpoint
 | Route | Ghi chú |
 |---|---|
@@ -433,6 +519,8 @@ Content-Type: application/json
 | `/api/DeviceSoftware` | `device/{deviceId}`, POST, PUT, DELETE `device/{deviceId}/software/{softwareId}`, `picker/{deviceId}`, `sync` |
 | `/api/AuditTrail` | `grid-list` (filter+phân trang), `record?tableName=&recordId=`. Chỉ đọc, ghi tự động ở BE |
 | `/api/AiChat` | `stream`(POST, NDJSON, 7c) — trợ lý AI tra cứu, thay thế hoàn toàn cách gọi thẳng Ollama cũ ở FE |
+| `/api/ServerCheck` | `today`, `start`(POST), `{id}`, `{id}/scan`(POST), `{id}/end`(POST), `manual-items`, `grid-list`, `report`, `report/export`(trả file .xlsx), `network-ping` (7d) — kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR + ping mạng |
+| `/api/AssetSetting` | GET, PUT — cấu hình 1 dòng duy nhất: `liquidationAfterMonths` (tự xóa mềm thiết bị đã thanh lý) + `serverCheckBranchId?` (phạm vi chi nhánh **chỉ** cho `ServerCheck/network-ping` 7d.8; danh sách quét QR lấy theo cờ `device.requiresDailyCheck`) |
 
 `DELETE /api/Device/{id}` và `bulk-delete` (`POST /api/Device/bulk-delete`, `{ ids:[] }`, permission `Asset.Device.Delete`): xóa mềm, **chỉ** thiết bị `Liquidated(3)` "Đã thanh lý" (2026-08-22, đổi từ `PendingLiquidation(2)`); `DELETE {id}` trả lỗi 400 nếu sai trạng thái, `bulk-delete` bỏ qua và trả kết quả `{ deletedCount, skippedDevices:[{id,deviceCode,reason}] }`.
 

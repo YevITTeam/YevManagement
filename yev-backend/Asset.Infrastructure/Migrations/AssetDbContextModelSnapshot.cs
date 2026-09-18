@@ -36,8 +36,13 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<int>("LiquidationAfterMonths")
                         .HasColumnType("int");
 
+                    b.Property<int?>("ServerCheckBranchId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id")
                         .HasName("PK_AssetSettings");
+
+                    b.HasIndex("ServerCheckBranchId");
 
                     b.ToTable("AssetSettings");
                 });
@@ -130,6 +135,11 @@ namespace Asset.Infrastructure.Migrations
 
                     b.Property<DateTime>("PurchaseDate")
                         .HasColumnType("datetime2");
+
+                    b.Property<bool>("RequiresDailyCheck")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("SerialNumber")
                         .HasMaxLength(100)
@@ -628,6 +638,9 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("ServerCheckCategory")
+                        .HasColumnType("int");
+
                     b.Property<string>("TypeCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -740,6 +753,160 @@ namespace Asset.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("IpPrefixes");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.ServerCheckItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Category")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ScannedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ScannedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("SessionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ServerCheckItems");
+
+                    b.HasIndex(new[] { "DeviceId" }, "IX_ServerCheckItems_DeviceId");
+
+                    b.HasIndex(new[] { "SessionId" }, "IX_ServerCheckItems_SessionId");
+
+                    b.ToTable("ServerCheckItems");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.ServerCheckManualItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<bool>("UsesNetworkPing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.HasKey("Id")
+                        .HasName("PK_ServerCheckManualItems");
+
+                    b.ToTable("ServerCheckManualItems");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.ServerCheckManualResult", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ConfirmedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ConfirmedBy")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("ManualItemId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("SessionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ServerCheckManualResults");
+
+                    b.HasIndex("ManualItemId");
+
+                    b.HasIndex(new[] { "SessionId" }, "IX_ServerCheckManualResults_SessionId");
+
+                    b.HasIndex(new[] { "SessionId", "ManualItemId" }, "IX_ServerCheckManualResults_SessionId_ManualItemId")
+                        .IsUnique();
+
+                    b.ToTable("ServerCheckManualResults");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.ServerCheckSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CheckDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EndedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("StartedBy")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ServerCheckSessions");
+
+                    b.HasIndex(new[] { "CheckDate" }, "IX_ServerCheckSessions_CheckDate")
+                        .IsUnique();
+
+                    b.ToTable("ServerCheckSessions");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.Software", b =>
@@ -935,6 +1102,17 @@ namespace Asset.Infrastructure.Migrations
                     b.ToTable("AuditTrails");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.AssetSetting", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Branch", "ServerCheckBranch")
+                        .WithMany()
+                        .HasForeignKey("ServerCheckBranchId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_AssetSettings_Branches_ServerCheckBranchId");
+
+                    b.Navigation("ServerCheckBranch");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.Device", b =>
                 {
                     b.HasOne("Asset.Domain.Entities.Branch", "Branch")
@@ -1096,6 +1274,48 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("Branch");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.ServerCheckItem", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ServerCheckItems_ThietBis_DeviceId");
+
+                    b.HasOne("Asset.Domain.Entities.ServerCheckSession", "Session")
+                        .WithMany("Items")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ServerCheckItems_ServerCheckSessions_SessionId");
+
+                    b.Navigation("Device");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.ServerCheckManualResult", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.ServerCheckManualItem", "ManualItem")
+                        .WithMany("Results")
+                        .HasForeignKey("ManualItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ServerCheckManualResults_ServerCheckManualItems_ManualItemId");
+
+                    b.HasOne("Asset.Domain.Entities.ServerCheckSession", "Session")
+                        .WithMany("ManualResults")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_ServerCheckManualResults_ServerCheckSessions_SessionId");
+
+                    b.Navigation("ManualItem");
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.Software", b =>
                 {
                     b.HasOne("Asset.Domain.Entities.SoftwareGroup", "SoftwareGroup")
@@ -1169,6 +1389,18 @@ namespace Asset.Infrastructure.Migrations
             modelBuilder.Entity("Asset.Domain.Entities.IpPrefix", b =>
                 {
                     b.Navigation("IpAddresses");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.ServerCheckManualItem", b =>
+                {
+                    b.Navigation("Results");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.ServerCheckSession", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("ManualResults");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.Software", b =>

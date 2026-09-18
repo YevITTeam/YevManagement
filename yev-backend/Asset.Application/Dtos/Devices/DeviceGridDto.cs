@@ -21,5 +21,6 @@
         public bool IsOutsourced { get; set; }
         public string? SerialNumber { get; set; }
         public bool IsUseUsb { get; set; }
+        public bool RequiresDailyCheck { get; set; }
     }
 }

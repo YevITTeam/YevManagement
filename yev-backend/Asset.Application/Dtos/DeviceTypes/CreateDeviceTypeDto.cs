@@ -12,5 +12,8 @@ namespace Asset.Application.Dtos.DeviceTypes
 
         [Required(ErrorMessage = "Tên loại thiết bị không được để trống")]
         public string TypeName { get; set; } = null!;
+
+        // Null = không thuộc phạm vi kiểm tra hằng ngày (quét QR). Giá trị = Asset.Domain.Enums.ServerCheckCategory.
+        public int? ServerCheckCategory { get; set; }
     }
 }

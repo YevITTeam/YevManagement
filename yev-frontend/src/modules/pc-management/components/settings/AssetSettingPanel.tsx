@@ -5,6 +5,8 @@ import { toast } from "react-toastify";
 import { Save } from "lucide-react";
 
 import { AssetSettingApi } from "@/modules/pc-management/api/asset-setting.api";
+import { BranchApi } from "@/modules/pc-management/api/branch.api";
+import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
@@ -14,15 +16,23 @@ const fieldClassName =
 
 // GET/PUT /api/AssetSetting — cấu hình chung module Asset: số tháng giữa 2 lần chạy job tự động
 // xóa mềm thiết bị "Đã thanh lý" (DeviceLiquidationBackgroundService, kiểm tra hàng ngày lúc 00:30
-// nhưng chỉ thật sự chạy khi đủ số tháng cấu hình kể từ lần chạy trước, 2026-08-22).
+// nhưng chỉ thật sự chạy khi đủ số tháng cấu hình kể từ lần chạy trước, 2026-08-22), và chi nhánh giới
+// hạn phạm vi ping của nút "Kiểm tra network" (asset-module.md §1.20). Danh sách thiết bị phải quét QR
+// KHÔNG lấy theo chi nhánh mà theo cờ Device.RequiresDailyCheck (§1.19).
 export default function AssetSettingPanel() {
     const [isSaving, setIsSaving] = useState(false);
     const [liquidationAfterMonths, setLiquidationAfterMonths] = useState<number>(1);
+    const [serverCheckBranchId, setServerCheckBranchId] = useState<number | null>(null);
+    const [branches, setBranches] = useState<BranchDto[]>([]);
 
     const { isLoading } = useFetchEffect(
-        () => AssetSettingApi.getAssetSetting(),
+        () => Promise.all([AssetSettingApi.getAssetSetting(), BranchApi.getAllBranches()]),
         [],
-        (data) => setLiquidationAfterMonths(data.liquidationAfterMonths),
+        ([setting, branchList]) => {
+            setLiquidationAfterMonths(setting.liquidationAfterMonths);
+            setServerCheckBranchId(setting.serverCheckBranchId);
+            setBranches(branchList);
+        },
         "Không thể tải cấu hình.",
         (message) => toast.error(message),
         "asset-setting"
@@ -36,8 +46,9 @@ export default function AssetSettingPanel() {
         }
         setIsSaving(true);
         try {
-            const data = await AssetSettingApi.updateAssetSetting({ liquidationAfterMonths });
+            const data = await AssetSettingApi.updateAssetSetting({ liquidationAfterMonths, serverCheckBranchId });
             setLiquidationAfterMonths(data.liquidationAfterMonths);
+            setServerCheckBranchId(data.serverCheckBranchId);
             toast.success("Cập nhật cấu hình thành công");
         } catch (err) {
             console.error(err);
@@ -66,8 +77,8 @@ export default function AssetSettingPanel() {
                 {isLoading ? (
                     <div className="mt-6 h-10 w-40 animate-pulse rounded-lg bg-[#eceef0]" />
                 ) : (
-                    <form onSubmit={handleSubmit} className="mt-6 flex flex-wrap items-end gap-4">
-                        <label className="block">
+                    <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+                        <label className="block w-fit">
                             <span className={fieldLabelClassName}>Số tháng giữa 2 lần tự động xóa</span>
                             <input
                                 type="number"
@@ -80,6 +91,28 @@ export default function AssetSettingPanel() {
                                 className={fieldClassName}
                             />
                         </label>
+
+                        <div>
+                            <label className="block w-fit">
+                                <span className={fieldLabelClassName}>Chi nhánh áp dụng &quot;Kiểm tra network&quot;</span>
+                                <select
+                                    value={serverCheckBranchId ?? ""}
+                                    onChange={(event) => setServerCheckBranchId(event.target.value ? Number(event.target.value) : null)}
+                                    disabled={isSaving}
+                                    className={`${fieldClassName} w-64`}
+                                >
+                                    <option value="">Tất cả chi nhánh</option>
+                                    {branches.map((branch) => (
+                                        <option key={branch.id} value={branch.id}>{branch.branchName}</option>
+                                    ))}
+                                </select>
+                            </label>
+                            <p className="mt-1.5 max-w-md text-xs text-[#8a8f94]">
+                                Nút &quot;Kiểm tra network&quot; chỉ ping IP của thiết bị Server/Network/UPS thuộc chi nhánh
+                                này (gồm cả server ảo). Để trống nếu muốn ping mọi chi nhánh. Riêng danh sách thiết bị phải
+                                quét QR mỗi ngày được quyết định bởi ô &quot;Cần kiểm tra hằng ngày (QR)&quot; trên từng thiết bị.
+                            </p>
+                        </div>
 
                         <button
                             type="submit"

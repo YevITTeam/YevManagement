@@ -21,7 +21,13 @@ const IDENTITY_ADMIN_PERMISSIONS = [
 export default function Header() {
   const t = useTranslations("Header");
   const pathname = usePathname() || "";
-  const hasSidebar = pathname.startsWith("/pc") || pathname.startsWith("/ot") || pathname.startsWith("/workflow");
+  // /pc/server-check/scan cố tình KHÔNG có Sidebar (layout "kiosk" riêng, mobile-friendly cho trang
+  // quét QR — xem (pc-scan)/layout.tsx) nên phải loại trừ khỏi đây, không thì Header vẫn chừa
+  // khoảng trống 13.75rem bên trái tưởng có Sidebar trong khi thực tế không có.
+  const hasSidebar =
+    (pathname.startsWith("/pc") && !pathname.startsWith("/pc/server-check/scan")) ||
+    pathname.startsWith("/ot") ||
+    pathname.startsWith("/workflow");
   const { user, isLoading, refreshUser, logout } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const router = useRouter();

@@ -35,6 +35,7 @@ export interface DeviceFormValues {
     note: string;
     serialNumber: string | null;
     isUseUsb: boolean;
+    requiresDailyCheck: boolean;
     ipAddressIds: number[];
 }
 
@@ -71,6 +72,7 @@ const emptyValues: DeviceFormValues = {
     note: "",
     serialNumber: "",
     isUseUsb: false,
+    requiresDailyCheck: false,
     ipAddressIds: [],
 };
 
@@ -166,6 +168,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                       note: current.note ?? "",
                       serialNumber: current.serialNumber ?? "",
                       isUseUsb: current.isUseUsb,
+                      requiresDailyCheck: current.requiresDailyCheck,
                       ipAddressIds: current.ipAddresses.map((ip) => ip.id),
                   }
                 : emptyValues
@@ -448,6 +451,17 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                 className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                             />
                             <span className="text-sm text-[#191c1e]">Sử dụng USB</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 pt-6" title="Thiết bị nằm trong phòng server, có dán mã QR và phải quét mỗi ngày">
+                            <input
+                                type="checkbox"
+                                checked={values.requiresDailyCheck}
+                                onChange={(event) => handleChange("requiresDailyCheck", event.target.checked)}
+                                disabled={loading}
+                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                            />
+                            <span className="text-sm text-[#191c1e]">Cần kiểm tra hằng ngày (QR)</span>
                         </label>
                     </div>
 

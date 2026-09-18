@@ -9,5 +9,7 @@ namespace Asset.Application.Dtos.DeviceTypes
         public int Id { get; set; }
         public string TypeCode { get; set; } = null!;
         public string TypeName { get; set; } = null!;
+        public int? ServerCheckCategory { get; set; }
+        public string? ServerCheckCategoryText { get; set; }
     }
 }

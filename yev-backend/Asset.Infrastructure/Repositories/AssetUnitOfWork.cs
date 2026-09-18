@@ -26,7 +26,11 @@ namespace Asset.Infrastructure.Repositories
             IIpAddressRepository ipAddresses,
             IIpPrefixRepository ipPrefixes,
             ITransferHistoryRepository transferHistories,
-            IAuditTrailRepository auditTrails) : base(dbContext)
+            IAuditTrailRepository auditTrails,
+            IServerCheckSessionRepository serverCheckSessions,
+            IServerCheckItemRepository serverCheckItems,
+            IServerCheckManualItemRepository serverCheckManualItems,
+            IServerCheckManualResultRepository serverCheckManualResults) : base(dbContext)
         {
             Devices = devices;
             Branches = branches;
@@ -46,6 +50,10 @@ namespace Asset.Infrastructure.Repositories
             IpPrefixes = ipPrefixes;
             TransferHistories = transferHistories;
             AuditTrails = auditTrails;
+            ServerCheckSessions = serverCheckSessions;
+            ServerCheckItems = serverCheckItems;
+            ServerCheckManualItems = serverCheckManualItems;
+            ServerCheckManualResults = serverCheckManualResults;
         }
 
         public IDeviceRepository Devices { get; }
@@ -66,5 +74,9 @@ namespace Asset.Infrastructure.Repositories
         public IIpPrefixRepository IpPrefixes { get; }
         public ITransferHistoryRepository TransferHistories { get; }
         public IAuditTrailRepository AuditTrails { get; }
+        public IServerCheckSessionRepository ServerCheckSessions { get; }
+        public IServerCheckItemRepository ServerCheckItems { get; }
+        public IServerCheckManualItemRepository ServerCheckManualItems { get; }
+        public IServerCheckManualResultRepository ServerCheckManualResults { get; }
     }
 }

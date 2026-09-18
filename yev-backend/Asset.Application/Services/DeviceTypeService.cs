@@ -1,6 +1,7 @@
-﻿using Asset.Application.Dtos.DeviceTypes;
+using Asset.Application.Dtos.DeviceTypes;
 using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
+using Asset.Domain.Enums;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
@@ -24,7 +25,20 @@ namespace Asset.Application.Services
                 query.OrderBy(x => x.Id),
                 pageIndex,
                 pageSize,
-                x => new DeviceTypeDto { Id = x.Id, TypeCode = x.TypeCode, TypeName = x.TypeName }
+                x => new DeviceTypeDto
+                {
+                    Id = x.Id,
+                    TypeCode = x.TypeCode,
+                    TypeName = x.TypeName,
+                    ServerCheckCategory = x.ServerCheckCategory,
+                    // Duplicated ternary (not the extension method) because this is an Expression<Func<>>
+                    // translated by EF into SQL — same reason DeviceService.StatusText inlines it (§1.4 asset-module.md).
+                    ServerCheckCategoryText = x.ServerCheckCategory == (int)ServerCheckCategory.Server ? "Server"
+                        : x.ServerCheckCategory == (int)ServerCheckCategory.Network ? "Network"
+                        : x.ServerCheckCategory == (int)ServerCheckCategory.Ups ? "UPS"
+                        : x.ServerCheckCategory == (int)ServerCheckCategory.AirConditioner ? "Máy lạnh"
+                        : null
+                }
             );
         }
 
@@ -32,7 +46,18 @@ namespace Asset.Application.Services
         {
             var types = await _unitOfWork.DeviceTypes.SelectAsync(
                 predicate: x => !x.IsDeleted,
-                selector: x => new DeviceTypeDto { Id = x.Id, TypeCode = x.TypeCode, TypeName = x.TypeName }
+                selector: x => new DeviceTypeDto
+                {
+                    Id = x.Id,
+                    TypeCode = x.TypeCode,
+                    TypeName = x.TypeName,
+                    ServerCheckCategory = x.ServerCheckCategory,
+                    ServerCheckCategoryText = x.ServerCheckCategory == (int)ServerCheckCategory.Server ? "Server"
+                        : x.ServerCheckCategory == (int)ServerCheckCategory.Network ? "Network"
+                        : x.ServerCheckCategory == (int)ServerCheckCategory.Ups ? "UPS"
+                        : x.ServerCheckCategory == (int)ServerCheckCategory.AirConditioner ? "Máy lạnh"
+                        : null
+                }
             );
             return types.OrderBy(x => x.Id).ToList();
         }
@@ -41,7 +66,7 @@ namespace Asset.Application.Services
         {
             var deviceType = (await _unitOfWork.DeviceTypes.GetByIdAsync(id)).OrThrowNotFound("Loại thiết bị", id);
 
-            return new DeviceTypeDto { Id = deviceType.Id, TypeCode = deviceType.TypeCode, TypeName = deviceType.TypeName };
+            return MapToDto(deviceType);
         }
 
         public async Task<DeviceTypeDto> CreateAsync(CreateDeviceTypeDto request)
@@ -53,13 +78,14 @@ namespace Asset.Application.Services
             {
                 TypeCode = request.TypeCode,
                 TypeName = request.TypeName,
+                ServerCheckCategory = request.ServerCheckCategory,
                 IsDeleted = false
             };
 
             await _unitOfWork.DeviceTypes.AddAsync(newType);
             await _unitOfWork.SaveChangesAsync();
 
-            return new DeviceTypeDto { Id = newType.Id, TypeCode = newType.TypeCode, TypeName = newType.TypeName };
+            return MapToDto(newType);
         }
 
         public async Task UpdateAsync(UpdateDeviceTypeDto request)
@@ -72,6 +98,7 @@ namespace Asset.Application.Services
 
             deviceType.TypeCode = request.TypeCode;
             deviceType.TypeName = request.TypeName;
+            deviceType.ServerCheckCategory = request.ServerCheckCategory;
 
             _unitOfWork.DeviceTypes.Update(deviceType);
             await _unitOfWork.SaveChangesAsync();
@@ -86,5 +113,14 @@ namespace Asset.Application.Services
             _unitOfWork.DeviceTypes.Update(deviceType);
             await _unitOfWork.SaveChangesAsync();
         }
+
+        private static DeviceTypeDto MapToDto(DeviceType deviceType) => new()
+        {
+            Id = deviceType.Id,
+            TypeCode = deviceType.TypeCode,
+            TypeName = deviceType.TypeName,
+            ServerCheckCategory = deviceType.ServerCheckCategory,
+            ServerCheckCategoryText = deviceType.ServerCheckCategory?.GetServerCheckCategoryText()
+        };
     }
 }

@@ -16,6 +16,7 @@ import {
   Settings,
   PanelLeftClose,
   History,
+  QrCode,
 } from "lucide-react";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -39,6 +40,7 @@ const navItems = [
   // Asset.AuditTrail.View và Asset.AiChat.Use chỉ được seed sẵn cho Admin (docs/docs-be/asset-api-fe.md
   // §7b, §7c) — role khác phải được Admin gán tay.
   { key: "auditTrail", href: "/pc/audit-trail", icon: History, permissions: ["Asset.AuditTrail.View"] },
+  { key: "serverCheck", href: "/pc/server-check", icon: QrCode, permissions: ["Asset.ServerCheck.View", "Asset.ServerCheck.Scan"] },
   { key: "aiChat", href: "/pc/ai-chat", icon: Bot, permissions: ["Asset.AiChat.Use"] },
   { key: "settings", href: "/pc/settings", icon: Settings, permissions: ["Asset.Setting.View"] },
 ] as const;
@@ -52,7 +54,7 @@ export default function PcManagerSidebar() {
   return (
     // Trích xuất phần khai báo aside trong PcManagerSidebar.tsx
     <aside
-      className={`fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
+      className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
         }`}
     >
       <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>

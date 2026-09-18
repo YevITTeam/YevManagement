@@ -35,6 +35,12 @@ public partial class Device
 
     public bool IsUseUsb { get; set; }
 
+    // Added 2026-09-17: the device physically sits in the server room and carries a printed QR label,
+    // so it must be scanned during the daily ServerCheck session (asset-module.md §1.19). Devices that
+    // share a ServerCheckCategory but have no physical presence there (virtual servers, switches spread
+    // across the factory) stay false — they are never scanned, only pinged (§1.20).
+    public bool RequiresDailyCheck { get; set; }
+
     public int? SuggestedNewDeviceId { get; set; }
 
     public int? GroupId { get; set; }

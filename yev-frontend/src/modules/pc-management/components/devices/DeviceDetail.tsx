@@ -183,6 +183,10 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                         <div className="mt-1 text-sm text-[#191c1e]">{device.isUseUsb ? "Có" : "Không"}</div>
                     </div>
                     <div>
+                        <div className={infoLabelClassName}>Kiểm tra hằng ngày (QR)</div>
+                        <div className="mt-1 text-sm text-[#191c1e]">{device.requiresDailyCheck ? "Có" : "Không"}</div>
+                    </div>
+                    <div>
                         <div className={infoLabelClassName}>Ngày mua</div>
                         <div className="mt-1 text-sm text-[#191c1e]">{formatDate(device.purchaseDate)}</div>
                     </div>
