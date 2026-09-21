@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { CheckCircle2, Circle, Loader2, QrCode, XCircle } from "lucide-react";
+import { Building2, CheckCircle2, Circle, Loader2, QrCode, ShieldAlert, XCircle } from "lucide-react";
 
 import { ServerCheckApi } from "@/modules/pc-management/api/server-check.api";
-import type { ServerCheckSessionDto } from "@/modules/pc-management/types/server-check.dto";
+import { ServerCheckAssignmentApi } from "@/modules/pc-management/api/server-check-assignment.api";
+import type { ServerCheckAssignmentDto, ServerCheckSessionDto } from "@/modules/pc-management/types/server-check.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { getApiErrorMessage } from "@/lib/apiError";
 import ServerCheckEndSessionDialog from "./ServerCheckEndSessionDialog";
@@ -16,6 +17,7 @@ const CATEGORY_ORDER = [0, 1, 2, 3] as const;
 export default function ServerCheckScanPage() {
     const t = useTranslations("Asset.ServerCheck");
 
+    const [assignment, setAssignment] = useState<ServerCheckAssignmentDto | null>(null);
     const [session, setSession] = useState<ServerCheckSessionDto | null>(null);
     const [starting, setStarting] = useState(false);
     const [scanValue, setScanValue] = useState("");
@@ -25,10 +27,20 @@ export default function ServerCheckScanPage() {
 
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Xưởng KHÔNG cho người quét tự chọn (dễ chọn nhầm) — lấy từ phân công của Admin
+    // (asset-module.md §1.21); chưa được phân công thì chặn hẳn, không gọi tiếp getToday/start.
     const { isLoading, error } = useFetchEffect(
-        () => ServerCheckApi.getToday(),
+        async () => {
+            const mine = await ServerCheckAssignmentApi.getMine();
+            if (!mine) return { assignment: null, session: null };
+            const today = await ServerCheckApi.getToday();
+            return { assignment: mine, session: today };
+        },
         [],
-        (result) => setSession(result),
+        (result) => {
+            setAssignment(result.assignment);
+            setSession(result.session);
+        },
         t("loadTodayError"),
         (message) => toast.error(message)
     );
@@ -92,11 +104,28 @@ export default function ServerCheckScanPage() {
         return <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>;
     }
 
+    if (!assignment) {
+        return (
+            <div className="mx-auto max-w-md space-y-4 py-12 text-center">
+                <ShieldAlert className="mx-auto h-12 w-12 text-[#930006]" />
+                <h1 className="text-xl font-semibold text-[#191c1e]">{t("noAssignmentTitle")}</h1>
+                <p className="text-sm text-[#5e3f3a]">{t("noAssignmentHint")}</p>
+            </div>
+        );
+    }
+
+    const branchBadge = (
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-[#fff4f2] px-3 py-1 text-xs font-semibold text-[#e3000f]">
+            <Building2 className="h-3.5 w-3.5" /> {t("assignedBranchLabel")}: {assignment.branchName}
+        </div>
+    );
+
     // Chưa bắt đầu phiên hôm nay.
     if (!session) {
         return (
             <div className="mx-auto max-w-md space-y-6 py-12 text-center">
                 <QrCode className="mx-auto h-12 w-12 text-[#e3000f]" />
+                {branchBadge}
                 <div>
                     <h1 className="text-xl font-semibold text-[#191c1e]">{t("scanTitle")}</h1>
                     <p className="mt-2 text-sm text-[#5e3f3a]">{t("notStartedHint")}</p>
@@ -117,6 +146,7 @@ export default function ServerCheckScanPage() {
         return (
             <div className="mx-auto max-w-md space-y-4 py-12 text-center">
                 <CheckCircle2 className="mx-auto h-12 w-12 text-[#1a7f37]" />
+                {branchBadge}
                 <h1 className="text-xl font-semibold text-[#191c1e]">{t("completedTitle")}</h1>
                 <p className="text-sm text-[#5e3f3a]">
                     {t("completedHint", { scanned: session.scannedCount, total: session.totalCount, by: session.endedBy ?? "" })}
@@ -129,7 +159,8 @@ export default function ServerCheckScanPage() {
 
     return (
         <div className="mx-auto max-w-2xl space-y-6 pb-24">
-            <div>
+            <div className="space-y-2">
+                {branchBadge}
                 <h1 className="text-xl font-semibold text-[#191c1e]">{t("scanTitle")}</h1>
                 <p className="mt-1 text-sm text-[#5e3f3a]">{t("scanHint")}</p>
             </div>

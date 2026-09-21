@@ -5,6 +5,7 @@ interface ServerCheckReportPrintViewProps {
     manualColumns: ServerCheckManualItemDto[];
     fromDate: string;
     toDate: string;
+    branchName: string | null;
 }
 
 const formatDate = (value: string) => new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -34,7 +35,7 @@ const td = "border border-black px-1 py-0.5 text-center align-top";
 // tiết"...) vì đó là bảng để THAO TÁC, còn đây là bản để IN, cần đúng cấu trúc 2 nhóm cột merge
 // (Phòng Server / Các kiểm tra khác) như tờ giấy. `hidden print:block` — chỉ hiện khi in, màn hình
 // vẫn dùng bảng tương tác cũ (đã có `print:hidden` ở section bọc ngoài).
-export default function ServerCheckReportPrintView({ rows, manualColumns, fromDate, toDate }: ServerCheckReportPrintViewProps) {
+export default function ServerCheckReportPrintView({ rows, manualColumns, fromDate, toDate, branchName }: ServerCheckReportPrintViewProps) {
     // manualColumns[0] = "Tình trạng âm thanh, mùi, nhiệt độ" thuộc nhóm "Phòng Server" trên tờ giấy;
     // các mục còn lại (Network Factory/Server, Gởi nhận Mail, Backup x3) thuộc nhóm "Các kiểm tra
     // khác" — vị trí cố định theo DisplayOrder đã seed (asset-module.md §1.19), không đoán theo tên.
@@ -55,10 +56,8 @@ export default function ServerCheckReportPrintView({ rows, manualColumns, fromDa
                     <p className="text-sm">ITの日常的なチェックシート</p>
                 </div>
                 <div className="w-40 shrink-0 text-xs">
-                    {/* Bỏ trống "Nhà xưởng" — quét QR không còn giới hạn theo 1 chi nhánh cố định từ khi
-                        đổi sang cờ Device.RequiresDailyCheck (asset-module.md §1.19), khác giả định ban
-                        đầu của tờ giấy gốc (1 tờ = 1 phòng server = 1 chi nhánh). */}
-                    <p>Nhà xưởng 工場: ……………</p>
+                    {/* 1 tờ = 1 xưởng (phiên quét theo xưởng, asset-module.md §1.21) nên điền tên xưởng đang lọc. */}
+                    <p>Nhà xưởng 工場: {branchName ?? "……………"}</p>
                     <p>Tháng 月: {singleMonth ? from.getMonth() + 1 : "-"}</p>
                     <p>Năm 年: {singleMonth ? from.getFullYear() : "-"}</p>
                 </div>

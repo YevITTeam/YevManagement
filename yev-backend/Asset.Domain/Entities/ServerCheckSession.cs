@@ -21,6 +21,12 @@ public partial class ServerCheckSession
 
     public int Status { get; set; }
 
+    // Added 2026-09-21 (asset-module.md §1.21): 1 session per day PER Branch. Nullable only because
+    // sessions created before this column existed have no branch.
+    public int? BranchId { get; set; }
+
+    public virtual Branch? Branch { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual ICollection<ServerCheckItem> Items { get; set; } = new List<ServerCheckItem>();

@@ -7,6 +7,8 @@ namespace Asset.Application.Dtos.ServerChecks
     {
         public int Id { get; set; }
         public DateTime CheckDate { get; set; }
+        public int? BranchId { get; set; }
+        public string? BranchName { get; set; }
         public DateTime StartedAt { get; set; }
         public string StartedBy { get; set; } = null!;
         public DateTime? EndedAt { get; set; }

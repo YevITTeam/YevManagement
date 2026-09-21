@@ -37,6 +37,7 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<ServerCheckItem> ServerCheckItems { get; set; }
     public virtual DbSet<ServerCheckManualItem> ServerCheckManualItems { get; set; }
     public virtual DbSet<ServerCheckManualResult> ServerCheckManualResults { get; set; }
+    public virtual DbSet<ServerCheckAssignment> ServerCheckAssignments { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -289,9 +290,27 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<ServerCheckSession>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_ServerCheckSessions");
-            entity.HasIndex(e => e.CheckDate, "IX_ServerCheckSessions_CheckDate").IsUnique();
+            entity.HasIndex(e => new { e.CheckDate, e.BranchId }, "IX_ServerCheckSessions_CheckDate_BranchId").IsUnique();
             entity.Property(e => e.StartedBy).HasMaxLength(150);
             entity.Property(e => e.EndedBy).HasMaxLength(150);
+
+            entity.HasOne(d => d.Branch).WithMany()
+                .HasForeignKey(d => d.BranchId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ServerCheckSessions_Branches_BranchId");
+        });
+
+        modelBuilder.Entity<ServerCheckAssignment>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ServerCheckAssignments");
+            entity.HasIndex(e => e.UserId, "IX_ServerCheckAssignments_UserId").IsUnique();
+            entity.Property(e => e.UserName).HasMaxLength(150);
+            entity.Property(e => e.FullName).HasMaxLength(150);
+
+            entity.HasOne(d => d.Branch).WithMany()
+                .HasForeignKey(d => d.BranchId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ServerCheckAssignments_Branches_BranchId");
         });
 
         modelBuilder.Entity<ServerCheckItem>(entity =>

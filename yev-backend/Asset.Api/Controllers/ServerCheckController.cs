@@ -17,9 +17,9 @@ namespace Asset.Api.Controllers
 
         [RequirePermission("Asset.ServerCheck.View")]
         [HttpGet("today")]
-        public async Task<ActionResult<ApiResponse<ServerCheckSessionDto?>>> GetToday()
+        public async Task<ActionResult<ApiResponse<ServerCheckSessionDto?>>> GetToday([FromQuery] int? branchId = null)
         {
-            var result = await _serverCheckService.GetTodaySessionAsync();
+            var result = await _serverCheckService.GetTodaySessionAsync(branchId);
             return Success(result);
         }
 
@@ -67,18 +67,18 @@ namespace Asset.Api.Controllers
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<ServerCheckSessionDto>>>> GetPaged(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 30,
-            [FromQuery] DateTime? fromDate = null, [FromQuery] DateTime? toDate = null)
+            [FromQuery] DateTime? fromDate = null, [FromQuery] DateTime? toDate = null, [FromQuery] int? branchId = null)
         {
-            var result = await _serverCheckService.GetSessionsPagedAsync(pageIndex, pageSize, fromDate, toDate);
+            var result = await _serverCheckService.GetSessionsPagedAsync(pageIndex, pageSize, fromDate, toDate, branchId);
             return Success(result);
         }
 
         [RequirePermission("Asset.ServerCheck.View")]
         [HttpGet("report")]
         public async Task<ActionResult<ApiResponse<List<ServerCheckReportRowDto>>>> GetReport(
-            [FromQuery] DateTime fromDate, [FromQuery] DateTime toDate)
+            [FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId = null)
         {
-            var result = await _serverCheckService.GetReportAsync(fromDate, toDate);
+            var result = await _serverCheckService.GetReportAsync(fromDate, toDate, branchId);
             return Success(result);
         }
 
@@ -94,9 +94,9 @@ namespace Asset.Api.Controllers
         // DeviceConfigurationImportController.GetMissingDevicesReport: body là 1 file nhị phân).
         [RequirePermission("Asset.ServerCheck.View")]
         [HttpGet("report/export")]
-        public async Task<IActionResult> ExportReport([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate)
+        public async Task<IActionResult> ExportReport([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId = null)
         {
-            var (content, fileName) = await _serverCheckService.ExportReportAsync(fromDate, toDate);
+            var (content, fileName) = await _serverCheckService.ExportReportAsync(fromDate, toDate, branchId);
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
     }

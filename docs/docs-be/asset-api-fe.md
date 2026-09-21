@@ -423,6 +423,8 @@ Content-Type: application/json
 ## 7d. ServerCheck — `/api/ServerCheck` (2026-09-16, kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR)
 Thay checksheet giấy bằng quét QR trên máy TC21/TC22 — chi tiết nghiệp vụ: [asset-module.md §1.19](asset-module.md). Server/Máy lạnh/UPS/Network đều là `Device` bình thường (không entity riêng), QR dán lên vẫn dùng `POST /api/Device/qr-labels` (§5.4b) — điều kiện để vào phạm vi kiểm tra hằng ngày là `DeviceType` của nó có `serverCheckCategory` khác `null` (Admin tự cấu hình ở màn `DeviceType`, §2).
 
+> ⚠️ **Từ 2026-09-21 phiên quét theo xưởng** (xem 7d.10 + asset-module.md §1.21): `ServerCheckSessionDto`/`ServerCheckReportRowDto` có thêm `branchId?/branchName?`; `POST /start` tự lấy xưởng của user (không nhận xưởng từ client, chưa phân công → 400); `scan`/`end` chỉ trên phiên xưởng mình; `GET /today`, `/grid-list`, `/report`, `/report/export` nhận thêm `branchId` (optional, chỉ có tác dụng với quyền `View` — người chỉ có `Scan` bị ép về xưởng mình).
+
 **7d.1 `GET /today`** → `ServerCheckSessionDto | null`. `null` = hôm nay **chưa bấm "Bắt đầu"**. Có giá trị → xem `status` (`0`=`InProgress`, đang quét dở/vừa mới bắt đầu; `1`=`Completed`, đã khóa) để FE quyết định hiện màn "đang quét" hay "đã xong hôm nay".
 
 **7d.2 `POST /start`** (không body, permission `Asset.ServerCheck.Scan`) → `ServerCheckSessionDto`. Gọi khi user bấm "Bắt đầu phiên quét" trên TC21/22 (đã đăng nhập trước qua `/api/Auth/login`, xem identity-api-fe.md §2c). Nếu hôm nay đã có phiên `InProgress` (vd trình duyệt đóng giữa chừng) → trả lại nguyên phiên đó, **không** tạo mới/mất dữ liệu đã quét. Đã `Completed` → 400 "Đã hoàn thành phiên kiểm tra hôm nay." — FE hiện thông báo, điều hướng sang xem báo cáo thay vì cho quét tiếp (**chỉ 1 phiên/ngày**, khóa cứng). Danh sách thiết bị snapshot vào phiên = Device `InUse` có `deviceType.serverCheckCategory != null` **và** `requiresDailyCheck = true` (cờ Admin tick trong form Thiết bị, 5.5/5.6). Quét QR là thao tác **vật lý** nên chỉ máy thật sự nằm trong phòng server mới vào danh sách — máy cùng loại nhưng là server ảo hoặc switch rải khắp nhà máy để cờ `false`, chúng chỉ nằm trong phạm vi ping (7d.8). **Không** lọc theo chi nhánh ở bước này (`serverCheckBranchId` chỉ áp dụng cho `network-ping`). Chưa tick cờ cho máy nào → phiên tạo ra rỗng (`totalCount:0`), FE nên báo Admin đi cấu hình thay vì hiện danh sách trắng.
@@ -501,6 +503,17 @@ FE: `allReachable=true` → tự gán `status=1`(OK) cho **cả 2** mục `usesN
 - Giá trị mỗi ô category/mục thủ công chỉ là `"OK"`/`"NG"`/rỗng (rỗng = phiên `InProgress` hoặc chưa có thiết bị loại đó/mục đó chưa tồn tại lúc phiên đó kết thúc) — không dùng ký hiệu ✓/× để tránh đoán sai quy ước, có thể đổi sau nếu người dùng muốn.
 - Tên file gợi ý: `CheckSheet_KiemTraServer_{yyyyMMdd}.xlsx` (1 ngày) hoặc `..._{from}-{to}.xlsx` (khoảng ngày).
 
+**7d.10 `/api/ServerCheckAssignment` — phân công user ↔ xưởng** (2026-09-21):
+
+| Method | Path | Permission | Ghi chú |
+|---|---|---|---|
+| GET | `/api/ServerCheckAssignment` | `Asset.ServerCheck.Assign` | `List<ServerCheckAssignmentDto>` `{id,userId,userName,fullName,branchId,branchName}` |
+| GET | `/api/ServerCheckAssignment/me` | `Asset.ServerCheck.Scan` | xưởng của **chính user đang đăng nhập**; `data:null` = chưa được phân công → app quét phải chặn, báo liên hệ Admin. Gọi **trước** `GET /today`/`POST /start` |
+| PUT | `/api/ServerCheckAssignment` | `Asset.ServerCheck.Assign` | body `{userId, userName, fullName?, branchId}` — upsert theo `userId` (đã có thì đổi xưởng, mỗi user đúng 1 xưởng). `userId/userName/fullName` lấy từ `GET /api/Auth/get-all-users-with-roles` |
+| DELETE | `/api/ServerCheckAssignment/{id}` | `Asset.ServerCheck.Assign` | bỏ phân công (xoá cứng) |
+
+Điều kiện để 1 người quét được: có role **"Kiểm tra Server"** (chứa `Asset.ServerCheck.Scan`) **và** được phân công xưởng. Thiếu role → 403; thiếu phân công → 400 ở `POST /start` (và `data:null` ở `/me`).
+
 ## 8. Tổng hợp endpoint
 | Route | Ghi chú |
 |---|---|
@@ -520,6 +533,7 @@ FE: `allReachable=true` → tự gán `status=1`(OK) cho **cả 2** mục `usesN
 | `/api/AuditTrail` | `grid-list` (filter+phân trang), `record?tableName=&recordId=`. Chỉ đọc, ghi tự động ở BE |
 | `/api/AiChat` | `stream`(POST, NDJSON, 7c) — trợ lý AI tra cứu, thay thế hoàn toàn cách gọi thẳng Ollama cũ ở FE |
 | `/api/ServerCheck` | `today`, `start`(POST), `{id}`, `{id}/scan`(POST), `{id}/end`(POST), `manual-items`, `grid-list`, `report`, `report/export`(trả file .xlsx), `network-ping` (7d) — kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR + ping mạng |
+| `/api/ServerCheckAssignment` | `GET`, `GET me`, `PUT`, `DELETE {id}` — phân công user ↔ xưởng cho kiểm tra server (7d.10) | `Asset.ServerCheck.Assign` (`me`: `.Scan`) |
 | `/api/AssetSetting` | GET, PUT — cấu hình 1 dòng duy nhất: `liquidationAfterMonths` (tự xóa mềm thiết bị đã thanh lý) + `serverCheckBranchId?` (phạm vi chi nhánh **chỉ** cho `ServerCheck/network-ping` 7d.8; danh sách quét QR lấy theo cờ `device.requiresDailyCheck`) |
 
 `DELETE /api/Device/{id}` và `bulk-delete` (`POST /api/Device/bulk-delete`, `{ ids:[] }`, permission `Asset.Device.Delete`): xóa mềm, **chỉ** thiết bị `Liquidated(3)` "Đã thanh lý" (2026-08-22, đổi từ `PendingLiquidation(2)`); `DELETE {id}` trả lỗi 400 nếu sai trạng thái, `bulk-delete` bỏ qua và trả kết quả `{ deletedCount, skippedDevices:[{id,deviceCode,reason}] }`.

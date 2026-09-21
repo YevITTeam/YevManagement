@@ -28,6 +28,8 @@ export interface ServerCheckManualResultDto {
 export interface ServerCheckSessionDto {
     id: number;
     checkDate: string;
+    branchId: number | null;
+    branchName: string | null;
     startedAt: string;
     startedBy: string;
     endedAt: string | null;
@@ -87,6 +89,8 @@ export interface EndServerCheckSessionDto {
 export interface ServerCheckReportRowDto {
     checkDate: string;
     sessionId: number;
+    branchId: number | null;
+    branchName: string | null;
     sessionStatus: number;
     sessionStatusText: string;
     serverStatus: boolean | null;
@@ -99,4 +103,21 @@ export interface ServerCheckReportRowDto {
     airConditionerNote: string | null;
     manualResults: ServerCheckManualResultDto[];
     checkedBy: string | null;
+}
+
+// GET /api/ServerCheckAssignment — mỗi user đúng 1 xưởng (asset-module.md §1.21).
+export interface ServerCheckAssignmentDto {
+    id: number;
+    userId: number;
+    userName: string;
+    fullName: string | null;
+    branchId: number;
+    branchName: string;
+}
+
+export interface SaveServerCheckAssignmentDto {
+    userId: number;
+    userName: string;
+    fullName?: string | null;
+    branchId: number;
 }

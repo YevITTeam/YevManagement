@@ -30,7 +30,8 @@ namespace Asset.Infrastructure.Repositories
             IServerCheckSessionRepository serverCheckSessions,
             IServerCheckItemRepository serverCheckItems,
             IServerCheckManualItemRepository serverCheckManualItems,
-            IServerCheckManualResultRepository serverCheckManualResults) : base(dbContext)
+            IServerCheckManualResultRepository serverCheckManualResults,
+            IServerCheckAssignmentRepository serverCheckAssignments) : base(dbContext)
         {
             Devices = devices;
             Branches = branches;
@@ -54,6 +55,7 @@ namespace Asset.Infrastructure.Repositories
             ServerCheckItems = serverCheckItems;
             ServerCheckManualItems = serverCheckManualItems;
             ServerCheckManualResults = serverCheckManualResults;
+            ServerCheckAssignments = serverCheckAssignments;
         }
 
         public IDeviceRepository Devices { get; }
@@ -78,5 +80,6 @@ namespace Asset.Infrastructure.Repositories
         public IServerCheckItemRepository ServerCheckItems { get; }
         public IServerCheckManualItemRepository ServerCheckManualItems { get; }
         public IServerCheckManualResultRepository ServerCheckManualResults { get; }
+        public IServerCheckAssignmentRepository ServerCheckAssignments { get; }
     }
 }

@@ -10,6 +10,8 @@ namespace Asset.Application.Dtos.ServerChecks
     {
         public DateTime CheckDate { get; set; }
         public int SessionId { get; set; }
+        public int? BranchId { get; set; }
+        public string? BranchName { get; set; }
         public int SessionStatus { get; set; }
         public string SessionStatusText { get; set; } = null!;
 

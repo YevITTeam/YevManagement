@@ -139,6 +139,17 @@ Việt, dùng được thẳng cho toast/dialog).
 
 Tất cả endpoint dưới đây thuộc `/api/ServerCheck`, cần header `Authorization: Bearer <token>`.
 
+### 6.0 `GET /api/ServerCheckAssignment/me` — xưởng của mình (BẮT BUỘC gọi trước tiên)
+
+> **Cập nhật 2026-09-21:** mỗi người được Admin **phân công đúng 1 xưởng**; app **không có ô chọn xưởng**, không gửi xưởng lên server — server tự dùng xưởng của tài khoản đang đăng nhập. Ngoài quyền `Asset.ServerCheck.Scan` (role **"Kiểm tra Server"**), tài khoản phải được phân công xưởng.
+
+- Permission: `Asset.ServerCheck.Scan`.
+- Response `data`: `{ "id", "userId", "userName", "fullName", "branchId", "branchName" }` hoặc **`null`** nếu chưa được phân công.
+- `data == null` → **chặn toàn bộ màn quét**, hiện "Tài khoản của bạn chưa được phân công xưởng kiểm tra server. Vui lòng liên hệ Admin." (không gọi tiếp `/today`, `/start`).
+- Có `data` → hiện tên xưởng (`branchName`) nổi bật trên đầu màn hình để người quét biết mình đang quét xưởng nào. `GET /today`, `POST /start`, `scan`, `end` sau đó **không cần và không được** truyền xưởng.
+- `POST /start` cũng tự trả 400 với cùng thông điệp nếu chưa phân công; `scan`/`end` trên phiên của xưởng khác → 400. Phiên (`ServerCheckSessionDto`) giờ có thêm `branchId`, `branchName`.
+- Giới hạn "1 phiên/ngày" nay tính **theo từng xưởng**.
+
 ### 6.1 `GET /today` — kiểm tra hôm nay đã có phiên chưa
 
 Permission: `Asset.ServerCheck.View`. Không tham số.

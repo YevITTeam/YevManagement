@@ -26,9 +26,10 @@
 | `TransferHistory` | `OldDeviceId`, `NewDeviceId`, `TransferDate`, `Note?` (FK bắt buộc, `ClientSetNull`) | N-1 Old/NewDevice | Không |
 | `AssetSetting` | `LiquidationAfterMonths` (§1.16), `ServerCheckBranchId?` (§1.20, đổi tên từ `NetworkCheckBranchId` 2026-09-17) | N-1 Branch? | Không |
 | `AuditTrail` | `Id(long)`, `TableName`, `RecordId`, `RecordName?`, `AffectedCount`, `Action`, `OldValues?`, `NewValues?`, `ChangedBy`, `ChangedAt` (ns `Asset.Domain.Models`) | — | Không |
-| `ServerCheckSession` | `CheckDate`(unique), `StartedAt`, `StartedBy`, `EndedAt?`, `EndedBy?`, `Status`(§1.19) | 1-N ServerCheckItem/ServerCheckManualResult | **Có** |
+| `ServerCheckSession` | `CheckDate`(unique), `StartedAt`, `StartedBy`, `EndedAt?`, `EndedBy?`, `Status`, `BranchId?`(§1.21, unique cùng `CheckDate`) | 1-N ServerCheckItem/ServerCheckManualResult, N-1 Branch? | **Có** |
 | `ServerCheckItem` | `SessionId`, `DeviceId`, `Category`(snapshot từ `DeviceType.ServerCheckCategory`), `ScannedAt?`, `ScannedBy?`, `Status`, `Note?` | N-1 Session/Device | Không |
 | `ServerCheckManualItem` | `Name`, `DisplayOrder`, `UsesNetworkPing`(§1.20) (seed 4 dòng, §1.19) | 1-N ServerCheckManualResult | **Có** |
+| `ServerCheckAssignment` | `UserId`(unique, Identity.Users.Id — khác DB nên không FK), `UserName`, `FullName?`, `BranchId`(FK Branches) (§1.21) | N-1 Branch | Không (xoá cứng) |
 | `ServerCheckManualResult` | `SessionId`, `ManualItemId`, `Status`, `Note?`, `ConfirmedBy`, `ConfirmedAt` | N-1 Session/ManualItem | Không |
 
 > `DeviceSoftware` không có `Id` đơn → tìm bằng `FirstOrDefaultAsync(DeviceId+SoftwareId)`, xóa cứng.
@@ -293,6 +294,24 @@ Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào ph
 4. **Hỏi lại người dùng thì lọc theo chi nhánh vẫn chưa đủ** (còn ~57 mục vì gồm cả server ảo + switch toàn nhà máy): phòng server thật chỉ có **3 server vật lý Dell iDRAC** (chưa nhập hệ thống, sẽ thêm sau) + UPS + vài thiết bị mạng. Chốt phương án cuối: thêm cờ **`Device.RequiresDailyCheck`** (§1.19) làm tiêu chí quét, bỏ hẳn lọc chi nhánh khỏi `StartSessionAsync`; `ServerCheckBranchId` chỉ còn dùng cho `network-ping` (server ảo vẫn được ping như cũ, chỉ không phải quét QR).
 - **Đã smoke-test qua HTTP thật** (2026-09-17): gán `ServerCheckBranchId`=DĨ AN, gọi `network-ping` → 55 IP (19 Server + 36 Network của DĨ AN), 29 phản hồi/26 không, phản hồi trong 1.1s; xác nhận `GET /today` trả `null` sau khi dọn phiên lỗi.
 
+### 1.21. Phân công user ↔ xưởng cho kiểm tra server (2026-09-21)
+
+**Vấn đề:** trước đây ai có quyền `Asset.ServerCheck.Scan` cũng vào được trang quét và bấm "Bắt đầu" — không biết đang quét cho xưởng nào, và phiên chỉ có 1/ngày cho cả công ty. Yêu cầu: chỉ người được cấp role kiểm tra server mới vào được, và mỗi người **gắn cứng 1 xưởng** do Admin phân công (không cho tự chọn xưởng lúc quét — dễ chọn nhầm).
+
+**Quyết định người dùng (chốt 2026-09-21):** (1) **1 phiên/ngày/xưởng** (thay vì 1 phiên/ngày toàn công ty); (2) **mỗi user đúng 1 xưởng**; (3) quyền `Asset.ServerCheck.View` xem được mọi xưởng, người chỉ có `Scan` chỉ thấy xưởng mình.
+
+- **`ServerCheckAssignment`** (bảng mới, migration `AddServerCheckAssignment`): `UserId` unique → 1 user = 1 xưởng. `UserId` = `Identity.Users.Id` lấy từ claim `UserId` trong JWT (khác DB nên không có FK; `UserName`/`FullName` là snapshot để hiển thị). Token cũ trước 2026-08-25 không có claim `UserId` → coi như "chưa được phân công", user đăng nhập lại là có.
+- **`ServerCheckSession.BranchId?`** (nullable chỉ để giữ phiên cũ chưa có xưởng); unique index đổi từ `CheckDate` → `(CheckDate, BranchId)` (filtered `BranchId IS NOT NULL`).
+- **`POST /start`**: xưởng lấy từ phân công của user đang đăng nhập, **không nhận từ client**. Chưa phân công → 400 "Tài khoản của bạn chưa được phân công xưởng…". Snapshot thiết bị thêm điều kiện `Device.BranchId == xưởng`. Đã có phiên hôm nay của xưởng đó: `InProgress` → resume, `Completed` → 400.
+- **`scan`/`end`** chỉ làm được trên phiên của **đúng xưởng mình được phân công** (kể cả Admin) — sai xưởng → 400.
+- **Đọc** (`today`/`{id}`/`grid-list`/`report`/`report/export`): có `Asset.ServerCheck.View` → xem mọi xưởng, tham số `branchId` (optional) để lọc (không truyền thì mặc định xưởng được phân công của mình nếu có); **không có View** (chỉ Scan) → BE ép về xưởng được phân công, bỏ qua `branchId`.
+- **`network-ping`** ưu tiên xưởng được phân công của người gọi; `AssetSetting.ServerCheckBranchId` chỉ còn là fallback cho tài khoản chưa được phân công (vd Admin).
+- **Excel/in**: 1 tờ = 1 xưởng — ô "Nhà xưởng" (N2) tự điền tên xưởng khi báo cáo thuộc đúng 1 xưởng; tên file có thêm tên xưởng. FE báo cáo luôn lọc theo 1 xưởng (dropdown, mặc định xưởng đầu tiên).
+- **Permission/role mới** (migration Identity `AddServerCheckAssignPermissionAndRole`): permission `Asset.ServerCheck.Assign` (CRUD phân công, gán `Admin`); role **"Kiểm tra Server"** chỉ chứa `Asset.ServerCheck.Scan`. Cách dùng: Admin gán role "Kiểm tra Server" cho user (màn Quản lý người dùng có sẵn) **rồi** phân công xưởng ở màn "Phân công xưởng" — thiếu 1 trong 2 thì không quét được.
+- **API** `ServerCheckAssignmentController` (`/api/ServerCheckAssignment`): `GET` (Assign) danh sách; `GET /me` (Scan) xưởng của chính mình, `data:null` nếu chưa phân công; `PUT` (Assign, upsert theo `userId` — đổi xưởng nếu đã có); `DELETE /{id}` (Assign). Chi tiết ở `asset-api-fe.md §7d.10`.
+- **FE**: `ServerCheckScanPage` gọi `/me` trước — chưa phân công thì chặn + báo liên hệ Admin, đã phân công thì hiện badge "Xưởng phụ trách" (không có ô chọn xưởng); `ServerCheckAssignmentPage` (route `/pc/server-check/assignments`, nút "Phân công xưởng" ở màn báo cáo, chỉ hiện với quyền Assign); `ServerCheckReportPage` thêm dropdown xưởng; sidebar mục "Kiểm tra Server" trỏ thẳng trang quét với user chỉ có `Scan` (không có View thì trang báo cáo sẽ 403).
+- **Phiên cũ** (trước 2026-09-21) có `BranchId = null` nên không hiện khi lọc theo xưởng — muốn xem lại phải gỡ lọc qua DB; chấp nhận vì dữ liệu lúc đó chỉ là thử nghiệm.
+
 ## 2. DTOs (`Asset.Application/Dtos/`)
 - **Master data** (Branches/Suplliers/DeviceTypes/SoftwareGroups): `{Entity}Dto`(Id/Code/Name), `Create...`(+`[Required]`), `Update...`.
 - **DeviceGroups**: `DeviceGroupDto`(+`DepartmentId`/`DepartmentName`), `Create/UpdateDeviceGroupDto`(`DepartmentId[Required]`+Code/Name).
@@ -314,10 +333,10 @@ Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào ph
 - **DeviceConfigurations**: `DeviceConfigurationDto`(+`DeviceCode`, 20 field), `Create...`(`DeviceId[Required]`, còn lại optional), `Update...`(+`Id`; `DeviceId` không dùng trong `UpdateAsync`), `DeviceConfigurationInitialDto`(+`CreatedAt`), `DeviceConfigurationHistoryDto`(+`EditedAt`/`EditedBy`) — 2 cuối tự sinh.
 - **TransferHistories**: `TransferHistoryDto`(+Old/New Code/Name), `CreateTransferHistoryDto` — không Update/Delete.
 - **AssetSettings**: `AssetSettingDto`(+`ServerCheckBranchId?/ServerCheckBranchName?`, §1.20, đổi tên từ `NetworkCheckBranchId` 2026-09-17), `UpdateAssetSettingDto`(`LiquidationAfterMonths[Range(1,120)]` + `ServerCheckBranchId?`).
-- **ServerChecks** (§1.19): `ServerCheckSessionDto`(+`Items:List<ServerCheckItemDto>`+`ManualResults:List<ServerCheckManualResultDto>`+`TotalCount`/`ScannedCount`), `ServerCheckItemDto`(+`DeviceCode/DeviceName/CategoryText/StatusText`), `ServerCheckManualItemDto`(Id/Name/DisplayOrder/`UsesNetworkPing`), `ServerCheckManualResultDto`(+`ManualItemName/UsesNetworkPing/StatusText`), `ScanServerCheckItemDto`(`DeviceCode[Required]`), `EndServerCheckSessionDto`(`Items:[{ServerCheckItemId,Note?}]`, `ManualResults:[{ManualItemId,Status,Note?}][Required]`), `ServerCheckReportRowDto`(1 dòng/ngày, 4 cột `bool?`+`*Note` theo category + `ManualResults`+`CheckedBy`), `NetworkPingResultDto`(§1.20, `TotalCount/ReachableCount/AllReachable`+`Items:List<NetworkPingItemDto>`), `NetworkPingItemDto`(`IpAddress/DeviceId/DeviceCode/DeviceName/Category/CategoryText/Reachable/RoundtripMs?`).
+- **ServerChecks** (§1.19): `ServerCheckSessionDto`(+`BranchId?/BranchName?`, §1.21; +`Items:List<ServerCheckItemDto>`+`ManualResults:List<ServerCheckManualResultDto>`+`TotalCount`/`ScannedCount`), `ServerCheckItemDto`(+`DeviceCode/DeviceName/CategoryText/StatusText`), `ServerCheckManualItemDto`(Id/Name/DisplayOrder/`UsesNetworkPing`), `ServerCheckManualResultDto`(+`ManualItemName/UsesNetworkPing/StatusText`), `ScanServerCheckItemDto`(`DeviceCode[Required]`), `EndServerCheckSessionDto`(`Items:[{ServerCheckItemId,Note?}]`, `ManualResults:[{ManualItemId,Status,Note?}][Required]`), `ServerCheckAssignmentDto`/`SaveServerCheckAssignmentDto`(§1.21), `ServerCheckReportRowDto`(+`BranchId?/BranchName?`; 1 dòng/ngày, 4 cột `bool?`+`*Note` theo category + `ManualResults`+`CheckedBy`), `NetworkPingResultDto`(§1.20, `TotalCount/ReachableCount/AllReachable`+`Items:List<NetworkPingItemDto>`), `NetworkPingItemDto`(`IpAddress/DeviceId/DeviceCode/DeviceName/Category/CategoryText/Reachable/RoundtripMs?`).
 
 ## 3. Repositories & UnitOfWork
-`IAssetUnitOfWork` gom **22 repo**: `Devices, Branches, AssetSettings, DeviceGroups, DeviceDepartments, Softwares, SoftwareGroups, Suppliers, DeviceConfigurations, DeviceConfigurationInitials, DeviceConfigurationHistories, DeviceEmails, DeviceSoftwares, DeviceTypes, IpAddresses, IpPrefixes, TransferHistories, AuditTrails, ServerCheckSessions, ServerCheckItems, ServerCheckManualItems, ServerCheckManualResults`. Tất cả **generic thuần** (rỗng). `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>`.
+`IAssetUnitOfWork` gom **23 repo**: `Devices, Branches, AssetSettings, DeviceGroups, DeviceDepartments, Softwares, SoftwareGroups, Suppliers, DeviceConfigurations, DeviceConfigurationInitials, DeviceConfigurationHistories, DeviceEmails, DeviceSoftwares, DeviceTypes, IpAddresses, IpPrefixes, TransferHistories, AuditTrails, ServerCheckSessions, ServerCheckItems, ServerCheckManualItems, ServerCheckManualResults, ServerCheckAssignments`. Tất cả **generic thuần** (rỗng). `AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>`.
 
 ## 4. Services & API — theo entity
 > Hợp đồng API đầy đủ: [asset-api-fe.md](asset-api-fe.md). Toàn bộ 15 controller dùng `[RequirePermission("Module.Entity.Action")]` (danh sách mã: [identity-module.md](identity-module.md) §9).
@@ -344,6 +363,7 @@ Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào ph
 | DeviceLiquidationImport | `/api/DeviceLiquidationImport` | `preview`, `confirm` (§1.10b, thanh lý hàng loạt theo mã máy) | `Asset.Device.Update` |
 | AuditTrail | `/api/AuditTrail` | `grid-list`(phân trang+filter), `record?tableName=&recordId=`. **Không** POST/PUT/DELETE (ghi tự động qua `SaveChangesAsync`, §1.17) | `Asset.AuditTrail.View` |
 | AiChat | `/api/AiChat` | `stream`(POST, NDJSON, §1.18). Chỉ 1 endpoint | `Asset.AiChat.Use` |
+| ServerCheckAssignment | `/api/ServerCheckAssignment` | `GET`, `GET me`, `PUT`(upsert theo userId), `DELETE {id}` (§1.21) | `Asset.ServerCheck.Assign` (`me`: `.Scan`) |
 | ServerCheck | `/api/ServerCheck` | `today`, `start`(POST), `{id}`, `{id}/scan`(POST), `{id}/end`(POST), `manual-items`, `grid-list`, `report`(§1.19), `report/export`(trả file .xlsx, §1.19), `network-ping`(§1.20). **Không** PUT/DELETE | `Asset.ServerCheck.Scan/.View` |
 
 **Pattern service mẫu để nhân bản:**
@@ -370,6 +390,7 @@ Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào ph
 | `AddAssetSetting` (seed `LiquidationAfterMonths=2`) | **Đã apply** (xác nhận lại 2026-07-27) |
 | `AddServerCheckModule` (Asset — thêm `DeviceTypes.ServerCheckCategory` + 4 bảng `ServerCheck*`, seed 4 `ServerCheckManualItems`), `AddServerCheckPermissions` (Identity — seed `Asset.ServerCheck.Scan/.View`) | **Đã apply** (2026-09-16) |
 | `AddServerCheckNetworkPing` (Asset — thêm `AssetSettings.NetworkCheckBranchId` (FK Branches, SetNull) + `ServerCheckManualItems.UsesNetworkPing`, seed `UsesNetworkPing=1` cho "Network - Factory"/"Network - Server", §1.20) | **Đã apply** (2026-09-17) |
+| `AddServerCheckAssignment` (Asset — bảng `ServerCheckAssignments` + `ServerCheckSessions.BranchId`, unique `(CheckDate, BranchId)`, §1.21), `AddServerCheckAssignPermissionAndRole` (Identity — permission `Asset.ServerCheck.Assign` + role "Kiểm tra Server") | **Chưa apply** (2026-09-21) |
 | `RenameServerCheckBranchSetting` (Asset — đổi tên `AssetSettings.NetworkCheckBranchId` → `ServerCheckBranchId`, §1.20) | **Đã apply** (2026-09-17) |
 | `AddDeviceRequiresDailyCheck` (Asset — thêm `Devices.RequiresDailyCheck` bit default 0 làm tiêu chí quét QR §1.19 + seed 3 mục thủ công `Backup - File Srv/OES/Domain` cho khớp tờ giấy) | **Đã apply** (2026-09-17) |
 

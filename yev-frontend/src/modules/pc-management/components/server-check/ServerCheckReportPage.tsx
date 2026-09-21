@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { CheckCircle2, FileSpreadsheet, Loader2, Minus, Printer, QrCode, XCircle } from "lucide-react";
+import { CheckCircle2, FileSpreadsheet, Loader2, Minus, Printer, QrCode, Users, XCircle } from "lucide-react";
 
 import { ServerCheckApi } from "@/modules/pc-management/api/server-check.api";
+import { BranchApi } from "@/modules/pc-management/api/branch.api";
+import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import type { ServerCheckManualItemDto, ServerCheckReportRowDto } from "@/modules/pc-management/types/server-check.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import ServerCheckSessionDetailDialog from "./ServerCheckSessionDetailDialog";
@@ -48,13 +50,30 @@ export default function ServerCheckReportPage() {
     const [manualColumns, setManualColumns] = useState<ServerCheckManualItemDto[]>([]);
     const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [branches, setBranches] = useState<BranchDto[]>([]);
+    const [branchId, setBranchId] = useState<number | null>(null);
     const { user } = useAuth();
     const canScan = hasPermission(user, "Asset.ServerCheck.Scan");
+    const canAssign = hasPermission(user, "Asset.ServerCheck.Assign");
+
+    // Mỗi xưởng có phiên + tờ check sheet riêng (asset-module.md §1.21) nên báo cáo luôn lọc theo ĐÚNG
+    // 1 xưởng — mặc định xưởng đầu tiên trong danh sách, không có lựa chọn "tất cả" (sẽ trộn nhiều xưởng
+    // cùng ngày vào 1 tờ).
+    useFetchEffect(
+        () => BranchApi.getAllBranches(),
+        [],
+        (result) => {
+            setBranches(result);
+            setBranchId((current) => current ?? result[0]?.id ?? null);
+        },
+        t("loadReportError"),
+        (message) => toast.error(message)
+    );
 
     const { isLoading, error, refetch } = useFetchEffect(
-        () => ServerCheckApi.getReport(fromDate, toDate),
-        [fromDate, toDate],
-        (result) => setRows(result),
+        () => (branchId === null ? Promise.resolve(null) : ServerCheckApi.getReport(fromDate, toDate, branchId)),
+        [fromDate, toDate, branchId],
+        (result) => setRows(result ?? []),
         t("loadReportError"),
         (message) => toast.error(message)
     );
@@ -77,7 +96,7 @@ export default function ServerCheckReportPage() {
     const handleExportExcel = async () => {
         setIsExporting(true);
         try {
-            const { blob, fileName } = await ServerCheckApi.exportReport(fromDate, toDate);
+            const { blob, fileName } = await ServerCheckApi.exportReport(fromDate, toDate, branchId ?? undefined);
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -107,6 +126,24 @@ export default function ServerCheckReportPage() {
                             <QrCode className="h-3.5 w-3.5" /> {t("startButton")}
                         </Link>
                     )}
+                    {canAssign && (
+                        <Link
+                            href="/pc/server-check/assignments"
+                            className="flex h-10 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                        >
+                            <Users className="h-3.5 w-3.5" /> {t("assignmentsButton")}
+                        </Link>
+                    )}
+                    <select
+                        value={branchId ?? ""}
+                        onChange={(event) => setBranchId(event.target.value ? Number(event.target.value) : null)}
+                        aria-label={t("branchFilterLabel")}
+                        className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                    >
+                        {branches.map((branch) => (
+                            <option key={branch.id} value={branch.id}>{branch.branchName}</option>
+                        ))}
+                    </select>
                     <input
                         type="date"
                         value={fromDate}
@@ -240,7 +277,13 @@ export default function ServerCheckReportPage() {
                 </div>
             </section>
 
-            <ServerCheckReportPrintView rows={rows} manualColumns={manualColumns} fromDate={fromDate} toDate={toDate} />
+            <ServerCheckReportPrintView
+                rows={rows}
+                manualColumns={manualColumns}
+                fromDate={fromDate}
+                toDate={toDate}
+                branchName={branches.find((b) => b.id === branchId)?.branchName ?? null}
+            />
 
             <ServerCheckSessionDetailDialog sessionId={selectedSessionId} onClose={() => setSelectedSessionId(null)} />
         </div>

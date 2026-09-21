@@ -24,22 +24,31 @@ namespace Asset.Application.Services
             _templateService = templateService;
         }
 
-        public async Task<ServerCheckSessionDto?> GetTodaySessionAsync()
+        public async Task<ServerCheckSessionDto?> GetTodaySessionAsync(int? branchId)
         {
+            var effectiveBranchId = await ResolveViewBranchIdAsync(branchId);
+            if (effectiveBranchId == null) return null;
+
             var today = TimeHelper.GetCurrentUtcTime().Date;
-            var session = await _unitOfWork.ServerCheckSessions.FirstOrDefaultAsync(x => x.CheckDate == today && !x.IsDeleted);
+            var session = await _unitOfWork.ServerCheckSessions.FirstOrDefaultAsync(
+                x => x.CheckDate == today && x.BranchId == effectiveBranchId && !x.IsDeleted);
             return session == null ? null : await BuildSessionDtoAsync(session);
         }
 
         public async Task<ServerCheckSessionDto> StartSessionAsync()
         {
+            // Xưởng lấy từ phân công của user (asset-module.md §1.21), KHÔNG nhận từ client — không có
+            // đường nào để quét nhầm xưởng.
+            var branchId = await RequireAssignedBranchIdAsync();
+
             var today = TimeHelper.GetCurrentUtcTime().Date;
-            var existing = await _unitOfWork.ServerCheckSessions.FirstOrDefaultAsync(x => x.CheckDate == today && !x.IsDeleted);
+            var existing = await _unitOfWork.ServerCheckSessions.FirstOrDefaultAsync(
+                x => x.CheckDate == today && x.BranchId == branchId && !x.IsDeleted);
 
             if (existing != null)
             {
                 if (existing.Status == (int)ServerCheckSessionStatus.Completed)
-                    throw new DomainException("Đã hoàn thành phiên kiểm tra hôm nay.");
+                    throw new DomainException("Xưởng của bạn đã hoàn thành phiên kiểm tra hôm nay.");
 
                 // Đã có phiên InProgress (vd trình duyệt bị đóng giữa chừng) — tiếp tục phiên đó, không tạo mới.
                 return await BuildSessionDtoAsync(existing);
@@ -47,17 +56,18 @@ namespace Asset.Application.Services
 
             // Chỉ thiết bị Admin đánh dấu RequiresDailyCheck (nằm trong phòng server, có dán QR) mới được
             // snapshot vào phiên — quét QR là thao tác VẬT LÝ, nên phạm vi phải là "máy có thật trong
-            // phòng", không phải "máy cùng loại/cùng chi nhánh" (asset-module.md §1.19). Lọc theo loại
-            // (DeviceType.ServerCheckCategory) vẫn giữ vì báo cáo gộp cột theo loại.
+            // phòng" (asset-module.md §1.19). Lọc theo loại (DeviceType.ServerCheckCategory) vẫn giữ vì báo
+            // cáo gộp cột theo loại; lọc theo xưởng vì mỗi xưởng có phiên + tờ check sheet riêng (§1.21).
             var deviceRows = await _unitOfWork.Devices.SelectAsync(
                 predicate: d => !d.IsDeleted && d.Status == (int)DeviceStatus.InUse
-                    && d.DeviceType.ServerCheckCategory != null && d.RequiresDailyCheck,
+                    && d.DeviceType.ServerCheckCategory != null && d.RequiresDailyCheck && d.BranchId == branchId,
                 selector: d => new { d.Id, Category = d.DeviceType.ServerCheckCategory!.Value }
             );
 
             var session = new ServerCheckSession
             {
                 CheckDate = today,
+                BranchId = branchId,
                 StartedAt = TimeHelper.GetCurrentUtcTime(),
                 StartedBy = GetCurrentUser(),
                 Status = (int)ServerCheckSessionStatus.InProgress,
@@ -83,6 +93,9 @@ namespace Asset.Application.Services
         public async Task<ServerCheckSessionDto> GetSessionByIdAsync(int id)
         {
             var session = (await _unitOfWork.ServerCheckSessions.GetByIdAsync(id)).OrThrowNotFound("Phiên kiểm tra", id);
+            var visibleBranchId = await ResolveViewBranchIdAsync(null, enforceOnly: true);
+            if (visibleBranchId != null && session.BranchId != visibleBranchId)
+                throw new NotFoundException("Phiên kiểm tra", id);
             return await BuildSessionDtoAsync(session);
         }
 
@@ -91,6 +104,7 @@ namespace Asset.Application.Services
             var session = (await _unitOfWork.ServerCheckSessions.GetByIdAsync(sessionId)).OrThrowNotFound("Phiên kiểm tra", sessionId);
             if (session.Status != (int)ServerCheckSessionStatus.InProgress)
                 throw new DomainException("Phiên kiểm tra đã kết thúc, không thể quét thêm.");
+            await EnsureOwnBranchSessionAsync(session);
 
             var deviceCode = request.DeviceCode.Trim();
             var device = await _unitOfWork.Devices.FirstOrDefaultAsync(d => d.DeviceCode == deviceCode && !d.IsDeleted);
@@ -129,6 +143,7 @@ namespace Asset.Application.Services
             var session = (await _unitOfWork.ServerCheckSessions.GetByIdAsync(sessionId)).OrThrowNotFound("Phiên kiểm tra", sessionId);
             if (session.Status != (int)ServerCheckSessionStatus.InProgress)
                 throw new DomainException("Phiên kiểm tra đã kết thúc.");
+            await EnsureOwnBranchSessionAsync(session);
 
             var activeManualItemIds = (await _unitOfWork.ServerCheckManualItems.SelectAsync(
                 predicate: x => !x.IsDeleted,
@@ -202,8 +217,14 @@ namespace Asset.Application.Services
         // still finishes in a few seconds.
         public async Task<NetworkPingResultDto> PingNetworkAsync()
         {
-            var settings = await _unitOfWork.AssetSettings.GetAllAsync();
-            var branchId = settings.FirstOrDefault()?.ServerCheckBranchId;
+            // Xưởng của người quét (§1.21) ưu tiên hơn AssetSetting.ServerCheckBranchId — cấu hình chung
+            // đó chỉ còn là fallback cho tài khoản chưa được phân công xưởng (vd Admin).
+            var branchId = await GetAssignedBranchIdAsync();
+            if (branchId == null)
+            {
+                var settings = await _unitOfWork.AssetSettings.GetAllAsync();
+                branchId = settings.FirstOrDefault()?.ServerCheckBranchId;
+            }
 
             var targets = await _unitOfWork.IpAddresses.SelectAsync(
                 predicate: ip => !ip.IsDeleted && ip.DeviceId != null
@@ -272,9 +293,11 @@ namespace Asset.Application.Services
             };
         }
 
-        public async Task<PagedResponse<ServerCheckSessionDto>> GetSessionsPagedAsync(int pageIndex, int pageSize, DateTime? fromDate, DateTime? toDate)
+        public async Task<PagedResponse<ServerCheckSessionDto>> GetSessionsPagedAsync(int pageIndex, int pageSize, DateTime? fromDate, DateTime? toDate, int? branchId)
         {
+            var effectiveBranchId = await ResolveViewBranchIdAsync(branchId);
             var query = _unitOfWork.ServerCheckSessions.GetQueryable(false).Where(x => !x.IsDeleted);
+            if (effectiveBranchId != null) query = query.Where(x => x.BranchId == effectiveBranchId);
 
             if (fromDate.HasValue) query = query.Where(x => x.CheckDate >= fromDate.Value.Date);
             if (toDate.HasValue) query = query.Where(x => x.CheckDate <= toDate.Value.Date);
@@ -287,6 +310,8 @@ namespace Asset.Application.Services
                 {
                     Id = x.Id,
                     CheckDate = x.CheckDate,
+                    BranchId = x.BranchId,
+                    BranchName = x.Branch != null ? x.Branch.BranchName : null,
                     StartedAt = x.StartedAt,
                     StartedBy = x.StartedBy,
                     EndedAt = x.EndedAt,
@@ -299,14 +324,16 @@ namespace Asset.Application.Services
             );
         }
 
-        public async Task<List<ServerCheckReportRowDto>> GetReportAsync(DateTime fromDate, DateTime toDate)
+        public async Task<List<ServerCheckReportRowDto>> GetReportAsync(DateTime fromDate, DateTime toDate, int? branchId)
         {
             var from = fromDate.Date;
             var to = toDate.Date;
+            var effectiveBranchId = await ResolveViewBranchIdAsync(branchId);
 
             var sessions = await _unitOfWork.ServerCheckSessions.SelectAsync(
-                predicate: x => !x.IsDeleted && x.CheckDate >= from && x.CheckDate <= to,
-                selector: x => new { x.Id, x.CheckDate, x.Status, x.EndedBy }
+                predicate: x => !x.IsDeleted && x.CheckDate >= from && x.CheckDate <= to
+                    && (effectiveBranchId == null || x.BranchId == effectiveBranchId),
+                selector: x => new { x.Id, x.CheckDate, x.Status, x.EndedBy, x.BranchId, BranchName = x.Branch != null ? x.Branch.BranchName : null }
             );
 
             if (sessions.Count == 0) return new List<ServerCheckReportRowDto>();
@@ -330,6 +357,15 @@ namespace Asset.Application.Services
                 selector: x => new { x.SessionId, x.ManualItemId, ManualItemName = x.ManualItem.Name, x.Status, x.Note, x.ConfirmedBy, x.ConfirmedAt }
             );
 
+            // "Người kiểm" hiển thị họ tên thay vì tên đăng nhập: Session.EndedBy chỉ lưu username (Identity.Name),
+            // còn họ tên nằm ở DB Identity (khác DB) — lấy từ snapshot FullName trong ServerCheckAssignment.
+            // User chưa có phân công (vd Admin, phiên cũ) giữ nguyên username.
+            var fullNameByUserName = (await _unitOfWork.ServerCheckAssignments.SelectAsync(
+                predicate: a => a.FullName != null,
+                selector: a => new { a.UserName, a.FullName }
+            )).GroupBy(a => a.UserName, StringComparer.OrdinalIgnoreCase)
+              .ToDictionary(g => g.Key, g => g.First().FullName!, StringComparer.OrdinalIgnoreCase);
+
             var itemsBySession = items.ToLookup(x => x.SessionId);
             var manualBySession = manualResults.ToLookup(x => x.SessionId);
 
@@ -349,7 +385,7 @@ namespace Asset.Application.Services
                 return (false, note);
             }
 
-            return sessions.OrderBy(s => s.CheckDate).Select(s =>
+            return sessions.OrderBy(s => s.CheckDate).ThenBy(s => s.BranchName).Select(s =>
             {
                 var sessionItems = itemsBySession[s.Id].ToList();
 
@@ -362,6 +398,8 @@ namespace Asset.Application.Services
                 {
                     CheckDate = s.CheckDate,
                     SessionId = s.Id,
+                    BranchId = s.BranchId,
+                    BranchName = s.BranchName,
                     SessionStatus = s.Status,
                     SessionStatusText = s.Status.GetServerCheckSessionStatusText(),
                     ServerStatus = serverStatus,
@@ -382,7 +420,7 @@ namespace Asset.Application.Services
                         ConfirmedBy = m.ConfirmedBy,
                         ConfirmedAt = m.ConfirmedAt
                     }).OrderBy(m => m.ManualItemId).ToList(),
-                    CheckedBy = s.EndedBy
+                    CheckedBy = s.EndedBy != null && fullNameByUserName.TryGetValue(s.EndedBy, out var fullName) ? fullName : s.EndedBy
                 };
             }).ToList();
         }
@@ -392,9 +430,9 @@ namespace Asset.Application.Services
         // của template (B/C/D=Đèn cảnh báo Server/Network/UPS, E=Máy lạnh, F..L=7 mục thủ công theo đúng
         // thứ tự DisplayOrder, M=Người kiểm, N=Ghi chú) khớp 1-1 với ServerCheckReportRowDto nên không
         // cần build header động như màn hình web (asset-module.md §1.19/§1.20).
-        public async Task<(byte[] Content, string FileName)> ExportReportAsync(DateTime fromDate, DateTime toDate)
+        public async Task<(byte[] Content, string FileName)> ExportReportAsync(DateTime fromDate, DateTime toDate, int? branchId)
         {
-            var rows = await GetReportAsync(fromDate, toDate);
+            var rows = await GetReportAsync(fromDate, toDate, branchId);
             // Thứ tự cột F..L trong file mẫu ĐÃ IN SẴN đúng tên 7 mục (Tình trạng âm thanh.../Network -
             // Factory/Server/Gởi nhận Mail/Backup - File Srv/OES/Domain) theo DisplayOrder 1..7 — không
             // ghi lại tên cột, chỉ cần map giá trị theo ĐÚNG thứ tự này, KHÔNG theo ManualItemId cụ thể
@@ -426,6 +464,10 @@ namespace Asset.Application.Services
             // "Tháng"/"Năm" ở góc trên chỉ có 1 ô — chỉ điền khi cả khoảng ngày nằm gọn trong 1 tháng,
             // tránh ghi sai khi người dùng lọc báo cáo trải dài nhiều tháng.
             var singleMonth = fromDate.Year == toDate.Year && fromDate.Month == toDate.Month;
+            // "Nhà xưởng" (N2): điền khi báo cáo thuộc đúng 1 xưởng (1 tờ = 1 xưởng, §1.21).
+            var branchNames = rows.Select(r => r.BranchName).Where(n => !string.IsNullOrEmpty(n)).Distinct().ToList();
+            if (branchNames.Count == 1) sheet.Cell("N2").Value = branchNames[0];
+
             if (singleMonth)
             {
                 sheet.Cell("N3").Value = fromDate.Month;
@@ -475,9 +517,10 @@ namespace Asset.Application.Services
             using var output = new MemoryStream();
             workbook.SaveAs(output);
 
+            var branchSuffix = branchNames.Count == 1 ? $"_{branchNames[0]}" : string.Empty;
             var fileName = fromDate.Date == toDate.Date
-                ? $"CheckSheet_KiemTraServer_{fromDate:yyyyMMdd}.xlsx"
-                : $"CheckSheet_KiemTraServer_{fromDate:yyyyMMdd}-{toDate:yyyyMMdd}.xlsx";
+                ? $"CheckSheet_KiemTraServer{branchSuffix}_{fromDate:yyyyMMdd}.xlsx"
+                : $"CheckSheet_KiemTraServer{branchSuffix}_{fromDate:yyyyMMdd}-{toDate:yyyyMMdd}.xlsx";
             return (output.ToArray(), fileName);
         }
 
@@ -512,10 +555,19 @@ namespace Asset.Application.Services
 
             var manualResults = await BuildManualResultsAsync(session.Id);
 
+            string? branchName = null;
+            if (session.BranchId != null)
+            {
+                var branch = await _unitOfWork.Branches.GetByIdAsync(session.BranchId.Value);
+                branchName = branch?.BranchName;
+            }
+
             return new ServerCheckSessionDto
             {
                 Id = session.Id,
                 CheckDate = session.CheckDate,
+                BranchId = session.BranchId,
+                BranchName = branchName,
                 StartedAt = session.StartedAt,
                 StartedBy = session.StartedBy,
                 EndedAt = session.EndedAt,
@@ -560,6 +612,48 @@ namespace Asset.Application.Services
                     ConfirmedAt = result?.ConfirmedAt
                 };
             }).ToList();
+        }
+
+        // Xưởng user hiện tại được phân công (asset-module.md §1.21); null = chưa được phân công.
+        private async Task<int?> GetAssignedBranchIdAsync()
+        {
+            var userId = ServerCheckUserContext.GetUserId(_httpContextAccessor);
+            if (userId == null) return null;
+
+            var rows = await _unitOfWork.ServerCheckAssignments.SelectAsync(
+                predicate: a => a.UserId == userId.Value,
+                selector: a => (int?)a.BranchId
+            );
+            return rows.FirstOrDefault();
+        }
+
+        private async Task<int> RequireAssignedBranchIdAsync()
+        {
+            var branchId = await GetAssignedBranchIdAsync();
+            return branchId ?? throw new DomainException(
+                "Tài khoản của bạn chưa được phân công xưởng kiểm tra server. Vui lòng liên hệ Admin để được phân công.");
+        }
+
+        // Quét/kết thúc phiên chỉ được làm trên phiên của ĐÚNG xưởng mình được phân công — kể cả Admin.
+        private async Task EnsureOwnBranchSessionAsync(ServerCheckSession session)
+        {
+            var branchId = await RequireAssignedBranchIdAsync();
+            if (session.BranchId != branchId)
+                throw new DomainException("Phiên kiểm tra này thuộc xưởng khác, bạn không được thao tác.");
+        }
+
+        // Which branch a READ endpoint is limited to. Users holding Asset.ServerCheck.View see every
+        // branch (optionally narrowed by `requested`); scan-only users are forced to their assigned
+        // branch. `enforceOnly`: return only the forced branch (null for viewers) - used by GetById,
+        // which has no branch filter of its own.
+        private async Task<int?> ResolveViewBranchIdAsync(int? requested, bool enforceOnly = false)
+        {
+            if (ServerCheckUserContext.HasPermission(_httpContextAccessor, "Asset.ServerCheck.View"))
+            {
+                if (enforceOnly) return null;
+                return requested ?? await GetAssignedBranchIdAsync();
+            }
+            return await RequireAssignedBranchIdAsync();
         }
 
         private string GetCurrentUser() => _httpContextAccessor.HttpContext?.User?.Identity?.Name ?? "Unknown";

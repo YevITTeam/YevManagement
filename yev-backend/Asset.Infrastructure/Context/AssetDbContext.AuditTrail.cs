@@ -331,6 +331,7 @@ public partial class AssetDbContext
             TransferHistory transfer => $"{DeviceLabel(transfer.OldDeviceId, deviceCodes)} → {DeviceLabel(transfer.NewDeviceId, deviceCodes)}",
             AssetSetting => "Cấu hình hệ thống",
             ServerCheckManualItem manualItem => manualItem.Name,
+            ServerCheckAssignment assignment => $"{assignment.UserName} → xưởng #{assignment.BranchId}",
             _ => null
         };
 
