@@ -19,7 +19,7 @@ namespace Asset.Application.Services
         private readonly IServerCheckTemplateService _templateService;
 
         private const int PingCount = 10;
-        private const int RequiredLastSuccesses = 2;
+        private const int MinSuccessesForOk = 8;
         private const int PingTimeoutMs = 1000;
 
         public ServerCheckService(IAssetUnitOfWork unitOfWork, IHttpContextAccessor httpContextAccessor, IServerCheckTemplateService templateService) : base(unitOfWork)
@@ -256,21 +256,20 @@ namespace Asset.Application.Services
                 try
                 {
                     // Exactly PingCount pings per IP, no early exit (asset-module.md §1.20): the user prefers a
-                    // slower but certain result. Only the LAST 2 pings decide: the IP is reachable only when
-                    // both of them get a reply — early drops while a host is still coming up are ignored, but
-                    // a host that is down at the end is NG. RoundtripMs is the average of the successful replies.
-                    var pingSucceeded = new List<bool>(PingCount);
+                    // slower but certain result. Reachable when at least MinSuccessesForOk of the PingCount
+                    // pings get a reply — a few dropped packets on a flaky link don't flip the result.
+                    // RoundtripMs is the average of the successful replies.
+                    var successCount = 0;
                     var replyTimes = new List<long>();
                     for (var attempt = 0; attempt < PingCount; attempt++)
                     {
-                        var ok = false;
                         try
                         {
                             using var ping = new Ping();
                             var reply = await ping.SendPingAsync(target.IpAddress, PingTimeoutMs);
                             if (reply.Status == IPStatus.Success)
                             {
-                                ok = true;
+                                successCount++;
                                 replyTimes.Add(reply.RoundtripTime);
                             }
                         }
@@ -278,9 +277,8 @@ namespace Asset.Application.Services
                         {
                             // count as a failed ping
                         }
-                        pingSucceeded.Add(ok);
                     }
-                    var reachable = pingSucceeded.TakeLast(RequiredLastSuccesses).All(x => x);
+                    var reachable = successCount >= MinSuccessesForOk;
                     long? roundtripMs = replyTimes.Count > 0 ? (long)Math.Round(replyTimes.Average()) : null;
 
                     results.Add(new NetworkPingItemDto
