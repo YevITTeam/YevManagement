@@ -110,6 +110,13 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.IsUseUsb == request.IsUseUsb.Value);
             }
 
+            // Lọc máy đã tick "Cần kiểm tra hằng ngày (QR)" — dùng để gom nhanh danh sách in QR hàng
+            // loạt cho phòng server (asset-module.md §1.19/§1.21), không liên quan phiên quét đang chạy.
+            if (request.RequiresDailyCheck.HasValue)
+            {
+                query = query.Where(d => d.RequiresDailyCheck == request.RequiresDailyCheck.Value);
+            }
+
             if (!string.IsNullOrWhiteSpace(request.IpAddress))
             {
                 query = query.Where(d => d.IpAddresses.Any(ip => !ip.IsDeleted && ip.IpAddress1.Contains(request.IpAddress)));
