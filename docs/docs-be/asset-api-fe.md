@@ -18,6 +18,9 @@
 | **Device** (grid-list, filter, import, QR, báo cáo…) | §5 |
 | DeviceConfiguration · DeviceSoftware · AuditTrail | §6, §7, §7b |
 | **AI Chat** (`POST /api/AiChat/stream`, NDJSON) | §7c |
+| **ServerCheck** (kiểm tra Server hằng ngày qua QR) | §7d |
+| **Inventory** (kiểm kê thiết bị theo xưởng qua quét mã) | §7e |
+| **AppRelease** (quản lý bản cập nhật app Flutter "YEV Scan") | §7f |
 | Bảng tổng hợp endpoint · checklist màn "Chi tiết thiết bị" | §8, §9 |
 
 
@@ -529,6 +532,55 @@ FE: `allReachable=true` → tự gán `status=1`(OK) cho **cả 2** mục `usesN
 
 Điều kiện để 1 người quét được: có role **"Kiểm tra Server"** (chứa `Asset.ServerCheck.Scan`) **và** được phân công xưởng. Thiếu role → 403; thiếu phân công → 400 ở `POST /start` (và `data:null` ở `/me`).
 
+## 7e. Inventory — `/api/Inventory` (2026-09-23, kiểm kê thiết bị theo xưởng qua quét mã)
+Đối chiếu thực tế với dữ liệu hệ thống — chi tiết nghiệp vụ: [asset-module.md §1.22](asset-module.md). Khác `ServerCheck` (§7d): quét **toàn bộ Device** của 1 xưởng (không riêng nhóm thiết bị nào), theo **đợt** chứ không phải hằng ngày (không unique theo ngày, chỉ ràng buộc 1 xưởng không quá 1 phiên `InProgress` cùng lúc), và **nhiều user cùng xưởng thao tác chung 1 phiên**.
+
+- **`GET /current`** (permission `Asset.Inventory.Scan`, không tham số) → `InventorySessionDto | null` — phiên `InProgress` của xưởng **chính người gọi** được phân công (không nhận `branchId`). Dùng cho màn quét kiosk; gọi lại sau mỗi lần quét để đồng bộ tiến độ (có thể do đồng nghiệp khác vừa quét).
+- **`POST /start`** (không body) → `InventorySessionDto`. Xưởng lấy từ `GET /api/InventoryAssignment/me` (server tự resolve). Xưởng đã có phiên `InProgress` (do chính mình hoặc đồng nghiệp khác mở) → trả lại **nguyên phiên đó**, không tạo mới. Chưa được phân công xưởng → 400. Snapshot **chỉ** `Device.Status = InUse` ("Đang sử dụng") của xưởng (2026-09-23 — máy `PendingUse`/`PendingLiquidation` **không** đưa vào đợt kiểm kê).
+```jsonc
+// InventorySessionDto
+{
+  "id": 5, "branchId": 2, "branchName": "Xưởng Dĩ An",
+  "startedAt": "2026-09-23T08:05:00", "startedBy": "n.van.a", "endedAt": null, "endedBy": null,
+  "status": 0, "statusText": "Đang kiểm kê", "totalCount": 128, "foundCount": 40, "missingCount": 0,
+  "items": [
+    { "id": 1001, "deviceId": 55, "deviceCode": "PC-0123", "deviceName": "Dell OptiPlex 7080",
+      "scannedAt": "2026-09-23T08:12:03", "scannedBy": "n.van.a", "status": 1, "statusText": "Đã tìm thấy", "note": null },
+    { "id": 1002, "deviceId": 60, "deviceCode": "PC-0456", "deviceName": "HP EliteDesk 800",
+      "scannedAt": null, "scannedBy": null, "status": 0, "statusText": "Chưa kiểm kê", "note": null }
+  ]
+}
+```
+- **`POST /{id}/scan`** (`{ "deviceCode": "PC-0123" }`, permission `Asset.Inventory.Scan`) → `InventorySessionItemDto` (dòng vừa cập nhật, `status=1` Found). Quét lại máy đã Found vẫn 200 (idempotent). Mã **không thuộc phạm vi xưởng đang kiểm kê** → 400, **không ghi nhận gì** — áp dụng cho cả 2 case: mã không tồn tại, hoặc thiết bị thuộc xưởng khác/mới chuyển vào sau khi đã `start` (FE không cần phân biệt 2 lý do).
+- **`POST /{id}/end`** (permission `Asset.Inventory.Scan`) → `InventorySessionDto` đã `status=1` (`Completed`), khoá cứng. Body chỉ cần liệt kê item còn `Pending` muốn ghi chú (note tự do, không bắt buộc — **không có** checklist thủ công bắt buộc như ServerCheck):
+```jsonc
+{ "items": [ { "inventorySessionItemId": 1002, "note": "Không tìm thấy tại vị trí ghi nhận" } ] }
+```
+Item `Pending` không được liệt kê → server tự chuyển `Missing`, note `null`.
+- **`GET /{id}`** (permission `Asset.Inventory.View`) → chi tiết 1 phiên bất kỳ (không giới hạn xưởng của mình).
+- **`GET /grid-list?pageIndex=&pageSize=&fromDate=&toDate=&branchId=`** (permission `Asset.Inventory.View`) → phân trang `InventorySessionDto` nhưng `items` rỗng (như ServerCheck 7d.6).
+- **`GET /report?fromDate=&toDate=&branchId=`** (permission `Asset.Inventory.View`) → `List<InventoryReportRowDto>`, 1 dòng/phiên (khác ServerCheck gộp theo ngày): `{ sessionId, branchId, branchName, startedAt, endedAt, status, statusText, totalCount, foundCount, missingCount, missingItems:[{deviceCode,deviceName,note}], checkedBy }`.
+- **`GET /report/export?fromDate=&toDate=&branchId=`** (permission `Asset.Inventory.View`) — trả file `.xlsx` (không phải `ApiResponse<T>`, đọc bằng `getForBlob()`). Khác ServerCheck: **không có file mẫu công ty**, BE tự dựng workbook mới (ClosedXML, layout tự do).
+- **`/api/InventoryAssignment`** — phân công user↔xưởng, cùng shape `/api/ServerCheckAssignment` (7d.10) nhưng **route/permission riêng**: `GET` (`Asset.Inventory.Assign`) danh sách; `GET /me` (`Asset.Inventory.Scan`) xưởng của mình, `data:null`=chưa phân công; `PUT` (`Asset.Inventory.Assign`, upsert theo `userId`); `DELETE /{id}` (`Asset.Inventory.Assign`). **Khác ServerCheckAssignment**: nhiều user khác nhau được gán **CHUNG 1 xưởng** là bình thường (không unique theo `branchId`).
+
+Role **"Kiểm kê thiết bị"** chứa `Asset.Inventory.Scan`. Xuất PDF (màn báo cáo web) dựng ở FE bằng `jspdf`, không qua BE.
+
+## 7f. AppRelease — `/api/AppRelease` (2026-09-23, quản lý bản cập nhật app Flutter "YEV Scan")
+Quản trị metadata bản phát hành app mobile nội bộ — chi tiết nghiệp vụ: [asset-module.md §1.23](asset-module.md). `apkUrl` chỉ là **string** — có thể là link ngoài dán tay (Drive...) hoặc link nội bộ do `POST /upload` sinh ra, FE/BE không phân biệt 2 loại. **Hợp đồng dành cho đội mobile (app Flutter "YEV Scan"): xem [docs/AppRelease-API-Flutter-Guide.md](../AppRelease-API-Flutter-Guide.md)** — chỉ cần `GET /latest` + tải file qua `apkUrl` trả về, không cần biết endpoint quản trị bên dưới.
+
+- **`GET /latest`** — **`[AllowAnonymous]`, không cần token** (app gọi để kiểm tra cập nhật trước khi đăng nhập). → `AppReleaseDto | null` (`null` = chưa có bản nào). "Mới nhất" = `!isDeleted`, `versionCode` lớn nhất.
+```jsonc
+// AppReleaseDto
+{ "id": 3, "versionCode": 4, "versionName": "1.3.0", "minVersionCode": 3,
+  "apkUrl": "http://10.45.1.155:8081/api/AppRelease/download/b01fa4fe....apk", "changelog": "Sửa lỗi quét mã bị treo\nThêm màn lịch sử" }
+```
+App tự so `versionCode` hiện tại của mình với response: `< minVersionCode` → **bắt buộc** cập nhật (chặn dùng tiếp); nằm giữa `minVersionCode` và `versionCode` → **gợi ý** cập nhật (cho bỏ qua); `>= versionCode` → không cần làm gì. Logic so sánh này nằm ở **app Flutter**, BE chỉ trả dữ liệu thô.
+- **`GET /grid-list?pageIndex=&pageSize=&keyword=`** (permission `Asset.AppRelease.Manage`) → phân trang chuẩn (§1.2); `keyword` lọc theo `versionName` (Contains).
+- **`POST /api/AppRelease`** / **`PUT /{id}`** (permission `Asset.AppRelease.Manage`) — body `{ versionCode[Required], versionName[Required], minVersionCode[Required], apkUrl[Required], changelog? }`, PUT thêm `id` khớp URL. `versionCode` trùng (kể cả với bản ghi đã xoá mềm) → 400.
+- **`DELETE /{id}`** (permission `Asset.AppRelease.Manage`) — xoá mềm.
+- **`POST /upload`** (permission `Asset.AppRelease.Manage`, `multipart/form-data`, field `file`, giới hạn 300MB, chỉ nhận đuôi `.apk`) → `ApiResponse<string>`, `data` là URL tuyệt đối để dán vào `apkUrl` khi create/update — **không** tự lưu vào DB, không tự gắn với bản ghi nào. FE (`app-release.api.ts` → `AppReleaseApi.uploadApk`) dùng `api.postForm`.
+- **`GET /download/{fileName}`** — **`[AllowAnonymous]`, không cần token**, trả file nhị phân trực tiếp (không bọc `ApiResponse<T>`), content-type `application/vnd.android.package-archive`. Đây chính là URL BE trả về từ `POST /upload` (cũng là giá trị `apkUrl` khi bản phát hành dùng file upload thay vì link ngoài).
+
 ## 8. Tổng hợp endpoint
 | Route | Ghi chú |
 |---|---|
@@ -549,6 +601,9 @@ FE: `allReachable=true` → tự gán `status=1`(OK) cho **cả 2** mục `usesN
 | `/api/AiChat` | `stream`(POST, NDJSON, 7c) — trợ lý AI tra cứu, thay thế hoàn toàn cách gọi thẳng Ollama cũ ở FE |
 | `/api/ServerCheck` | `today`, `start`(POST), `{id}`, `{id}/scan`(POST), `{id}/end`(POST), `manual-items`, `grid-list`, `report`, `report/export`(trả file .xlsx), `network-ping` (7d) — kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR + ping mạng |
 | `/api/ServerCheckAssignment` | `GET`, `GET me`, `PUT`, `DELETE {id}` — phân công user ↔ xưởng cho kiểm tra server (7d.10) | `Asset.ServerCheck.Assign` (`me`: `.Scan`) |
+| `/api/Inventory` | `current`, `start`(POST), `{id}`, `{id}/scan`(POST), `{id}/end`(POST), `grid-list`, `report`, `report/export`(trả file .xlsx) (7e) — kiểm kê thiết bị theo xưởng qua quét mã |
+| `/api/InventoryAssignment` | `GET`, `GET me`, `PUT`, `DELETE {id}` — phân công user ↔ xưởng cho kiểm kê thiết bị (7e), nhiều user được gán chung 1 xưởng |
+| `/api/AppRelease` | `latest`(**[AllowAnonymous]**), `grid-list`, POST, `PUT {id}`, `DELETE {id}`, `upload`(POST, multipart), `download/{fileName}`(**[AllowAnonymous]**, trả file nhị phân) (7f) — quản lý bản cập nhật app Flutter "YEV Scan", permission `Asset.AppRelease.Manage` (trừ `latest`/`download`) |
 | `/api/AssetSetting` | GET, PUT — cấu hình 1 dòng duy nhất: `liquidationAfterMonths` (tự xóa mềm thiết bị đã thanh lý) + `serverCheckBranchId?` (phạm vi chi nhánh **chỉ** cho `ServerCheck/network-ping` 7d.8; danh sách quét QR lấy theo cờ `device.requiresDailyCheck`) |
 
 `DELETE /api/Device/{id}` và `bulk-delete` (`POST /api/Device/bulk-delete`, `{ ids:[] }`, permission `Asset.Device.Delete`): xóa mềm, **chỉ** thiết bị `Liquidated(3)` "Đã thanh lý" (2026-08-22, đổi từ `PendingLiquidation(2)`); `DELETE {id}` trả lỗi 400 nếu sai trạng thái, `bulk-delete` bỏ qua và trả kết quả `{ deletedCount, skippedDevices:[{id,deviceCode,reason}] }`.

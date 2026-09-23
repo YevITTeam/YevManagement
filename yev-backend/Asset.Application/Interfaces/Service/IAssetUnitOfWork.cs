@@ -28,5 +28,9 @@ namespace Asset.Application.Interfaces.Service
         IServerCheckManualItemRepository ServerCheckManualItems { get; }
         IServerCheckManualResultRepository ServerCheckManualResults { get; }
         IServerCheckAssignmentRepository ServerCheckAssignments { get; }
+        IInventorySessionRepository InventorySessions { get; }
+        IInventorySessionItemRepository InventorySessionItems { get; }
+        IInventoryAssignmentRepository InventoryAssignments { get; }
+        IAppReleaseRepository AppReleases { get; }
     }
 }

@@ -17,6 +17,8 @@ import {
   PanelLeftClose,
   History,
   QrCode,
+  ClipboardCheck,
+  Smartphone,
 } from "lucide-react";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -41,6 +43,8 @@ const navItems = [
   // §7b, §7c) — role khác phải được Admin gán tay.
   { key: "auditTrail", href: "/pc/audit-trail", icon: History, permissions: ["Asset.AuditTrail.View"] },
   { key: "serverCheck", href: "/pc/server-check", icon: QrCode, permissions: ["Asset.ServerCheck.View", "Asset.ServerCheck.Scan"] },
+  { key: "inventory", href: "/pc/inventory", icon: ClipboardCheck, permissions: ["Asset.Inventory.View", "Asset.Inventory.Scan"] },
+  { key: "appReleases", href: "/pc/app-releases", icon: Smartphone, permissions: ["Asset.AppRelease.Manage"] },
   { key: "aiChat", href: "/pc/ai-chat", icon: Bot, permissions: ["Asset.AiChat.Use"] },
   { key: "settings", href: "/pc/settings", icon: Settings, permissions: ["Asset.Setting.View"] },
 ] as const;
@@ -100,11 +104,13 @@ export default function PcManagerSidebar() {
         {navItems
           .filter((item) => hasAnyPermission(user, [...item.permissions]))
           .map((baseItem) => {
-          // Người chỉ có quyền Scan (role "Kiểm tra Server") không có View nên trang báo cáo sẽ 403 —
-          // cho vào thẳng trang quét (asset-module.md §1.21).
+          // Người chỉ có quyền Scan (role "Kiểm tra Server"/"Kiểm kê thiết bị") không có View nên trang
+          // báo cáo sẽ 403 — cho vào thẳng trang quét (asset-module.md §1.21, §1.22).
           const item = baseItem.key === "serverCheck" && !hasPermission(user, "Asset.ServerCheck.View")
             ? { ...baseItem, href: "/pc/server-check/scan" }
-            : baseItem;
+            : baseItem.key === "inventory" && !hasPermission(user, "Asset.Inventory.View")
+              ? { ...baseItem, href: "/pc/inventory/scan" }
+              : baseItem;
           // Logic tách riêng cho route gốc "/pc" để tránh highlight sai ở các route con
           const isActive = item.href === "/pc"
             ? pathname === item.href

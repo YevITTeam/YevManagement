@@ -38,6 +38,10 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<ServerCheckManualItem> ServerCheckManualItems { get; set; }
     public virtual DbSet<ServerCheckManualResult> ServerCheckManualResults { get; set; }
     public virtual DbSet<ServerCheckAssignment> ServerCheckAssignments { get; set; }
+    public virtual DbSet<InventorySession> InventorySessions { get; set; }
+    public virtual DbSet<InventorySessionItem> InventorySessionItems { get; set; }
+    public virtual DbSet<InventoryAssignment> InventoryAssignments { get; set; }
+    public virtual DbSet<AppRelease> AppReleases { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -311,6 +315,63 @@ public partial class AssetDbContext : DbContext
                 .HasForeignKey(d => d.BranchId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_ServerCheckAssignments_Branches_BranchId");
+        });
+
+        modelBuilder.Entity<InventorySession>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_InventorySessions");
+            // Chỉ ràng buộc DB: 1 xưởng không được có quá 1 phiên InProgress (Status=0) cùng lúc — filtered
+            // unique index vì nhiều phiên Completed của cùng xưởng là bình thường (mỗi đợt kiểm kê 1 phiên).
+            entity.HasIndex(e => e.BranchId, "IX_InventorySessions_BranchId_InProgress")
+                .IsUnique()
+                .HasFilter("[Status] = 0");
+            entity.Property(e => e.StartedBy).HasMaxLength(150);
+            entity.Property(e => e.EndedBy).HasMaxLength(150);
+
+            entity.HasOne(d => d.Branch).WithMany()
+                .HasForeignKey(d => d.BranchId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_InventorySessions_Branches_BranchId");
+        });
+
+        modelBuilder.Entity<InventorySessionItem>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_InventorySessionItems");
+            entity.HasIndex(e => e.SessionId, "IX_InventorySessionItems_SessionId");
+            entity.HasIndex(e => e.DeviceId, "IX_InventorySessionItems_DeviceId");
+            entity.Property(e => e.ScannedBy).HasMaxLength(150);
+            entity.Property(e => e.Note).HasMaxLength(500);
+
+            entity.HasOne(d => d.Session).WithMany(p => p.Items)
+                .HasForeignKey(d => d.SessionId)
+                .HasConstraintName("FK_InventorySessionItems_InventorySessions_SessionId");
+
+            entity.HasOne(d => d.Device).WithMany()
+                .HasForeignKey(d => d.DeviceId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_InventorySessionItems_ThietBis_DeviceId");
+        });
+
+        modelBuilder.Entity<InventoryAssignment>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_InventoryAssignments");
+            entity.HasIndex(e => e.UserId, "IX_InventoryAssignments_UserId").IsUnique();
+            entity.Property(e => e.UserName).HasMaxLength(150);
+            entity.Property(e => e.FullName).HasMaxLength(150);
+
+            entity.HasOne(d => d.Branch).WithMany()
+                .HasForeignKey(d => d.BranchId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_InventoryAssignments_Branches_BranchId");
+        });
+
+        modelBuilder.Entity<AppRelease>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_AppReleases");
+            entity.HasIndex(e => e.VersionCode, "IX_AppReleases_VersionCode").IsUnique();
+            entity.Property(e => e.VersionName).HasMaxLength(50);
+            entity.Property(e => e.ApkUrl).HasMaxLength(500);
+            entity.Property(e => e.Changelog).HasColumnType("nvarchar(max)");
         });
 
         modelBuilder.Entity<ServerCheckItem>(entity =>

@@ -25,6 +25,8 @@
 | In mã QR | §1.16 (mục QR) |
 | `AuditTrail` | §1.17 |
 | **AI Chat** (tool-calling) — kiến trúc & code | §1.18 |
+| **Kiểm kê thiết bị** (quét mã theo xưởng) | §1.22 |
+| **AppRelease** (quản lý bản cập nhật app Flutter "YEV Scan") | §1.23 |
 | DTO · Repository/UnitOfWork · Service+API theo entity | §2, §3, §4 |
 | Migration đối chiếu DB thật · việc cần làm tiếp · checklist thêm entity | §5, §6, §7 |
 
@@ -342,6 +344,66 @@ Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào ph
 - **API** `ServerCheckAssignmentController` (`/api/ServerCheckAssignment`): `GET` (Assign) danh sách; `GET /me` (Scan) xưởng của chính mình, `data:null` nếu chưa phân công; `PUT` (Assign, upsert theo `userId` — đổi xưởng nếu đã có); `DELETE /{id}` (Assign). Chi tiết ở `asset-api-fe.md §7d.10`.
 - **FE**: `ServerCheckScanPage` gọi `/me` trước — chưa phân công thì chặn + báo liên hệ Admin, đã phân công thì hiện badge "Xưởng phụ trách" (không có ô chọn xưởng); `ServerCheckAssignmentPage` (route `/pc/server-check/assignments`, nút "Phân công xưởng" ở màn báo cáo, chỉ hiện với quyền Assign); `ServerCheckReportPage` thêm dropdown xưởng; sidebar mục "Kiểm tra Server" trỏ thẳng trang quét với user chỉ có `Scan` (không có View thì trang báo cáo sẽ 403).
 - **Phiên cũ** (trước 2026-09-21) có `BranchId = null` nên không hiện khi lọc theo xưởng — muốn xem lại phải gỡ lọc qua DB; chấp nhận vì dữ liệu lúc đó chỉ là thử nghiệm.
+
+### 1.22. Kiểm kê thiết bị bằng quét mã theo xưởng (2026-09-23)
+
+Đối chiếu thực tế vật lý với dữ liệu hệ thống — khác hẳn §1.19 (ServerCheck chỉ kiểm tra "còn hoạt động tốt" cho 1 nhóm thiết bị hẹp mỗi ngày): kiểm kê quét **toàn bộ Device** của 1 xưởng, theo đợt (không phải hằng ngày). Nghiệp vụ chưa có trong doc trước khi làm → đã hỏi người dùng chốt đủ (CLAUDE.md §2 luật 2), quyết định giữ ở các mục con dưới. Tái dùng tối đa pattern ServerCheck (phiên/snapshot/quét idempotent/khoá cứng sau khi kết thúc) nhưng **không dùng chung entity/bảng** — 2 tính năng cố ý độc lập.
+
+- **`InventorySession`** = 1 đợt kiểm kê của 1 xưởng. Khác `ServerCheckSession`: **không unique theo ngày** — 1 đợt có thể kéo dài nhiều ngày. Ràng buộc duy nhất: **1 xưởng không được có quá 1 phiên `InProgress` cùng lúc** (unique filtered index `IX_InventorySessions_BranchId_InProgress` trên `BranchId` với `WHERE Status = 0`). `Status`: `InProgress(0)`/`Completed(1)`.
+  - **Tần suất giữa các đợt**: **không ép** — xưởng nào cũng mở phiên mới bất cứ lúc nào, miễn không còn phiên `InProgress` dở dang (quyết định người dùng — chu kỳ kiểm kê là quy định quản lý nội bộ, hệ thống không enforce).
+  - **Nhiều người cùng quét 1 phiên**: `POST /start` gặp phiên `InProgress` của xưởng mình thì trả lại nguyên phiên đó (không tạo mới) — nhiều user cùng được gán 1 xưởng (xem `InventoryAssignment`) đều thao tác trên **cùng 1 phiên chung**, mỗi người quét 1 khu vực, không xung đột vì mỗi lần quét chỉ update đúng 1 `InventorySessionItem`.
+- **`Device.RequiresDailyCheck`/`DeviceType.ServerCheckCategory` KHÔNG liên quan** — phạm vi kiểm kê là `Device` `!IsDeleted && Status = InUse("Đang sử dụng") && BranchId = xưởng` tại thời điểm `start` (2026-09-23, thu hẹp từ "mọi status trừ Liquidated" — quyết định người dùng: `PendingUse`/`PendingLiquidation` không phải máy đang thật sự vận hành nên không gom vào đợt kiểm kê).
+- **`InventorySessionItem`** = 1 Device snapshot trong 1 phiên. `Status`: `Pending(0)`/`Found(1)`/`Missing(2)`.
+  - **`POST /api/Inventory/{id}/scan`** (`ScanInventoryItemDto{DeviceCode}`): tra `Device` theo mã → không tồn tại **hoặc** tồn tại nhưng không có `InventorySessionItem` tương ứng trong phiên này (thuộc xưởng khác, hoặc chuyển vào xưởng này SAU khi đã snapshot) → `DomainException`, **không ghi nhận gì** — quyết định người dùng, không có khái niệm "quét thừa/lạ" (khác thiết kế nháp ban đầu có tính tới case này). Khớp → `Found` + `ScannedAt`. Quét lại máy đã `Found` vẫn hợp lệ (idempotent).
+  - **`POST /api/Inventory/{id}/end`** (`EndInventorySessionDto{Items:[{InventorySessionItemId,Note?}]}`): item còn `Pending` → ép `Missing` + `Note` gửi kèm (ghi chú tự do, không checklist — cùng pattern ServerCheck). Xong → `Completed`, **khoá cứng, không sửa được nữa**.
+- **`InventoryAssignment`** = phân công user↔xưởng, cùng shape `ServerCheckAssignment` (`UserId` unique → 1 user đúng 1 xưởng, lấy từ claim `UserId` trong JWT) nhưng là **bảng riêng** — 2 tính năng độc lập dù trùng shape. Khác biệt duy nhất: **nhiều user khác nhau được gán CHUNG 1 xưởng** (không có gì ngăn, vì unique chỉ ở `UserId`) — cần thiết vì 1 xưởng có quá nhiều máy ở nhiều nơi, không thể để 1 người đi kiểm kê hết.
+- **Quyền đọc**: có `Asset.Inventory.View` → xem mọi xưởng (`grid-list`/`report` nhận `branchId` optional lọc); chỉ có `Asset.Inventory.Scan` → BE ép về xưởng được phân công. `GET /api/Inventory/current` (lấy phiên `InProgress` của xưởng mình cho màn quét) cố tình chỉ yêu cầu quyền `Scan` (không phải `View`) — khác `ServerCheckController.GetToday` đang yêu cầu `View` dù được gọi từ màn quét dành cho role chỉ có `Scan` (có vẻ là bug tồn tại ở ServerCheck, chưa sửa vì ngoài phạm vi việc này).
+- **API** (`InventoryController`, `/api/Inventory`): `GET current` (Scan), `POST start` (Scan), `GET {id}` (View), `POST {id}/scan` (Scan), `POST {id}/end` (Scan), `GET grid-list` (View, phân trang + filter `fromDate/toDate/branchId`), `GET report` (View, trả `List<InventoryReportRowDto>` — 1 dòng/phiên, kèm `MissingItems` liệt kê mã+tên+note các máy thiếu), `GET report/export` (View, trả file `.xlsx`).
+- **Xuất báo cáo**: chưa có file mẫu công ty (khác ServerCheck) → **Excel do BE tự dựng workbook mới bằng ClosedXML** (`InventoryService.ExportReportAsync`, layout tự thiết kế, không mở template). **PDF (khi FE làm) phải vẽ thẳng bằng `jspdf`+`jspdf-autotable` ở FE** theo đúng CLAUDE.md §4.8 — không qua BE.
+- **Permission** (migration Identity `AddInventoryPermissionsAndRole`): `Asset.Inventory.Scan`, `Asset.Inventory.View`, `Asset.Inventory.Assign` — cả 3 đã gán `Admin`. Role **"Kiểm kê thiết bị"** chỉ chứa `Scan` (cùng pattern role "Kiểm tra Server").
+- **`InventoryAssignmentController`** (`/api/InventoryAssignment`): `GET` (Assign) danh sách; `GET /me` (Scan) xưởng của chính mình; `PUT` (Assign, upsert theo `userId`); `DELETE /{id}` (Assign).
+- **DB thật**: migration Asset `AddInventoryModule` + Identity `AddInventoryPermissionsAndRole` **đã apply** (2026-09-23). Smoke-test qua HTTP thật: `grid-list`→mảng rỗng, `InventoryAssignment`→mảng rỗng, `/me`→`null` (đúng kỳ vọng, chưa ai được phân công).
+- **FE đã có** (2026-09-23): `modules/pc-management/components/inventory/` (`InventoryScanPage` kiosk cùng khuôn `ServerCheckScanPage` nhưng không chia category; `InventoryEndSessionDialog`; `InventoryAssignmentPage`; `InventoryReportPage` + `InventorySessionDetailDialog`) — route `(pc-scan)/pc/inventory/scan` (kiosk, không Sidebar — `Header.tsx`/`PcAccessGuard` đã trừ riêng route này giống `/pc/server-check/scan`) + `(pc-manager)/pc/inventory` (báo cáo) + `/pc/inventory/assignments`, `inventory.api.ts`/`inventory-assignment.api.ts`/`inventory.dto.ts`, mục sidebar "Kiểm kê thiết bị" (`PcManagerSidebar.tsx`, tự đổi sang thẳng trang quét nếu user chỉ có `Scan`), key i18n `Asset.Inventory`/`Navigation.inventory` (`vi.json`/`ja.json`).
+  - **Xuất PDF** (`InventoryReportPage.handleExportPdf`) dựng thẳng bằng `jspdf`+`jspdf-autotable` ở client, nhúng font Roboto dùng chung `modules/pc-management/lib/pdf-fonts.ts` (đúng CLAUDE.md §4.8, không chụp DOM).
+  - Báo cáo cho lọc **"Tất cả xưởng"** (khác ServerCheckReportPage bắt buộc đúng 1 xưởng) vì không bị ràng buộc bởi layout tờ giấy nào — mỗi dòng báo cáo tự mang tên xưởng riêng.
+  - ⚠️ **Bug đã fix cùng ngày**: bản đầu `InventoryScanPage.tsx` refresh sau mỗi lần quét bằng `getById(session.id)` (quyền `View`) — role "Kiểm kê thiết bị" chỉ có `Scan` nên sẽ 403 ngay sau lần quét đầu tiên. Đổi sang gọi `getCurrent()` (quyền `Scan`, đã tự trả đúng phiên `InProgress` của xưởng mình).
+
+### 1.23. Quản lý bản cập nhật app Flutter "YEV Scan" — `AppRelease` (2026-09-23)
+
+App mobile nội bộ dùng chung cho các tính năng quét mã (ServerCheck §1.19, Inventory §1.22, và các app
+quét sau này) tự kiểm tra bản mới khi mở app. Entity đơn giản — `ApkUrl` chỉ là **string** (không có cột
+riêng phân biệt link ngoài/link nội bộ): admin có thể dán link ngoài (Drive...) **hoặc** upload file
+`.apk` trực tiếp qua UI, cả 2 đều ra một chuỗi URL lưu y hệt vào `ApkUrl` (2026-09-23, mở rộng từ quyết
+định ban đầu "không upload file" sau khi người dùng yêu cầu bổ sung).
+
+- **`AppRelease`**: `Id`, `VersionCode`(int, unique — index filtered global giống các mã khác, bản ghi
+  xoá mềm vẫn giữ chỗ), `VersionName`(string), `MinVersionCode`(int), `ApkUrl`(string, link — có thể là
+  link ngoài hoặc link nội bộ do `POST /upload` sinh ra), `Changelog`(string dài, nullable), `IsDeleted`.
+  Không có field audit riêng nào khác — theo đúng convention `Branch` (audit Create/Update/Delete đã có
+  sẵn qua `AuditTrail` tự động, §1.17, không cần cột CreatedAt/CreatedBy thủ công).
+- **Upload file `.apk`** (`POST /api/AppRelease/upload`, permission `Asset.AppRelease.Manage`, giới hạn
+  300MB qua `[RequestSizeLimit]`): nhận `IFormFile`, chỉ chấp nhận đuôi `.apk`, lưu trên đĩa server chạy
+  `CompanySystem.HostApi` qua `IAppReleaseFileStorage`/`AppReleaseFileStorageService` (mirror
+  `IWorkflowAttachmentStorage`, thư mục cấu hình `AppSettings:AppReleaseStoragePath`, mặc định
+  `App_Data/AppReleaseFiles`), tên file lưu = GUID + đuôi gốc (tránh trùng/đoán được). Trả về **string**
+  là URL tuyệt đối `{scheme}://{host}/api/AppRelease/download/{storedFileName}` — FE tự điền URL này vào
+  ô `ApkUrl` như dán link tay, **không** tự động lưu vào DB (vẫn phải POST/PUT create/update apkUrl riêng).
+  Không xoá file cũ khi upload file mới thay thế (admin quản lý số lượng nhỏ, chấp nhận file mồ côi tích
+  luỹ theo thời gian — đơn giản hoá, không cần dọn dẹp tự động).
+- **Download file `.apk`** (`GET /api/AppRelease/download/{fileName}`) — **`[AllowAnonymous]`** (app
+  Flutter tải file sau khi gọi `GetLatest()` mà chưa đăng nhập), trả file nhị phân trực tiếp
+  (`PhysicalFile`, content-type `application/vnd.android.package-archive`), **không** bọc
+  `ApiResponse<T>` (rule CLAUDE.md §3.4-1 chỉ áp dụng JSON, giống `WorkflowRequestController.DownloadAttachment`).
+  `fileName` qua `Path.GetFileName()` để chặn path traversal; 404 nếu không tồn tại.
+- **Deploy IIS**: `docs/deploy-config/config-be/web.config` đã nâng `maxAllowedContentLength` lên 300MB
+  (mặc định IIS chặn body > ~28.6MB, sẽ chặn upload APK thật trước khi tới Kestrel).
+- **"Bản mới nhất"** = `!IsDeleted`, `VersionCode` lớn nhất — tính on-the-fly (`OrderByDescending(VersionCode).Take(1)`), không có cờ `IsLatest` riêng để tránh 2 nguồn sự thật.
+- **`GET /api/AppRelease/latest`** — **`[AllowAnonymous]`** (app gọi trước khi đăng nhập để kiểm tra cập nhật lúc mở app) — bề mặt anonymous thứ 3 của hệ thống, cùng nhóm `UserSignatureController`/`OtFormController` (Attendance). Trả `AppReleaseDto?`, `null` nếu chưa có bản nào. **Logic so sánh `versionCode` hiện tại của app với `minVersionCode`/`versionCode` trả về nằm ở app Flutter** — BE chỉ trả dữ liệu thô, không tự quyết "có bắt buộc cập nhật không".
+- **CRUD còn lại** (`grid-list`, POST, `PUT {id}`, `DELETE {id}`) chỉ 1 permission duy nhất `Asset.AppRelease.Manage` (không tách View/Create/Update/Delete như Branch — quyết định người dùng, đơn giản hoá vì màn quản trị này chỉ dành cho vài người). `grid-list` lọc `keyword` theo `VersionName`. Tạo/sửa trùng `VersionCode` → 400 (`GuardExtensions.ThrowIfDuplicateCode`, không lọc `IsDeleted` trong truy vấn tìm trùng — đúng luật CLAUDE.md §3.4).
+- **Permission** (migration Identity `AddAppReleaseManagePermission`): `Asset.AppRelease.Manage`, đã gán `Admin`.
+- **DB thật**: migration Asset `AddAppRelease` + Identity `AddAppReleaseManagePermission` **đã apply** (2026-09-23). Smoke-test qua HTTP thật: `latest`→`null` lúc chưa có dữ liệu, tạo/sửa/xoá/trùng mã đều đúng kỳ vọng, dọn sạch dữ liệu test sau khi kiểm (`latest`→`null` trở lại). Upload/download file test riêng (không đụng DB): upload file `.apk` giả → nhận URL → tải anonymous → nội dung khớp byte-for-byte; path traversal (`..%2f..%2f`) → 404; file không tồn tại → 404; upload thiếu token → 401; sai đuôi file → 400. Dọn file test khỏi đĩa sau khi kiểm.
+- **FE**: `modules/pc-management/components/app-releases/` (`AppReleaseList`/`AppReleaseForm`, khuôn CRUD giống `branches/`, nút Thêm/Sửa/Xoá gate theo `hasPermission(user, "Asset.AppRelease.Manage")`), route `(pc-manager)/pc/app-releases`, `app-release.api.ts`/`app-release.dto.ts`, mục sidebar "Bản cập nhật app". `AppReleaseForm` có nút "Tải file .apk lên" cạnh ô `apkUrl` — upload xong tự điền URL vào ô đó (vẫn sửa tay được, vẫn cho dán link ngoài).
+- **Mobile**: hợp đồng cho đội Flutter ở [docs/AppRelease-API-Flutter-Guide.md](../AppRelease-API-Flutter-Guide.md).
 
 ## 2. DTOs (`Asset.Application/Dtos/`)
 - **Master data** (Branches/Suplliers/DeviceTypes/SoftwareGroups): `{Entity}Dto`(Id/Code/Name), `Create...`(+`[Required]`), `Update...`.

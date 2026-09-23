@@ -31,7 +31,11 @@ namespace Asset.Infrastructure.Repositories
             IServerCheckItemRepository serverCheckItems,
             IServerCheckManualItemRepository serverCheckManualItems,
             IServerCheckManualResultRepository serverCheckManualResults,
-            IServerCheckAssignmentRepository serverCheckAssignments) : base(dbContext)
+            IServerCheckAssignmentRepository serverCheckAssignments,
+            IInventorySessionRepository inventorySessions,
+            IInventorySessionItemRepository inventorySessionItems,
+            IInventoryAssignmentRepository inventoryAssignments,
+            IAppReleaseRepository appReleases) : base(dbContext)
         {
             Devices = devices;
             Branches = branches;
@@ -56,6 +60,10 @@ namespace Asset.Infrastructure.Repositories
             ServerCheckManualItems = serverCheckManualItems;
             ServerCheckManualResults = serverCheckManualResults;
             ServerCheckAssignments = serverCheckAssignments;
+            InventorySessions = inventorySessions;
+            InventorySessionItems = inventorySessionItems;
+            InventoryAssignments = inventoryAssignments;
+            AppReleases = appReleases;
         }
 
         public IDeviceRepository Devices { get; }
@@ -81,5 +89,9 @@ namespace Asset.Infrastructure.Repositories
         public IServerCheckManualItemRepository ServerCheckManualItems { get; }
         public IServerCheckManualResultRepository ServerCheckManualResults { get; }
         public IServerCheckAssignmentRepository ServerCheckAssignments { get; }
+        public IInventorySessionRepository InventorySessions { get; }
+        public IInventorySessionItemRepository InventorySessionItems { get; }
+        public IInventoryAssignmentRepository InventoryAssignments { get; }
+        public IAppReleaseRepository AppReleases { get; }
     }
 }

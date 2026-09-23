@@ -22,6 +22,45 @@ namespace Asset.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Asset.Domain.Entities.AppRelease", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ApkUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Changelog")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MinVersionCode")
+                        .HasColumnType("int");
+
+                    b.Property<int>("VersionCode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("VersionName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AppReleases");
+
+                    b.HasIndex(new[] { "VersionCode" }, "IX_AppReleases_VersionCode")
+                        .IsUnique();
+
+                    b.ToTable("AppReleases");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.AssetSetting", b =>
                 {
                     b.Property<int>("Id")
@@ -660,6 +699,117 @@ namespace Asset.Infrastructure.Migrations
                     b.ToTable("DeviceTypes");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.InventoryAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FullName")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_InventoryAssignments");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex(new[] { "UserId" }, "IX_InventoryAssignments_UserId")
+                        .IsUnique();
+
+                    b.ToTable("InventoryAssignments");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.InventorySession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EndedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("StartedBy")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id")
+                        .HasName("PK_InventorySessions");
+
+                    b.HasIndex(new[] { "BranchId" }, "IX_InventorySessions_BranchId_InProgress")
+                        .IsUnique()
+                        .HasFilter("[Status] = 0");
+
+                    b.ToTable("InventorySessions");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.InventorySessionItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ScannedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ScannedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("SessionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id")
+                        .HasName("PK_InventorySessionItems");
+
+                    b.HasIndex(new[] { "DeviceId" }, "IX_InventorySessionItems_DeviceId");
+
+                    b.HasIndex(new[] { "SessionId" }, "IX_InventorySessionItems_SessionId");
+
+                    b.ToTable("InventorySessionItems");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.IpAddress", b =>
                 {
                     b.Property<int>("Id")
@@ -1285,6 +1435,51 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("Software");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.InventoryAssignment", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_InventoryAssignments_Branches_BranchId");
+
+                    b.Navigation("Branch");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.InventorySession", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_InventorySessions_Branches_BranchId");
+
+                    b.Navigation("Branch");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.InventorySessionItem", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_InventorySessionItems_ThietBis_DeviceId");
+
+                    b.HasOne("Asset.Domain.Entities.InventorySession", "Session")
+                        .WithMany("Items")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_InventorySessionItems_InventorySessions_SessionId");
+
+                    b.Navigation("Device");
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.IpAddress", b =>
                 {
                     b.HasOne("Asset.Domain.Entities.Device", "Device")
@@ -1447,6 +1642,11 @@ namespace Asset.Infrastructure.Migrations
             modelBuilder.Entity("Asset.Domain.Entities.DeviceType", b =>
                 {
                     b.Navigation("Devices");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.InventorySession", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.IpPrefix", b =>
