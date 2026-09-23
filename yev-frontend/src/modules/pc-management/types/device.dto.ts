@@ -42,6 +42,7 @@ export interface DeviceDto {
     isOutsourced: boolean;
     serialNumber: string | null;
     isUseUsb: boolean;
+    requiresDailyCheck: boolean;
 }
 
 export interface CreateUpdateDeviceDto {
@@ -65,6 +66,10 @@ export interface CreateUpdateDeviceDto {
     note: string;
     serialNumber: string | null;
     isUseUsb: boolean;
+    // Thiết bị nằm trong phòng server, có dán QR → phải quét trong phiên kiểm tra hằng ngày
+    // (asset-api-fe.md §7d.2). Máy cùng loại nhưng không có mặt vật lý (server ảo, switch rải
+    // khắp nhà máy) để false — không quét, chỉ nằm trong phạm vi ping (§7d.8).
+    requiresDailyCheck: boolean;
     ipAddressIds: number[];
 }
 
@@ -93,6 +98,7 @@ export interface DeviceGetDto {
     note: string | null;
     serialNumber: string | null;
     isUseUsb: boolean;
+    requiresDailyCheck: boolean;
     ipAddresses: DeviceIpAddressDto[];
     // 2026-07-13: máy MỚI nào được gợi ý để thay thế CHÍNH máy đang xem này — chỉ có ý nghĩa khi
     // đang xem 1 máy CŨ, gợi ý từ cột "MQL Cũ" lúc import Excel (docs/asset-api-fe.md §5.3/5.10),

@@ -170,13 +170,14 @@ export default function DeviceTypeList() {
                                 <th className="px-6 py-3">ID</th>
                                 <th className="px-6 py-3">{t("colCode")}</th>
                                 <th className="px-6 py-3">{t("colName")}</th>
+                                <th className="px-6 py-3">{t("colServerCheckCategory")}</th>
                                 <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && deviceTypes.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         {t("noData")}
                                     </td>
                                 </tr>
@@ -186,6 +187,9 @@ export default function DeviceTypeList() {
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{deviceType.id}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{deviceType.typeCode}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{deviceType.typeName}</td>
+                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">
+                                        {deviceType.serverCheckCategoryText ?? <span className="text-[#8a8f94]">—</span>}
+                                    </td>
                                     <td className="px-6 py-4 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Calendar, ChevronDown, ChevronUp, Filter, Layers, Mail, MapPin, Search, Tag, Truck, User, Users, X } from "lucide-react";
+import { Building2, Calendar, ChevronDown, ChevronUp, Filter, Layers, Mail, MapPin, QrCode, Search, Tag, Truck, User, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
@@ -26,6 +26,9 @@ export interface DeviceFilters {
     serialNumber: string;
     // "" = tất cả, "true"/"false" — dùng string vì DeviceFilters là bộ lọc kiểu string đồng nhất.
     isUseUsb: string;
+    // "" = tất cả, "true"/"false" — lọc theo cờ "Cần kiểm tra hằng ngày (QR)", dùng để gom nhanh danh
+    // sách in QR cho phòng server (asset-module.md §1.19/§1.21).
+    requiresDailyCheck: string;
     // "" = tất cả, ngược lại là Id (dạng string) của Nhóm/Bộ phận — lọc chính xác qua API (docs/asset-api-fe.md §5.2).
     groupId: string;
     departmentId: string;
@@ -48,6 +51,7 @@ const defaultFilters: DeviceFilters = {
     expiryDate: "",
     serialNumber: "",
     isUseUsb: "",
+    requiresDailyCheck: "",
     groupId: "",
     departmentId: "",
 };
@@ -65,6 +69,7 @@ const filterLabels: Record<keyof DeviceFilters, string> = {
     expiryDate: "Hạn sử dụng",
     serialNumber: "Số Serial",
     isUseUsb: "Cho phép dùng USB",
+    requiresDailyCheck: "Kiểm tra hằng ngày (QR)",
     groupId: "Nhóm",
     departmentId: "Bộ phận",
 };
@@ -79,6 +84,7 @@ const advancedFields: (keyof DeviceFilters)[] = [
     "expiryDate",
     "serialNumber",
     "isUseUsb",
+    "requiresDailyCheck",
     "groupId",
     "departmentId",
 ];
@@ -409,6 +415,22 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
 
                         <label>
                             <span className={fieldLabelClassName}>
+                                <QrCode className="h-3.5 w-3.5" />
+                                Kiểm tra hằng ngày (QR)
+                            </span>
+                            <select
+                                value={filters.requiresDailyCheck}
+                                onChange={(event) => handleChange("requiresDailyCheck", event.target.value)}
+                                className={fieldClassName}
+                            >
+                                <option value="">Tất cả</option>
+                                <option value="true">Có — cần quét QR</option>
+                                <option value="false">Không</option>
+                            </select>
+                        </label>
+
+                        <label>
+                            <span className={fieldLabelClassName}>
                                 <Layers className="h-3.5 w-3.5" />
                                 Nhóm
                             </span>
@@ -452,7 +474,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 className="flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs text-[#5e3f3a]"
                             >
                                 <span className="font-semibold text-[#191c1e]">{filterLabels[field]}:</span>
-                                {field === "isUseUsb"
+                                {field === "isUseUsb" || field === "requiresDailyCheck"
                                     ? value === "true"
                                         ? "Có"
                                         : "Không"

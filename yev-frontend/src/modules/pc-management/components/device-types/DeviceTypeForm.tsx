@@ -9,7 +9,16 @@ import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 export interface DeviceTypeFormValues {
     typeCode: string;
     typeName: string;
+    serverCheckCategory: number | null;
 }
+
+// Khớp Asset.Domain.Enums.ServerCheckCategory bên BE.
+const SERVER_CHECK_CATEGORY_OPTIONS = [
+    { value: 0, labelKey: "serverCheckCategoryServer" },
+    { value: 1, labelKey: "serverCheckCategoryNetwork" },
+    { value: 2, labelKey: "serverCheckCategoryUps" },
+    { value: 3, labelKey: "serverCheckCategoryAirConditioner" },
+] as const;
 
 interface DeviceTypeFormProps {
     isOpen: boolean;
@@ -20,7 +29,7 @@ interface DeviceTypeFormProps {
     onSubmit: (values: DeviceTypeFormValues) => void | Promise<void>;
 }
 
-const emptyValues: DeviceTypeFormValues = { typeCode: "", typeName: "" };
+const emptyValues: DeviceTypeFormValues = { typeCode: "", typeName: "", serverCheckCategory: null };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -32,12 +41,16 @@ export default function DeviceTypeForm({ isOpen, mode, initial, loading = false,
     const [values, setValues] = useState<DeviceTypeFormValues>(emptyValues);
 
     useDialogReset(isOpen, initial, (current) => {
-        setValues(current ? { typeCode: current.typeCode, typeName: current.typeName } : emptyValues);
+        setValues(
+            current
+                ? { typeCode: current.typeCode, typeName: current.typeName, serverCheckCategory: current.serverCheckCategory ?? null }
+                : emptyValues
+        );
     });
 
     if (!isOpen) return null;
 
-    const handleChange = (field: keyof DeviceTypeFormValues, value: string) => {
+    const handleChange = (field: "typeCode" | "typeName", value: string) => {
         setValues((current) => ({ ...current, [field]: value }));
     };
 
@@ -95,6 +108,29 @@ export default function DeviceTypeForm({ isOpen, mode, initial, loading = false,
                             required
                             className={fieldClassName}
                         />
+                    </label>
+
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("fieldServerCheckCategory")}</span>
+                        <select
+                            value={values.serverCheckCategory ?? ""}
+                            onChange={(event) =>
+                                setValues((current) => ({
+                                    ...current,
+                                    serverCheckCategory: event.target.value === "" ? null : Number(event.target.value),
+                                }))
+                            }
+                            disabled={loading}
+                            className={fieldClassName}
+                        >
+                            <option value="">{t("serverCheckCategoryNone")}</option>
+                            {SERVER_CHECK_CATEGORY_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {t(option.labelKey)}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="mt-1 text-xs text-[#8a8f94]">{t("fieldServerCheckCategoryHint")}</p>
                     </label>
 
                     <div className="flex justify-end gap-3 pt-2">

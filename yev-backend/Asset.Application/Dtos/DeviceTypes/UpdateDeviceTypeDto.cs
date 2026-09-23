@@ -14,5 +14,7 @@ namespace Asset.Application.Dtos.DeviceTypes
 
         [Required(ErrorMessage = "Tên loại thiết bị không được để trống")]
         public string TypeName { get; set; } = null!;
+
+        public int? ServerCheckCategory { get; set; }
     }
 }

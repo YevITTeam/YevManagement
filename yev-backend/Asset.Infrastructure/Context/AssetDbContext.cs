@@ -33,6 +33,11 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<Supplier> Suppliers { get; set; }
     public virtual DbSet<TransferHistory> TransferHistories { get; set; }
     public virtual DbSet<SoftwareGroup> SoftwareGroups { get; set; }
+    public virtual DbSet<ServerCheckSession> ServerCheckSessions { get; set; }
+    public virtual DbSet<ServerCheckItem> ServerCheckItems { get; set; }
+    public virtual DbSet<ServerCheckManualItem> ServerCheckManualItems { get; set; }
+    public virtual DbSet<ServerCheckManualResult> ServerCheckManualResults { get; set; }
+    public virtual DbSet<ServerCheckAssignment> ServerCheckAssignments { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +55,11 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<AssetSetting>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_AssetSettings");
+
+            entity.HasOne(d => d.ServerCheckBranch).WithMany()
+                .HasForeignKey(d => d.ServerCheckBranchId)
+                .HasConstraintName("FK_AssetSettings_Branches_ServerCheckBranchId")
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Branch>(entity =>
@@ -75,6 +85,7 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.Note).HasMaxLength(500);
             entity.Property(e => e.SerialNumber).HasMaxLength(100);
             entity.Property(e => e.IsUseUsb).HasDefaultValue(false);
+            entity.Property(e => e.RequiresDailyCheck).HasDefaultValue(false);
 
             entity.HasOne(d => d.Branch).WithMany(p => p.Devices)
                 .HasForeignKey(d => d.BranchId)
@@ -274,6 +285,75 @@ public partial class AssetDbContext : DbContext
             entity.HasIndex(e => e.TypeCode, "IX_LoaiThietBis_MaLoai").IsUnique();
             entity.Property(e => e.TypeCode).HasMaxLength(50);
             entity.Property(e => e.TypeName).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<ServerCheckSession>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ServerCheckSessions");
+            entity.HasIndex(e => new { e.CheckDate, e.BranchId }, "IX_ServerCheckSessions_CheckDate_BranchId").IsUnique();
+            entity.Property(e => e.StartedBy).HasMaxLength(150);
+            entity.Property(e => e.EndedBy).HasMaxLength(150);
+
+            entity.HasOne(d => d.Branch).WithMany()
+                .HasForeignKey(d => d.BranchId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ServerCheckSessions_Branches_BranchId");
+        });
+
+        modelBuilder.Entity<ServerCheckAssignment>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ServerCheckAssignments");
+            entity.HasIndex(e => e.UserId, "IX_ServerCheckAssignments_UserId").IsUnique();
+            entity.Property(e => e.UserName).HasMaxLength(150);
+            entity.Property(e => e.FullName).HasMaxLength(150);
+
+            entity.HasOne(d => d.Branch).WithMany()
+                .HasForeignKey(d => d.BranchId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ServerCheckAssignments_Branches_BranchId");
+        });
+
+        modelBuilder.Entity<ServerCheckItem>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ServerCheckItems");
+            entity.HasIndex(e => e.SessionId, "IX_ServerCheckItems_SessionId");
+            entity.HasIndex(e => e.DeviceId, "IX_ServerCheckItems_DeviceId");
+            entity.Property(e => e.ScannedBy).HasMaxLength(150);
+            entity.Property(e => e.Note).HasMaxLength(500);
+
+            entity.HasOne(d => d.Session).WithMany(p => p.Items)
+                .HasForeignKey(d => d.SessionId)
+                .HasConstraintName("FK_ServerCheckItems_ServerCheckSessions_SessionId");
+
+            entity.HasOne(d => d.Device).WithMany()
+                .HasForeignKey(d => d.DeviceId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ServerCheckItems_ThietBis_DeviceId");
+        });
+
+        modelBuilder.Entity<ServerCheckManualItem>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ServerCheckManualItems");
+            entity.Property(e => e.Name).HasMaxLength(255);
+            entity.Property(e => e.UsesNetworkPing).HasDefaultValue(false);
+        });
+
+        modelBuilder.Entity<ServerCheckManualResult>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ServerCheckManualResults");
+            entity.HasIndex(e => e.SessionId, "IX_ServerCheckManualResults_SessionId");
+            entity.HasIndex(e => new { e.SessionId, e.ManualItemId }, "IX_ServerCheckManualResults_SessionId_ManualItemId").IsUnique();
+            entity.Property(e => e.Note).HasMaxLength(500);
+            entity.Property(e => e.ConfirmedBy).HasMaxLength(150);
+
+            entity.HasOne(d => d.Session).WithMany(p => p.ManualResults)
+                .HasForeignKey(d => d.SessionId)
+                .HasConstraintName("FK_ServerCheckManualResults_ServerCheckSessions_SessionId");
+
+            entity.HasOne(d => d.ManualItem).WithMany(p => p.Results)
+                .HasForeignKey(d => d.ManualItemId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ServerCheckManualResults_ServerCheckManualItems_ManualItemId");
         });
 
         modelBuilder.Entity<IpAddress>(entity =>

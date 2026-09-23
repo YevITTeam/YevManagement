@@ -21,6 +21,9 @@ namespace Asset.Application.Dtos.Devices
         public bool? IsOutsourced { get; set; }
         public string? SerialNumber { get; set; }
         public bool? IsUseUsb { get; set; }
+        // Lọc máy đã tick "Cần kiểm tra hằng ngày (QR)" — dùng cho màn Thiết bị gom nhanh máy cần in QR
+        // cho phòng server (asset-module.md §1.19/§1.21).
+        public bool? RequiresDailyCheck { get; set; }
         public int? BranchId { get; set; }
         public int? DeviceTypeId { get; set; }
         // 0=PendingUse, 1=InUse, 2=PendingLiquidation, 3=Liquidated (Asset.Domain.Enums.DeviceStatus).

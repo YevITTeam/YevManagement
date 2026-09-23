@@ -13,11 +13,16 @@ export const metadata = {
 export default function PcManagerLayout({ children }: { children: ReactNode }) {
   return (
     <PcAccessGuard>
+      {/* Sidebar tự ẩn khi in (print:hidden) nhưng margin-left bên dưới là inline style (biến
+          --sidebar-w) nên class Tailwind `print:` không thắng nổi — phải override riêng bằng
+          <style> mới đủ specificity, nếu không bản in sẽ có 1 dải trắng rộng 13.75rem bên trái do
+          Sidebar đã ẩn nhưng chỗ nó chừa ra thì chưa. */}
+      <style>{`@media print { .pc-content-offset { margin-left: 0 !important; } }`}</style>
       <div className="min-h-full bg-[#f7f9fb] text-[#191c1e]">
         <Sidebar />
 
         <div
-          className="min-h-full transition-[margin-left] duration-200"
+          className="pc-content-offset min-h-full transition-[margin-left] duration-200"
           style={{ marginLeft: "var(--sidebar-w, 13.75rem)" }}
         >
           <div className="min-h-full bg-[#f8fafc] px-5 pb-5 pt-3 md:px-8 md:pb-8 md:pt-4 lg:px-10 lg:pb-10 lg:pt-5">

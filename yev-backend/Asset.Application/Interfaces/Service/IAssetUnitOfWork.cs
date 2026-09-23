@@ -23,5 +23,10 @@ namespace Asset.Application.Interfaces.Service
         IIpPrefixRepository IpPrefixes { get; }
         ITransferHistoryRepository TransferHistories { get; }
         IAuditTrailRepository AuditTrails { get; }
+        IServerCheckSessionRepository ServerCheckSessions { get; }
+        IServerCheckItemRepository ServerCheckItems { get; }
+        IServerCheckManualItemRepository ServerCheckManualItems { get; }
+        IServerCheckManualResultRepository ServerCheckManualResults { get; }
+        IServerCheckAssignmentRepository ServerCheckAssignments { get; }
     }
 }

@@ -29,7 +29,13 @@ public partial class AssetDbContext
     {
         typeof(AuditTrail),
         typeof(DeviceConfigurationHistory),
-        typeof(DeviceConfigurationInitial)
+        typeof(DeviceConfigurationInitial),
+        // ServerCheckSession/Item/ManualResult ARE the daily check's own log (1 row per scan/session) —
+        // auditing them too would just duplicate every scan as a second, noisier log (same rationale as
+        // DeviceConfigurationHistory above). ServerCheckManualItem (rarely-edited master data) stays audited.
+        typeof(ServerCheckSession),
+        typeof(ServerCheckItem),
+        typeof(ServerCheckManualResult)
     };
 
     // A grouped row keeps at most this many record names in NewValues — enough to know what was
@@ -324,6 +330,8 @@ public partial class AssetDbContext
             DeviceSoftware deviceSoftware => $"{DeviceLabel(deviceSoftware.DeviceId, deviceCodes)} - Phần mềm #{deviceSoftware.SoftwareId}",
             TransferHistory transfer => $"{DeviceLabel(transfer.OldDeviceId, deviceCodes)} → {DeviceLabel(transfer.NewDeviceId, deviceCodes)}",
             AssetSetting => "Cấu hình hệ thống",
+            ServerCheckManualItem manualItem => manualItem.Name,
+            ServerCheckAssignment assignment => $"{assignment.UserName} → xưởng #{assignment.BranchId}",
             _ => null
         };
 

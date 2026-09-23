@@ -44,6 +44,7 @@ const defaultFilters: DeviceFilters = {
   expiryDate: "",
   serialNumber: "",
   isUseUsb: "",
+  requiresDailyCheck: "",
   groupId: "",
   departmentId: "",
 };
@@ -178,6 +179,7 @@ export default function DeviceList() {
     filters.expiryDate,
     filters.serialNumber,
     filters.isUseUsb,
+    filters.requiresDailyCheck,
     filters.groupId,
     filters.departmentId,
     sortDeviceCodeAscending,
@@ -203,6 +205,7 @@ export default function DeviceList() {
         purchaseDate: filters.purchaseDate || undefined,
         serialNumber: filters.serialNumber || undefined,
         isUseUsb: filters.isUseUsb === "" ? undefined : filters.isUseUsb === "true",
+        requiresDailyCheck: filters.requiresDailyCheck === "" ? undefined : filters.requiresDailyCheck === "true",
         groupId: filters.groupId === "" ? undefined : Number(filters.groupId),
         departmentId: filters.departmentId === "" ? undefined : Number(filters.departmentId),
         branchId: filters.branch === "" ? undefined : Number(filters.branch),

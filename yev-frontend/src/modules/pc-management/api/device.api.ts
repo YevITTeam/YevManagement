@@ -34,6 +34,9 @@ export interface GetDevicePageNationParams {
     isOutsourced?: boolean;
     serialNumber?: string;
     isUseUsb?: boolean;
+    // Lọc máy đã tick "Cần kiểm tra hằng ngày (QR)" — gom nhanh danh sách in QR cho phòng server
+    // (asset-module.md §1.19/§1.21).
+    requiresDailyCheck?: boolean;
     branchId?: number;
     deviceTypeId?: number;
     // 0=Chưa sử dụng,1=Đang sử dụng,2=Chờ thanh lý,3=Đã thanh lý (Asset.Domain.Enums.DeviceStatus).
@@ -60,6 +63,7 @@ export const DeviceApi = {
         if (params?.isOutsourced !== undefined) query.set("IsOutsourced", String(params.isOutsourced));
         if (params?.serialNumber) query.set("SerialNumber", params.serialNumber);
         if (params?.isUseUsb !== undefined) query.set("IsUseUsb", String(params.isUseUsb));
+        if (params?.requiresDailyCheck !== undefined) query.set("RequiresDailyCheck", String(params.requiresDailyCheck));
         if (params?.branchId !== undefined) query.set("BranchId", String(params.branchId));
         if (params?.deviceTypeId !== undefined) query.set("DeviceTypeId", String(params.deviceTypeId));
         if (params?.status !== undefined) query.set("Status", String(params.status));

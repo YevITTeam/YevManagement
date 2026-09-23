@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { EmployeeDto } from "@/modules/workflow/types/employee.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 
 export interface EmployeeFormValues {
     employeeCode: string;
@@ -21,6 +22,8 @@ interface EmployeeFormProps {
     mode: "create" | "edit";
     initial?: EmployeeDto | null;
     loading?: boolean;
+    userOptions: SelectOption[];
+    isLoadingUsers?: boolean;
     onClose: () => void;
     onSubmit: (values: EmployeeFormValues) => void | Promise<void>;
 }
@@ -39,7 +42,16 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: EmployeeFormProps) {
+export default function EmployeeForm({
+    isOpen,
+    mode,
+    initial,
+    loading = false,
+    userOptions,
+    isLoadingUsers = false,
+    onClose,
+    onSubmit,
+}: EmployeeFormProps) {
     const t = useTranslations("Workflow.Employee");
     const tCommon = useTranslations("Common");
     const [values, setValues] = useState<EmployeeFormValues>(emptyValues);
@@ -157,18 +169,12 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
 
                     <label className="block">
                         <span className={fieldLabelClassName}>{t("fieldUserId")}</span>
-                        <input
-                            type="number"
+                        <SearchableSelect
+                            options={userOptions}
                             value={values.userId ?? ""}
-                            onChange={(event) =>
-                                setValues((current) => ({
-                                    ...current,
-                                    userId: event.target.value === "" ? null : Number(event.target.value),
-                                }))
-                            }
-                            placeholder={t("fieldUserIdPlaceholder")}
-                            disabled={loading}
-                            className={fieldClassName}
+                            onChange={(v) => setValues((current) => ({ ...current, userId: v === "" ? null : v }))}
+                            placeholder={isLoadingUsers ? tCommon("loading") : t("fieldUserIdPlaceholder")}
+                            disabled={loading || isLoadingUsers}
                         />
                         <span className="mt-1 block text-xs text-[#8a8f94]">{t("fieldUserIdHint")}</span>
                     </label>

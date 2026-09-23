@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>YEV Workflow</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root {
+    --ink: #191c1e;
+    --ink-soft: #5e3f3a;
+    --muted: #8a8f94;
+    --line: #e0e3e5;
+    --line-strong: #c9ced2;
+    --surface: #ffffff;
+    --surface-alt: #f8fafc;
+    --bg: #fbf9f8;
+    --accent: #e3000f;
+    --accent-hover: #b40009;
+    --accent-tint: #fff1f1;
+    --success: #1a7a52;
+    --success-tint: #eaf7f1;
+    --shadow: 0 1px 2px rgba(25, 28, 30, 0.04), 0 8px 24px -12px rgba(25, 28, 30, 0.12);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #f3ede9;
+      --ink-soft: #d3ac9b;
+      --muted: #948d88;
+      --line: #35302c;
+      --line-strong: #45403a;
+      --surface: #211c19;
+      --surface-alt: #181513;
+      --bg: #141210;
+      --accent: #ff4d4d;
+      --accent-hover: #ff7373;
+      --accent-tint: #2e1616;
+      --success: #4cc796;
+      --success-tint: #133226;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #f3ede9;
+    --ink-soft: #d3ac9b;
+    --muted: #948d88;
+    --line: #35302c;
+    --line-strong: #45403a;
+    --surface: #211c19;
+    --surface-alt: #181513;
+    --bg: #141210;
+    --accent: #ff4d4d;
+    --accent-hover: #ff7373;
+    --accent-tint: #2e1616;
+    --success: #4cc796;
+    --success-tint: #133226;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.6);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page { max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .eyebrow::before {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+  }
+
+  h1 {
+    font-family: 'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+    font-weight: 700;
+    font-size: clamp(32px, 5vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    margin: 14px 0 16px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+
+  .lede {
+    font-size: 17px;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0 0 36px;
+  }
+
+  /* Approval chain hero strip */
+  .chain {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    flex-wrap: wrap;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin-bottom: 48px;
+  }
+  .chain-step {
+    flex: 1 1 140px;
+    padding: 18px 16px;
+    position: relative;
+    border-right: 1px solid var(--line);
+  }
+  .chain-step:last-child { border-right: none; background: var(--accent-tint); }
+  .chain-step .code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+  .chain-step .role {
+    font-weight: 600;
+    font-size: 14.5px;
+    margin-top: 4px;
+    color: var(--ink);
+  }
+  .chain-step .org {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .chain-step::after {
+    content: "→";
+    position: absolute;
+    right: -11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 14px;
+    z-index: 1;
+    background: var(--surface);
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line);
+  }
+  .chain-step:last-child::after { display: none; }
+
+  section { margin-bottom: 52px; }
+
+  h2 {
+    font-family: 'IBM Plex Sans Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--ink);
+    margin: 0 0 8px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  h2 .num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .section-intro {
+    color: var(--ink-soft);
+    font-size: 15px;
+    max-width: 62ch;
+    margin: 0 0 22px;
+  }
+
+  /* pipeline */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .pipe-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 14px;
+  }
+  .pipe-card .step-idx {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .pipe-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 6px 0 6px;
+    color: var(--ink);
+  }
+  .pipe-card p {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .pipe-card .entities {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .pipe-card .entities span {
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 6px;
+  }
+
+  /* feature grid */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .feature {
+    display: flex;
+    gap: 10px;
+    padding: 13px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .feature .dot {
+    flex: none;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--success-tint);
+    color: var(--success);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    margin-top: 1px;
+  }
+  .feature .txt strong { display: block; font-size: 14px; color: var(--ink); font-weight: 600; }
+  .feature .txt span { font-size: 12.5px; color: var(--muted); }
+
+  /* screens table */
+  .screens {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .screen-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    border-top: 1px solid var(--line);
+    padding: 12px 16px;
+    gap: 14px;
+    align-items: baseline;
+  }
+  .screen-row:first-child { border-top: none; }
+  .screen-row .name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .screen-row .route {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .screen-row .desc { font-size: 13.5px; color: var(--ink-soft); }
+
+  /* test accounts */
+  .callout {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .callout-head {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-alt);
+  }
+  .callout-head strong { font-size: 15px; color: var(--ink); }
+  .callout-head p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+
+  table.acct {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  table.acct th {
+    text-align: left;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 16px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--line);
+  }
+  table.acct td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+    vertical-align: top;
+  }
+  table.acct tr:last-child td { border-bottom: none; }
+  table.acct .u { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--ink); }
+  table.acct .role-pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent-tint);
+    color: var(--accent);
+  }
+
+  .warn {
+    display: flex;
+    gap: 10px;
+    padding: 14px 20px;
+    background: var(--surface-alt);
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .warn b { color: var(--ink); }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 24px;
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  footer .status { font-family: 'IBM Plex Mono', monospace; }
+  footer .status b { color: var(--success); }
+
+  @media (max-width: 720px) {
+    .pipeline, .features { grid-template-columns: 1fr; }
+    .screen-row { grid-template-columns: 1fr; }
+    .chain-step::after { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <span class="eyebrow">YEV Management · Workflow</span>
+  <h1>Duyệt đơn nhiều cấp, không cần lập trình mỗi lần đổi form</h1>
+  <p class="lede">
+    Thay vì mỗi loại đơn (nghỉ phép, mua hàng, tăng ca…) phải code riêng, Workflow cho phép admin
+    tự kéo-thả thiết kế form và cấu hình chuỗi duyệt theo đúng sơ đồ tổ chức thật — không sửa code.
+    Trang này tóm tắt kiến trúc, tính năng đã xong và cách tự vào thử.
+  </p>
+
+  <div class="chain">
+    <div class="chain-step">
+      <div class="code">ST · Phòng Công Vụ</div>
+      <div class="role">Staff nộp đơn</div>
+      <div class="org">Đơn xin nghỉ phép</div>
+    </div>
+    <div class="chain-step">
+      <div class="code">GL</div>
+      <div class="role">Group Leader</div>
+      <div class="org">có thể thêm bước duyệt</div>
+    </div>
+    <div class="chain-step">
+      <div class="code">TL</div>
+      <div class="role">Team Leader duyệt</div>
+      <div class="org">bước duyệt cấu hình sẵn</div>
+    </div>
+    <div class="chain-step">
+      <div class="code">DM</div>
+      <div class="role">Department Manager</div>
+      <div class="org">form "Mua hàng" / "TEST"</div>
+    </div>
+  </div>
+
+  <section>
+    <h2><span class="num">01</span> Cách hoạt động</h2>
+    <p class="section-intro">
+      Một chuỗi 4 lớp cấu hình — dựng 1 lần, dùng cho mọi loại đơn phát sinh sau này.
+    </p>
+    <div class="pipeline">
+      <div class="pipe-card">
+        <div class="step-idx">BƯỚC 1</div>
+        <h3>Sơ đồ tổ chức</h3>
+        <p>Cây đơn vị + chức danh + nhân sự, khớp thật với công ty.</p>
+        <div class="entities"><span>OrgUnit</span><span>JobTitle</span><span>Employee</span></div>
+      </div>
+      <div class="pipe-card">
+        <div class="step-idx">BƯỚC 2</div>
+        <h3>Thiết kế form</h3>
+        <p>Kéo-thả field, đặt điều kiện ẩn/hiện/bắt buộc theo giá trị nhập.</p>
+        <div class="entities"><span>FormDefinition</span><span>FormField</span></div>
+      </div>
+      <div class="pipe-card">
+        <div class="step-idx">BƯỚC 3</div>
+        <h3>Cấu hình luồng duyệt</h3>
+        <p>Rẽ nhánh theo điều kiện, mỗi bước gán người duyệt theo Chức danh hoặc đích danh.</p>
+        <div class="entities"><span>FormRoute</span><span>ApprovalStep</span></div>
+      </div>
+      <div class="pipe-card">
+        <div class="step-idx">BƯỚC 4</div>
+        <h3>Nộp &amp; duyệt</h3>
+        <p>Người dùng nộp đơn thật, hệ thống tự resolve người duyệt từng bước.</p>
+        <div class="entities"><span>WorkflowRequest</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span> Tính năng đã sẵn sàng</h2>
+    <p class="section-intro">Toàn bộ mục dưới đây đã code xong cả Backend lẫn Frontend, dùng được ngay hôm nay.</p>
+    <div class="features">
+      <div class="feature"><span class="dot">✓</span><div class="txt"><strong>Kéo-thả thiết kế form</strong><span>Không cần dev mỗi khi thêm loại đơn mới</span></div></div>
+      <div class="feature"><span class="dot">✓</span><div class="txt"><strong>Điều kiện động</strong><span>Ẩn/hiện/bắt buộc field theo giá trị đã nhập</span></div></div>
+      <div class="feature"><span class="dot">✓</span><div class="txt"><strong>Duyệt nhiều cấp + rẽ nhánh</strong><span>Chuỗi bước duyệt khác nhau theo điều kiện đơn</span></div></div>
+      <div class="feature"><span class="dot">✓</span><div class="txt"><strong>Ủy quyền duyệt thay</strong><span>Người vắng mặt chỉ định người duyệt thay</span></div></div>
+      <div class="feature"><span class="dot">✓</span><div class="txt"><strong>Chữ ký điện tử</strong><span>Đăng ký chữ ký cá nhân, in kèm trên đơn</span></div></div>
+      <div class="feature"><span class="dot">✓</span><div class="txt"><strong>Duyệt qua email</strong><span>Bấm link trong mail, duyệt/từ chối không cần đăng nhập</span></div></div>
+      <div class="feature"><span class="dot">✓</span><div class="txt"><strong>Đính kèm file</strong><span>Thêm/xoá file xuyên suốt vòng đời đơn</span></div></div>
+      <div class="feature"><span class="dot">✓</span><div class="txt"><strong>Xem &amp; in đơn</strong><span>Theo dõi tiến độ duyệt từng bước, xuất in</span></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span> Màn hình chính</h2>
+    <p class="section-intro">Dưới nhóm menu <b>Workflow</b> sau khi đăng nhập.</p>
+    <div class="screens">
+      <div class="screen-row">
+        <div class="name">Tổ chức &amp; Nhân sự<span class="route">org-levels · job-titles · employees</span></div>
+        <div class="desc">Cây đơn vị kéo-thả, danh mục chức danh, danh sách nhân sự + gán đơn vị/chức danh.</div>
+      </div>
+      <div class="screen-row">
+        <div class="name">Danh mục &amp; Thiết kế form<span class="route">form-categories · form-definitions</span></div>
+        <div class="desc">Gom nhóm loại đơn, kéo-thả field, cấu hình điều kiện và luồng duyệt cho từng form.</div>
+      </div>
+      <div class="screen-row">
+        <div class="name">Đơn từ<span class="route">requests · requests/new</span></div>
+        <div class="desc">Nộp đơn mới, tab "Đơn của tôi" / "Chờ tôi duyệt" / "Tất cả", xem chi tiết &amp; in.</div>
+      </div>
+      <div class="screen-row">
+        <div class="name">Ủy quyền duyệt thay<span class="route">delegations</span></div>
+        <div class="desc">Chỉ định người duyệt thay trong khoảng thời gian vắng mặt.</div>
+      </div>
+      <div class="screen-row">
+        <div class="name">Chữ ký &amp; Cấu hình<span class="route">signature · settings</span></div>
+        <div class="desc">Đăng ký chữ ký cá nhân; giới hạn dung lượng/số lượng/đuôi file đính kèm.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">04</span> Truy cập &amp; tài khoản test</h2>
+    <p class="section-intro">
+      4 tài khoản dựng sẵn theo đúng 1 chuỗi duyệt thật (Phòng Công Vụ), chỉ mang quyền
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;">Workflow.*</span> —
+      không phải tài khoản quản trị toàn hệ thống.
+    </p>
+    <div class="callout">
+      <div class="callout-head">
+        <strong>Bộ tài khoản test — Phòng Công Vụ</strong>
+        <p>Domain TEST — dùng để nộp thử "Đơn xin nghỉ phép" và đi hết chuỗi duyệt.</p>
+      </div>
+      <table class="acct">
+        <thead>
+          <tr><th>Tài khoản</th><th>Chức danh</th><th>Vai trò trong demo</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="u">TEST\st_cvit</td><td>Staff</td><td><span class="role-pill">Nộp đơn</span></td></tr>
+          <tr><td class="u">TEST\gl_cvit</td><td>Group Leader</td><td><span class="role-pill">Duyệt (nếu route yêu cầu)</span></td></tr>
+          <tr><td class="u">TEST\tl_cvit</td><td>Team Leader</td><td><span class="role-pill">Duyệt "Đơn xin nghỉ phép"</span></td></tr>
+          <tr><td class="u">TEST\mgr_cv</td><td>Department Manager</td><td><span class="role-pill">Duyệt form "Mua hàng" / "TEST"</span></td></tr>
+        </tbody>
+      </table>
+      <div class="warn">⚠️ <span><b>Mật khẩu cấp riêng qua kênh khác</b>, không đính kèm trong trang này. Cần mạng nội bộ/VPN tới hệ thống — xem hướng dẫn chi tiết kèm theo email.</span></div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="status">Trạng thái: Pha 1–4 <b>hoàn tất</b> · Pha 5 (gộp dữ liệu Attendance) đang chờ</span>
+    <span>Tài liệu hướng dẫn chi tiết + FAQ: đính kèm email dạng Markdown</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -110,6 +110,13 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.IsUseUsb == request.IsUseUsb.Value);
             }
 
+            // Lọc máy đã tick "Cần kiểm tra hằng ngày (QR)" — dùng để gom nhanh danh sách in QR hàng
+            // loạt cho phòng server (asset-module.md §1.19/§1.21), không liên quan phiên quét đang chạy.
+            if (request.RequiresDailyCheck.HasValue)
+            {
+                query = query.Where(d => d.RequiresDailyCheck == request.RequiresDailyCheck.Value);
+            }
+
             if (!string.IsNullOrWhiteSpace(request.IpAddress))
             {
                 query = query.Where(d => d.IpAddresses.Any(ip => !ip.IsDeleted && ip.IpAddress1.Contains(request.IpAddress)));
@@ -169,6 +176,7 @@ namespace Asset.Application.Services
                     IsOutsourced = d.IsOutsourced,
                     SerialNumber = d.SerialNumber,
                     IsUseUsb = d.IsUseUsb,
+                    RequiresDailyCheck = d.RequiresDailyCheck,
                     Status = d.Status,
                     // Duplicate the logic of GetStatusText here (instead of calling the method) because
                     // this is an Expression<Func<>> translated by EF into SQL, which doesn't support calling arbitrary C# methods.
@@ -219,6 +227,7 @@ namespace Asset.Application.Services
                     IsOutsourced = d.IsOutsourced,
                     SerialNumber = d.SerialNumber,
                     IsUseUsb = d.IsUseUsb,
+                    RequiresDailyCheck = d.RequiresDailyCheck,
                     Status = d.Status,
                     StatusText = d.Status == (int)DeviceStatus.PendingUse ? "Chờ sử dụng"
                         : d.Status == (int)DeviceStatus.InUse ? "Đang sử dụng"
@@ -477,6 +486,7 @@ namespace Asset.Application.Services
                 Note = request.Note,
                 SerialNumber = request.SerialNumber,
                 IsUseUsb = request.IsUseUsb,
+                RequiresDailyCheck = request.RequiresDailyCheck,
                 SuggestedNewDeviceId = request.SuggestedNewDeviceId,
                 IsDeleted = false
             };
@@ -585,6 +595,7 @@ namespace Asset.Application.Services
             device.Note = request.Note;
             device.SerialNumber = request.SerialNumber;
             device.IsUseUsb = request.IsUseUsb;
+            device.RequiresDailyCheck = request.RequiresDailyCheck;
             device.SuggestedNewDeviceId = request.SuggestedNewDeviceId;
 
             _unitOfWork.Devices.Update(device);
@@ -932,6 +943,7 @@ namespace Asset.Application.Services
             Note = device.Note,
             SerialNumber = device.SerialNumber,
             IsUseUsb = device.IsUseUsb,
+            RequiresDailyCheck = device.RequiresDailyCheck,
             SuggestedNewDeviceId = device.SuggestedNewDeviceId,
             SuggestedNewDeviceCode = device.SuggestedNewDevice?.DeviceCode,
             IpAddresses = ipAddresses.Select(ip => new DeviceIpAddressDto { Id = ip.Id, IpAddress = ip.IpAddress1 }).ToList(),
