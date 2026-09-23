@@ -27,6 +27,7 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import InfoTooltip from "@/components/ui/InfoTooltip";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { useDragReorder } from "./useDragReorder";
 import StepCard, { type StepCardLabels } from "./StepCard";
@@ -859,216 +860,230 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                     </div>
 
                     {activeTab === "group" && (
-                        <>
-                    {/* Khối cấp trung gian — theo Nhóm con của Bộ phận đang chọn (đơn đi qua khối này TRƯỚC) */}
-                    <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                        <div className="space-y-1">
-                            <h3 className={sectionTitleClassName}>{tGroup("sectionTitle")}</h3>
-                            <p className="text-sm text-[#5e3f3a]">{tGroup("description")}</p>
-                        </div>
+                        // Layout 2 cột "canvas + inspector" (2026-09-16): pipeline hợp nhất Nhóm → Bộ
+                        // phận bên trái là trọng tâm (đọc liền mạch thành 1 hành trình duyệt, đánh số
+                        // xuyên suốt qua deptStepNumberOffset — không đổi gì ở phần state/logic, chỉ gộp
+                        // lại chỗ hiển thị); cột phải cố định (sticky) gom mọi thứ THUỘC VỀ CẤU HÌNH —
+                        // chọn Nhóm, người phụ trách 2 cấp — để pipeline không bị ngắt mạch bởi các khối
+                        // chọn lựa xen giữa như bố cục cũ (2 card xếp chồng, mỗi card tự chứa selector
+                        // + người phụ trách + danh sách bước).
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+                            <div className="order-2 space-y-6 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm lg:order-1">
+                                {/* Cấp trung gian — theo Nhóm con của Bộ phận đang chọn (đơn đi qua khối này TRƯỚC) */}
+                                <div>
+                                    <div className="mb-4 flex items-center gap-1.5">
+                                        <h3 className={sectionTitleClassName}>{tGroup("sectionTitle")}</h3>
+                                        <InfoTooltip text={tGroup("description")} />
+                                        <div className="h-px flex-1 bg-[#e0e3e5]" />
+                                    </div>
 
-                        <label className="block max-w-sm">
-                            <span className={fieldLabelClassName}>{tGroup("fieldGroup")}</span>
-                            <SearchableSelect
-                                options={groupOptions}
-                                value={groupId}
-                                onChange={handleSelectGroup}
-                                placeholder={tGroup("fieldGroupPlaceholder")}
-                                disabled={isLoadingOptions}
-                            />
-                        </label>
+                                    {typeof groupId !== "number" ? (
+                                        <p className="text-sm italic text-[#8a8f94]">{tGroup("chooseGroupHint")}</p>
+                                    ) : isLoadingGroupSteps ? (
+                                        loadingStepsSkeleton
+                                    ) : (
+                                        <>
+                                            {groupSteps.length === 0 && <p className="mb-2 text-sm text-[#5e3f3a]">{tGroup("noSteps")}</p>}
 
-                        {typeof groupId !== "number" && (
-                            <p className="text-sm italic text-[#8a8f94]">{tGroup("chooseGroupHint")}</p>
-                        )}
-
-                        {typeof groupId === "number" && canManageGroupCoordinators && (
-                            <CoordinatorsBox
-                                isLoading={isLoadingGroupCoordinators}
-                                coordinators={groupCoordinators}
-                                onRemove={handleRemoveGroupCoordinator}
-                                isSaving={isSavingGroupCoordinators}
-                                addOptions={buildCoordinatorOptions(groupEmployees, new Set(groupCoordinators.map((c) => c.employeeId)))}
-                                addingValue={addingGroupCoordinatorEmployeeId}
-                                onAddChange={handleAddGroupCoordinator}
-                                labels={groupCoordinatorLabels}
-                            />
-                        )}
-
-                        {typeof groupId === "number" && (
-                            isLoadingGroupSteps ? (
-                                loadingStepsSkeleton
-                            ) : (
-                                <>
-                                    {groupSteps.length === 0 && <p className="text-sm text-[#5e3f3a]">{tGroup("noSteps")}</p>}
-
-                                    {groupSteps.length > 0 && (
-                                        <ol className="space-y-2">
-                                            {groupSteps.map((step, index) => (
-                                                <StepCard
-                                                    key={step.jobTitleId}
-                                                    registerNodeRef={groupDrag.registerNode(step.jobTitleId)}
-                                                    isDragging={groupDrag.dragIndex === index}
-                                                    onDragStart={groupDrag.handleDragStart(index)}
-                                                    onDragOver={groupDrag.handleDragOver(index)}
-                                                    onDragEnd={groupDrag.handleDragEnd}
-                                                    displayNumber={index + 1}
-                                                    jobTitleName={step.jobTitleName}
-                                                    jobTitleCode={step.jobTitleCode}
-                                                    rankOrder={step.rankOrder}
-                                                    requiresSignature={step.requiresSignature}
-                                                    onToggleSignature={() => handleToggleGroupSignature(index)}
-                                                    isResponsible={step.isResponsible}
-                                                    onToggleResponsible={() => handleSetGroupResponsible(index)}
-                                                    onRemove={() => handleRemoveGroupStep(index)}
-                                                    labels={groupStepLabels}
-                                                    footer={
-                                                        <StepHolders
-                                                            holders={groupEmployees.filter((e) => e.jobTitleId === step.jobTitleId)}
-                                                            isLoadingEmployees={isLoadingGroupEmployees}
-                                                            removingHolderId={assigningGroupEmployeeId}
-                                                            onRemoveHolder={(holder) => handleAssignGroupJobTitle(holder as EmployeeDto, "")}
-                                                            addOptions={buildHolderOptions(groupEmployees, step.jobTitleId)}
-                                                            addingValue={addingGroupHolderByJobTitle[step.jobTitleId] ?? ""}
-                                                            onAddChange={(v) => handlePickGroupHolder(step.jobTitleId, v)}
-                                                            labels={groupHoldersLabels}
+                                            {groupSteps.length > 0 && (
+                                                <ol>
+                                                    {groupSteps.map((step, index) => (
+                                                        <StepCard
+                                                            key={step.jobTitleId}
+                                                            registerNodeRef={groupDrag.registerNode(step.jobTitleId)}
+                                                            isDragging={groupDrag.dragIndex === index}
+                                                            onDragStart={groupDrag.handleDragStart(index)}
+                                                            onDragOver={groupDrag.handleDragOver(index)}
+                                                            onDragEnd={groupDrag.handleDragEnd}
+                                                            displayNumber={index + 1}
+                                                            jobTitleName={step.jobTitleName}
+                                                            jobTitleCode={step.jobTitleCode}
+                                                            rankOrder={step.rankOrder}
+                                                            requiresSignature={step.requiresSignature}
+                                                            onToggleSignature={() => handleToggleGroupSignature(index)}
+                                                            isResponsible={step.isResponsible}
+                                                            onToggleResponsible={() => handleSetGroupResponsible(index)}
+                                                            onRemove={() => handleRemoveGroupStep(index)}
+                                                            labels={groupStepLabels}
+                                                            footer={
+                                                                <StepHolders
+                                                                    holders={groupEmployees.filter((e) => e.jobTitleId === step.jobTitleId)}
+                                                                    isLoadingEmployees={isLoadingGroupEmployees}
+                                                                    removingHolderId={assigningGroupEmployeeId}
+                                                                    onRemoveHolder={(holder) => handleAssignGroupJobTitle(holder as EmployeeDto, "")}
+                                                                    addOptions={buildHolderOptions(groupEmployees, step.jobTitleId)}
+                                                                    addingValue={addingGroupHolderByJobTitle[step.jobTitleId] ?? ""}
+                                                                    onAddChange={(v) => handlePickGroupHolder(step.jobTitleId, v)}
+                                                                    labels={groupHoldersLabels}
+                                                                />
+                                                            }
                                                         />
-                                                    }
-                                                />
-                                            ))}
-                                        </ol>
-                                    )}
+                                                    ))}
+                                                </ol>
+                                            )}
 
-                                    <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
-                                        <div className="flex-1 min-w-[220px]">
+                                            <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
+                                                <div className="flex-1 min-w-[220px]">
+                                                    <SearchableSelect
+                                                        options={toJobTitleOptions(availableGroupJobTitles)}
+                                                        value={addingGroupJobTitleId}
+                                                        onChange={setAddingGroupJobTitleId}
+                                                        placeholder={tGroup("fieldAddJobTitlePlaceholder")}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddGroupStep}
+                                                    disabled={!addingGroupJobTitleId}
+                                                    className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    <Plus className="h-3.5 w-3.5" /> {tGroup("addStepButton")}
+                                                </button>
+                                            </div>
+                                            {groupSigningMinNotMet && <p className="text-xs text-[#930006]">{tGroup("intermediateMinHint")}</p>}
+                                            {groupSigningLimitReached && <p className="text-xs text-[#9a5b00]">{tGroup("intermediateLimitHint")}</p>}
+
+                                            <div className="flex justify-end pt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSaveGroup}
+                                                    disabled={!isGroupDirty || isSavingGroup || groupSigningMinNotMet}
+                                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {isSavingGroup ? tGroup("saving") : tGroup("saveButton")}
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Cấp cuối — theo chính Bộ phận đang chọn (đơn đi qua khối này SAU khối Nhóm) */}
+                                <div>
+                                    <div className="mb-4 flex items-center gap-1.5">
+                                        <h3 className={sectionTitleClassName}>{tDept("sectionTitle")}</h3>
+                                        <InfoTooltip text={tDept("description")} />
+                                        <div className="h-px flex-1 bg-[#e0e3e5]" />
+                                    </div>
+
+                                    {isLoadingDeptSteps ? (
+                                        loadingStepsSkeleton
+                                    ) : (
+                                        <>
+                                            {deptSteps.length === 0 && <p className="mb-2 text-sm text-[#5e3f3a]">{tDept("noSteps")}</p>}
+
+                                            {deptSteps.length > 0 && (
+                                                <ol>
+                                                    {deptSteps.map((step, index) => (
+                                                        <StepCard
+                                                            key={step.jobTitleId}
+                                                            registerNodeRef={deptDrag.registerNode(step.jobTitleId)}
+                                                            isDragging={deptDrag.dragIndex === index}
+                                                            onDragStart={deptDrag.handleDragStart(index)}
+                                                            onDragOver={deptDrag.handleDragOver(index)}
+                                                            onDragEnd={deptDrag.handleDragEnd}
+                                                            displayNumber={deptStepNumberOffset + index + 1}
+                                                            jobTitleName={step.jobTitleName}
+                                                            jobTitleCode={step.jobTitleCode}
+                                                            rankOrder={step.rankOrder}
+                                                            requiresSignature={step.requiresSignature}
+                                                            onToggleSignature={() => handleToggleDeptSignature(index)}
+                                                            onRemove={() => handleRemoveDeptStep(index)}
+                                                            labels={deptStepLabels}
+                                                            footer={
+                                                                <StepHolders
+                                                                    holders={deptEmployees.filter((e) => e.jobTitleId === step.jobTitleId)}
+                                                                    isLoadingEmployees={isLoadingDeptEmployees}
+                                                                    removingHolderId={assigningDeptEmployeeId}
+                                                                    onRemoveHolder={(holder) => handleAssignDeptJobTitle(holder as EmployeeDto, "")}
+                                                                    addOptions={buildHolderOptions(deptEmployees, step.jobTitleId)}
+                                                                    addingValue={addingDeptHolderByJobTitle[step.jobTitleId] ?? ""}
+                                                                    onAddChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
+                                                                    labels={deptHoldersLabels}
+                                                                />
+                                                            }
+                                                        />
+                                                    ))}
+                                                </ol>
+                                            )}
+
+                                            <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
+                                                <div className="flex-1 min-w-[220px]">
+                                                    <SearchableSelect
+                                                        options={toJobTitleOptions(availableDeptJobTitles)}
+                                                        value={addingDeptJobTitleId}
+                                                        onChange={setAddingDeptJobTitleId}
+                                                        placeholder={tDept("fieldAddJobTitlePlaceholder")}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddDeptStep}
+                                                    disabled={!addingDeptJobTitleId}
+                                                    className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    <Plus className="h-3.5 w-3.5" /> {tDept("addStepButton")}
+                                                </button>
+                                            </div>
+
+                                            <div className="flex justify-end pt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSaveDept}
+                                                    disabled={!isDeptDirty || isSavingDept}
+                                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {isSavingDept ? tDept("saving") : tDept("saveButton")}
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Sidebar cấu hình — chọn Nhóm + người phụ trách 2 cấp, cố định khi cuộn */}
+                            <aside className="order-1 space-y-4 lg:sticky lg:top-6 lg:order-2 lg:self-start">
+                                <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
+                                    <label className="block">
+                                        <span className={fieldLabelClassName}>{tGroup("fieldGroup")}</span>
+                                        <div className="mt-1.5">
                                             <SearchableSelect
-                                                options={toJobTitleOptions(availableGroupJobTitles)}
-                                                value={addingGroupJobTitleId}
-                                                onChange={setAddingGroupJobTitleId}
-                                                placeholder={tGroup("fieldAddJobTitlePlaceholder")}
+                                                options={groupOptions}
+                                                value={groupId}
+                                                onChange={handleSelectGroup}
+                                                placeholder={tGroup("fieldGroupPlaceholder")}
+                                                disabled={isLoadingOptions}
                                             />
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={handleAddGroupStep}
-                                            disabled={!addingGroupJobTitleId}
-                                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            <Plus className="h-3.5 w-3.5" /> {tGroup("addStepButton")}
-                                        </button>
-                                    </div>
-                                    {groupSigningMinNotMet && <p className="text-xs text-[#930006]">{tGroup("intermediateMinHint")}</p>}
-                                    {groupSigningLimitReached && <p className="text-xs text-[#9a5b00]">{tGroup("intermediateLimitHint")}</p>}
+                                    </label>
+                                </div>
 
-                                    <div className="flex justify-end pt-2">
-                                        <button
-                                            type="button"
-                                            onClick={handleSaveGroup}
-                                            disabled={!isGroupDirty || isSavingGroup || groupSigningMinNotMet}
-                                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            {isSavingGroup ? tGroup("saving") : tGroup("saveButton")}
-                                        </button>
-                                    </div>
-                                </>
-                            )
-                        )}
-                    </section>
-
-                    {/* Khối cấp cuối — theo chính Bộ phận đang chọn (đơn đi qua khối này SAU khối Nhóm) */}
-                    <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                        <div className="space-y-1">
-                            <h3 className={sectionTitleClassName}>{tDept("sectionTitle")}</h3>
-                            <p className="text-sm text-[#5e3f3a]">{tDept("description")}</p>
-                        </div>
-
-                        {canManageDeptCoordinators && (
-                            <CoordinatorsBox
-                                isLoading={isLoadingDeptCoordinators}
-                                coordinators={deptCoordinators}
-                                onRemove={handleRemoveDeptCoordinator}
-                                isSaving={isSavingDeptCoordinators}
-                                addOptions={buildCoordinatorOptions(deptEmployees, new Set(deptCoordinators.map((c) => c.employeeId)))}
-                                addingValue={addingDeptCoordinatorEmployeeId}
-                                onAddChange={handleAddDeptCoordinator}
-                                labels={deptCoordinatorLabels}
-                            />
-                        )}
-
-                        {isLoadingDeptSteps ? (
-                            loadingStepsSkeleton
-                        ) : (
-                            <>
-                                {deptSteps.length === 0 && <p className="text-sm text-[#5e3f3a]">{tDept("noSteps")}</p>}
-
-                                {deptSteps.length > 0 && (
-                                    <ol className="space-y-2">
-                                        {deptSteps.map((step, index) => (
-                                            <StepCard
-                                                key={step.jobTitleId}
-                                                registerNodeRef={deptDrag.registerNode(step.jobTitleId)}
-                                                isDragging={deptDrag.dragIndex === index}
-                                                onDragStart={deptDrag.handleDragStart(index)}
-                                                onDragOver={deptDrag.handleDragOver(index)}
-                                                onDragEnd={deptDrag.handleDragEnd}
-                                                displayNumber={deptStepNumberOffset + index + 1}
-                                                jobTitleName={step.jobTitleName}
-                                                jobTitleCode={step.jobTitleCode}
-                                                rankOrder={step.rankOrder}
-                                                requiresSignature={step.requiresSignature}
-                                                onToggleSignature={() => handleToggleDeptSignature(index)}
-                                                onRemove={() => handleRemoveDeptStep(index)}
-                                                labels={deptStepLabels}
-                                                footer={
-                                                    <StepHolders
-                                                        holders={deptEmployees.filter((e) => e.jobTitleId === step.jobTitleId)}
-                                                        isLoadingEmployees={isLoadingDeptEmployees}
-                                                        removingHolderId={assigningDeptEmployeeId}
-                                                        onRemoveHolder={(holder) => handleAssignDeptJobTitle(holder as EmployeeDto, "")}
-                                                        addOptions={buildHolderOptions(deptEmployees, step.jobTitleId)}
-                                                        addingValue={addingDeptHolderByJobTitle[step.jobTitleId] ?? ""}
-                                                        onAddChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
-                                                        labels={deptHoldersLabels}
-                                                    />
-                                                }
-                                            />
-                                        ))}
-                                    </ol>
+                                {typeof groupId === "number" && canManageGroupCoordinators && (
+                                    <CoordinatorsBox
+                                        isLoading={isLoadingGroupCoordinators}
+                                        coordinators={groupCoordinators}
+                                        onRemove={handleRemoveGroupCoordinator}
+                                        isSaving={isSavingGroupCoordinators}
+                                        addOptions={buildCoordinatorOptions(groupEmployees, new Set(groupCoordinators.map((c) => c.employeeId)))}
+                                        addingValue={addingGroupCoordinatorEmployeeId}
+                                        onAddChange={handleAddGroupCoordinator}
+                                        labels={groupCoordinatorLabels}
+                                    />
                                 )}
 
-                                <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
-                                    <div className="flex-1 min-w-[220px]">
-                                        <SearchableSelect
-                                            options={toJobTitleOptions(availableDeptJobTitles)}
-                                            value={addingDeptJobTitleId}
-                                            onChange={setAddingDeptJobTitleId}
-                                            placeholder={tDept("fieldAddJobTitlePlaceholder")}
-                                        />
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleAddDeptStep}
-                                        disabled={!addingDeptJobTitleId}
-                                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        <Plus className="h-3.5 w-3.5" /> {tDept("addStepButton")}
-                                    </button>
-                                </div>
-
-                                <div className="flex justify-end pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={handleSaveDept}
-                                        disabled={!isDeptDirty || isSavingDept}
-                                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        {isSavingDept ? tDept("saving") : tDept("saveButton")}
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </section>
-                        </>
+                                {canManageDeptCoordinators && (
+                                    <CoordinatorsBox
+                                        isLoading={isLoadingDeptCoordinators}
+                                        coordinators={deptCoordinators}
+                                        onRemove={handleRemoveDeptCoordinator}
+                                        isSaving={isSavingDeptCoordinators}
+                                        addOptions={buildCoordinatorOptions(deptEmployees, new Set(deptCoordinators.map((c) => c.employeeId)))}
+                                        addingValue={addingDeptCoordinatorEmployeeId}
+                                        onAddChange={handleAddDeptCoordinator}
+                                        labels={deptCoordinatorLabels}
+                                    />
+                                )}
+                            </aside>
+                        </div>
                     )}
 
                     {activeTab === "production" && (
@@ -1077,9 +1092,9 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         không tách Group/Department, không hiển thị "ai đang giữ Chức vụ" (dữ liệu
                         chuyền đổi hàng ngày, danh sách người giữ ở đây không có ý nghĩa lâu dài). */
                     <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                        <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
                             <h3 className={sectionTitleClassName}>{tProd("sectionTitle")}</h3>
-                            <p className="text-sm text-[#5e3f3a]">{tProd("description")}</p>
+                            <InfoTooltip text={tProd("description")} />
                         </div>
 
                         {isLoadingProductionSteps ? (
@@ -1089,7 +1104,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                 {productionSteps.length === 0 && <p className="text-sm text-[#5e3f3a]">{tProd("noSteps")}</p>}
 
                                 {productionSteps.length > 0 && (
-                                    <ol className="space-y-2">
+                                    <ol>
                                         {productionSteps.map((step, index) => (
                                             <StepCard
                                                 key={step.jobTitleId}

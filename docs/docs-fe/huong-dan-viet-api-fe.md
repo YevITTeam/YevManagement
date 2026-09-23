@@ -342,6 +342,23 @@ deleteDeviceSoftware: (deviceId: number, softwareId: number) =>
 >
 > Luôn bám sát schema trong `asset-api-fe.md` / Scalar UI làm nguồn chân lý.
 
+### 6.1. Endpoint không trả JSON — dùng helper riêng của `client.ts`
+
+`api.get/post/...` luôn `JSON.parse` body, nên **không** dùng được cho stream và file. `client.ts` đã có
+sẵn 3 helper, đừng tự viết `fetch` mới:
+
+| Helper | Dùng cho | Trả về |
+|---|---|---|
+| `postStream(url, data)` | endpoint NDJSON của AI Chat (đọc từng dòng khi BE đang sinh câu trả lời) | `Response` còn nguyên body để tự đọc `body.getReader()` |
+| `getForBlob(url, options?)` | tải file bằng GET (xuất Excel/PDF, tải file đính kèm) | `BlobDownloadResult` = `{ blob, fileName, headers }` — `fileName` bóc từ `Content-Disposition` (null nếu BE chưa `WithExposedHeaders`), `headers` để đọc header phụ như `X-Missing-Device-Count` |
+| `postFormForBlob(url, formData)` | upload file rồi nhận file trả về (import Excel → file kết quả) | `BlobDownloadResult` |
+
+Cả 3 vẫn gắn Bearer token và vẫn bóc lỗi JSON thường cho các lỗi xảy ra **trước khi** body bắt đầu
+(400 validate, 401, 403) — nên phía component cứ `try/catch` + `getApiErrorMessage` như CRUD bình thường.
+
+Ngoài ra `setOnUnauthorized(handler)` để `AuthContext` hứng sự kiện hết phiên (401 sau khi đã re-login)
+— chỉ đăng ký ở tầng context, **không** gọi trong file `*.api.ts`.
+
 ---
 
 ## 7. Checklist review nhanh trước khi commit

@@ -6,6 +6,21 @@
 - **Auth**: mọi endpoint cần `Authorization: Bearer <token>` (từ `windows-login`, xem [identity-api-fe.md](identity-api-fe.md)) **và** permission tương ứng (vd `Asset.Device.View`). Thiếu token→401, thiếu permission→403. FE dựa `user.permissions` ẩn/hiện nút.
 - **Content-Type**: `application/json` cho request có body.
 
+---
+
+## MỤC LỤC ĐỌC NHANH
+
+| Cần gì | Mục |
+|---|---|
+| Quy ước chung (envelope, phân trang, lỗi, pattern CRUD) — **dùng chung cho cả 3 module** | §1 |
+| Master data: Branch/Supplier/DeviceType/SoftwareGroup/DeviceDepartment | §2 |
+| Software · IpPrefix & IpAddress | §3, §4 |
+| **Device** (grid-list, filter, import, QR, báo cáo…) | §5 |
+| DeviceConfiguration · DeviceSoftware · AuditTrail | §6, §7, §7b |
+| **AI Chat** (`POST /api/AiChat/stream`, NDJSON) | §7c |
+| Bảng tổng hợp endpoint · checklist màn "Chi tiết thiết bị" | §8, §9 |
+
+
 ## 1. Quy ước chung
 ### 1.1 Envelope — mọi response (kể cả lỗi) bọc `ApiResponse<T>` (camelCase):
 ```json
@@ -376,7 +391,7 @@ Ai sửa/xóa gì, lúc nào — ghi tự động ở BE mỗi lần Create/Upda
 - Permission `Asset.AuditTrail.View` — **cần Admin gán** cho role muốn xem (chưa role nào có sẵn ngoài `Admin`).
 
 ## 7c. AI Chat — `POST /api/AiChat/stream` (2026-07-24, thay thế hoàn toàn cách gọi thẳng Ollama ở FE)
-Chuyển từ "FE tự gọi Ollama + tự thực thi tool" sang "FE chỉ gọi 1 endpoint BE, đọc stream, hiển thị" — xem bối cảnh đầy đủ ở [ai-chat-be-huong-dan.md](ai-chat-be-huong-dan.md). Mục này là **hợp đồng cuối cùng đã lên production** (khớp 100% với đề xuất ở §7 của tài liệu đó — không có sai khác, trừ 2 bổ sung backward-compatible ngày 2026-07-27 ghi ở dưới: field request `think` và dòng response `"type":"device"`).
+Chuyển từ "FE tự gọi Ollama + tự thực thi tool" sang "FE chỉ gọi 1 endpoint BE, đọc stream, hiển thị" — kiến trúc/code ở [asset-module.md §1.18](asset-module.md). Mục này là **hợp đồng cuối cùng đã lên production** (2 bổ sung backward-compatible ngày 2026-07-27 ghi ở dưới: field request `think` và dòng response `"type":"device"`).
 
 **Request:**
 ```http
@@ -392,7 +407,7 @@ Content-Type: application/json
     { "role": "assistant", "content": "..." }
   ],
   "systemPrompt": null,                     // optional — null/bỏ trống thì BE dùng prompt mặc định (§9 tài liệu trên)
-  "think": false,                           // optional, 2026-07-27 — null/bỏ trống = false (mặc định nhanh, ~2-3s). true = model suy luận sâu hơn trước khi trả lời (~15-20s, xem ai-chat-be-huong-dan.md §3/§11)
+  "think": false,                           // optional, 2026-07-27 — null/bỏ trống = false (mặc định nhanh, ~2-3s). true = model suy luận sâu hơn trước khi trả lời (chậm hơn ~1.7x, map sang `reasoning_effort:"high"` của LM Studio — xem asset-module.md §1.18)
   "locale": "vi"                            // optional, 2026-08-22 — locale UI hiện tại của FE ("vi" | "ja", lấy từ next-intl `useLocale()`). BE dùng để chọn ngôn ngữ trả lời trong prompt mặc định — khác "ja" (kể cả null/bỏ trống) → tiếng Việt. Bị BỎ QUA nếu `systemPrompt` đã được truyền tuỳ chỉnh.
 }
 ```
@@ -412,7 +427,7 @@ Content-Type: application/json
 - 1 lượt hỏi có thể có **nhiều dòng `"tool"`** (model gọi nhiều tool cùng lúc) và nhiều dòng `"content"` xen kẽ trước khi tới `"done"`.
 - Nếu model gọi tool quá 3 lần liên tiếp mà không chốt câu trả lời → BE trả `{"type":"error","message":"Đã đạt giới hạn số lần gọi công cụ tra cứu..."}` thay vì treo mãi.
 - **FE lưu lịch sử**: chỉ cần gộp các `"content"` của 1 lượt thành 1 `assistant` message rồi thêm vào mảng `history` gửi lần sau — **không** lưu các dòng `"tool"`/`"device"` (BE không cần và cũng không hiểu nếu FE gửi ngược lại role `"tool"`).
-- BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm. **Từ 2026-07-30 catalogue rút còn 7 tool**, tập trung 2 nhóm việc: tra cứu thiết bị (đủ mọi field như màn hình danh sách) và tra cứu IP (IP trống / IP này ai đang dùng / tình trạng cả dải) — xem `ai-chat-be-huong-dan.md §16`. Gợi ý câu hỏi trên FE phải khớp đúng 2 nhóm này, lọc theo chi nhánh/nhóm/bộ phận nay truyền THẲNG TÊN (thêm 2026-07-30, xem §17) nên không cần đổi tên sang id.
+- BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm. **Từ 2026-07-30 catalogue rút còn 7 tool**, tập trung 2 nhóm việc: tra cứu thiết bị (đủ mọi field như màn hình danh sách) và tra cứu IP (IP trống / IP này ai đang dùng / tình trạng cả dải) — danh sách tool ở `asset-module.md §1.18`. Gợi ý câu hỏi trên FE phải khớp đúng 2 nhóm này; lọc theo chi nhánh/nhóm/bộ phận truyền THẲNG TÊN nên không cần đổi tên sang id.
 - Permission `Asset.AiChat.Use` — **đã gán sẵn cho role `Admin`**, role khác cần Admin gán thêm nếu muốn dùng chat AI. Nút "Xem chi tiết" từ dòng `"device"` là UX-only, ẩn ở FE nếu user không có `Asset.Device.View` — BE vẫn enforce permission đó khi FE thật sự điều hướng sang trang chi tiết thiết bị.
 
 ## 8. Tổng hợp endpoint

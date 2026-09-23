@@ -2,8 +2,8 @@
 
 > Hợp đồng API cho đội FE (login + quản trị user/role). Implementation: [identity-module.md](identity-module.md). Module Asset: [asset-api-fe.md](asset-api-fe.md) · Module Attendance: [attendance-api-fe.md](attendance-api-fe.md).
 
-- **Base URL (Dev)**: `http://10.45.1.181:8080` (theo `CompanySystem.HostApi/Properties/launchSettings.json` — đây là nguồn chuẩn; giá trị cũ `http://localhost:5000` đã không còn dùng) · Scalar UI `/scalar/v1`.
-- **CORS**: chỉ `http://localhost:3000` + `http://10.45.1.181:3000` (`AllowCredentials`). Origin khác → báo BE thêm whitelist.
+- **Base URL (Dev)**: `http://10.45.1.155:8081` (theo `CompanySystem.HostApi/Properties/launchSettings.json` — đây là nguồn chuẩn; các giá trị cũ `http://localhost:5000` và `http://10.45.1.181:8080` đã không còn dùng, port đổi từ `8080` ngày 2026-08-26) · Scalar UI `/scalar/v1`.
+- **CORS**: whitelist ở policy `AllowNextJs` (`CompanySystem.HostApi/Program.cs`, `AllowCredentials`): `localhost:3000`, `localhost:8000`, `10.45.1.155:3000`, `10.45.1.181:3000`, `10.45.1.49` (`:8000`/`:80`/không port), `http://intra.yev.vn`. Origin khác → báo BE thêm whitelist.
 - Envelope `ApiResponse<T>` + cách đọc `data`/`errors` giống Asset — xem [asset-api-fe.md §1](asset-api-fe.md).
 - **Cập nhật 2026-07-16**: `UserDto` thêm `email` (nullable, tự resolve từ AD, không tự nhập/sửa được) — trả về ở `windows-login` (mục 2) và `get-all-users-with-roles` (mục 4.1). Phục vụ tính năng gửi email xác nhận cập nhật chữ ký/duyệt đơn ở module Attendance.
 
@@ -22,7 +22,7 @@
 Không phải username/password — xác thực qua **Windows Negotiate** dựa phiên Windows của máy client (phải trong domain AD). **Không có body request.**
 
 ```js
-const res = await fetch("http://10.45.1.181:8080/api/Auth/windows-login", {
+const res = await fetch("http://10.45.1.155:8081/api/Auth/windows-login", {
   method: "POST", credentials: "include" // BẮT BUỘC, thiếu → luôn 401
 });
 ```
@@ -84,7 +84,7 @@ Dùng cho trang `/login` tự viết ở FE — thay thế popup gốc "Windows 
 thật sự**: BE tự bind username/password vào AD, không tự chế hệ mật khẩu riêng, không lưu password.
 
 ```js
-const res = await fetch("http://10.45.1.181:8080/api/Auth/login", {
+const res = await fetch("http://10.45.1.155:8081/api/Auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ userName: "n.truong.da.pcd.it", password: "..." }) // userName KHÔNG kèm domain
@@ -147,7 +147,7 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
 | Hiện tượng | Nguyên nhân → xử lý |
 |---|---|
 | `windows-login` luôn 401 | Thiếu `credentials:"include"` / máy không trong domain → thêm credentials, test máy joined domain |
-| **Trình duyệt hỏi tài khoản domain lặp lại dù vừa nhập đúng** | Đang gọi `windows-login` nhiều lần (mỗi lần = 1 handshake Negotiate). FE đã sửa: còn token thì dùng `GET /Auth/me` (mục 2b). Vẫn còn hỏi ở lần đăng nhập ĐẦU → máy chưa bật SSO cho origin BE: thêm `http://10.45.1.181:8080` vào vùng **Local Intranet** (Internet Options → Security → Local intranet → Sites → Advanced) hoặc policy `AuthServerAllowlist` của Chrome/Edge |
+| **Trình duyệt hỏi tài khoản domain lặp lại dù vừa nhập đúng** | Đang gọi `windows-login` nhiều lần (mỗi lần = 1 handshake Negotiate). FE đã sửa: còn token thì dùng `GET /Auth/me` (mục 2b). Vẫn còn hỏi ở lần đăng nhập ĐẦU → máy chưa bật SSO cho origin BE: thêm `http://10.45.1.155:8081` vào vùng **Local Intranet** (Internet Options → Security → Local intranet → Sites → Advanced) hoặc policy `AuthServerAllowlist` của Chrome/Edge |
 | API 401 dù đã login | Token hết hạn (120') / thiếu header → `GET /Auth/me` gia hạn, hỏng nữa thì `windows-login` |
 | API 403 dù token còn hạn | Role thiếu permission → Admin `PUT /api/Permission/role/{roleId}` hoặc đổi Role |
 | Có Role đủ quyền vẫn 403 | Bị **deny override** riêng → `GET /api/Permission/user/{userId}` kiểm tra, PUT gỡ deny |

@@ -16,14 +16,19 @@ YevManagement_FE_BE/
 ├─ CLAUDE.md          ← file này (áp dụng cho CẢ FE lẫn BE)
 ├─ docs/
 │  ├─ docs-be/        ← thiết kế BE + HỢP ĐỒNG API (nguồn chân lý chung cho cả 2 phía)
-│  └─ docs-fe/        ← khuôn mẫu code FE + design system + i18n
+│  ├─ docs-fe/        ← khuôn mẫu code FE + design system + i18n
+│  ├─ deploy-config/  ← web.config cho IIS + AutoDeploy.ps1 + docker-deploy-guide.md
+│  └─ Data/           ← Excel/PDF nghiệp vụ thật (input để đối chiếu, KHÔNG phải doc)
 ├─ yev-backend/       ← .NET 10 modular monolith (`YevManagement.slnx`)
 └─ yev-frontend/      ← Next.js 16 App Router (static export)
 ```
 
-**Hệ thống:** ứng dụng quản lý nội bộ công ty YEV, gồm 3 mảng nghiệp vụ:
-Identity (user/role/permission, đăng nhập Windows AD), Asset (quản lý PC/thiết bị),
-Attendance (giấy đề nghị làm ngoài giờ — OT Form).
+**Hệ thống:** ứng dụng quản lý nội bộ công ty YEV, gồm 4 mảng nghiệp vụ:
+Identity (user/role/permission, đăng nhập Windows AD + user/mật khẩu), Asset (quản lý PC/thiết bị),
+Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form builder động + duyệt nhiều cấp).
+
+> `docs/Guideline_PC.md` và `docs/huong-dan-su-dung-attendance.md` là **hướng dẫn cho người dùng cuối**,
+> không phải spec kỹ thuật — đừng suy schema/endpoint từ 2 file đó.
 
 ### Bảng định tuyến task → doc phải đọc TRƯỚC khi code
 
@@ -33,24 +38,26 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form).
 | Module Asset (BE) | [docs/docs-be/asset-module.md](docs/docs-be/asset-module.md) |
 | Module Identity (BE) | [docs/docs-be/identity-module.md](docs/docs-be/identity-module.md) |
 | Module Attendance (BE) | [docs/docs-be/attendance-module.md](docs/docs-be/attendance-module.md) |
-| **Module Workflow (BE)** — form builder động + duyệt nhiều cấp | [docs/docs-be/workflow-module.md](docs/docs-be/workflow-module.md) + sơ đồ [docs/workflow-erd.drawio](docs/workflow-erd.drawio) |
-| **Gọi API từ FE** (bất kỳ module nào) | hợp đồng API tương ứng: [asset-api-fe.md](docs/docs-be/asset-api-fe.md) · [identity-api-fe.md](docs/docs-be/identity-api-fe.md) · [attendance-api-fe.md](docs/docs-be/attendance-api-fe.md) |
+| **Module Workflow (BE + FE)** — form builder động + duyệt nhiều cấp | [docs/docs-be/workflow-module.md](docs/docs-be/workflow-module.md) + sơ đồ [docs/workflow-erd.drawio](docs/workflow-erd.drawio) |
+| **Gọi API từ FE** (Asset / Identity / Attendance) | hợp đồng API tương ứng: [asset-api-fe.md](docs/docs-be/asset-api-fe.md) · [identity-api-fe.md](docs/docs-be/identity-api-fe.md) · [attendance-api-fe.md](docs/docs-be/attendance-api-fe.md) |
+| **Gọi API Workflow từ FE** | **không có** `workflow-api-fe.md` — hợp đồng nằm ngay trong [workflow-module.md](docs/docs-be/workflow-module.md) (§6 endpoint, §10 phần bổ sung cho FE) |
 | Viết file `*.api.ts` / `*.dto.ts` mới | [docs/docs-fe/huong-dan-viet-api-fe.md](docs/docs-fe/huong-dan-viet-api-fe.md) |
 | Dựng / sửa UI | [docs/docs-fe/DESIGN_SYSTEM.md](docs/docs-fe/DESIGN_SYSTEM.md) |
-| Đa ngôn ngữ (vi/ja) | [docs/docs-fe/thiet-ke-tinh-nang-dich-ngon-ngu.md](docs/docs-fe/thiet-ke-tinh-nang-dich-ngon-ngu.md) |
+| Đa ngôn ngữ (vi/ja) | §4.6 dưới đây (không còn doc riêng) |
 | In PDF phiếu tăng ca | [docs/docs-be/attendance-otform-pdf-mapping.md](docs/docs-be/attendance-otform-pdf-mapping.md) |
-| AI Chat tra cứu Asset (tool-calling, read-only) | [docs/docs-be/ai-chat-be-huong-dan.md](docs/docs-be/ai-chat-be-huong-dan.md) (thiết kế gốc) — hợp đồng thật ở `asset-api-fe.md §7c` |
+| AI Chat tra cứu Asset (tool-calling, read-only) | kiến trúc/code + blocker hạ tầng: `asset-module.md §1.18` — hợp đồng FE: `asset-api-fe.md §7c` |
 | AI Chat lập đơn tăng ca Attendance (tool-calling, có tool ghi) | [docs/docs-be/attendance-aichat-be-huong-dan.md](docs/docs-be/attendance-aichat-be-huong-dan.md) — hợp đồng thật ở `attendance-api-fe.md §10` |
 
-> 3 file `*-api-fe.md` là **hợp đồng dùng chung FE↔BE**, chỉ tồn tại 1 bản duy nhất trong
-> `docs/docs-be/`. Đây là nguồn chân lý về tên field & shape — đừng đoán, đừng chép ra bản thứ hai.
+> 3 file `*-api-fe.md` (Asset / Identity / Attendance) là **hợp đồng dùng chung FE↔BE**, chỉ tồn tại
+> 1 bản duy nhất trong `docs/docs-be/`. Đây là nguồn chân lý về tên field & shape — đừng đoán, đừng chép
+> ra bản thứ hai. Workflow cố tình không tách file riêng: hợp đồng nằm trong chính `workflow-module.md`.
 
 ---
 
 ## 2. Giao thức làm việc (BẮT BUỘC)
 
 1. **Tự đọc doc trước, không hỏi xin mã nguồn.** Người dùng nhắc tên module → việc đầu tiên là
-   đọc doc module đó ở bảng trên.
+   đọc doc module đó ở bảng trên — nhưng **đọc theo lát cắt, xem luật 7**.
 2. **Nghiệp vụ chưa được define → HỎI TRƯỚC, code SAU.** Nếu được yêu cầu làm một thực thể/luồng
    hoàn toàn mới chưa có trong doc: **KHÔNG tự bịa nghiệp vụ**. Phải chốt đủ 2 thứ trước khi viết
    dòng code đầu tiên: (a) **danh sách Entity** (tên, thuộc tính, kiểu, quan hệ, có `IsDeleted`?);
@@ -63,6 +70,25 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form).
 5. **DB là SQL Server dùng chung, DỮ LIỆU THẬT.** Mọi thao tác kiểm thử phải read-only —
    không tạo/sửa/xoá bản ghi rác.
 6. **Không "sửa" typo có sẵn** trong tên thư mục/class/route (xem §3.5) — sẽ vỡ reference.
+7. **ĐỌC DOC LỚN THEO LÁT CẮT — đừng `Read` cả file.** Vài doc rất nặng, đọc trọn 1 file đủ đốt sạch
+   context còn lại của phiên:
+
+   | Doc | Nặng | Đọc kiểu gì |
+   |---|---|---|
+   | `attendance-module.md` | ~378 KB | **Bắt buộc** cắt lát |
+   | `attendance-api-fe.md` | ~162 KB | **Bắt buộc** cắt lát |
+   | `workflow-module.md` | ~135 KB | **Bắt buộc** cắt lát |
+   | `asset-module.md` | ~82 KB | Nên cắt lát |
+   | còn lại (`architecture-core.md`, `*-api-fe.md` nhỏ, `docs-fe/*`) | < 45 KB | Đọc cả file được |
+
+   **Quy trình 3 bước:** (a) đọc bảng **"MỤC LỤC ĐỌC NHANH"** ở đầu mỗi doc lớn (chủ đề → mục/dải dòng);
+   (b) `Grep` pattern `^#{2,3} ` trên file đó để lấy số dòng hiện tại của mục cần; (c) `Read` với
+   `offset`/`limit` bao đúng dải đó (dư ±20 dòng là đủ). Cần tra 1 tên field/endpoint cụ thể thì `Grep`
+   thẳng chuỗi đó, đừng đọc tuần tự.
+8. **Cập nhật doc thì viết theo trạng thái HIỆN TẠI, không viết nhật ký.** Sửa thẳng vào mục đang mô tả
+   phần đó; chỉ thêm mục mới khi là nghiệp vụ mới. Khi một quyết định cũ bị thay thế → **xoá/gộp** mục
+   cũ, giữ lại đúng 1 dòng "trước làm X, bỏ vì Y" nếu lý do còn giá trị. Đừng nối thêm mục
+   `§... (ngày)` cho mỗi lần sửa — đó là thứ đã làm `attendance-module.md` phình lên 410 KB.
 
 ---
 
@@ -74,18 +100,15 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form).
 - EF Core 10 + SQL Server (scaffold từ hệ cũ, có Migrations). Scrutor 7 để auto-DI.
 - Host: `CompanySystem.HostApi` (ASP.NET Core Web API). API docs: OpenAPI + **Scalar UI** `/scalar/v1`
   (chỉ Development). Auth: Windows Negotiate (AD) → JWT Bearer.
-- **Base URL hiện tại: `http://10.45.1.155:8081`** (`CompanySystem.HostApi/Properties/launchSettings.json`
-  — đổi từ `:8080` ngày 2026-08-26 vì máy dev có 1 rule `netsh interface portproxy` cũ (WSL, đã tắt)
-  chiếm cứng port 8080, chặn Kestrel bind; không đụng vào rule portproxy đó).
-  Một số doc còn ghi `http://localhost:5000` (giá trị cũ) — lấy `launchSettings.json` làm chuẩn.
+- **Base URL hiện tại: `http://10.45.1.155:8081`** (profile `http` trong
+  `CompanySystem.HostApi/Properties/launchSettings.json` — **luôn lấy file này làm chuẩn**; đổi từ `:8080`
+  ngày 2026-08-26 vì máy dev có 1 rule `netsh interface portproxy` cũ chiếm cứng port 8080, đừng đụng rule đó).
+  Doc nào còn ghi `http://localhost:5000` hay `http://10.45.1.181:8080` là giá trị cũ.
 
 ```powershell
 # từ yev-backend/
 dotnet build YevManagement.slnx
 dotnet run --project CompanySystem.HostApi --launch-profile http
-
-# smoke test nhanh (start → 7 check read-only → stop). Có sẵn skill `run-yevmanagement`.
-& .claude\skills\run-yevmanagement\smoke.ps1            # thêm -KeepRunning để giữ API chạy
 
 # migration cho 1 module (chạy tại thư mục gốc solution = yev-backend/)
 dotnet ef migrations add <TenMigration> --project Asset.Infrastructure --startup-project CompanySystem.HostApi
@@ -123,7 +146,12 @@ Luật vàng phụ thuộc: **Domain không phụ thuộc gì. Application khôn
 | Identity | `YevIdentityManagement` | Production. User/Role/Permission, Windows login → JWT. |
 | Asset | `YevPCManagement` | Đang phát triển. Device/Branch/Supplier/DeviceType/Software/IpAddress/TransferHistory/AuditTrail, import Excel, report, AI Chat. |
 | Attendance | (xem `attendance-module.md`) | Đã có code. OT Form: duyệt nhiều cấp + phạm vi tổ chức + chữ ký + gửi email. |
-| Workflow | `YevWorkflowManagement` | **Mới có thiết kế (25 bảng), chưa có code/migration/project.** Form builder động + duyệt nhiều cấp theo mô hình POWER EGG. **Cố ý ĐỘC LẬP với Attendance** dù trùng 7 nhóm bảng — xem `workflow-module.md §1`. |
+| Workflow | `YevWorkflowManagement` | Đang phát triển, **đã có đủ 4 project + 27 entity + Migrations + FE**. Form builder động + duyệt nhiều cấp theo mô hình POWER EGG; Pha 1→4 (tổ chức/nhân sự → form designer kéo-thả → engine nộp/duyệt → chữ ký + đính kèm + duyệt qua email) đã xong BE lẫn FE. Phần còn nợ ghi ở đầu `workflow-module.md`. **Cố ý ĐỘC LẬP với Attendance** dù trùng 7 nhóm bảng — xem `workflow-module.md §1`. |
+
+> **Trước khi chạm DB Asset:** `PCManagementConnection` trong `appsettings.json` đang trỏ
+> `YevPCManagement`, nhưng dữ liệu production thật của PC Management nằm ở **`YevPCManagement_New`**
+> (2 DB chưa đồng bộ schema/dữ liệu — việc tách/migrate còn dở). Trước khi chạy migration hoặc đọc số
+> liệu "thật", **xác nhận lại đang nối DB nào**; đừng mặc định appsettings là production.
 
 ### 3.4 Chuẩn code BE (BẮT BUỘC — chi tiết ở `architecture-core.md`)
 
@@ -178,12 +206,15 @@ Controller `: BaseController` + `[RequirePermission]` → migration (kèm seed p
 
 ### 4.1 Stack & lệnh
 
-Next.js 16 (App Router, **`output: "export"`** — static export, `trailingSlash: true`) ·
-React 19 (**React Compiler bật**) · TypeScript `strict` · Tailwind CSS v4 · next-intl ·
-react-toastify · lucide-react · jspdf/html2canvas/qrcode (in PDF & QR) ·
-react-markdown + remark-gfm (chỉ dùng để render câu trả lời AI Chat).
+Next.js 16 (App Router, static export · `trailingSlash: true`) · React 19 (**React Compiler bật**) ·
+TypeScript `strict` · Tailwind CSS v4 · next-intl · react-toastify · lucide-react.
+Thư viện chuyên dụng: `jspdf` + `jspdf-autotable` + `qrcode` (in PDF & QR) · `@dnd-kit/*` (kéo-thả field
+trong form designer của Workflow) · `jszip` + `docx-preview` + `html-react-parser` (đọc/hiển thị file
+`.docx`) · `vietnamese-conversion` (bỏ dấu để tìm kiếm) · `react-markdown` + `remark-gfm` (chỉ để render
+câu trả lời AI Chat).
 **Không** dùng thư viện data-fetching/state (React Query, Redux…) — chỉ `fetch` wrapper thủ công
-+ `useState`/`useEffect`. Package manager: **pnpm** (`pnpm-lock.yaml`).
++ `useState`/`useEffect`. Package manager: **pnpm** (`pnpm-lock.yaml`; `package-lock.json` là rác còn sót
+từ npm — đừng dùng, đừng cập nhật).
 
 ```bash
 # từ yev-frontend/
@@ -197,14 +228,18 @@ npx tsc --noEmit    # CHẠY SAU MỖI THAY ĐỔI .ts/.tsx, trước khi báo x
 - `NEXT_PUBLIC_API_URL` đặt trong `.env.local` (gitignored, **phải tự tạo**), giá trị = base URL của
   BE **kèm `/api`**, vd `http://10.45.1.155:8081/api`.
 - Vì là static export: **không có** middleware/SSR/route handler ở production (IIS chỉ serve file tĩnh).
-  `src/proxy.ts` (middleware next-intl) chỉ chạy khi dev.
+  `src/proxy.ts` (middleware next-intl) chỉ chạy khi dev. `next.config.ts` chỉ bật `output: "export"` ở
+  phase `next build` — bật cả ở dev sẽ lỗi "Middleware cannot be used with output: export", đừng "dọn"
+  đoạn rẽ theo phase đó.
 
 ### 4.2 Cấu trúc thư mục
 
 ```
 src/
-├─ app/[locale]/            # mọi route nằm dưới [locale] (vi | ja). Route groups: (admin), (ot-manager), (pc-manager)
-│  ├─ layout.tsx            # root: Header + ToastContainer + AuthProvider (đã mount toàn cục)
+├─ app/[locale]/            # mọi route nằm dưới [locale] (vi | ja)
+│  #                          route groups: (admin) (ot-manager) (pc-manager) (workflow-manager)
+│  #                          route công khai mở từ link email: login, xac-nhan-* (5 route)
+│  ├─ layout.tsx            # root: Header + ToastContainer + AuthProvider + AuthGuard (mount toàn cục)
 │  └─ .../page.tsx          # mỗi page CHỈ là wrapper mỏng render 1 component List/Page
 ├─ navigation.ts            # Link / useRouter / usePathname của next-intl — DÙNG CÁI NÀY, không dùng next/link
 ├─ proxy.ts                 # middleware next-intl (chỉ có tác dụng khi dev)
@@ -212,10 +247,13 @@ src/
 ├─ components/              # UI dùng chung: ui/(Button, Card, Input, Table), common/ConfirmDialog, LanguageSwitcher
 ├─ lib/
 │  ├─ client.ts             # fetch wrapper api.get/post/put/delete + Bearer token + auto re-login khi 401
-│  │                        # + postStream() trả Response còn nguyên body cho endpoint NDJSON (AI Chat)
-│  └─ apiError.ts           # getApiErrorMessage(err, fallback) — bóc message tiếng Việt từ BE
+│  │                        # + postStream() (NDJSON cho AI Chat) + getForBlob()/postFormForBlob()
+│  │                        # (tải file: Excel/PDF) + windowsLogin()/passwordLogin()/setOnUnauthorized()
+│  ├─ apiError.ts           # getApiErrorMessage(err, fallback) — bóc message tiếng Việt từ BE
+│  └─ uuid.ts               # sinh id tạm cho item chưa lưu (form designer, dòng động)
 ├─ types/api.ts             # ApiResponse<T> & ApiResponseWithPageNation<T>
-└─ modules/<module>/        # auth · common · pc-management · attendance · schedule · ai-chat
+└─ modules/<module>/        # auth · common · pc-management · attendance · workflow · schedule
+   #                          · ai-chat (chat tra cứu Asset) · attendance-ai-chat (chat lập đơn OT)
    ├─ api/<entity>.api.ts   # 1 file / entity — CHỈ endpoint + hàm gọi HTTP
    ├─ types/<entity>.dto.ts # 1 file / entity — interface khớp schema BE
    ├─ lib/                  # helper thuần (vd auth/lib/permissions.ts)
@@ -254,56 +292,42 @@ Xác nhận xoá: `components/common/ConfirmDialog`. Thông báo: `react-toastif
 Ẩn/hiện nút theo quyền: `modules/auth/lib/permissions.ts` (`hasPermission` / `hasAnyPermission` /
 `hasModuleAccess`) — BE vẫn luôn enforce lại, FE chỉ làm UX.
 
-**Fetch dữ liệu — luôn dùng `useFetchEffect`** (`modules/common/hooks/useFetchEffect.ts`).
-React Compiler lint rule `react-hooks/set-state-in-effect` **cấm setState đồng bộ trong `useEffect`**
-(kể cả gọi 1 hàm `async` khác có setState bên trong, dù setState nằm sau `await`); chỉ được setState
-trong `.then()/.catch()/.finally()`. Vì vậy **không** viết lại pattern cũ
-`fetchXxx` async + `useEffect(() => { fetchXxx() }, deps)`:
+**React Compiler cấm setState đồng bộ trong `useEffect`** (lint `react-hooks/set-state-in-effect`; kể cả
+gọi hàm `async` khác có setState bên trong, dù setState nằm sau `await`) — chỉ được setState trong
+`.then()/.catch()/.finally()`. Hệ quả: **3 pattern bắt buộc**, mẫu đầy đủ xem
+`modules/pc-management/components/branches/` (khuôn gọn nhất) và chính 2 file hook:
 
-```ts
-const { isLoading, error, refetch: fetchBranches } = useFetchEffect(
-    () => BranchApi.getBranchPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-    [pageIndex, appliedKeyword],          // deps — đổi thì tự fetch lại + tự bật lại isLoading
-    (result) => {                         // onSuccess — nơi DUY NHẤT được set state khác
-        setBranches(result.data);
-        setTotalCount(result.totalCount);
-    },
-    "Không thể tải danh sách chi nhánh.", // errorFallback
-    (message) => toast.error(message)     // onError (optional)
-);
-```
-`refetch` dùng y hệt hàm `fetchXxx` cũ: nút "Làm mới" (`onClick={() => fetchBranches()}`) và
-`await fetchBranches();` sau create/update/delete. `fetcher` được phép `async/await` (miễn không tự setState).
-
-**Reset form dialog — dùng `useDialogReset`** (`modules/common/hooks/useDialogReset.ts`) thay cho
-`useEffect(() => { if (isOpen) setValues(...) }, [isOpen, initial])`:
-```ts
-useDialogReset(isOpen, initial, (current) => {
-    setValues(current ? { branchCode: current.branchCode, branchName: current.branchName } : emptyValues);
-});
-```
-Nếu Form không có prop `isOpen` (bị cha mount/gỡ có điều kiện, vd `RoleForm`) phải kết hợp thêm
-**lazy initializer** `useState(() => ...)` vì `useDialogReset` không chạy ở lần mount đầu.
-
-**Reset state khi 1 giá trị đổi** (vd `setPageIndex(1)` khi filter đổi, xoá `selectedIds` khi
-`devices` đổi) — **không** dùng effect, so sánh snapshot ngay trong thân render
-([you-might-not-need-an-effect](https://react.dev/learn/you-might-not-need-an-effect)):
-```ts
-const [prevFilters, setPrevFilters] = useState(filtersKey);
-if (prevFilters !== filtersKey) {
-    setPrevFilters(filtersKey);
-    setPageIndex(1);
-}
-```
+1. **Fetch:** `useFetchEffect(fetcher, deps, onSuccess, errorFallback, onError?)` →
+   `{ isLoading, error, refetch }` (`modules/common/hooks/useFetchEffect.ts`). `onSuccess` là nơi DUY
+   NHẤT được set state; `refetch` thay hàm `fetchXxx` cũ (nút "Làm mới", gọi lại sau create/update/delete).
+   **Không** viết lại `fetchXxx` async + `useEffect(() => { fetchXxx() }, deps)`.
+2. **Reset form dialog:** `useDialogReset(isOpen, initial, apply)`
+   (`modules/common/hooks/useDialogReset.ts`) thay cho `useEffect(… if (isOpen) setValues …)`. Form không
+   có prop `isOpen` (bị cha mount/gỡ có điều kiện, vd `RoleForm`) phải kèm **lazy initializer**
+   `useState(() => …)` vì hook không chạy ở lần mount đầu.
+3. **Reset state khi 1 giá trị đổi** (`setPageIndex(1)` khi filter đổi…): **không** dùng effect, so sánh
+   snapshot ngay trong thân render ([you-might-not-need-an-effect](https://react.dev/learn/you-might-not-need-an-effect)):
+   ```ts
+   const [prevFilters, setPrevFilters] = useState(filtersKey);
+   if (prevFilters !== filtersKey) { setPrevFilters(filtersKey); setPageIndex(1); }
+   ```
 
 ### 4.6 Đa ngôn ngữ (next-intl) — đang triển khai dở
 
 Locale `vi` (mặc định) + `ja`, `localePrefix: "always"` (bắt buộc vì static export không có middleware
-ở production). Message ở `messages/vi.json` & `messages/ja.json`.
-**Hiện mới dịch Header/Navigation/Home** — phần lớn màn hình vẫn hardcode tiếng Việt.
-Khi làm màn hình mới hoặc được yêu cầu dịch: dùng `useTranslations`, thêm key vào **cả hai** file
-message, theo [thiet-ke-tinh-nang-dich-ngon-ngu.md](docs/docs-fe/thiet-ke-tinh-nang-dich-ngon-ngu.md).
-Chỉ dịch **text tĩnh** — dữ liệu động từ DB giữ nguyên tiếng Việt (đã chốt).
+ở production — đổi sang `"as-needed"` sẽ 404 trên IIS). Message ở `messages/vi.json` & `messages/ja.json`
+(~2.050 dòng mỗi file), namespace gốc: `Common`, `Navigation`, `Header`, `Home`, `Attendance`,
+`Workflow`, `Asset`. Vẫn còn màn hình lẻ hardcode tiếng Việt — đụng tới màn nào thì bổ sung key màn đó.
+Khi thêm text mới: dùng `useTranslations("<Namespace>")`, thêm key vào **cả hai** file message với cấu
+trúc lồng nhau giống hệt nhau (thiếu 1 bên → màn đó vỡ khi đổi ngôn ngữ).
+Chỉ dịch **text tĩnh** — dữ liệu động từ DB (tên phòng ban/thiết bị/form) và nội dung biểu mẫu in PDF
+theo mẫu giấy công ty giữ nguyên tiếng Việt (đã chốt). Màn cũ còn hardcode thì để nguyên, chỉ chuyển
+khi đang sửa chính màn đó.
+Cấu hình: `src/i18n/routing.ts` (`defineRouting`) · `src/i18n/request.ts` (`getRequestConfig`) ·
+`src/navigation.ts` (`createNavigation`) · `src/proxy.ts` · `next.config.ts` (`withNextIntl`) ·
+`app/[locale]/layout.tsx` (`generateStaticParams` + `setRequestLocale` + `NextIntlClientProvider`) ·
+`components/LanguageSwitcher.tsx` (`router.replace(pathname, { locale })` + `useTransition`).
+Điều hướng lấy từ `@/navigation`; **ngoại lệ duy nhất**: `useSearchParams` vẫn import từ `next/navigation`.
 
 ### 4.7 Style & icon
 
@@ -311,13 +335,20 @@ Tailwind CSS v4, font Inter. Đọc [DESIGN_SYSTEM.md](docs/docs-fe/DESIGN_SYSTE
 Bảng màu thương hiệu (giữ nguyên khi thêm màn mới): đỏ nhấn `#e3000f` / hover `#b40009`;
 chữ đậm `#191c1e`; chữ phụ `#5e3f3a`; muted `#8a8f94`; viền `#e0e3e5`; nền phụ `#f8fafc`; lỗi `#930006`.
 
-**Icon:** luôn dùng component từ `lucide-react` (`import { X } from "lucide-react"`), **không** gõ thẳng
-emoji/ký tự unicode làm icon (`✕`, `🗑`, `🖨`, `↻`, `⬇`, `←`, `⚙`, `✓`, `⚠`…) — kể cả nút đóng modal,
-"Làm mới", in/xuất PDF, hay icon sắp xếp. Kích cỡ quy ước: nút đóng modal `h-5 w-5`; icon trong nút
-hành động nhỏ `h-3.5 w-3.5` kèm `flex items-center gap-1.5` trên chính button/link; icon inline cạnh
-text ngắn dùng `size={12}`–`size={16}`.
-*Ngoại lệ:* nội dung mô phỏng ô tick trên biểu mẫu giấy in ra PDF (vd `OtFormPrintView.tsx`) vẫn giữ
-ký tự `✓` thuần — đó là nội dung tài liệu, không phải icon UI.
+**Icon:** luôn dùng `lucide-react`, **không** gõ emoji/ký tự unicode làm icon (`✕ 🗑 🖨 ↻ ⬇ ← ⚙ ✓ ⚠`…)
+— kể cả nút đóng modal, "Làm mới", in/xuất PDF, icon sắp xếp. Cỡ: nút đóng modal `h-5 w-5`; icon trong
+nút hành động nhỏ `h-3.5 w-3.5` + `flex items-center gap-1.5` trên chính button/link; icon inline cạnh
+text ngắn `size={12}`–`size={16}`. *Ngoại lệ:* ô tick mô phỏng trên biểu mẫu giấy in PDF (vd
+`OtFormPrintView.tsx`) giữ ký tự `✓` thuần — đó là nội dung tài liệu, không phải icon UI.
+
+### 4.8 Xuất PDF — vẽ thẳng bằng jsPDF
+
+`html2canvas` (chụp DOM rồi dán ảnh vào PDF) **không đáng tin**: font/khoảng cách/ngắt dòng trôi so với
+layout đã verify trên màn hình, chữ bị nhoè khi scale, và mỗi lần sửa CSS là một lần PDF lệch lại.
+Code cũ còn dùng nó (`attendance/components/ot-form/OtFormPrintView.tsx`,
+`attendance/lib/productionTicketBatchPdf.tsx`, `workflow/components/requests/WorkflowRequestPrintView.tsx`)
+thì **giữ nguyên**, nhưng **mọi luồng xuất PDF mới phải dựng trực tiếp bằng `jspdf`**
+(+ `jspdf-autotable` cho bảng) **ngay từ đầu** — đừng đi đường chụp DOM rồi sửa dần.
 
 ---
 
@@ -326,15 +357,20 @@ ký tự `✓` thuần — đó là nội dung tài liệu, không phải icon U
 - **Envelope**: mọi response (kể cả lỗi) là
   `{ isSuccess, message, data, errors, timestamp }` (camelCase). `errors`: `string[] | null`.
 - **Phân trang**: `data` chứa `data[]` + `pageIndex/pageSize/totalCount/totalPages/hasNextPage/hasPreviousPage`.
-- **Auth**: `POST /api/Auth/windows-login` (Windows Negotiate, `-UseDefaultCredentials`) → JWT.
-  Mọi endpoint khác cần `Authorization: Bearer <token>` **và** permission tương ứng
-  (thiếu token → 401, thiếu permission → 403).
+- **Auth**: `POST /api/Auth/windows-login` (Windows Negotiate, `-UseDefaultCredentials`) → JWT, hoặc
+  `POST /api/Auth/login` (user + mật khẩu, dùng ở trang `/login`). Còn token thì xác thực lại bằng
+  `GET /api/Auth/me` — **đừng gọi lại `windows-login`**, mỗi lần gọi là một handshake NTLM và trình duyệt
+  sẽ hỏi tài khoản domain. Mọi endpoint khác cần `Authorization: Bearer <token>` **và** permission tương
+  ứng (thiếu token → 401, thiếu permission → 403).
   `client.ts` đã có sẵn cơ chế Bearer token (localStorage) + tự re-login qua `/windows-login` khi gặp
   401 rồi retry, và dồn nhiều 401 đồng thời về đúng 1 lần handshake NTLM — **không phá cơ chế này**.
+- JWT mang thêm claim **`UserId`** (số, thêm ngày 2026-08-25) — module Workflow dùng nó để tra
+  `Employees.UserId` ra "nhân sự nào đang đăng nhập". Token phát trước mốc đó không có claim này.
 - Chỉ **JWT** được lưu `localStorage`; thông tin user (fullName/roles/permissions) giữ trong
   React Context (`modules/auth/context/AuthContext.tsx`), không ghi ra đĩa.
-- **CORS**: BE chỉ whitelist `http://localhost:3000` + `http://10.45.1.181:3000` (`AllowCredentials`).
-  Origin khác phải bổ sung ở BE.
+- **CORS**: whitelist nằm ở policy `AllowNextJs` trong `CompanySystem.HostApi/Program.cs`
+  (`AllowCredentials`): `localhost:3000`, `localhost:8000`, `10.45.1.155:3000`, `10.45.1.181:3000`,
+  `10.45.1.49` (`:8000`/`:80`/không port), `http://intra.yev.vn`. Origin khác phải bổ sung ở BE.
 
 ---
 

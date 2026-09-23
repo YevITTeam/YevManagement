@@ -1,12 +1,48 @@
 # attendance-module.md — Module Attendance (Chấm công / Giấy tăng ca)
 
-> **ĐÃ CÓ CODE** — Domain + DbContext + Migrations + Repository/UnitOfWork + DTO + Service + Controller
-> đầy đủ cho tính năng đầu tiên: **Giấy tăng ca (OT Form)** với luồng duyệt nhiều cấp + phân quyền
-> theo phạm vi tổ chức + chữ ký. Build sạch, đã smoke-test host khởi động OK (2026-07-14).
+> **Đang chạy thật.** Giấy tăng ca (OT Form): duyệt nhiều cấp theo Cây chức vụ + đơn "theo chuyền" của
+> Chế Tạo, đơn tổng, phiếu ăn, giới hạn/lũy kế giờ OT, chữ ký + mật khẩu cấp 2, duyệt qua email, 4 báo
+> cáo Excel + phiếu PDF hàng loạt, AI Chat lập đơn, import Excel nhân sự/lũy kế. Việc còn nợ: xem §3 cuối file.
 >
-> **FE triển khai đọc [attendance-api-fe.md](attendance-api-fe.md)** — hợp đồng API đầy đủ (request/response
-> mẫu, enum, checklist màn hình). File này (`attendance-module.md`) là tài liệu **cho dev BE**: lý do thiết kế,
-> migration, cấu trúc code nội bộ.
+> File này là tài liệu **cho dev BE** (lý do thiết kế, migration, cấu trúc code nội bộ).
+> **FE đọc [attendance-api-fe.md](attendance-api-fe.md)** — hợp đồng API (request/response mẫu, enum,
+> checklist màn hình).
+
+---
+
+## MỤC LỤC ĐỌC NHANH — đọc file này theo lát cắt
+
+> ⚠ **File ~375 KB. KHÔNG `Read` cả file** — đọc trọn nó đốt sạch context của phiên (CLAUDE.md §2 luật 7).
+> Cách dùng: tra bảng dưới → `Read` với `offset`/`limit` đúng dải dòng (dư ±20 dòng là đủ).
+> Số dòng có thể lệch sau khi ai đó sửa file → `Grep` pattern `^#{2,4} ` trên chính file này để lấy lại
+> mục lục kèm số dòng. Cần 1 tên field/endpoint cụ thể thì `Grep` thẳng chuỗi đó, đừng đọc tuần tự.
+
+| Cần biết gì | Dải dòng | Mục |
+|---|---|---|
+| Entity + business logic gốc của OT Form | 47–171 | §Entity, §Business Logic, §Sửa đơn Draft/Pending |
+| **Lũy kế** (ledger, snapshot đóng băng, lũy kế dự kiến) | 172–201, 581–651 | 4 mục §Lũy kế… |
+| **Phiếu ăn** (ngưỡng giờ, 3 bậc, trừ 30 phút, đồng bộ khi sửa đơn) | 202–402 | 5 mục §Phiếu ăn / §Có ăn hay không |
+| **Giới hạn giờ OT** (chặn cứng ngày/tháng/năm + gia hạn riêng từng NV) | 403–472 | 2 mục §Giới hạn |
+| **Nhân sự dưới chuyền** (`ProductionEmployee`, import/export file Chế Tạo) | 473–580 | §Import/Export nhân sự dưới chuyền |
+| Song ngữ Vn/Jp trên DTO | 652–662 | §Song ngữ Vn/Jp |
+| **Đơn tổng** (`OtFormBatch`) | 663–763 | §Đơn tổng |
+| **Email**: mail tổng hợp hằng ngày, token xác thực, font/dark-mode | 764–852, 3316–3342 | 3 mục §…email |
+| Mật khẩu cấp 2 | 853–890 | §Mật khẩu cấp 2 |
+| Loại nhân viên khỏi đơn (in-app đã xoá, còn kênh email) | 891–993 | 2 mục §Loại nhân viên |
+| Luật giao diện + ghép chuỗi song ngữ | 994–1020, 3260–3288 | 2 mục §…giao diện |
+| **Cây chức vụ / Cây duyệt / đơn "theo chuyền"** — Giai đoạn 1→16 | 1021–2316 | §Cây chức vụ + 16 mục con |
+| Migration & DB | 2317–2321 | §DB |
+| **Danh sách controller/endpoint đã có** | 2322–2461 | §1. Cấu trúc code đã có |
+| **Báo cáo & export Excel/PDF** (4 báo cáo + phiếu PDF hàng loạt) | 2462–2779 | 5 mục §Báo cáo/§Excel/§PDF |
+| **Phân quyền** theo Chức vụ / Phòng ban / Coordinator | 2780–2950 | §Gộp tab Quyền…, §Phân quyền theo Phòng ban, §Vá lỗ hổng Employee.View |
+| **Import Excel** (lũy kế tháng, liên kết Identity, bẫy ClosedXML) | 2951–3119 | 4 mục §Import… |
+| Sửa đơn / duyệt hàng loạt / filter danh sách | 3120–3242 | 3 mục §… |
+| Bug đã sửa (Coordinator Chuyền, Team A/B) | 3243–3259, 3289–3315 | 2 mục §Fix bug |
+| Wiring Host + **việc còn nợ / cố ý chưa làm** | 3343–hết | §2, §3 |
+
+**Quy ước viết tiếp file này** (CLAUDE.md §2 luật 8): sửa thẳng vào mục đang mô tả phần đó, **không**
+nối thêm mục `§… (ngày)` cho mỗi lần chỉnh. Quyết định cũ bị thay thế → gộp/xoá mục cũ, giữ 1 dòng
+"trước làm X, bỏ vì Y" nếu lý do còn giá trị. Vài mục dưới đây đã được gộp lại theo đúng cách này.
 
 ## 0. Chốt yêu cầu (CLAUDE.md §2 luật 2)
 
@@ -955,142 +991,32 @@ email tồn tại từ đầu, xem §Xác thực qua email) nên không loại �
   `OtFormEmailConfirmPage.tsx`) từ text phẳng sang badge Có/Không (icon `Check`/`X`, màu xanh lá/xám)
   + icon theo mục (`Utensils`/`Car`/`Printer`) cho dễ đọc hơn.
 
-#### §Đổi tên khu vực "Phần xử lý" + sửa lỗi hiển thị song ngữ (2026-07-31)
-Người dùng phản hồi tên "Phần xử lý / 処理内容" (khu vực Ăn uống/Xe đưa đón/Phòng copy/Phiếu ăn) khó
-hiểu, và văn bản hiển thị trên trang email bị lặp (vd `"Ăn uống: Có / はい / 食事：Có / はい"`).
+#### §Giao diện & song ngữ OT Form — các luật rút ra (2026-07-31)
 
-- **Nguyên nhân lỗi lặp**: `OtFormEmailConfirmPage.tsx` dùng `createBilingualTranslator` (ghép bản dịch
-  `vi` + `ja` của CÙNG 1 key/values thành 1 chuỗi) cho các dòng dạng `t("eatLabel", { value: t("yes") })`
-  — nhưng `t("yes")` TỰ NÓ đã trả về chuỗi song ngữ `"Có / はい"` (không phải giá trị đơn theo locale),
-  nên khi nhét `value` đó vào `t("eatLabel", ...)` rồi ghép tiếp 1 lần nữa, cả cụm nhãn+giá trị bị lặp
-  y hệt 2 lần (1 lần trong bản "vi", 1 lần trong bản "ja" — cả 2 bản đều chèn cùng `value` song ngữ).
-  Cùng lỗi cho `transportationLabel`/`copyRoomLabel`/`anotherSuggestionLabel`, và dòng
-  `removedInlineNote` (§Loại nhân viên khỏi đơn) khi `level` truyền vào là
-  `approvalLevelLabelsBilingual[...]` (đã song ngữ sẵn).
-- **Cách sửa**: KHÔNG đưa giá trị đã song ngữ hoá vào `createBilingualTranslator` nữa — với các dòng có
-  cả nhãn lẫn giá trị động, dựng thủ công bằng literal string trong `bilingual.ts`
-  (`processPartTitleBilingual`, `processPartFieldLabelsBilingual`, `bilingualYesNo()`,
-  `removedByLabelBilingual`, `removedReasonLabelBilingual`) rồi ghép trực tiếp trong JSX thay vì gọi
-  `t(key, { value })`. `OtFormDetail.tsx` (trong app, `useTranslations` 1 locale, không có khái niệm
-  ghép vi+ja) **không bị lỗi này** nên giữ nguyên cách cũ.
-- **Đổi tên**: `processPartTitle` (namespace `Attendance.OtFormDetail`, dùng chung bởi cả
-  `OtFormDetail.tsx` và `OtFormEmailConfirmPage.tsx`) đổi `"Phần xử lý"` → `"Yêu cầu hỗ trợ khác"` (vi),
-  `"処理内容"` → `"その他のご要望"` (ja). **KHÔNG đổi** ở `OtFormPrintView.tsx` (bản in PDF) — khối này
-  trên ảnh nền in vẫn giữ đúng tên gốc "Phần xử lý / 処理欄" khớp phiếu giấy thật YEV-22-024, xem
-  `attendance-otform-pdf-mapping.md` §4.
-- **Không đổi field/response BE nào** — thuần sửa UI text + cách ghép chuỗi ở FE.
-- **Sửa thêm (2026-07-31, cùng đợt)**: `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx` trước đây ẩn hẳn
-  cả khối "Yêu cầu hỗ trợ khác" khi `form.processPart == null` (đơn không tick "Yêu cầu hỗ trợ khác"
-  lúc tạo) — khiến người dùng nhầm là thiếu thông tin dù đây là giá trị mặc định hợp lệ (đơn #22 xác
-  minh qua SQL: `ProcessParts` không có dòng tương ứng, không phải lỗi lưu dữ liệu). Đã sửa để LUÔN hiện
-  khối này, mặc định 3 checkbox "Không" khi `processPart` null — khớp đúng cách `OtFormPrintView.tsx`
-  (bản in PDF) đã xử lý từ trước (`processPart?.isEat ?? false`), 2 màn hiển thị giờ nhất quán với bản in.
+> Gộp từ 5 mục changelog cùng ngày (đổi tên "Phần xử lý", làm đẹp giao diện đợt 1/2/3, sửa 2 thanh cuộn).
+> Chỉ giữ phần còn giá trị khi code tiếp; chi tiết thao tác từng đợt đã bỏ.
 
-#### §Làm đẹp giao diện OT Form — đợt 1 (2026-07-31)
-Người dùng yêu cầu "làm đẹp lại giao diện" cho toàn module Attendance — quy mô lớn (~25 màn), chốt qua
-AskUserQuestion làm theo đợt, ưu tiên các màn OT Form trước (chạm nhiều nhất), hướng thiết kế:
-badge/pill thay text phẳng + card/spacing nhất quán + bảng gọn hơn. `OtFormDetail.tsx`/
-`OtFormEmailConfirmPage.tsx` đã làm ở đợt trước (xem mục "Yêu cầu hỗ trợ khác" ở trên). Đợt này:
-
-- **`OtFormListPage.tsx`** (5 tab danh sách, §4.2): thu gọn padding ô bảng `px-6 py-4` → `px-4 py-3`
-  (đúng thang "danh sách gọn" ở `DESIGN_SYSTEM.md` §2.3, bảng này 8-9 cột nên ưu tiên gọn hơn thưa);
-  `totalHour` đổi từ số trần sang badge pill; empty-state thêm icon `Inbox` xám nhạt phía trên dòng
-  "Không có dữ liệu". Không đổi field/API nào.
-- **`CreateOtFormPage.tsx`** (form tạo/sửa đơn): (1) 3 checkbox Ăn uống/Xe đưa đón/Phòng copy trong khối
-  "Yêu cầu hỗ trợ khác" đổi từ checkbox+label phẳng sang `ToggleOptionCard` — ô bo góc có icon
-  (`Utensils`/`Car`/`Printer`), đổi viền/nền sang xanh lá nhạt khi chọn (cùng ngôn ngữ hình ảnh
-  `ProcessPartTile` đã dùng ở màn Chi tiết); input thật vẫn là `<input type="checkbox">` (`sr-only`,
-  giữ nguyên hành vi/accessibility, chỉ đổi lớp vỏ hiển thị). (2) Bảng chọn nhân viên: dòng đã chọn tô
-  nền hồng nhạt `bg-[#fff4f2]/60` để dễ nhìn; cột luỹ kế giờ OT (`monthToDate`/`yearToDate`) đổi từ text
-  trần sang badge pill, đỏ nhạt kèm icon `AlertTriangle` khi vượt ngưỡng (>25h/tháng hoặc >300h/năm),
-  xám trung tính khi bình thường — cùng bộ màu semantic ở `DESIGN_SYSTEM.md` §1.3. (3) Dòng "Đã chọn N
-  nhân viên" chuyển từ text dưới bảng lên thành badge ở góc phải tiêu đề section (mẫu Card có badge,
-  `DESIGN_SYSTEM.md` §4.1). Không đổi logic validate/submit nào.
-- Các màn OT Form còn lại (`OtFormTabsPage.tsx` — tab bar, `OtFormDetail.tsx`/`OtFormEmailConfirmPage.tsx`
-  — đã làm đợt trước) giữ nguyên, đã khớp `DESIGN_SYSTEM.md`. Các nhóm màn khác của module (danh mục
-  CRUD Group/Department/Employee/Reason/OtCase, phạm vi duyệt, chữ ký, mật khẩu cấp 2) **CHƯA làm** —
-  để ở đợt sau theo đúng thứ tự người dùng chọn.
-
-#### §Làm đẹp giao diện — đợt 2 (2026-07-31, danh mục CRUD + phạm vi duyệt + chữ ký + mật khẩu cấp 2)
-Tiếp nối đợt 1 (OT Form). Cùng hướng: badge/pill thay text phẳng, bảng gọn hơn (`px-6 py-4` → `px-4
-py-3`, header `py-3` → `py-2.5`), empty-state thêm icon `Inbox`. Áp dụng cho `DepartmentList.tsx`,
-`GroupList.tsx`, `ReasonList.tsx`, `OtCaseList.tsx`, `EmployeeList.tsx`, `UserApprovalScopeManager.tsx`.
-
-- **Badge hoá field boolean/enum trong bảng**: `OtCaseList.tsx` — `requireSignature` đổi từ text "Có"/
-  "Không" sang badge xanh lá (icon `Check`)/xám (icon `X`); `requiredApprovalLevel` sang badge xám
-  trung tính. `UserApprovalScopeManager.tsx` — `scopeType` sang badge xám, `approvalLevel` sang badge đỏ
-  nhạt (accent, không phải cảnh báo — không có badge lỗi nào khác trong cùng bảng nên không xung đột
-  ngữ nghĩa). `GroupList.tsx` — tên Phòng ban của mỗi Bộ phận sang badge xám. `EmployeeList.tsx` — cột
-  luỹ kế giờ OT tháng/năm đổi từ text `font-semibold` màu đỏ sang badge pill (đỏ nhạt + icon
-  `AlertTriangle` khi vượt ngưỡng >25h/tháng hoặc >300h/năm, xám khi bình thường) — cùng bộ màu đã
-  chuẩn hoá ở `CreateOtFormPage.tsx` (đợt 1).
-- **Bài học từ lỗi đợt 1** (xem báo cáo người dùng kèm ảnh chụp màn hình ngay sau khi đợt 1 xong):
-  dùng nhầm màu "Accent nhạt / Error" (`#fff4f2`/`#e9bcb6`/`#930006`) cho trạng thái "đã chọn" (không
-  phải lỗi/cảnh báo) ở bảng chọn nhân viên `CreateOtFormPage.tsx` khiến cả bảng nhìn như đang báo lỗi
-  hàng loạt — đã sửa lại dòng đã chọn sang `bg-[#f8fafc]` (xám trung tính) và badge "Đã chọn N nhân
-  viên" cũng đổi từ đỏ sang xám. Đợt 2 rút kinh nghiệm: chỉ dùng họ màu đỏ/hồng (`#fff4f2`/`#e9bcb6`/
-  `#930006`/`#e3000f`) cho lỗi thật/cảnh báo thật/badge accent KHÔNG đứng cạnh cảnh báo khác trong cùng
-  view; trạng thái trung tính (đã chọn, nhãn phụ, đếm số lượng) luôn dùng xám (`#e0e3e5`/`#f8fafc`/
-  `#5e3f3a`); trạng thái tích cực dùng `emerald`.
-- **`UserSignaturePanel.tsx`/`SecondaryPasswordPanel.tsx`**: thêm icon vào các ô trạng thái đã có sẵn
-  màu (emerald=đã đăng ký kèm `Check`, amber=chưa đăng ký kèm `AlertTriangle`, amber=đã gửi email xác
-  nhận kèm `Clock`) — các ô này vốn đã đúng ngữ nghĩa màu từ trước, chỉ thêm icon cho rõ hơn, không đổi
-  logic.
-- **`EmployeeAccumulationPanel.tsx`**: thêm 2 thẻ KPI (mẫu Stat Card `DESIGN_SYSTEM.md` §4.1) hiện
-  monthToDate/yearToDate hiện tại phía trên form chỉnh — đỏ nhạt kèm icon `AlertTriangle` khi vượt
-  ngưỡng, xám kèm icon `Clock` khi bình thường.
-- **`EmployeeImportDialog.tsx`**: sửa màu xanh lá hardcode `#16a34a` (không có trong bảng màu
-  `DESIGN_SYSTEM.md`) thành `emerald-600` chuẩn — không đổi layout/logic.
-- Modal form (`DepartmentForm.tsx`/`GroupForm.tsx`/`ReasonForm.tsx`/`OtCaseForm.tsx`/`EmployeeForm.tsx`)
-  và `SignatureUpload.tsx`: đã khớp `DESIGN_SYSTEM.md` §4.7 từ trước, **không sửa**.
-- Còn lại (nếu có): các trang public qua email/link xác nhận ngoài OT Form (`SignatureConfirmPage.tsx`,
-  `SecondaryPasswordConfirmPage.tsx`) chưa rà — để đợt sau nếu người dùng yêu cầu tiếp.
-
-#### §Làm đẹp giao diện — đợt 3 (2026-07-31, thanh công cụ in đơn)
-Người dùng phản hồi thanh công cụ phía trên bản in (`OtFormPrintView.tsx`) xấu — 2 nút chọn khổ giấy
-nhét nguyên câu mô tả dài (`"A4 (tối đa 10 người/trang đầu, 30 người/trang sau)"`) làm nút bị xuống
-dòng, phình to, lệch layout so với nút "Xuất PDF"/"In" bên cạnh.
-
-- **Chỉ sửa thanh công cụ `no-print`** (2 nút chọn khổ giấy + "Xuất PDF" + "In") — **KHÔNG đụng** phần
-  render bản in thật (`PageFrame`/`FormHeaderFields`/`EmployeeRowFields`, ảnh nền + toạ độ `%` đo từ file
-  gốc), theo đúng nguyên tắc đã ghi ở đầu file component: bản in phải khớp tuyệt đối phiếu giấy gốc
-  YEV-22-024, không tự thêm/bớt gì ngoài ảnh nền.
-- Rút nút khổ giấy về nhãn ngắn (`"A4"`/`"A5 ngang"`, key mới `paperSizeA4Short`/`paperSizeA5Short`) +
-  icon phân biệt hướng giấy (`RectangleVertical` cho A4 dọc, `RectangleHorizontal` cho A5 ngang). Câu mô
-  tả sức chứa đầy đủ cũ (`paperSizeA4`/`paperSizeA5`, giữ nguyên nội dung) chuyển xuống thành 1 dòng chú
-  thích nhỏ màu xám bên dưới thanh nút, chỉ hiện đúng 1 câu khớp khổ đang chọn — không còn nhét trong nút.
-- Nút "In" thêm icon `Printer` cho đồng bộ với nút "Xuất PDF" (đã có icon `Download` từ trước).
-
-#### §Sửa lỗi 2 thanh cuộn chồng nhau ở khung app (2026-07-31)
-Người dùng báo bảng nhân viên ở `/ot/create` bị "che, bị cắt" và tồn tại 2 thanh cuộn cùng lúc — dựng
-lại được bằng thao tác dev tools, xác định đây là lỗi cấu trúc CSS ở khung ứng dụng
-(`(ot-manager)/layout.tsx`, dùng chung bởi MỌI trang OT chứ không riêng gì `/ot/create`), không phải
-lỗi riêng của `CreateOtFormPage.tsx`.
-
-**Phải sửa 3 lượt mới dứt** (người dùng test lại và báo còn lỗi sau mỗi lượt) — ghi lại đầy đủ để
-không lặp lại lối mò mẫm này:
-
-1. **Lượt 1 — thêm `min-h-0` vào `<main>`**: `flex-1 overflow-y-auto` là flex item, mà flex item mặc
-   định `min-height: auto` nên không chịu co theo chiều cao khối cha. Đúng nhưng **chưa đủ**.
-2. **Lượt 2 — đổi `max-h-screen` → `h-[calc(100vh-4rem)]`**: `Header`
-   (`modules/common/components/Header.tsx`) cao `h-16` = `4rem`, là `sticky` chứ **không** `fixed` nên
-   **chiếm chỗ thật** trong luồng. Khung OT/PC nằm dưới header mà vẫn khai `100vh` → tổng chiều cao
-   trang `100vh + 4rem` → tràn viewport → `document` sinh thanh cuộn riêng. Đúng hướng nhưng **vẫn tái
-   phát**, vì mới chỉ chỉnh con số chứ chưa bỏ được việc nhiều tầng cùng tranh quản chiều cao.
-3. **Lượt 3 (dứt điểm) — dồn toàn bộ chiều cao + vùng cuộn về `[locale]/layout.tsx`**:
-   - `body`: `min-h-screen flex flex-col` → **`flex h-screen flex-col overflow-hidden`** (+
-     `print:h-auto print:overflow-visible`) — chặn hẳn document tự cuộn.
-   - root `<main>`: `flex-grow` → **`min-h-0 flex-1 overflow-y-auto`** — trở thành vùng cuộn **duy
-     nhất** của toàn app.
-   - `(ot-manager)/layout.tsx` + `(pc-manager)/layout.tsx`: **bỏ sạch** mọi khai báo chiều cao/cuộn của
-     riêng mình, chỉ còn `min-h-full`; `<main>` bên trong đổi thành `<div>` (root layout đã có `<main>`
-     rồi — lồng 2 `<main>` là HTML không hợp lệ).
-   - Dọn theo cho nhất quán: `OtAccessGuard`/`PcAccessGuard` `min-h-screen` → `min-h-full`;
-     `(admin)/admin/page.tsx` `h-[calc(100vh-4rem)]` → `h-full` và `<main>` lồng bên trong → `<div>`.
-- Quy tắc rút ra đã ghi thành mục riêng ở `DESIGN_SYSTEM.md` §3: **chỉ root layout được khai chiều cao
-  và vùng cuộn**; layout con chỉ dùng `h-full`/`min-h-full`, không tự `overflow-y-auto`, không lồng
-  `<main>`. Sidebar vẫn `fixed h-screen` — đúng, vì `fixed` nằm ngoài luồng.
-- Không đổi cấu trúc/hành vi nghiệp vụ nào — thuần sửa lỗi CSS layout.
+- **Ghép chuỗi song ngữ (trang mở từ link email):** KHÔNG đưa giá trị **đã song ngữ hoá** vào
+  `createBilingualTranslator` (vd `t("eatLabel", { value: t("yes") })` với `t("yes")` = `"Có / はい"`) —
+  sẽ lặp nguyên cụm 2 lần. Dòng có cả nhãn lẫn giá trị động phải dựng thủ công bằng literal trong
+  `bilingual.ts` (`processPartTitleBilingual`, `processPartFieldLabelsBilingual`, `bilingualYesNo()`,
+  `removedByLabelBilingual`, `removedReasonLabelBilingual`) rồi ghép trong JSX. `OtFormDetail.tsx`
+  (trong app, 1 locale) không dính lỗi này — giữ nguyên cách gọi `t(key, { value })`.
+- **Tên khối "Yêu cầu hỗ trợ khác"** (`Attendance.OtFormDetail.processPartTitle`, vi/ja) chỉ đổi ở
+  `OtFormDetail.tsx` + `OtFormEmailConfirmPage.tsx`. **`OtFormPrintView.tsx` giữ nguyên "Phần xử lý /
+  処理欄"** — phải khớp phiếu giấy YEV-22-024 (`attendance-otform-pdf-mapping.md` §4).
+- **`processPart == null` là giá trị hợp lệ** (đơn không tick gì), KHÔNG được ẩn khối — luôn hiện với
+  3 checkbox mặc định "Không", khớp cách bản in xử lý (`processPart?.isEat ?? false`).
+- **Ngữ nghĩa màu** (bài học từ lỗi tô cả bảng thành hồng): họ đỏ/hồng (`#fff4f2`/`#e9bcb6`/`#930006`/
+  `#e3000f`) **chỉ** cho lỗi thật/cảnh báo thật; trạng thái trung tính (dòng đã chọn, nhãn phụ, đếm số
+  lượng) dùng xám (`#e0e3e5`/`#f8fafc`/`#5e3f3a`); trạng thái tích cực dùng `emerald`. Ngưỡng cảnh báo
+  lũy kế đang dùng ở UI: >25h/tháng, >300h/năm.
+- **Thanh công cụ bản in:** chỉ được sửa vùng `no-print` (nút chọn khổ giấy, "Xuất PDF", "In") —
+  **KHÔNG đụng** `PageFrame`/`FormHeaderFields`/`EmployeeRowFields` (ảnh nền + toạ độ `%` đo từ file gốc).
+- **Chiều cao & thanh cuộn:** chỉ `[locale]/layout.tsx` được khai chiều cao và vùng cuộn
+  (`body: flex h-screen flex-col overflow-hidden`, `main: min-h-0 flex-1 overflow-y-auto`). Layout con
+  (`(ot-manager)`, `(pc-manager)`…) chỉ `min-h-full`, không tự `overflow-y-auto`, không lồng thêm
+  `<main>`. Sidebar `fixed h-screen` là ngoại lệ hợp lệ (nằm ngoài luồng). Xem `DESIGN_SYSTEM.md §3`.
 
 ### §Cây chức vụ (JobTitle) — Giai đoạn 1: nền tảng (2026-08-06)
 
@@ -2814,144 +2740,42 @@ tổ hợp với `GetTicketReportAsync` nhưng trả DANH SÁCH TỪNG NGƯỜI 
   verify qua API call thuần — cần người dùng tự bấm thử trong trình duyệt (nút "Xuất phiếu theo
   Line/Nhóm (zip)" trong tab Báo cáo) và mở thử vài file PDF trong zip trước khi coi là ổn định.
 
-### §Fix chữ tràn ô trong PDF hàng loạt theo Line/Nhóm (2026-09-03e)
+### §Phiếu PDF hàng loạt theo Line/Nhóm — trạng thái chốt (2026-09-03e→h)
 
-Người dùng bấm thử nút "Xuất phiếu theo Line/Nhóm (zip)" (mục §3 ở trên, lúc đó còn ghi "CHƯA bấm thử")
-— báo lỗi kèm ảnh chụp: nhiều ô chữ (tên "Trưởng phòng", "Người chịu trách nhiệm", "Người đề nghị"...)
-bị tràn ra ngoài viền ô in sẵn, đè lên nội dung xung quanh.
+> Gộp từ 4 lượt sửa liên tiếp (tràn chữ → sai dữ liệu → chữ đè viền → viết lại bằng jsPDF).
+> **Tính năng "Xuất phiếu theo Line/Nhóm (zip)" đã HOÀN TẤT, người dùng xác nhận ổn.**
 
-**Nguyên nhân**: `OtFormPrintView.tsx` trước đó dùng `nowrapBoxStyle()` (CSS `overflow:hidden` +
-`white-space:nowrap`) để cắt chữ dài không vừa ô — cách này CHỈ đúng khi trình duyệt tự render (bản in
-đơn lẻ qua `window.print()`, đã verify ổn định từ trước). Đường xuất PDF hàng loạt lại chụp trang qua
-`html2canvas` rồi nhúng ảnh vào `jsPDF` (xem §3) — `html2canvas` KHÔNG cắt `overflow:hidden` đáng tin
-cậy trên các ô `position:absolute`/`flex` chứa `white-space:nowrap` (giới hạn đã biết của thư viện này),
-nên chữ dài vẫn bị vẽ tràn ra ngoài dù CSS khai đúng. Bằng chứng: ô "Lý do" (dùng `ReasonAutoFit` — tự
-đo `scrollHeight` THẬT trên DOM rồi thu nhỏ cỡ chữ cho vừa, KHÔNG dựa vào CSS clip) là ô DUY NHẤT không
-bị lỗi trong ảnh chụp.
+**Cách vẽ (bắt buộc giữ):** `productionTicketBatchPdf.tsx` **tự vẽ thẳng lên `jsPDF`**, KHÔNG render
+React off-screen, KHÔNG `html2canvas`. `doc.addImage()` cho ảnh nền (`/ot-form/a4-page1.png`,
+`a4-page2.png`), `doc.text()` cho chữ, `doc.line()` vẽ tay dấu ✓ (font Roboto nhúng không chắc có glyph
+Dingbats). Toạ độ % + business logic **tái dùng** từ `OtFormPrintView.tsx` (đã export sẵn:
+`formatDate/formatTime/formatDateTime/findHistory/findStepByTerminalLevel/getGivenName/`
+`getProductionCongDoanLabel/columnBox` + hằng `REASON_*`, `HEADER_LAYOUTS`, `A4_PAGE1_EMPLOYEE`,
+`A4_PAGE2_EMPLOYEE`) — **đừng chép lại logic**, chỉ đổi cách "vẽ ra". Font tiếng Việt: nhúng Roboto qua
+VFS bằng `registerVietnameseFont` + base64 ở `modules/pc-management/lib/pdf-fonts.ts` (mỗi nơi tự giữ
+bản nhỏ — convention hiện có, đừng gom helper chung). Đo chữ bằng chính `doc.getTextWidth` /
+`doc.splitTextToSize` (cùng engine đo và vẽ → hết lệch tỷ lệ). Ảnh chữ ký: `Image().decode()` lấy
+`naturalWidth/naturalHeight` thật trước khi `addImage` (tương đương `object-contain`).
 
-**Fix**: bỏ hẳn `nowrapBoxStyle`, thay bằng kỹ thuật giống `ReasonAutoFit` nhưng cho 1 dòng — component
-mới `AutoFitLine` + hook `useAutoFitLineWidth` (đo `scrollWidth`/`clientWidth` THẬT, tự thu nhỏ cỡ chữ
-tới khi vừa khít, sàn 55% cỡ gốc) — áp dụng cho MỌI ô 1 dòng trong `FormHeaderFields`/`EmployeeRowFields`
-(tên công đoạn, số lượng NV, người chịu trách nhiệm, giờ/ngày, đề nghị khác, và toàn bộ cột trong bảng
-nhân viên). Riêng dòng tên trong `SignatureCell` (ô chữ ký) tách thành `SignatureNameLine` — thêm
-`width:100%` cho wrapper (trước đó là `div` co theo nội dung bên trong `flex-column, alignItems:center`
-nên không bị ép theo bề rộng ô, đây là phần lộ rõ nhất trong ảnh lỗi) rồi áp dụng cùng kỹ thuật tự co.
-Vì fix ở tầng component DÙNG CHUNG cho cả 2 đường (in đơn lẻ + xuất hàng loạt), bản in đơn lẻ cũng được
-lợi (trước đây chữ tràn sẽ bị cắt mất, giờ tự co nhỏ để hiện đủ) — không có rủi ro thụt lùi vì chữ vừa
-sẵn thì hiển thị y hệt như cũ (cùng cỡ chữ gốc).
+**Dữ liệu (bắt buộc giữ):** `ProductionOtReportService.GetTicketBatchAsync` phải lấy đúng **snapshot đã
+đóng băng trên `OtFormEmployee`**, y hệt `OtFormService.GetOtFormByIdAsync` của bản in đơn lẻ:
+- Projection có `StartTime`, `MonthToDate`, `YearToDate` + 5 field snapshot (`CongDoanSnapshot`,
+  `TaskNameSnapshot`, `BlockCodeSnapshot`, `TeamCodeSnapshot`, `ShiftTeamCodeSnapshot`) — thiếu thì ô
+  "Tên công đoạn" trống trơn (`getProductionCongDoanLabel` không có gì để ghép).
+- Lũy kế đọc thẳng cột `OtFormEmployee.MonthToDate/YearToDate`, **KHÔNG** tính lại từ
+  `EmployeeAccumulationHistories` (ledger sống ≠ số đã ký trên giấy — xem `OtFormEmployee.cs` dòng 29-34).
+- Thứ tự nhân viên `.OrderBy(eg => eg.Key)` (EmployeeId, thứ tự tự nhiên) — **KHÔNG** sắp lại theo
+  `EmployeeCode` (bản in đơn lẻ không sắp gì cả).
 
-**Verify**: `npx tsc --noEmit` + `pnpm lint` sạch (`OtFormPrintView.tsx` không còn cảnh báo mới).
+**Bài học `html2canvas` — đừng quay lại:** đã vá 3 lần vẫn hỏng, vì thư viện hỗ trợ CSS không đầy đủ ở
+`overflow:hidden`+`nowrap`, `flex align-items:center`, `display:table-cell`, và `aspect-ratio` (lệch tỷ
+lệ tích luỹ theo chiều dọc — càng xuống cuối trang càng lệch). Xem `CLAUDE.md §4.8`.
 
-### §Fix dữ liệu sai trong PDF hàng loạt (Tên công đoạn trống + lũy kế + thứ tự NV) (2026-09-03f)
-
-Người dùng bấm thử lại sau fix format ở trên, báo "vẫn lỗi format" — gửi kèm 2 ảnh so sánh (bản in đơn
-lẻ vs bản xuất qua zip cùng 1 đơn thật, `departmentId=7`, `date=2026-08-29`, nhóm `HL`). Lần này KHÔNG
-còn tràn chữ (đúng như fix trước) nhưng lộ ra 3 chỗ SAI DỮ LIỆU: ô "Tên công đoạn" trống trơn, lũy kế
-Tháng/Năm khác hẳn (đơn thật toàn `0`, zip ra `2.5/1.75/3.5/3.5`), và thứ tự 4 nhân viên trong bảng
-đảo lộn so với đơn thật. Yêu cầu người dùng ("lấy cái logic in đơn... để làm phần xuất báo cáo pdf phiếu
-đó") xác nhận hướng sửa: PHẢI lấy đúng dữ liệu snapshot đã đóng băng trên `OtFormEmployee` — y hệt cách
-`OtFormService.GetOtFormByIdAsync` đang trả cho bản in đơn lẻ — thay vì để `GetTicketBatchAsync` tự tính
-lại/tự sắp xếp khác đi.
-
-**Nguyên nhân cả 3, cùng 1 gốc**: `ProductionOtReportService.GetTicketBatchAsync` (thêm mới ở §3) không
-tái dùng đúng field/cách sắp xếp của bản in đơn:
-- `ProductionTicketBatchEmployeeDto` thiếu hẳn `CongDoanSnapshot/TaskNameSnapshot/BlockCodeSnapshot/
-  TeamCodeSnapshot/ShiftTeamCodeSnapshot` — FE `toPrintableEmployee()` phải set `null` cho đủ field,
-  khiến `getProductionCongDoanLabel()` (OtFormPrintView.tsx, đọc đúng các field này) không có gì để ghép.
-- `MonthToDate/YearToDate` bị TÍNH LẠI từ `EmployeeAccumulationHistories` (ledger SỐNG tại thời điểm xuất
-  báo cáo) thay vì đọc thẳng cột `OtFormEmployee.MonthToDate/YearToDate` (snapshot ĐÓNG BĂNG lúc lập đơn
-  — đúng số đã ký trên giấy thật, xem comment gốc ở `OtFormEmployee.cs` dòng 29-34).
-- Danh sách nhân viên bị `.OrderBy(EmployeeCode, OrdinalIgnoreCase)` (sắp lại theo chuỗi mã NV) trong khi
-  bản in đơn không sắp gì cả — giữ nguyên thứ tự tự nhiên `OtFormEmployees.FindWithIncludesAsync` trả về.
-
-**Fix**: `GetTicketBatchAsync` — thêm `x.StartTime/x.MonthToDate/x.YearToDate/x.TaskNameSnapshot` vào
-projection ban đầu (trước chỉ có `EndTime`), dùng `first.StartTime/first.MonthToDate/first.YearToDate`
-thay cho `FormStartTime`/tính ledger; đổi `.OrderBy(EmployeeCode)` thành `.OrderBy(eg => eg.Key)`
-(EmployeeId, khớp thứ tự tự nhiên); bỏ hẳn khối tính `ledgerByEmployee` (không còn dùng). Thêm 5 field
-snapshot còn thiếu vào `ProductionTicketBatchGroupDto.cs`. FE: thêm 5 field tương ứng vào
-`production-ot-report.dto.ts`, sửa `toPrintableEmployee()` (productionTicketBatchPdf.tsx) truyền thẳng
-`e.congDoanSnapshot`/... thay vì `null`.
-
-**Verify bằng dữ liệu thật** (`GET ticket-batch?date=2026-08-29&departmentId=7`, JWT thật): nhóm `HL`
-trả đúng thứ tự nhân viên `634→787→3128→T-LL-HL` (khớp ảnh đơn thật), `monthToDate`/`yearToDate` đều
-`0.00` (khớp), `teamCodeSnapshot="HC", blockCodeSnapshot="HL", shiftTeamCodeSnapshot="HC"` (ghép đúng ra
-"HC   HL   HC", khớp "Tên công đoạn" trên đơn thật). Backend build sạch, `npx tsc --noEmit` +
-`pnpm lint` FE sạch. **CHƯA bấm thử lại nút xuất zip trên trình duyệt sau fix lần này** — cần người dùng
-tự kiểm tra lại file PDF trong zip.
-
-### §Fix chữ đè lên viền dòng trong bảng nhân viên (PDF hàng loạt) (2026-09-03g)
-
-Sau 2 fix trên (§...e format, §...f dữ liệu), người dùng bấm thử lại — báo "vẫn bị lỗi như vậy" kèm ảnh:
-dữ liệu đã đúng (Tên công đoạn/lũy kế/thứ tự đều khớp bản in đơn) nhưng chữ ở CỘT "Họ và tên" trong bảng
-danh sách nhân viên bị đè lên đúng đường viền ngang bên dưới mỗi dòng, trông như bị gạch ngang qua chữ.
-
-**Nguyên nhân**: `AutoFitLine` (fix ở §...e) dùng `display:flex; alignItems:center` để canh giữa dọc chữ
-trong ô. Dòng nhân viên rất mỏng (~16pt cao ở trang 1 A4) — `html2canvas` không tính đúng
-`alignItems:center` trên ô `position:absolute` mỏng như vậy, đẩy chữ lệch xuống sát đáy ô, chạm/đè lên
-viền dòng ngay bên dưới (viền này nằm sẵn trong ảnh nền). Cùng HỌ lỗi với vụ `overflow:hidden` ở §...e —
-`html2canvas` hỗ trợ CSS flexbox không đầy đủ, lần này là thuộc tính canh giữa chứ không phải cắt tràn.
-
-**Fix lần 1**: đổi `AutoFitLine` VÀ `SignatureCell` (ô chữ ký, dùng flex column tương tự để canh giữa
-khối ảnh+tên) từ `display:flex` sang `display:table` + `display:table-cell; verticalAlign:middle`.
-Người dùng bấm thử lại — **VẪN Y HỆT LỖI CŨ** (chữ đè viền dòng). `display:table > display:table-cell`
-thiếu hẳn `display:table-row` tường minh dựa vào trình duyệt tự sinh "anonymous table-row" — 1 tính
-năng CSS nâng cao khác mà `html2canvas` cũng không tính đúng, cùng họ lỗi hỗ trợ layout không đầy đủ với
-flexbox trước đó.
-
-**Fix lần 2 (đã xác nhận đúng hướng)**: bỏ hẳn CẢ flexbox LẪN CSS table ở `AutoFitLine` — chỉ dùng
-`line-height` bằng ĐÚNG chiều cao thật của ô (đo qua `wrapper.clientHeight`, set trực tiếp bằng JS trong
-`useAutoFitLineWidth`, cùng vòng đo/set đang dùng để tự co chữ theo bề rộng). Đây là kỹ thuật canh giữa
-dọc CŨ NHẤT (có từ trước cả CSS table lẫn flexbox) — chỉ dựa vào text-flow bình thường của 1 dòng chữ
-trong khối `block`, không phụ thuộc bất kỳ layout model nào mà `html2canvas` có thể tính sai. CHƯA đổi
-`SignatureCell` (vẫn đang ở bản `table`/`table-cell` — không bị người dùng báo lỗi cụ thể trong 2 lần
-test gần nhất, để nguyên tránh sửa lan man khi chưa có bằng chứng).
-
-**Verify**: `npx tsc --noEmit` + `pnpm lint` sạch. CHƯA bấm thử lại trên trình duyệt sau fix lần 2 —
-cần người dùng tự kiểm tra lại (nhớ hard-refresh tab trước khi bấm xuất, vì FE dev server hot-reload
-nhưng tab có thể đang giữ bundle cũ).
-
-### §Bỏ html2canvas, tự vẽ PDF hàng loạt trực tiếp bằng jsPDF (2026-09-03h)
-
-Sau 3 lần vá `html2canvas` (§...e format, §...f dữ liệu, §...g canh giữa) người dùng vẫn báo Y HỆT lỗi
-chữ đè viền dòng bảng nhân viên — đổi cả 3 kỹ thuật canh giữa dọc (`flex`, `table-cell`, `line-height`)
-đều ra kết quả giống hệt nhau. Việc đổi kỹ thuật canh giữa không sửa được gì chứng tỏ gốc vấn đề KHÔNG
-nằm ở cách canh giữa — quan sát thêm: các ô phía trên (Tên công đoạn, Người chịu trách nhiệm, Thời
-gian...) đều đúng vị trí, chỉ bảng nhân viên (nằm cuối trang, hàng rất sát nhau, 10 dòng chỉ trong
-~18% chiều cao trang) mới lệch — dấu hiệu của lỗi LỆCH TỶ LỆ TOÀN TRANG tích luỹ theo chiều dọc (càng
-xuống dưới càng lệch nhiều), khả năng cao do CSS `aspect-ratio` (dùng để tự tính chiều cao khung trang
-off-screen) — thuộc tính mà `html2canvas` cũng hỗ trợ không đầy đủ.
-
-Người dùng đề xuất: bỏ hẳn việc chụp lại giao diện, tự vẽ trực tiếp ra PDF. Đây là hướng ĐÚNG và dứt
-điểm — loại bỏ hoàn toàn `html2canvas` khỏi luồng này thay vì tiếp tục vá từng lỗi CSS lộ ra.
-
-**Kiến trúc mới** (`productionTicketBatchPdf.tsx`, viết lại toàn bộ):
-- KHÔNG còn render React/DOM off-screen, KHÔNG còn `html2canvas`/`createRoot`. Vẽ thẳng lên `jsPDF`:
-  `doc.addImage()` cho ảnh nền (`/ot-form/a4-page1.png`/`a4-page2.png`, y hệt ảnh nền cũ), `doc.text()`
-  cho mọi ô chữ, `doc.line()` cho dấu ✓ (vẽ tay 2 đoạn thẳng — KHÔNG dùng ký tự Unicode "✓" vì font
-  Roboto nhúng không chắc có glyph khối Dingbats).
-- **Vẫn tái dùng đúng toạ độ % + business logic** của `OtFormPrintView.tsx` — KHÔNG chép lại: export
-  thêm `formatDate/formatTime/formatDateTime/findHistory/findStepByTerminalLevel/getGivenName/
-  getProductionCongDoanLabel/columnBox` (trước đó private) + các hằng `REASON_*`/`HEADER_LAYOUTS`/
-  `A4_PAGE1_EMPLOYEE`/`A4_PAGE2_EMPLOYEE` (đã export sẵn) — chỉ đổi "vẽ ra" bằng jsPDF thay vì
-  React DOM + html2canvas, field nào hiện giá trị gì giữ nguyên 100%.
-- Font tiếng Việt: nhúng Roboto qua VFS (`registerVietnameseFont`, cùng pattern
-  `ProductionOtReportPanel.tsx`/`DeviceListReportPrintDialog.tsx` đã dùng cho PDF khác trong dự án —
-  KHÔNG tạo helper dùng chung mới, giữ đúng convention hiện có là mỗi nơi tự có bản nhỏ).
-  `ROBOTO_REGULAR_BASE64`/`ROBOTO_BOLD_BASE64` từ `modules/pc-management/lib/pdf-fonts.ts`.
-  Import font qua base64 thay vì URL.
-- Tự co chữ 1 dòng (`drawAutoFitText`) và tự ngắt dòng/co chữ "Lý do" (`drawReason`) đều đo bằng CHÍNH
-  `doc.getTextWidth`/`doc.splitTextToSize` của jsPDF — cùng 1 engine đo VÀ vẽ, không còn khoảng lệch
-  giữa "đo" (DOM/canvas cũ) và "vẽ" (jsPDF) như trước — triệt tiêu luôn cả lớp lỗi lệch tỷ lệ.
-- Ảnh chữ ký: load qua `Image().decode()` lấy đúng tỉ lệ thật (`naturalWidth/naturalHeight`) trước khi
-  `addImage` (tương đương `object-contain` cũ) — 1 request ảnh/chữ ký, không dùng chung cache như ảnh
-  nền tĩnh (nội dung khác nhau mỗi đơn).
-
-**Lợi ích**: KHÔNG còn phụ thuộc `html2canvas` cho tính năng này (hết luôn cả lớp lỗi CSS-support từ
-§...e/f/g) — chữ là vector thật trong PDF (không phải ảnh chụp raster), file nhẹ hơn, chất lượng in nét
-hơn.
-
-**Verify**: `npx tsc --noEmit` + `pnpm lint` sạch. Người dùng đã bấm thử lại trên trình duyệt — XÁC NHẬN
-ỔN, hết lỗi hiển thị. Tính năng "Xuất phiếu theo Line/Nhóm (zip)" coi như HOÀN TẤT.
+**Phần vẫn dùng cho bản in đơn lẻ:** `AutoFitLine` + hook `useAutoFitLineWidth` (đo `scrollWidth`/
+`clientWidth` thật rồi thu nhỏ cỡ chữ, sàn 55%; canh giữa dọc bằng `line-height` = chiều cao thật của ô,
+không dùng flex/table) và `ReasonAutoFit` — thay cho `nowrapBoxStyle` cũ, áp cho mọi ô 1 dòng trong
+`FormHeaderFields`/`EmployeeRowFields` và `SignatureNameLine`. Giữ nguyên: đây là đường in qua
+`window.print()` của trình duyệt.
 
 ### §Gộp tab "Quyền theo Chức vụ" vào modal Sửa chức vụ (2026-09-03d)
 
@@ -3433,80 +3257,34 @@ thêm hằng `ProductionUpdateCode` gán riêng cho `isDeptCoordinator` (cùng s
 để `SyncAutoGrantedPermissionsForEmployeeAsync` chạy lại với bộ quyền mới — không có cách nào hồi tố tự
 động vì quyền chỉ tính lại đúng lúc danh sách được ghi.
 
-### §Polish giao diện màn Cây duyệt (2026-09-05)
+### §Chuẩn giao diện rút ra sau đợt polish (2026-09-05)
 
-`ApprovalStepManager.tsx` (~1400 dòng) từng lặp gần y hệt JSX cho 3 khối "danh sách bước" (Nhóm/Bộ
-phận/Chuyền, ~110 dòng/khối) và 2 khối "Người phụ trách" (Nhóm/Bộ phận, ~60 dòng/khối) — tách ra 3
-component dùng chung, cùng thư mục `job-titles/`:
-- **`StepCard.tsx`** — thẻ 1 bước (drag handle, số thứ tự, tên/mã/cấp Chức vụ, pill "Cần ký", pill
-  "Chịu trách nhiệm" *(optional — khối Bộ phận không có)*, nút xoá). Phần "đang giữ chức vụ" bên dưới
-  KHÔNG nằm trong component này (khác nhau quá nhiều giữa 3 khối, đặc biệt khối Chuyền có 3 nhánh nội
-  dung tuỳ `terminalLevel`/`isLineScoped`) — truyền qua prop `footer: React.ReactNode`.
-- **`StepHolders.tsx`** — chip-list "đang giữ" + combobox thêm, dùng làm `footer` ở khối Nhóm/Bộ phận
-  và nhánh "không tự động theo Line Leader" của khối Chuyền.
-- **`CoordinatorsBox.tsx`** — khối "Người phụ trách" (tiêu đề/hint/chip list/combobox thêm), dùng chung
-  cho Nhóm + Bộ phận (2 DTO Coordinator khác tên nhưng CÙNG shape `{employeeId, employeeCode, fullName, userName}`).
+> Gộp từ 3 mục changelog cùng ngày (polish Cây duyệt, polish Báo cáo, dọn trùng lặp). Giữ phần còn dùng
+> lại được; diễn biến từng lượt sửa đã bỏ.
 
-Sửa kèm theo (không đổi API/behavior, chỉ đổi UI):
-- 3 chỗ `<select>` thường ("chọn chức vụ để thêm bước") đổi sang `SearchableSelect` — đúng luật
-  DESIGN_SYSTEM §4.3, trước đó là 3 chỗ DUY NHẤT trong màn này không dùng combobox tìm kiếm.
-- **Sửa bug mất dữ liệu im lặng**: đổi Bộ phận/Nhóm ở dropdown trong khi đang có thay đổi chưa lưu
-  (`isDeptDirty`/`isGroupDirty`/`isProductionDirty`) trước đây xoá thẳng state, không cảnh báo gì — giờ
-  hiện `ConfirmDialog` ("Huỷ thay đổi chưa lưu?") trước khi đổi. Đổi TAB "Theo Nhóm"/"Theo chuyền" thì
-  KHÔNG cần confirm — state của cả 2 tab đều nằm ở component cha (không bị mất khi ẩn/hiện JSX).
-- **Đánh số liên tục** cho khối Bộ phận (tab "Theo Nhóm"): trước đây Nhóm đánh 1..N rồi Bộ phận đánh lại
-  từ 1 dù thực tế là 1 chuỗi duyệt liền mạch (Nhóm trước, Bộ phận sau) — giờ khối Bộ phận bắt đầu từ
-  `groupSteps.length + 1`.
-- `sectionTitleClassName` đổi từ `text-sm font-bold uppercase tracking-[0.1em]` sang đúng chuẩn tiêu đề
-  card DESIGN_SYSTEM §2.2 (`text-base font-semibold`, bỏ uppercase); thêm tiêu đề cho card chọn Bộ phận
-  đầu tiên (trước đây là card DUY NHẤT không có `h3`); nút "Xoá bước" đổi sang đúng biến thể Icon button
-  §4.2 (`rounded-md p-2` thay vì `rounded-lg p-1.5`); pill "Cần ký"/"Chịu trách nhiệm" đổi `px-2 py-0.5`
-  → `px-2.5 py-0.5` đúng chuẩn badge §4.6; dòng loading dạng `<p>` thuần đổi sang skeleton
-  `animate-pulse`.
-- Chính thức hoá màu "warning" (`bg-[#fff4e5]`/`border-[#f5d0a9]`/`text-[#9a5b00]`, đã dùng nhất quán ở
-  đây + `UserSignaturePanel.tsx`/`SecondaryPasswordPanel.tsx` cho "chưa liên kết tài khoản"/"đang chờ
-  xác nhận"/"sắp đạt giới hạn" nhưng doc chưa liệt kê) vào `DESIGN_SYSTEM.md` §1.3.
-- **Verify**: `npx tsc --noEmit` sạch, `pnpm lint` sạch 100% trên cả 4 file (`ApprovalStepManager.tsx` +
-  3 file mới). **Chưa test tay UI thật** (kéo-thả, xác nhận huỷ thay đổi, số thứ tự liên tục) — người
-  dùng tự kiểm khi dùng thử.
-
-### §Polish giao diện màn Báo cáo (2026-09-05)
-
-`ProductionOtReportPanel.tsx` là file DUY NHẤT trong module Attendance không dùng `useTranslations` —
-100% text hard-code tiếng Việt. Đã sửa:
-- Thêm `useTranslations("Attendance.ProductionOtReport")` + đủ key ở `messages/vi.json`/`ja.json`.
-- Đổi tên 2 nút xuất Excel đang lộ tên bảng/query nội bộ ra UI ("Qry_EXPORT_EXCEL" → "Chi tiết theo
-  người/ngày", "SUM_EXPORT_DATA" → "Tóm tắt theo ngày") — tên kỹ thuật cũ vẫn còn trong `title` tooltip
-  cho ai cần đối chiếu với hệ cũ.
-- Đổi filter "Phòng ban (chuyền)" từ `<select>` sang `SearchableSelect` — nhất quán với cách lọc Bộ
-  phận ở `CreateOtFormPage.tsx`/`EmployeeForm.tsx`.
-- **Verify**: `npx tsc --noEmit`/`pnpm lint` sạch. **Chưa test tay UI thật** (bấm từng nút xuất, xem
-  đúng file tải về) — người dùng tự kiểm khi dùng thử vì cần dữ liệu OT thật trong ngày để test có ý nghĩa.
-
-### §Dọn trùng lặp/nhất quán giao diện (2026-09-05)
-
-Tiếp tục đợt polish, dọn 3 chỗ trùng lặp/lệch nhau tìm được khi rà soát toàn module:
-
-- **Gộp `MealTicketTypeBadge`**: `CreateOtFormPage.tsx` từng tự định nghĩa 1 bản cục bộ (props
-  `{type, labels}`) song song bản dùng chung `ot-form/MealTicketTypeBadge.tsx` (props `{type, t}`, đã
-  dùng ở `OtFormDetail.tsx`/`OtFormBatchDetail.tsx`/`OtFormEmailConfirmPage.tsx`) — 2 component JSX y
-  hệt nhau, chỉ khác cách nhận label. Xoá bản cục bộ, đổi 4 chỗ gọi sang dùng thẳng
-  `t={t}` (namespace `Attendance.CreateOtForm` đã có sẵn đủ 3 key `mealTicketType*`, không cần thêm gì).
-- **Đồng bộ 3 dropdown "Theo chuyền" trong `CreateOtFormPage.tsx`**: `productionTeamId`/
-  `productionShiftTeamId` trước đây là `<select>` thường trong khi `productionLineId` ngay cạnh đã dùng
-  `SearchableSelect` — đổi cả 3 dùng chung `SearchableSelect`.
-- **Thống nhất khung cuộn modal của 5 dialog Import** (`EmployeeImportDialog.tsx`/
-  `ProductionEmployeeImportDialog.tsx`/`EmployeeIdentityLinkImportDialog.tsx` vs
-  `EmployeeOtHourLimitImportDialog.tsx`/`EmployeeMonthlyAccumulationImportDialog.tsx`): 3 dialog đầu dùng
-  `flex max-h-[85vh] flex-col` (header đứng yên, chỉ vùng nội dung `flex-1 overflow-auto` cuộn) — 2 dialog
-  sau trước đây cuộn cả trang (`overflow-y-auto py-8` ở wrapper ngoài cùng `max-w-2xl` không phải flex),
-  header có thể trôi mất nếu bảng kết quả dài. Đổi 2 dialog sau sang ĐÚNG cùng khung cuộn (header cố
-  định + 1 vùng `flex-1 overflow-auto` duy nhất) — **giữ nguyên `max-w-2xl`** (không ép rộng `max-w-6xl`
-  như 3 dialog kia vì bảng kết quả của 2 dialog này chỉ 2-4 cột, rộng hơn sẽ trống trải vô lý — khác biệt
-  chiều rộng là ĐÚNG theo nội dung, chỉ khung cuộn cần nhất quán).
-- **Verify**: `npx tsc --noEmit` sạch; `pnpm lint` sạch 100% trên cả 4 file vừa sửa. **Chưa test tay UI
-  thật** (mở từng dialog, kiểm tra header không trôi khi bảng kết quả dài) — người dùng tự kiểm khi
-  dùng thử.
+- **Component dùng chung của màn Cây duyệt** (`job-titles/`): `StepCard.tsx` (thẻ 1 bước — drag handle,
+  số thứ tự, tên/mã/cấp Chức vụ, pill "Cần ký", pill "Chịu trách nhiệm" *(optional)*, nút xoá),
+  `StepHolders.tsx` (chip-list "đang giữ" + combobox thêm), `CoordinatorsBox.tsx` (khối "Người phụ
+  trách", dùng chung Nhóm + Bộ phận vì 2 DTO Coordinator cùng shape
+  `{employeeId, employeeCode, fullName, userName}`). Phần "đang giữ chức vụ" truyền qua prop
+  `footer: React.ReactNode` — khác nhau quá nhiều giữa 3 khối (khối Chuyền có 3 nhánh theo
+  `terminalLevel`/`isLineScoped`), đừng cố nhét vào `StepCard`.
+- **`SearchableSelect` thay mọi `<select>` thường** (DESIGN_SYSTEM §4.3) — đã áp cho 3 dropdown chọn
+  chức vụ ở Cây duyệt, filter Phòng ban ở màn Báo cáo, và 3 dropdown "Theo chuyền" ở `CreateOtFormPage`.
+- **Đổi Bộ phận/Nhóm khi state đang dirty** (`isDeptDirty`/`isGroupDirty`/`isProductionDirty`) phải hỏi
+  `ConfirmDialog` trước — trước đây xoá thẳng state, mất dữ liệu im lặng. Đổi **tab** thì không cần hỏi
+  (state 2 tab đều ở component cha).
+- **Đánh số bước liên tục**: khối Bộ phận bắt đầu từ `groupSteps.length + 1` (Nhóm → Bộ phận là 1 chuỗi
+  duyệt liền mạch, không đánh lại từ 1).
+- **Màu "warning"** `bg-[#fff4e5]`/`border-[#f5d0a9]`/`text-[#9a5b00]` đã ghi chính thức vào
+  `DESIGN_SYSTEM.md §1.3` (dùng cho "chưa liên kết tài khoản"/"đang chờ xác nhận"/"sắp đạt giới hạn").
+- **`MealTicketTypeBadge`** chỉ có đúng 1 bản dùng chung `ot-form/MealTicketTypeBadge.tsx` (props
+  `{type, t}`) — đừng tạo bản cục bộ trong màn khác.
+- **Khung cuộn modal (5 dialog Import)**: `flex max-h-[85vh] flex-col`, header đứng yên, **đúng 1** vùng
+  `flex-1 overflow-auto` — không cuộn cả trang. Chiều rộng tuỳ nội dung (`max-w-2xl` cho bảng 2-4 cột,
+  `max-w-6xl` cho bảng nhiều cột) — khác nhau là ĐÚNG, chỉ khung cuộn phải nhất quán.
+- **Nhãn nút xuất Excel màn Báo cáo** không lộ tên query hệ cũ ra UI ("Chi tiết theo người/ngày",
+  "Tóm tắt theo ngày"); tên kỹ thuật `Qry_EXPORT_EXCEL`/`SUM_EXPORT_DATA` giữ trong `title` tooltip.
 
 ### §Fix bug — Team A/B lệch chuẩn hoá + dropdown Line theo Team lọc ra danh sách rỗng (2026-09-05)
 
@@ -3535,85 +3313,32 @@ Line đó có nhân viên thật. Rà ra 2 vấn đề độc lập:
   khi UPDATE — đúng 784/823 dòng đổi thành `1`/`2`, không đụng `AB`/`HC`. **Chưa test tay qua UI thật**
   (mở màn "Nhân viên dưới chuyền", chọn lại đúng tổ hợp Team+Line từng bị rỗng để xác nhận ra kết quả).
 
-### §Fix font logo email — đồng bộ Arial cho mọi máy Windows (2026-09-05)
+### §Template email — trạng thái chốt về font & dark-mode (2026-09-05)
 
-Người dùng báo font chữ logo "YevManagement" trong email gửi đi không hiển thị đúng trên 1 số máy. Cả 6
-template email (`OtForm/ApprovalNotification.html`, `OtForm/BatchApprovalNotification.html`,
-`UserSignature/RequestUpdateConfirmation.html`, `SecondaryPassword/RequestUpdateConfirmation.html`, và
-2 bản tương ứng bên `Workflow.Infrastructure/EmailTemplates/`) đều dùng `font-family:Georgia, 'Times New
-Roman', serif` RIÊNG cho dòng logo, khác hẳn phần nội dung còn lại dùng `Arial, Helvetica, sans-serif` —
-Georgia không đảm bảo có sẵn trên mọi máy Windows (máy cấu hình rút gọn/Windows Server có thể thiếu),
-trong khi Arial là font duy nhất chắc chắn có mặt trên mọi bản Windows. Đổi dòng logo dùng chung Arial —
-nhất quán toàn bộ email, không còn phụ thuộc font nào ngoài Arial/Helvetica.
+> Gộp từ 5 lượt sửa liên tiếp trong ngày (Georgia→Arial → `color-scheme` → thử Times New Roman →
+> tìm ra gốc rễ). **Áp cho cả 7 template** ở `Attendance.Infrastructure/EmailTemplates/` và
+> `Workflow.Infrastructure/EmailTemplates/`.
 
-### §Thêm chức năng gửi email kiểm tra (2026-09-05)
+**Luật khi sửa/thêm template email — giữ đủ 3 điều:**
+1. **Khai `font-family` TRỰC TIẾP trên MỌI thẻ** `<p>/<span>/<strong>/<a>/<td>` có `style=""` — hiện là
+   `'Times New Roman', 'Liberation Serif', Georgia, serif` (239 chỗ). Outlook Desktop render bằng engine
+   Word, **không đảm bảo kế thừa `font-family`** qua nhiều tầng `<table>` lồng nhau (mà email HTML thì
+   bắt buộc lồng nhiều tầng) → thẻ nào không tự khai sẽ rơi về font Normal của Word. Đây là **gốc rễ
+   thật**, đã loại trừ mọi giả thuyết khác (registry `FontSubstitutes` bình thường; bảng Font
+   Substitution của Word báo "All fonts used in this email are available").
+2. **`<meta name="color-scheme">` và `supported-color-schemes` chỉ được để `"light"`.** Khai
+   `"light dark"` trong khi template KHÔNG có khối `@media (prefers-color-scheme: dark)` khiến client tự
+   ý xử lý lại màu/font theo cách riêng — máy được máy không.
+3. **Giữ attribute HTML `bgcolor`** (`#eef0f2` / `#ffffff`) song song CSS `background-color` cho 2 bảng
+   nền chính — engine Word chỉ tin `bgcolor`; thiếu nó càng dễ bị dark-mode tự động ghi đè.
 
-Theo yêu cầu người dùng, thêm 1 nút "Gửi email kiểm tra" vào tab "Cấu hình" (trong "Danh mục" của module
-Attendance) — nhập tay 1 địa chỉ email bất kỳ để tự kiểm tra cấu hình SMTP còn hoạt động và email hiển
-thị đúng font/layout trên máy thật (liên quan trực tiếp tới fix font logo email ở mục trên).
+**Công cụ tự kiểm tra:** `POST /api/AttendanceSetting/test-email` (`SendTestEmailDto { Email }`,
+`[Required]`+`[EmailAddress]`, quyền `Attendance.Setting.Update` — không tạo permission mới) render
+template `Test/TestEmail.html` (mirror header/footer thật, KHÔNG có nút CTA để không bị tưởng là yêu cầu
+duyệt thật) rồi gọi `IEmailService.SendAsync`; trả `bool`, `false` → `Fail<bool>` kèm gợi ý kiểm tra
+`EmailSettings` trong `appsettings.json`. FE: section "Gửi email kiểm tra" trong
+`AttendanceSettingPanel.tsx` (tab Cấu hình), i18n `Attendance.AttendanceSetting.testEmail*` đủ vi/ja.
 
-- **BE**: `POST /api/AttendanceSetting/test-email` (`[RequirePermission("Attendance.Setting.Update")]`
-  — cùng quyền với sửa cấu hình, không tạo permission mới). `SendTestEmailDto { Email }` (`[Required]` +
-  `[EmailAddress]`). `AttendanceSettingService.SendTestEmailAsync` inject thêm `IEmailService` +
-  `IEmailTemplateRenderer` (2 abstraction dùng chung `Shared.*`, không cần đăng ký DI tay — Scrutor tự
-  nhận vì class tên kết thúc `Service`), render template mới `Test/TestEmail.html` (mirror đúng
-  header/footer/font Arial của các template thật, KHÔNG có nút CTA/link nào để tránh gây hiểu lầm là
-  yêu cầu duyệt thật) rồi gọi `IEmailService.SendAsync` — trả về đúng `bool` (không throw khi SMTP lỗi,
-  theo hợp đồng `IEmailService`), Controller map `false` thành `Fail<bool>` với message gợi ý kiểm tra
-  `EmailSettings` trong `appsettings.json`.
-- **FE**: `AttendanceSettingPanel.tsx` thêm section mới (dưới "Giới hạn lũy kế", trên nút Lưu) — 1 input
-  email + nút gửi, dùng `AttendanceSettingApi.sendTestEmail`. i18n đầy đủ `Attendance.AttendanceSetting`
-  namespace (`testEmail*` keys) ở cả vi/ja.
-- **Verify**: `dotnet build` sạch, `npx tsc --noEmit` + `eslint` sạch. **Chưa gửi thử email thật** —
-  người dùng tự nhập 1 địa chỉ email của mình để kiểm tra khi dùng, vì đây là hành động gửi mail thật.
-
-### §Fix tiếp — email vẫn "vỡ font" trên 1 số máy dù đã đổi Arial (2026-09-05)
-
-Sau khi đổi font logo sang Arial (mục trên), người dùng test qua tính năng "Gửi email kiểm tra" mới thêm
-và báo: mở email ở Outlook Web (chế độ dark mode) vẫn thấy chữ hiển thị sai kiểu — **có máy đúng có máy
-không**, dù Arial chắc chắn có sẵn ở mọi máy Windows. "Có máy đúng có máy không" cho thấy đây KHÔNG phải
-vấn đề Arial thiếu (đã loại từ đầu), mà do **client tự động áp dark-mode xử lý lại font/màu** không nhất
-quán giữa các máy/thiết lập — gốc rễ: cả 7 template đều khai `<meta name="color-scheme" content="light
-dark">` + `<meta name="supported-color-schemes" content="light dark">`, tức là "tự nhận" hỗ trợ dark mode
-nhưng KHÔNG hề có khối `@media (prefers-color-scheme: dark)` cấp màu tối thật — client thấy khai báo này
-sẽ tự ý xử lý lại (đổi màu/thay font) theo cách riêng của từng client, không đoán trước được.
-
-- Đổi cả 7 template (`color-scheme` + `supported-color-schemes`) từ `"light dark"` xuống chỉ còn
-  `"light"` — khai đúng sự thật (chỉ có 1 giao diện sáng), buộc mọi client hiển thị ĐÚNG NHƯ THIẾT KẾ,
-  không tự ý xử lý lại nữa.
-- Thêm attribute HTML `bgcolor="#eef0f2"`/`bgcolor="#ffffff"` (song song CSS `background-color` đã có)
-  cho 2 bảng nền chính — một số engine (đặc biệt Outlook desktop dùng Word engine) chỉ tin
-  `bgcolor` thay vì CSS, thiếu `bgcolor` càng dễ bị coi là "chưa có nền cố định" nên càng dễ bị dark-mode
-  tự động ghi đè.
-- **Verify**: `dotnet build` sạch. **Chưa gửi thử lại email thật để xác nhận hết vỡ font** — người dùng
-  tự gửi lại qua nút "Gửi email kiểm tra" ở tab Cấu hình để kiểm tra trên đúng máy/Outlook Web đã gặp lỗi.
-
-### §Đổi thử font email sang Times New Roman (2026-09-05)
-
-Theo yêu cầu người dùng (thử đổi khác Arial xem có hết "vỡ font" không), đổi cả 7 template email từ
-`Arial, Helvetica, sans-serif` sang `'Times New Roman', Times, serif` — cũng là font lõi có sẵn trên mọi
-Windows như Arial, chỉ khác kiểu chữ (serif thay vì sans-serif). Fix thật cho vấn đề "vỡ font" nhiều khả
-năng vẫn là mục `color-scheme: light` + `bgcolor` ở trên; đổi font lần này là thử nghiệm bổ sung.
-
-### §Fix gốc rễ thật — Outlook Desktop không kế thừa font-family qua nhiều tầng bảng (2026-09-05)
-
-Đã loại bỏ dần các giả thuyết qua kiểm tra trực tiếp với người dùng: registry `FontSubstitutes` của
-Windows — bình thường, không map sai gì; bảng "Font Substitution" riêng của Word (Outlook Desktop) —
-báo "No font substitution is necessary. All fonts used in this email are available." Vậy không phải do
-thiếu font hay bị map sai ở bất kỳ cấp nào.
-
-**Nguyên nhân thật**: cả 7 template chỉ khai `font-family` ở `<body>` và 1-2 chỗ, còn lại dựa vào kế
-thừa CSS xuống các tầng `<table>`/`<td>`/`<p>`/`<span>` lồng nhau bên trong (email HTML bắt buộc dùng
-nhiều tầng bảng lồng để tương thích). Outlook Desktop dùng engine Word để render, vốn nổi tiếng
-**không đảm bảo kế thừa `font-family` qua nhiều tầng bảng** như trình duyệt/webmail — dễ "quên" và rơi
-về font mặc định riêng của Word (Normal style) ở những thẻ không tự khai font-family.
-
-- Chạy 1 script one-off (Node) thêm `font-family:'Times New Roman', 'Liberation Serif', Georgia, serif;`
-  TRỰC TIẾP vào MỌI thẻ `<p>`/`<span>`/`<strong>`/`<a>`/`<td>` có `style="..."` mà chưa tự khai
-  font-family — 239 chỗ trên cả 7 template (không dựa vào kế thừa từ `<body>`/`<table>` cha nữa).
-- **Verify**: `dotnet build` sạch; grep xác nhận 0 phần tử còn thiếu font-family trên cả 7 file.
-  **Chưa gửi thử lại email thật** — người dùng tự gửi qua nút "Gửi email kiểm tra" để xác nhận Outlook
-  Desktop hiển thị đúng font sau fix này.
 
 ## 2. Wiring Host — đã xong
 1. `Configurations/DependencyInjection.cs`: `AddDbContext<AttendanceDbContext>` với `OTManagementConnection`.
@@ -3621,19 +3346,21 @@ về font mặc định riêng của Word (Normal style) ở những thẻ khôn
 3. `Attendance.Api.csproj`: thêm `ProjectReference` tới `Attendance.Application` (cần cho DTO/Interface Service).
 4. Scrutor tự động đăng ký toàn bộ `*Repository`/`*UnitOfWork`/`*Service` trong assembly `Attendance.*` (không cần khai báo `AddScoped` thủ công).
 
-## 3. Đã smoke-test (2026-07-14, kiểm lại 2026-07-16 sau khi thêm luồng Draft)
-Build 0 lỗi. Host khởi động, `/openapi/v1.json` liệt kê đủ route `Department/Group/Reason/OtCase/Employee/OtForm/UserApprovalScope/UserSignature`, kể cả route mới `POST /api/OtForm/{id}/submit`. Gọi không token → 401 đúng như thiết kế (RequirePermission hoạt động). Chưa test bằng JWT thật với dữ liệu Group/UserApprovalScope thật (cần Admin seed trước — xem mục 4).
+## 3. Còn nợ / cố ý chưa làm (cập nhật 2026-09-10)
 
-## 4. Còn thiếu / bước tiếp theo
-- Gán Role thật cho user (Trưởng nhóm/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc) + tạo dữ liệu `UserApprovalScope` thật — lưu ý từ 2026-07-16, gán `ApprovalLevel=Submitter` chỉ thành công nếu `UserName` đã có Role "Trưởng nhóm" từ trước.
-- Chưa test end-to-end luồng Draft mới (`Create` → `submit` → `Update` khi còn Draft/Pending → `approve`/`reject`) với dữ liệu thật.
-- Seed data mẫu: 3 `OtCase` (TH1/TH2/TH3 với `RequiredApprovalLevel` tương ứng), `Department`/`Group`/`Reason`/`Employee` thật.
-- Gán `Employee.UserName` cho các nhân viên có tài khoản AD riêng (nếu muốn dùng tính năng tự chỉnh lũy kế) qua `PUT /api/Employee/{id}`.
-- Validate end-to-end qua Scalar UI với JWT thật (chưa test luồng Create → Update → Approve → Reject với dữ liệu thật, cũng như luồng cộng lũy kế lúc Completed và rollover tháng/năm).
-- **SMTP đã cấu hình thật và verify gửi được (2026-07-17)** — xem §Xác thực qua email. Còn lại: khi deploy server IIS thật, nhớ import cert self-signed của `VNMAIL04` vào `Cert:\LocalMachine\Root` trên đúng server đó (hoặc nhờ IT đẩy qua GPO domain `yev.vn`) — chưa làm vì server production chưa dựng.
-- Chưa verify bằng mắt hộp thư thật nhận đúng nội dung từ 2 luồng nghiệp vụ dùng template mới (`UserSignature/RequestUpdateConfirmation.html`, `OtForm/ApprovalNotification.html`) — mới verify SMTP connect/auth/send qua console test rời, chưa gọi qua đúng API nghiệp vụ với dữ liệu thật.
-- **FE cần xây 2 trang xác nhận công khai** (`{FrontendBaseUrl}/xac-nhan-chu-ky`, `{FrontendBaseUrl}/xac-nhan-don`, đọc `?token=` trên URL) gọi các cặp API preview+action `[AllowAnonymous]` tương ứng — chưa có hợp đồng API riêng cho FE (`attendance-api-fe.md`) cho phần này, cần bổ sung khi FE bắt đầu code.
-- Chưa test end-to-end luồng `OtFormApprovalEmailToken` với dữ liệu thật (chỉ mới verify luồng `PendingSignatureConfirmation`) — nên test khi có đơn thật đang chờ duyệt.
-- Cân nhắc thêm `PUT` cho `UserApprovalScope` nếu cần sửa thay vì xoá-tạo-lại.
-- Phân quyền theo Role (Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc dùng chung permission `OTForm.View`+`Approve`) đã đủ để "tinh gọn giao diện" — 3 role này không thấy màn Tạo đơn/Sửa đơn/Danh mục; khác biệt giữa 3 role chỉ nằm ở dữ liệu trả về (`pending-approvals` tự lọc đúng cấp qua `UserApprovalScope`/Role), không cần thêm permission riêng cho từng role. Nếu sau này cần phân biệt sâu hơn (VD Trưởng phòng không được xem đơn của Trưởng xưởng phụ trách) thì mới cần thiết kế thêm.
-- FE chưa có — hợp đồng API đã tài liệu hoá đầy đủ ở [attendance-api-fe.md](attendance-api-fe.md), đội FE có thể bắt đầu code song song trong lúc BE tiếp tục seed data thật.
+> Mục này thay cho 2 mục cũ "Đã smoke-test (2026-07-14)" + "Còn thiếu / bước tiếp theo" — cả hai đã lỗi
+> thời (còn nhắc `UserApprovalScope` đã xoá 2026-08-08, "FE chưa có" trong khi FE đã chạy production).
+
+**Cố ý chưa làm — chờ yêu cầu, đừng tự triển khai:**
+- **Cột `KHOI SU`** trong file mẫu Chế Tạo: export để trống, import bỏ qua (xem §Import/Export nhân sự
+  dưới chuyền).
+- **Import hàng loạt số giờ giới hạn OT riêng theo từng nhân viên** — "quyết định sau" (xem §Giới hạn
+  OT/tháng/năm RIÊNG theo từng nhân viên).
+- **Backfill lũy kế lịch sử từ hệ thống cũ** vào `EmployeeAccumulationHistories` — việc riêng, không nằm
+  trong luồng import nhân sự.
+- **Báo cáo thứ 4 trở đi** (mục 9 trong danh sách báo cáo gốc).
+- **Làm đẹp giao diện đợt 2** cho phần CRUD danh mục/phạm vi duyệt/chữ ký/mật khẩu cấp 2.
+
+**Việc vận hành khi dựng server production:** import cert self-signed của `VNMAIL04` vào
+`Cert:\LocalMachine\Root` trên chính server đó (hoặc nhờ IT đẩy qua GPO domain `yev.vn`) — nếu không,
+SMTP sẽ fail TLS. SMTP đã verify gửi được từ máy dev (2026-07-17).

@@ -5,7 +5,7 @@
 > cuối cùng: [attendance-api-fe.md §10](attendance-api-fe.md). Xem
 > [attendance-module.md](attendance-module.md) (mục `AttendanceAiChatController`) cho vị trí code.
 >
-> Đây là tính năng **song song** với [ai-chat-be-huong-dan.md](ai-chat-be-huong-dan.md) (AI Chat của
+> Đây là tính năng **song song** với AI Chat của Asset ([asset-module.md §1.18](asset-module.md)) (
 > Asset — các tool tra cứu, chỉ đọc) chứ **không phải** mở rộng của tính năng đó — 2 endpoint, 2
 > permission, 2 orchestrator, 2 system prompt hoàn toàn tách biệt, chỉ dùng chung phần hạ tầng gọi
 > LLM server (§1, `ILlmChatClient`/`LmStudioChatClient`). Lý do tách hoàn toàn: (1) giữ đúng ranh giới
@@ -17,13 +17,13 @@
 > chi tiết giao thức + 🔴 **BLOCKER thật đang chặn cả tính năng này** (mọi request kèm `tools` treo
 > ~5 phút rồi lỗi `"Engine protocol predict request failed: fetch failed"`, xác nhận là vấn đề phía
 > server LM Studio chứ không phải code, xem cách cô lập bằng `curl` trực tiếp) ghi ở
-> [ai-chat-be-huong-dan.md](ai-chat-be-huong-dan.md) (đầu file, mục cập nhật 2026-08-24) — vì tool
+> [asset-module.md §1.18](asset-module.md) — vì tool
 > `create_ot_form_draft` + các tool tra cứu khác của module này cũng đi qua đúng client đó nên bị chặn
 > y hệt, chưa test riêng nhưng không có lý do gì khác đi.
 
 ## 0. Vì sao đây không phải "thêm 1 tool" đơn giản
 
-Toàn bộ tool của Asset AI Chat cố tình chỉ đọc (xem `ai-chat-be-huong-dan.md §5`, dòng đầu class
+Toàn bộ tool của Asset AI Chat cố tình chỉ đọc (xem `asset-module.md §1.18`, dòng đầu class
 comment về read-only tools). Tính năng này có đúng **1 tool ghi**: `create_ot_form_draft`, gọi
 thẳng `OtFormService.CreateAsync` (không business logic mới, không bypass validate/scope nào đã có).
 Rủi ro khác hẳn tra cứu sai:
@@ -38,7 +38,7 @@ Rủi ro khác hẳn tra cứu sai:
   3 cấp quản lý) — chỉ gửi ở lần chạy mail tổng hợp hằng ngày kế tiếp. Dù vậy đơn Draft **vẫn không hề
   "im lặng"** — luôn tạo THẬT 1 bản ghi nghiệp vụ, chỉ khác thời điểm gửi mail.
 - **Model nội bộ đã chứng minh không đáng tin cậy nhiều lần** khi xây Asset AI Chat: từ chối gọi tool
-  khi cần (`ai-chat-be-huong-dan.md §13`), bịa kết quả sau khi hứa suông không thực hiện (`§14`). Với
+  khi cần, bịa kết quả sau khi hứa suông không thực hiện (3 bài học prompt ở `asset-module.md §1.18`). Với
   các tool đọc, hậu quả tệ nhất là câu trả lời sai. Với tool ghi này, hậu quả tệ nhất là 1 bản ghi
   nghiệp vụ thật + 1 email thật gửi nhầm.
 
@@ -132,7 +132,7 @@ model đọc lại — không crash stream).
    phải trình bày lại và chờ xác nhận thật.
 
    Điểm mấu chốt: cơ chế này **không thể bị model tự vượt qua** kể cả khi nó hallucinate là đã có xác
-   nhận (đúng kiểu lỗi đã thấy ở `ai-chat-be-huong-dan.md §14`) — điều kiện dựa trên tin nhắn CHÍNH
+   nhận (đúng kiểu lỗi đã thấy ở `asset-module.md §1.18`) — điều kiện dựa trên tin nhắn CHÍNH
    NGƯỜI DÙNG gõ ở đúng lượt đó, model không tự tạo ra được. Model có gọi `tool_calls` cho
    `create_ot_form_draft` bao nhiêu lần cũng không thực thi được nếu người dùng chưa thực sự xác nhận
    ở lượt đó.

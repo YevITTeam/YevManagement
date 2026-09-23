@@ -4,56 +4,46 @@
 > Sơ đồ quan hệ trực quan: [`docs/workflow-erd.drawio`](../workflow-erd.drawio) (mở bằng draw.io).
 > Mô hình tham chiếu: **POWER EGG 3.5 — 汎用申請ワークフロー**.
 >
-> **Trạng thái tính tới 2026-08-26: Pha 1, 2A, 2B, 2C, 2D, 3A, 3B-1, 3B-2 đã xong cả BE+FE — Pha 2
-> HOÀN TẤT, Pha 3A HOÀN TẤT, Pha 3B (engine nộp/duyệt + FE) HOÀN TẤT.** Pha 1: 5 bảng nhóm Tổ
-> chức + nhân sự. Pha 2A: `FormCategories` `FormCategoryCoordinators` `FormDataSources`. Pha 2B:
-> `FormDefinitions` (khung thông tin form). Pha 2C: `FormFields` (field designer kéo-thả thật, FE dùng
-> `@dnd-kit`) + `FormFieldConditions` (điều kiện ẩn/hiện/bắt buộc, chặn vòng lặp). Pha 2D: `FormAccesses`
-> (ai được tạo đơn) + `POST /{id}/publish` (bật `IsPublished`, tăng `Version` khi publish lại) +
-> `POST /{id}/clone` (nhân bản form kèm FormFields/FormFieldConditions, KHÔNG kèm FormAccesses). Pha 3A:
-> `FormRoutes` + `FormApprovalSteps` + `FormApprovalStepParticipants` — cấu hình nhánh rẽ + bước duyệt +
-> người duyệt, thuần CRUD/validate. Pha 3B-1: `WorkflowRequests` `WorkflowRequestSteps`
-> `WorkflowRequestStepParticipants` `WorkflowRequestHistories` `WorkflowSequences` `ApprovalDelegations`
-> — **engine nộp/duyệt đơn THẬT chạy được** (tạo Draft → sửa → nộp → duyệt/từ chối/trả về/thêm người
-> duyệt/hủy/ủy quyền duyệt thay). Pha 3B-2: **FE render form động để nộp đơn + inbox "Chờ tôi duyệt" +
-> xem/in đơn + quản lý ủy quyền duyệt thay**, cộng 3 endpoint BE nhỏ bổ sung để FE đọc được đúng phạm vi
-> dữ liệu của người nộp đơn thường (`available-forms`, `form-schema/{id}`, `my-employee` — xem §6, §10).
-> Tất cả đủ Entity → Repository/UnitOfWork → Service → Controller → FE, đã smoke-test qua HTTP đầy đủ
-> (3B-2 build+tsc+eslint sạch, luồng Draft→Submit→Approve xác nhận qua HTTP, KHÔNG có công cụ trình
-> duyệt tự động trong phiên làm việc nên chưa tự tay bấm thử UI — xem §10). Permission
-> `Workflow.Organization.View/Manage`, `Workflow.FormDesign.View/Manage`, `Workflow.Setting.Manage`,
-> `Workflow.Request.Create`, `Workflow.Request.ViewAll` đã seed vào Identity DB, gán Admin.
+> **Trạng thái: Pha 1 → 4 đã xong cả BE lẫn FE.** 4 project + 27 entity + Migrations đầy đủ.
+> - **Pha 1** tổ chức + nhân sự (5 bảng) · **Pha 2** form builder: danh mục/nguồn dữ liệu → `FormDefinitions`
+>   → `FormFields` kéo-thả (`@dnd-kit`) + `FormFieldConditions` → `FormAccesses` + `publish`/`clone`.
+> - **Pha 3** engine nộp–duyệt thật: `FormRoutes` + `FormApprovalSteps` (+ `Participants`) cấu hình nhánh
+>   rẽ/bước duyệt; `WorkflowRequests`/`Steps`/`Participants`/`Histories`/`Sequences` + `ApprovalDelegations`
+>   chạy luồng Draft → nộp → duyệt/từ chối/trả về/thêm người duyệt/hủy/ủy quyền. FE: render form động,
+>   inbox "Chờ tôi duyệt", xem/in đơn, quản lý ủy quyền (3 endpoint phụ cho người nộp thường: §6, §10).
+> - **Pha 4** 4A chữ ký đăng ký sẵn (`EmployeeSignatures` + `PendingEmployeeSignatureConfirmations`) ·
+>   4B đính kèm (`WorkflowAttachments` — file trên đĩa, KHÔNG lưu `byte[]` — + `WorkflowSettings`) ·
+>   4C duyệt qua email (`WorkflowRequestEmailTokens`, không có mật khẩu cấp 2) · **4D xuất Excel: chủ
+>   động KHÔNG làm** (quyết định 2026-08-27, §10).
 >
-> **Gap phát hiện lúc test Pha 2D, CHƯA fix (out of scope pha này):** `FormCategoryService.DeleteAsync`
-> vẫn còn nguyên comment "chưa scaffold FormDefinitions nên chưa check" từ Pha 2A — nay `FormDefinitions`
-> đã tồn tại nhưng guard chưa được bổ sung, nên xoá 1 `FormCategory` đang có `FormDefinitions` trỏ tới
-> sẽ để lại `FormDefinitions.FormCategoryId` trỏ vào 1 danh mục đã `IsDeleted=true`. Cần thêm guard
-> "còn FormDefinitions chưa xoá dùng danh mục này thì chặn xoá" (mirror cách `FormDefinitionService.
-> DeleteAsync` chặn xoá form đã publish) ở đợt code tiếp theo chạm tới `FormCategoryService`.
+> **JWT phải có claim `UserId`** (số) — Workflow map ra `Employees.UserId` để biết "nhân sự nào đang
+> đăng nhập"; token phát trước 2026-08-25 không có claim này, holder phải đăng nhập lại.
+> Permission đã seed & gán Admin: `Workflow.Organization.View/Manage`, `Workflow.FormDesign.View/Manage`,
+> `Workflow.Setting.Manage`, `Workflow.Request.Create`, `Workflow.Request.ViewAll`.
 >
-> **Quyết định kèm Pha 2B (2026-08-25): thêm claim `UserId` (số) vào JWT.** Trước đó JWT toàn hệ
-> thống chỉ mang username Windows dạng chuỗi — không đủ để tra `Employees.UserId` (điểm neo cross-DB
-> đã chốt ở §1.4) nhằm xác định "nhân sự nào đang đăng nhập" cho các cột kiểu
-> `CreatedByEmployeeId`/`ApproverEmployeeId` sẽ còn dùng lại xuyên suốt Pha 2B-4. Đã sửa
-> `Identity.Application/Authentication/IdentityClaimTypes.cs` (thêm hằng `UserId`) +
-> `Indentity.Infrastructure/Authentication/MyClaimsTransformation.cs` (thêm claim lúc build
-> `DbRoles` identity). `WorkflowBaseController.CurrentUserId` đọc claim này bằng chuỗi thô `"UserId"`
-> (không reference `Identity.Application` — giữ Workflow độc lập theo §1.1), Service resolve ra
-> `Employee.Id` qua `Employees.FirstOrDefault(x => x.UserId == currentUserId)`, chặn thao tác nếu
-> tài khoản hiện tại chưa gán vào Employee nào. **JWT cũ (phát trước 2026-08-25) không có claim
-> này** — holder phải đăng nhập lại.
->
-> `ApprovalDelegations` đã scaffold ở Pha 3B-1 dù nằm trong nhóm "Độc lập / cấu hình" §3.4, vì logic
-> duyệt thay (§5.6) cần ngay từ engine nộp/duyệt.
->
-> **Pha 4 tách làm 4 phần độc lập** (xem §8): 4A (chữ ký đăng ký sẵn) **✅ xong BE+FE 2026-08-26** —
-> `EmployeeSignatures` + `PendingEmployeeSignatureConfirmations` (bảng mới ngoài 25 bảng gốc, mirror
-> `Attendance.UserSignature` — cập nhật qua email xác nhận, không áp dụng ngay). 4B (đính kèm file)
-> **✅ xong BE+FE 2026-08-26** — `WorkflowAttachments` (file nằm trên đĩa, KHÔNG lưu byte[] trong DB) +
-> `WorkflowSettings` (giới hạn dung lượng/số lượng/đuôi file, luôn 1 dòng seed sẵn). 4C (duyệt qua
-> email) **✅ xong BE+FE 2026-08-27** — `WorkflowRequestEmailTokens`, mirror `Attendance.
-> OtFormApprovalEmailToken` nhưng đơn giản hơn (không có secondary password, chỉ Duyệt/Từ chối). 4D
-> (xuất Excel) **❌ chủ động không làm** (quyết định 2026-08-27, xem §10) — **Pha 4 coi như hoàn tất**.
+> **Còn nợ:** `FormCategoryService.DeleteAsync` thiếu guard "còn `FormDefinitions` chưa xoá thì chặn xoá"
+> (mirror cách `FormDefinitionService.DeleteAsync` chặn xoá form đã publish) — xoá danh mục hiện để lại
+> `FormDefinitions.FormCategoryId` trỏ vào bản ghi `IsDeleted=true`. Bổ sung khi nào chạm `FormCategoryService`.
+
+---
+
+## MỤC LỤC ĐỌC NHANH
+
+> ⚠ **File ~135 KB — đọc theo lát cắt** (CLAUDE.md §2 luật 7): `Grep` pattern `^#{2,3} ` để lấy mục lục
+> kèm số dòng → `Read` đúng dải. Tra 1 field/endpoint cụ thể thì `Grep` thẳng chuỗi đó.
+
+| Cần gì | Mục |
+|---|---|
+| **Quyết định kiến trúc ĐỪNG LẬT LẠI** (độc lập với Attendance, prefix route, in phiếu…) | §1.1 → §1.7 |
+| Bản đồ 25 bảng | §2 |
+| Entity chi tiết: tổ chức/nhân sự · định nghĩa form · dữ liệu đơn · cấu hình | §3.1 → §3.4 |
+| Enum | §4 |
+| **Luật nghiệp vụ**: nộp đơn, nhánh điều kiện, ẩn/hiện field, cấp số, resolve người duyệt, ủy quyền | §5.1 → §5.6a |
+| In phiếu (2 chế độ: lưới / layout Word gốc) | §1.5, §5.7 |
+| **`DataJson` — quy ước bắt buộc** + index + đặt tên DB | §5.8 → §5.10 |
+| **Hợp đồng API cho FE** (không có `workflow-api-fe.md` riêng) | §6, §10 |
+| Phân quyền | §7 |
+| Lộ trình · còn để ngỏ · nhật ký quyết định | §8, §9, §10 |
 
 ---
 

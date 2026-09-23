@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import AvatarStack from "@/components/ui/AvatarStack";
 
 export interface StepHoldersLabels {
     holdersLabel: string;
@@ -42,12 +43,13 @@ export default function StepHolders({
     labels: StepHoldersLabels;
 }) {
     return (
-        <div className="flex flex-wrap items-center gap-1.5 pl-8">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[#f1f5f9] pt-2">
             <span className="text-xs font-semibold text-[#8a8f94]">{labels.holdersLabel}</span>
             {isLoadingEmployees ? (
                 <span className="text-xs text-[#8a8f94]">{labels.loadingEmployees}</span>
             ) : (
                 <>
+                    <AvatarStack people={holders.map((h) => ({ id: h.id, name: `${h.lastName} ${h.firstName}`, code: h.code }))} />
                     {holders.length === 0 ? (
                         <span className="text-xs italic text-[#8a8f94]">{labels.noHolders}</span>
                     ) : (
