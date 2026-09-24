@@ -63,7 +63,6 @@ export default function OtFormTabsPage() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
             </div>
 
             <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">

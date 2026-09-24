@@ -17,9 +17,9 @@ export const approvalLevelLabels: Record<number, string> = {
 // trị, chi tiết "đang chờ ai" nằm ở OtFormDto.approvalSteps (bước Pending có StepOrder nhỏ nhất),
 // không còn suy được trực tiếp từ status như enum cũ.
 export const otFormStatusLabels: Record<number, string> = {
-    0: "Đang chờ duyệt",
+    0: "Đang chờ phê duyệt",
     1: "Hoàn tất",
-    2: "Từ chối",
+    2: "Không phê duyệt",
 };
 
 export const otFormStatusClasses: Record<number, string> = {
@@ -30,8 +30,8 @@ export const otFormStatusClasses: Record<number, string> = {
 
 export const approvalActionLabels: Record<number, string> = {
     0: "Đã đề nghị (ký)",
-    1: "Đã duyệt",
-    2: "Đã từ chối",
+    1: "Đã phê duyệt",
+    2: "Không phê duyệt",
 };
 
 // JobTitleTerminalLevel (docs/attendance-api-fe.md §Cây chức vụ) — None nếu chỉ là cấp trung gian,
@@ -46,7 +46,7 @@ export const jobTitleTerminalLevelLabels: Record<number, string> = {
 // OtFormApprovalStepStatus (docs §Cây chức vụ) — dùng cho OtFormDto.approvalSteps[].status.
 export const otFormApprovalStepStatusLabels: Record<number, string> = {
     0: "Đang chờ",
-    1: "Đã duyệt",
-    2: "Đã từ chối",
+    1: "Đã phê duyệt",
+    2: "Không phê duyệt",
     3: "Bỏ qua",
 };

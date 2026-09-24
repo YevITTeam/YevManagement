@@ -3,6 +3,7 @@
 
 export interface CheckOtFormOverlapEmployeeDto {
     employeeId: number;
+    startTime: string | null;
     endTime: string;
 }
 
@@ -26,11 +27,12 @@ export interface ProcessPartDto {
     anotherSuggestionJp: string | null;
 }
 
-// employees[].startTime KHÔNG còn tồn tại (bỏ 2026-07-16) — luôn bằng startTime của đơn, BE tự set.
+// startTime: giờ bắt đầu riêng của từng người, phải nằm trong khoảng giờ của đơn — null = startTime của đơn.
 // didEat (mới 2026-08-06): chỉ có ý nghĩa khi giờ OT thực tế của người này >= setting.mainMealTicketMinHours
 // — xem §Phiếu ăn. Dưới ngưỡng thì gửi giá trị nào cũng không ảnh hưởng gì (BE bỏ qua).
 export interface OtFormEmployeeInputDto {
     employeeId: number;
+    startTime: string | null;
     endTime: string;
     didEat: boolean;
     noteVn: string | null;
@@ -123,6 +125,8 @@ export interface CreateOtFormDto {
 // từng nhân viên thay vì ghi giấy, xem attendance-module.md §Chế tạo.
 export interface UpdateOtFormEmployeeTimeDto {
     employeeId: number;
+    // null = giữ nguyên giờ bắt đầu hiện có của người này.
+    startTime: string | null;
     endTime: string;
     didEat: boolean;
     noteVn: string | null;

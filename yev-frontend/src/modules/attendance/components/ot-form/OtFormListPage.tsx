@@ -436,16 +436,6 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             : mode === "all-forms"
             ? t("titleAllForms")
             : t("titleMyParticipations");
-    const description =
-        mode === "my-forms"
-            ? t("descMyForms")
-            : mode === "pending-approvals"
-            ? t("descPendingApprovals")
-            : mode === "my-actions"
-            ? t("descMyActions")
-            : mode === "all-forms"
-            ? t("descAllForms")
-            : t("descMyParticipations");
     const columnCount = (mode === "my-forms" ? 10 : 9) + (canBulkApprove ? 1 : 0);
 
     return (
@@ -453,7 +443,6 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             {!hideHeading && (
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{title}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{description}</p>
                 </div>
             )}
 

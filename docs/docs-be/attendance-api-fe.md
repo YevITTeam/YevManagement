@@ -701,7 +701,7 @@ field Id/Code không bao giờ lệch nhau. **Lưu ý**: dữ liệu sửa ở �
   "subReason": null,
   "totalHour": 2.0, "date": "2026-07-15",                                    // [Required], DateOnly "yyyy-MM-dd"
   "employees": [                                                             // [Required][MinLength(1)]
-    { "employeeId": 100, "endTime": "19:30:00", "noteVn": null, "noteJp": null }
+    { "employeeId": 100, "startTime": "18:00:00", "endTime": "19:30:00", "noteVn": null, "noteJp": null }  // startTime optional
   ],
   "processPart": { "isEat": true, "mainTicketCount": 3, "secondaryTicketCount": 1, "milkCount": 0,
                     "isTransportation": false, "isUseCopyRoom": false,
@@ -709,8 +709,7 @@ field Id/Code không bao giờ lệch nhau. **Lưu ý**: dữ liệu sửa ở �
   "secondaryPassword": "..."                                                  // [Required], mới 2026-08-28 — xem §4.4
 }
 ```
-- **`employees[].startTime` KHÔNG còn tồn tại** (bỏ từ 2026-07-16) — giờ bắt đầu của từng nhân viên LUÔN bằng `startTime` của đơn, BE tự set, FE không gửi lên nữa.
-- `employees[].endTime` do FE cho phép chỉnh riêng từng người, nhưng phải **> `startTime` của đơn** và **<= `endTime` của đơn** — sai thì 400 (`DomainException`, kèm mã nhân viên vi phạm trong message).
+- `employees[].startTime` / `employees[].endTime` chỉnh riêng được cho từng người, nhưng phải nằm trong khung giờ của đơn: **`startTime` của đơn <= `employees[].startTime` < `employees[].endTime` <= `endTime` của đơn** — sai thì 400 (`DomainException`, kèm mã nhân viên vi phạm). `employees[].startTime` là `string | null` — `null` = lấy `startTime` của đơn.
 - **`endTime` của đơn phải > `startTime` của đơn — KHÔNG hỗ trợ ca qua đêm** (2026-08-26, theo yêu cầu
   người dùng): `endTime <= startTime` → 400 ngay đầu `CreateAsync`, trước khi làm bất kỳ việc gì khác
   (áp dụng cho cả 2 kiểu tạo đơn, theo Nhóm lẫn theo chuyền). Trước đây không có validate này — FE từng
@@ -749,7 +748,7 @@ trả 404. Kênh email (§4.5a mục "Kênh email") **không đổi**, vẫn dù
     // NV cũ: sửa thực tích như trước. NV MỚI: employeeId chưa có trong đơn — BE validate y hệt lúc
     // Thêm NV cũ (giờ hợp lệ, trùng giờ OT, giới hạn ngày/tháng/năm) + LUẬT MỚI: đơn theo chuyền phải
     // cùng Line/Nhóm ca với NV còn lại của đơn (xem attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn).
-    { "employeeId": 100, "endTime": "20:00:00", "didEat": true, "noteVn": null, "noteJp": null },
+    { "employeeId": 100, "startTime": "18:00:00", "endTime": "20:00:00", "didEat": true, "noteVn": null, "noteJp": null },  // startTime null = giữ nguyên
     { "employeeId": 205, "endTime": "19:00:00", "didEat": false, "noteVn": null, "noteJp": null }
   ],
   "removedEmployees": [
@@ -765,7 +764,7 @@ trả 404. Kênh email (§4.5a mục "Kênh email") **không đổi**, vẫn dù
 - **Validate NV giữ nguyên**: mọi NV đang active mà KHÔNG có mặt ở `employees[]` LẪN `removedEmployees[]`
   → 400 "Danh sách nhân viên trong đơn không khớp — thiếu nhân viên đang có trong đơn". Tổng NV còn lại
   (giữ nguyên + mới thêm) phải ≥ 1.
-- Mỗi `endTime` vẫn validate `> otForm.StartTime && <= otForm.EndTime`.
+- Mỗi dòng validate `otForm.StartTime <= startTime < endTime <= otForm.EndTime` (cùng luật §4.1). `startTime: null` → NV giữ nguyên giữ giờ bắt đầu hiện có, NV mới thêm lấy `startTime` của đơn. Đổi giờ bắt đầu được ghi `OtFormEditLog` (field `"StartTime"`).
 - Response `data` = `OtFormDto` (§4.3) đầy đủ sau khi sửa.
 - Permission: `Attendance.OTForm.Create` (không đổi).
 - **FE (`CreateOtFormPage.tsx`, dùng chung với Tạo mới)**: `isEditMode` vẫn khoá "Thông tin đơn"/"Yêu
@@ -1413,7 +1412,7 @@ Tab **"Đơn tôi tham gia"** (**mới**, mọi role kể cả "Nhân viên") �
 | `POST /UserApprovalScope` 400 "chưa giữ Role '...'" (mở rộng cho cả 4 cấp, **2026-07-17**) | Admin gán `approvalLevel` (Submitter/GroupHead/DepartmentManager/WorkshopManager) cho `userName` chưa có đúng Role tương ứng (Trưởng nhóm/Trưởng Bộ phận/Trưởng phòng/Trưởng xưởng) — gán Role qua Identity `update-user-roles` trước, rồi mới gán scope. Xem bảng mapping ở §5 |
 | `POST /UserApprovalScope` 400 "Cấp duyệt này chỉ được gán theo phạm vi '...'" (**mới 2026-07-17**) | `scopeType` không khớp `approvalLevel` (VD gán `Trưởng Bộ phận` theo phạm vi "Phòng ban" thay vì "Bộ phận", hoặc `Trưởng phòng` theo phạm vi "Bộ phận" thay vì "Phòng ban") — xem bảng mapping ScopeType ở §5, FE nên ép sẵn PHẠM VI theo `approvalLevel` đã chọn để tránh lỗi này |
 | `pending-approvals` luôn rỗng dù có đơn chờ | User Tổng Giám Đốc thiếu Role `"Tổng Giám Đốc"` (case-sensitive, kiểm tra đúng chuỗi), hoặc Trưởng phòng/xưởng thiếu `UserApprovalScope` |
-| `POST /OtForm` 400 "Giờ kết thúc OT của nhân viên ... phải sau giờ bắt đầu ... và không được vượt quá giờ kết thúc của đơn" | 1 `employees[].endTime` <= `startTime` của đơn hoặc > `endTime` của đơn — FE nên giới hạn input giờ kết thúc từng nhân viên trong khoảng `(startTime, endTime]` của đơn ngay trên UI, không đợi BE trả lỗi |
+| `POST /OtForm` 400 "Giờ bắt đầu OT của nhân viên ... phải nằm trong khoảng giờ của đơn" / "Giờ kết thúc OT của nhân viên ... phải sau giờ bắt đầu ... và không được vượt quá giờ kết thúc của đơn" | `employees[].startTime`/`endTime` ra ngoài khung `[startTime, endTime]` của đơn, hoặc `endTime <= startTime` của chính người đó — FE tự chặn trước khi gửi |
 | `PUT /OtForm/{id}` 400 "Bạn chỉ có thể sửa đơn do chính mình tạo" | Gọi sửa đơn không phải do mình tạo — chỉ hiện nút "Sửa" khi `createdByUserName == user hiện tại` |
 | `PUT /OtForm/{id}` 400 "Đơn đã được duyệt ít nhất 1 cấp, không thể sửa nữa" | Đơn đã qua cấp duyệt nào đó (`isEditable=false`) — ẩn nút "Sửa" dựa vào field này thay vì tự đoán theo `status` |
 | `GET/POST /UserSignature/confirm/{token}` 404 "Yêu cầu xác nhận chữ ký..." | Token sai/không tồn tại — kiểm tra lại link email, có thể bị copy thiếu ký tự |

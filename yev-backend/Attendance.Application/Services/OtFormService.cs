@@ -534,9 +534,10 @@ namespace Attendance.Application.Services
 
             // Kiểm tra trùng giờ tăng ca — 1 nhân viên không được xuất hiện trong 2 đơn tăng ca có
             // giờ chồng chéo trong cùng 1 ngày. Chỉ xét các đơn chưa bị xóa và chưa bị từ chối.
-            var employeeEndTimes = request.Employees.ToDictionary(x => x.EmployeeId, x => x.EndTime);
+            var employeeTimes = request.Employees.ToDictionary(
+                x => x.EmployeeId, x => (x.StartTime ?? request.StartTime, x.EndTime));
             await EnsureNoOverlappingOtFormsAsync(
-                validatedEmployees, request.Date, request.StartTime, employeeEndTimes, excludeFormId: null);
+                validatedEmployees, request.Date, employeeTimes, excludeFormId: null);
 
             // Suy luận chuỗi duyệt tự động qua Cây chức vụ (2026-08-07, Giai đoạn 3.1) — Admin tạo hộ
             // (creatorEmployee null) coi như đứng ở cấp thấp nhất, không loại bước nào khỏi cây duyệt
@@ -639,9 +640,10 @@ namespace Attendance.Application.Services
 
             var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
 
-            var employeeEndTimes = request.Employees.ToDictionary(x => x.EmployeeId, x => x.EndTime);
+            var employeeTimes = request.Employees.ToDictionary(
+                x => x.EmployeeId, x => (x.StartTime ?? request.StartTime, x.EndTime));
             await EnsureNoOverlappingOtFormsAsync(
-                validatedEmployees, request.Date, request.StartTime, employeeEndTimes, excludeFormId: null);
+                validatedEmployees, request.Date, employeeTimes, excludeFormId: null);
 
             var chainResult = await _jobTitleApprovalChainService.ResolveChainForProductionCreationAsync(
                 creatorEmployee?.Id, request.DepartmentId, employeeIds, request.OtCaseId);
@@ -710,7 +712,7 @@ namespace Attendance.Application.Services
             // Chặn CỨNG trước khi ghi bất kỳ gì — vượt giới hạn ngày/tháng/năm của bất kỳ nhân viên nào
             // thì từ chối tạo cả đơn (2026-08-26, xem ValidateOtHourLimitsAsync).
             var newHoursByEmployeeId = request.Employees.ToDictionary(
-                x => x.EmployeeId, x => CalculateOtHours(request.StartTime, x.EndTime, x.DidEat, mealSettings));
+                x => x.EmployeeId, x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, x.DidEat, mealSettings));
             await ValidateOtHourLimitsAsync(request.Date, newHoursByEmployeeId, mealSettings, excludeFormId: null);
 
             // Chụp lại Dự kiến "trước khi thêm đơn này" — query CHƯA thấy đơn đang tạo (chưa
@@ -730,7 +732,7 @@ namespace Attendance.Application.Services
                 {
                     OtForm = newOtForm,
                     EmployeeId = item.EmployeeId,
-                    StartTime = request.StartTime,
+                    StartTime = item.StartTime ?? request.StartTime,
                     EndTime = item.EndTime,
                     DidEat = item.DidEat,
                     NoteVn = item.NoteVn,
@@ -950,15 +952,15 @@ namespace Attendance.Application.Services
             }
             var employeeCodeById = employeesById.ToDictionary(x => x.Key, x => x.Value.Code);
 
+            // Per-employee StartTime: null keeps the row's current value (new rows: the form's StartTime).
+            var startTimeByEmployeeId = request.Employees.ToDictionary(
+                x => x.EmployeeId,
+                x => x.StartTime ?? (activeByEmployeeId.TryGetValue(x.EmployeeId, out var row) ? row.StartTime : otForm.StartTime));
+
             foreach (var item in request.Employees)
             {
-                if (item.EndTime <= otForm.StartTime || item.EndTime > otForm.EndTime)
-                {
-                    var code = employeeCodeById.GetValueOrDefault(item.EmployeeId, item.EmployeeId.ToString());
-                    throw new DomainException(
-                        $"Giờ kết thúc OT của nhân viên '{code}' phải sau giờ bắt đầu ({otForm.StartTime:HH:mm}) " +
-                        $"và không được vượt quá giờ kết thúc của đơn ({otForm.EndTime:HH:mm}).");
-                }
+                var code = employeeCodeById.GetValueOrDefault(item.EmployeeId, item.EmployeeId.ToString());
+                EnsureEmployeeTimeWithinForm(code, startTimeByEmployeeId[item.EmployeeId], item.EndTime, otForm.StartTime, otForm.EndTime);
             }
 
             // Nhân viên MỚI thêm vào đơn theo chuyền phải cùng Line/Nhóm ca với NV còn lại của đơn
@@ -1003,7 +1005,7 @@ namespace Attendance.Application.Services
             // dồn ngược lại với giá trị cũ của chính nó (xem ValidateOtHourLimitsAsync). Áp dụng cho cả
             // NV giữ nguyên lẫn NV mới thêm.
             var newHoursByEmployeeId = request.Employees.ToDictionary(
-                x => x.EmployeeId, x => CalculateOtHours(otForm.StartTime, x.EndTime, x.DidEat, mealSettings));
+                x => x.EmployeeId, x => CalculateOtHours(startTimeByEmployeeId[x.EmployeeId], x.EndTime, x.DidEat, mealSettings));
             await ValidateOtHourLimitsAsync(otForm.Date, newHoursByEmployeeId, mealSettings, excludeFormId: otForm.Id);
 
             // NV mới cần thêm 2 check chỉ áp dụng lúc THÊM (không áp dụng cho NV giữ nguyên — ngày/giờ
@@ -1013,9 +1015,9 @@ namespace Attendance.Application.Services
             if (toAddIds.Count > 0)
             {
                 var toAddEmployees = toAddIds.Select(eid => employeesById[eid]).ToList();
-                var toAddEndTimes = request.Employees.Where(x => toAddIds.Contains(x.EmployeeId))
-                    .ToDictionary(x => x.EmployeeId, x => x.EndTime);
-                await EnsureNoOverlappingOtFormsAsync(toAddEmployees, otForm.Date, otForm.StartTime, toAddEndTimes, excludeFormId: otForm.Id);
+                var toAddTimes = request.Employees.Where(x => toAddIds.Contains(x.EmployeeId))
+                    .ToDictionary(x => x.EmployeeId, x => (startTimeByEmployeeId[x.EmployeeId], x.EndTime));
+                await EnsureNoOverlappingOtFormsAsync(toAddEmployees, otForm.Date, toAddTimes, excludeFormId: otForm.Id);
 
                 projectedByEmployee = await ComputeAccumulatedHoursBatchAsync(toAddIds, otForm.Date, mealSettings, excludeFormId: otForm.Id);
             }
@@ -1062,6 +1064,7 @@ namespace Attendance.Application.Services
                     existingRow.RemovedAtLevel = null;
                     existingRow.RemovedAt = null;
                     existingRow.RemoveReason = null;
+                    existingRow.StartTime = startTimeByEmployeeId[employeeId];
                     existingRow.EndTime = addRequest.EndTime;
                     existingRow.DidEat = addRequest.DidEat;
                     existingRow.NoteVn = addRequest.NoteVn;
@@ -1075,7 +1078,7 @@ namespace Attendance.Application.Services
                     {
                         OtForm = otForm,
                         EmployeeId = employeeId,
-                        StartTime = otForm.StartTime,
+                        StartTime = startTimeByEmployeeId[employeeId],
                         EndTime = addRequest.EndTime,
                         DidEat = addRequest.DidEat,
                         NoteVn = addRequest.NoteVn,
@@ -1093,7 +1096,7 @@ namespace Attendance.Application.Services
                 addedOrReactivatedRows.Add(affectedRow);
 
                 await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.EmployeeAdded,
-                    employeeId, employee.Code, null, null, $"{addRequest.EndTime:HH:mm}");
+                    employeeId, employee.Code, null, null, $"{startTimeByEmployeeId[employeeId]:HH:mm}–{addRequest.EndTime:HH:mm}");
             }
 
             foreach (var item in request.Employees.Where(x => toKeepIds.Contains(x.EmployeeId)))
@@ -1102,6 +1105,10 @@ namespace Attendance.Application.Services
                 var code = employeeCodeById.GetValueOrDefault(item.EmployeeId, item.EmployeeId.ToString());
 
                 // Log lại từng field thực sự đổi (2026-08-28, theo yêu cầu người dùng — xem OtFormEditLog).
+                var newStartTime = startTimeByEmployeeId[item.EmployeeId];
+                if (existing.StartTime != newStartTime)
+                    await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.TimeChanged,
+                        item.EmployeeId, code, "StartTime", existing.StartTime.ToString("HH:mm"), newStartTime.ToString("HH:mm"));
                 if (existing.EndTime != item.EndTime)
                     await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.TimeChanged,
                         item.EmployeeId, code, "EndTime", existing.EndTime.ToString("HH:mm"), item.EndTime.ToString("HH:mm"));
@@ -1115,6 +1122,7 @@ namespace Attendance.Application.Services
                     await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.NoteChanged,
                         item.EmployeeId, code, "NoteJp", existing.NoteJp, item.NoteJp);
 
+                existing.StartTime = newStartTime;
                 existing.EndTime = item.EndTime;
                 existing.DidEat = item.DidEat;
                 existing.NoteVn = item.NoteVn;
@@ -1559,21 +1567,28 @@ namespace Attendance.Application.Services
 
             var employeeById = employees.ToDictionary(x => x.Id);
             foreach (var item in items)
-            {
-                if (item.EndTime <= formStartTime || item.EndTime > formEndTime)
-                {
-                    var code = employeeById[item.EmployeeId].Code;
-                    throw new DomainException(
-                        $"Giờ kết thúc OT của nhân viên '{code}' phải sau giờ bắt đầu ({formStartTime:HH:mm}) " +
-                        $"và không được vượt quá giờ kết thúc của đơn ({formEndTime:HH:mm}).");
-                }
-            }
+                EnsureEmployeeTimeWithinForm(
+                    employeeById[item.EmployeeId].Code, item.StartTime ?? formStartTime, item.EndTime, formStartTime, formEndTime);
 
             return employees.ToList();
         }
 
+        // Per-employee OT window must sit inside the form's window: formStart <= start < end <= formEnd.
+        private static void EnsureEmployeeTimeWithinForm(
+            string code, TimeOnly startTime, TimeOnly endTime, TimeOnly formStartTime, TimeOnly formEndTime)
+        {
+            if (startTime < formStartTime || startTime >= formEndTime)
+                throw new DomainException(
+                    $"Giờ bắt đầu OT của nhân viên '{code}' phải nằm trong khoảng giờ của đơn " +
+                    $"({formStartTime:HH:mm}–{formEndTime:HH:mm}).");
+            if (endTime <= startTime || endTime > formEndTime)
+                throw new DomainException(
+                    $"Giờ kết thúc OT của nhân viên '{code}' phải sau giờ bắt đầu ({startTime:HH:mm}) " +
+                    $"và không được vượt quá giờ kết thúc của đơn ({formEndTime:HH:mm}).");
+        }
+
         private async Task EnsureNoOverlappingOtFormsAsync(
-            List<Employee> employees, DateOnly date, TimeOnly formStartTime, Dictionary<int, TimeOnly> employeeEndTimes, int? excludeFormId)
+            List<Employee> employees, DateOnly date, Dictionary<int, (TimeOnly Start, TimeOnly End)> employeeTimes, int? excludeFormId)
         {
             var employeeIds = employees.Select(x => x.Id).ToList();
 
@@ -1587,7 +1602,7 @@ namespace Attendance.Application.Services
                 x => x.OtForm);
 
             var overlapping = existingRecords
-                .Where(x => formStartTime < x.EndTime && employeeEndTimes.GetValueOrDefault(x.EmployeeId, formStartTime) > x.StartTime)
+                .Where(x => employeeTimes.TryGetValue(x.EmployeeId, out var t) && t.Start < x.EndTime && t.End > x.StartTime)
                 .ToList();
 
             if (overlapping.Count > 0)
@@ -1619,10 +1634,11 @@ namespace Attendance.Application.Services
                      && (request.ExcludeFormId == null || x.OtFormId != request.ExcludeFormId.Value),
                 x => x.OtForm);
 
-            var employeeEndTimes = request.Employees.ToDictionary(x => x.EmployeeId, x => x.EndTime);
+            var employeeTimes = request.Employees.ToDictionary(
+                x => x.EmployeeId, x => (Start: x.StartTime ?? request.StartTime, End: x.EndTime));
 
             var overlappingIds = existingRecords
-                .Where(x => request.StartTime < x.EndTime && employeeEndTimes.GetValueOrDefault(x.EmployeeId, request.StartTime) > x.StartTime)
+                .Where(x => employeeTimes.TryGetValue(x.EmployeeId, out var t) && t.Start < x.EndTime && t.End > x.StartTime)
                 .Select(x => x.EmployeeId)
                 .Distinct()
                 .ToList();

@@ -4,7 +4,6 @@ import { Users, X } from "lucide-react";
 
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import AvatarStack from "@/components/ui/AvatarStack";
-import InfoTooltip from "@/components/ui/InfoTooltip";
 
 export interface CoordinatorsBoxLabels {
     title: string;
@@ -52,7 +51,6 @@ export default function CoordinatorsBox({
             <div className="flex items-center gap-1.5">
                 <Users className="h-3.5 w-3.5 text-[#8a8f94]" />
                 <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{labels.title}</span>
-                <InfoTooltip text={labels.hint} />
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs font-semibold text-[#8a8f94]">{labels.label}</span>

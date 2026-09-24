@@ -39,15 +39,15 @@ export function bilingualText(vn: string | null | undefined, jp: string | null |
 // /ja routes instead, so these values are literal bilingual pairs, not translation keys.
 // OtFormStatus (redesign 2026-08-07, Giai đoạn 3.1) — rút gọn còn 3 giá trị, xem enums.ts.
 export const otFormStatusLabelsBilingual: Record<number, string> = {
-    0: "Đang chờ duyệt / 承認待ち",
+    0: "Đang chờ phê duyệt / 承認待ち",
     1: "Hoàn tất / 完了",
-    2: "Từ chối / 却下",
+    2: "Không phê duyệt / 却下",
 };
 
 export const approvalActionLabelsBilingual: Record<number, string> = {
     0: "Đã đề nghị (ký) / 申請済み（署名）",
-    1: "Đã duyệt / 承認済み",
-    2: "Đã từ chối / 却下済み",
+    1: "Đã phê duyệt / 承認済み",
+    2: "Không phê duyệt / 却下済み",
 };
 
 // Khối "Yêu cầu hỗ trợ khác" (ăn uống/xe đưa đón/phòng copy/đề nghị khác) trên trang xem trước qua

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { Car, Check, MessageCircle, Printer, Utensils, X } from "lucide-react";
+import { Car, Check, ChevronDown, MessageCircle, Printer, Utensils, X } from "lucide-react";
 
 import { OtFormBatchApi } from "@/modules/attendance/api/ot-form-batch.api";
 import type { OtFormBatchDto, ProcessOtFormBatchFormDto } from "@/modules/attendance/types/ot-form-batch.dto";
@@ -85,6 +85,17 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
     const [processedResult, setProcessedResult] = useState(false);
+    // Each form card starts collapsed (header + summary only) to keep long batches readable.
+    const [expandedFormIds, setExpandedFormIds] = useState<Set<number>>(() => new Set());
+
+    const toggleExpanded = (otFormId: number) => {
+        setExpandedFormIds((current) => {
+            const next = new Set(current);
+            if (next.has(otFormId)) next.delete(otFormId);
+            else next.add(otFormId);
+            return next;
+        });
+    };
 
     const fetchKey = props.variant === "app" ? props.id : props.token;
 
@@ -215,9 +226,15 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                             const state = decisions[form.otFormId];
                             if (!state) return null;
                             const totalHours = form.employees.reduce((sum, employee) => sum + employee.actualHours, 0);
+                            const isExpanded = expandedFormIds.has(form.otFormId);
+                            const includedCount = form.employees.length - state.excludedEmployeeIds.size;
                             return (
                                 <section key={form.otFormId} className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-4">
+                                    <div
+                                        className={`flex flex-wrap items-center justify-between gap-3 bg-[#f8fafc] px-6 py-4 ${
+                                            isExpanded || state.decision === 1 ? "border-b border-[#e0e3e5]" : ""
+                                        }`}
+                                    >
                                         <div>
                                             <div className="text-sm font-semibold text-[#191c1e]">
                                                 {t("formTitle", { id: form.otFormId })} — {bilingualText(form.groupNameVn, form.groupNameJp)}
@@ -233,7 +250,20 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleExpanded(form.otFormId)}
+                                                aria-expanded={isExpanded}
+                                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                            >
+                                                {t("employeeSummary", {
+                                                    count: state.decision === 1 ? form.employees.length : includedCount,
+                                                    total: form.employees.length,
+                                                    hours: formatHours(totalHours),
+                                                })}
+                                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setDecision(form.otFormId, 0)}
@@ -259,6 +289,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                         </div>
                                     </div>
 
+                                    {isExpanded && (
                                     <div className="border-b border-[#e0e3e5] px-6 py-4">
                                         <div className="mb-2.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                             {tDetail("processPartTitle")}
@@ -309,6 +340,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                             </div>
                                         )}
                                     </div>
+                                    )}
 
                                     {state.decision === 1 ? (
                                         <div className="px-6 py-4">
@@ -324,7 +356,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                 />
                                             </label>
                                         </div>
-                                    ) : (
+                                    ) : isExpanded ? (
                                         <div className="overflow-x-auto">
                                             <table className="min-w-full border-collapse text-left">
                                                 <thead>
@@ -400,7 +432,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                 {t("formTotalHoursLabel", { hours: formatHours(totalHours) })}
                                             </div>
                                         </div>
-                                    )}
+                                    ) : null}
                                 </section>
                             );
                         })}

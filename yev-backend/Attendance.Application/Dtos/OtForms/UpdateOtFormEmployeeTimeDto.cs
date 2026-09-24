@@ -13,6 +13,9 @@ namespace Attendance.Application.Dtos.OtForms
         [Required(ErrorMessage = "Nhân viên không được để trống")]
         public int EmployeeId { get; set; }
 
+        // Optional — null keeps the row's current StartTime (new rows fall back to the form's StartTime).
+        public TimeOnly? StartTime { get; set; }
+
         public TimeOnly EndTime { get; set; }
 
         public bool DidEat { get; set; }

@@ -58,7 +58,6 @@ export default function SecondaryPasswordPanel() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
             </div>
 
             <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">

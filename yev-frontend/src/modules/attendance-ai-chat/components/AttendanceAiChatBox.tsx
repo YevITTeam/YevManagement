@@ -36,11 +36,11 @@ const TOOL_LABELS: Record<string, string> = {
     search_ot_cases: "trường hợp OT",
     search_employees_by_group: "nhân viên",
     get_my_create_scopes: "phạm vi được tạo đơn",
-    create_ot_form_draft: "tạo đơn tăng ca",
+    create_ot_form_draft: "đăng ký tăng ca",
 };
 
 const SUGGESTIONS = [
-    "Tạo đơn tăng ca cho nhóm Kế toán ngày mai từ 18:00 đến 20:00",
+    "Đăng ký tăng ca cho nhóm Kế toán ngày mai từ 18:00 đến 20:00",
     "Nhóm của tôi có những nhân viên nào?",
     "Tôi được phép tạo đơn cho nhóm/bộ phận nào?",
     "Có những trường hợp OT (TH1/TH2/TH3) nào?",
@@ -203,9 +203,9 @@ export default function AttendanceAiChatBox() {
                         <Bot className="h-5 w-5 text-[#e3000f]" />
                     </div>
                     <div>
-                        <h1 className="text-sm font-semibold text-[#191c1e]">Trợ lý AI tạo đơn tăng ca</h1>
+                        <h1 className="text-sm font-semibold text-[#191c1e]">Trợ lý AI đăng ký tăng ca</h1>
                         <p className="text-xs text-[#8a8f94]">
-                            Hỏi bằng tiếng Việt để lập đơn — trợ lý sẽ tóm tắt và chờ bạn xác nhận trước khi tạo thật.
+                            Hỏi bằng tiếng Việt để đăng ký tăng ca — trợ lý sẽ tóm tắt và chờ bạn xác nhận trước khi tạo thật.
                         </p>
                     </div>
                 </div>
@@ -322,7 +322,7 @@ export default function AttendanceAiChatBox() {
                             }
                         }}
                         rows={2}
-                        placeholder="Nhập yêu cầu lập đơn… (Enter để gửi, Shift+Enter để xuống dòng)"
+                        placeholder="Nhập yêu cầu đăng ký tăng ca… (Enter để gửi, Shift+Enter để xuống dòng)"
                         className="flex-1 resize-none rounded-lg border border-[#e0e3e5] px-3 py-2 text-sm text-[#191c1e] outline-none focus:border-[#e3000f]"
                     />
 

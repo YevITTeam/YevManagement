@@ -164,7 +164,6 @@ export default function CategoryManagement() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">

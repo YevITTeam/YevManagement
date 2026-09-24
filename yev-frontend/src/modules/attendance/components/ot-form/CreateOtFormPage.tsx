@@ -66,24 +66,35 @@ function computeTotalHour(startTime: string, endTime: string): number {
     return Math.round((diffMinutes / 60) * 100) / 100;
 }
 
-// Thông báo "Nhân viên mã ... quá ..." khi vượt bất kỳ mốc ngày/tháng/năm nào — đúng mẫu người dùng
-// yêu cầu (2026-08-26), mirror OtFormService.ValidateOtHourLimitsAsync ở BE (dayLimit luôn dùng chung
-// 1 mốc cho mọi người; monthLimit/yearLimit ưu tiên mốc riêng employee.customMonthly/YearlyOtHourLimit
-// nếu đã gán — xem CreateOtFormPage gọi hàm này). Chỉ cảnh báo SỚM, BE luôn là nguồn chặn thật.
-function buildOtLimitWarning(
-    t: (key: string, values?: Record<string, string | number>) => string,
-    code: string,
-    dayHours: number,
-    dayLimit: number,
-    monthHours: number,
-    monthLimit: number,
-    yearHours: number,
-    yearLimit: number
-): string | null {
-    if (dayHours > dayLimit) return t("employeeOverDailyLimit", { code, hours: dayHours, limit: dayLimit });
-    if (monthHours > monthLimit) return t("employeeOverMonthlyLimit", { code, hours: monthHours, limit: monthLimit });
-    if (yearHours > yearLimit) return t("employeeOverYearlyLimit", { code, hours: yearHours, limit: yearLimit });
-    return null;
+type AccumulationKind = "Daily" | "Monthly" | "Yearly";
+
+// One accumulation value cell (day/month/year) — red + warning icon, full message on hover, when over its
+// limit. Early warning only; mirrors OtFormService.ValidateOtHourLimitsAsync, which is the real guard.
+function AccumulationCell({
+    t,
+    code,
+    kind,
+    hours,
+    limit,
+}: {
+    t: (key: string, values?: Record<string, string | number>) => string;
+    code: string;
+    kind: AccumulationKind;
+    hours: number;
+    limit: number;
+}) {
+    const isOver = hours > limit;
+    return (
+        <td
+            className={`whitespace-nowrap px-3 py-2 text-center align-top text-sm ${isOver ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}
+            title={isOver ? t(`employeeOver${kind}Limit`, { code, hours, limit }) : undefined}
+        >
+            <span className="inline-flex items-center gap-1">
+                {isOver && <AlertTriangle className="h-3 w-3" />}
+                {hours}h
+            </span>
+        </td>
+    );
 }
 
 const emptyProcessPart: ProcessPartDto = {
@@ -98,6 +109,8 @@ const emptyProcessPart: ProcessPartDto = {
 };
 
 interface EmployeeOverride {
+    // "" = follow the form's start time; otherwise a per-employee start within the form's time range.
+    startTime: string;
     endTime: string;
     // Có ăn hay không — chỉ có ý nghĩa khi giờ OT thực tế của người này >= ngưỡng phiếu ăn (mới
     // 2026-08-06). Mặc định true (giả định ăn) khi chọn mới; không ăn dù đủ ngưỡng thì BE tự +30
@@ -497,7 +510,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     Object.fromEntries(
                         activeEmployees.map((e) => [
                             e.employeeId,
-                            { endTime: e.endTime.slice(0, 5), didEat: e.didEat, noteVn: e.noteVn ?? "", noteJp: e.noteJp ?? "" },
+                            { startTime: e.startTime.slice(0, 5), endTime: e.endTime.slice(0, 5), didEat: e.didEat, noteVn: e.noteVn ?? "", noteJp: e.noteJp ?? "" },
                         ])
                     )
                 );
@@ -574,7 +587,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         for (const employeeId of selectedEmployeeIds) {
             const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
             const didEat = employeeOverrides[employeeId]?.didEat ?? mealServiceActive;
-            const ticketType = computeMealTicketType(startTime, employeeEndTime, didEat, setting);
+            const employeeStartTime = employeeOverrides[employeeId]?.startTime || startTime;
+            const ticketType = computeMealTicketType(employeeStartTime, employeeEndTime, didEat, setting);
             if (ticketType === MEAL_TICKET_MAIN) main += 1;
             else if (ticketType === MEAL_TICKET_SECONDARY) secondary += 1;
         }
@@ -617,6 +631,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         const timeout = setTimeout(() => {
             const reqEmployees = selectedEmployeeIds.map(id => ({
                 employeeId: id,
+                startTime: `${employeeOverrides[id]?.startTime || startTime}:00`,
                 endTime: `${employeeOverrides[id]?.endTime || endTime}:00`,
             }));
 
@@ -640,7 +655,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         setEmployeeOverrides((current) =>
             current[employeeId]
                 ? current
-                : { ...current, [employeeId]: { endTime, didEat: mealServiceActive, noteVn: "", noteJp: "" } }
+                : { ...current, [employeeId]: { startTime: "", endTime, didEat: mealServiceActive, noteVn: "", noteJp: "" } }
         );
     };
 
@@ -661,17 +676,18 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             setEmployeeOverrides((current) => {
                 const next = { ...current };
                 for (const id of employeeIds) {
-                    if (!next[id]) next[id] = { endTime, didEat: mealServiceActive, noteVn: "", noteJp: "" };
+                    if (!next[id]) next[id] = { startTime: "", endTime, didEat: mealServiceActive, noteVn: "", noteJp: "" };
                 }
                 return next;
             });
         }
     };
 
-    const handleEmployeeOverrideChange = (employeeId: number, field: "endTime" | "noteVn" | "noteJp", value: string) => {
+    const handleEmployeeOverrideChange = (employeeId: number, field: "startTime" | "endTime" | "noteVn" | "noteJp", value: string) => {
         setEmployeeOverrides((current) => ({
             ...current,
             [employeeId]: {
+                startTime: current[employeeId]?.startTime ?? "",
                 endTime: current[employeeId]?.endTime ?? endTime,
                 didEat: current[employeeId]?.didEat ?? mealServiceActive,
                 noteVn: current[employeeId]?.noteVn ?? "",
@@ -685,6 +701,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         setEmployeeOverrides((current) => ({
             ...current,
             [employeeId]: {
+                startTime: current[employeeId]?.startTime ?? "",
                 endTime: current[employeeId]?.endTime ?? endTime,
                 didEat,
                 noteVn: current[employeeId]?.noteVn ?? "",
@@ -832,9 +849,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         const orderStartMinutes = toMinutes(`${startTime}:00`);
         const orderEndMinutes = toMinutes(`${endTime}:00`);
         for (const employeeId of selectedEmployeeIds) {
+            const employeeStartMinutes = toMinutes(`${employeeOverrides[employeeId]?.startTime || startTime}:00`);
             const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
             const employeeEndMinutes = toMinutes(`${employeeEndTime}:00`);
-            if (employeeEndMinutes <= orderStartMinutes || employeeEndMinutes > orderEndMinutes) {
+            if (
+                employeeStartMinutes < orderStartMinutes ||
+                employeeEndMinutes <= employeeStartMinutes ||
+                employeeEndMinutes > orderEndMinutes
+            ) {
                 const code = isEditMode
                     ? (editEmployees.find((e) => e.employeeId === employeeId)?.employeeCode ??
                       employeeAddedMeta[employeeId]?.employeeCode)
@@ -850,6 +872,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             if (isEditMode && otFormId) {
                 const employees: UpdateOtFormEmployeeTimeDto[] = selectedEmployeeIds.map((employeeId) => ({
                     employeeId,
+                    startTime: `${employeeOverrides[employeeId]?.startTime || startTime}:00`,
                     endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
                     didEat: employeeOverrides[employeeId]?.didEat ?? true,
                     noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
@@ -866,6 +889,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             } else {
                 const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
                     employeeId,
+                    startTime: `${employeeOverrides[employeeId]?.startTime || startTime}:00`,
                     endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
                     didEat: employeeOverrides[employeeId]?.didEat ?? mealServiceActive,
                     noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
@@ -917,7 +941,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-semibold text-[#191c1e]">{isEditMode ? t("titleEdit", { id: otFormId }) : t("titleCreate")}</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">{isEditMode ? t("descEdit") : t("descCreate")}</p>
             </div>
 
             {!isEditMode && isScopeLocked && (
@@ -1131,25 +1154,30 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         // pendingRemovals), áp dụng thật + log lại 1 lần khi bấm "Lưu thay đổi" bên dưới
                         // (1 lần nhập mật khẩu cấp 2 cho toàn bộ thay đổi trong phiên sửa).
                         <div className="space-y-4">
-                        <div className="overflow-x-auto">
+                        <div className="max-h-[60vh] overflow-auto rounded-lg border border-[#e0e3e5]">
                             <table className="min-w-full border-collapse text-left">
-                                <thead>
-                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                        <th className="px-3 py-2">{t("colEmployeeCode")}</th>
-                                        <th className="px-3 py-2">{t("colFullName")}</th>
+                                <thead className="sticky top-0 z-10 bg-white">
+                                    <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
                                         {formMode === "production" && (
                                             <>
-                                                <th className="px-3 py-2">{t("colBlockCode")}</th>
-                                                <th className="px-3 py-2">{t("colTeamCode")}</th>
-                                                <th className="px-3 py-2">{t("colShiftTeam")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colBlockCode")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colTeamCode")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colShiftTeam")}</th>
                                             </>
                                         )}
-                                        <th className="px-3 py-2">{t("colAccumulation")}</th>
-                                        <th className="px-3 py-2">{t("colEndTime")}</th>
-                                        <th className="px-3 py-2">{t("colDidEat")}</th>
-                                        <th className="px-3 py-2">{t("colMealTicketType")}</th>
-                                        <th className="px-3 py-2">{t("colNote")}</th>
-                                        <th className="px-3 py-2" />
+                                        <th colSpan={2} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colDidEat")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
+                                        <th rowSpan={2} className="px-3 py-2" />
+                                    </tr>
+                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                        <th className="px-3 py-2 text-center">{t("colMonth")}</th>
+                                        <th className="px-3 py-2 text-center">{t("colYear")}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1163,7 +1191,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     </td>
                                                     <td
                                                         className="px-3 py-2 align-top text-sm text-[#930006]"
-                                                        colSpan={formMode === "production" ? 8 : 5}
+                                                        colSpan={formMode === "production" ? 10 : 7}
                                                     >
                                                         <span className="line-through">{employee.fullName}</span> —{" "}
                                                         {t("willBeRemovedNote", { reason: removalReason })}
@@ -1183,21 +1211,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         // Không có dữ liệu "ngày" ở bảng này (monthToDate/yearToDate là lũy kế
                                         // THẬT, không phải Dự kiến theo ngày) — chỉ cảnh báo tháng/năm, ưu tiên
                                         // mốc riêng của nhân viên nếu đã gán (2026-08-26).
-                                        const otLimitWarning = buildOtLimitWarning(
-                                            t,
-                                            employee.employeeCode,
-                                            0,
-                                            setting.dailyOtHourLimit,
-                                            employee.monthToDate,
-                                            employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit,
-                                            employee.yearToDate,
-                                            employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit
-                                        );
-                                        const isOverLimit = otLimitWarning !== null;
+                                        const currentStartTime = employeeOverrides[employee.employeeId]?.startTime || startTime;
                                         const currentEndTime = employeeOverrides[employee.employeeId]?.endTime ?? endTime;
                                         const currentDidEat = employeeOverrides[employee.employeeId]?.didEat ?? true;
-                                        const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
-                                        const mealTicketType = computeMealTicketType(startTime, currentEndTime, currentDidEat, setting);
+                                        const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);
+                                        const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, currentDidEat, setting);
                                         return (
                                             <tr key={employee.employeeId} className="border-b border-[#f1f5f9]">
                                                 <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">
@@ -1217,17 +1235,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         </td>
                                                     </>
                                                 )}
-                                                <td className="px-3 py-2 align-top text-sm">
-                                                    <span
-                                                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                                                            isOverLimit
-                                                                ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                                                : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                                                        }`}
-                                                    >
-                                                        {isOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                                        {otLimitWarning ?? `${employee.monthToDate}h / ${employee.yearToDate}h`}
-                                                    </span>
+                                                <AccumulationCell t={t} code={employee.employeeCode} kind="Monthly" hours={employee.monthToDate} limit={employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit} />
+                                                <AccumulationCell t={t} code={employee.employeeCode} kind="Yearly" hours={employee.yearToDate} limit={employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit} />
+                                                <td className="px-3 py-2 align-top">
+                                                    <TimePicker24h
+                                                        value={currentStartTime}
+                                                        onChange={(value) => handleEmployeeOverrideChange(employee.employeeId, "startTime", value)}
+                                                        disabled={isSubmitting}
+                                                    />
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
                                                     <TimePicker24h
@@ -1289,10 +1304,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         .map((employeeId) => {
                                             const meta = employeeAddedMeta[employeeId];
                                             if (!meta) return null;
+                                            const currentStartTime = employeeOverrides[employeeId]?.startTime || startTime;
                                             const currentEndTime = employeeOverrides[employeeId]?.endTime ?? endTime;
                                             const currentDidEat = employeeOverrides[employeeId]?.didEat ?? true;
-                                            const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
-                                            const mealTicketType = computeMealTicketType(startTime, currentEndTime, currentDidEat, setting);
+                                            const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);
+                                            const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, currentDidEat, setting);
                                             return (
                                                 <tr key={employeeId} className="border-b border-[#f1f5f9] bg-emerald-50/40">
                                                     <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">{meta.employeeCode}</td>
@@ -1309,7 +1325,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                             <td className="px-3 py-2 align-top text-sm text-[#8a8f94]">—</td>
                                                         </>
                                                     )}
-                                                    <td className="px-3 py-2 align-top text-sm text-[#8a8f94]">—</td>
+                                                    <td className="px-3 py-2 text-center align-top text-sm text-[#8a8f94]">—</td>
+                                                    <td className="px-3 py-2 text-center align-top text-sm text-[#8a8f94]">—</td>
+                                                    <td className="px-3 py-2 align-top">
+                                                        <TimePicker24h
+                                                            value={currentStartTime}
+                                                            onChange={(value) => handleEmployeeOverrideChange(employeeId, "startTime", value)}
+                                                            disabled={isSubmitting}
+                                                        />
+                                                    </td>
                                                     <td className="px-3 py-2 align-top">
                                                         <TimePicker24h
                                                             value={currentEndTime}
@@ -1489,18 +1513,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 />
                             </div>
 
-                            {!isCoreFormInfoFilled ? (
-                                <p className="text-sm text-[#5e3f3a]">{t("fillFormInfoFirstHint")}</p>
-                            ) : !canSearchProduction ? (
-                                <p className="text-sm text-[#5e3f3a]">{t("chooseTeamLineFirstHint")}</p>
-                            ) : productionResults.length === 0 ? (
+                            {!isCoreFormInfoFilled || !canSearchProduction ? null : productionResults.length === 0 ? (
                                 <p className="text-sm text-[#5e3f3a]">{t("noProductionResults")}</p>
                             ) : (
-                                <div className="overflow-x-auto">
+                                <div className="max-h-[60vh] overflow-auto rounded-lg border border-[#e0e3e5]">
                                     <table className="min-w-full border-collapse text-left">
-                                        <thead>
-                                            <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                <th className="w-10 px-3 py-2">
+                                        <thead className="sticky top-0 z-10 bg-white">
+                                            <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                                <th rowSpan={2} className="w-10 px-3 py-2 align-bottom">
                                                     <input
                                                         type="checkbox"
                                                         checked={productionResults.length > 0 && productionResults.every((item) => selectedEmployeeIds.includes(item.employeeId))}
@@ -1515,16 +1535,22 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                                     />
                                                 </th>
-                                                <th className="px-3 py-2">{t("colEmployeeCode")}</th>
-                                                <th className="px-3 py-2">{t("colFullName")}</th>
-                                                <th className="px-3 py-2">{t("colBlockCode")}</th>
-                                                <th className="px-3 py-2">{t("colCongDoan")}</th>
-                                                <th className="px-3 py-2">{t("colShiftTeam")}</th>
-                                                <th className="px-3 py-2">{t("colAccumulation")}</th>
-                                                <th className="px-3 py-2">{t("colEndTime")}</th>
-                                                <th className="px-3 py-2">{t("colDidEat")}</th>
-                                                <th className="px-3 py-2">{t("colMealTicketType")}</th>
-                                                <th className="px-3 py-2">{t("colNote")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colBlockCode")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colCongDoan")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colShiftTeam")}</th>
+                                                <th colSpan={3} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colDidEat")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
+                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
+                                            </tr>
+                                            <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                                <th className="px-3 py-2 text-center">{t("colDay")}</th>
+                                                <th className="px-3 py-2 text-center">{t("colMonth")}</th>
+                                                <th className="px-3 py-2 text-center">{t("colYear")}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1536,21 +1562,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 // nhân viên (customMonthly/YearlyOtHourLimit) nếu đã gán — "gia hạn" cao
                                                 // hơn mặc định, thường dùng cho công nhân dưới chuyền (2026-08-26). BE
                                                 // luôn là nguồn chặn thật (ValidateOtHourLimitsAsync).
-                                                const otLimitWarning = buildOtLimitWarning(
-                                                    t,
-                                                    item.employeeCode,
-                                                    item.projectedDayToDate,
-                                                    setting.dailyOtHourLimit,
-                                                    item.projectedMonthToDate,
-                                                    item.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit,
-                                                    item.projectedYearToDate,
-                                                    item.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit
-                                                );
-                                                const isOverLimit = otLimitWarning !== null;
+                                                const currentStartTime = employeeOverrides[item.employeeId]?.startTime || startTime;
                                                 const currentEndTime = employeeOverrides[item.employeeId]?.endTime ?? endTime;
                                                 const currentDidEat = employeeOverrides[item.employeeId]?.didEat ?? mealServiceActive;
-                                                const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
-                                                const mealTicketType = computeMealTicketType(startTime, currentEndTime, currentDidEat, setting);
+                                                const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);
+                                                const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, currentDidEat, setting);
                                                 return (
                                                     <tr
                                                         key={item.employeeId}
@@ -1584,18 +1600,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.blockCode || "—"}</td>
                                                         <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.congDoan || "—"}</td>
                                                         <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.shiftTeamNameVn || item.shiftTeamCode || "—"}</td>
-                                                        <td className="px-3 py-2 align-top text-sm">
-                                                            <span
-                                                                className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                                                                    isOverLimit
-                                                                        ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                                                        : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                                                                }`}
-                                                            >
-                                                                {isOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                                                {otLimitWarning ??
-                                                                    `${item.projectedDayToDate}h · ${item.projectedMonthToDate}h / ${item.projectedYearToDate}h`}
-                                                            </span>
+                                                        <AccumulationCell t={t} code={item.employeeCode} kind="Daily" hours={item.projectedDayToDate} limit={setting.dailyOtHourLimit} />
+                                                        <AccumulationCell t={t} code={item.employeeCode} kind="Monthly" hours={item.projectedMonthToDate} limit={item.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit} />
+                                                        <AccumulationCell t={t} code={item.employeeCode} kind="Yearly" hours={item.projectedYearToDate} limit={item.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit} />
+                                                        <td className="px-3 py-2 align-top">
+                                                            <TimePicker24h
+                                                                value={currentStartTime}
+                                                                onChange={(value) => handleEmployeeOverrideChange(item.employeeId, "startTime", value)}
+                                                                disabled={isSubmitting || !checked}
+                                                            />
                                                         </td>
                                                         <td className="px-3 py-2 align-top">
                                                             <TimePicker24h
@@ -1641,18 +1654,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 </div>
                             )}
                         </div>
-                    ) : !isCoreFormInfoFilled ? (
-                        <p className="text-sm text-[#5e3f3a]">{t("fillFormInfoFirstHint")}</p>
-                    ) : !groupId ? (
-                        <p className="text-sm text-[#5e3f3a]">{t("chooseGroupFirstHint")}</p>
-                    ) : groupEmployees.length === 0 ? (
+                    ) : !isCoreFormInfoFilled || !groupId ? null : groupEmployees.length === 0 ? (
                         <p className="text-sm text-[#5e3f3a]">{t("noEmployeesInGroup")}</p>
                     ) : (
-                        <div className="overflow-x-auto">
+                        <div className="max-h-[60vh] overflow-auto rounded-lg border border-[#e0e3e5]">
                             <table className="min-w-full border-collapse text-left">
-                                <thead>
-                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                        <th className="w-10 px-3 py-2">
+                                <thead className="sticky top-0 z-10 bg-white">
+                                    <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                        <th rowSpan={2} className="w-10 px-3 py-2 align-bottom">
                                             <input
                                                 type="checkbox"
                                                 checked={groupEmployees.length > 0 && groupEmployees.every((employee) => selectedEmployeeIds.includes(employee.id))}
@@ -1667,13 +1676,19 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                             />
                                         </th>
-                                        <th className="px-3 py-2">{t("colEmployeeCode")}</th>
-                                        <th className="px-3 py-2">{t("colFullName")}</th>
-                                        <th className="px-3 py-2">{t("colAccumulation")}</th>
-                                        <th className="px-3 py-2">{t("colEndTime")}</th>
-                                        <th className="px-3 py-2">{t("colDidEat")}</th>
-                                        <th className="px-3 py-2">{t("colMealTicketType")}</th>
-                                        <th className="px-3 py-2">{t("colNote")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
+                                        <th colSpan={3} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colDidEat")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
+                                    </tr>
+                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                        <th className="px-3 py-2 text-center">{t("colDay")}</th>
+                                        <th className="px-3 py-2 text-center">{t("colMonth")}</th>
+                                        <th className="px-3 py-2 text-center">{t("colYear")}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1685,21 +1700,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         // Chỉ mang tính cảnh báo SỚM — BE luôn là nguồn chân lý chặn thật khi submit
                                         // (ValidateOtHourLimitsAsync, cộng thêm giờ của chính đơn đang tạo). Ưu tiên
                                         // mốc riêng của nhân viên nếu đã gán (2026-08-26).
-                                        const otLimitWarning = buildOtLimitWarning(
-                                            t,
-                                            employee.code,
-                                            employee.projectedDayToDate,
-                                            setting.dailyOtHourLimit,
-                                            employee.projectedMonthToDate,
-                                            employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit,
-                                            employee.projectedYearToDate,
-                                            employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit
-                                        );
-                                        const isOverLimit = otLimitWarning !== null;
+                                        const currentStartTime = employeeOverrides[employee.id]?.startTime || startTime;
                                         const currentEndTime = employeeOverrides[employee.id]?.endTime ?? endTime;
                                         const currentDidEat = employeeOverrides[employee.id]?.didEat ?? mealServiceActive;
-                                        const earlyWindow = isEarlyMealWindowOt(startTime, currentEndTime, setting);
-                                        const mealTicketType = computeMealTicketType(startTime, currentEndTime, currentDidEat, setting);
+                                        const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);
+                                        const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, currentDidEat, setting);
                                         return (
                                             <tr
                                                 key={employee.id}
@@ -1725,18 +1730,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         </div>
                                                     )}
                                                 </td>
-                                                <td className="px-3 py-2 align-top text-sm">
-                                                    <span
-                                                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                                                            isOverLimit
-                                                                ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                                                : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                                                        }`}
-                                                    >
-                                                        {isOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                                        {otLimitWarning ??
-                                                            `${employee.projectedDayToDate}h · ${employee.projectedMonthToDate}h / ${employee.projectedYearToDate}h`}
-                                                    </span>
+                                                <AccumulationCell t={t} code={employee.code} kind="Daily" hours={employee.projectedDayToDate} limit={setting.dailyOtHourLimit} />
+                                                <AccumulationCell t={t} code={employee.code} kind="Monthly" hours={employee.projectedMonthToDate} limit={employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit} />
+                                                <AccumulationCell t={t} code={employee.code} kind="Yearly" hours={employee.projectedYearToDate} limit={employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit} />
+                                                <td className="px-3 py-2 align-top">
+                                                    <TimePicker24h
+                                                        value={currentStartTime}
+                                                        onChange={(value) => handleEmployeeOverrideChange(employee.id, "startTime", value)}
+                                                        disabled={isSubmitting || !checked}
+                                                    />
                                                 </td>
                                                 <td className="px-3 py-2 align-top">
                                                     <TimePicker24h

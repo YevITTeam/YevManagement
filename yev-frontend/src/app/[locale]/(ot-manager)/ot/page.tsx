@@ -7,7 +7,7 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 
 const tiles = [
     {
-        title: "Tạo đơn tăng ca",
+        title: "Đăng ký tăng ca",
         desc: "Lập đơn đề nghị làm ngoài giờ cho nhân viên của bạn.",
         link: "/ot/create",
         icon: <FilePlus2 className="h-8 w-8" />,
@@ -24,8 +24,8 @@ const tiles = [
 // Admin, xem migration AddAttendanceAiChatPermission) — 2 tile kia không cần gate vì permission của
 // chúng đã được cấp rộng cho mọi Role nghiệp vụ từ trước.
 const aiChatTile = {
-    title: "Trợ lý AI tạo đơn",
-    desc: "Trò chuyện để AI tự lập đơn tăng ca (nháp) cho bạn.",
+    title: "Trợ lý AI đăng ký tăng ca",
+    desc: "Trò chuyện để AI tự đăng ký tăng ca (nháp) cho bạn.",
     link: "/ot/ai-chat",
     icon: <Bot className="h-8 w-8" />,
 };

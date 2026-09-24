@@ -27,7 +27,6 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
-import InfoTooltip from "@/components/ui/InfoTooltip";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { useDragReorder } from "./useDragReorder";
 import StepCard, { type StepCardLabels } from "./StepCard";
@@ -823,11 +822,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     return (
         <div className="space-y-4">
             <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <div className="space-y-1">
-                    <h3 className={sectionTitleClassName}>{tDept("fieldDepartment")}</h3>
-                    <p className="text-sm text-[#5e3f3a]">{tDept("intro")}</p>
-                </div>
-
                 <label className="block max-w-sm">
                     <span className={fieldLabelClassName}>{tDept("fieldDepartment")}</span>
                     <SearchableSelect
@@ -873,7 +867,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                 <div>
                                     <div className="mb-4 flex items-center gap-1.5">
                                         <h3 className={sectionTitleClassName}>{tGroup("sectionTitle")}</h3>
-                                        <InfoTooltip text={tGroup("description")} />
                                         <div className="h-px flex-1 bg-[#e0e3e5]" />
                                     </div>
 
@@ -961,7 +954,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                 <div>
                                     <div className="mb-4 flex items-center gap-1.5">
                                         <h3 className={sectionTitleClassName}>{tDept("sectionTitle")}</h3>
-                                        <InfoTooltip text={tDept("description")} />
                                         <div className="h-px flex-1 bg-[#e0e3e5]" />
                                     </div>
 
@@ -1094,7 +1086,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                     <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                         <div className="flex items-center gap-1.5">
                             <h3 className={sectionTitleClassName}>{tProd("sectionTitle")}</h3>
-                            <InfoTooltip text={tProd("description")} />
                         </div>
 
                         {isLoadingProductionSteps ? (
@@ -1124,9 +1115,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                 onRemove={() => handleRemoveProductionStep(index)}
                                                 labels={productionStepLabels}
                                                 footer={
-                                                    step.terminalLevel === 0 && step.isLineScoped ? (
-                                                        <p className="pl-8 text-xs italic text-[#8a8f94]">{tProd("lineLeaderAutoHint")}</p>
-                                                    ) : step.terminalLevel === 0 && !step.isLineScoped ? (
+                                                    step.terminalLevel === 0 && step.isLineScoped ? null : step.terminalLevel === 0 && !step.isLineScoped ? (
                                                         <StepHolders
                                                             holders={deptEmployees.filter((e) => e.jobTitleId === step.jobTitleId)}
                                                             isLoadingEmployees={isLoadingDeptEmployees}
@@ -1137,9 +1126,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                             onAddChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
                                                             labels={deptHoldersLabels}
                                                         />
-                                                    ) : (
-                                                        <p className="pl-8 text-xs italic text-[#8a8f94]">{tProd("finalStepManagedElsewhereHint")}</p>
-                                                    )
+                                                    ) : null
                                                 }
                                             />
                                         ))}
