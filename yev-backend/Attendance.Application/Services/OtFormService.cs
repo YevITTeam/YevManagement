@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Attendance.Application.Dtos.AttendanceSettings;
 using Attendance.Application.Dtos.JobTitles;
@@ -170,6 +171,126 @@ namespace Attendance.Application.Services
 
             await NotifyEligibleApproversAsync(otForm, step);
         }
+
+        // Notify the form's creator (not the approvers) when the form is rejected or employees are removed
+        // from it. Same background-queue rationale as QueueStepApprovalNotification: callers have already
+        // saved the business change, so a slow/failed SMTP round-trip must not affect the response.
+        private void QueueRejectedNotification(int otFormId)
+        {
+            _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
+            {
+                var otFormService = sp.GetRequiredService<IOtFormService>();
+                await otFormService.SendRejectedNotificationAsync(otFormId);
+            });
+        }
+
+        private void QueueEmployeesRemovedNotification(int otFormId, List<int> employeeIds)
+        {
+            if (employeeIds.Count == 0) return;
+
+            _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
+            {
+                var otFormService = sp.GetRequiredService<IOtFormService>();
+                await otFormService.SendEmployeesRemovedNotificationAsync(otFormId, employeeIds);
+            });
+        }
+
+        public async Task SendRejectedNotificationAsync(int otFormId)
+        {
+            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == otFormId);
+            if (otForm == null) return;
+
+            var rejection = (await _unitOfWork.OtFormApprovalHistories.FindAsync(
+                x => x.OtFormId == otFormId && x.Action == (int)ApprovalAction.Rejected))
+                .OrderByDescending(x => x.ActionAt).FirstOrDefault();
+            if (rejection == null || rejection.ApproverUserName == otForm.CreatedByUserName) return;
+
+            var detailBlock = BuildRequesterDetailRow("LÝ DO TỪ CHỐI", "却下理由",
+                string.IsNullOrWhiteSpace(rejection.Comment) ? "-" : WebUtility.HtmlEncode(rejection.Comment));
+
+            await SendRequesterNotificationAsync(
+                otForm,
+                actorFullName: rejection.ApproverFullName ?? rejection.ApproverUserName,
+                subject: $"Đơn tăng ca #{otForm.Id} đã bị từ chối - YevManagement",
+                statusLabelVn: "ĐÃ BỊ TỪ CHỐI", statusLabelJp: "却下されました",
+                introVn: "Đơn tăng ca bạn đã lập đã bị từ chối. Vui lòng xem lý do bên dưới và lập đơn mới nếu cần.",
+                introJp: "作成された残業申請が却下されました。下記の理由をご確認のうえ、必要に応じて再度申請してください。",
+                detailBlock);
+        }
+
+        public async Task SendEmployeesRemovedNotificationAsync(int otFormId, List<int> employeeIds)
+        {
+            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == otFormId);
+            if (otForm == null) return;
+
+            var removedRows = (await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
+                x => x.OtFormId == otFormId && employeeIds.Contains(x.EmployeeId) && x.IsRemoved, x => x.Employee))
+                .Where(x => x.RemovedByUserName != otForm.CreatedByUserName)
+                .ToList();
+            if (removedRows.Count == 0) return;
+
+            var employeeLinesHtml = string.Join("<br>", removedRows.Select(x =>
+            {
+                var line = $"{x.Employee.Code} - {x.Employee.LastName} {x.Employee.FirstName}";
+                if (!string.IsNullOrWhiteSpace(x.RemoveReason)) line += $" ({x.RemoveReason})";
+                return WebUtility.HtmlEncode(line);
+            }));
+            var detailBlock = BuildRequesterDetailRow("NHÂN VIÊN BỊ LOẠI KHỎI ĐƠN", "除外された従業員", employeeLinesHtml);
+
+            var first = removedRows[0];
+            await SendRequesterNotificationAsync(
+                otForm,
+                actorFullName: first.RemovedByFullName ?? first.RemovedByUserName ?? "-",
+                subject: $"Đơn tăng ca #{otForm.Id}: có nhân viên bị loại khỏi đơn - YevManagement",
+                statusLabelVn: "NHÂN VIÊN BỊ LOẠI", statusLabelJp: "従業員が除外されました",
+                introVn: "Người duyệt đã loại nhân viên khỏi đơn tăng ca bạn lập. Đơn vẫn được xử lý tiếp với các nhân viên còn lại.",
+                introJp: "作成された残業申請から従業員が除外されました。申請は残りの従業員で引き続き処理されます。",
+                detailBlock);
+        }
+
+        private async Task SendRequesterNotificationAsync(
+            OtForm otForm, string actorFullName, string subject,
+            string statusLabelVn, string statusLabelJp, string introVn, string introJp, string detailBlock)
+        {
+            var (email, requesterFullName) = await _userDirectoryService.GetContactInfoAsync(otForm.CreatedByUserName);
+            if (string.IsNullOrWhiteSpace(email)) return;
+
+            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == otForm.GroupId);
+            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == otForm.DepartmentId);
+
+            try
+            {
+                var html = _emailTemplateRenderer.Render("OtForm/RequesterNotification.html", new Dictionary<string, string>
+                {
+                    ["OtFormId"] = otForm.Id.ToString(),
+                    ["RequesterFullName"] = WebUtility.HtmlEncode(requesterFullName ?? otForm.CreatedByFullName ?? otForm.CreatedByUserName),
+                    ["ActorFullName"] = WebUtility.HtmlEncode(actorFullName),
+                    ["DepartmentName"] = WebUtility.HtmlEncode(FormatBilingual(department?.DepartmentNameVn, department?.DepartmentNameJp)),
+                    ["GroupName"] = WebUtility.HtmlEncode(FormatBilingual(group?.GroupNameVn, group?.GroupNameJp)),
+                    ["OtFormDate"] = otForm.Date.ToString("dd/MM/yyyy"),
+                    ["OtFormTime"] = $"{otForm.StartTime:HH\\:mm} - {otForm.EndTime:HH\\:mm}",
+                    ["StatusLabelVn"] = statusLabelVn,
+                    ["StatusLabelJp"] = statusLabelJp,
+                    ["IntroVn"] = introVn,
+                    ["IntroJp"] = introJp,
+                    ["DetailBlock"] = detailBlock
+                });
+
+                await _emailService.SendAsync(email, subject, html);
+            }
+            catch (FileNotFoundException)
+            {
+                // A missing template file is a deployment error — must not break the business flow.
+            }
+        }
+
+        // 1 full-width definition row of the outcome-specific block; valueHtml must already be HTML-encoded.
+        private static string BuildRequesterDetailRow(string labelVn, string labelJp, string valueHtml) =>
+            "<tr><td colspan=\"2\" style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:14px 0; border-bottom:1px solid #e7e9ee;\">" +
+            "<span style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:11px; letter-spacing:0.5px; color:#9aa2b1; mso-line-height-rule:exactly; line-height:16px;\">" +
+            $"{labelVn}&nbsp;/&nbsp;{labelJp}</span>" +
+            "<span style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:15px; color:#8a2432; margin-top:4px; mso-line-height-rule:exactly; line-height:22px;\">" +
+            $"{valueHtml}</span></td></tr>";
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
@@ -1140,6 +1261,9 @@ namespace Attendance.Application.Services
 
             await _unitOfWork.SaveChangesAsync();
 
+            // Skipped in the background job when the remover is the form's own creator.
+            QueueEmployeesRemovedNotification(otForm.Id, removedEmployeeIds.ToList());
+
             return await GetByIdAsync(otForm.Id);
         }
 
@@ -1283,6 +1407,8 @@ namespace Attendance.Application.Services
             _unitOfWork.OtForms.Update(otForm);
 
             await _unitOfWork.SaveChangesAsync();
+
+            QueueRejectedNotification(otForm.Id);
         }
 
         // Ký hàng loạt (2026-08-27, theo yêu cầu người dùng — Team Leader/Trưởng phòng có nhiều Group
@@ -1338,9 +1464,12 @@ namespace Attendance.Application.Services
 
             // secondaryPassword: null — kênh email KHÔNG cần mật khẩu cấp 2 (quyết định riêng, không đổi
             // theo yêu cầu 2026-08-28, xem RemoveOtFormEmployeeByEmailTokenDto).
-            return await RemoveEmployeeCoreAsync(
+            var result = await RemoveEmployeeCoreAsync(
                 emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName,
                 isAdmin: false, request.EmployeeId, request.Reason, secondaryPassword: null);
+
+            QueueEmployeesRemovedNotification(emailToken.OtFormId, new List<int> { request.EmployeeId });
+            return result;
         }
 
         // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate ở 1 bước, không có cách resolve lại
@@ -2175,6 +2304,9 @@ namespace Attendance.Application.Services
                             item.OtFormId, approverUserName, approverFullName, isAdmin: false,
                             employeeId, "Loại khi duyệt Đơn tổng", secondaryPassword: null);
                     }
+
+                    // 1 mail per form listing every employee removed in this pass, not 1 per employee.
+                    QueueEmployeesRemovedNotification(item.OtFormId, item.ExcludedEmployeeIds.ToList());
                 }
 
                 await ApproveAsync(item.OtFormId, approverUserName, approverFullName, new ApproveOtFormDto

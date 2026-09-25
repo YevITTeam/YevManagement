@@ -110,5 +110,10 @@ namespace Attendance.Application.Interfaces.Service
         // này chạy, không thể tái sử dụng entity đã load trong CreateAsync/ApproveAsync. Xem
         // docs/attendance-module.md "Gửi email duyệt chạy nền".
         Task SendStepApprovalNotificationAsync(int otFormId, int otFormApprovalStepId);
+
+        // Also called by QueuedHostedService — notify the form's creator that an approver rejected the
+        // form / removed employees from it (the creator gets no other signal in those cases).
+        Task SendRejectedNotificationAsync(int otFormId);
+        Task SendEmployeesRemovedNotificationAsync(int otFormId, List<int> employeeIds);
     }
 }
