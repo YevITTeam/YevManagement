@@ -41,13 +41,13 @@ export function bilingualText(vn: string | null | undefined, jp: string | null |
 export const otFormStatusLabelsBilingual: Record<number, string> = {
     0: "Đang chờ phê duyệt / 承認待ち",
     1: "Hoàn tất / 完了",
-    2: "Không phê duyệt / 却下",
+    2: "Không phê duyệt / 不承認",
 };
 
 export const approvalActionLabelsBilingual: Record<number, string> = {
     0: "Đã đề nghị (ký) / 申請済み（署名）",
     1: "Đã phê duyệt / 承認済み",
-    2: "Không phê duyệt / 却下済み",
+    2: "Không phê duyệt / 不承認",
 };
 
 // Khối "Yêu cầu hỗ trợ khác" (ăn uống/xe đưa đón/phòng copy/đề nghị khác) trên trang xem trước qua
