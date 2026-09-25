@@ -850,6 +850,20 @@ Bổ sung 1 kênh xác nhận qua email (nút bấm mở trang xác nhận nhỏ
 - `AppSettings:FrontendBaseUrl` — domain FE dùng để build link trong email (`{FrontendBaseUrl}/xac-nhan-chu-ky?token=...`, `{FrontendBaseUrl}/xac-nhan-don?token=...`); **trang xác nhận do FE tự xây** (2 route public, gọi 2 cặp API preview+action ở trên), BE không server-render HTML.
 - Đã verify qua HTTP thật (2026-07-16): `PUT /me` tạo pending đúng, không áp dụng ngay; `GET/POST /confirm/{token}` preview + áp dụng đúng; gọi lại token đã dùng bị chặn (chống replay). Luồng `OtFormApprovalEmailToken` dùng lại nguyên `ApproveAsync`/`RejectAsync` đã test kỹ ở các tính năng trước nên chưa test riêng end-to-end. Riêng việc SMTP gửi được thật (kết nối + auth + send) đã verify độc lập qua console test (2026-07-17) — chưa verify lại trọn vẹn 2 luồng trên với mail thật gửi đi thành công (mới verify tới bước tạo token + gọi `SendAsync`, chưa xác nhận hộp thư nhận được đúng nội dung từ 2 luồng nghiệp vụ này).
 
+### §Mail báo người lập đơn khi đơn bị từ chối / bị loại nhân viên
+
+Trước đây người lập đơn (`OtForm.CreatedByUserName`) không nhận tín hiệu nào khi approver Từ chối đơn hoặc
+Loại nhân viên khỏi đơn. Nay gửi 1 mail cho người lập, template `OtForm/RequesterNotification.html` (song ngữ
+Vn/Jp, không có nút CTA), chạy nền qua `IBackgroundTaskQueue` như mail duyệt:
+- **Từ chối**: `RejectAsync` (sau `SaveChangesAsync`) → `QueueRejectedNotification` → `SendRejectedNotificationAsync`
+  (lấy lý do/người từ chối từ `OtFormApprovalHistory` Rejected mới nhất). Phủ luôn kênh email, từ chối hàng loạt, đơn tổng.
+- **Loại nhân viên**: `QueueEmployeesRemovedNotification(otFormId, employeeIds)` gọi ở 3 nơi: `UpdateAsync` (approver sửa đơn
+  theo chuyền có `RemovedEmployees`), `RemoveEmployeeByEmailTokenAsync`, và `ProcessBatchAsync` (đơn tổng — gom **1 mail/đơn**
+  cho mọi NV bị loại, không phải 1 mail/NV). `SendEmployeesRemovedNotificationAsync` đọc lại `OtFormEmployee.Removed*` từ DB.
+- **Bỏ qua** nếu người thực hiện chính là người lập đơn (tự sửa đơn của mình) hoặc người lập không có email. Giá trị động
+  (lý do, tên) được `WebUtility.HtmlEncode` vì `EmailTemplateService` không tự encode.
+- Chưa verify mail thật gửi tới hộp thư (mới `dotnet build` sạch).
+
 ### §Mật khẩu cấp 2 khi ký/duyệt OtForm (2026-07-30)
 **Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): thêm 1 lớp xác
 thực bổ sung (giống PIN giao dịch ngân hàng) cho hành vi có tính pháp lý — ký/duyệt phiếu tăng ca.
