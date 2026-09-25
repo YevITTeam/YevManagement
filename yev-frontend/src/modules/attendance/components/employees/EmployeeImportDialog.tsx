@@ -154,7 +154,6 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                         <h3 id="import-employee-title" className="text-lg font-semibold text-[#191c1e]">
                             {t("importTitle")}
                         </h3>
-                        <p className="mt-1 text-xs text-[#5e3f3a]">{t("importDescription")}</p>
                     </div>
                     <button
                         type="button"

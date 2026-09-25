@@ -183,7 +183,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                                 </tr>
                             )}
                             {prefixes.map((prefix) => (
-                                <tr key={prefix.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                <tr key={prefix.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-[#191c1e]">{prefix.prefix}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.branchName ?? "—"}</td>
                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.subnetMask ?? "—"}</td>

@@ -55,12 +55,12 @@ export default function SecondaryPasswordPanel() {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                <h1 className="text-xl font-semibold text-[#191c1e]">{t("title")}</h1>
             </div>
 
-            <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+            <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                 {isLoading ? (
                     <div className="py-8 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
                 ) : (
@@ -117,7 +117,6 @@ export default function SecondaryPasswordPanel() {
                                         className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                     />
                                 </label>
-                                <p className="text-xs text-[#5e3f3a]">{t("passwordHint")}</p>
                                 <div className="flex justify-end">
                                     <button
                                         onClick={handleSave}

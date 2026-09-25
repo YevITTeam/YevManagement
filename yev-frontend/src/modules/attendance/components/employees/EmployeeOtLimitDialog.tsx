@@ -106,7 +106,6 @@ export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: Em
                             />
                         </label>
                     </div>
-                    <p className="-mt-2 text-xs text-[#8a8f94]">{t("fieldCustomOtHourLimitHint")}</p>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

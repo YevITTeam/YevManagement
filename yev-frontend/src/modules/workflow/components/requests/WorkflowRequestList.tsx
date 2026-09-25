@@ -86,7 +86,6 @@ export default function WorkflowRequestList() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{t("listTitle")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("listDescription")}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -170,7 +169,7 @@ export default function WorkflowRequestList() {
                                     <tr
                                         key={item.id}
                                         onClick={() => goToDetail(item.id)}
-                                        className="cursor-pointer border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]"
+                                        className="cursor-pointer border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
                                     >
                                         <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.requestCode ?? t("draftLabel")}</td>
                                         <td className="px-6 py-4 text-sm text-[#191c1e]">{item.formDefinitionNameVn}</td>

@@ -108,11 +108,6 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                         />
                     </label>
 
-                    {mode === "create" && (
-                        <p className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
-                            {t("rankOrderAutoAppendHint")}
-                        </p>
-                    )}
 
                     <label className="block">
                         <span className={fieldLabelClassName}>{t("fieldTerminalLevel")}</span>

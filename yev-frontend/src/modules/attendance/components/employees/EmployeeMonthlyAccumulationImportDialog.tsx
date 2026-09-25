@@ -98,7 +98,6 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] p-6 pb-4">
                     <div>
                         <h3 className="text-lg font-semibold text-[#191c1e]">{t("monthlyAccumulationImportTitle")}</h3>
-                        <p className="mt-1 text-sm text-[#5e3f3a]">{t("monthlyAccumulationImportDesc")}</p>
                     </div>
                     <button
                         onClick={handleClose}

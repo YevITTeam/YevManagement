@@ -41,7 +41,6 @@ export default function NewWorkflowRequestPicker() {
                     <ArrowLeft className="h-3.5 w-3.5" /> {t("backToList")}
                 </Link>
                 <h1 className="mt-2 text-2xl font-semibold text-[#191c1e]">{t("pickFormTitle")}</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("pickFormDescription")}</p>
             </div>
 
             {isLoading && <div className="py-10 text-center text-sm text-[#5e3f3a]">{t("loading")}</div>}

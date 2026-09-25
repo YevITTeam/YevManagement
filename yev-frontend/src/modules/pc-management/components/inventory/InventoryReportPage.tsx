@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { ClipboardCheck, FileDown, FileSpreadsheet, Loader2, Users } from "lucide-react";
+import { ClipboardCheck, FileDown, FileSpreadsheet, Loader2, Users, Search } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -134,7 +134,6 @@ export default function InventoryReportPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{t("reportTitle")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("reportDescription")}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     {canScan && (
@@ -184,9 +183,11 @@ export default function InventoryReportPage() {
                 <button
                     onClick={() => refetch()}
                     disabled={isLoading}
-                    className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                    title={tCommon("search")}
+                    aria-label={tCommon("search")}
+                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
                 >
-                    {tCommon("search")}
+                    <Search className="h-4 w-4" />
                 </button>
                 <div className="ml-auto flex flex-wrap items-center gap-2">
                     <button
@@ -238,7 +239,7 @@ export default function InventoryReportPage() {
                                 </tr>
                             )}
                             {rows.map((row) => (
-                                <tr key={row.sessionId} className="border-b border-[#f1f5f9] last:border-0 hover:bg-[#f8fafc]">
+                                <tr key={row.sessionId} className="border-b border-[#f1f5f9] last:border-0 bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-4 py-3 font-semibold text-[#191c1e]">{row.branchName}</td>
                                     <td className="px-4 py-3 text-[#5e3f3a]">{formatDateTime(row.startedAt)}</td>
                                     <td className="px-4 py-3 text-[#5e3f3a]">{formatDateTime(row.endedAt)}</td>

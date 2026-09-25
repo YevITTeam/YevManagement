@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, History, Inbox, Pencil, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, History, Inbox, Pencil, SlidersHorizontal, Search } from "lucide-react";
 
 import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
@@ -31,6 +31,8 @@ interface ProductionEmployeeListProps {
     // Nút Nhập/Xuất Excel (do EmployeeList sở hữu dialog/handler) — render ngay trong hàng bộ lọc để
     // không thêm 1 hàng toolbar riêng.
     actions?: ReactNode;
+    // Công tắc chuyển Nhân viên / Nhân viên dưới chuyền (do EmployeeList sở hữu) — nằm đầu thanh công cụ.
+    leading?: ReactNode;
 }
 
 // Màn "Nhân viên dưới chuyền" — view riêng đọc thẳng ProductionEmployees. Dữ liệu CẤU TRÚC
@@ -39,7 +41,7 @@ interface ProductionEmployeeListProps {
 // 2026-09-04, xem comment ở khối state bên dưới. Bộ lọc dùng đúng 3 dropdown Line/Team/Nhóm ca đã có
 // sẵn cho màn tạo đơn "Theo chuyền".
 const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, ProductionEmployeeListProps>(function ProductionEmployeeList(
-    { actions },
+    { actions, leading },
     ref
 ) {
     const t = useTranslations("Attendance.ProductionEmployeeList");
@@ -180,49 +182,52 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
 
     return (
         <div>
-            <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
+                    {leading}
                     <input
                         value={keyword}
                         onChange={(event) => setKeyword(event.target.value)}
                         onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                         placeholder={t("searchPlaceholder")}
-                        className="h-10 w-48 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        className="h-9 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     <button
                         onClick={handleSearch}
                         disabled={isLoading}
-                        className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        title={tCommon("search")}
+                        aria-label={tCommon("search")}
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
                     >
-                        {tCommon("search")}
+                        <Search className="h-4 w-4" />
                     </button>
                     <SearchableSelect
                         options={departmentSelectOptions}
                         value={departmentId}
                         onChange={handleSelectDepartment}
                         placeholder={t("filterDepartmentPlaceholder")}
-                        triggerClassName="h-10 w-36 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        triggerClassName="h-9 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     <SearchableSelect
                         options={teamSelectOptions}
                         value={teamId}
                         onChange={handleSelectTeam}
                         placeholder={t("filterTeamPlaceholder")}
-                        triggerClassName="h-10 w-32 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        triggerClassName="h-9 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     <SearchableSelect
                         options={lineSelectOptions}
                         value={productionLineId}
                         onChange={handleSelectLine}
                         placeholder={t("filterBlockPlaceholder")}
-                        triggerClassName="h-10 w-28 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        triggerClassName="h-9 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     <SearchableSelect
                         options={shiftTeamSelectOptions}
                         value={shiftTeamId}
                         onChange={handleSelectShiftTeam}
                         placeholder={t("filterShiftTeamPlaceholder")}
-                        triggerClassName="h-10 w-32 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        triggerClassName="h-9 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     {actions}
                 </div>
@@ -237,18 +242,18 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                 <table className="min-w-full border-collapse text-left">
                     <thead>
                         <tr className="whitespace-nowrap border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                            <th className="px-4 py-2.5">{t("colCode")}</th>
-                            <th className="px-4 py-2.5">{t("colFullName")}</th>
-                            <th className="px-4 py-2.5">{t("colDepartment")}</th>
-                            <th className="px-4 py-2.5">{t("colBlock")}</th>
-                            <th className="px-4 py-2.5">{t("colCongDoan")}</th>
-                            <th className="px-4 py-2.5">{t("colTeam")}</th>
-                            <th className="px-4 py-2.5">{t("colShiftTeam")}</th>
-                            <th className="px-4 py-2.5">{t("colTaskName")}</th>
-                            <th className="px-4 py-2.5">{t("colLeader")}</th>
-                            <th className="px-4 py-2.5">{t("colMonthToDate")}</th>
-                            <th className="px-4 py-2.5">{t("colYearToDate")}</th>
-                            <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
+                            <th className="px-3 py-2">{t("colCode")}</th>
+                            <th className="px-3 py-2">{t("colFullName")}</th>
+                            <th className="px-3 py-2">{t("colDepartment")}</th>
+                            <th className="px-3 py-2">{t("colBlock")}</th>
+                            <th className="px-3 py-2">{t("colCongDoan")}</th>
+                            <th className="px-3 py-2">{t("colTeam")}</th>
+                            <th className="px-3 py-2">{t("colShiftTeam")}</th>
+                            <th className="px-3 py-2">{t("colTaskName")}</th>
+                            <th className="px-3 py-2">{t("colLeader")}</th>
+                            <th className="px-3 py-2">{t("colMonthToDate")}</th>
+                            <th className="px-3 py-2">{t("colYearToDate")}</th>
+                            <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -272,16 +277,16 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                                         : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
                                 }`;
                             return (
-                                <tr key={item.id} className="whitespace-nowrap border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
-                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{item.fullName}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{item.departmentNameVn ?? "-"}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{item.blockCode ?? "-"}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{item.congDoan ?? "-"}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{item.teamNameVn ?? item.teamCode ?? "-"}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{item.shiftTeamNameVn ?? item.shiftTeamCode ?? "-"}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{item.taskName ?? "-"}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">
+                                <tr key={item.id} className="whitespace-nowrap border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
+                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.fullName}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.departmentNameVn ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.blockCode ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.congDoan ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.teamNameVn ?? item.teamCode ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.shiftTeamNameVn ?? item.shiftTeamCode ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.taskName ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
                                         {item.isLeader ? (
                                             <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#191c1e]">
                                                 {t("leaderYes")}
@@ -290,19 +295,19 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                                             "-"
                                         )}
                                     </td>
-                                    <td className="px-4 py-3 text-sm">
+                                    <td className="px-3 py-2 text-sm">
                                         <span className={accumulationBadgeClass(isMonthOverLimit)}>
                                             {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
                                             {item.monthToDate}h
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-sm">
+                                    <td className="px-3 py-2 text-sm">
                                         <span className={accumulationBadgeClass(isYearOverLimit)}>
                                             {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
                                             {item.yearToDate}h
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-right text-sm">
+                                    <td className="px-3 py-2 text-right text-sm">
                                         {item.employeeId !== null && (
                                             <div className="inline-flex items-center gap-1.5">
                                                 <button
@@ -344,7 +349,7 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                 </table>
             </div>
 
-            <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+            <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
                 <button
                     className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                     disabled={!hasPreviousPage || isLoading}

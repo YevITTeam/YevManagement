@@ -118,7 +118,6 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <p className="text-xs text-[#8a8f94]">{t("editDialogHint")}</p>
 
                     <label className="block">
                         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("fieldTeam")}</span>

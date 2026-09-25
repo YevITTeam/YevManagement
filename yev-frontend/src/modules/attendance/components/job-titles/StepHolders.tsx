@@ -1,9 +1,8 @@
 "use client";
 
-import { X } from "lucide-react";
+import { User, X } from "lucide-react";
 
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
-import AvatarStack from "@/components/ui/AvatarStack";
 
 export interface StepHoldersLabels {
     holdersLabel: string;
@@ -43,22 +42,22 @@ export default function StepHolders({
     labels: StepHoldersLabels;
 }) {
     return (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[#f1f5f9] pt-2">
-            <span className="text-xs font-semibold text-[#8a8f94]">{labels.holdersLabel}</span>
+        <div className="relative ml-[1.35rem] pb-1 pl-5" title={labels.holdersLabel}>
             {isLoadingEmployees ? (
-                <span className="text-xs text-[#8a8f94]">{labels.loadingEmployees}</span>
+                <div className="py-1 text-xs text-[#8a8f94]">{labels.loadingEmployees}</div>
             ) : (
-                <>
-                    <AvatarStack people={holders.map((h) => ({ id: h.id, name: `${h.lastName} ${h.firstName}`, code: h.code }))} />
-                    {holders.length === 0 ? (
-                        <span className="text-xs italic text-[#8a8f94]">{labels.noHolders}</span>
-                    ) : (
-                        holders.map((holder) => (
-                            <span
-                                key={holder.id}
-                                className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-[#f8fafc] py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
-                            >
-                                {holder.lastName} {holder.firstName} ({holder.code})
+                <ul>
+                    {holders.length === 0 && (
+                        <TreeLeaf>
+                            <span className="text-xs italic text-[#8a8f94]">{labels.noHolders}</span>
+                        </TreeLeaf>
+                    )}
+                    {holders.map((holder) => (
+                        <TreeLeaf key={holder.id}>
+                            <span className="inline-flex items-center gap-1.5 text-xs text-[#191c1e]">
+                                <User size={12} className="text-[#8a8f94]" />
+                                {holder.lastName} {holder.firstName}
+                                <span className="rounded bg-[#f2f4f6] px-1.5 py-px text-[11px] text-[#5e3f3a]">{holder.code}</span>
                                 <button
                                     type="button"
                                     onClick={() => onRemoveHolder(holder)}
@@ -67,23 +66,36 @@ export default function StepHolders({
                                     aria-label={labels.removeHolderHint}
                                     className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
                                 >
-                                    <X size={10} />
+                                    <X size={11} />
                                 </button>
                             </span>
-                        ))
-                    )}
-                    <div className="w-56 shrink-0">
-                        <SearchableSelect
-                            options={addOptions}
-                            value={addingValue}
-                            onChange={onAddChange}
-                            placeholder={labels.addHolderPlaceholder}
-                            disabled={removingHolderId !== null}
-                            triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
-                        />
-                    </div>
-                </>
+                        </TreeLeaf>
+                    ))}
+                    <TreeLeaf>
+                        <div className="w-44">
+                            <SearchableSelect
+                                options={addOptions}
+                                value={addingValue}
+                                onChange={onAddChange}
+                                placeholder={labels.addHolderPlaceholder}
+                                disabled={removingHolderId !== null}
+                                triggerClassName="h-6 rounded-md border border-dashed border-[#e0e3e5] bg-white px-2 pr-6 text-[11px]! text-[#8a8f94] outline-none transition hover:border-[#e3000f] focus:border-[#e3000f]"
+                            />
+                        </div>
+                    </TreeLeaf>
+                </ul>
             )}
         </div>
+    );
+}
+
+// One leaf of the holder tree: vertical guide + horizontal elbow (guide stops at the elbow on the last leaf).
+function TreeLeaf({ children }: { children: React.ReactNode }) {
+    return (
+        <li className="group/leaf relative flex min-h-6 items-center pl-4">
+            <span className="absolute -left-2.5 bottom-0 top-0 w-px bg-[#d5d9dd] group-last/leaf:bottom-auto group-last/leaf:h-1/2" aria-hidden />
+            <span className="absolute -left-2.5 top-1/2 h-px w-3 bg-[#d5d9dd]" aria-hidden />
+            {children}
+        </li>
     );
 }

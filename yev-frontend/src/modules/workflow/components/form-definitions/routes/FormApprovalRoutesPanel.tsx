@@ -158,7 +158,6 @@ export default function FormApprovalRoutesPanel({ formDefinitionId, routeConditi
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
-                <p className="text-sm text-[#5e3f3a]">{t("routesHint")}</p>
                 <div className="flex items-center gap-2">
                     <button
                         type="button"

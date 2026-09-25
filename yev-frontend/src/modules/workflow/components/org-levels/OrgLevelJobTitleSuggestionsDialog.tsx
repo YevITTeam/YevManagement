@@ -121,7 +121,6 @@ export default function OrgLevelJobTitleSuggestionsDialog({ orgLevel, onClose }:
                     <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 ) : (
                     <div className="space-y-4">
-                        <p className="text-xs text-[#5e3f3a]">{t("jobTitleSuggestionsHint")}</p>
 
                         <div className="space-y-1.5">
                             {selectedIds.length === 0 && (

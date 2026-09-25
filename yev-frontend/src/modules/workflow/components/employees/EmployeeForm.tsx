@@ -176,7 +176,6 @@ export default function EmployeeForm({
                             placeholder={isLoadingUsers ? tCommon("loading") : t("fieldUserIdPlaceholder")}
                             disabled={loading || isLoadingUsers}
                         />
-                        <span className="mt-1 block text-xs text-[#8a8f94]">{t("fieldUserIdHint")}</span>
                     </label>
 
                     <label className="flex items-center gap-2">

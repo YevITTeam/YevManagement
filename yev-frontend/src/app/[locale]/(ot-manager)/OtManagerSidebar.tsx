@@ -79,7 +79,7 @@ export default function OtManagerSidebar() {
 
     return (
         <aside
-            className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
+            className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-4 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
                 }`}
         >
             <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>
@@ -89,19 +89,19 @@ export default function OtManagerSidebar() {
                         onClick={toggle}
                         title={t("expandSidebar")}
                         aria-label={t("expandSidebar")}
-                        className="cursor-pointer flex h-10 w-10 shrink-0 items-center justify-center bg-[#e3000f] text-lg font-bold text-white transition hover:opacity-90"
+                        className="cursor-pointer flex h-8 w-8 shrink-0 items-center justify-center bg-[#e3000f] text-base font-bold text-white transition hover:opacity-90"
                     >
                         Y
                     </button>
                 ) : (
                     <>
                         <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-[#e3000f] text-lg font-bold text-white">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-[#e3000f] text-base font-bold text-white">
                                 Y
                             </div>
                             <div>
-                                <div className="text-lg font-semibold text-[#191c1e]">YEV IT</div>
-                                <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">{t("otManagerTagline")}</div>
+                                <div className="text-base font-semibold leading-tight text-[#191c1e]">YEV IT</div>
+                                <div className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.12em] text-[#5e3f3a]">{t("otManagerTagline")}</div>
                             </div>
                         </div>
                         <button
@@ -121,7 +121,7 @@ export default function OtManagerSidebar() {
                 trình duyệt tự scrollIntoView() 1 link đang focus/active, nav bị cuộn ngang và kẹt luôn
                 ở đó (không thanh cuộn để kéo lại) — icon + đầu chữ label bị cắt mất. clip không tạo
                 scroll container nên không thể bị cuộn ngang nữa. */}
-            <nav className="mt-8 flex-1 overflow-y-auto overflow-x-clip">
+            <nav className="mt-5 flex-1 space-y-1 overflow-y-auto overflow-x-clip">
                 {navItems
                     .filter((item) => !item.permissions || hasAnyPermission(user, item.permissions))
                     .map((item) => {
@@ -136,14 +136,14 @@ export default function OtManagerSidebar() {
                                 // luôn 404, chỉ tổ tốn connection pool trình duyệt.
                                 prefetch={false}
                                 title={badgeCount > 0 ? `${t(item.key)} (${badgeCount})` : t(item.key)}
-                                className={`flex min-w-0 items-center gap-3 border-l-4 py-3 text-sm font-medium transition ${collapsed ? "justify-center px-0" : "px-5"
+                                className={`flex min-w-0 items-center gap-3 border-l-4 py-3.5 text-[15px] font-medium transition ${collapsed ? "justify-center px-0" : "px-5"
                                     } ${isActive
                                         ? "border-[#e3000f] bg-[#eceef0] text-[#191c1e]"
                                         : "border-transparent text-[#5e3f3a] hover:bg-[#eceef0] hover:text-[#191c1e]"
                                     }`}
                             >
                                 <span className="relative shrink-0">
-                                    <item.icon size={18} className={isActive ? "text-[#e3000f]" : "text-[#5e3f3a]"} />
+                                    <item.icon size={20} className={isActive ? "text-[#e3000f]" : "text-[#5e3f3a]"} />
                                     {badgeCount > 0 && collapsed && (
                                         <span className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 rounded-full bg-[#e3000f]" />
                                     )}
@@ -158,6 +158,24 @@ export default function OtManagerSidebar() {
                         );
                     })}
             </nav>
+
+            {/* Chân sidebar: thẻ người dùng đang đăng nhập — lấp phần trống phía dưới khi menu ngắn (vai trò ít
+                mục), thay vì để menu dồn cụm ở trên và cả cột trống bên dưới. */}
+            {user && (
+                <div className={`mt-2 border-t border-[#e0e3e5] pt-3 ${collapsed ? "px-2" : "px-4"}`}>
+                    <div className={`flex items-center gap-2.5 ${collapsed ? "justify-center" : ""}`} title={user.fullName ?? user.userName}>
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-xs font-semibold text-white">
+                            {user.fullName?.charAt(0)?.toUpperCase() ?? "U"}
+                        </div>
+                        {!collapsed && (
+                            <div className="min-w-0 leading-tight">
+                                <p className="truncate text-xs font-semibold text-[#191c1e]">{user.fullName}</p>
+                                <p className="truncate text-[11px] text-[#5e3f3a]">{user.userName}</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </aside>
     );
 }

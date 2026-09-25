@@ -60,9 +60,9 @@ export default function OtFormTabsPage() {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                <h1 className="text-xl font-semibold text-[#191c1e]">{t("title")}</h1>
             </div>
 
             <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">

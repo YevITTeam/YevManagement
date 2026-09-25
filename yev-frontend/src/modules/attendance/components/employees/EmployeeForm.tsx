@@ -114,7 +114,6 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     const terminalLevel = selectedJobTitle?.terminalLevel ?? TERMINAL_LEVEL_NONE;
     const needsGroup = terminalLevel === TERMINAL_LEVEL_NONE;
     const needsDepartment = terminalLevel === TERMINAL_LEVEL_DEPARTMENT_MANAGER;
-    const isCompanyWide = !needsGroup && !needsDepartment;
 
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.groupNameVn, searchText: g.groupNameVn.toLowerCase() }));
     const departmentOptions: SelectOption[] = departments.map((d) => ({
@@ -293,15 +292,9 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                                 placeholder={t("fieldDepartmentPlaceholder")}
                                 disabled={loading}
                             />
-                            <p className="mt-1.5 text-xs text-[#8a8f94]">{t("fieldDepartmentHint")}</p>
                         </label>
                     )}
 
-                    {isCompanyWide && (
-                        <p className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5 text-xs text-[#5e3f3a]">
-                            {t("companyWideHint")}
-                        </p>
-                    )}
 
                     {/* Giới hạn OT riêng — CHỈ hiện lúc Tạo mới (2026-08-29, đã tách khỏi PUT /{id} —
                         sửa sau này đi qua EmployeeOtLimitDialog.tsx, permission hẹp
@@ -348,7 +341,6 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                                     />
                                 </label>
                             </div>
-                            <p className="-mt-2 text-xs text-[#8a8f94]">{t("fieldCustomOtHourLimitHint")}</p>
                         </>
                     )}
 

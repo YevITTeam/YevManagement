@@ -233,7 +233,7 @@ export default function DeviceSoftwarePanel({ deviceId, deviceStatus, softwares,
                                 </tr>
                             )}
                             {visibleSoftwares.map((item) => (
-                                <tr key={item.softwareId} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
+                                <tr key={item.softwareId} className="border-b border-[#f1f5f9] bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-[#191c1e]">{item.softwareName}</td>
                                     <td className="whitespace-nowrap px-4 py-3 text-sm text-[#5e3f3a]">{formatDate(item.installDate)}</td>
                                     <td className="whitespace-nowrap px-4 py-3 text-sm text-[#5e3f3a]">{item.licenseKey || "-"}</td>

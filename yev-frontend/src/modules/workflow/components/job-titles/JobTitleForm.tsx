@@ -139,7 +139,6 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                         />
                         <span>
                             <span className="block text-sm font-medium text-[#191c1e]">{t("fieldIsUniquePerOrgUnit")}</span>
-                            <span className="block text-xs text-[#8a8f94]">{t("fieldIsUniquePerOrgUnitHint")}</span>
                         </span>
                     </label>
 

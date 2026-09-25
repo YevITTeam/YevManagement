@@ -338,49 +338,51 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         />
     );
 
+    // Công tắc Nhân viên / Nhân viên dưới chuyền — đặt ngay đầu thanh công cụ của từng bảng (trước là 1 hàng
+    // riêng phía trên) để bớt 1 hàng, nhường chỗ cho bảng.
+    const viewModeSwitch = (
+        <div className="inline-flex h-9 shrink-0 items-center rounded-lg border border-[#e0e3e5] bg-white p-0.5">
+            {(["employee", "production"] as const).map((mode) => (
+                <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    className={`h-full cursor-pointer whitespace-nowrap rounded-md px-2.5 text-[13px] font-semibold transition ${
+                        viewMode === mode ? "bg-[#fff4f2] text-[#e3000f]" : "text-[#5e3f3a] hover:text-[#191c1e]"
+                    }`}
+                >
+                    {mode === "employee" ? t("viewModeEmployee") : t("viewModeProduction")}
+                </button>
+            ))}
+        </div>
+    );
+
     return (
         <div className="space-y-4">
-            <div className="inline-flex rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-1">
-                <button
-                    onClick={() => setViewMode("employee")}
-                    className={`cursor-pointer rounded-md px-3.5 py-1.5 text-sm font-semibold transition ${
-                        viewMode === "employee" ? "bg-white text-[#e3000f] shadow-sm" : "text-[#5e3f3a] hover:text-[#191c1e]"
-                    }`}
-                >
-                    {t("viewModeEmployee")}
-                </button>
-                <button
-                    onClick={() => setViewMode("production")}
-                    className={`cursor-pointer rounded-md px-3.5 py-1.5 text-sm font-semibold transition ${
-                        viewMode === "production" ? "bg-white text-[#e3000f] shadow-sm" : "text-[#5e3f3a] hover:text-[#191c1e]"
-                    }`}
-                >
-                    {t("viewModeProduction")}
-                </button>
-            </div>
-
             {viewMode === "production" ? (
                 <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                    <ProductionEmployeeList ref={productionListRef} actions={productionExcelActions} />
+                    <ProductionEmployeeList ref={productionListRef} actions={productionExcelActions} leading={viewModeSwitch} />
                 </section>
             ) : (
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {viewModeSwitch}
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-52 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer inline-flex h-10 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            title={tCommon("search")}
+                            aria-label={tCommon("search")}
+                            className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
-                            <Search className="h-3.5 w-3.5" />
-                            {tCommon("search")}
+                            <Search className="h-4 w-4" />
                         </button>
                         {showDepartmentFilter && (
                             <SearchableSelect
@@ -388,7 +390,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                 value={departmentId}
                                 onChange={handleSelectDepartment}
                                 placeholder={t("filterDepartmentPlaceholder")}
-                                triggerClassName="h-10 w-56 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                triggerClassName="h-9 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                             />
                         )}
                         <SearchableSelect
@@ -396,7 +398,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             value={groupId}
                             onChange={handleSelectGroup}
                             placeholder={t("filterGroupPlaceholder")}
-                            triggerClassName="h-10 w-56 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            triggerClassName="h-9 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         {employeeExcelActions}
                     </div>
@@ -413,14 +415,14 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="whitespace-nowrap border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-4 py-2.5">{t("colCode")}</th>
-                                <th className="px-4 py-2.5">{t("colFullName")}</th>
-                                <th className="px-4 py-2.5">{t("colUserName")}</th>
-                                <th className="px-4 py-2.5">{t("colGroup")}</th>
-                                <th className="px-4 py-2.5">{t("colJobTitle")}</th>
-                                <th className="px-4 py-2.5">{t("colMonthToDate")}</th>
-                                <th className="px-4 py-2.5">{t("colYearToDate")}</th>
-                                <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
+                                <th className="px-3 py-2">{t("colCode")}</th>
+                                <th className="px-3 py-2">{t("colFullName")}</th>
+                                <th className="px-3 py-2">{t("colUserName")}</th>
+                                <th className="px-3 py-2">{t("colGroup")}</th>
+                                <th className="px-3 py-2">{t("colJobTitle")}</th>
+                                <th className="px-3 py-2">{t("colMonthToDate")}</th>
+                                <th className="px-3 py-2">{t("colYearToDate")}</th>
+                                <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -444,18 +446,18 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                             : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
                                     }`;
                                 return (
-                                <tr key={employee.id} className="whitespace-nowrap border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
-                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">
+                                <tr key={employee.id} className="whitespace-nowrap border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
+                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
                                         {employee.lastName} {employee.firstName}
                                     </td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
                                         {employee.groupNameVn ?? employee.departmentNameVn ?? (
                                             <span className="text-xs italic text-[#8a8f94]">{t("orgUnitCompanyWide")}</span>
                                         )}
                                     </td>
-                                    <td className="px-4 py-3 text-sm">
+                                    <td className="px-3 py-2 text-sm">
                                         {employee.jobTitleName ? (
                                             <span className="text-[#5e3f3a]">{employee.jobTitleName}</span>
                                         ) : (
@@ -464,19 +466,19 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                             </span>
                                         )}
                                     </td>
-                                    <td className="px-4 py-3 text-sm">
+                                    <td className="px-3 py-2 text-sm">
                                         <span className={accumulationBadgeClass(isMonthOverLimit)}>
                                             {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
                                             {employee.monthToDate}h
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-sm">
+                                    <td className="px-3 py-2 text-sm">
                                         <span className={accumulationBadgeClass(isYearOverLimit)}>
                                             {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
                                             {employee.yearToDate}h
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-right text-sm">
+                                    <td className="px-3 py-2 text-right text-sm">
                                         <div className="inline-flex items-center gap-1.5">
                                             <button
                                                 onClick={() => setHistoryEmployee(employee)}
@@ -525,7 +527,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasPreviousPage || isLoading}

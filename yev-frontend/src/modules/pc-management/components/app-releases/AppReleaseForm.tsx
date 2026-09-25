@@ -145,7 +145,6 @@ export default function AppReleaseForm({ isOpen, mode, initial, loading = false,
                             required
                             className={fieldClassName}
                         />
-                        <span className="mt-1 block text-xs text-[#8a8f94]">{t("fieldMinVersionCodeHint")}</span>
                     </label>
 
                     <label className="block">
@@ -176,7 +175,6 @@ export default function AppReleaseForm({ isOpen, mode, initial, loading = false,
                                 <UploadCloud className="h-3.5 w-3.5" />
                                 {isUploading ? t("uploadingApk") : t("uploadApkButton")}
                             </button>
-                            <span className="text-xs text-[#8a8f94]">{t("fieldApkUrlHint")}</span>
                         </div>
                     </label>
 

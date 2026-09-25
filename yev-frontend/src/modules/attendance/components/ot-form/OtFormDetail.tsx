@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { TimeRange } from "@/modules/attendance/components/ot-form/TimeRange";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
-import { Car, Check, Clock, History, MessageCircle, Printer, Trash2, Utensils, X } from "lucide-react";
+import { Car, Check, ChevronDown, Clock, History, MessageCircle, Printer, Trash2, User, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalStepDto, OtFormDto, OtFormEditLogDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
@@ -84,21 +85,26 @@ function ProcessPartTile({
     inactiveLabel: string;
 }) {
     return (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5">
-            <span className="flex items-center gap-2 text-sm text-[#191c1e]">
-                <span className="text-[#5e3f3a]">{icon}</span>
-                {label}
-            </span>
-            <span
-                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                    active
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-[#e0e3e5] bg-white text-[#8a8f94]"
-                }`}
-            >
-                {active ? <Check size={12} /> : <X size={12} />}
-                {active ? activeLabel : inactiveLabel}
-            </span>
+        <span
+            title={active ? activeLabel : inactiveLabel}
+            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                active
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-[#e0e3e5] bg-white text-[#9aa0a6] line-through"
+            }`}
+        >
+            {icon}
+            {label}
+        </span>
+    );
+}
+
+// 1 cặp nhãn/giá trị trong khối thông tin đơn (cột trái, lưới 2 cột) — `wide` chiếm cả 2 cột.
+function InfoField({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
+    return (
+        <div className={wide ? "col-span-2" : undefined}>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{label}</div>
+            <div className="mt-0.5 text-sm font-semibold text-[#191c1e]">{children}</div>
         </div>
     );
 }
@@ -302,12 +308,16 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // (docs §4.5a). Vẫn hiện dòng của họ trong bảng bên dưới để giữ dấu vết ai loại/khi nào/vì sao.
     const activeEmployees = form.employees.filter((employee) => !employee.isRemoved);
     const totalWorkedHours = activeEmployees.reduce((sum, employee) => sum + employee.actualHours, 0);
+    // Cột Ghi chú chỉ hiện khi có ít nhất 1 người còn trong đơn có ghi chú — toàn "-" chỉ tốn chỗ.
+    const hasNotes = activeEmployees.some((employee) => Boolean(employee.noteVn || employee.noteJp));
+    // Số cột phía sau Mã NV + Họ tên (dòng "đã bị loại" gộp ô cho hết phần còn lại).
+    const removedColSpan = 5 + (hasNotes ? 1 : 0) + (form.isProductionForm ? 3 : 0);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("titleWithId", { id: form.id })}</h1>
+                    <h1 className="text-xl font-semibold text-[#191c1e]">{t("titleWithId", { id: form.id })}</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
                         {bilingualText(form.departmentNameVn, form.departmentNameJp)} — {bilingualText(form.groupNameVn, form.groupNameJp)}
                     </p>
@@ -349,393 +359,393 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                 </div>
             </div>
 
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-6 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalProgressTitle")}</h2>
-                {form.approvalChainWarning && (
-                    <div className="mb-4 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-xs text-[#9a5b00]">
-                        {form.approvalChainWarning}
-                    </div>
-                )}
-                <div className="flex overflow-x-auto pb-1">
-                    {approvalStepViews.map((view, index) => (
-                        <div key={view.step.id} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
-                            {index > 0 && (
-                                <div
-                                    className={`absolute left-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
-                                        approvalStepViews[index - 1].state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
-                                    }`}
-                                />
+            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
+                {/* Cột trái: thông tin đơn + hỗ trợ + tiến trình duyệt (gộp luôn "Lịch sử phê duyệt" cũ — 2 khối
+                    trước đây hiển thị cùng 3 người/thời điểm, nay mỗi bước có đủ tên, giờ, ý kiến và chữ ký). */}
+                <div className="space-y-4">
+                    <section className="space-y-3.5 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+                            <InfoField label={t("otCaseLabel")}>{form.otCaseCode}</InfoField>
+                            <InfoField label={t("dateLabel")}>{formatDate(form.date)}</InfoField>
+                            <InfoField label={t("reasonLabel")} wide>
+                                {bilingualText(form.reasonNameVn, form.reasonNameJp)}
+                            </InfoField>
+                            <InfoField label={t("timeLabel")}>
+                                <TimeRange start={formatTime(form.startTime)} end={formatTime(form.endTime)} hours={form.totalHour} />
+                            </InfoField>
+                            <InfoField label={t("createdByLabel")}>{form.createdByFullName ?? form.createdByUserName}</InfoField>
+                            {productionSummary && (
+                                <>
+                                    <InfoField label={t("colBlockCode")}>{productionSummary.lines.join(", ") || "—"}</InfoField>
+                                    <InfoField label={t("colTeamCode")}>{productionSummary.teams.join(", ") || "—"}</InfoField>
+                                    <InfoField label={t("colShiftTeam")} wide>
+                                        {productionSummary.shiftTeams.join(", ") || "—"}
+                                    </InfoField>
+                                </>
                             )}
-                            {index < approvalStepViews.length - 1 && (
-                                <div
-                                    className={`absolute right-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
-                                        view.state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
-                                    }`}
-                                />
+                            {form.subReason && (
+                                <InfoField label={t("subReasonLabel")} wide>
+                                    {form.subReason}
+                                </InfoField>
                             )}
-                            <div
-                                className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
-                                    view.state === "done"
-                                        ? "border-emerald-500 bg-emerald-500 text-white"
-                                        : view.state === "rejected"
-                                        ? "border-[#930006] bg-[#930006] text-white"
-                                        : view.state === "current"
-                                        ? "border-[#9a5b00] bg-[#fff4e5] text-[#9a5b00]"
-                                        : "border-[#e0e3e5] bg-white text-[#9aa0a6]"
-                                }`}
-                            >
-                                {view.state === "done" && <Check size={16} />}
-                                {view.state === "rejected" && <X size={16} />}
-                                {view.state === "current" && <Clock size={16} />}
-                                {(view.state === "upcoming" || view.state === "skipped") && index + 1}
+                        </div>
+
+                        {/* Luôn hiện khối này, kể cả khi form.processPart null (đơn không yêu cầu hỗ trợ gì thêm) —
+                            mặc định "Không" cho 3 mục, cùng cách OtFormPrintView.tsx đã xử lý từ trước
+                            (processPart?.isEat ?? false). Ẩn hẳn sẽ khiến người dùng tưởng thiếu thông tin. */}
+                        <div className="space-y-2 border-t border-[#e0e3e5] pt-3.5">
+                            <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
+                            <div className="flex flex-nowrap gap-1.5">
+                                <ProcessPartTile
+                                    icon={<Utensils size={12} />}
+                                    label={t("eatFieldLabel")}
+                                    active={Boolean(form.processPart?.isEat)}
+                                    activeLabel={t("yes")}
+                                    inactiveLabel={t("no")}
+                                />
+                                <ProcessPartTile
+                                    icon={<Car size={12} />}
+                                    label={t("transportationFieldLabel")}
+                                    active={Boolean(form.processPart?.isTransportation)}
+                                    activeLabel={t("yes")}
+                                    inactiveLabel={t("no")}
+                                />
+                                <ProcessPartTile
+                                    icon={<Printer size={12} />}
+                                    label={t("copyRoomFieldLabel")}
+                                    active={Boolean(form.processPart?.isUseCopyRoom)}
+                                    activeLabel={t("yes")}
+                                    inactiveLabel={t("no")}
+                                />
                             </div>
-                            <div
-                                className={`mt-2 text-center text-xs font-semibold ${
-                                    view.state === "upcoming" || view.state === "skipped" ? "text-[#9aa0a6]" : "text-[#191c1e]"
-                                }`}
-                            >
-                                {view.step.jobTitleNameSnapshot}
+                            {form.processPart?.isEat && (
+                                <p className="text-xs font-semibold text-[#191c1e]">
+                                    {[
+                                        t("mainTicketLabel", { count: form.processPart.mainTicketCount }),
+                                        t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount }),
+                                        t("milkLabel", { count: form.processPart.milkCount }),
+                                    ].join("  ·  ")}
+                                </p>
+                            )}
+                            {form.processPart?.anotherSuggestionVn && (
+                                <div className="flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
+                                    <MessageCircle size={14} className="mt-0.5 shrink-0" />
+                                    <span>
+                                        <span className="font-semibold text-[#191c1e]">{t("anotherSuggestionFieldLabel")}: </span>
+                                        {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
+                    <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
+                        <h2 className="mb-4 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{t("approvalProgressTitle")}</h2>
+                        {form.approvalChainWarning && (
+                            <div className="mb-4 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-xs text-[#9a5b00]">
+                                {form.approvalChainWarning}
                             </div>
-                            {view.history ? (
-                                <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
-                                    {view.history.approverFullName ?? view.history.approverUserName}
-                                    <br />
-                                    {formatDateTime(view.history.actionAt)}
-                                </div>
-                            ) : view.state === "current" ? (
-                                <div
-                                    className="mt-0.5 text-center text-[11px] text-[#9a5b00]"
-                                    title={
-                                        view.step.candidates.length > 1
-                                            ? t("waitingCandidatesTooltip", {
-                                                  names: view.step.candidates.map((c) => c.fullName).join(", "),
-                                              })
-                                            : undefined
-                                    }
-                                >
-                                    {view.step.candidates.length > 1
-                                        ? t("waitingShortMulti", { count: view.step.candidates.length })
-                                        : t("waitingShort")}
-                                </div>
-                            ) : view.state === "skipped" ? (
-                                <div className="mt-0.5 text-center text-[11px] text-[#9aa0a6]">{t("skippedShort")}</div>
-                            ) : null}
-                        </div>
-                    ))}
-                </div>
-            </section>
-
-            <section className="grid gap-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm md:grid-cols-2 lg:grid-cols-3">
-                <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("otCaseLabel")}</div>
-                    <div className="mt-1 text-sm text-[#191c1e]">{form.otCaseCode}</div>
-                </div>
-                <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("reasonLabel")}</div>
-                    <div className="mt-1 text-sm text-[#191c1e]">{bilingualText(form.reasonNameVn, form.reasonNameJp)}</div>
-                </div>
-                <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("dateLabel")}</div>
-                    <div className="mt-1 text-sm text-[#191c1e]">{formatDate(form.date)}</div>
-                </div>
-                <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("timeLabel")}</div>
-                    <div className="mt-1 text-sm text-[#191c1e]">
-                        {formatTime(form.startTime)} — {formatTime(form.endTime)} ({form.totalHour}h)
-                    </div>
-                </div>
-                <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("createdByLabel")}</div>
-                    <div className="mt-1 text-sm text-[#191c1e]">{form.createdByFullName ?? form.createdByUserName}</div>
-                </div>
-                {productionSummary && (
-                    <>
-                        <div>
-                            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("colBlockCode")}</div>
-                            <div className="mt-1 text-sm text-[#191c1e]">{productionSummary.lines.join(", ") || "—"}</div>
-                        </div>
-                        <div>
-                            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("colTeamCode")}</div>
-                            <div className="mt-1 text-sm text-[#191c1e]">{productionSummary.teams.join(", ") || "—"}</div>
-                        </div>
-                        <div>
-                            <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("colShiftTeam")}</div>
-                            <div className="mt-1 text-sm text-[#191c1e]">{productionSummary.shiftTeams.join(", ") || "—"}</div>
-                        </div>
-                    </>
-                )}
-                {form.subReason && (
-                    <div>
-                        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("subReasonLabel")}</div>
-                        <div className="mt-1 text-sm text-[#191c1e]">{form.subReason}</div>
-                    </div>
-                )}
-            </section>
-
-            {/* Luôn hiện khối này, kể cả khi form.processPart null (đơn không yêu cầu hỗ trợ gì thêm) —
-                mặc định "Không" cho 3 checkbox, cùng cách OtFormPrintView.tsx đã xử lý từ trước
-                (processPart?.isEat ?? false). Trước đây ẩn hẳn cả khối khi null, khiến người dùng
-                tưởng thiếu thông tin dù đây là giá trị mặc định hợp lệ, không phải dữ liệu bị mất. */}
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                    <ProcessPartTile
-                        icon={<Utensils size={16} />}
-                        label={t("eatFieldLabel")}
-                        active={Boolean(form.processPart?.isEat)}
-                        activeLabel={t("yes")}
-                        inactiveLabel={t("no")}
-                    />
-                    <ProcessPartTile
-                        icon={<Car size={16} />}
-                        label={t("transportationFieldLabel")}
-                        active={Boolean(form.processPart?.isTransportation)}
-                        activeLabel={t("yes")}
-                        inactiveLabel={t("no")}
-                    />
-                    <ProcessPartTile
-                        icon={<Printer size={16} />}
-                        label={t("copyRoomFieldLabel")}
-                        active={Boolean(form.processPart?.isUseCopyRoom)}
-                        activeLabel={t("yes")}
-                        inactiveLabel={t("no")}
-                    />
-                </div>
-                {form.processPart?.isEat && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
-                            {t("mainTicketLabel", { count: form.processPart.mainTicketCount })}
-                        </span>
-                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
-                            {t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}
-                        </span>
-                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
-                            {t("milkLabel", { count: form.processPart.milkCount })}
-                        </span>
-                    </div>
-                )}
-                {form.processPart?.anotherSuggestionVn && (
-                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#5e3f3a]">
-                        <MessageCircle size={16} className="mt-0.5 shrink-0 text-[#5e3f3a]" />
-                        <span>
-                            <span className="font-semibold text-[#191c1e]">{t("anotherSuggestionFieldLabel")}: </span>
-                            {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
-                        </span>
-                    </div>
-                )}
-            </section>
-
-            <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-6 py-3">
-                    <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                        {t("employeeListTitle", { count: form.numberOfEmployee })}
-                    </h2>
-                    <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-white px-3 py-1 text-xs font-semibold text-[#191c1e]">
-                            {t("totalWorkedHoursLabel", { hours: formatHours(totalWorkedHours) })}
-                        </span>
-                    </div>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full border-collapse text-left">
-                        <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colEmployeeCode")}</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colFullName")}</th>
-                                {form.isProductionForm && (
-                                    <>
-                                        <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colBlockCode")}</th>
-                                        <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colTeamCode")}</th>
-                                        <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colShiftTeam")}</th>
-                                    </>
-                                )}
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colTime")}</th>
-                                <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colHours")}</th>
-                                <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
-                                <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colMeal")}</th>
-                                <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colDidEat")}</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colNote")}</th>
-                            </tr>
-                            <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="px-6 py-2 text-center">{t("colMonth")}</th>
-                                <th className="px-6 py-2 text-center">{t("colYear")}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {form.employees.map((employee) => {
-                                const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
-                                const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
-                                const isOverLimit = isMonthOverLimit || isYearOverLimit;
-                                const hours = employee.actualHours;
-                                // Đã bị loại khỏi đơn (docs §4.5a) — vẫn hiện dòng để giữ dấu vết, nhưng
-                                // làm mờ + gạch ngang, thay toàn bộ cột số liệu bằng lý do/người loại.
-                                if (employee.isRemoved) {
-                                    return (
-                                        <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#f8fafc] opacity-60">
-                                            <td className="px-6 py-3 text-sm">
-                                                <span className="inline-flex items-center rounded-md bg-[#eceef0] px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e] line-through">
-                                                    {employee.employeeCode}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-3 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
-                                            <td colSpan={form.isProductionForm ? 9 : 6} className="px-6 py-3 text-sm text-[#930006]">
-                                                {t("removedInlineNote", {
-                                                    name: employee.removedByFullName ?? employee.removedByUserName ?? "",
-                                                    level: stepNameByOrder(form, employee.removedAtLevel),
-                                                    reason: employee.removeReason ?? "",
-                                                })}
-                                                {employee.removedAt && (
-                                                    <span className="ml-2 text-[#9aa0a6]">({formatDateTime(employee.removedAt)})</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                }
+                        )}
+                        <ol>
+                            {approvalStepViews.map((view, index) => {
+                                const history = view.history;
+                                const isMuted = view.state === "upcoming" || view.state === "skipped";
                                 return (
-                                    <tr
-                                        key={employee.employeeId}
-                                        className={`border-b border-[#f1f5f9] transition-colors ${
-                                            isOverLimit ? "bg-[#fff4f2] hover:bg-[#ffe9e6]" : "hover:bg-[#f8fafc]"
-                                        }`}
-                                    >
-                                        <td className="px-6 py-3 text-sm">
-                                            <span className="inline-flex items-center whitespace-nowrap rounded-md bg-[#eceef0] px-3 py-1 font-mono text-xs font-semibold text-[#191c1e]">
-                                                {employee.employeeCode}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-3 text-sm font-medium text-[#191c1e]">{employee.fullName}</td>
-                                        {form.isProductionForm && (
-                                            <>
-                                                <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.blockCodeSnapshot ?? "—"}</td>
-                                                <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.teamCodeSnapshot ?? "—"}</td>
-                                                <td className="px-6 py-3 text-sm text-[#5e3f3a]">{employee.shiftTeamCodeSnapshot ?? "—"}</td>
-                                            </>
-                                        )}
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">
-                                            {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
-                                        </td>
-                                        <td className="px-6 py-3 text-center text-sm">
-                                            <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
-                                                {formatHours(hours)}
-                                            </span>
-                                        </td>
-                                        <td className={`px-6 py-3 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
-                                            {employee.monthToDate}h
-                                        </td>
-                                        <td className={`px-6 py-3 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
-                                            <span className="inline-flex items-center gap-1">
-                                                {employee.yearToDate}h
-                                                {canApprove && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setHistoryEmployee(employee)}
-                                                        title={t("viewAccumulationHistoryHint")}
-                                                        aria-label={t("viewAccumulationHistoryHint")}
-                                                        className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                    >
-                                                        <History className="h-3.5 w-3.5" />
-                                                    </button>
-                                                )}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-3 text-center text-sm">
-                                            <MealTicketTypeBadge type={employee.mealTicketType} t={t} />
-                                        </td>
-                                        <td className="px-6 py-3 text-center text-sm">
-                                            {employee.didEat ? (
-                                                <span title={t("didEatYes")}>
-                                                    <Check size={18} className="mx-auto text-emerald-600" aria-label={t("didEatYes")} role="img" />
-                                                </span>
-                                            ) : (
-                                                <span title={t("didEatNoHint")}>
-                                                    <X size={18} className="mx-auto text-[#9a5b00]" aria-label={t("didEatNo")} role="img" />
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalHistoryTitle")}</h2>
-                <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-                    {form.approvalSteps.map((step) => {
-                        const history = form.approvalHistories.find((item) => item.stepOrder === step.stepOrder);
-                        return (
-                            <div key={step.id} className="rounded-lg border border-[#e0e3e5] p-4">
-                                <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {step.jobTitleNameSnapshot}
-                                </div>
-                                {history ? (
-                                    <div className="mt-2 space-y-2">
-                                        <div className="text-sm font-semibold text-[#191c1e]">
-                                            {history.approverFullName ?? history.approverUserName}
-                                        </div>
-                                        <div className="text-xs text-[#5e3f3a]">{approvalActionLabels[history.action]}</div>
-                                        <div className="text-xs text-[#5e3f3a]">{formatDateTime(history.actionAt)}</div>
-                                        {history.comment && <div className="text-xs text-[#191c1e]">&quot;{history.comment}&quot;</div>}
-                                        {history.hasSignature && history.signatureImage && (
-                                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
-                                            <img
-                                                src={`data:image/png;base64,${history.signatureImage}`}
-                                                alt={t("signatureAlt", { name: history.approverFullName ?? history.approverUserName })}
-                                                className="h-16 w-full rounded border border-[#e0e3e5] object-contain"
+                                    <li key={view.step.id} className="relative flex gap-3 pb-4 last:pb-0">
+                                        {index < approvalStepViews.length - 1 && (
+                                            <span
+                                                className={`absolute bottom-0 left-3.5 top-7 w-px ${view.state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"}`}
+                                                aria-hidden
                                             />
                                         )}
-                                    </div>
-                                ) : (
-                                    <div className="mt-2 text-xs text-[#9aa0a6]">{t("notProcessedYet")}</div>
-                                )}
-                            </div>
-                        );
-                    })}
+                                        {/* relative z-10: đường nối là absolute nên nếu không có z-index sẽ vẽ đè lên vòng tròn */}
+                                        <span
+                                            className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
+                                                view.state === "done"
+                                                    ? "border-emerald-500 bg-emerald-500 text-white"
+                                                    : view.state === "rejected"
+                                                    ? "border-[#930006] bg-[#930006] text-white"
+                                                    : view.state === "current"
+                                                    ? "border-[#9a5b00] bg-[#fff4e5] text-[#9a5b00]"
+                                                    : "border-[#e0e3e5] bg-white text-[#9aa0a6]"
+                                            }`}
+                                        >
+                                            {view.state === "done" && <Check size={14} />}
+                                            {view.state === "rejected" && <X size={14} />}
+                                            {view.state === "current" && <Clock size={14} />}
+                                            {isMuted && index + 1}
+                                        </span>
+                                        <div className="min-w-0 flex-1 space-y-0.5 pt-0.5">
+                                            <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                                                <span className={`text-sm font-semibold ${isMuted ? "text-[#9aa0a6]" : "text-[#191c1e]"}`}>
+                                                    {view.step.jobTitleNameSnapshot}
+                                                </span>
+                                                {history && (
+                                                    <span className="text-[11px] text-[#8a8f94]">{formatDateTime(history.actionAt)}</span>
+                                                )}
+                                            </div>
+                                            {history ? (
+                                                <>
+                                                    <div className="text-xs text-[#5e3f3a]">
+                                                        {history.approverFullName ?? history.approverUserName} ·{" "}
+                                                        {approvalActionLabels[history.action]}
+                                                    </div>
+                                                    {history.comment && (
+                                                        <div className="text-xs italic text-[#191c1e]">&quot;{history.comment}&quot;</div>
+                                                    )}
+                                                    {history.hasSignature && history.signatureImage && (
+                                                        // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được
+                                                        <img
+                                                            src={`data:image/png;base64,${history.signatureImage}`}
+                                                            alt={t("signatureAlt", { name: history.approverFullName ?? history.approverUserName })}
+                                                            className="mt-1 h-10 w-28 rounded border border-[#e0e3e5] bg-white object-contain"
+                                                        />
+                                                    )}
+                                                </>
+                                            ) : view.state === "current" ? (
+                                                <div
+                                                    className="text-xs text-[#9a5b00]"
+                                                    title={
+                                                        view.step.candidates.length > 1
+                                                            ? t("waitingCandidatesTooltip", {
+                                                                  names: view.step.candidates.map((c) => c.fullName).join(", "),
+                                                              })
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {view.step.candidates.length > 1
+                                                        ? t("waitingShortMulti", { count: view.step.candidates.length })
+                                                        : t("waitingShort")}
+                                                </div>
+                                            ) : view.state === "skipped" ? (
+                                                <div className="text-xs text-[#9aa0a6]">{t("skippedShort")}</div>
+                                            ) : (
+                                                <div className="text-xs text-[#9aa0a6]">{t("notProcessedYet")}</div>
+                                            )}
+                                            {/* Ai sẽ duyệt bước này: candidates[] snapshot lúc tạo đơn — chỉ hiện cho bước CHƯA xử lý
+                                                (bước đã xử lý đã có tên người duyệt thật ở trên). */}
+                                            {!history && (view.state === "current" || view.state === "upcoming") && view.step.candidates.length > 0 && (
+                                                <div className="flex flex-wrap gap-1 pt-1">
+                                                    {view.step.candidates.slice(0, 3).map((candidate) => (
+                                                        <span
+                                                            key={candidate.employeeId}
+                                                            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                                                view.state === "current"
+                                                                    ? "border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]"
+                                                                    : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                                                            }`}
+                                                        >
+                                                            <User size={10} />
+                                                            {candidate.fullName}
+                                                        </span>
+                                                    ))}
+                                                    {view.step.candidates.length > 3 && (
+                                                        <span
+                                                            title={view.step.candidates
+                                                                .slice(3)
+                                                                .map((candidate) => candidate.fullName)
+                                                                .join(", ")}
+                                                            className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#5e3f3a]"
+                                                        >
+                                                            +{view.step.candidates.length - 3}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ol>
+                    </section>
                 </div>
-            </section>
 
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("editLogTitle")}</h2>
-                {form.editLogs.length === 0 ? (
-                    <p className="text-sm text-[#9aa0a6]">{t("editLogEmpty")}</p>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full border-collapse text-left">
-                            <thead>
-                                <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    <th className="px-4 py-2">{t("editLogColTime")}</th>
-                                    <th className="px-4 py-2">{t("editLogColActor")}</th>
-                                    <th className="px-4 py-2">{t("editLogColEmployee")}</th>
-                                    <th className="px-4 py-2">{t("editLogColAction")}</th>
-                                    <th className="px-4 py-2">{t("editLogColChange")}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {form.editLogs.map((log, index) => (
-                                    <tr key={index} className="border-b border-[#f1f5f9] text-sm">
-                                        <td className="whitespace-nowrap px-4 py-2 text-[#5e3f3a]">{formatDateTime(log.actionAt)}</td>
-                                        <td className="px-4 py-2 text-[#191c1e]">{log.actionByFullName ?? log.actionByUserName}</td>
-                                        <td className="px-4 py-2 text-[#191c1e]">
-                                            {log.employeeCodeSnapshot ?? "-"}
-                                        </td>
-                                        <td className="px-4 py-2 text-[#5e3f3a]">{editLogActionLabel(log)}</td>
-                                        <td className="px-4 py-2 text-[#191c1e]">
-                                            {log.oldValue != null || log.newValue != null
-                                                ? t("editLogChangeValue", { oldValue: log.oldValue ?? "-", newValue: log.newValue ?? "-" })
-                                                : "-"}
-                                        </td>
+                {/* Cột phải: danh sách nhân viên + lịch sử chỉnh sửa (thu gọn). */}
+                <div className="min-w-0 space-y-6">
+                    <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3">
+                            <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                {t("employeeListTitle", { count: form.numberOfEmployee })}
+                            </h2>
+                            <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-white px-3 py-0.5 text-xs font-semibold text-[#191c1e]">
+                                {t("totalWorkedHoursLabel", { hours: formatHours(totalWorkedHours) })}
+                            </span>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full border-collapse text-left [&_td]:border-r [&_td]:border-[#eef1f3] [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-[#e0e3e5]">
+                                <thead>
+                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                        <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colEmployeeCode")}</th>
+                                        <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colFullName")}</th>
+                                        {form.isProductionForm && (
+                                            <>
+                                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colBlockCode")}</th>
+                                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colTeamCode")}</th>
+                                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colShiftTeam")}</th>
+                                            </>
+                                        )}
+                                        <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colTime")}</th>
+                                        <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 text-center align-bottom">{t("colHours")}</th>
+                                        <th colSpan={2} className="whitespace-nowrap border-b border-[#e0e3e5] px-3 py-1.5 text-center">{t("colAccumulation")}</th>
+                                        <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 text-center align-bottom">{t("colMeal")}</th>
+                                        {hasNotes && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colNote")}</th>}
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </section>
+                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                        <th className="whitespace-nowrap px-3 py-1.5 text-center">{t("colMonth")}</th>
+                                        <th className="whitespace-nowrap px-3 py-1.5 text-center">{t("colYear")}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {form.employees.map((employee) => {
+                                        const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
+                                        const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
+                                        const isOverLimit = isMonthOverLimit || isYearOverLimit;
+                                        const hours = employee.actualHours;
+                                        // Đã bị loại khỏi đơn (docs §4.5a) — vẫn hiện dòng để giữ dấu vết, nhưng
+                                        // làm mờ + gạch ngang, thay toàn bộ cột số liệu bằng lý do/người loại.
+                                        if (employee.isRemoved) {
+                                            return (
+                                                <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#f8fafc] opacity-60">
+                                                    <td className="whitespace-nowrap px-3 py-2.5 text-sm">
+                                                        <span className="inline-flex items-center rounded-md border border-[#d5dade] bg-white px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e] line-through">
+                                                            {employee.employeeCode}
+                                                        </span>
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-3 py-2.5 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
+                                                    <td colSpan={removedColSpan} className="px-3 py-2.5 text-xs text-[#930006]">
+                                                        {t("removedInlineNote", {
+                                                            name: employee.removedByFullName ?? employee.removedByUserName ?? "",
+                                                            level: stepNameByOrder(form, employee.removedAtLevel),
+                                                            reason: employee.removeReason ?? "",
+                                                        })}
+                                                        {employee.removedAt && (
+                                                            <span className="ml-2 text-[#9aa0a6]">({formatDateTime(employee.removedAt)})</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
+                                        return (
+                                            <tr
+                                                key={employee.employeeId}
+                                                className={`border-b border-[#f1f5f9] transition-colors ${
+                                                    isOverLimit ? "bg-[#fff4f2] hover:bg-[#ffe9e6]" : "bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
+                                                }`}
+                                            >
+                                                <td className="whitespace-nowrap px-3 py-2.5 text-sm">
+                                                    <span className="inline-flex items-center whitespace-nowrap rounded-md border border-[#d5dade] bg-white px-2.5 py-0.5 font-mono text-xs font-semibold text-[#191c1e]">
+                                                        {employee.employeeCode}
+                                                    </span>
+                                                </td>
+                                                <td className="whitespace-nowrap px-3 py-2.5 text-sm font-medium text-[#191c1e]">{employee.fullName}</td>
+                                                {form.isProductionForm && (
+                                                    <>
+                                                        <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">{employee.blockCodeSnapshot ?? "—"}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">{employee.teamCodeSnapshot ?? "—"}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">{employee.shiftTeamCodeSnapshot ?? "—"}</td>
+                                                    </>
+                                                )}
+                                                <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">
+                                                    <TimeRange start={formatTime(employee.startTime)} end={formatTime(employee.endTime)} />
+                                                </td>
+                                                <td className="px-3 py-2.5 text-center text-sm">
+                                                    <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
+                                                        {formatHours(hours)}
+                                                    </span>
+                                                </td>
+                                                <td className={`px-3 py-2.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                                    {employee.monthToDate}h
+                                                </td>
+                                                <td className={`whitespace-nowrap px-3 py-2.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                                    <span className="inline-flex items-center gap-1">
+                                                        {employee.yearToDate}h
+                                                        {canApprove && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setHistoryEmployee(employee)}
+                                                                title={t("viewAccumulationHistoryHint")}
+                                                                aria-label={t("viewAccumulationHistoryHint")}
+                                                                className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                            >
+                                                                <History className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </span>
+                                                </td>
+                                                {/* Gộp cột "Có ăn" cũ vào đây: luôn hiện loại phiếu, kèm nhãn "không ăn" khi người này
+                                                    không ăn (trước là cột ✓/✗ riêng, lặp ý với loại phiếu). */}
+                                                <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm">
+                                                    <span className="inline-flex items-center justify-center gap-1.5">
+                                                        <MealTicketTypeBadge type={employee.mealTicketType} t={t} />
+                                                        {!employee.didEat && (
+                                                            <span
+                                                                title={t("didEatNoHint")}
+                                                                className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#9a5b00]"
+                                                            >
+                                                                <X size={11} />
+                                                                {t("didEatNo")}
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                </td>
+                                                {hasNotes && (
+                                                    <td className="px-3 py-2.5 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
+                                                )}
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
 
-            {showApprovalActions && (
+                    <details className="group overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-5 py-3 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a] [&::-webkit-details-marker]:hidden">
+                            <span>
+                                {t("editLogTitle")} ({form.editLogs.length})
+                            </span>
+                            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+                        </summary>
+                        <div className="border-t border-[#e0e3e5] px-5 py-3">
+                            {form.editLogs.length === 0 ? (
+                                <p className="text-sm text-[#9aa0a6]">{t("editLogEmpty")}</p>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full border-collapse text-left">
+                                        <thead>
+                                            <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColTime")}</th>
+                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColActor")}</th>
+                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColEmployee")}</th>
+                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColAction")}</th>
+                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColChange")}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {form.editLogs.map((log, index) => (
+                                                <tr key={index} className="border-b border-[#f1f5f9] text-sm">
+                                                    <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{formatDateTime(log.actionAt)}</td>
+                                                    <td className="px-3 py-2 text-[#191c1e]">{log.actionByFullName ?? log.actionByUserName}</td>
+                                                    <td className="px-3 py-2 text-[#191c1e]">{log.employeeCodeSnapshot ?? "-"}</td>
+                                                    <td className="px-3 py-2 text-[#5e3f3a]">{editLogActionLabel(log)}</td>
+                                                    <td className="px-3 py-2 text-[#191c1e]">
+                                                        {log.oldValue != null || log.newValue != null
+                                                            ? t("editLogChangeValue", { oldValue: log.oldValue ?? "-", newValue: log.newValue ?? "-" })
+                                                            : "-"}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </details>
+                </div>
+            </div>
+
+
+{showApprovalActions && (
                 <div className="flex justify-end gap-3">
                     <button
                         onClick={() => openAction("reject")}

@@ -580,7 +580,7 @@ export default function DeviceList() {
                 </tr>
               )}
               {devices.map((device) => (
-                <tr key={device.id} className="group border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
+                <tr key={device.id} className="group border-b border-[#f1f5f9] bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                   <td className="w-10 whitespace-nowrap px-4 py-3 align-top">
                     <input
                       type="checkbox"
@@ -660,7 +660,7 @@ export default function DeviceList() {
                       {device.note || "-"}
                     </div>
                   </td>
-                  <td className="sticky right-0 w-10 whitespace-nowrap bg-white px-2 py-3 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)] group-hover:bg-[#f8fafc]">
+                  <td className="sticky right-0 w-10 whitespace-nowrap bg-inherit px-2 py-3 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                     <div className="inline-flex justify-end">
                       <RowActionsMenu
                         actions={[

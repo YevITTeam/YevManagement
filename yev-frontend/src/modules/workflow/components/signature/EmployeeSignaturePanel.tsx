@@ -103,7 +103,6 @@ export default function EmployeeSignaturePanel() {
                                     <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                         {t("uploadNewLabel")}
                                     </div>
-                                    <p className="mb-2 text-xs text-[#5e3f3a]">{t("uploadHint")}</p>
                                     <SignatureUpload key="draft" onChange={setDraftBase64} disabled={isSaving} />
                                 </div>
                                 <div className="flex justify-end">

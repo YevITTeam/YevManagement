@@ -453,7 +453,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
     }));
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-end gap-3">
                     <label className="block">
@@ -464,7 +464,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                             type="date"
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
-                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                     </label>
                     <label className="block w-56">
@@ -482,12 +482,11 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                         type="button"
                         onClick={handleSearch}
                         disabled={isLoading || !date}
-                        className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <Search className="h-3.5 w-3.5" /> {isLoading ? t("searching") : t("searchButton")}
                     </button>
                 </div>
-                <p className="mt-2 text-xs text-[#8a8f94]">{t("searchHint")}</p>
 
                 <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[#f1f5f9] pt-3">
                     <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("exportExcelGroupLabel")}</span>
@@ -554,7 +553,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
 
             {report && (
                 <div className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3">
                         <div className="flex flex-wrap gap-6 text-sm text-[#5e3f3a]">
                             <span>
                                 {t("summarySecondaryLabel")} <strong className="text-[#191c1e]">{report.totalSecondaryTicketCount}</strong>
@@ -603,18 +602,18 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                                 {report.rows.map((row, index) => (
                                     <tr
                                         key={`${row.congDoan}-${row.ca}-${row.team}-${row.lineCa}-${row.startTime}-${index}`}
-                                        className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]"
+                                        className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
                                     >
-                                        <td className="px-4 py-3 text-sm text-[#191c1e]">{row.congDoan}</td>
-                                        <td className="px-4 py-3 text-sm text-[#191c1e]">{row.ca}</td>
-                                        <td className="px-4 py-3 text-sm text-[#191c1e]">{row.team}</td>
-                                        <td className="px-4 py-3 text-sm text-[#191c1e]">{row.lineCa}</td>
-                                        <td className="px-4 py-3 text-right text-sm text-[#5e3f3a]">{row.secondaryTicketCount}</td>
-                                        <td className="px-4 py-3 text-right text-sm text-[#5e3f3a]">{row.mainTicketCount}</td>
-                                        <td className="px-4 py-3 text-right text-sm text-[#5e3f3a]">{row.milkCount}</td>
-                                        <td className="px-4 py-3 text-right text-sm text-[#5e3f3a]">{row.totalHour}</td>
-                                        <td className="px-4 py-3 text-sm text-[#5e3f3a]">{row.startTime.slice(0, 5)}</td>
-                                        <td className="px-4 py-3 text-sm text-[#5e3f3a]">{row.endTime.slice(0, 5)}</td>
+                                        <td className="px-3 py-2 text-sm text-[#191c1e]">{row.congDoan}</td>
+                                        <td className="px-3 py-2 text-sm text-[#191c1e]">{row.ca}</td>
+                                        <td className="px-3 py-2 text-sm text-[#191c1e]">{row.team}</td>
+                                        <td className="px-3 py-2 text-sm text-[#191c1e]">{row.lineCa}</td>
+                                        <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{row.secondaryTicketCount}</td>
+                                        <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{row.mainTicketCount}</td>
+                                        <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{row.milkCount}</td>
+                                        <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{row.totalHour}</td>
+                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.startTime.slice(0, 5)}</td>
+                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.endTime.slice(0, 5)}</td>
                                     </tr>
                                 ))}
                             </tbody>
