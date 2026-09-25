@@ -225,7 +225,6 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                         {batch.otForms.map((form) => {
                             const state = decisions[form.otFormId];
                             if (!state) return null;
-                            const totalHours = form.employees.reduce((sum, employee) => sum + employee.actualHours, 0);
                             const isExpanded = expandedFormIds.has(form.otFormId);
                             const includedCount = form.employees.length - state.excludedEmployeeIds.size;
                             return (
@@ -260,7 +259,6 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                 {t("employeeSummary", {
                                                     count: state.decision === 1 ? form.employees.length : includedCount,
                                                     total: form.employees.length,
-                                                    hours: formatHours(totalHours),
                                                 })}
                                                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                                             </button>
@@ -361,16 +359,19 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                             <table className="min-w-full border-collapse text-left">
                                                 <thead>
                                                     <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                        <th className="px-6 py-2.5">{t("colInclude")}</th>
-                                                        <th className="px-6 py-2.5">{t("colEmployeeCode")}</th>
-                                                        <th className="px-6 py-2.5">{t("colFullName")}</th>
-                                                        <th className="px-6 py-2.5">{t("colTime")}</th>
-                                                        <th className="px-6 py-2.5 text-center">{t("colHours")}</th>
-                                                        <th className="px-6 py-2.5 text-center">{tDetail("colMonth")}</th>
-                                                        <th className="px-6 py-2.5 text-center">{tDetail("colYear")}</th>
-                                                        <th className="px-6 py-2.5 text-center">{tDetail("colMeal")}</th>
-                                                        <th className="px-6 py-2.5 text-center">{tDetail("colDidEat")}</th>
-                                                        <th className="px-6 py-2.5">{tDetail("colNote")}</th>
+                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{t("colInclude")}</th>
+                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{t("colEmployeeCode")}</th>
+                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{t("colFullName")}</th>
+                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{t("colTime")}</th>
+                                                        <th rowSpan={2} className="px-6 py-2.5 text-center align-bottom">{t("colHours")}</th>
+                                                        <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{tDetail("colAccumulation")}</th>
+                                                        <th rowSpan={2} className="px-6 py-2.5 text-center align-bottom">{tDetail("colMeal")}</th>
+                                                        <th rowSpan={2} className="px-6 py-2.5 text-center align-bottom">{tDetail("colDidEat")}</th>
+                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{tDetail("colNote")}</th>
+                                                    </tr>
+                                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                                        <th className="px-6 py-2 text-center">{tDetail("colMonth")}</th>
+                                                        <th className="px-6 py-2 text-center">{tDetail("colYear")}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -428,9 +429,6 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                     })}
                                                 </tbody>
                                             </table>
-                                            <div className="border-t border-[#e0e3e5] bg-[#fbfcfd] px-6 py-2 text-right text-xs font-semibold text-[#5e3f3a]">
-                                                {t("formTotalHoursLabel", { hours: formatHours(totalHours) })}
-                                            </div>
                                         </div>
                                     ) : null}
                                 </section>
