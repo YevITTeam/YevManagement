@@ -7,16 +7,25 @@
 
 ## 1. Bối cảnh nghiệp vụ
 
-Mỗi ngày nhân viên phải kiểm tra phòng server: server vật lý, UPS, switch mạng, máy lạnh — trước đây
-ghi bằng tay vào tờ giấy checksheet. App Flutter thay việc "kiểm tra ngoại quan" bằng cách **quét mã QR**
-dán sẵn trên từng thiết bị. Phần "kiểm tra khác" (ping mạng, gửi/nhận mail, backup) là các mục xác nhận
-thủ công + 1 nút bấm để hệ thống tự ping IP — không cần quét QR.
+Mỗi ngày nhân viên phải kiểm tra phòng server — trước đây ghi bằng tay vào tờ giấy checksheet. Cách
+kiểm tra **chia làm 3 nhóm** (cập nhật 2026-09-26):
+
+| Nhóm | Thiết bị | Cách kiểm tra | Cờ `requiresScan` |
+|---|---|---|---|
+| **Phải quét QR** | Chỉ máy loại **IDR** (iDRAC/SAN — máy vật lý thật sự nằm trong phòng server, nhân viên nhìn đèn tín hiệu rồi quét QR) | Quét QR từng máy | `true` |
+| **Tự ping** | SVR, SWT (switch), UPS, NAS… — Admin chỉ **tick "kiểm tra hằng ngày"**, không có QR để quét | **Không quét.** Khi bấm "Kết thúc phiên", **server tự ping** IP của từng máy: đạt → OK, không đạt → NG (kèm ghi chú IP lỗi) | `false` |
+| **Máy lạnh** | Không còn là thiết bị | Là **1 mục xác nhận thủ công** ("Máy lạnh") — nhân viên tự bấm OK/NG | (nằm trong `manualResults`, không phải `items`) |
+
+Ngoài ra vẫn có các mục xác nhận thủ công khác (âm thanh/mùi/nhiệt độ, gửi/nhận mail, backup, 2 mục network
+có nút "Kiểm tra network").
 
 Toàn bộ nghiệp vụ gói trong **1 phiên kiểm tra/ngày** (`ServerCheckSession`):
-1. Nhân viên đăng nhập → bấm "Bắt đầu phiên quét" → hệ thống snapshot toàn bộ thiết bị cần quét hôm nay.
-2. Nhân viên đi vòng phòng server, quét lần lượt từng mã QR → mỗi lần quét gọi 1 API.
-3. Quét xong (hoặc bỏ dở), vào màn hình tổng kết: xác nhận OK/NG cho các mục thủ công + bấm nút
-   "Kiểm tra network" (tự ping) → bấm "Kết thúc phiên" → khoá phiên hôm nay, không sửa được nữa.
+1. Nhân viên đăng nhập → bấm "Bắt đầu phiên quét" → hệ thống snapshot toàn bộ thiết bị đã tick hôm nay.
+2. Nhân viên đi vòng phòng server, quét lần lượt từng mã QR của **máy IDR** (`requiresScan=true`) → mỗi lần quét gọi 1 API.
+   Máy `requiresScan=false` **không quét**, app chỉ liệt kê ở khối riêng "Tự kiểm tra".
+3. Quét xong (hoặc bỏ dở), vào màn hình tổng kết: xác nhận OK/NG cho các mục thủ công (gồm cả "Máy lạnh") +
+   (tuỳ chọn) bấm nút "Kiểm tra network" → bấm "Kết thúc phiên" → server tự ping các máy `requiresScan=false`
+   rồi khoá phiên hôm nay, không sửa được nữa.
 
 Mỗi ngày chỉ tạo được **1 phiên duy nhất**. Nếu app bị tắt/crash giữa chừng, mở lại gọi `POST /start`
 lại sẽ nhận về **đúng phiên đang dở**, không mất dữ liệu đã quét.
@@ -119,19 +128,19 @@ Việt, dùng được thẳng cho toast/dialog).
             ├─ status=0 (InProgress)     → vào thẳng màn quét, load lại items đã có
             └─ status=1 (Completed)      → hiện "Hôm nay đã kiểm tra xong", cho xem lại (không quét được nữa)
 
-[Bấm "Bắt đầu"] → POST /ServerCheck/start → nhận ServerCheckSessionDto (có sẵn "items" rỗng-chưa quét)
+[Bấm "Bắt đầu"] → POST /ServerCheck/start → nhận ServerCheckSessionDto (có sẵn "items" đủ, máy IDR đang chưa quét)
         → vào màn quét
 
 [Màn quét] (lặp lại)
     → mỗi lần quét được QR: POST /ServerCheck/{id}/scan { "deviceCode": "<dòng 1 của QR>" }
     → cập nhật dòng thiết bị đó trên UI theo response (status=OK, scannedAt, scannedBy)
-    → quét sai/không thuộc phạm vi hôm nay → 400 → rung máy/beep lỗi, KHÔNG chặn quét tiếp mã khác
+    → quét sai/không thuộc phạm vi hôm nay, hoặc quét máy requiresScan=false → 400 → rung máy/beep lỗi, KHÔNG chặn quét tiếp mã khác
 
 [Bấm "Kết thúc phiên"] (khi đã quét xong hoặc muốn dừng)
-    → GET /ServerCheck/manual-items                  (lấy danh sách mục xác nhận tay, hiện đang 7 mục)
+    → GET /ServerCheck/manual-items                  (lấy danh sách mục xác nhận tay, hiện đang 8 mục — gồm "Máy lạnh")
     → (tuỳ chọn) GET /ServerCheck/network-ping        (bấm nút "Kiểm tra network" để auto ping)
-    → hiện form cho user xác nhận OK/NG từng mục thủ công + ghi chú lý do NG cho item còn "Chưa quét"
-    → POST /ServerCheck/{id}/end { items: [...], manualResults: [...] }
+    → hiện form cho user xác nhận OK/NG từng mục thủ công + ghi chú lý do NG cho máy IDR còn "Chưa quét"
+    → POST /ServerCheck/{id}/end { items: [...], manualResults: [...] }   (CHẬM: server ping các máy tự-ping, ~10–60 giây → hiện loading, tăng timeout)
     → nhận lại ServerCheckSessionDto với status=1 (Completed) → khoá, không quét/kết thúc lại được nữa
 ```
 
@@ -171,10 +180,12 @@ Permission: `Asset.ServerCheck.Scan`. Không body.
   (giữ nguyên các item đã quét), **không** tạo phiên mới, không mất dữ liệu.
 - Nếu hôm nay **đã `Completed`** → **400** `"Đã hoàn thành phiên kiểm tra hôm nay."` — app nên điều hướng
   sang màn xem lại (không có nút quét).
-- Danh sách thiết bị nằm trong phiên = thiết bị đang dùng, được Admin **tick sẵn** là "nằm trong phòng
-  server, có dán QR" — **không phải mọi server trong hệ thống**, chỉ thiết bị vật lý thật sự. Nếu response
-  trả `totalCount: 0` (danh sách trống), đó là do **Admin chưa cấu hình xong**, không phải lỗi app — báo
-  lại cho quản trị hệ thống YEV, không phải bug Flutter.
+- Danh sách thiết bị nằm trong phiên = thiết bị đang dùng, được Admin **tick sẵn** "kiểm tra hằng ngày" —
+  **không phải mọi server trong hệ thống**. Mỗi item có cờ `requiresScan`: `true` = phải quét QR (máy IDR),
+  `false` = không quét, server tự ping lúc kết thúc. Nếu `items` rỗng, đó là do **Admin chưa cấu hình xong**,
+  không phải lỗi app — báo lại cho quản trị hệ thống YEV, không phải bug Flutter.
+- **`totalCount`/`scannedCount` chỉ đếm máy `requiresScan=true`** (tiến độ quét). Số item `requiresScan=false`
+  không nằm trong tiến độ — đừng lấy `items.length` làm mẫu số.
 
 **`ServerCheckSessionDto`** (dùng chung cho `/start`, `GET /{id}`, `GET /today`, `POST /{id}/end`):
 
@@ -188,16 +199,17 @@ Permission: `Asset.ServerCheck.Scan`. Không body.
   "endedBy": null,
   "status": 0,                     // 0=InProgress, 1=Completed
   "statusText": "Đang quét",       // đã dịch sẵn tiếng Việt, hiện thẳng lên UI
-  "totalCount": 9,                 // tổng số thiết bị cần quét hôm nay
-  "scannedCount": 3,               // số đã quét (bất kể OK/NG)
+  "totalCount": 9,                 // tổng số thiết bị PHẢI QUÉT hôm nay (chỉ item requiresScan=true)
+  "scannedCount": 3,               // số máy phải quét đã quét OK (chỉ item requiresScan=true)
   "items": [
     {
       "id": 101,
       "deviceId": 55,
       "deviceCode": "SRV-01",             // MÃ QUÉT — dòng 1 của QR, dùng để so khớp khi quét
       "deviceName": "Server File",
-      "category": 0,                      // 0=Server, 1=Network, 2=Ups, 3=AirConditioner
+      "category": 0,                      // 0=Server, 1=Network, 2=Ups
       "categoryText": "Server",           // đã dịch sẵn
+      "requiresScan": true,               // true = phải quét QR (IDR); false = KHÔNG quét, server tự ping lúc kết thúc
       "scannedAt": "2026-09-17T08:06:12", // null nếu chưa quét
       "scannedBy": "n.van.a",             // null nếu chưa quét
       "status": 1,                        // 0=Pending(chưa quét), 1=Ok, 2=Ng
@@ -205,8 +217,8 @@ Permission: `Asset.ServerCheck.Scan`. Không body.
       "note": null
     },
     {
-      "id": 102, "deviceId": 60, "deviceCode": "AC-01", "deviceName": "Điều hòa phòng server",
-      "category": 3, "categoryText": "Máy lạnh",
+      "id": 102, "deviceId": 60, "deviceCode": "SWT-01", "deviceName": "Switch core",
+      "category": 1, "categoryText": "Network", "requiresScan": false,   // không quét — chờ tự ping lúc kết thúc
       "scannedAt": null, "scannedBy": null, "status": 0, "statusText": "Chưa quét", "note": null
     }
   ],
@@ -220,7 +232,7 @@ Permission: `Asset.ServerCheck.Scan`. Không body.
       "confirmedBy": null,
       "confirmedAt": null
     }
-    // ... đủ 7 mục, xem 6.5
+    // ... đủ 8 mục (gồm "Máy lạnh"), xem 6.5
   ]
 }
 ```
@@ -248,6 +260,9 @@ hoặc `/today`).
   mã không tồn tại) → **400**. Đây là API gọi liên tục khi đi quét nhanh — app nên có **1 ô input luôn giữ
   focus**, nhận input từ đầu đọc QR (hoạt động như bàn phím), Enter tự submit rồi xoá ô + focus lại ngay,
   kèm rung máy + tiếng "beep lỗi" khi 400 vì người quét thường không nhìn màn hình liên tục.
+- **Máy `requiresScan=false`** (SVR/SWT/UPS/NAS… — không cần quét) mà bị quét → **400**
+  `"Thiết bị '...' không cần quét QR — hệ thống tự ping khi kết thúc phiên."`. Xử lý như quét sai (rung + beep),
+  không phải lỗi app.
 - Phiên đã `Completed` (đã bấm kết thúc) → 400, không quét được nữa.
 
 ### 6.4 `POST /{id}/end` — kết thúc phiên
@@ -279,9 +294,16 @@ trừ khi muốn cho user OK/NG dựa theo kết quả ping — xem 6.6):
   định lúc chưa xác nhận, không được gửi lên).
 - Thiếu bất kỳ `manualItemId` nào đang active → **400** `"Vui lòng xác nhận đủ toàn bộ mục kiểm tra thủ công."`
   — app nên disable nút "Kết thúc" tới khi user đã chọn OK/NG cho **tất cả** dòng trong `manual-items`.
-- Item nào còn `Pending` (chưa quét) mà **không** được liệt kê trong `items` của body này → server tự
-  chuyển sang **NG** không ghi chú. Nên nhắc user quét đủ trước khi kết thúc, nhưng không chặn cứng (cho
-  phép kết thúc dở nếu thật sự có máy hỏng đầu đọc QR/không quét được).
+- Item **`requiresScan=true`** còn `Pending` (chưa quét) mà **không** được liệt kê trong `items` của body này
+  → server tự chuyển sang **NG** không ghi chú. Nên nhắc user quét đủ trước khi kết thúc, nhưng không chặn
+  cứng (cho phép kết thúc dở nếu thật sự có máy hỏng đầu đọc QR/không quét được).
+- `items` trong body **chỉ nên chứa máy `requiresScan=true` còn Pending** (để ghi chú lý do). Máy
+  `requiresScan=false` **không cần gửi** — server tự xử lý: **ping mọi IP đang gán cho máy** (đạt ≥8/10 lần
+  mới tính OK) → tất cả IP đạt = `Ok`, có IP lỗi = `Ng` + note `"Không ping được: <ip>"`; máy chưa gán IP nào
+  = `Ng` + note `"Chưa có IP để ping"`. Kết quả này vào các cột Server/Network/UPS của báo cáo.
+- ⚠️ **Request này CHẬM** (ping xong mới trả, thường 10–60 giây tuỳ số máy): app phải hiện loading + **khoá nút
+  bấm** để khỏi gửi lặp, và đặt `receiveTimeout` của HTTP client **≥ 120 giây** cho riêng API này. Trước khi
+  bấm xác nhận nên hiện dòng báo trước "N thiết bị không cần quét sẽ được hệ thống tự ping (có thể mất vài chục giây)".
 - Thành công → trả về `ServerCheckSessionDto` với `status=1` (`Completed`) — dùng để cập nhật UI ngay,
   không cần gọi lại `/today`.
 - Gọi `/scan` hoặc `/end` lần nữa trên phiên đã Completed → **400**.
@@ -299,13 +321,17 @@ cache trong phiên làm việc, không cần gọi lại liên tục.
   { "id": 4, "name": "Gởi nhận Mail", "displayOrder": 4, "usesNetworkPing": false },
   { "id": 5, "name": "Backup - File Srv", "displayOrder": 5, "usesNetworkPing": false },
   { "id": 6, "name": "Backup - OES", "displayOrder": 6, "usesNetworkPing": false },
-  { "id": 7, "name": "Backup - Domain", "displayOrder": 7, "usesNetworkPing": false }
+  { "id": 7, "name": "Backup - Domain", "displayOrder": 7, "usesNetworkPing": false },
+  { "id": 8, "name": "Máy lạnh", "displayOrder": 8, "usesNetworkPing": false, "isAirConditioner": true }
 ]
+// (mọi phần tử đều có field isAirConditioner; chỉ mục "Máy lạnh" là true, các mục khác false — rút gọn ở trên)
 ```
 
 - **App phải render động theo danh sách trả về** (sort theo `displayOrder`), **không hardcode** số lượng
   mục hay tên — Backend có thể thêm/bớt mục bằng migration mà không đổi API, hiện tại là 7 dòng nhưng
   con số này **có thể đổi trong tương lai**.
+- **"Máy lạnh"** (`isAirConditioner: true`) là mục tick tay như mọi mục thủ công khác (OK/NG + ghi chú khi NG) —
+  máy lạnh không còn là thiết bị trong `items`, không quét, không ping. Cứ render chung trong danh sách mục thủ công.
 - 2 dòng có `usesNetworkPing: true` (hiện là "Network - Factory"/"Network - Server") — app hiện thêm 1 nút
   **"Kiểm tra network"** cạnh 2 mục này, gọi API 6.6 khi bấm, rồi tự động điền OK/NG cho **cả 2 dòng** đó
   theo kết quả trả về (user vẫn sửa tay lại được trước khi bấm "Kết thúc"). Các mục còn lại (`false`) chỉ
@@ -316,8 +342,10 @@ cache trong phiên làm việc, không cần gọi lại liên tục.
 Permission: `Asset.ServerCheck.Scan`. Không tham số, không ghi dữ liệu — **gọi lại bao nhiêu lần cũng được**
 (dùng cho nút "Kiểm tra lại" sau khi xử lý sự cố tại chỗ).
 
-Backend tự ping toàn bộ IP đang gán cho thiết bị Server/Network/UPS (loại trừ Máy lạnh) đang sử dụng,
-theo phạm vi chi nhánh Admin đã cấu hình sẵn (app không cần biết/truyền chi nhánh nào).
+Backend tự ping toàn bộ IP đang gán cho thiết bị Server/Network/UPS **đã được Admin tick "kiểm tra hằng ngày"**
+(gồm cả máy IDR phải quét — với IDR ping chỉ để tham khảo), theo xưởng của tài khoản đang đăng nhập (app không
+cần truyền chi nhánh). Đây là bản **xem trước** để điền 2 mục "Network - Factory/Server"; việc chốt OK/NG cho
+từng máy tự-ping vẫn do `POST /{id}/end` làm (6.4).
 
 ```jsonc
 {
@@ -359,7 +387,8 @@ Nếu app Flutter còn muốn làm thêm màn "Xem lại lịch sử"/"Báo cáo
 | 0 | Server | "Server" |
 | 1 | Network | "Network" |
 | 2 | Ups | "UPS" |
-| 3 | AirConditioner | "Máy lạnh" |
+
+> Không còn giá trị `3` (máy lạnh đã bỏ khỏi danh mục thiết bị, chuyển thành mục thủ công — xem 6.5).
 
 **`ServerCheckItemStatus`** (field `status` trong `items` và `manualResults`):
 
@@ -386,7 +415,9 @@ Nếu app Flutter còn muốn làm thêm màn "Xem lại lịch sử"/"Báo cáo
 | Login 400 dù đúng tài khoản | Gửi `userName` kèm domain (`YEV\...`) | Chỉ gửi phần sau dấu `\` |
 | Mọi API trả 401 dù vừa login | Thiếu header `Authorization: Bearer <token>`, hoặc token đã quá 120 phút | Kiểm tra header; thử `GET /Auth/me` để gia hạn |
 | Login/get thành công nhưng `/ServerCheck/*` trả 403 | Tài khoản chưa được Admin cấp `Asset.ServerCheck.Scan`/`View` | Không phải lỗi app — báo Admin hệ thống YEV |
-| `POST /start` trả `totalCount: 0` | Admin chưa tick "Cần kiểm tra hằng ngày (QR)" cho thiết bị nào | Không phải lỗi app — báo Admin cấu hình |
+| `POST /start` trả `items` rỗng (hoặc `totalCount: 0` dù có item) | `items` rỗng: Admin chưa tick "kiểm tra hằng ngày" cho thiết bị nào. `totalCount: 0` mà `items` vẫn có: chưa có loại thiết bị nào được bật "Phải quét QR" (chỉ IDR) — toàn bộ máy sẽ tự ping | Không phải lỗi app — báo Admin cấu hình |
+| Quét máy SVR/SWT/UPS/NAS trả 400 "không cần quét QR" | Máy đó `requiresScan=false`, chỉ tự ping lúc kết thúc | Đúng thiết kế — đừng cho quét, đừng hiện checkbox/vòng tròn "chưa quét" cho máy này |
+| `POST /{id}/end` bị timeout dù server vẫn xử lý | Server ping các máy tự-ping trong request nên chậm hơn trước nhiều | Tăng `receiveTimeout` ≥ 120s; nếu vẫn timeout, gọi `GET /today` xem phiên đã `status=1` chưa trước khi cho thử lại |
 | Quét đúng mã in trên thiết bị vẫn 400 "không thuộc phạm vi" | Thiết bị đó chưa được Admin tick cờ quét QR (có thể là server ảo/thiết bị không nằm trong phòng), hoặc quét nhầm ngày (mã không đổi nhưng thiết bị chưa được thêm) | Đối chiếu lại danh sách `items` của phiên hiện tại, không tự ý bỏ qua lỗi |
 | `POST /{id}/end` báo thiếu mục thủ công dù đã chọn hết trên UI | `manualItemId` gửi lên không khớp `id` mới nhất từ `GET /manual-items` (đã cache cũ trong khi Backend vừa thêm/đổi mục) | Gọi lại `GET /manual-items` trước khi build request `/end`, đừng hardcode danh sách cũ |
 | Quét/kết thúc phiên trả 400 dù trước đó hoạt động bình thường | Phiên đã bị **người khác** kết thúc trước (vd 2 nhân viên cùng dùng 1 tài khoản/2 máy) — chỉ 1 phiên/ngày | Gọi lại `GET /today` để đồng bộ trạng thái mới nhất, không giữ state cũ trong app quá lâu |
@@ -399,8 +430,9 @@ Nếu app Flutter còn muốn làm thêm màn "Xem lại lịch sử"/"Báo cáo
   (vd `mobile_scanner`) rồi tách lấy dòng 1 trước khi gọi API 6.3.
 - Quét sai/ngoài phạm vi (400) nên phản hồi **ngay lập tức bằng âm thanh + rung**, không hiện dialog chặn
   luồng — người dùng đang thao tác nhanh, tay cầm máy quét không nhìn màn hình liên tục.
-- Hiện rõ tiến độ `scannedCount / totalCount` ở đầu màn hình quét, danh sách bên dưới highlight thiết bị
-  vừa quét được (theo `deviceId` trong response 6.3) để biết còn thiếu thiết bị nào.
+- Hiện rõ tiến độ `scannedCount / totalCount` ở đầu màn hình quét (chỉ tính máy `requiresScan=true`), danh sách
+  bên dưới **chỉ liệt kê máy phải quét**, highlight thiết bị vừa quét được (theo `deviceId` trong response 6.3).
+  Máy `requiresScan=false` để ở **khối riêng "Tự kiểm tra"** phía dưới: chỉ tên + loại, **không** có vòng tròn/dấu tick trạng thái.
 - Cho phép **thoát app giữa chừng** — mở lại chỉ cần gọi `GET /today` rồi `POST /start` là khôi phục đúng
   tiến độ, không cần tự lưu state phiên quét trên máy.
 
@@ -410,6 +442,7 @@ Nếu app Flutter còn muốn làm thêm màn "Xem lại lịch sử"/"Báo cáo
 2. Xử lý `401` bằng thử gia hạn qua `/Auth/me` trước khi bắt đăng nhập lại.
 3. Vào app → luôn gọi `GET /today` trước để quyết định vào màn nào (bắt đầu mới / tiếp tục quét / đã xong hôm nay).
 4. Quét theo API 6.3, xử lý lỗi 400 bằng phản hồi tức thời (âm thanh/rung), không hardcode danh sách mã QR ở app.
-5. Màn kết thúc: gọi `GET /manual-items` **mỗi lần** (không hardcode 7 mục), bắt buộc user chọn đủ OK/NG mọi mục trước khi cho bấm "Kết thúc".
-6. Có nút "Kiểm tra network" gọi 6.6, tự điền kết quả nhưng vẫn cho sửa tay.
+4b. Tách `items` theo `requiresScan`: quét + tính tiến độ chỉ với `true`; `false` hiện ở khối "Tự kiểm tra", không quét.
+5. Màn kết thúc: gọi `GET /manual-items` **mỗi lần** (không hardcode 8 mục, gồm cả "Máy lạnh"), bắt buộc user chọn đủ OK/NG mọi mục trước khi cho bấm "Kết thúc". Danh sách "chưa quét, ghi chú lý do" chỉ gồm máy `requiresScan=true`. `POST /end` chậm → loading + timeout ≥ 120s.
+6. Có nút "Kiểm tra network" gọi 6.6 (xem trước), tự điền kết quả 2 mục network nhưng vẫn cho sửa tay.
 7. Test thử với tài khoản **có đủ** `Asset.ServerCheck.Scan` + `Asset.ServerCheck.View`, và thử cả tài khoản **thiếu quyền** để chắc chắn app hiện đúng thông báo 403 (không crash).

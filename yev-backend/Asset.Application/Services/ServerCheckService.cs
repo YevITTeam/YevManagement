@@ -21,6 +21,10 @@ namespace Asset.Application.Services
         private const int PingCount = 10;
         private const int MinSuccessesForOk = 8;
         private const int PingTimeoutMs = 1000;
+        // Pings to one IP are spaced 1s apart, like the Windows `ping` command. Back-to-back pings make Dell
+        // iDRAC controllers rate-limit ICMP (only ~7/10 replies) and flip a healthy iDRAC to NG.
+        private const int PingIntervalMs = 1000;
+        private const int MaxParallelIps = 200;
 
         public ServerCheckService(IAssetUnitOfWork unitOfWork, IHttpContextAccessor httpContextAccessor, IServerCheckTemplateService templateService) : base(unitOfWork)
         {
@@ -323,7 +327,7 @@ namespace Asset.Application.Services
         private static async Task<List<NetworkPingItemDto>> PingTargetsAsync(IEnumerable<PingTargetRow> targets)
         {
             var results = new ConcurrentBag<NetworkPingItemDto>();
-            using var throttle = new SemaphoreSlim(30);
+            using var throttle = new SemaphoreSlim(MaxParallelIps);
 
             await Task.WhenAll(targets.Select(async target =>
             {
@@ -338,6 +342,7 @@ namespace Asset.Application.Services
                     var replyTimes = new List<long>();
                     for (var attempt = 0; attempt < PingCount; attempt++)
                     {
+                        var attemptWatch = System.Diagnostics.Stopwatch.StartNew();
                         try
                         {
                             using var ping = new Ping();
@@ -352,6 +357,9 @@ namespace Asset.Application.Services
                         {
                             // count as a failed ping
                         }
+
+                        var remaining = PingIntervalMs - (int)attemptWatch.ElapsedMilliseconds;
+                        if (attempt < PingCount - 1 && remaining > 0) await Task.Delay(remaining);
                     }
                     var reachable = successCount >= MinSuccessesForOk;
                     long? roundtripMs = replyTimes.Count > 0 ? (long)Math.Round(replyTimes.Average()) : null;
