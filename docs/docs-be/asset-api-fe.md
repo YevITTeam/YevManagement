@@ -61,7 +61,7 @@ GET /api/{Entity}/{id}   POST   PUT /{id} (body có Id khớp)   DELETE /{id} (x
 
 DTO: `{id, code, name}`. POST/PUT body có Code+Name (`[Required]`), PUT thêm `id` khớp URL. 400 nếu Code trùng.
 
-**`DeviceType` có thêm 2 field** (2026-09-16, phục vụ §7d): `serverCheckCategory?: number` (0=Server/1=Network/2=Ups/3=AirConditioner, `null`=không thuộc phạm vi kiểm tra hằng ngày) + `serverCheckCategoryText?: string` (read-only). POST/PUT `DeviceType` nhận thêm `serverCheckCategory?: number|null` — **ghi đè trực tiếp** (không phải "giữ nguyên nếu bỏ trống"): gửi `null`/bỏ field này (JS `undefined` serialize thành thiếu field, BE default `null`) sẽ **xóa** khỏi phạm vi kiểm tra hằng ngày nếu DeviceType đó từng được gán.
+**`DeviceType` có thêm 2 field** (2026-09-16, phục vụ §7d): `serverCheckCategory?: number` (0=Server/1=Network/2=Ups; máy lạnh không còn là category, `null`=không thuộc phạm vi kiểm tra hằng ngày) + `serverCheckCategoryText?: string` (read-only). `requiresQrScan?: boolean` (2026-09-26: `true` = nhân viên phải quét QR máy loại này — chỉ `IDR`; `false` = BE tự ping lúc kết thúc phiên, xem asset-module.md §1.19; cũng ghi đè trực tiếp như field trên). POST/PUT `DeviceType` nhận thêm `serverCheckCategory?: number|null` + `requiresQrScan?: boolean` — **ghi đè trực tiếp** (không phải "giữ nguyên nếu bỏ trống"): gửi `null`/bỏ field này (JS `undefined` serialize thành thiếu field, BE default `null`) sẽ **xóa** khỏi phạm vi kiểm tra hằng ngày nếu DeviceType đó từng được gán.
 
 ### 2.1 DeviceGroup (Nhóm) — thuộc 1 Bộ phận
 `/api/DeviceGroup`: grid-list, all, {id}, POST, PUT, DELETE. Mỗi Nhóm **bắt buộc thuộc 1 `DeviceDepartment`**.
@@ -439,7 +439,7 @@ Content-Type: application/json
 - Permission `Asset.AiChat.Use` — **đã gán sẵn cho role `Admin`**, role khác cần Admin gán thêm nếu muốn dùng chat AI. Nút "Xem chi tiết" từ dòng `"device"` là UX-only, ẩn ở FE nếu user không có `Asset.Device.View` — BE vẫn enforce permission đó khi FE thật sự điều hướng sang trang chi tiết thiết bị.
 
 ## 7d. ServerCheck — `/api/ServerCheck` (2026-09-16, kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR)
-Thay checksheet giấy bằng quét QR trên máy TC21/TC22 — chi tiết nghiệp vụ: [asset-module.md §1.19](asset-module.md). Server/Máy lạnh/UPS/Network đều là `Device` bình thường (không entity riêng), QR dán lên vẫn dùng `POST /api/Device/qr-labels` (§5.4b) — điều kiện để vào phạm vi kiểm tra hằng ngày là `DeviceType` của nó có `serverCheckCategory` khác `null` (Admin tự cấu hình ở màn `DeviceType`, §2).
+`ServerCheckItemDto` có thêm `requiresScan: boolean` (false = không quét, BE tự ping khi `POST /{id}/end`; `totalCount`/`scannedCount` của phiên chỉ đếm máy `requiresScan=true`). Thay checksheet giấy bằng quét QR trên máy TC21/TC22 — chi tiết nghiệp vụ: [asset-module.md §1.19](asset-module.md). Server/Máy lạnh/UPS/Network đều là `Device` bình thường (không entity riêng), QR dán lên vẫn dùng `POST /api/Device/qr-labels` (§5.4b) — điều kiện để vào phạm vi kiểm tra hằng ngày là `DeviceType` của nó có `serverCheckCategory` khác `null` (Admin tự cấu hình ở màn `DeviceType`, §2).
 
 > ⚠️ **Từ 2026-09-21 phiên quét theo xưởng** (xem 7d.10 + asset-module.md §1.21): `ServerCheckSessionDto`/`ServerCheckReportRowDto` có thêm `branchId?/branchName?`; `POST /start` tự lấy xưởng của user (không nhận xưởng từ client, chưa phân công → 400); `scan`/`end` chỉ trên phiên xưởng mình; `GET /today`, `/grid-list`, `/report`, `/report/export` nhận thêm `branchId` (optional, chỉ có tác dụng với quyền `View` — người chỉ có `Scan` bị ép về xưởng mình).
 
@@ -456,7 +456,7 @@ Thay checksheet giấy bằng quét QR trên máy TC21/TC22 — chi tiết nghi�
   "items": [
     { "id": 101, "deviceId": 55, "deviceCode": "SRV-01", "deviceName": "Server File", "category": 0, "categoryText": "Server",
       "scannedAt": "2026-09-16T08:06:12", "scannedBy": "n.van.a", "status": 1, "statusText": "OK", "note": null },
-    { "id": 102, "deviceId": 60, "deviceCode": "AC-01", "deviceName": "Điều hòa phòng server", "category": 3, "categoryText": "Máy lạnh",
+    { "id": 102, "deviceId": 60, "deviceCode": "SVR-01", "deviceName": "Server mẫu", "category": 0, "categoryText": "Server",
       "scannedAt": null, "scannedBy": null, "status": 0, "statusText": "Chưa quét", "note": null }
   ],
   "manualResults": [
@@ -466,7 +466,7 @@ Thay checksheet giấy bằng quét QR trên máy TC21/TC22 — chi tiết nghi�
 ```
 `items`/`manualResults` **luôn có mặt đầy đủ ngay từ lúc `start`** (snapshot toàn bộ thiết bị + 4 mục thủ công), không phải chỉ những gì đã quét — FE render list đủ, cập nhật từng dòng khi quét.
 
-**7d.3 `POST /{id}/scan`** (`{ "deviceCode": "SRV-01" }`, permission `Asset.ServerCheck.Scan`) → `ServerCheckItemDto` (dòng vừa cập nhật). Đây là API **duy nhất** cần gọi lặp lại khi quét — trang "Quét kiểm tra" nên có 1 ô input luôn giữ focus, TC21/22 quét QR gõ ra `deviceCode` (dòng 1 QR) + Enter → submit ngay, xoá ô, focus lại. Quét lại 1 máy đã `OK` vẫn **200 OK** (idempotent, chỉ cập nhật giờ). Mã không thuộc phạm vi hôm nay (sai mã, hoặc DeviceType không bật `serverCheckCategory`) → 400, FE nên phát âm báo lỗi/rung máy vì user đang thao tác nhanh không nhìn màn hình liên tục.
+**7d.3 `POST /{id}/scan`** (`{ "deviceCode": "SRV-01" }`, permission `Asset.ServerCheck.Scan`) → `ServerCheckItemDto` (dòng vừa cập nhật). Đây là API **duy nhất** cần gọi lặp lại khi quét — trang "Quét kiểm tra" nên có 1 ô input luôn giữ focus, TC21/22 quét QR gõ ra `deviceCode` (dòng 1 QR) + Enter → submit ngay, xoá ô, focus lại. Quét lại 1 máy đã `OK` vẫn **200 OK** (idempotent, chỉ cập nhật giờ). Mã không thuộc phạm vi hôm nay (sai mã, hoặc DeviceType không bật `serverCheckCategory`) **hoặc thiết bị không cần quét (`requiresScan=false` — tự ping lúc `end`)** → 400, FE nên phát âm báo lỗi/rung máy vì user đang thao tác nhanh không nhìn màn hình liên tục.
 
 **7d.4 `POST /{id}/end`** (permission `Asset.ServerCheck.Scan`) — bấm "Kết thúc phiên quét". Trước khi gọi, FE lấy `items` còn `status=0` (Pending, tức đối chiếu với `GET /{id}` mới nhất) hiện form cho user ghi chú lý do NG, và bắt buộc hiện đủ 4 mục từ `GET /manual-items` để user chọn OK/NG:
 ```jsonc
@@ -493,7 +493,7 @@ Thiếu 1 trong 4 `manualItemId` đang active → 400 "Vui lòng xác nhận đ�
   "serverStatus": true, "serverNote": null,
   "networkStatus": null, "networkNote": null,           // null = chưa khai báo Device nào loại Network, KHÔNG phải lỗi
   "upsStatus": null, "upsNote": null,
-  "airConditionerStatus": false, "airConditionerNote": "AC-01: Không thấy đèn nguồn, nghi hỏng dây",
+  "airConditionerStatus": false, "airConditionerNote": "Không thấy đèn nguồn, nghi hỏng dây",
   "manualResults": [ /* 4 dòng, cấu trúc như ServerCheckManualResultDto ở 7d.2 */ ],
   "checkedBy": "n.van.a"
 }

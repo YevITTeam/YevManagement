@@ -86,7 +86,8 @@ export default function ServerCheckReportPage() {
     useFetchEffect(
         () => ServerCheckApi.getManualItems(),
         [],
-        (result) => setManualColumns([...result].sort((a, b) => a.displayOrder - b.displayOrder)),
+        // "Máy lạnh" đã có cột riêng (airConditionerStatus) nên không lặp lại trong cột mục thủ công.
+        (result) => setManualColumns(result.filter((m) => !m.isAirConditioner).sort((a, b) => a.displayOrder - b.displayOrder)),
         t("loadReportError"),
         (message) => toast.error(message)
     );

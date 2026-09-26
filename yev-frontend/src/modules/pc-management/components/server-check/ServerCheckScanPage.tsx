@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { Building2, CheckCircle2, Circle, Loader2, QrCode, ShieldAlert, XCircle } from "lucide-react";
+import { Building2, CheckCircle2, Circle, Loader2, QrCode, ShieldAlert, Wifi, XCircle } from "lucide-react";
 
 import { ServerCheckApi } from "@/modules/pc-management/api/server-check.api";
 import { ServerCheckAssignmentApi } from "@/modules/pc-management/api/server-check-assignment.api";
@@ -155,7 +155,10 @@ export default function ServerCheckScanPage() {
         );
     }
 
-    const pendingCount = session.items.filter((item) => item.status === 0).length;
+    // Only iDRAC-type devices are scanned; the rest are pinged by the server when the session ends.
+    const scanItems = session.items.filter((item) => item.requiresScan);
+    const autoItems = session.items.filter((item) => !item.requiresScan);
+    const pendingCount = scanItems.filter((item) => item.status === 0).length;
 
     return (
         <div className="mx-auto max-w-2xl space-y-6 pb-24">
@@ -193,7 +196,7 @@ export default function ServerCheckScanPage() {
 
             <div className="space-y-4">
                 {CATEGORY_ORDER.map((category) => {
-                    const items = session.items.filter((item) => item.category === category);
+                    const items = scanItems.filter((item) => item.category === category);
                     if (items.length === 0) return null;
                     return (
                         <div key={category} className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white">
@@ -220,6 +223,23 @@ export default function ServerCheckScanPage() {
                         </div>
                     );
                 })}
+
+                {autoItems.length > 0 && (
+                    <div className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white">
+                        <div className="flex items-center gap-1.5 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            <Wifi className="h-3.5 w-3.5" /> {t("autoCheckSectionTitle", { count: autoItems.length })}
+                        </div>
+                        <p className="border-b border-[#f1f5f9] px-4 py-2 text-xs text-[#8a8f94]">{t("autoCheckHint")}</p>
+                        <ul className="divide-y divide-[#f1f5f9]">
+                            {autoItems.map((item) => (
+                                <li key={item.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                                    <span className="truncate text-sm text-[#191c1e]">{item.deviceCode} - {item.deviceName}</span>
+                                    <span className="shrink-0 text-xs text-[#8a8f94]">{item.categoryText}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
             </div>
 
             <div className="fixed inset-x-0 bottom-0 border-t border-[#e0e3e5] bg-white p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">

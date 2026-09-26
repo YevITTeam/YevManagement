@@ -1977,12 +1977,13 @@
       "deleteMessage": "機器種別 <b>{name}</b> を削除してもよろしいですか？この操作は取り消せません。",
       "colServerCheckCategory": "日次QR点検",
       "fieldServerCheckCategory": "日次点検グループ（QR）",
-      "fieldServerCheckCategoryHint": "この種別の機器が毎日QRスキャンで点検が必要な場合に選択してください（サーバー点検モジュール参照）。",
+      "fieldServerCheckCategoryHint": "この種別の機器が毎日の点検対象である場合に選択してください（サーバー点検モジュール参照）。",
+      "fieldRequiresQrScan": "QRスキャン必須",
+      "fieldRequiresQrScanHint": "オン：スタッフが機器ごとにQRをスキャンします。オフ：点検終了時にシステムが自動でpingします。",
       "serverCheckCategoryNone": "点検対象外",
       "serverCheckCategoryServer": "サーバー",
       "serverCheckCategoryNetwork": "ネットワーク",
-      "serverCheckCategoryUps": "UPS",
-      "serverCheckCategoryAirConditioner": "エアコン"
+      "serverCheckCategoryUps": "UPS"
     },
     "ServerCheck": {
       "noAssignmentTitle": "担当工場が未設定です",
@@ -2023,6 +2024,9 @@
       "scanError": "機器が見つからないか、本日の点検対象ではありません。",
       "progressLabel": "スキャン進捗",
       "pendingCountLabel": "未スキャン {count} 台",
+      "autoCheckSectionTitle": "自動点検（{count} 台）",
+      "autoCheckHint": "QRスキャン不要 — 点検終了時にシステムが自動でpingします。",
+      "autoCheckNotice": "スキャン不要の {count} 台は、確定時にシステムが自動でpingします（数十秒かかる場合があります）。",
       "allScannedLabel": "全機器のスキャンが完了しました",
       "endButton": "点検セッションを終了",
       "endSuccess": "点検セッションを終了しました。",

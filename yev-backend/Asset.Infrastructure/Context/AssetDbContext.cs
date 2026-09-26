@@ -1,4 +1,4 @@
-﻿using Asset.Domain.Entities;
+using Asset.Domain.Entities;
 using Asset.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -289,6 +289,7 @@ public partial class AssetDbContext : DbContext
             entity.HasIndex(e => e.TypeCode, "IX_LoaiThietBis_MaLoai").IsUnique();
             entity.Property(e => e.TypeCode).HasMaxLength(50);
             entity.Property(e => e.TypeName).HasMaxLength(255);
+            entity.Property(e => e.RequiresQrScan).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<ServerCheckSession>(entity =>
@@ -397,6 +398,7 @@ public partial class AssetDbContext : DbContext
             entity.HasKey(e => e.Id).HasName("PK_ServerCheckManualItems");
             entity.Property(e => e.Name).HasMaxLength(255);
             entity.Property(e => e.UsesNetworkPing).HasDefaultValue(false);
+            entity.Property(e => e.IsAirConditioner).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<ServerCheckManualResult>(entity =>

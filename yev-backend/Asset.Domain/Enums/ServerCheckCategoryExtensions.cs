@@ -9,7 +9,6 @@ public static class ServerCheckCategoryExtensions
         ServerCheckCategory.Server => "Server",
         ServerCheckCategory.Network => "Network",
         ServerCheckCategory.Ups => "UPS",
-        ServerCheckCategory.AirConditioner => "Máy lạnh",
         _ => UnknownText
     };
 

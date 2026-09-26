@@ -15,6 +15,11 @@ public partial class DeviceType
     // 4 report columns (Asset.Domain.Enums.ServerCheckCategory). Null = not checked daily (ordinary PC etc.)
     public int? ServerCheckCategory { get; set; }
 
+    // True = devices of this type are physically scanned by QR during the daily check (only iDRAC/SAN
+    // hardware in the server room). False = ticked devices are verified by ping at session end instead
+    // (or auto-OK when they have no IP, e.g. air conditioners) — see asset-module.md §1.19.
+    public bool RequiresQrScan { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual ICollection<Device> Devices { get; set; } = new List<Device>();

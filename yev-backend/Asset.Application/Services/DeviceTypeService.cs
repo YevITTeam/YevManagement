@@ -31,12 +31,12 @@ namespace Asset.Application.Services
                     TypeCode = x.TypeCode,
                     TypeName = x.TypeName,
                     ServerCheckCategory = x.ServerCheckCategory,
+                    RequiresQrScan = x.RequiresQrScan,
                     // Duplicated ternary (not the extension method) because this is an Expression<Func<>>
                     // translated by EF into SQL — same reason DeviceService.StatusText inlines it (§1.4 asset-module.md).
                     ServerCheckCategoryText = x.ServerCheckCategory == (int)ServerCheckCategory.Server ? "Server"
                         : x.ServerCheckCategory == (int)ServerCheckCategory.Network ? "Network"
                         : x.ServerCheckCategory == (int)ServerCheckCategory.Ups ? "UPS"
-                        : x.ServerCheckCategory == (int)ServerCheckCategory.AirConditioner ? "Máy lạnh"
                         : null
                 }
             );
@@ -52,10 +52,10 @@ namespace Asset.Application.Services
                     TypeCode = x.TypeCode,
                     TypeName = x.TypeName,
                     ServerCheckCategory = x.ServerCheckCategory,
+                    RequiresQrScan = x.RequiresQrScan,
                     ServerCheckCategoryText = x.ServerCheckCategory == (int)ServerCheckCategory.Server ? "Server"
                         : x.ServerCheckCategory == (int)ServerCheckCategory.Network ? "Network"
                         : x.ServerCheckCategory == (int)ServerCheckCategory.Ups ? "UPS"
-                        : x.ServerCheckCategory == (int)ServerCheckCategory.AirConditioner ? "Máy lạnh"
                         : null
                 }
             );
@@ -79,6 +79,7 @@ namespace Asset.Application.Services
                 TypeCode = request.TypeCode,
                 TypeName = request.TypeName,
                 ServerCheckCategory = request.ServerCheckCategory,
+                RequiresQrScan = request.RequiresQrScan,
                 IsDeleted = false
             };
 
@@ -99,6 +100,7 @@ namespace Asset.Application.Services
             deviceType.TypeCode = request.TypeCode;
             deviceType.TypeName = request.TypeName;
             deviceType.ServerCheckCategory = request.ServerCheckCategory;
+            deviceType.RequiresQrScan = request.RequiresQrScan;
 
             _unitOfWork.DeviceTypes.Update(deviceType);
             await _unitOfWork.SaveChangesAsync();
@@ -120,6 +122,7 @@ namespace Asset.Application.Services
             TypeCode = deviceType.TypeCode,
             TypeName = deviceType.TypeName,
             ServerCheckCategory = deviceType.ServerCheckCategory,
+            RequiresQrScan = deviceType.RequiresQrScan,
             ServerCheckCategoryText = deviceType.ServerCheckCategory?.GetServerCheckCategoryText()
         };
     }

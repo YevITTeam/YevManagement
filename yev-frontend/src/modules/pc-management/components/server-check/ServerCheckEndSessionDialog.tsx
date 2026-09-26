@@ -40,7 +40,9 @@ export default function ServerCheckEndSessionDialog({ isOpen, session, onClose, 
 
     if (!isOpen || !session) return null;
 
-    const pendingItems = session.items.filter((item) => item.status === 0);
+    // Only scan-required devices can be "not scanned"; the others are resolved by ping on the server.
+    const pendingItems = session.items.filter((item) => item.requiresScan && item.status === 0);
+    const autoItemCount = session.items.filter((item) => !item.requiresScan && item.status === 0).length;
     const networkPingItems = session.manualResults.filter((m) => m.usesNetworkPing);
     const regularManualItems = session.manualResults.filter((m) => !m.usesNetworkPing);
 
@@ -176,6 +178,12 @@ export default function ServerCheckEndSessionDialog({ isOpen, session, onClose, 
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+                        )}
+
+                        {autoItemCount > 0 && (
+                            <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3 text-sm text-[#5e3f3a]">
+                                {t("autoCheckNotice", { count: autoItemCount })}
                             </div>
                         )}
 
