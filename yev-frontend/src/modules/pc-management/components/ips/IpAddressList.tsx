@@ -1,6 +1,6 @@
 "use client";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { IpApi } from "@/modules/pc-management/api/ip-api";
@@ -185,12 +185,12 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder="Tìm theo địa chỉ IP, thiết bị..."
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            className="cursor-pointer h-9 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
                             Tìm kiếm
                         </button>
@@ -200,7 +200,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                 setStatusFilter(event.target.value);
                                 setPageIndex(1);
                             }}
-                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         >
                             <option value="">Tất cả trạng thái</option>
                             {ipStatusOptions.map((status) => (
@@ -212,7 +212,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                         {canBulkSelect && selectedIds.size > 0 && (
                             <button
                                 onClick={() => setBulkFormOpen(true)}
-                                className="cursor-pointer h-10 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                                className="cursor-pointer h-9 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                             >
                                 Đổi trạng thái hàng loạt ({selectedIds.size})
                             </button>
@@ -252,7 +252,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                 <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: VISIBLE_ROWS * ROW_HEIGHT_PX }}>
                     <table className="min-w-full border-collapse text-left">
                         <thead className="sticky top-0 z-10">
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
                                 {canBulkSelect && (
                                     <th className="whitespace-nowrap px-4 py-3">
                                         <input
@@ -264,12 +264,12 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                         />
                                     </th>
                                 )}
-                                <th className="whitespace-nowrap px-6 py-3">Địa chỉ IP</th>
-                                <th className="whitespace-nowrap px-6 py-3">Dải mạng</th>
-                                <th className="whitespace-nowrap px-6 py-3">Thiết bị</th>
-                                <th className="whitespace-nowrap px-6 py-3">Trạng thái</th>
-                                <th className="whitespace-nowrap px-6 py-3">Ghi chú</th>
-                                <th className="whitespace-nowrap px-6 py-3 text-right">Thao tác</th>
+                                <th className="whitespace-nowrap px-3 py-2">Địa chỉ IP</th>
+                                <th className="whitespace-nowrap px-3 py-2">Dải mạng</th>
+                                <th className="whitespace-nowrap px-3 py-2">Thiết bị</th>
+                                <th className="whitespace-nowrap px-3 py-2">Trạng thái</th>
+                                <th className="whitespace-nowrap px-3 py-2">Ghi chú</th>
+                                <th className="whitespace-nowrap px-3 py-2 text-right">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -293,10 +293,10 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                             />
                                         </td>
                                     )}
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-[#191c1e]">{ip.ipAddress}</td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{ip.prefix ?? "—"}</td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{ip.deviceCode ?? "—"}</td>
-                                    <td className="whitespace-nowrap px-6 py-4">
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm font-semibold text-[#191c1e]">{ip.ipAddress}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{ip.prefix ?? "—"}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{ip.deviceCode ?? "—"}</td>
+                                    <td className="whitespace-nowrap px-3 py-2">
                                         <span
                                             className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
                                                 ipStatusClasses[ip.status] ?? "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
@@ -306,16 +306,17 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                             {ip.statusText || "Không xác định"}
                                         </span>
                                     </td>
-                                    <td className="max-w-[220px] truncate px-6 py-4 text-sm text-[#5e3f3a]" title={ip.note ?? undefined}>
+                                    <td className="max-w-[220px] truncate px-3 py-2 text-sm text-[#5e3f3a]" title={ip.note ?? undefined}>
                                         {ip.note ?? "—"}
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
+                                    <td className="whitespace-nowrap px-3 py-2 text-right text-sm">
                                         <button
                                             onClick={() => openEditForm(ip)}
-                                            className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e0e3e5] text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                             title="Sửa"
+                                            aria-label="Sửa"
                                         >
-                                            Sửa
+                                            <Pencil className="h-3.5 w-3.5" />
                                         </button>
                                     </td>
                                 </tr>

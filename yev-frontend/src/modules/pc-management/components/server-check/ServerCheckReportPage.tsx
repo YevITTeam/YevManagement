@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { CheckCircle2, FileSpreadsheet, Loader2, Minus, Printer, QrCode, Users, XCircle, Search } from "lucide-react";
+import { CheckCircle2, FileSpreadsheet, Loader2, Minus, Printer, QrCode, Users, XCircle, Search, Eye } from "lucide-react";
 
 import { ServerCheckApi } from "@/modules/pc-management/api/server-check.api";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
@@ -120,7 +120,7 @@ export default function ServerCheckReportPage() {
                     {canScan && (
                         <Link
                             href="/pc/server-check/scan"
-                            className="flex h-10 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
                             <QrCode className="h-3.5 w-3.5" /> {t("startButton")}
                         </Link>
@@ -128,7 +128,7 @@ export default function ServerCheckReportPage() {
                     {canAssign && (
                         <Link
                             href="/pc/server-check/assignments"
-                            className="flex h-10 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
                             <Users className="h-3.5 w-3.5" /> {t("assignmentsButton")}
                         </Link>
@@ -137,7 +137,7 @@ export default function ServerCheckReportPage() {
                         value={branchId ?? ""}
                         onChange={(event) => setBranchId(event.target.value ? Number(event.target.value) : null)}
                         aria-label={t("branchFilterLabel")}
-                        className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     >
                         {branches.map((branch) => (
                             <option key={branch.id} value={branch.id}>{branch.branchName}</option>
@@ -147,14 +147,14 @@ export default function ServerCheckReportPage() {
                         type="date"
                         value={fromDate}
                         onChange={(event) => setFromDate(event.target.value)}
-                        className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     <span className="text-sm text-[#5e3f3a]">{tCommon("to")}</span>
                     <input
                         type="date"
                         value={toDate}
                         onChange={(event) => setToDate(event.target.value)}
-                        className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     <button
                         onClick={() => refetch()}
@@ -168,7 +168,7 @@ export default function ServerCheckReportPage() {
                     <button
                         onClick={handleExportExcel}
                         disabled={isExporting}
-                        className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {isExporting ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -179,7 +179,7 @@ export default function ServerCheckReportPage() {
                     </button>
                     <button
                         onClick={() => window.print()}
-                        className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                     >
                         <Printer className="h-3.5 w-3.5" /> {t("printButton")}
                     </button>
@@ -266,9 +266,11 @@ export default function ServerCheckReportPage() {
                                     <td className="border-b border-[#f1f5f9] px-3 py-3 group-hover:bg-[#f8fafc] print:hidden">
                                         <button
                                             onClick={() => setSelectedSessionId(row.sessionId)}
-                                            className="cursor-pointer text-xs font-semibold text-[#5e3f3a] underline-offset-2 hover:text-[#191c1e] hover:underline"
+                                            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e0e3e5] text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                            title={tCommon("viewDetail")}
+                                            aria-label={tCommon("viewDetail")}
                                         >
-                                            {tCommon("viewDetail")}
+                                            <Eye className="h-3.5 w-3.5" />
                                         </button>
                                     </td>
                                 </tr>

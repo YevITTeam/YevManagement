@@ -1,5 +1,6 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
 import { Building2, Calendar, ChevronDown, ChevronUp, Filter, Layers, Mail, MapPin, QrCode, Search, Tag, Truck, User, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
@@ -77,8 +78,6 @@ const filterLabels: Record<keyof DeviceFilters, string> = {
 // These fields are sent straight to the Device/grid-list API as query params.
 const advancedFields: (keyof DeviceFilters)[] = [
     "supplierName",
-    "deviceType",
-    "status",
     "email",
     "purchaseDate",
     "expiryDate",
@@ -86,15 +85,16 @@ const advancedFields: (keyof DeviceFilters)[] = [
     "isUseUsb",
     "requiresDailyCheck",
     "groupId",
-    "departmentId",
+    "manager",
+    "ipAddress",
 ];
 
 const fieldClassName =
-    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+    "h-9 w-full rounded-md border border-[#e0e3e5] bg-white px-2.5 text-sm! text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
-const fieldWithIconClassName = `${fieldClassName} pl-9`;
+const fieldWithIconClassName = `${fieldClassName} pl-8`;
 
-const fieldLabelClassName = "mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+const fieldLabelClassName = "mb-1 flex items-center gap-1 text-xs font-semibold text-[#5e3f3a]";
 
 // Nhãn hiển thị cho chip "Đang lọc" của field status — value thật gửi lên API là số (0-3) hoặc
 // sentinel "outsourced" (lọc theo IsOutsourced), không phải chuỗi tiếng Việt.
@@ -192,286 +192,143 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
     };
 
     return (
-        <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="flex flex-1 flex-col gap-3 md:flex-row md:flex-wrap">
-                        <label className="min-w-[220px] flex-1">
-                            <span className={fieldLabelClassName}>
-                                <Search className="h-3.5 w-3.5" />
-                                Mã thiết bị
-                            </span>
-                            <div className="relative">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <input
-                                    value={filters.deviceCode}
-                                    onChange={(event) => handleChange("deviceCode", event.target.value)}
-                                    placeholder="Nhập mã thiết bị..."
-                                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-[#f8fafc] pl-9 pr-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:bg-white focus:ring-2 focus:ring-[#ffe0e3]"
-                                />
-                            </div>
-                        </label>
+        <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
+            <div className="flex flex-col gap-2.5">
+                <div className="flex flex-wrap items-center gap-2 [&>*]:w-full sm:[&>*]:w-44">
+                    <IconInput
+                        icon={Search}
+                        value={filters.deviceCode}
+                        onChange={(value) => handleChange("deviceCode", value)}
+                        placeholder="Mã thiết bị..."
+                        className="sm:w-56!"
+                    />
+                    <IconSelect
+                        icon={Building2}
+                        options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
+                        value={filters.branch}
+                        onChange={(value) => handleChange("branch", value)}
+                        placeholder="Chi nhánh"
+                    />
+                    <IconSelect
+                        icon={Tag}
+                        options={deviceTypes.map((dt) => ({ value: dt.id, label: dt.typeName, searchText: dt.typeName.toLowerCase() }))}
+                        value={filters.deviceType}
+                        onChange={(value) => handleChange("deviceType", value)}
+                        placeholder="Loại thiết bị"
+                    />
+                    <IconSelect
+                        icon={Users}
+                        options={deviceDepartments.map((d) => ({ value: d.id, label: d.departmentName, searchText: d.departmentName.toLowerCase() }))}
+                        value={filters.departmentId}
+                        onChange={(value) => handleChange("departmentId", value)}
+                        placeholder="Bộ phận"
+                    />
+                    <NativeSelect
+                        value={filters.status}
+                        onChange={(value) => handleChange("status", value)}
+                        options={[
+                            { value: "", label: "Tất cả trạng thái" },
+                            { value: "0", label: "Chưa sử dụng" },
+                            { value: "1", label: "Đang sử dụng" },
+                            { value: "2", label: "Chờ thanh lý" },
+                            { value: "3", label: "Đã thanh lý" },
+                            // Not a Device.Status value (only 0-3) — separate filter on IsOutsourced sharing this dropdown.
+                            { value: "outsourced", label: "Thuê ngoài" },
+                        ]}
+                    />
 
-                        <label className="min-w-[170px] flex-1">
-                            <span className={fieldLabelClassName}>
-                                <Building2 className="h-3.5 w-3.5" />
-                                Chi nhánh
-                            </span>
-                            <div className="relative">
-                                <Building2 className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <SearchableSelect
-                                    options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
-                                    value={filters.branch === "" ? "" : Number(filters.branch)}
-                                    onChange={(v) => handleChange("branch", v === "" ? "" : String(v))}
-                                    placeholder="Tất cả chi nhánh"
-                                    triggerClassName={fieldWithIconClassName}
-                                />
-                            </div>
-                        </label>
-
-                        <label className="min-w-[170px] flex-1">
-                            <span className={fieldLabelClassName}>
-                                <User className="h-3.5 w-3.5" />
-                                Người quản lý
-                            </span>
-                            <div className="relative">
-                                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <input
-                                    value={filters.manager}
-                                    onChange={(event) => handleChange("manager", event.target.value)}
-                                    placeholder="Nhập tên người quản lý..."
-                                    className={fieldWithIconClassName}
-                                />
-                            </div>
-                        </label>
-
-                        <label className="min-w-[180px] flex-1">
-                            <span className={fieldLabelClassName}>
-                                <MapPin className="h-3.5 w-3.5" />
-                                Địa chỉ IP
-                            </span>
-                            <div className="relative">
-                                <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <input
-                                    value={filters.ipAddress}
-                                    onChange={(event) => handleChange("ipAddress", event.target.value)}
-                                    placeholder="Nhập địa chỉ IP..."
-                                    className={fieldWithIconClassName}
-                                />
-                            </div>
-                        </label>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 sm:ml-auto! sm:w-auto!">
                         <button
                             type="button"
                             onClick={() => setIsAdvancedOpen((current) => !current)}
-                            className="flex h-10 items-center gap-2 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f8fafc]"
+                            className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 text-sm! font-semibold! text-[#191c1e] transition hover:bg-[#f8fafc]"
                         >
-                            <Filter className="h-4 w-4" />
-                            Bộ lọc nâng cao
+                            <Filter className="h-3.5 w-3.5" />
+                            Lọc thêm
                             {advancedActiveCount > 0 && (
                                 <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#e3000f] px-1 text-[11px] font-semibold text-white">
                                     {advancedActiveCount}
                                 </span>
                             )}
-                            {isAdvancedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            {isAdvancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                         </button>
-
                         <button
                             type="button"
                             onClick={handleReset}
-                            className="cursor-pointer flex h-10 items-center gap-2 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc]"
+                            disabled={activeEntries.length === 0}
+                            title="Xóa bộ lọc"
+                            aria-label="Xóa bộ lọc"
+                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-40"
                         >
                             <X className="h-4 w-4" />
-                            Xóa bộ lọc
                         </button>
                     </div>
                 </div>
 
                 {isAdvancedOpen && (
-                    <div className="grid gap-3 border-t border-[#e0e3e5] pt-4 md:grid-cols-2 xl:grid-cols-3">
-                        <label>
-                            <span className={fieldLabelClassName}>
-                                <Truck className="h-3.5 w-3.5" />
-                                Nhà cung cấp
-                            </span>
-                            <div className="relative">
-                                <Truck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <input
-                                    value={filters.supplierName}
-                                    onChange={(event) => handleChange("supplierName", event.target.value)}
-                                    placeholder="Nhập tên nhà cung cấp..."
-                                    className={fieldWithIconClassName}
-                                />
-                            </div>
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>
-                                <Tag className="h-3.5 w-3.5" />
-                                Loại thiết bị
-                            </span>
-                            <div className="relative">
-                                <Tag className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <SearchableSelect
-                                    options={deviceTypes.map((dt) => ({ value: dt.id, label: dt.typeName, searchText: dt.typeName.toLowerCase() }))}
-                                    value={filters.deviceType === "" ? "" : Number(filters.deviceType)}
-                                    onChange={(v) => handleChange("deviceType", v === "" ? "" : String(v))}
-                                    placeholder="Tất cả loại"
-                                    triggerClassName={fieldWithIconClassName}
-                                />
-                            </div>
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>Trạng thái</span>
-                            <select
-                                value={filters.status}
-                                onChange={(event) => handleChange("status", event.target.value)}
-                                className={fieldClassName}
-                            >
-                                <option value="">Tất cả trạng thái</option>
-                                <option value="0">Chưa sử dụng</option>
-                                <option value="1">Đang sử dụng</option>
-                                <option value="2">Chờ thanh lý</option>
-                                <option value="3">Đã thanh lý</option>
-                                {/* Không phải 1 giá trị của Device.Status (chỉ có 0-3) — đây là filter riêng
-                                    trên field IsOutsourced, dùng chung dropdown cho gọn UI. */}
-                                <option value="outsourced">Thuê ngoài</option>
-                            </select>
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>
-                                <Mail className="h-3.5 w-3.5" />
-                                Email
-                            </span>
-                            <div className="relative">
-                                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <input
-                                    value={filters.email}
-                                    onChange={(event) => handleChange("email", event.target.value)}
-                                    placeholder="Nhập email..."
-                                    className={fieldWithIconClassName}
-                                />
-                            </div>
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>
-                                <Calendar className="h-3.5 w-3.5" />
-                                Ngày mua
-                            </span>
-                            <input
-                                type="date"
-                                value={filters.purchaseDate}
-                                onChange={(event) => handleChange("purchaseDate", event.target.value)}
-                                className={fieldClassName}
+                    <div className="grid gap-x-3 gap-y-2.5 border-t border-[#e0e3e5] pt-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                        <Field label="Người quản lý" icon={User}>
+                            <IconInput icon={User} value={filters.manager} onChange={(value) => handleChange("manager", value)} placeholder="Tên người quản lý" />
+                        </Field>
+                        <Field label="Địa chỉ IP" icon={MapPin}>
+                            <IconInput icon={MapPin} value={filters.ipAddress} onChange={(value) => handleChange("ipAddress", value)} placeholder="Địa chỉ IP" />
+                        </Field>
+                        <Field label="Nhà cung cấp" icon={Truck}>
+                            <IconInput icon={Truck} value={filters.supplierName} onChange={(value) => handleChange("supplierName", value)} placeholder="Tên nhà cung cấp" />
+                        </Field>
+                        <Field label="Email" icon={Mail}>
+                            <IconInput icon={Mail} value={filters.email} onChange={(value) => handleChange("email", value)} placeholder="Email" />
+                        </Field>
+                        <Field label="Số Serial" icon={Tag}>
+                            <IconInput icon={Tag} value={filters.serialNumber} onChange={(value) => handleChange("serialNumber", value)} placeholder="Số Serial" />
+                        </Field>
+                        <Field label="Ngày mua" icon={Calendar}>
+                            <input type="date" value={filters.purchaseDate} onChange={(event) => handleChange("purchaseDate", event.target.value)} className={fieldClassName} />
+                        </Field>
+                        <Field label="Hết hạn trước" icon={Calendar}>
+                            <input type="date" value={filters.expiryDate} onChange={(event) => handleChange("expiryDate", event.target.value)} className={fieldClassName} />
+                        </Field>
+                        <Field label="Nhóm" icon={Layers}>
+                            <IconSelect
+                                icon={Layers}
+                                options={deviceGroups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
+                                value={filters.groupId}
+                                onChange={(value) => handleChange("groupId", value)}
+                                placeholder="Tất cả nhóm"
                             />
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>
-                                <Calendar className="h-3.5 w-3.5" />
-                                Hết hạn trước
-                            </span>
-                            <input
-                                type="date"
-                                value={filters.expiryDate}
-                                onChange={(event) => handleChange("expiryDate", event.target.value)}
-                                className={fieldClassName}
-                            />
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>
-                                <Tag className="h-3.5 w-3.5" />
-                                Số Serial
-                            </span>
-                            <div className="relative">
-                                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <input
-                                    value={filters.serialNumber}
-                                    onChange={(event) => handleChange("serialNumber", event.target.value)}
-                                    placeholder="Nhập số Serial..."
-                                    className={fieldWithIconClassName}
-                                />
-                            </div>
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>Cho phép dùng USB</span>
-                            <select
+                        </Field>
+                        <Field label="Cho phép dùng USB">
+                            <NativeSelect
                                 value={filters.isUseUsb}
-                                onChange={(event) => handleChange("isUseUsb", event.target.value)}
-                                className={fieldClassName}
-                            >
-                                <option value="">Tất cả</option>
-                                <option value="true">Có</option>
-                                <option value="false">Không</option>
-                            </select>
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>
-                                <QrCode className="h-3.5 w-3.5" />
-                                Kiểm tra hằng ngày (QR)
-                            </span>
-                            <select
+                                onChange={(value) => handleChange("isUseUsb", value)}
+                                options={[
+                                    { value: "", label: "Tất cả" },
+                                    { value: "true", label: "Có" },
+                                    { value: "false", label: "Không" },
+                                ]}
+                            />
+                        </Field>
+                        <Field label="Kiểm tra hằng ngày (QR)" icon={QrCode}>
+                            <NativeSelect
                                 value={filters.requiresDailyCheck}
-                                onChange={(event) => handleChange("requiresDailyCheck", event.target.value)}
-                                className={fieldClassName}
-                            >
-                                <option value="">Tất cả</option>
-                                <option value="true">Có — cần quét QR</option>
-                                <option value="false">Không</option>
-                            </select>
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>
-                                <Layers className="h-3.5 w-3.5" />
-                                Nhóm
-                            </span>
-                            <div className="relative">
-                                <Layers className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <SearchableSelect
-                                    options={deviceGroups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
-                                    value={filters.groupId === "" ? "" : Number(filters.groupId)}
-                                    onChange={(v) => handleChange("groupId", v === "" ? "" : String(v))}
-                                    placeholder="Tất cả nhóm"
-                                    triggerClassName={fieldWithIconClassName}
-                                />
-                            </div>
-                        </label>
-
-                        <label>
-                            <span className={fieldLabelClassName}>
-                                <Users className="h-3.5 w-3.5" />
-                                Bộ phận
-                            </span>
-                            <div className="relative">
-                                <Users className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#5e3f3a]" />
-                                <SearchableSelect
-                                    options={deviceDepartments.map((d) => ({ value: d.id, label: d.departmentName, searchText: d.departmentName.toLowerCase() }))}
-                                    value={filters.departmentId === "" ? "" : Number(filters.departmentId)}
-                                    onChange={(v) => handleChange("departmentId", v === "" ? "" : String(v))}
-                                    placeholder="Tất cả bộ phận"
-                                    triggerClassName={fieldWithIconClassName}
-                                />
-                            </div>
-                        </label>
+                                onChange={(value) => handleChange("requiresDailyCheck", value)}
+                                options={[
+                                    { value: "", label: "Tất cả" },
+                                    { value: "true", label: "Có — cần quét QR" },
+                                    { value: "false", label: "Không" },
+                                ]}
+                            />
+                        </Field>
                     </div>
                 )}
 
                 {activeEntries.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-3">
-                        <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Đang lọc:</span>
+                    <div className="flex flex-wrap items-center gap-1.5 border-t border-[#e0e3e5] pt-2">
+                        <span className="text-xs font-semibold text-[#5e3f3a]">Đang lọc:</span>
                         {activeEntries.map(([field, value]) => (
                             <span
                                 key={field}
-                                className="flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs text-[#5e3f3a]"
+                                className="flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs text-[#5e3f3a]"
                             >
                                 <span className="font-semibold text-[#191c1e]">{filterLabels[field]}:</span>
                                 {field === "isUseUsb" || field === "requiresDailyCheck"
@@ -503,5 +360,100 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                 )}
             </div>
         </section>
+    );
+}
+
+// Small presentational helpers so every filter cell looks identical (height, font, icon, chevron).
+
+function Field({ label, icon: Icon, children }: { label: string; icon?: LucideIcon; children: React.ReactNode }) {
+    return (
+        <label className="block min-w-0">
+            <span className={fieldLabelClassName}>
+                {Icon && <Icon className="h-3 w-3" />}
+                {label}
+            </span>
+            {children}
+        </label>
+    );
+}
+
+function IconInput({
+    icon: Icon,
+    value,
+    onChange,
+    placeholder,
+    className = "",
+}: {
+    icon: LucideIcon;
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    className?: string;
+}) {
+    return (
+        <div className={`relative ${className}`}>
+            <Icon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
+            <input
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                placeholder={placeholder}
+                title={placeholder}
+                className={fieldWithIconClassName}
+            />
+        </div>
+    );
+}
+
+function IconSelect({
+    icon: Icon,
+    options,
+    value,
+    onChange,
+    placeholder,
+}: {
+    icon: LucideIcon;
+    options: { value: number; label: string; searchText: string }[];
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+}) {
+    return (
+        <div className="relative">
+            <Icon className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
+            <SearchableSelect
+                options={options}
+                value={value === "" ? "" : Number(value)}
+                onChange={(v) => onChange(v === "" ? "" : String(v))}
+                placeholder={placeholder}
+                triggerClassName={fieldWithIconClassName}
+            />
+        </div>
+    );
+}
+
+function NativeSelect({
+    value,
+    onChange,
+    options,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+    options: { value: string; label: string }[];
+}) {
+    return (
+        <div className="relative">
+            <select
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                className={`${fieldClassName} appearance-none pr-8 ${value === "" ? "text-[#8a8f94]" : ""}`}
+            >
+                {options.map((option) => (
+                    <option key={option.value} value={option.value} className="text-[#191c1e]">
+                        {option.label}
+                    </option>
+                ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
+        </div>
     );
 }

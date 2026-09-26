@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { ClipboardCheck, FileDown, FileSpreadsheet, Loader2, Users, Search } from "lucide-react";
+import { ClipboardCheck, FileDown, FileSpreadsheet, Loader2, Users, Search, Eye } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -139,7 +139,7 @@ export default function InventoryReportPage() {
                     {canScan && (
                         <Link
                             href="/pc/inventory/scan"
-                            className="flex h-10 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
                             <ClipboardCheck className="h-3.5 w-3.5" /> {t("startButton")}
                         </Link>
@@ -147,7 +147,7 @@ export default function InventoryReportPage() {
                     {canAssign && (
                         <Link
                             href="/pc/inventory/assignments"
-                            className="flex h-10 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
                             <Users className="h-3.5 w-3.5" /> {t("assignmentsButton")}
                         </Link>
@@ -160,7 +160,7 @@ export default function InventoryReportPage() {
                     value={branchId ?? ""}
                     onChange={(event) => setBranchId(event.target.value ? Number(event.target.value) : null)}
                     aria-label={t("branchFilterLabel")}
-                    className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                    className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                 >
                     <option value="">{t("allBranchesOption")}</option>
                     {branches.map((branch) => (
@@ -171,14 +171,14 @@ export default function InventoryReportPage() {
                     type="date"
                     value={fromDate}
                     onChange={(event) => setFromDate(event.target.value)}
-                    className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                    className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                 />
                 <span className="text-sm text-[#5e3f3a]">{tCommon("to")}</span>
                 <input
                     type="date"
                     value={toDate}
                     onChange={(event) => setToDate(event.target.value)}
-                    className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                    className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                 />
                 <button
                     onClick={() => refetch()}
@@ -193,14 +193,14 @@ export default function InventoryReportPage() {
                     <button
                         onClick={handleExportExcel}
                         disabled={isExportingExcel}
-                        className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {isExportingExcel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
                         {t("exportExcelButton")}
                     </button>
                     <button
                         onClick={handleExportPdf}
-                        className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                     >
                         <FileDown className="h-3.5 w-3.5" /> {t("exportPdfButton")}
                     </button>
@@ -258,9 +258,11 @@ export default function InventoryReportPage() {
                                     <td className="px-4 py-3">
                                         <button
                                             onClick={() => setSelectedSessionId(row.sessionId)}
-                                            className="cursor-pointer text-xs font-semibold text-[#5e3f3a] underline-offset-2 hover:text-[#191c1e] hover:underline"
+                                            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e0e3e5] text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                            title={tCommon("viewDetail")}
+                                            aria-label={tCommon("viewDetail")}
                                         >
-                                            {tCommon("viewDetail")}
+                                            <Eye className="h-3.5 w-3.5" />
                                         </button>
                                     </td>
                                 </tr>

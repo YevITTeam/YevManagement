@@ -9,6 +9,7 @@ import SoftwareGroupForm, { type SoftwareGroupFormValues } from "./SoftwareGroup
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Pencil, Trash2 } from "lucide-react";
 
 const PAGE_SIZE = 10;
 
@@ -126,12 +127,12 @@ const SoftwareGroupList = forwardRef<ListHandle, ListToolbarProps>(function Soft
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder="Tìm theo mã hoặc tên nhóm phần mềm..."
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            className="cursor-pointer h-9 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
                             Tìm kiếm
                         </button>
@@ -148,11 +149,11 @@ const SoftwareGroupList = forwardRef<ListHandle, ListToolbarProps>(function Soft
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">ID</th>
-                                <th className="px-6 py-3">Mã nhóm</th>
-                                <th className="px-6 py-3">Tên nhóm</th>
-                                <th className="px-6 py-3 text-right">Thao tác</th>
+                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                <th className="px-3 py-2">ID</th>
+                                <th className="px-3 py-2">Mã nhóm</th>
+                                <th className="px-3 py-2">Tên nhóm</th>
+                                <th className="px-3 py-2 text-right">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -165,24 +166,26 @@ const SoftwareGroupList = forwardRef<ListHandle, ListToolbarProps>(function Soft
                             )}
                             {groups.map((group) => (
                                 <tr key={group.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{group.id}</td>
-                                    <td className="px-6 py-4 text-sm text-[#191c1e]">{group.groupCode}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{group.groupName}</td>
-                                    <td className="px-6 py-4 text-right text-sm">
-                                        <div className="inline-flex items-center gap-3">
+                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{group.id}</td>
+                                    <td className="px-3 py-2 text-sm text-[#191c1e]">{group.groupCode}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{group.groupName}</td>
+                                    <td className="px-3 py-2 text-right text-sm">
+                                        <div className="inline-flex items-center gap-1.5">
                                             <button
                                                 onClick={() => openEditForm(group)}
-                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e0e3e5] text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                 title="Sửa"
+                                                aria-label="Sửa"
                                             >
-                                                Sửa
+                                                <Pencil className="h-3.5 w-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => setDeletingGroup(group)}
-                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e9bcb6] text-[#930006] hover:bg-[#fff4f2]"
                                                 title="Xoá"
+                                                aria-label="Xoá"
                                             >
-                                                Xoá
+                                                <Trash2 className="h-3.5 w-3.5" />
                                             </button>
                                         </div>
                                     </td>

@@ -164,13 +164,9 @@ export default function ApprovalDelegationList() {
                                         {d.reason && ` · ${d.reason}`}
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <button onClick={() => openEdit(d)} className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
-                                        <Pencil className="h-3.5 w-3.5" /> {tCommon("edit")}
-                                    </button>
-                                    <button onClick={() => setDeletingId(d.id)} className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-[#930006] hover:text-[#e3000f]">
-                                        <Trash2 className="h-3.5 w-3.5" /> {tCommon("delete")}
-                                    </button>
+                                <div className="flex items-center gap-1.5">
+                                    <button onClick={() => openEdit(d)} className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-40" title={tCommon("edit")} aria-label={tCommon("edit")}><Pencil className="h-3.5 w-3.5" /></button>
+                                    <button onClick={() => setDeletingId(d.id)} className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e9bcb6] text-[#930006] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40" title={tCommon("delete")} aria-label={tCommon("delete")}><Trash2 className="h-3.5 w-3.5" /></button>
                                 </div>
                             </div>
                         ))}

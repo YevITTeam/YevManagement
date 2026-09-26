@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Search, Pencil, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -111,11 +111,10 @@ export default function SupplierList() {
     };
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
+                    <h1 className="text-lg font-semibold text-[#191c1e]">{t("title")}</h1>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -143,7 +142,7 @@ export default function SupplierList() {
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
-                            className="h-10 w-64 border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
@@ -168,10 +167,10 @@ export default function SupplierList() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">ID</th>
-                                <th className="px-6 py-3">{t("colCode")}</th>
-                                <th className="px-6 py-3">{t("colName")}</th>
-                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
+                                <th className="px-3 py-2">ID</th>
+                                <th className="px-3 py-2">{t("colCode")}</th>
+                                <th className="px-3 py-2">{t("colName")}</th>
+                                <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -184,24 +183,26 @@ export default function SupplierList() {
                             )}
                             {suppliers.map((supplier) => (
                                 <tr key={supplier.id} className="border-b border-[#f1f5f9] bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{supplier.id}</td>
-                                    <td className="px-6 py-4 text-sm text-[#191c1e]">{supplier.supplierCode}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{supplier.supplierName}</td>
-                                    <td className="px-6 py-4 text-right text-sm">
-                                        <div className="inline-flex items-center gap-3">
+                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{supplier.id}</td>
+                                    <td className="px-3 py-2 text-sm text-[#191c1e]">{supplier.supplierCode}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{supplier.supplierName}</td>
+                                    <td className="px-3 py-2 text-right text-sm">
+                                        <div className="inline-flex items-center gap-1.5">
                                             <button
                                                 onClick={() => openEditForm(supplier)}
-                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-40"
                                                 title={tCommon("edit")}
+                                                aria-label={tCommon("edit")}
                                             >
-                                                {tCommon("edit")}
+                                                <Pencil className="h-3.5 w-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => setDeletingSupplier(supplier)}
-                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e9bcb6] text-[#930006] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
                                                 title={tCommon("delete")}
+                                                aria-label={tCommon("delete")}
                                             >
-                                                {tCommon("delete")}
+                                                <Trash2 className="h-3.5 w-3.5" />
                                             </button>
                                         </div>
                                     </td>

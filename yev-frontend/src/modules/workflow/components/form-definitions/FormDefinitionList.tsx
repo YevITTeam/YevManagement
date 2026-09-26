@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, LayoutGrid, Inbox, Search } from "lucide-react";
+import { RefreshCw, LayoutGrid, Inbox, Search, Pencil, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
@@ -241,7 +241,7 @@ export default function FormDefinitionList() {
                                     </td>
                                     {canManage && (
                                         <td className="px-6 py-4 text-right text-sm">
-                                            <div className="inline-flex items-center gap-3">
+                                            <div className="inline-flex items-center gap-1.5">
                                                 <button
                                                     onClick={() =>
                                                         router.push({ pathname: "/workflow/form-definitions/detail", query: { id: String(item.id) } })
@@ -252,15 +252,19 @@ export default function FormDefinitionList() {
                                                 </button>
                                                 <button
                                                     onClick={() => openEditForm(item)}
-                                                    className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                    className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title={tCommon("edit")}
+                                                    aria-label={tCommon("edit")}
                                                 >
-                                                    {tCommon("edit")}
+                                                    <Pencil className="h-3.5 w-3.5" />
                                                 </button>
                                                 <button
                                                     onClick={() => setDeletingItem(item)}
-                                                    className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                    className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e9bcb6] text-[#930006] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title={tCommon("delete")}
+                                                    aria-label={tCommon("delete")}
                                                 >
-                                                    {tCommon("delete")}
+                                                    <Trash2 className="h-3.5 w-3.5" />
                                                 </button>
                                             </div>
                                         </td>

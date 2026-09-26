@@ -215,10 +215,7 @@ export default function DeviceReport() {
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Báo cáo thiết bị</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Tổng hợp tình trạng thiết bị theo trạng thái, chi nhánh, loại và hạn sử dụng.
-                    </p>
+                    <h1 className="text-lg font-semibold text-[#191c1e]">Báo cáo thiết bị</h1>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -312,12 +309,12 @@ export default function DeviceReport() {
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="whitespace-nowrap px-6 py-3">Thiết bị</th>
-                                <th className="whitespace-nowrap px-6 py-3">Chi nhánh</th>
-                                <th className="whitespace-nowrap px-6 py-3">Người quản lý</th>
-                                <th className="whitespace-nowrap px-6 py-3">Ngày hết hạn</th>
-                                <th className="whitespace-nowrap px-6 py-3 text-right">Còn lại</th>
+                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                <th className="whitespace-nowrap px-3 py-2">Thiết bị</th>
+                                <th className="whitespace-nowrap px-3 py-2">Chi nhánh</th>
+                                <th className="whitespace-nowrap px-3 py-2">Người quản lý</th>
+                                <th className="whitespace-nowrap px-3 py-2">Ngày hết hạn</th>
+                                <th className="whitespace-nowrap px-3 py-2 text-right">Còn lại</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -338,18 +335,18 @@ export default function DeviceReport() {
                                 const badgeText = expired ? `Quá hạn ${Math.abs(days)} ngày` : `Còn ${days} ngày`;
                                 return (
                                     <tr key={device.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                        <td className="px-6 py-4">
+                                        <td className="px-3 py-2">
                                             <div className="text-sm font-semibold text-[#191c1e]">{device.deviceCode}</div>
                                             <div className="max-w-[220px] truncate text-xs text-[#5e3f3a]" title={device.deviceName}>
                                                 {device.deviceName}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-[#5e3f3a]">{device.branchName}</td>
-                                        <td className="px-6 py-4 text-sm text-[#5e3f3a]">{device.manager}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">
+                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{device.branchName}</td>
+                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{device.manager}</td>
+                                        <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">
                                             {formatDate(device.expirationDate)}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-right">
+                                        <td className="whitespace-nowrap px-3 py-2 text-right">
                                             <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}`}>
                                                 {badgeText}
                                             </span>

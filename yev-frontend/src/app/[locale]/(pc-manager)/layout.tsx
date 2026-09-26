@@ -25,8 +25,8 @@ export default function PcManagerLayout({ children }: { children: ReactNode }) {
           className="pc-content-offset min-h-full transition-[margin-left] duration-200"
           style={{ marginLeft: "var(--sidebar-w, 13.75rem)" }}
         >
-          <div className="min-h-full bg-[#f8fafc] px-5 pb-5 pt-3 md:px-8 md:pb-8 md:pt-4 lg:px-10 lg:pb-10 lg:pt-5">
-            <div className="mx-auto max-w-[1280px]">{children}</div>
+          <div className="min-h-full bg-[#f8fafc] px-3 pb-4 pt-3 md:px-4 lg:px-5">
+            <div className="mx-auto max-w-[1600px]">{children}</div>
           </div>
         </div>
       </div>

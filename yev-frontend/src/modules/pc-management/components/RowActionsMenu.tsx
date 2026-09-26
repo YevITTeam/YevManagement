@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MoreVertical } from "lucide-react";
+import { MoreVertical, type LucideIcon } from "lucide-react";
 
 export interface RowAction {
     label: string;
+    icon?: LucideIcon;
     onClick: () => void;
     variant?: "default" | "danger";
     disabled?: boolean;
@@ -80,7 +81,7 @@ export default function RowActionsMenu({ actions }: RowActionsMenuProps) {
                         style={{ position: "fixed", top: coords.top, right: coords.right }}
                         className="z-50 w-max min-w-[140px] overflow-hidden rounded-lg border border-[#e0e3e5] bg-white py-1 shadow-lg"
                     >
-                        {actions.map((action) => (
+                        {actions.map(({ icon: Icon, ...action }) => (
                             <button
                                 key={action.label}
                                 role="menuitem"
@@ -89,12 +90,13 @@ export default function RowActionsMenu({ actions }: RowActionsMenuProps) {
                                     setOpen(false);
                                     action.onClick();
                                 }}
-                                className={`block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-sm font-semibold transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50 ${
+                                className={`flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-xs! font-semibold! transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50 ${
                                     action.variant === "danger"
                                         ? "text-[#930006] hover:text-[#e3000f]"
                                         : "text-[#5e3f3a] hover:text-[#191c1e]"
                                 }`}
                             >
+                                {Icon && <Icon className="h-3.5 w-3.5" />}
                                 {action.label}
                             </button>
                         ))}

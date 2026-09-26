@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, FilterX, RefreshCw, Search } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { AuditTrailApi } from "@/modules/pc-management/api/audit-trail.api";
@@ -12,9 +12,9 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const PAGE_SIZE = 20;
 
-const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+const fieldLabelClassName = "mb-1 block text-xs font-semibold text-[#5e3f3a]";
 const fieldClassName =
-    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+    "h-9 w-full rounded-md border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
 function formatDateTime(value: string) {
     if (!value) return "-";
@@ -103,25 +103,24 @@ export default function AuditTrailList() {
     };
 
     return (
-        <div className="space-y-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Lịch sử thao tác</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Nhật ký Tạo/Sửa/Xoá/Khôi phục tự động ghi lại cho toàn bộ dữ liệu quản lý thiết bị.
-                    </p>
+                    <h1 className="text-lg font-semibold text-[#191c1e]">Lịch sử thao tác</h1>
                 </div>
                 <button
                     onClick={() => fetchRows()}
                     disabled={isLoading}
-                    className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                    title="Làm mới"
+                    aria-label="Làm mới"
+                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    <RefreshCw className="h-3.5 w-3.5" /> Làm mới
+                    <RefreshCw className="h-3.5 w-3.5" />
                 </button>
             </div>
 
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-                <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+            <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
+                <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-full sm:[&>label]:w-36">
                     <label className="block">
                         <span className={fieldLabelClassName}>Bảng dữ liệu</span>
                         <input
@@ -142,7 +141,7 @@ export default function AuditTrailList() {
                             className={fieldClassName}
                         />
                     </label>
-                    <label className="block">
+                    <label className="block sm:w-28!">
                         <span className={fieldLabelClassName}>Id bản ghi</span>
                         <input
                             value={recordId}
@@ -152,16 +151,23 @@ export default function AuditTrailList() {
                             className={fieldClassName}
                         />
                     </label>
-                    <label className="block">
+                    <label className="block sm:w-32!">
                         <span className={fieldLabelClassName}>Hành động</span>
-                        <select value={action} onChange={(event) => setAction(event.target.value)} className={fieldClassName}>
-                            <option value="">Tất cả</option>
-                            {Object.entries(auditActionLabels).map(([value, label]) => (
-                                <option key={value} value={value}>
-                                    {label}
-                                </option>
-                            ))}
-                        </select>
+                        <div className="relative">
+                            <select
+                                value={action}
+                                onChange={(event) => setAction(event.target.value)}
+                                className={`${fieldClassName} appearance-none pr-8 ${action === "" ? "text-[#8a8f94]" : ""}`}
+                            >
+                                <option value="">Tất cả</option>
+                                {Object.entries(auditActionLabels).map(([value, label]) => (
+                                    <option key={value} value={value} className="text-[#191c1e]">
+                                        {label}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
+                        </div>
                     </label>
                     <label className="block">
                         <span className={fieldLabelClassName}>Người thao tác</span>
@@ -169,34 +175,39 @@ export default function AuditTrailList() {
                             value={changedBy}
                             onChange={(event) => setChangedBy(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="YEV\\..."
+                            placeholder="YEV\..."
                             className={fieldClassName}
                         />
                     </label>
-                    <label className="block">
+                    <label className="block sm:w-40!">
                         <span className={fieldLabelClassName}>Từ ngày</span>
                         <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className={fieldClassName} />
                     </label>
-                    <label className="block">
+                    <label className="block sm:w-40!">
                         <span className={fieldLabelClassName}>Đến ngày</span>
                         <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className={fieldClassName} />
                     </label>
-                </div>
-                <div className="mt-4 flex justify-end gap-2">
-                    <button
-                        onClick={handleReset}
-                        disabled={isLoading}
-                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                    >
-                        Xoá lọc
-                    </button>
-                    <button
-                        onClick={handleSearch}
-                        disabled={isLoading}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:opacity-50"
-                    >
-                        Tìm kiếm
-                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={handleSearch}
+                            disabled={isLoading}
+                            title="Tìm kiếm"
+                            aria-label="Tìm kiếm"
+                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-[#e3000f] text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <Search className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={handleReset}
+                            disabled={isLoading}
+                            title="Xoá lọc"
+                            aria-label="Xoá lọc"
+                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <FilterX className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
             </section>
 
@@ -211,12 +222,12 @@ export default function AuditTrailList() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Bảng</th>
-                                <th className="px-6 py-3">Đối tượng</th>
-                                <th className="px-6 py-3">Hành động</th>
-                                <th className="px-6 py-3">Người thao tác</th>
-                                <th className="px-6 py-3">Thời gian</th>
-                                <th className="px-6 py-3 text-right">Chi tiết</th>
+                                <th className="px-3 py-2">Bảng</th>
+                                <th className="px-3 py-2">Đối tượng</th>
+                                <th className="px-3 py-2">Hành động</th>
+                                <th className="px-3 py-2">Người thao tác</th>
+                                <th className="px-3 py-2">Thời gian</th>
+                                <th className="px-3 py-2 text-right">Chi tiết</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -230,8 +241,8 @@ export default function AuditTrailList() {
                             {rows.map((row) => (
                                 <Fragment key={row.id}>
                                     <tr className="border-b border-[#f1f5f9]">
-                                        <td className="px-6 py-3 text-sm font-semibold text-[#191c1e]">{row.tableName}</td>
-                                        <td className="px-6 py-3 text-sm text-[#191c1e]">
+                                        <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{row.tableName}</td>
+                                        <td className="px-3 py-2 text-sm text-[#191c1e]">
                                             <div className="flex items-center gap-2">
                                                 <span>{row.recordName || "-"}</span>
                                                 {row.affectedCount > 1 && (
@@ -242,16 +253,16 @@ export default function AuditTrailList() {
                                             </div>
                                             <div className="text-xs text-[#5e3f3a]">#{row.recordId}</div>
                                         </td>
-                                        <td className="px-6 py-3">
+                                        <td className="px-3 py-2">
                                             <span
                                                 className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${auditActionClasses[row.action] ?? "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"}`}
                                             >
                                                 {auditActionLabels[row.action] ?? row.action}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{row.changedBy}</td>
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{formatDateTime(row.changedAt)}</td>
-                                        <td className="px-6 py-3 text-right">
+                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.changedBy}</td>
+                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{formatDateTime(row.changedAt)}</td>
+                                        <td className="px-3 py-2 text-right">
                                             <button
                                                 onClick={() => setExpandedId((current) => (current === row.id ? null : row.id))}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
@@ -262,7 +273,7 @@ export default function AuditTrailList() {
                                     </tr>
                                     {expandedId === row.id && (
                                         <tr className="border-b border-[#f1f5f9] bg-[#f8fafc]">
-                                            <td colSpan={6} className="px-6 py-4">
+                                            <td colSpan={6} className="px-3 py-2">
                                                 <AuditTrailDiffView
                                                     oldValues={row.oldValues}
                                                     newValues={row.newValues}

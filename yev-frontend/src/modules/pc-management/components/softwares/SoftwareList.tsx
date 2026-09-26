@@ -1,6 +1,6 @@
 "use client";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, Pencil, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { SoftwareApi } from "@/modules/pc-management/api/software.api";
@@ -215,19 +215,19 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder="Tìm theo mã hoặc tên phần mềm..."
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            className="cursor-pointer h-9 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
                             Tìm kiếm
                         </button>
                         <select
                             value={priorityFilter}
                             onChange={(event) => handlePriorityFilterChange(event.target.value)}
-                            className="h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         >
                             <option value={PRIORITY_FILTER_ALL}>Tất cả mức ưu tiên</option>
                             {priorityOptions.values.map((value) => (
@@ -250,18 +250,18 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">Mã</th>
-                                <th className="px-6 py-3">Tên phần mềm</th>
-                                <th className="px-6 py-3">Nhóm</th>
-                                <th className="px-6 py-3">Loại</th>
-                                <th className="px-6 py-3">Nhà phát hành</th>
-                                <th className="px-6 py-3 text-right">Số lượng</th>
-                                <th className="px-6 py-3 text-right">
+                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                <th className="px-3 py-2">Mã</th>
+                                <th className="px-3 py-2">Tên phần mềm</th>
+                                <th className="px-3 py-2">Nhóm</th>
+                                <th className="px-3 py-2">Loại</th>
+                                <th className="px-3 py-2">Nhà phát hành</th>
+                                <th className="px-3 py-2 text-right">Số lượng</th>
+                                <th className="px-3 py-2 text-right">
                                     <button
                                         type="button"
                                         onClick={togglePrioritySort}
-                                        className="cursor-pointer inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                        className="cursor-pointer inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a] transition hover:text-[#191c1e]"
                                         title="Sắp xếp theo ưu tiên"
                                     >
                                         Ưu tiên
@@ -269,7 +269,7 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                                         {prioritySort === "desc" && <ArrowDown size={14} />}
                                     </button>
                                 </th>
-                                <th className="px-6 py-3 text-right">Thao tác</th>
+                                <th className="px-3 py-2 text-right">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -282,28 +282,30 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                             )}
                             {pagedSoftwares.map((software) => (
                                 <tr key={software.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{software.softwareCode}</td>
-                                    <td className="px-6 py-4 text-sm text-[#191c1e]">{software.softwareName}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{software.softwareGroupName}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{software.softwareType ?? "—"}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{software.publisher ?? "—"}</td>
-                                    <td className="px-6 py-4 text-right text-sm text-[#5e3f3a]">{software.softwareQuantity ?? "—"}</td>
-                                    <td className="px-6 py-4 text-right text-sm text-[#5e3f3a]">{software.softwarePriority ?? "—"}</td>
-                                    <td className="px-6 py-4 text-right text-sm">
-                                        <div className="inline-flex items-center gap-3">
+                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{software.softwareCode}</td>
+                                    <td className="px-3 py-2 text-sm text-[#191c1e]">{software.softwareName}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{software.softwareGroupName}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{software.softwareType ?? "—"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{software.publisher ?? "—"}</td>
+                                    <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{software.softwareQuantity ?? "—"}</td>
+                                    <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{software.softwarePriority ?? "—"}</td>
+                                    <td className="px-3 py-2 text-right text-sm">
+                                        <div className="inline-flex items-center gap-1.5">
                                             <button
                                                 onClick={() => openEditForm(software)}
-                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e0e3e5] text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                 title="Sửa"
+                                                aria-label="Sửa"
                                             >
-                                                Sửa
+                                                <Pencil className="h-3.5 w-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => setDeletingSoftware(software)}
-                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e9bcb6] text-[#930006] hover:bg-[#fff4f2]"
                                                 title="Xoá"
+                                                aria-label="Xoá"
                                             >
-                                                Xoá
+                                                <Trash2 className="h-3.5 w-3.5" />
                                             </button>
                                         </div>
                                     </td>

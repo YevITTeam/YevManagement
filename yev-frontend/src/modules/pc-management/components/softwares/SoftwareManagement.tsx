@@ -26,10 +26,7 @@ export default function SoftwareManagement() {
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Quản lý phần mềm</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Quản lý phần mềm được cấp phép và các nhóm phân loại phần mềm trong doanh nghiệp.
-                    </p>
+                    <h1 className="text-lg font-semibold text-[#191c1e]">Quản lý phần mềm</h1>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">

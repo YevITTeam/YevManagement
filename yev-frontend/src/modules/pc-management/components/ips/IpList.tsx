@@ -28,10 +28,7 @@ export default function IpList() {
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Quản lý IP</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Quản lý địa chỉ IP và các dải mạng (prefix) sử dụng trong hệ thống.
-                    </p>
+                    <h1 className="text-lg font-semibold text-[#191c1e]">Quản lý IP</h1>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">

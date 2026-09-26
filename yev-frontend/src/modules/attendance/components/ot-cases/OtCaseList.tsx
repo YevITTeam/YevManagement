@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Check, Inbox, X, Search } from "lucide-react";
+import { Check, Inbox, X, Search, Pencil, Trash2 } from "lucide-react";
 
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
@@ -197,20 +197,22 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                                         </span>
                                     </td>
                                     <td className="px-3 py-2 text-right text-sm">
-                                        <div className="inline-flex items-center gap-3">
+                                        <div className="inline-flex items-center gap-1.5">
                                             <button
                                                 onClick={() => openEditForm(otCase)}
-                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-40"
                                                 title={tCommon("edit")}
+                                                aria-label={tCommon("edit")}
                                             >
-                                                {tCommon("edit")}
+                                                <Pencil className="h-3.5 w-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => setDeletingOtCase(otCase)}
-                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e9bcb6] text-[#930006] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
                                                 title={tCommon("delete")}
+                                                aria-label={tCommon("delete")}
                                             >
-                                                {tCommon("delete")}
+                                                <Trash2 className="h-3.5 w-3.5" />
                                             </button>
                                         </div>
                                     </td>

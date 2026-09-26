@@ -13,6 +13,7 @@ import type {
 import { getApiErrorMessage } from "@/lib/apiError";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Trash2 } from "lucide-react";
 
 interface DeviceConfigurationPanelProps {
     deviceId: number;
@@ -273,9 +274,11 @@ export default function DeviceConfigurationPanel({ deviceId, deviceCode, configu
                                 <button
                                     type="button"
                                     onClick={() => setDeletingInitial(true)}
-                                    className="cursor-pointer text-sm font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                    className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e9bcb6] text-[#930006] hover:bg-[#fff4f2]"
+                                    title="Xoá"
+                                    aria-label="Xoá"
                                 >
-                                    Xoá
+                                    <Trash2 className="h-3.5 w-3.5" />
                                 </button>
                             )}
                         </div>

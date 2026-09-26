@@ -9,6 +9,7 @@ import IpPrefixForm, { type IpPrefixFormValues } from "./IpPrefixForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Pencil, Trash2 } from "lucide-react";
 
 const PAGE_SIZE = 10;
 
@@ -141,12 +142,12 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder="Tìm theo dải mạng, mô tả..."
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            className="cursor-pointer h-9 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
                             Tìm kiếm
                         </button>
@@ -163,15 +164,15 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="whitespace-nowrap px-6 py-3">Dải mạng</th>
-                                <th className="whitespace-nowrap px-6 py-3">Chi nhánh</th>
-                                <th className="whitespace-nowrap px-6 py-3">Subnet mask</th>
-                                <th className="whitespace-nowrap px-6 py-3">Gateway</th>
-                                <th className="whitespace-nowrap px-6 py-3">DNS</th>
-                                <th className="whitespace-nowrap px-6 py-3">Mô tả</th>
-                                <th className="whitespace-nowrap px-6 py-3 text-center">IP đã dùng/ còn trống</th>
-                                <th className="whitespace-nowrap px-6 py-3 text-right">Thao tác</th>
+                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                <th className="whitespace-nowrap px-3 py-2">Dải mạng</th>
+                                <th className="whitespace-nowrap px-3 py-2">Chi nhánh</th>
+                                <th className="whitespace-nowrap px-3 py-2">Subnet mask</th>
+                                <th className="whitespace-nowrap px-3 py-2">Gateway</th>
+                                <th className="whitespace-nowrap px-3 py-2">DNS</th>
+                                <th className="whitespace-nowrap px-3 py-2">Mô tả</th>
+                                <th className="whitespace-nowrap px-3 py-2 text-center">IP đã dùng/ còn trống</th>
+                                <th className="whitespace-nowrap px-3 py-2 text-right">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -184,36 +185,38 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                             )}
                             {prefixes.map((prefix) => (
                                 <tr key={prefix.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-[#191c1e]">{prefix.prefix}</td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.branchName ?? "—"}</td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.subnetMask ?? "—"}</td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">{prefix.gateway ?? "—"}</td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-[#5e3f3a]">
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm font-semibold text-[#191c1e]">{prefix.prefix}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{prefix.branchName ?? "—"}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{prefix.subnetMask ?? "—"}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{prefix.gateway ?? "—"}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">
                                         {prefix.preferredDns || prefix.alternateDns
                                             ? [prefix.preferredDns, prefix.alternateDns].filter(Boolean).join(" / ")
                                             : "—"}
                                     </td>
-                                    <td className="max-w-[220px] truncate px-6 py-4 text-sm text-[#5e3f3a]" title={prefix.description ?? undefined}>
+                                    <td className="max-w-[220px] truncate px-3 py-2 text-sm text-[#5e3f3a]" title={prefix.description ?? undefined}>
                                         {prefix.description ?? "—"}
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-center text-sm text-[#5e3f3a]">
+                                    <td className="whitespace-nowrap px-3 py-2 text-center text-sm text-[#5e3f3a]">
                                         {prefix.usedIpCount} / {prefix.availableIpCount}
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                                        <div className="inline-flex items-center gap-3">
+                                    <td className="whitespace-nowrap px-3 py-2 text-right text-sm">
+                                        <div className="inline-flex items-center gap-1.5">
                                             <button
                                                 onClick={() => openEditForm(prefix)}
-                                                className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e0e3e5] text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                 title="Sửa"
+                                                aria-label="Sửa"
                                             >
-                                                Sửa
+                                                <Pencil className="h-3.5 w-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => setDeletingPrefix(prefix)}
-                                                className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e9bcb6] text-[#930006] hover:bg-[#fff4f2]"
                                                 title="Xoá"
+                                                aria-label="Xoá"
                                             >
-                                                Xoá
+                                                <Trash2 className="h-3.5 w-3.5" />
                                             </button>
                                         </div>
                                     </td>

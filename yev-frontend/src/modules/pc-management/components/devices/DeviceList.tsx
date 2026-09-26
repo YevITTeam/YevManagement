@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown, ChevronDown, Printer, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, ArrowRightLeft, ArrowUpDown, ChevronDown, Copy, Eye, Pencil, ChevronLeft, ChevronRight, FileBarChart, Plus, Printer, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import RowActionsMenu from "@/modules/pc-management/components/RowActionsMenu";
 import DeviceFilterBar, { type DeviceFilters } from "@/modules/pc-management/components/DeviceFilterBar";
 import PrintDeviceQrLabelsDialog from "@/modules/pc-management/components/PrintDeviceQrLabelsDialog";
-import RowActionsMenu from "@/modules/pc-management/components/RowActionsMenu";
 import DeviceForm, { type DeviceFormValues } from "@/modules/pc-management/components/devices/DeviceForm";
 import TransferDeviceDialog from "@/modules/pc-management/components/devices/TransferDeviceDialog";
 import ImportDeviceDialog from "@/modules/pc-management/components/devices/ImportDeviceDialog";
@@ -66,10 +66,6 @@ function incrementDeviceCode(code: string): string {
   return `${prefix}${nextDigits}`;
 }
 
-// Bảng thiết bị có nhiều dòng cao thấp khác nhau (IP/email nhiều dòng) nên không dùng
-// công thức "số dòng x chiều cao 1 dòng" như bảng IP; cố định chiều cao khung cuộn để
-// danh sách gọn trong màn hình, giống cách IpAddressList giới hạn maxHeight cho khung bảng.
-const TABLE_MAX_HEIGHT_PX = 640;
 
 export default function DeviceList() {
   const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
@@ -383,18 +379,17 @@ export default function DeviceList() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#191c1e]">Quản lý Thiết bị</h1>
-          <p className="mt-1 text-[15px] text-[#5e3f3a]">Quản lý và theo dõi thiết bị phần cứng qua các văn phòng.</p>
-        </div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-lg font-semibold text-[#191c1e]" title="Quản lý và theo dõi thiết bị phần cứng qua các văn phòng.">
+          Quản lý Thiết bị
+        </h1>
 
         <div className="flex flex-wrap items-center gap-2">
           <div ref={actionsMenuRef} className="relative">
             <button
               onClick={() => setIsActionsMenuOpen((current) => !current)}
-              className="cursor-pointer flex items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+              className="cursor-pointer flex h-8 items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 text-xs! font-semibold! text-[#191c1e] transition hover:bg-[#f2f4f6]"
               aria-haspopup="menu"
               aria-expanded={isActionsMenuOpen}
             >
@@ -413,9 +408,9 @@ export default function DeviceList() {
                     setIsActionsMenuOpen(false);
                     router.push("/pc/reports");
                   }}
-                  className="block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-xs! font-semibold! text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
                 >
-                   Xem báo cáo
+                  <FileBarChart className="h-3.5 w-3.5" /> Xem báo cáo
                 </button>
                 <button
                   role="menuitem"
@@ -423,7 +418,7 @@ export default function DeviceList() {
                     setIsActionsMenuOpen(false);
                     setIsTaniumImportOpen(true);
                   }}
-                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-xs! font-semibold! text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
                 >
                   <RefreshCw className="h-3.5 w-3.5" /> Đồng bộ từ Tanium
                 </button>
@@ -433,7 +428,7 @@ export default function DeviceList() {
                     setIsActionsMenuOpen(false);
                     setIsImportOpen(true);
                   }}
-                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-xs! font-semibold! text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
                 >
                   <Upload className="h-3.5 w-3.5" /> Nhập từ Excel
                 </button>
@@ -443,7 +438,7 @@ export default function DeviceList() {
                     setIsActionsMenuOpen(false);
                     setIsLiquidationImportOpen(true);
                   }}
-                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-4 py-2 text-left text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
+                  className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-xs! font-semibold! text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e]"
                 >
                   <Trash2 className="h-3.5 w-3.5" /> Nhập thanh lý hàng loạt
                 </button>
@@ -452,45 +447,45 @@ export default function DeviceList() {
           </div>
           <button
             onClick={openCreateForm}
-            className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+            className="cursor-pointer inline-flex h-8 items-center gap-1.5 rounded-md bg-[#e3000f] px-3 text-xs! font-semibold! text-white transition hover:bg-[#b40009]"
           >
-            + Thêm mới
+            <Plus className="h-3.5 w-3.5" /> Thêm mới
           </button>
         </div>
       </div>
 
       <section className="overflow-hidden border border-[#e0e3e5] bg-white">
-        <div className="border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
+        <div className="border-b border-[#e0e3e5] bg-[#f8fafc] p-2.5">
           <DeviceFilterBar onFilter={setFilters} />
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-white p-4 md:flex-row md:items-center md:justify-between">
-          <div className="text-sm font-medium text-[#5e3f3a]">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-white px-3 py-1.5">
+          <div className="text-xs font-medium text-[#5e3f3a]">
             {isLoading
               ? "Đang tải dữ liệu..."
               : `Hiển thị ${devices.length} bản ghi (trang ${pageIndex}/${totalPages}, tổng ${totalCount})`}
           </div>
 
           {selectedIds.length > 0 && (
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-[#5e3f3a]">Đã chọn {selectedIds.length} thiết bị</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-[#5e3f3a]">Đã chọn {selectedIds.length} thiết bị</span>
               <button
                 onClick={() => setSelectedDevices(new Map())}
-                className="cursor-pointer text-xs font-semibold text-[#5e3f3a] underline-offset-2 transition hover:text-[#191c1e] hover:underline"
+                className="cursor-pointer text-xs! font-semibold! text-[#5e3f3a] underline-offset-2 transition hover:text-[#191c1e] hover:underline"
               >
                 Bỏ chọn tất cả
               </button>
               <button
                 onClick={handlePrintSelectedDevices}
-                className="flex cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-2.5 text-xs! font-semibold! text-[#191c1e] transition hover:bg-[#f2f4f6]"
               >
                 <Printer className="h-3.5 w-3.5" /> In tem QR
               </button>
               <button
                 onClick={() => setIsBulkDeleteOpen(true)}
-                className="cursor-pointer rounded-md border border-[#930006] bg-white px-3 py-1.5 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
+                className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-[#930006] bg-white px-2.5 text-xs! font-semibold! text-[#930006] transition hover:bg-[#fff4f2]"
               >
-                Xoá đã chọn
+                <Trash2 className="h-3.5 w-3.5" /> Xoá đã chọn
               </button>
             </div>
           )}
@@ -500,7 +495,7 @@ export default function DeviceList() {
             selectedDevices) — hiển thị dạng badge kèm nút bỏ chọn để người dùng biết đang chọn những
             mã nào kể cả khi chúng không còn nằm trong kết quả tìm kiếm hiện tại. */}
         {selectedIds.length > 0 && (
-          <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto border-b border-[#e0e3e5] bg-[#fff8f6] px-4 py-3">
+          <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto border-b border-[#e0e3e5] bg-[#fff8f6] px-3 py-1.5">
             {Array.from(selectedDevices.entries()).map(([id, code]) => (
               <span
                 key={id}
@@ -521,7 +516,7 @@ export default function DeviceList() {
         )}
 
         {error && (
-          <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
+          <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-xs text-[#930006]">{error}</div>
         )}
 
         <div
@@ -531,12 +526,12 @@ export default function DeviceList() {
           onMouseUp={handleDragEnd}
           onMouseLeave={handleDragEnd}
           className={`overflow-x-auto overflow-y-auto ${isDragScrolling ? "cursor-grabbing select-none" : "cursor-grab"}`}
-          style={{ maxHeight: TABLE_MAX_HEIGHT_PX }}
+          style={{ maxHeight: "calc(100vh - 250px)", minHeight: 320 }}
         >
           <table className="min-w-full border-collapse text-left">
             <thead className="sticky top-0 z-10">
-              <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                <th className="w-10 whitespace-nowrap px-4 py-3">
+              <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-[11px] font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                <th className="w-10 whitespace-nowrap px-3 py-1.5">
                   <input
                     type="checkbox"
                     className="h-4 w-4 cursor-pointer accent-[#e3000f]"
@@ -545,11 +540,11 @@ export default function DeviceList() {
                     aria-label="Chọn tất cả (trang hiện tại)"
                   />
                 </th>
-                <th className="whitespace-nowrap px-4 py-3">
+                <th className="whitespace-nowrap px-3 py-1.5">
                   <button
                     type="button"
                     onClick={toggleSortDeviceCode}
-                    className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a] transition hover:text-[#191c1e]"
+                    className="cursor-pointer inline-flex items-center gap-1.5 text-[11px]! font-semibold! uppercase tracking-[0.06em] text-[#5e3f3a] transition hover:text-[#191c1e]"
                     title="Sắp xếp theo mã thiết bị"
                   >
                     Thiết bị
@@ -558,15 +553,15 @@ export default function DeviceList() {
                     {sortDeviceCodeAscending === false && <ArrowUpAZ className="h-3.5 w-3.5" />}
                   </button>
                 </th>
-                <th className="whitespace-nowrap px-4 py-3">Loại / NCC</th>
-                <th className="whitespace-nowrap px-4 py-3">Chi nhánh</th>
-                <th className="whitespace-nowrap px-4 py-3">Địa chỉ IP</th>
-                <th className="whitespace-nowrap px-4 py-3">Người quản lý</th>
-                <th className="whitespace-nowrap px-4 py-3">Email</th>
-                <th className="whitespace-nowrap px-4 py-3">Mua / Hết hạn</th>
-                <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
-                <th className="whitespace-nowrap px-4 py-3">Ghi chú</th>
-                <th className="sticky right-0 z-10 w-10 whitespace-nowrap bg-[#f8fafc] px-2 py-3 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
+                <th className="whitespace-nowrap px-3 py-1.5">Loại / NCC</th>
+                <th className="whitespace-nowrap px-3 py-1.5">Chi nhánh</th>
+                <th className="whitespace-nowrap px-3 py-1.5">Địa chỉ IP</th>
+                <th className="whitespace-nowrap px-3 py-1.5">Người quản lý</th>
+                <th className="whitespace-nowrap px-3 py-1.5">Email</th>
+                <th className="whitespace-nowrap px-3 py-1.5">Mua / Hết hạn</th>
+                <th className="whitespace-nowrap px-3 py-1.5">Trạng thái</th>
+                <th className="whitespace-nowrap px-3 py-1.5">Ghi chú</th>
+                <th className="sticky right-0 z-10 w-10 whitespace-nowrap bg-[#f8fafc] px-2 py-1.5 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                   <span className="sr-only">Hành động</span>
                 </th>
               </tr>
@@ -581,7 +576,7 @@ export default function DeviceList() {
               )}
               {devices.map((device) => (
                 <tr key={device.id} className="group border-b border-[#f1f5f9] bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                  <td className="w-10 whitespace-nowrap px-4 py-3 align-top">
+                  <td className="w-10 whitespace-nowrap px-3 py-1.5 align-top">
                     <input
                       type="checkbox"
                       className="h-4 w-4 cursor-pointer accent-[#e3000f]"
@@ -590,19 +585,19 @@ export default function DeviceList() {
                       aria-label={`Chọn thiết bị ${device.deviceCode}`}
                     />
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                  <td className="whitespace-nowrap px-3 py-1.5 align-top">
                     <div className="text-sm font-semibold text-[#191c1e]">{device.deviceCode}</div>
                     <div className="max-w-[200px] truncate text-xs text-[#5e3f3a]" title={device.deviceName}>
                       {device.deviceName}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                  <td className="whitespace-nowrap px-3 py-1.5 align-top">
                     <div className="text-sm text-[#191c1e]">{device.deviceTypeName}</div>
                     <div className="max-w-[160px] truncate text-xs text-[#5e3f3a]" title={device.supplierName}>
                       {device.supplierName}
                     </div>
                   </td>
-                  <td className="px-4 py-3 align-top">
+                  <td className="px-3 py-1.5 align-top">
                     <div className="max-w-[120px] truncate text-xs text-[#5e3f3a]" title={device.branchName}>
                       {device.branchName}
                     </div>
@@ -613,9 +608,9 @@ export default function DeviceList() {
                       {device.groupName || "-"}
                     </div>
                   </td>
-                  <td className="min-w-[150px] px-4 py-3 align-top">
+                  <td className="min-w-[150px] px-3 py-1.5 align-top">
                     {device.ipAddresses.length > 0 ? (
-                      <div className="flex flex-col items-start gap-1">
+                      <div className="flex flex-col items-start gap-0.5">
                         {device.ipAddresses.map((ip, index) => (
                           <span
                             key={index}
@@ -629,8 +624,8 @@ export default function DeviceList() {
                       <span className="text-sm text-[#5e3f3a]">-</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top text-sm text-[#191c1e]">{device.manager || "-"}</td>
-                  <td className="min-w-[180px] px-4 py-3 align-top">
+                  <td className="whitespace-nowrap px-3 py-1.5 align-top text-sm text-[#191c1e]">{device.manager || "-"}</td>
+                  <td className="min-w-[180px] px-3 py-1.5 align-top">
                     {device.emails.length > 0 ? (
                       <div className="flex flex-col gap-0.5">
                         {device.emails.map((email, index) => (
@@ -643,39 +638,40 @@ export default function DeviceList() {
                       <span className="text-sm text-[#5e3f3a]">-</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top text-xs text-[#5e3f3a]">
+                  <td className="whitespace-nowrap px-3 py-1.5 align-top text-xs text-[#5e3f3a]">
                     <div>Mua: {formatDate(device.purchaseDate)}</div>
                     <div>HSD: {formatDate(device.expirationDate)}</div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                  <td className="whitespace-nowrap px-3 py-1.5 align-top">
                     <span
-                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[device.status] ?? statusClasses[0]}`}
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusClasses[device.status] ?? statusClasses[0]}`}
                     >
                       <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
                       {statusLabels[device.status] ?? "Không xác định"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 align-top">
-                    <div className="line-clamp-3 min-w-[220px] max-w-[280px] text-xs text-[#5e3f3a]" title={device.note ?? undefined}>
+                  <td className="px-3 py-1.5 align-top">
+                    <div className="line-clamp-2 min-w-[180px] max-w-[260px] text-xs text-[#5e3f3a]" title={device.note ?? undefined}>
                       {device.note || "-"}
                     </div>
                   </td>
-                  <td className="sticky right-0 w-10 whitespace-nowrap bg-inherit px-2 py-3 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
+                  <td className="sticky right-0 w-10 whitespace-nowrap bg-inherit px-2 py-1.5 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                     <div className="inline-flex justify-end">
                       <RowActionsMenu
                         actions={[
-                          { label: "Chi tiết", onClick: () => router.push({ pathname: "/pc/devices", query: { id: String(device.id) } }) },
-                          { label: "Sửa", onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
-                          { label: "Nhân bản", onClick: () => openDuplicateForm(device), disabled: isLoadingEditTarget },
+                          { label: "Chi tiết", icon: Eye, onClick: () => router.push({ pathname: "/pc/devices", query: { id: String(device.id) } }) },
+                          { label: "Sửa", icon: Pencil, onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
+                          { label: "Nhân bản", icon: Copy, onClick: () => openDuplicateForm(device), disabled: isLoadingEditTarget },
                           {
                             label: "Chuyển máy",
+                            icon: ArrowRightLeft,
                             onClick: () => {
                               setTransferPresetNewDeviceId(null);
                               setTransferringDevice(device);
                             },
                             disabled: device.status === 3,
                           },
-                          { label: "Xoá", onClick: () => setDeletingDevice(device), variant: "danger" },
+                          { label: "Xoá", icon: Trash2, onClick: () => setDeletingDevice(device), variant: "danger" },
                         ]}
                       />
                     </div>
@@ -686,23 +682,23 @@ export default function DeviceList() {
           </table>
         </div>
 
-        <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+        <div className="flex items-center justify-between border-t border-[#e0e3e5] px-3 py-1.5">
           <button
-            className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+            className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs! text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
             disabled={!hasPreviousPage || isLoading}
             onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
           >
-            Trang trước
+            <ChevronLeft className="h-3.5 w-3.5" /> Trang trước
           </button>
-          <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
+          <div className="text-xs font-semibold text-[#191c1e]">
             Trang {pageIndex} / {totalPages}
           </div>
           <button
-            className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+            className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs! text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
             disabled={!hasNextPage || isLoading}
             onClick={() => setPageIndex((current) => current + 1)}
           >
-            Trang sau
+            Trang sau <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
       </section>

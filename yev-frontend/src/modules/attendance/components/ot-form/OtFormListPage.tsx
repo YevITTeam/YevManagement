@@ -461,8 +461,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                 </div>
             )}
 
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
+            <section className="rounded-xl border border-[#e0e3e5] bg-white p-3 shadow-sm">
+                <div className="flex flex-wrap items-end gap-x-3 gap-y-2 [&>label]:w-full sm:[&>label]:w-40">
                     <label className="block">
                         <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterFromDateLabel")}
@@ -540,7 +540,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                 </div>
 
                 {showAdvancedFilter && (
-                    <div className="mt-3 grid gap-3 border-t border-[#f1f5f9] pt-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-2 border-t border-[#f1f5f9] pt-2.5 [&>label]:w-full sm:[&>label]:w-48">
                     <label className="block">
                         <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterDepartmentLabel")}

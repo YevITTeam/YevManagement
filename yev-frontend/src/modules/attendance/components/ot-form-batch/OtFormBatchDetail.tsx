@@ -14,6 +14,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { useRouter } from "@/navigation";
+import { MEAL_TICKET_MAIN, MEAL_TICKET_SECONDARY } from "@/modules/attendance/lib/mealTicket";
 import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
 
 function formatDate(value: string) {
@@ -255,7 +256,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                 type="button"
                                                 onClick={() => toggleExpanded(form.otFormId)}
                                                 aria-expanded={isExpanded}
-                                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs! font-semibold! text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
                                             >
                                                 {t("employeeSummary", {
                                                     count: state.decision === 1 ? form.employees.length : includedCount,
@@ -266,24 +267,30 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                             <button
                                                 type="button"
                                                 onClick={() => setDecision(form.otFormId, 0)}
-                                                className={`cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                                                title={t("decisionApprove")}
+                                                aria-label={t("decisionApprove")}
+                                                aria-pressed={state.decision === 0}
+                                                className={`inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition ${
                                                     state.decision === 0
                                                         ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                                                        : "border-[#e0e3e5] bg-white text-[#5e3f3a] hover:bg-[#f2f4f6]"
+                                                        : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
                                                 }`}
                                             >
-                                                {t("decisionApprove")}
+                                                <Check className="h-4 w-4" />
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setDecision(form.otFormId, 1)}
-                                                className={`cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                                                title={t("decisionReject")}
+                                                aria-label={t("decisionReject")}
+                                                aria-pressed={state.decision === 1}
+                                                className={`inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition ${
                                                     state.decision === 1
                                                         ? "border-[#930006] bg-[#fff4f2] text-[#930006]"
-                                                        : "border-[#e0e3e5] bg-white text-[#5e3f3a] hover:bg-[#f2f4f6]"
+                                                        : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:border-[#e9bcb6] hover:bg-[#fff4f2] hover:text-[#930006]"
                                                 }`}
                                             >
-                                                {t("decisionReject")}
+                                                <X className="h-4 w-4" />
                                             </button>
                                         </div>
                                     </div>
@@ -359,20 +366,19 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                         <div className="overflow-x-auto">
                                             <table className="min-w-full border-collapse text-left">
                                                 <thead>
-                                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{t("colInclude")}</th>
-                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{t("colEmployeeCode")}</th>
-                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{t("colFullName")}</th>
-                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{t("colTime")}</th>
-                                                        <th rowSpan={2} className="px-6 py-2.5 text-center align-bottom">{t("colHours")}</th>
-                                                        <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{tDetail("colAccumulation")}</th>
-                                                        <th rowSpan={2} className="px-6 py-2.5 text-center align-bottom">{tDetail("colMeal")}</th>
-                                                        <th rowSpan={2} className="px-6 py-2.5 text-center align-bottom">{tDetail("colDidEat")}</th>
-                                                        <th rowSpan={2} className="px-6 py-2.5 align-bottom">{tDetail("colNote")}</th>
+                                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-[11px] font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                                        <th rowSpan={2} className="px-3 py-1.5 align-bottom">{t("colInclude")}</th>
+                                                        <th rowSpan={2} className="px-3 py-1.5 align-bottom">{t("colEmployeeCode")}</th>
+                                                        <th rowSpan={2} className="px-3 py-1.5 align-bottom">{t("colFullName")}</th>
+                                                        <th rowSpan={2} className="px-3 py-1.5 align-bottom">{t("colTime")}</th>
+                                                        <th rowSpan={2} className="px-3 py-1.5 text-center align-bottom">{t("colHours")}</th>
+                                                        <th colSpan={2} className="border-b border-[#e0e3e5] px-3 py-1.5 text-center">{tDetail("colAccumulation")}</th>
+                                                        <th rowSpan={2} className="px-3 py-1.5 text-center align-bottom">{tDetail("colMeal")}</th>
+                                                        <th rowSpan={2} className="px-3 py-1.5 align-bottom">{tDetail("colNote")}</th>
                                                     </tr>
-                                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                        <th className="px-6 py-2 text-center">{tDetail("colMonth")}</th>
-                                                        <th className="px-6 py-2 text-center">{tDetail("colYear")}</th>
+                                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-[11px] font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                                        <th className="px-3 py-1.5 text-center">{tDetail("colMonth")}</th>
+                                                        <th className="px-3 py-1.5 text-center">{tDetail("colYear")}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -382,8 +388,8 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                         const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
                                                         const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
                                                         return (
-                                                            <tr key={employee.employeeId} className={`border-b border-[#f1f5f9] ${isExcluded ? "opacity-50" : ""}`}>
-                                                                <td className="px-6 py-2.5">
+                                                            <tr key={employee.employeeId} className={`border-b border-[#f1f5f9] bg-white even:bg-[#f2f4f7] ${isExcluded ? "opacity-50" : ""}`}>
+                                                                <td className="px-3 py-1.5">
                                                                     <input
                                                                         type="checkbox"
                                                                         checked={!isExcluded}
@@ -391,40 +397,42 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                                         className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                                                     />
                                                                 </td>
-                                                                <td className="px-6 py-2.5 text-sm">
-                                                                    <span className="inline-flex items-center rounded-md border border-[#d5dade] bg-white px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e]">
+                                                                <td className="px-3 py-1.5 text-sm">
+                                                                    <span className="inline-flex items-center whitespace-nowrap rounded-md border border-[#d5dade] bg-white px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e]">
                                                                         {employee.employeeCode}
                                                                     </span>
                                                                 </td>
-                                                                <td className="px-6 py-2.5 text-sm font-medium text-[#191c1e]">{employee.fullName}</td>
-                                                                <td className="px-6 py-2.5 text-sm text-[#5e3f3a]">
+                                                                <td className="px-3 py-1.5 whitespace-nowrap text-sm font-medium text-[#191c1e]">{employee.fullName}</td>
+                                                                <td className="px-3 py-1.5 text-sm text-[#5e3f3a]">
                                                                     <TimeRange start={formatTime(employee.startTime)} end={formatTime(employee.endTime)} />
                                                                 </td>
-                                                                <td className="px-6 py-2.5 text-center text-sm text-[#191c1e]">{formatHours(hours)}</td>
-                                                                <td className={`px-6 py-2.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                                                <td className="px-3 py-1.5 text-center text-sm text-[#191c1e]">{formatHours(hours)}</td>
+                                                                <td className={`px-3 py-1.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                                     {employee.monthToDate}h
                                                                 </td>
-                                                                <td className={`px-6 py-2.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                                                <td className={`px-3 py-1.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                                     {employee.yearToDate}h
                                                                 </td>
-                                                                <td className="px-6 py-2.5 text-center text-sm">
-                                                                    <MealTicketTypeBadge type={employee.mealTicketType} t={tDetail} />
-                                                                </td>
-                                                                <td className="px-6 py-2.5 text-center text-sm">
-                                                                    {employee.didEat ? (
-                                                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                                                                            <Check size={11} /> {tDetail("didEatYes")}
+                                                                <td className="px-3 py-1.5 text-center text-sm">
+                                                                    {employee.mealTicketType === MEAL_TICKET_MAIN || employee.mealTicketType === MEAL_TICKET_SECONDARY ? (
+                                                                        <span className="inline-flex items-center gap-1.5">
+                                                                            <MealTicketTypeBadge type={employee.mealTicketType} t={tDetail} />
+                                                                            <span
+                                                                                title={employee.didEat ? tDetail("didEatYes") : `${tDetail("didEatNo")} — ${tDetail("didEatNoHint")}`}
+                                                                                className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${
+                                                                                    employee.didEat
+                                                                                        ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+                                                                                        : "border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]"
+                                                                                }`}
+                                                                            >
+                                                                                {employee.didEat ? <Check size={12} /> : <X size={12} />}
+                                                                            </span>
                                                                         </span>
                                                                     ) : (
-                                                                        <span
-                                                                            className="inline-flex items-center gap-1 rounded-full border border-[#f5d0a9] bg-[#fff4e5] px-2 py-0.5 text-xs font-semibold text-[#9a5b00]"
-                                                                            title={tDetail("didEatNoHint")}
-                                                                        >
-                                                                            <X size={11} /> {tDetail("didEatNo")}
-                                                                        </span>
+                                                                        <span className="text-[#c7ccd1]">–</span>
                                                                     )}
                                                                 </td>
-                                                                <td className="px-6 py-2.5 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
+                                                                <td className="px-3 py-1.5 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
                                                             </tr>
                                                         );
                                                     })}
@@ -440,7 +448,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                     <div className="flex justify-end">
                         <button
                             onClick={openProcessModal}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-5 py-2.5 text-sm! font-semibold! text-white transition hover:bg-[#b40009]"
                         >
                             {t("processButton")}
                         </button>
@@ -452,7 +460,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                 <div>
                     <button
                         onClick={() => router.push({ pathname: "/ot/batches" })}
-                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm! font-semibold! text-[#191c1e] transition hover:bg-[#f2f4f6]"
                     >
                         {t("backToListButton")}
                     </button>
@@ -494,7 +502,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                     type="button"
                                     onClick={closeProcessModal}
                                     disabled={isSubmitting}
-                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm! font-semibold! text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {tCommon("cancel")}
                                 </button>
@@ -502,7 +510,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                     type="button"
                                     onClick={handleProcess}
                                     disabled={isSubmitting}
-                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm! font-semibold! text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isSubmitting ? tCommon("processing") : t("confirmProcess")}
                                 </button>
