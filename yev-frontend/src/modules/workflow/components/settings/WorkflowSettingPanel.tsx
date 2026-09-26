@@ -100,7 +100,6 @@ export default function WorkflowSettingPanel() {
                                 placeholder=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
                                 className={inputClassName}
                             />
-                            <p className="mt-1 text-xs text-[#8a8f94]">{t("allowedFileExtensionsHint")}</p>
                         </label>
 
                         <div className="flex justify-end">

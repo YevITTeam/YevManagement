@@ -58,7 +58,6 @@ export default function DocumentImportDropzone({ onClose, onImported }: Document
                     </button>
                 </div>
 
-                <p className="mb-4 text-sm text-[#5e3f3a]">{t("importDocxDesc")}</p>
 
                 <div
                     onDragOver={(e) => {

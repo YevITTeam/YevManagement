@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, Check, ChevronLeft, ChevronRight, Inbox, RefreshCw, X } from "lucide-react";
+import { Calendar, Check, ChevronLeft, ChevronRight, FilterX, Inbox, Pencil, RefreshCw, Search, SlidersHorizontal, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
 import { getPathname, useRouter } from "@/navigation";
@@ -47,7 +47,7 @@ interface OtFormListPageProps {
 
 function formatDate(value: string) {
     if (!value) return "-";
-    return new Date(value).toLocaleDateString("vi-VN");
+    return new Date(value).toLocaleDateString("en-GB");
 }
 
 // "Tiến độ duyệt" (approvalSummary) — mỗi phần tử 1 dòng đã Ký/Duyệt/Từ chối theo bước Chức vụ
@@ -68,27 +68,33 @@ function ApprovalSummaryCell({
 }) {
     const t = useTranslations("Attendance.OtFormList");
     const isWaiting = status === 0; // OtFormStatus.InApproval
-    if (summary.length === 0 && !isWaiting) {
-        return <span className="text-xs text-[#9aa0a6]">-</span>;
-    }
+    const showWaitingCount = isWaiting && currentStepCandidateCount > 1;
+    if (summary.length === 0 && !showWaitingCount) return null;
+    // Gọn: mỗi bước đã xử lý chỉ còn icon ✓/✗ + tên Chức vụ (tên người nằm trong tooltip); trạng thái "đang
+    // chờ" đã có pill Trạng thái nên chỉ hiện thêm số người cùng giữ bước đang chờ khi > 1.
     return (
-        <div className="space-y-0.5">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
             {summary.map((item, index) => {
                 const isRejected = item.action === 2;
                 return (
-                    <div
+                    <span
                         key={index}
-                        className={`flex items-center gap-1 text-xs ${isRejected ? "text-[#930006]" : "text-emerald-700"}`}
+                        title={`${item.approverFullName ?? item.approverUserName} (${item.jobTitleNameSnapshot})`}
+                        className={`inline-flex items-center gap-0.5 whitespace-nowrap text-xs ${isRejected ? "text-[#930006]" : "text-emerald-700"}`}
                     >
-                        {isRejected ? <X size={12} /> : <Check size={12} />} {item.approverFullName ?? item.approverUserName} (
-                        {item.jobTitleNameSnapshot})
-                    </div>
+                        {isRejected ? <X size={11} /> : <Check size={11} />}
+                        {item.jobTitleNameSnapshot}
+                    </span>
                 );
             })}
-            {isWaiting && (
-                <div className="text-xs text-[#9a5b00]">
-                    {currentStepCandidateCount > 1 ? t("waitingForNextMulti", { count: currentStepCandidateCount }) : t("waitingForNext")}
-                </div>
+            {showWaitingCount && (
+                <span
+                    title={t("waitingForNextMulti", { count: currentStepCandidateCount })}
+                    className="inline-flex items-center gap-0.5 whitespace-nowrap text-xs text-[#9a5b00]"
+                >
+                    <Users size={11} />
+                    {currentStepCandidateCount}
+                </span>
             )}
         </div>
     );
@@ -123,6 +129,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
 
     // Ô nhập bộ lọc (chưa áp dụng) — tách khỏi appliedFilters để gõ/chọn xong mới bấm "Tìm kiếm" mới
     // gọi API, giống khuôn AuditTrailList.tsx.
+    // Bộ lọc nâng cao (Bộ phận/Nhóm/Team/Line/Nhóm ca) mặc định thu gọn — đa số lượt chỉ lọc theo ngày/trạng thái.
+    const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
     const [fromDateInput, setFromDateInput] = useState("");
     const [toDateInput, setToDateInput] = useState("");
     const [statusInput, setStatusInput] = useState("");
@@ -436,48 +444,55 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             : mode === "all-forms"
             ? t("titleAllForms")
             : t("titleMyParticipations");
-    const columnCount = (mode === "my-forms" ? 10 : 9) + (canBulkApprove ? 1 : 0);
+    const advancedFilterCount = [
+        appliedFilters.departmentId,
+        appliedFilters.groupId,
+        appliedFilters.productionTeamId,
+        appliedFilters.productionLineId,
+        appliedFilters.productionShiftTeamId,
+    ].filter((value) => value !== "").length;
+    const columnCount = (mode === "my-forms" ? 9 : 8) + (canBulkApprove ? 1 : 0);
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-4">
             {!hideHeading && (
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">{title}</h1>
+                    <h1 className="text-xl font-semibold text-[#191c1e]">{title}</h1>
                 </div>
             )}
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
                     <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterFromDateLabel")}
                         </span>
                         <input
                             type="date"
                             value={fromDateInput}
                             onChange={(event) => setFromDateInput(event.target.value)}
-                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                     </label>
                     <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterToDateLabel")}
                         </span>
                         <input
                             type="date"
                             value={toDateInput}
                             onChange={(event) => setToDateInput(event.target.value)}
-                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                     </label>
                     <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterStatusLabel")}
                         </span>
                         <select
                             value={statusInput}
                             onChange={(event) => setStatusInput(event.target.value)}
-                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         >
                             <option value="">{t("filterAllStatus")}</option>
                             {Object.entries(otFormStatusLabels).map(([value, label]) => (
@@ -489,28 +504,51 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     </label>
                     <div className="flex items-end gap-2">
                         <button
+                            type="button"
+                            onClick={() => setShowAdvancedFilter((current) => !current)}
+                            aria-expanded={showAdvancedFilter}
+                            title={t("filterAdvancedButton")}
+                            aria-label={t("filterAdvancedButton")}
+                            className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            <SlidersHorizontal className="h-4 w-4" />
+                            {advancedFilterCount > 0 && (
+                                <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#e3000f] px-1 text-[10px] font-bold text-white">
+                                    {advancedFilterCount}
+                                </span>
+                            )}
+                        </button>
+                        <button
                             onClick={handleResetFilter}
                             disabled={isLoading}
-                            className="h-10 flex-1 cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            title={t("resetFilterButton")}
+                            aria-label={t("resetFilterButton")}
+                            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                            {t("resetFilterButton")}
+                            <FilterX className="h-4 w-4" />
                         </button>
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="h-10 flex-1 cursor-pointer rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:opacity-50"
+                            title={tCommon("search")}
+                            aria-label={tCommon("search")}
+                            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-[#e3000f] text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {tCommon("search")}
+                            <Search className="h-4 w-4" />
                         </button>
                     </div>
+                </div>
+
+                {showAdvancedFilter && (
+                    <div className="mt-3 grid gap-3 border-t border-[#f1f5f9] pt-3 sm:grid-cols-2 lg:grid-cols-5">
                     <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterDepartmentLabel")}
                         </span>
                         <select
                             value={departmentId}
                             onChange={(event) => setDepartmentId(event.target.value ? Number(event.target.value) : "")}
-                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         >
                             <option value="">{t("filterAllDepartment")}</option>
                             {departmentOptions.map((option) => (
@@ -519,14 +557,14 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                         </select>
                     </label>
                     <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterGroupLabel")}
                         </span>
                         <select
                             value={groupId}
                             onChange={(event) => setGroupId(event.target.value ? Number(event.target.value) : "")}
                             disabled={departmentId === ""}
-                            className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                         >
                             <option value="">{t("filterAllGroup")}</option>
                             {groupOptions.map((option) => (
@@ -537,13 +575,13 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     {showProductionFilter && (
                         <>
                             <label className="block">
-                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                     {t("filterProductionTeamLabel")}
                                 </span>
                                 <select
                                     value={productionTeamId}
                                     onChange={(event) => setProductionTeamId(event.target.value ? Number(event.target.value) : "")}
-                                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                    className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                                 >
                                     <option value="">{t("filterAllProductionTeam")}</option>
                                     {teamOptions.map((option) => (
@@ -552,13 +590,13 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                 </select>
                             </label>
                             <label className="block">
-                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                     {t("filterProductionLineLabel")}
                                 </span>
                                 <select
                                     value={productionLineId}
                                     onChange={(event) => setProductionLineId(event.target.value ? Number(event.target.value) : "")}
-                                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                    className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                                 >
                                     <option value="">{t("filterAllProductionLine")}</option>
                                     {lineOptions.map((option) => (
@@ -567,13 +605,13 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                 </select>
                             </label>
                             <label className="block">
-                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                     {t("filterProductionShiftTeamLabel")}
                                 </span>
                                 <select
                                     value={productionShiftTeamId}
                                     onChange={(event) => setProductionShiftTeamId(event.target.value ? Number(event.target.value) : "")}
-                                    className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                    className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                                 >
                                     <option value="">{t("filterAllProductionShiftTeam")}</option>
                                     {shiftTeamOptions.map((option) => (
@@ -583,7 +621,9 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                             </label>
                         </>
                     )}
-                </div>
+                
+                    </div>
+                )}
 
                 {mode === "pending-approvals" && (
                     <div className="mt-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
@@ -641,7 +681,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] p-3">
                     <div className="text-sm text-[#5e3f3a]">
                         {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: forms.length, total: totalCount })}
                     </div>
@@ -666,9 +706,11 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                         <button
                             onClick={() => fetchForms()}
                             disabled={isLoading}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            title={tCommon("refresh")}
+                            aria-label={tCommon("refresh")}
+                            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                         >
-                            <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
+                            <RefreshCw className="h-3.5 w-3.5" />
                         </button>
                     </div>
                 </div>
@@ -680,9 +722,9 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                 {canBulkApprove && (
-                                    <th className="w-10 px-4 py-2.5">
+                                    <th className="w-10 px-3 py-2.5">
                                         <input
                                             type="checkbox"
                                             checked={forms.length > 0 && selectedIds.length === forms.length}
@@ -692,16 +734,15 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                         />
                                     </th>
                                 )}
-                                <th className="px-4 py-2.5">{t("colDepartmentGroup")}</th>
-                                <th className="px-4 py-2.5">{t("colProductionLine")}</th>
-                                <th className="px-4 py-2.5">{t("colOtCase")}</th>
-                                <th className="px-4 py-2.5">{t("colDate")}</th>
-                                <th className="px-4 py-2.5">{t("colTotalHour")}</th>
-                                <th className="px-4 py-2.5">{t("colNumberOfEmployee")}</th>
-                                <th className="px-4 py-2.5">{t("colCreatedBy")}</th>
-                                <th className="px-4 py-2.5">{t("colStatus")}</th>
-                                <th className="px-4 py-2.5">{t("colApprovalProgress")}</th>
-                                {mode === "my-forms" && <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>}
+                                <th className="whitespace-nowrap px-3 py-2.5">{t("colDepartmentGroup")}</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">{t("colProductionLine")}</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">{t("colOtCase")}</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">{t("colDate")}</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">{t("colTotalHour")}</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">{t("colNumberOfEmployee")}</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">{t("colCreatedBy")}</th>
+                                <th className="whitespace-nowrap px-3 py-2.5">{t("colStatus")}</th>
+                                {mode === "my-forms" && <th className="whitespace-nowrap px-3 py-2.5 text-right">{tCommon("actions")}</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -719,10 +760,10 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                 <tr
                                     key={form.id}
                                     onClick={() => router.push({ pathname: "/ot/forms", query: { id: String(form.id) } })}
-                                    className="cursor-pointer border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]"
+                                    className="cursor-pointer border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
                                 >
                                     {canBulkApprove && (
-                                        <td className="px-4 py-3 align-top" onClick={(event) => event.stopPropagation()}>
+                                        <td className="px-3 py-2.5 align-top" onClick={(event) => event.stopPropagation()}>
                                             <input
                                                 type="checkbox"
                                                 checked={selectedIds.includes(form.id)}
@@ -732,13 +773,13 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                             />
                                         </td>
                                     )}
-                                    <td className="px-4 py-3 align-top">
+                                    <td className="px-3 py-2.5 align-top">
                                         <div className="text-sm font-semibold text-[#191c1e]">
                                             {bilingualText(form.departmentNameVn, form.departmentNameJp)}
                                         </div>
                                         <div className="text-xs text-[#5e3f3a]">{bilingualText(form.groupNameVn, form.groupNameJp)}</div>
                                     </td>
-                                    <td className="px-4 py-3 align-top text-xs text-[#5e3f3a]">
+                                    <td className="px-3 py-2.5 align-top text-xs text-[#5e3f3a]">
                                         {form.isProductionForm ? (
                                             <>
                                                 <div>{form.productionLineNames || "—"}</div>
@@ -750,42 +791,44 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                             "—"
                                         )}
                                     </td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{form.otCaseCode}</td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">
+                                    <td className="px-3 py-2.5 align-top text-sm text-[#191c1e]">{form.otCaseCode}</td>
+                                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
+                                    <td className="px-3 py-2.5 align-top text-sm text-[#191c1e]">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
                                             {form.totalHour}h
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{form.numberOfEmployee}</td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#5e3f3a]">
+                                    <td className="px-3 py-2.5 align-top text-sm text-[#191c1e]">{form.numberOfEmployee}</td>
+                                    <td className="px-3 py-2.5 align-top text-sm text-[#5e3f3a]">
                                         {form.createdByFullName ?? form.createdByUserName}
                                     </td>
-                                    <td className="px-4 py-3 align-top">
-                                        <span
-                                            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
-                                        >
-                                            {otFormStatusLabels[form.status] ?? t("unknownStatus")}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 align-top">
-                                        <ApprovalSummaryCell
-                                            summary={form.approvalSummary}
-                                            status={form.status}
-                                            currentStepCandidateCount={form.currentStepCandidateCount}
-                                        />
+                                    <td className="px-3 py-2.5 align-top">
+                                        <div className="space-y-1">
+                                            <span
+                                                className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
+                                            >
+                                                {otFormStatusLabels[form.status] ?? t("unknownStatus")}
+                                            </span>
+                                            <ApprovalSummaryCell
+                                                summary={form.approvalSummary}
+                                                status={form.status}
+                                                currentStepCandidateCount={form.currentStepCandidateCount}
+                                            />
+                                        </div>
                                     </td>
                                     {mode === "my-forms" && (
-                                        <td className="px-4 py-3 align-top text-right">
+                                        <td className="px-3 py-2.5 align-top text-right">
                                             {form.isEditable && canCreate && (
                                                 <button
                                                     onClick={(event) => {
                                                         event.stopPropagation();
                                                         router.push({ pathname: "/ot/forms/edit", query: { id: String(form.id) } });
                                                     }}
-                                                    className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                    title={tCommon("edit")}
+                                                    aria-label={tCommon("edit")}
+                                                    className="cursor-pointer rounded-md p-1.5 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                 >
-                                                    {tCommon("edit")}
+                                                    <Pencil className="h-4 w-4" />
                                                 </button>
                                             )}
                                         </td>
@@ -796,23 +839,27 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
                     <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+                        title={tCommon("prevPage")}
+                        aria-label={tCommon("prevPage")}
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
                         disabled={!hasPreviousPage || isLoading}
                         onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
                     >
-                        {tCommon("prevPage")}
+                        <ChevronLeft className="h-4 w-4" />
                     </button>
                     <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
                         {tCommon("pageOf", { current: pageIndex, total: totalPages })}
                     </div>
                     <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
+                        title={tCommon("nextPage")}
+                        aria-label={tCommon("nextPage")}
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
                         disabled={!hasNextPage || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        {tCommon("nextPage")}
+                        <ChevronRight className="h-4 w-4" />
                     </button>
                 </div>
             </section>
@@ -868,9 +915,11 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         onClick={(event) => event.stopPropagation()}
-                                                        className="shrink-0 cursor-pointer font-semibold text-[#5e3f3a] underline transition hover:text-[#191c1e]"
+                                                        title={tCommon("edit")}
+                                                        aria-label={tCommon("edit")}
+                                                        className="shrink-0 cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                     >
-                                                        {tCommon("edit")}
+                                                        <Pencil className="h-3.5 w-3.5" />
                                                     </a>
                                                 )}
                                             </div>
@@ -906,9 +955,6 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                 />
                             </label>
 
-                            <p className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
-                                {t("bulkActionHint")}
-                            </p>
 
                             <div className="flex justify-end gap-3 pt-2">
                                 <button

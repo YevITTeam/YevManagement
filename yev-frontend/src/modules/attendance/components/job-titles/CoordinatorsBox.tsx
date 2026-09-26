@@ -36,6 +36,7 @@ export default function CoordinatorsBox({
     addingValue,
     onAddChange,
     labels,
+    embedded = false,
 }: {
     isLoading: boolean;
     coordinators: CoordinatorItem[];
@@ -45,20 +46,22 @@ export default function CoordinatorsBox({
     addingValue: number | "";
     onAddChange: (value: number | "") => void;
     labels: CoordinatorsBoxLabels;
+    // true = rendered inside a shared card (no own border/background, no "currently in charge" caption).
+    embedded?: boolean;
 }) {
     return (
-        <div className="space-y-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
+        <div className={embedded ? "space-y-1.5 p-2.5" : "space-y-1.5 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-2.5"}>
             <div className="flex items-center gap-1.5">
                 <Users className="h-3.5 w-3.5 text-[#8a8f94]" />
-                <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{labels.title}</span>
+                <span className={embedded ? "text-xs font-semibold text-[#191c1e]" : "text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]"}>{labels.title}</span>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs font-semibold text-[#8a8f94]">{labels.label}</span>
+                {!embedded && <span className="text-xs font-semibold text-[#8a8f94]">{labels.label}</span>}
                 {isLoading ? (
                     <span className="text-xs text-[#8a8f94]">{labels.loading}</span>
                 ) : (
                     <>
-                        <AvatarStack people={coordinators.map((c) => ({ id: c.employeeId, name: c.fullName, code: c.employeeCode }))} />
+                        {!embedded && <AvatarStack people={coordinators.map((c) => ({ id: c.employeeId, name: c.fullName, code: c.employeeCode }))} />}
                         {coordinators.length === 0 ? (
                             <span className="text-xs italic text-[#8a8f94]">{labels.noCoordinators}</span>
                         ) : (
@@ -86,14 +89,14 @@ export default function CoordinatorsBox({
                                 </span>
                             ))
                         )}
-                        <div className="w-56 shrink-0">
+                        <div className="w-full">
                             <SearchableSelect
                                 options={addOptions}
                                 value={addingValue}
                                 onChange={onAddChange}
                                 placeholder={labels.addPlaceholder}
                                 disabled={isSaving}
-                                triggerClassName="h-7 rounded-full border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
+                                triggerClassName="h-7 rounded-md border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs! text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"
                             />
                         </div>
                     </>

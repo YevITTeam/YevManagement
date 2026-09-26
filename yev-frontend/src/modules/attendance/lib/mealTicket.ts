@@ -24,7 +24,7 @@ function computeRawHours(startTime: string, endTime: string): number {
     const startMinutes = toMinutes(startTime);
     let endMinutes = toMinutes(endTime);
     if (endMinutes < startMinutes) endMinutes += 24 * 60;
-    return (endMinutes - startMinutes) / 60;
+    return Math.round(((endMinutes - startMinutes) / 60) * 100) / 100;
 }
 
 // Ca OT khớp ĐÚNG khung sớm (mặc định 6h-8h, không phải chỉ overlap) — đặc cách không trừ giờ nghỉ ăn
@@ -36,6 +36,7 @@ export function isEarlyMealWindowOt(startTime: string, endTime: string, setting:
     );
 }
 
+// Giờ tính lũy kế/hiển thị: chỉ người có ăn mới bị trừ mealBreakDeductionHours (ngoài khung sớm).
 export function computeActualHours(startTime: string, endTime: string, didEat: boolean, setting: AttendanceSettingDto): number {
     const raw = computeRawHours(startTime, endTime);
     if (isEarlyMealWindowOt(startTime, endTime, setting)) return raw;
@@ -45,7 +46,8 @@ export function computeActualHours(startTime: string, endTime: string, didEat: b
 export function computeMealTicketType(startTime: string, endTime: string, didEat: boolean, setting: AttendanceSettingDto): number {
     if (isEarlyMealWindowOt(startTime, endTime, setting)) return MEAL_TICKET_SECONDARY;
 
-    const actualHours = computeActualHours(startTime, endTime, didEat, setting);
+    // Loại phiếu luôn tính như có trừ nghỉ ăn (không phụ thuộc didEat) — khớp MealTicketCalculator BE.
+    const actualHours = computeActualHours(startTime, endTime, true, setting);
     if (actualHours < setting.noMealTicketMaxHours) return MEAL_TICKET_NONE;
     if (actualHours < setting.mainMealTicketMinHours) return MEAL_TICKET_SECONDARY;
     return MEAL_TICKET_MAIN;

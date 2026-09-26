@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, Building2, Users } from "lucide-react";
+import { RefreshCw, Building2, Users, Search } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -178,9 +178,11 @@ export default function EmployeeList() {
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            title={tCommon("search")}
+                            aria-label={tCommon("search")}
+                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
                         >
-                            {tCommon("search")}
+                            <Search className="h-4 w-4" />
                         </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
@@ -213,7 +215,7 @@ export default function EmployeeList() {
                                 </tr>
                             )}
                             {!isLoading && employees.map((item) => (
-                                <tr key={item.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                <tr key={item.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{item.fullName}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.position || "—"}</td>

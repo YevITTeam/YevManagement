@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { TimeRange } from "@/modules/attendance/components/ot-form/TimeRange";
 import { useSearchParams } from "next/navigation";
 import { Car, Check, Clock, MessageCircle, Printer, UserX, Utensils, X } from "lucide-react";
 
@@ -381,7 +382,7 @@ export default function OtFormEmailConfirmPage() {
                 <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("timeLabel")}</div>
                     <div className="mt-1 text-sm text-[#191c1e]">
-                        {formatTime(form.startTime)} — {formatTime(form.endTime)} ({form.totalHour}h)
+                        <TimeRange start={formatTime(form.startTime)} end={formatTime(form.endTime)} hours={form.totalHour} />
                     </div>
                 </div>
                 <div>
@@ -489,7 +490,7 @@ export default function OtFormEmailConfirmPage() {
                                     return (
                                         <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#f8fafc] opacity-60">
                                             <td className="px-6 py-3 text-sm">
-                                                <span className="inline-flex items-center rounded-md bg-[#eceef0] px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e] line-through">
+                                                <span className="inline-flex items-center rounded-md border border-[#d5dade] bg-white px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e] line-through">
                                                     {employee.employeeCode}
                                                 </span>
                                             </td>
@@ -516,17 +517,17 @@ export default function OtFormEmailConfirmPage() {
                                     <tr
                                         key={employee.employeeId}
                                         className={`border-b border-[#f1f5f9] transition-colors ${
-                                            isOverLimit ? "bg-[#fff4f2] hover:bg-[#ffe9e6]" : "hover:bg-[#f8fafc]"
+                                            isOverLimit ? "bg-[#fff4f2] hover:bg-[#ffe9e6]" : "bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
                                         }`}
                                     >
                                         <td className="px-6 py-3 text-sm">
-                                            <span className="inline-flex items-center whitespace-nowrap rounded-md bg-[#eceef0] px-3 py-1 font-mono text-xs font-semibold text-[#191c1e]">
+                                            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-[#d5dade] bg-white px-3 py-1 font-mono text-xs font-semibold text-[#191c1e]">
                                                 {employee.employeeCode}
                                             </span>
                                         </td>
                                         <td className="px-6 py-3 text-sm font-medium whitespace-nowrap text-[#191c1e]">{employee.fullName}</td>
                                         <td className="px-6 py-3 text-sm whitespace-nowrap text-[#5e3f3a]">
-                                            {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
+                                            <TimeRange start={formatTime(employee.startTime)} end={formatTime(employee.endTime)} />
                                         </td>
                                         <td className="px-6 py-3 text-center text-sm">
                                             <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">

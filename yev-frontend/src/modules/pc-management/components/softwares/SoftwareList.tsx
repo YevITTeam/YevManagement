@@ -281,7 +281,7 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                                 </tr>
                             )}
                             {pagedSoftwares.map((software) => (
-                                <tr key={software.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                <tr key={software.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{software.softwareCode}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{software.softwareName}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{software.softwareGroupName}</td>

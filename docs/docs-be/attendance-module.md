@@ -247,9 +247,12 @@ thì giữ nguyên **4h** (bỏ hẳn phần +30 phút cộng bù trước đây
 - **Nhập/sửa**: cùng luồng và cùng giới hạn thời gian với việc sửa giờ kết thúc thực tế ("thực tích") —
   nhập lúc tạo đơn (`CreateOtFormEmployeeItemDto.DidEat`), sửa được tới trước khi Trưởng phòng duyệt
   (`UpdateOtFormEmployeeTimeDto.DidEat`, cùng `OtFormService.UpdateAsync` đang giới hạn phạm vi sửa).
-- **Công thức dùng chung 1 nơi** — `OtFormService.CalculateOtHours(startTime, endTime, didEat,
-  mainMealTicketMinHours)`: `hours = EndTime - StartTime`; nếu `hours >= mainMealTicketMinHours &&
-  didEat` thì `hours -= MealBreakDeductionHours (0.5m)`; ngược lại giữ nguyên. Mirror độc lập ở
+- **Công thức dùng chung 1 nơi** — `MealTicketCalculator.CalculateOtHours(startTime, endTime, didEat,
+  settings)`: `hours = round(EndTime - StartTime, 2)`; ngoài khung OT sớm, `didEat` thì `hours -=
+  MealBreakDeductionHours` (0.5h), không ăn giữ nguyên — dùng cho lũy kế/giờ hiển thị/chặn hạn mức.
+  **Loại phiếu** (`CalculateMealTicketType`, 2026-09-24) thì tính như MỌI người đều bị trừ (gọi
+  `CalculateOtHours(..., didEat: true)`), không phụ thuộc `DidEat` → cùng 1 ca luôn ra cùng loại phiếu dù
+  nút "Ăn uống" bật/tắt. Mirror độc lập ở
   `EmployeeService.CalculateProjectedHours` (Dự kiến, không gọi chéo — mỗi service tự chứa logic tính
   giờ của mình, quy ước cũ giữ nguyên).
 - **Nơi dùng công thức này**:
@@ -372,10 +375,9 @@ lũy kế và §Có ăn hay không phía trên — chốt qua nhiều vòng trao
   tính) luôn nhận **phiếu Phụ** và **KHÔNG** trừ `MealBreakDeductionHours`, bất kể `DidEat` là gì. Ví dụ
   chốt với người dùng: OT 6h-8h (2h) → phiếu Phụ, lũy kế ghi nhận đủ **2h** (không phải 1.5h như công
   thức thường).
-- **`DidEat` vẫn giữ nguyên vai trò gate việc trừ giờ** (per-employee, KHÔNG đổi thành trừ vô điều kiện
-  theo khung giờ như bản nháp đầu của `Note_OT.txt`) — lý do: 1 đơn có thể có người ăn người không ăn
-  cùng lúc, mỗi người đã có field `DidEat` riêng từ 2026-08-06. `DidEat` vẫn có tác dụng ở MỌI mức giờ
-  (không chỉ khi đủ phiếu Chính) — khác bản cũ chỉ ảnh hưởng khi đủ ngưỡng.
+- **`DidEat` chỉ gate việc trừ giờ LŨY KẾ, không gate loại phiếu (2026-09-24)** — trước đó `DidEat` cũng
+  quyết định loại phiếu nên cùng 1 ca ra Chính/Phụ khác nhau tuỳ nút "Ăn uống". Nay loại phiếu luôn tính
+  như đã trừ 30 phút (đúng `Note_OT.txt`), còn giờ cộng lũy kế vẫn chỉ trừ người có ăn.
 - **Cấu hình mở rộng** (`AttendanceSetting`, cả 4 field mới đều sửa được qua `PUT /api/AttendanceSetting`,
   `AttendanceSettingPanel.tsx`): `NoMealTicketMaxHours:decimal(5,2)` (default 2),
   `MealBreakDeductionHours:decimal(5,2)` (default 0.5, trước đây hardcode hằng số `0.5m`),

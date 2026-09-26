@@ -133,7 +133,6 @@ export default function ApprovalDelegationList() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{t("delegationTitle")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("delegationDescription")}</p>
                 </div>
                 <button
                     onClick={openCreate}

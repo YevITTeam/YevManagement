@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Check, Inbox, X } from "lucide-react";
+import { Check, Inbox, X, Search } from "lucide-react";
 
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
@@ -125,21 +125,23 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
     return (
         <div className="space-y-4">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex gap-2">
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            title={tCommon("search")}
+                            aria-label={tCommon("search")}
+                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
                         >
-                            {tCommon("search")}
+                            <Search className="h-4 w-4" />
                         </button>
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
@@ -155,11 +157,11 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-4 py-2.5">{t("colCode")}</th>
-                                <th className="px-4 py-2.5">{t("colDescription")}</th>
-                                <th className="px-4 py-2.5">{t("colRequiredLevel")}</th>
-                                <th className="px-4 py-2.5">{t("colRequireSignature")}</th>
-                                <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
+                                <th className="px-3 py-2">{t("colCode")}</th>
+                                <th className="px-3 py-2">{t("colDescription")}</th>
+                                <th className="px-3 py-2">{t("colRequiredLevel")}</th>
+                                <th className="px-3 py-2">{t("colRequireSignature")}</th>
+                                <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -174,15 +176,15 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                                 </tr>
                             )}
                             {otCases.map((otCase) => (
-                                <tr key={otCase.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
-                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{otCase.code}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{otCase.description || "-"}</td>
-                                    <td className="px-4 py-3 text-sm">
+                                <tr key={otCase.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
+                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{otCase.code}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{otCase.description || "-"}</td>
+                                    <td className="px-3 py-2 text-sm">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
                                             {approvalLevelLabels[otCase.requiredApprovalLevel] ?? otCase.requiredApprovalLevel}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-sm">
+                                    <td className="px-3 py-2 text-sm">
                                         <span
                                             className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                                                 otCase.requireSignature
@@ -194,7 +196,7 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                                             {otCase.requireSignature ? t("yes") : t("no")}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-right text-sm">
+                                    <td className="px-3 py-2 text-right text-sm">
                                         <div className="inline-flex items-center gap-3">
                                             <button
                                                 onClick={() => openEditForm(otCase)}
@@ -218,7 +220,7 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasPreviousPage || isLoading}

@@ -146,7 +146,6 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                         <h3 id="import-identity-link-title" className="text-lg font-semibold text-[#191c1e]">
                             {t("identityLinkImportTitle")}
                         </h3>
-                        <p className="mt-1 text-xs text-[#5e3f3a]">{t("identityLinkImportDescription")}</p>
                     </div>
                     <button
                         type="button"

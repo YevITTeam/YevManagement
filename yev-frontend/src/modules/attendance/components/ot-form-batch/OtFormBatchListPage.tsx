@@ -60,13 +60,13 @@ export default function OtFormBatchListPage() {
     );
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-4">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                <h1 className="text-xl font-semibold text-[#191c1e]">{t("title")}</h1>
             </div>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
+                <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] p-3">
                     <div className="text-sm text-[#5e3f3a]">
                         {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: batches.length, total: totalCount })}
                     </div>
@@ -87,13 +87,13 @@ export default function OtFormBatchListPage() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-4 py-2.5">{t("colScope")}</th>
-                                <th className="px-4 py-2.5">{t("colBatchDate")}</th>
-                                <th className="px-4 py-2.5">{t("colFormCount")}</th>
-                                <th className="px-4 py-2.5">{t("colEmployeeCount")}</th>
-                                <th className="px-4 py-2.5">{t("colTotalHour")}</th>
-                                <th className="px-4 py-2.5">{t("colStatus")}</th>
-                                <th className="px-4 py-2.5">{t("colProcessedBy")}</th>
+                                <th className="px-3 py-2">{t("colScope")}</th>
+                                <th className="px-3 py-2">{t("colBatchDate")}</th>
+                                <th className="px-3 py-2">{t("colFormCount")}</th>
+                                <th className="px-3 py-2">{t("colEmployeeCount")}</th>
+                                <th className="px-3 py-2">{t("colTotalHour")}</th>
+                                <th className="px-3 py-2">{t("colStatus")}</th>
+                                <th className="px-3 py-2">{t("colProcessedBy")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -111,27 +111,27 @@ export default function OtFormBatchListPage() {
                                 <tr
                                     key={batch.id}
                                     onClick={() => router.push({ pathname: "/ot/batches/detail", query: { id: String(batch.id) } })}
-                                    className="cursor-pointer border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]"
+                                    className="cursor-pointer border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
                                 >
-                                    <td className="px-4 py-3 align-top text-sm font-semibold text-[#191c1e]">
+                                    <td className="px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">
                                         {bilingualText(batch.scopeNameVn, batch.scopeNameJp)}
                                     </td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{formatDate(batch.batchDate)}</td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{batch.formCount}</td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">{batch.employeeCount}</td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#191c1e]">
+                                    <td className="px-3 py-2 align-top text-sm text-[#191c1e]">{formatDate(batch.batchDate)}</td>
+                                    <td className="px-3 py-2 align-top text-sm text-[#191c1e]">{batch.formCount}</td>
+                                    <td className="px-3 py-2 align-top text-sm text-[#191c1e]">{batch.employeeCount}</td>
+                                    <td className="px-3 py-2 align-top text-sm text-[#191c1e]">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
                                             {batch.totalHour}h
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 align-top">
+                                    <td className="px-3 py-2 align-top">
                                         <span
                                             className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${BATCH_STATUS_CLASSES[batch.status] ?? BATCH_STATUS_CLASSES[0]}`}
                                         >
                                             {batch.status === 1 ? t("statusProcessed") : t("statusPending")}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 align-top text-sm text-[#5e3f3a]">
+                                    <td className="px-3 py-2 align-top text-sm text-[#5e3f3a]">
                                         {batch.processedAt ? (
                                             <>
                                                 {batch.processedByFullName ?? t("statusAutoClosed")}
@@ -148,7 +148,7 @@ export default function OtFormBatchListPage() {
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasPreviousPage || isLoading}

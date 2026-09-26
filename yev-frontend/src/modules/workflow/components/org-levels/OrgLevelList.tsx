@@ -150,7 +150,7 @@ export default function OrgLevelList() {
                                 </tr>
                             )}
                             {!isLoading && orgLevels.map((item) => (
-                                <tr key={item.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                <tr key={item.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.levelNumber}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{item.nameVn}</td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.nameJp || "—"}</td>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { CheckCircle2, FileSpreadsheet, Loader2, Minus, Printer, QrCode, Users, XCircle } from "lucide-react";
+import { CheckCircle2, FileSpreadsheet, Loader2, Minus, Printer, QrCode, Users, XCircle, Search } from "lucide-react";
 
 import { ServerCheckApi } from "@/modules/pc-management/api/server-check.api";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
@@ -116,7 +116,6 @@ export default function ServerCheckReportPage() {
             <div className="flex flex-col gap-4 print:hidden md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">{t("reportTitle")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("reportDescription")}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     {canScan && (
@@ -161,9 +160,11 @@ export default function ServerCheckReportPage() {
                     <button
                         onClick={() => refetch()}
                         disabled={isLoading}
-                        className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        title={tCommon("search")}
+                        aria-label={tCommon("search")}
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
                     >
-                        {tCommon("search")}
+                        <Search className="h-4 w-4" />
                     </button>
                     <button
                         onClick={handleExportExcel}

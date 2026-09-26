@@ -20,7 +20,7 @@ namespace Attendance.Application.Services
         // kế). Ngoài khung sớm: có ăn thì trừ MealBreakDeductionHours, không ăn giữ nguyên giờ thô.
         public static decimal CalculateOtHours(TimeOnly startTime, TimeOnly endTime, bool didEat, AttendanceSettingDto settings)
         {
-            var hours = (decimal)(endTime - startTime).TotalHours;
+            var hours = Math.Round((decimal)(endTime - startTime).TotalHours, 2);
 
             if (IsEarlyMealWindowOt(startTime, endTime, settings)) return hours;
 
@@ -29,12 +29,14 @@ namespace Attendance.Application.Services
             return hours;
         }
 
-        // Loại phiếu ăn 1 người nhận cho 1 lần OT.
+        // Loại phiếu ăn 1 người nhận cho 1 lần OT. Tính trên giờ đã trừ nghỉ ăn VÔ ĐIỀU KIỆN (theo
+        // Note_OT.txt, không phụ thuộc DidEat) để cùng 1 ca luôn ra cùng loại phiếu dù nút "Ăn uống" bật/tắt;
+        // riêng lũy kế/giờ hiển thị vẫn chỉ trừ người có ăn (CalculateOtHours).
         public static MealTicketType CalculateMealTicketType(TimeOnly startTime, TimeOnly endTime, bool didEat, AttendanceSettingDto settings)
         {
             if (IsEarlyMealWindowOt(startTime, endTime, settings)) return MealTicketType.Secondary;
 
-            var actualHours = CalculateOtHours(startTime, endTime, didEat, settings);
+            var actualHours = CalculateOtHours(startTime, endTime, true, settings);
             if (actualHours < settings.NoMealTicketMaxHours) return MealTicketType.None;
             if (actualHours < settings.MainMealTicketMinHours) return MealTicketType.Secondary;
             return MealTicketType.Main;

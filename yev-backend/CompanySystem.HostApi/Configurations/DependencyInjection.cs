@@ -21,14 +21,21 @@ namespace CompanySystem.HostApi.Configurations
             var otManagementConnectionString = configuration.GetConnectionString("OTManagementConnection");
             var workflowManagementConnectionString = configuration.GetConnectionString("WorkflowManagementConnection");
 
+            // Split queries by default: a query with 2+ collection Includes otherwise becomes one JOIN that
+            // multiplies rows (cartesian explosion) and triggers EF warning 20504. Single-collection queries
+            // are unaffected; a hot path that needs one round-trip can opt back in with AsSingleQuery().
             services.AddDbContext<IdentityDbContext>(options =>
-                options.UseSqlServer(identityConnectionString));
+                options.UseSqlServer(identityConnectionString,
+                    sql => sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
             services.AddDbContext<AssetDbContext>(options =>
-                options.UseSqlServer(pcManagementConnectionString));
+                options.UseSqlServer(pcManagementConnectionString,
+                    sql => sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
             services.AddDbContext<AttendanceDbContext>(options =>
-                options.UseSqlServer(otManagementConnectionString));
+                options.UseSqlServer(otManagementConnectionString,
+                    sql => sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
             services.AddDbContext<WorkflowDbContext>(options =>
-                options.UseSqlServer(workflowManagementConnectionString));
+                options.UseSqlServer(workflowManagementConnectionString,
+                    sql => sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 
 
             services.Scan(scan => scan

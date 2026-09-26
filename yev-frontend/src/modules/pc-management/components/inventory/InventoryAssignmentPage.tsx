@@ -95,7 +95,6 @@ export default function InventoryAssignmentPage() {
                     <ArrowLeft className="h-3.5 w-3.5" /> {t("backToReport")}
                 </Link>
                 <h1 className="text-2xl font-semibold text-[#191c1e]">{t("assignmentTitle")}</h1>
-                <p className="mt-1 max-w-3xl text-[15px] text-[#5e3f3a]">{t("assignmentDescription")}</p>
             </div>
 
             <section className="flex flex-wrap items-end gap-3 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">

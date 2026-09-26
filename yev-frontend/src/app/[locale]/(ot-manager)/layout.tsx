@@ -19,8 +19,8 @@ export default function OtManagerLayout({ children }: { children: ReactNode }) {
           className="min-h-full transition-[margin-left] duration-200 print:ml-0!"
           style={{ marginLeft: "var(--sidebar-w, 13.75rem)" }}
         >
-          <div className="min-h-full bg-[#f8fafc] px-5 pb-5 pt-3 md:px-8 md:pb-8 md:pt-4 lg:px-10 lg:pb-10 lg:pt-5 print:p-0">
-            <div className="mx-auto max-w-[1280px] print:max-w-none">{children}</div>
+          <div className="min-h-full bg-[#f8fafc] px-4 pb-4 pt-3 md:px-5 md:pb-5 md:pt-3 lg:px-6 lg:pb-6 lg:pt-4 print:p-0">
+            <div className="mx-auto max-w-[1600px] print:max-w-none">{children}</div>
           </div>
         </div>
       </div>

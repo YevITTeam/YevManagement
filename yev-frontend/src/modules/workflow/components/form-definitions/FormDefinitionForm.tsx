@@ -261,7 +261,6 @@ export default function FormDefinitionForm({ isOpen, mode, initial, formCategori
                                 required
                                 className={fieldClassName}
                             />
-                            <p className="mt-1 text-xs text-[#8a8f94]">{t("routeFieldKeyNote")}</p>
                         </label>
                     )}
 
@@ -276,7 +275,6 @@ export default function FormDefinitionForm({ isOpen, mode, initial, formCategori
                                 required
                                 className={fieldClassName}
                             />
-                            <p className="mt-1 text-xs text-[#8a8f94]">{t("routeFieldKeyNote")}</p>
                         </label>
                     )}
 

@@ -135,7 +135,6 @@ export default function DeviceTypeForm({ isOpen, mode, initial, loading = false,
                                 </option>
                             ))}
                         </select>
-                        <p className="mt-1 text-xs text-[#8a8f94]">{t("fieldServerCheckCategoryHint")}</p>
                     </label>
 
                     {values.serverCheckCategory !== null && (

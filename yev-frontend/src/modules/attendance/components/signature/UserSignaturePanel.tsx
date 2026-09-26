@@ -50,12 +50,12 @@ export default function UserSignaturePanel() {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                <h1 className="text-xl font-semibold text-[#191c1e]">{t("title")}</h1>
             </div>
 
-            <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+            <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                 {isLoading ? (
                     <div className="py-8 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
                 ) : (
@@ -96,7 +96,6 @@ export default function UserSignaturePanel() {
                                     <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                         {t("uploadNewLabel")}
                                     </div>
-                                    <p className="mb-2 text-xs text-[#5e3f3a]">{t("uploadHint")}</p>
                                     <SignatureUpload key="draft" onChange={setDraftBase64} disabled={isSaving} />
                                 </div>
                                 <div className="flex justify-end">

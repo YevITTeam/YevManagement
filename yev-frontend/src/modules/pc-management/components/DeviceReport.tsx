@@ -337,7 +337,7 @@ export default function DeviceReport() {
                                     : "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]";
                                 const badgeText = expired ? `Quá hạn ${Math.abs(days)} ngày` : `Còn ${days} ngày`;
                                 return (
-                                    <tr key={device.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                    <tr key={device.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                         <td className="px-6 py-4">
                                             <div className="text-sm font-semibold text-[#191c1e]">{device.deviceCode}</div>
                                             <div className="max-w-[220px] truncate text-xs text-[#5e3f3a]" title={device.deviceName}>

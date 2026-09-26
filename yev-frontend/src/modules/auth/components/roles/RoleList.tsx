@@ -137,7 +137,7 @@ export default function RoleList() {
                                     </tr>
                                 ) : (
                                     filteredRoles.map((r) => (
-                                        <tr key={r.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                        <tr key={r.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                             <td className="px-4 py-3">
                                                 <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
                                                     {r.roleName}

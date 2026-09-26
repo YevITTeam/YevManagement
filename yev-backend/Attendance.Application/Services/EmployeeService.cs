@@ -117,7 +117,7 @@ namespace Attendance.Application.Services
             if (groupId.HasValue)
                 query = query.Where(x => x.GroupId == groupId.Value);
 
-            var orderedQuery = query.OrderBy(x => x.Code);
+            var orderedQuery = query.OrderBy(x => x.Code.Length).ThenBy(x => x.Code);
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {
@@ -131,7 +131,7 @@ namespace Attendance.Application.Services
 
                 // Khớp đúng tuyệt đối Code (vd tìm "50" ra ngay mã "50") được ưu tiên lên đầu,
                 // thay vì lẫn giữa các mã chỉ chứa keyword (vd "150", "250", "500").
-                orderedQuery = query.OrderBy(x => x.Code == keyword ? 0 : 1).ThenBy(x => x.Code);
+                orderedQuery = query.OrderBy(x => x.Code == keyword ? 0 : 1).ThenBy(x => x.Code.Length).ThenBy(x => x.Code);
             }
 
             return await _unitOfWork.Employees.ToPagedResponseAsync(
@@ -191,7 +191,7 @@ namespace Attendance.Application.Services
                     CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit
                 }
             );
-            return items.OrderBy(x => x.Code).ToList();
+            return items.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
         // Dùng cho Trưởng nhóm liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm. Trưởng
@@ -253,7 +253,7 @@ namespace Attendance.Application.Services
                 }
             }
 
-            return items.OrderBy(x => x.Code).ToList();
+            return items.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
         // Mirror OtFormService.CalculateOtHours (redesign 3 bậc phiếu ăn 2026-08-26, xem
@@ -261,7 +261,7 @@ namespace Attendance.Application.Services
         // giờ của mình. Ca khớp ĐÚNG khung sớm (EarlyMealWindowStartTime/EndTime) không trừ dù DidEat.
         private static decimal CalculateProjectedHours(OtFormEmployee row, AttendanceSettingDto mealSettings)
         {
-            var hours = (decimal)(row.EndTime - row.StartTime).TotalHours;
+            var hours = Math.Round((decimal)(row.EndTime - row.StartTime).TotalHours, 2);
             var isEarlyWindow = row.StartTime == mealSettings.EarlyMealWindowStartTime && row.EndTime == mealSettings.EarlyMealWindowEndTime;
             if (!isEarlyWindow && row.DidEat) hours -= mealSettings.MealBreakDeductionHours;
             return hours;
@@ -294,7 +294,7 @@ namespace Attendance.Application.Services
                     CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit
                 }
             );
-            return items.OrderBy(x => x.Code).ToList();
+            return items.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
         // Nhân viên trong phạm vi quản lý của người GIỮ QUYỀN DUYỆT (Attendance.OTForm.Approve, không
@@ -314,7 +314,7 @@ namespace Attendance.Application.Services
             if (!isAdmin)
                 query = ApplyScope(query, await ResolveCallerScopeAsync(callerUserName));
 
-            var orderedQuery = query.OrderBy(x => x.Code);
+            var orderedQuery = query.OrderBy(x => x.Code.Length).ThenBy(x => x.Code);
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {
@@ -323,7 +323,7 @@ namespace Attendance.Application.Services
                     x.FirstName.Contains(keyword) ||
                     x.LastName.Contains(keyword) ||
                     (x.LastName + " " + x.FirstName).Contains(keyword));
-                orderedQuery = query.OrderBy(x => x.Code == keyword ? 0 : 1).ThenBy(x => x.Code);
+                orderedQuery = query.OrderBy(x => x.Code == keyword ? 0 : 1).ThenBy(x => x.Code.Length).ThenBy(x => x.Code);
             }
 
             return await _unitOfWork.Employees.ToPagedResponseAsync(

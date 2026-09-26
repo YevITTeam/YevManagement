@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { GripVertical, Inbox } from "lucide-react";
+import { GripVertical, Inbox, Search } from "lucide-react";
 
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
@@ -170,9 +170,11 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            title={tCommon("search")}
+                            aria-label={tCommon("search")}
+                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
                         >
-                            {tCommon("search")}
+                            <Search className="h-4 w-4" />
                         </button>
                     </div>
                     <div className="flex items-center gap-3">

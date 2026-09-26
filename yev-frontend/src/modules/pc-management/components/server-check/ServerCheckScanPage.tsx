@@ -165,7 +165,6 @@ export default function ServerCheckScanPage() {
             <div className="space-y-2">
                 {branchBadge}
                 <h1 className="text-xl font-semibold text-[#191c1e]">{t("scanTitle")}</h1>
-                <p className="mt-1 text-sm text-[#5e3f3a]">{t("scanHint")}</p>
             </div>
 
             <form onSubmit={handleScanSubmit} className="space-y-2">

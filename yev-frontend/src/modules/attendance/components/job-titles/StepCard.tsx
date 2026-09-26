@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, GripVertical, Star, Trash2, X } from "lucide-react";
+import { Check, GripVertical, PenLine, Star, Trash2 } from "lucide-react";
 
 // Thẻ 1 bước duyệt — tách dùng chung cho cả 3 khối (Nhóm/Bộ phận/Chuyền) của ApprovalStepManager.tsx
 // (2026-09-05, đợt polish giao diện). Trước đó 3 khối copy gần y hệt ~110 dòng JSX mỗi nơi — khác nhau
@@ -69,76 +69,71 @@ export default function StepCard({
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDragEnd={onDragEnd}
-            className="relative pb-4 last:pb-0"
+            className="group/step relative pl-7"
         >
-            {/* Đường nối "rail" — luôn vẽ xuống hết phần đệm dưới mỗi thẻ, kể cả thẻ cuối (chạy tiếp
-                xuống khối "+ Thêm bước" ngay dưới list) để cảm giác vẫn là 1 chuỗi liền mạch. */}
-            <span className="absolute bottom-0 left-4 top-9 w-px bg-[#e0e3e5]" aria-hidden />
-            <div className="flex items-start gap-3">
-                <div className="flex w-8 shrink-0 flex-col items-center gap-1 pt-2.5">
-                    <span title={labels.dragHandleLabel} aria-label={labels.dragHandleLabel} className="cursor-grab text-[#8a8f94] active:cursor-grabbing">
+            {/* Tree connectors: vertical guide (stops at the elbow on the last node) + horizontal elbow. */}
+            <span className="absolute bottom-0 left-2.5 top-0 w-px bg-[#d5d9dd] group-last/step:bottom-auto group-last/step:h-4" aria-hidden />
+            <span className="absolute left-2.5 top-4 h-px w-4 bg-[#d5d9dd]" aria-hidden />
+            <div
+                className={`rounded-md transition-[background-color,box-shadow] duration-150 ${
+                    isDragging ? "bg-[#fff4f2] shadow-md ring-2 ring-[#e3000f]/25" : ""
+                }`}
+            >
+                <div className="flex flex-wrap items-center gap-2 rounded-md px-1.5 py-1 hover:bg-[#f2f4f7] lg:flex-nowrap">
+                    <span title={labels.dragHandleLabel} aria-label={labels.dragHandleLabel} className="shrink-0 cursor-grab text-[#b6bbc0] hover:text-[#5e3f3a] active:cursor-grabbing">
                         <GripVertical className="h-4 w-4" />
                     </span>
-                    <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-xs font-bold text-white ring-4 ring-[#f8fafc]">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-[11px] font-bold text-white">
                         {displayNumber}
                     </span>
-                </div>
-
-                <div
-                    className={`flex-1 space-y-2 rounded-lg border p-3 transition-[box-shadow,border-color,background-color] duration-150 ${
-                        isDragging
-                            ? "z-10 scale-[1.01] border-[#e3000f] bg-[#fff4f2] shadow-lg ring-2 ring-[#e3000f]/25"
-                            : "border-[#e0e3e5] bg-white shadow-sm"
-                    }`}
-                >
-                    <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
-                        <div className="flex min-w-0 flex-1 items-center gap-2" title={`${jobTitleName} (${jobTitleCode}, cấp ${rankOrder})`}>
-                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#191c1e]">{jobTitleName}</span>
-                            <span className="shrink-0 whitespace-nowrap rounded-full bg-[#f2f4f6] px-2 py-0.5 text-[11px] font-medium text-[#5e3f3a]">
-                                {jobTitleCode}, cấp {rankOrder}
-                            </span>
-                        </div>
+                    <div className="flex min-w-0 items-center gap-2" title={`${jobTitleName} (${jobTitleCode}, cấp ${rankOrder})`}>
+                        <span className="min-w-0 truncate text-sm font-semibold text-[#191c1e]">{jobTitleName}</span>
+                        <span className="shrink-0 whitespace-nowrap rounded-full bg-[#f2f4f6] px-2 py-0.5 text-[11px] font-medium text-[#5e3f3a]">
+                            {jobTitleCode}, cấp {rankOrder}
+                        </span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onToggleSignature}
+                        title={`${requiresSignature ? labels.requiresSignatureYes : labels.requiresSignatureNo} — ${labels.toggleSignatureHint}`}
+                        aria-pressed={requiresSignature}
+                        className={`inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border text-[11px]! font-semibold! transition ${
+                            requiresSignature
+                                ? "border-emerald-200 bg-emerald-50 px-2 text-emerald-700 hover:bg-emerald-100"
+                                : "w-6 border-transparent text-[#b6bbc0] hover:border-[#e0e3e5] hover:bg-[#f2f4f6] hover:text-[#5e3f3a]"
+                        }`}
+                    >
+                        {requiresSignature ? <Check size={11} /> : <PenLine size={12} />}
+                        {requiresSignature && labels.requiresSignatureYes}
+                    </button>
+                    {onToggleResponsible && (
                         <button
                             type="button"
-                            onClick={onToggleSignature}
-                            title={labels.toggleSignatureHint}
-                            className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold transition ${
-                                requiresSignature
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                    : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
+                            onClick={onToggleResponsible}
+                            title={`${isResponsible ? labels.isResponsibleYes : labels.isResponsibleNo} — ${labels.toggleResponsibleHint}`}
+                            aria-pressed={isResponsible}
+                            className={`inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border text-[11px]! font-semibold! transition ${
+                                isResponsible
+                                    ? "border-amber-200 bg-amber-50 px-2 text-amber-700 hover:bg-amber-100"
+                                    : "w-6 border-transparent text-[#b6bbc0] hover:border-[#e0e3e5] hover:bg-[#f2f4f6] hover:text-[#5e3f3a]"
                             }`}
                         >
-                            {requiresSignature ? <Check size={11} /> : <X size={11} />}
-                            {requiresSignature ? labels.requiresSignatureYes : labels.requiresSignatureNo}
+                            <Star size={11} fill={isResponsible ? "currentColor" : "none"} />
+                            {isResponsible && labels.isResponsibleYes}
                         </button>
-                        {onToggleResponsible && (
-                            <button
-                                type="button"
-                                onClick={onToggleResponsible}
-                                title={labels.toggleResponsibleHint}
-                                className={`inline-flex min-w-[118px] shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold transition ${
-                                    isResponsible
-                                        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                                        : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
-                                }`}
-                            >
-                                <Star size={11} fill={isResponsible ? "currentColor" : "none"} />
-                                {isResponsible ? labels.isResponsibleYes : labels.isResponsibleNo}
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            onClick={onRemove}
-                            title={labels.removeStep}
-                            aria-label={labels.removeStep}
-                            className="shrink-0 cursor-pointer rounded-md border border-[#e9bcb6] bg-white p-2 text-[#930006] transition hover:bg-[#fff4f2]"
-                        >
-                            <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
-
-                    {footer}
+                    )}
+                    <button
+                        type="button"
+                        onClick={onRemove}
+                        title={labels.removeStep}
+                        aria-label={labels.removeStep}
+                        className="ml-auto shrink-0 cursor-pointer rounded-md p-1.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006]"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                 </div>
+
+                {footer}
             </div>
         </li>
     );

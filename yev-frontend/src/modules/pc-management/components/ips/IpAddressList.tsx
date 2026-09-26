@@ -281,7 +281,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                 </tr>
                             )}
                             {ipAddresses.map((ip) => (
-                                <tr key={ip.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
+                                <tr key={ip.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     {canBulkSelect && (
                                         <td className="whitespace-nowrap px-4 py-4">
                                             <input

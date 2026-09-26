@@ -147,7 +147,6 @@ export default function FormDataSourceForm({ isOpen, mode, initial, loading = fa
                             <option value={DataSourceKind.OrgUnits}>{t("sourceKindOrgUnits")}</option>
                             <option value={DataSourceKind.JobTitles}>{t("sourceKindJobTitles")}</option>
                         </select>
-                        <p className="mt-1 text-xs text-[#8a8f94]">{t("sourceKindSqlQueryNote")}</p>
                     </label>
 
                     <label className="block">

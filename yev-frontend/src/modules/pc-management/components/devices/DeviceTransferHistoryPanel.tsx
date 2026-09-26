@@ -66,7 +66,7 @@ export default function DeviceTransferHistoryPanel({ deviceId }: DeviceTransferH
                             </tr>
                         )}
                         {history.map((item) => (
-                            <tr key={item.id} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
+                            <tr key={item.id} className="border-b border-[#f1f5f9] bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                 <td className="whitespace-nowrap px-4 py-3 text-sm text-[#5e3f3a]">{formatDateTime(item.transferDate)}</td>
                                 <td className="whitespace-nowrap px-4 py-3">
                                     <div className="text-sm font-semibold text-[#191c1e]">{item.oldDeviceCode}</div>

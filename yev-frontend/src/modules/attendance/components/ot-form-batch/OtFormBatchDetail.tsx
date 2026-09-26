@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TimeRange } from "@/modules/attendance/components/ot-form/TimeRange";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
 import { Car, Check, ChevronDown, MessageCircle, Printer, Utensils, X } from "lucide-react";
@@ -201,7 +202,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
         <div className="mx-auto max-w-7xl space-y-6">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("titleWithId", { id: batch.id })}</h1>
+                    <h1 className="text-xl font-semibold text-[#191c1e]">{t("titleWithId", { id: batch.id })}</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
                         {bilingualText(batch.scopeNameVn, batch.scopeNameJp)} — {t("batchDateLabel", { date: formatDate(batch.batchDate) })}
                     </p>
@@ -391,13 +392,13 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                                     />
                                                                 </td>
                                                                 <td className="px-6 py-2.5 text-sm">
-                                                                    <span className="inline-flex items-center rounded-md bg-[#eceef0] px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e]">
+                                                                    <span className="inline-flex items-center rounded-md border border-[#d5dade] bg-white px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e]">
                                                                         {employee.employeeCode}
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-6 py-2.5 text-sm font-medium text-[#191c1e]">{employee.fullName}</td>
                                                                 <td className="px-6 py-2.5 text-sm text-[#5e3f3a]">
-                                                                    {formatTime(employee.startTime)} — {formatTime(employee.endTime)}
+                                                                    <TimeRange start={formatTime(employee.startTime)} end={formatTime(employee.endTime)} />
                                                                 </td>
                                                                 <td className="px-6 py-2.5 text-center text-sm text-[#191c1e]">{formatHours(hours)}</td>
                                                                 <td className={`px-6 py-2.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
@@ -470,7 +471,6 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                         </div>
 
                         <div className="space-y-4">
-                            <p className="text-sm text-[#5e3f3a]">{t("modalDesc")}</p>
                             <label className="block">
                                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                     {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>

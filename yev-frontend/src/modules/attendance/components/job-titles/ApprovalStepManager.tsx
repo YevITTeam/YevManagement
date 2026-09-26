@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Plus } from "lucide-react";
+import { FolderOpen, Plus } from "lucide-react";
 
 import { DepartmentApprovalStepApi } from "@/modules/attendance/api/department-approval-step.api";
 import { GroupApprovalStepApi } from "@/modules/attendance/api/group-approval-step.api";
@@ -34,7 +34,10 @@ import StepHolders, { type StepHoldersLabels } from "./StepHolders";
 import CoordinatorsBox, { type CoordinatorsBoxLabels } from "./CoordinatorsBox";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
-const sectionTitleClassName = "text-base font-semibold text-[#191c1e]";
+const sectionTitleClassName = "text-sm font-semibold text-[#191c1e]";
+// Compact trigger for the selects in this screen (default input trigger is too tall/wide for a tree UI).
+const compactSelectClassName =
+    "h-8 w-full rounded-md border border-[#e0e3e5] bg-white px-2.5 pr-8 text-xs! text-[#191c1e] outline-none transition focus:border-[#e3000f]";
 
 const toJobTitleOptions = (jobTitles: JobTitleDto[]): SelectOption[] =>
     jobTitles.map((jt) => ({
@@ -575,6 +578,12 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
+    // One save for the whole "Theo Nhóm" tab: persists whichever of the two blocks has pending changes.
+    const handleSaveAll = async () => {
+        if (isGroupDirty && !groupSigningMinNotMet) await handleSaveGroup();
+        if (isDeptDirty) await handleSaveDept();
+    };
+
     // ── Khối Chuyền: thêm/xoá/sắp xếp/lưu bước ────────────────────────────────
     const usedProductionJobTitleIds = new Set(productionSteps.map((s) => s.jobTitleId));
     const availableProductionJobTitles = allJobTitles.filter((jt) => !usedProductionJobTitleIds.has(jt.id));
@@ -821,17 +830,43 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
     return (
         <div className="space-y-4">
-            <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <label className="block max-w-sm">
-                    <span className={fieldLabelClassName}>{tDept("fieldDepartment")}</span>
+            <section className="flex items-center gap-3 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 shadow-sm">
+                <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tDept("fieldDepartment")}</span>
+                <div className="w-64">
                     <SearchableSelect
                         options={departmentOptions}
                         value={departmentId}
                         onChange={handleSelectDepartment}
                         placeholder={tDept("fieldDepartmentPlaceholder")}
                         disabled={isLoadingOptions}
+                        triggerClassName={compactSelectClassName}
                     />
-                </label>
+                </div>
+                {activeTab === "group" && typeof departmentId === "number" && (
+                    <>
+                        <span className="ml-2 shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tGroup("fieldGroup")}</span>
+                        <div className="w-64">
+                            <SearchableSelect
+                                options={groupOptions}
+                                value={groupId}
+                                onChange={handleSelectGroup}
+                                placeholder={tGroup("fieldGroupPlaceholder")}
+                                disabled={isLoadingOptions}
+                                triggerClassName={compactSelectClassName}
+                            />
+                        </div>
+                    </>
+                )}
+                {activeTab === "group" && typeof departmentId === "number" && (
+                    <button
+                        type="button"
+                        onClick={handleSaveAll}
+                        disabled={!(isGroupDirty || isDeptDirty) || isSavingGroup || isSavingDept || groupSigningMinNotMet}
+                        className="ml-auto cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs! font-semibold! text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {isSavingGroup || isSavingDept ? tGroup("saving") : tGroup("saveButton")}
+                    </button>
+                )}
             </section>
 
             {typeof departmentId === "number" && (
@@ -842,7 +877,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                 key={tab}
                                 type="button"
                                 onClick={() => setActiveTab(tab)}
-                                className={`cursor-pointer border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+                                className={`cursor-pointer border-b-2 px-3 py-1.5 text-xs! font-semibold! transition ${
                                     activeTab === tab
                                         ? "border-[#e3000f] text-[#191c1e]"
                                         : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
@@ -861,11 +896,12 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         // chọn Nhóm, người phụ trách 2 cấp — để pipeline không bị ngắt mạch bởi các khối
                         // chọn lựa xen giữa như bố cục cũ (2 card xếp chồng, mỗi card tự chứa selector
                         // + người phụ trách + danh sách bước).
-                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-                            <div className="order-2 space-y-6 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm lg:order-1">
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
+                            <div className="order-2 space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm lg:order-1">
                                 {/* Cấp trung gian — theo Nhóm con của Bộ phận đang chọn (đơn đi qua khối này TRƯỚC) */}
                                 <div>
-                                    <div className="mb-4 flex items-center gap-1.5">
+                                    <div className="mb-2 flex items-center gap-1.5">
+                                        <FolderOpen className="h-4 w-4 text-[#e3000f]" />
                                         <h3 className={sectionTitleClassName}>{tGroup("sectionTitle")}</h3>
                                         <div className="h-px flex-1 bg-[#e0e3e5]" />
                                     </div>
@@ -915,20 +951,21 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                 </ol>
                                             )}
 
-                                            <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
-                                                <div className="flex-1 min-w-[220px]">
+                                            <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-3">
+                                                <div className="w-64 max-w-full">
                                                     <SearchableSelect
                                                         options={toJobTitleOptions(availableGroupJobTitles)}
                                                         value={addingGroupJobTitleId}
                                                         onChange={setAddingGroupJobTitleId}
                                                         placeholder={tGroup("fieldAddJobTitlePlaceholder")}
+                                                        triggerClassName={compactSelectClassName}
                                                     />
                                                 </div>
                                                 <button
                                                     type="button"
                                                     onClick={handleAddGroupStep}
                                                     disabled={!addingGroupJobTitleId}
-                                                    className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                                    className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-[#e0e3e5] bg-white px-2.5 text-xs! font-semibold! text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                     <Plus className="h-3.5 w-3.5" /> {tGroup("addStepButton")}
                                                 </button>
@@ -936,23 +973,14 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                             {groupSigningMinNotMet && <p className="text-xs text-[#930006]">{tGroup("intermediateMinHint")}</p>}
                                             {groupSigningLimitReached && <p className="text-xs text-[#9a5b00]">{tGroup("intermediateLimitHint")}</p>}
 
-                                            <div className="flex justify-end pt-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSaveGroup}
-                                                    disabled={!isGroupDirty || isSavingGroup || groupSigningMinNotMet}
-                                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                                                >
-                                                    {isSavingGroup ? tGroup("saving") : tGroup("saveButton")}
-                                                </button>
-                                            </div>
                                         </>
                                     )}
                                 </div>
 
                                 {/* Cấp cuối — theo chính Bộ phận đang chọn (đơn đi qua khối này SAU khối Nhóm) */}
                                 <div>
-                                    <div className="mb-4 flex items-center gap-1.5">
+                                    <div className="mb-2 flex items-center gap-1.5">
+                                        <FolderOpen className="h-4 w-4 text-[#e3000f]" />
                                         <h3 className={sectionTitleClassName}>{tDept("sectionTitle")}</h3>
                                         <div className="h-px flex-1 bg-[#e0e3e5]" />
                                     </div>
@@ -998,59 +1026,37 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                 </ol>
                                             )}
 
-                                            <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
-                                                <div className="flex-1 min-w-[220px]">
+                                            <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-3">
+                                                <div className="w-64 max-w-full">
                                                     <SearchableSelect
                                                         options={toJobTitleOptions(availableDeptJobTitles)}
                                                         value={addingDeptJobTitleId}
                                                         onChange={setAddingDeptJobTitleId}
                                                         placeholder={tDept("fieldAddJobTitlePlaceholder")}
+                                                        triggerClassName={compactSelectClassName}
                                                     />
                                                 </div>
                                                 <button
                                                     type="button"
                                                     onClick={handleAddDeptStep}
                                                     disabled={!addingDeptJobTitleId}
-                                                    className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                                    className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-[#e0e3e5] bg-white px-2.5 text-xs! font-semibold! text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                     <Plus className="h-3.5 w-3.5" /> {tDept("addStepButton")}
                                                 </button>
                                             </div>
 
-                                            <div className="flex justify-end pt-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSaveDept}
-                                                    disabled={!isDeptDirty || isSavingDept}
-                                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                                                >
-                                                    {isSavingDept ? tDept("saving") : tDept("saveButton")}
-                                                </button>
-                                            </div>
                                         </>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Sidebar cấu hình — chọn Nhóm + người phụ trách 2 cấp, cố định khi cuộn */}
+                            {/* Sidebar cấu hình — người phụ trách 2 cấp gộp 1 thẻ, cố định khi cuộn */}
                             <aside className="order-1 space-y-4 lg:sticky lg:top-6 lg:order-2 lg:self-start">
-                                <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-                                    <label className="block">
-                                        <span className={fieldLabelClassName}>{tGroup("fieldGroup")}</span>
-                                        <div className="mt-1.5">
-                                            <SearchableSelect
-                                                options={groupOptions}
-                                                value={groupId}
-                                                onChange={handleSelectGroup}
-                                                placeholder={tGroup("fieldGroupPlaceholder")}
-                                                disabled={isLoadingOptions}
-                                            />
-                                        </div>
-                                    </label>
-                                </div>
-
+                                <div className="divide-y divide-[#e0e3e5] rounded-lg border border-[#e0e3e5] bg-white shadow-sm">
                                 {typeof groupId === "number" && canManageGroupCoordinators && (
                                     <CoordinatorsBox
+                                        embedded
                                         isLoading={isLoadingGroupCoordinators}
                                         coordinators={groupCoordinators}
                                         onRemove={handleRemoveGroupCoordinator}
@@ -1064,6 +1070,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
                                 {canManageDeptCoordinators && (
                                     <CoordinatorsBox
+                                        embedded
                                         isLoading={isLoadingDeptCoordinators}
                                         coordinators={deptCoordinators}
                                         onRemove={handleRemoveDeptCoordinator}
@@ -1074,6 +1081,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                         labels={deptCoordinatorLabels}
                                     />
                                 )}
+                                </div>
                             </aside>
                         </div>
                     )}
@@ -1083,7 +1091,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         Bộ phận đang chọn, dùng cho đơn OT "theo chuyền" (2026-08-24). Khác 2 khối trên:
                         không tách Group/Department, không hiển thị "ai đang giữ Chức vụ" (dữ liệu
                         chuyền đổi hàng ngày, danh sách người giữ ở đây không có ý nghĩa lâu dài). */
-                    <section className="space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+                    <section className="space-y-3 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
                         <div className="flex items-center gap-1.5">
                             <h3 className={sectionTitleClassName}>{tProd("sectionTitle")}</h3>
                         </div>
@@ -1133,37 +1141,36 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                     </ol>
                                 )}
 
-                                <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-4">
-                                    <div className="flex-1 min-w-[220px]">
+                                <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-3">
+                                    <div className="w-64 max-w-full">
                                         <SearchableSelect
                                             options={toJobTitleOptions(availableProductionJobTitles)}
                                             value={addingProductionJobTitleId}
                                             onChange={setAddingProductionJobTitleId}
                                             placeholder={tProd("fieldAddJobTitlePlaceholder")}
+                                                        triggerClassName={compactSelectClassName}
                                         />
                                     </div>
                                     <button
                                         type="button"
                                         onClick={handleAddProductionStep}
                                         disabled={!addingProductionJobTitleId}
-                                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-[#e0e3e5] bg-white px-2.5 text-xs! font-semibold! text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         <Plus className="h-3.5 w-3.5" /> {tProd("addStepButton")}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveProduction}
+                                        disabled={!isProductionDirty || isSavingProduction || productionSigningMinNotMet}
+                                        className="ml-auto cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs! font-semibold! text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {isSavingProduction ? tProd("saving") : tProd("saveButton")}
                                     </button>
                                 </div>
                                 {productionSigningMinNotMet && <p className="text-xs text-[#930006]">{tProd("intermediateMinHint")}</p>}
                                 {productionSigningLimitReached && <p className="text-xs text-[#9a5b00]">{tProd("intermediateLimitHint")}</p>}
 
-                                <div className="flex justify-end pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={handleSaveProduction}
-                                        disabled={!isProductionDirty || isSavingProduction || productionSigningMinNotMet}
-                                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        {isSavingProduction ? tProd("saving") : tProd("saveButton")}
-                                    </button>
-                                </div>
                             </>
                         )}
                     </section>

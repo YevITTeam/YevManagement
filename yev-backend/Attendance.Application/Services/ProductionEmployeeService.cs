@@ -58,7 +58,7 @@ namespace Attendance.Application.Services
                     CustomYearlyOtHourLimit = x.Employee!.CustomYearlyOtHourLimit
                 });
 
-            var result = items.OrderBy(x => x.EmployeeCode).ToList();
+            var result = items.OrderBy(x => x.EmployeeCode.Length).ThenBy(x => x.EmployeeCode).ToList();
             if (result.Count == 0) return result;
 
             var target = targetDate ?? DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
@@ -88,7 +88,7 @@ namespace Attendance.Application.Services
         // chứa logic tính giờ của mình, không gọi chéo (quy ước đã có từ redesign 3 bậc phiếu ăn 2026-08-26).
         private static decimal CalculateProjectedHours(OtFormEmployee row, AttendanceSettingDto mealSettings)
         {
-            var hours = (decimal)(row.EndTime - row.StartTime).TotalHours;
+            var hours = Math.Round((decimal)(row.EndTime - row.StartTime).TotalHours, 2);
             var isEarlyWindow = row.StartTime == mealSettings.EarlyMealWindowStartTime && row.EndTime == mealSettings.EarlyMealWindowEndTime;
             if (!isEarlyWindow && row.DidEat) hours -= mealSettings.MealBreakDeductionHours;
             return hours;
@@ -103,7 +103,7 @@ namespace Attendance.Application.Services
                 var allItems = await _unitOfWork.ProductionLines.SelectAsync(
                     predicate: x => !x.IsDeleted,
                     selector: x => new ProductionOptionDto { Id = x.Id, Code = x.LineCode, NameVn = null });
-                return allItems.OrderBy(x => x.Code).ToList();
+                return allItems.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
             }
 
             // ProductionLine.TeamId là snapshot TĨNH từ file tham chiếu gốc lúc dựng FK (2026-08-21,
@@ -117,7 +117,7 @@ namespace Attendance.Application.Services
                 predicate: x => !x.IsDeleted && x.EmployeeId != null && x.ProductionLineId != null && x.TeamId == teamId,
                 selector: x => new ProductionOptionDto { Id = x.ProductionLineId!.Value, Code = x.ProductionLine!.LineCode, NameVn = null });
 
-            return items.DistinctBy(x => x.Id).OrderBy(x => x.Code).ToList();
+            return items.DistinctBy(x => x.Id).OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
         public async Task<List<ProductionOptionDto>> GetTeamOptionsAsync()
@@ -125,7 +125,7 @@ namespace Attendance.Application.Services
             var items = await _unitOfWork.ProductionTeams.SelectAsync(
                 predicate: x => !x.IsDeleted,
                 selector: x => new ProductionOptionDto { Id = x.Id, Code = x.Code, NameVn = x.NameVn });
-            return items.OrderBy(x => x.Code).ToList();
+            return items.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
         // Nhóm ca KHÔNG phải con của Line/Team (1 Line có thể xuất hiện ở nhiều Nhóm ca khác nhau, xem
@@ -140,7 +140,7 @@ namespace Attendance.Application.Services
                     && (teamId == null || x.TeamId == teamId),
                 selector: x => new ProductionOptionDto { Id = x.ShiftTeamId!.Value, Code = x.ShiftTeam!.Code, NameVn = x.ShiftTeam!.NameVn });
 
-            return items.DistinctBy(x => x.Id).OrderBy(x => x.Code).ToList();
+            return items.DistinctBy(x => x.Id).OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
         // Màn "Nhân viên dưới chuyền" — view riêng đọc thẳng ProductionEmployees (khác EmployeeService,
@@ -163,7 +163,7 @@ namespace Attendance.Application.Services
                     || x.EmployeeCode.Contains(trimmedKeyword)
                     || (x.Employee != null && (x.Employee.LastName.Contains(trimmedKeyword) || x.Employee.FirstName.Contains(trimmedKeyword)))));
 
-            var orderedQuery = query.OrderBy(x => x.EmployeeCode);
+            var orderedQuery = query.OrderBy(x => x.EmployeeCode.Length).ThenBy(x => x.EmployeeCode);
 
             return await _unitOfWork.ProductionEmployees.ToPagedResponseAsync(
                 orderedQuery,

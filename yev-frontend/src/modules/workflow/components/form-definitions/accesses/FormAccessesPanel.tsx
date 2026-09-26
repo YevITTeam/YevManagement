@@ -120,7 +120,6 @@ export default function FormAccessesPanel({ formDefinitionId }: FormAccessesPane
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
-                <p className="text-sm text-[#5e3f3a]">{t("accessesHint")}</p>
                 <div className="flex items-center gap-2">
                     <button
                         type="button"

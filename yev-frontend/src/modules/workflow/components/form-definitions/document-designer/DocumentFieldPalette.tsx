@@ -39,7 +39,6 @@ export default function DocumentFieldPalette() {
     return (
         <div className="w-56 shrink-0 space-y-3">
             <p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("paletteTitle")}</p>
-            <p className="text-xs text-[#8a8f94]">{t("documentPaletteHint")}</p>
             <div className="space-y-2">
                 {DOCUMENT_PALETTE_ORDER.map((dataType) => (
                     <PaletteItem key={dataType} dataType={dataType} />

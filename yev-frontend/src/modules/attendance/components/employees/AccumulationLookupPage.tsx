@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { History, Inbox } from "lucide-react";
+import { History, Inbox, Search } from "lucide-react";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -56,26 +56,27 @@ export default function AccumulationLookupPage() {
     return (
         <div className="space-y-4">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("pageTitle")}</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("pageDescription")}</p>
+                <h1 className="text-xl font-semibold text-[#191c1e]">{t("pageTitle")}</h1>
             </div>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex flex-wrap gap-2">
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            className="cursor-pointer h-10 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            title={tCommon("search")}
+                            aria-label={tCommon("search")}
+                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
                         >
-                            {tCommon("search")}
+                            <Search className="h-4 w-4" />
                         </button>
                     </div>
                     <div className="shrink-0 whitespace-nowrap text-sm text-[#5e3f3a]">
@@ -91,10 +92,10 @@ export default function AccumulationLookupPage() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-4 py-2.5">{t("colCode")}</th>
-                                <th className="px-4 py-2.5">{t("colFullName")}</th>
-                                <th className="px-4 py-2.5">{t("colOrgUnit")}</th>
-                                <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
+                                <th className="px-3 py-2">{t("colCode")}</th>
+                                <th className="px-3 py-2">{t("colFullName")}</th>
+                                <th className="px-3 py-2">{t("colOrgUnit")}</th>
+                                <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -109,17 +110,17 @@ export default function AccumulationLookupPage() {
                                 </tr>
                             )}
                             {employees.map((employee) => (
-                                <tr key={employee.id} className="border-b border-[#f1f5f9] transition-colors hover:bg-[#f8fafc]">
-                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">
+                                <tr key={employee.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
+                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
                                         {employee.lastName} {employee.firstName}
                                     </td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
                                         {employee.groupNameVn ?? employee.departmentNameVn ?? (
                                             <span className="text-xs italic text-[#8a8f94]">{t("orgUnitCompanyWide")}</span>
                                         )}
                                     </td>
-                                    <td className="px-4 py-3 text-right text-sm">
+                                    <td className="px-3 py-2 text-right text-sm">
                                         <button
                                             onClick={() => setSelectedEmployee(employee)}
                                             className="cursor-pointer inline-flex items-center gap-1.5 font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
@@ -135,7 +136,7 @@ export default function AccumulationLookupPage() {
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
+                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
                     <button
                         className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
                         disabled={!hasPreviousPage || isLoading}
