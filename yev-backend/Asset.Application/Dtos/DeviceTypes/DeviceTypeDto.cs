@@ -11,5 +11,6 @@ namespace Asset.Application.Dtos.DeviceTypes
         public string TypeName { get; set; } = null!;
         public int? ServerCheckCategory { get; set; }
         public string? ServerCheckCategoryText { get; set; }
+        public bool RequiresQrScan { get; set; }
     }
 }

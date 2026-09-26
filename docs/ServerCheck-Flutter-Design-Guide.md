@@ -271,19 +271,22 @@ Căn giữa. Icon `QrCode` 48 `brandRed` → **badge xưởng** → tiêu đề 
 Thứ tự từ trên xuống:
 1. Badge xưởng + tiêu đề 20 w600 + mô tả "Quét mã QR dán trên từng thiết bị…" (`textBody` 14).
 2. **Ô quét** luôn tự focus, viền đỏ 2px, cao 56 (xem 6.5). Bên dưới là banner kết quả lần quét gần nhất (xanh: `{DeviceCode} - {DeviceName}`; đỏ: thông báo lỗi). Sau mỗi lần quét: xoá ô, focus lại (ưu tiên máy quét gõ phím + Enter).
-3. **Thanh tiến độ**: hộp bo 8, nền `background`, viền `border`, chữ trái "Tiến độ quét" w600, chữ phải `scanned/total` `brandRed` w600.
-4. **Card theo nhóm thiết bị** (thứ tự: Server → Network → UPS → Máy lạnh; ẩn nhóm rỗng): header overline (12 w600 IN HOA, spacing 0.15em, `textBody`, nền `background`), mỗi hàng: trái `deviceCode - deviceName` (14 w600 `textStrong`, ellipsis) + giờ quét (12 `textMuted`, chỉ khi đã quét); phải icon 20 — **đã quét** `CheckCircle2` `success`, **chưa quét** `Circle` `textMuted`.
-5. **Thanh đáy cố định** (`bottomNavigationBar`): nền trắng, viền trên `border`, bóng nhẹ hướng lên; trái chữ "Còn N thiết bị chưa quét" / "Đã quét đủ toàn bộ thiết bị" (`textBody` 14); phải nút **Tối** "Kết thúc phiên quét". Chừa padding dưới danh sách ≥ 96 để không bị che.
+3. **Thanh tiến độ**: hộp bo 8, nền `background`, viền `border`, chữ trái "Tiến độ quét" w600, chữ phải `scanned/total` `brandRed` w600 — `scannedCount`/`totalCount` của server **chỉ đếm máy `requiresScan=true`** (máy IDR), đừng tự đếm từ `items.length`.
+4. **Card theo nhóm thiết bị — CHỈ máy `requiresScan=true`** (thứ tự: Server → Network → UPS; ẩn nhóm rỗng; không còn nhóm Máy lạnh): header overline (12 w600 IN HOA, spacing 0.15em, `textBody`, nền `background`), mỗi hàng: trái `deviceCode - deviceName` (14 w600 `textStrong`, ellipsis) + giờ quét (12 `textMuted`, chỉ khi đã quét); phải icon 20 — **đã quét** `CheckCircle2` `success`, **chưa quét** `Circle` `textMuted`.
+4b. **Khối "Tự kiểm tra"** (chỉ hiện khi có item `requiresScan=false`; đặt **dưới** các card quét): 1 card giống card nhóm, header overline có icon `Wifi` 14 + `"Tự kiểm tra ({count} thiết bị)"`; dòng mô tả 12 `textMuted` `"Không cần quét QR — hệ thống tự ping khi bạn kết thúc phiên."` (viền dưới `#F1F5F9`); mỗi hàng: trái `deviceCode - deviceName` (14 `textStrong`, ellipsis), phải `categoryText` 12 `textMuted`. **Không có** icon tròn/tick trạng thái, không tương tác được (không quét được máy này — server trả 400).
+5. **Thanh đáy cố định** (`bottomNavigationBar`): nền trắng, viền trên `border`, bóng nhẹ hướng lên; trái chữ "Còn N thiết bị chưa quét" / "Đã quét đủ toàn bộ thiết bị" (`textBody` 14; N = số máy `requiresScan=true` còn `status=0`, không tính máy tự ping); phải nút **Tối** "Kết thúc phiên quét". Chừa padding dưới danh sách ≥ 96 để không bị che.
 
 ### 7.4 Màn "Đã hoàn thành hôm nay"
 Căn giữa. Icon `CheckCircle2` 48 `success` → badge xưởng → "Đã hoàn thành kiểm tra hôm nay" (20 w600) → "Đã quét {scanned}/{total} thiết bị. Kết thúc bởi {by}." (`textBody` 14). Không cho quét/kết thúc thêm.
 
 ### 7.5 Dialog "Kết thúc phiên quét"
 Bottom sheet/dialog theo 6.6. Thân cuộn, các khối cách nhau 24:
-- **Thiết bị chưa quét** (chỉ khi còn): tiêu đề `"{count} thiết bị chưa quét — vui lòng ghi chú lý do"` màu `danger` w600 14. Mỗi thiết bị 1 thẻ nền `accentSoft`, viền `accentSoftBorder`, bo 8, padding 12: tên (`deviceCode - deviceName`, w600) + ô nhập ghi chú cao 36 (placeholder "Ghi chú vấn đề (không bắt buộc)...").
+- **Thông báo tự ping** (chỉ khi còn item `requiresScan=false` có `status=0`): hộp nền `background`, viền `border`, bo 8, padding 12, chữ `textBody` 14 `"{count} thiết bị không cần quét sẽ được hệ thống tự ping khi bấm xác nhận (có thể mất vài chục giây)."` — đặt trên cùng thân dialog.
+- **Thiết bị chưa quét** (chỉ khi còn **máy `requiresScan=true`** chưa quét; máy tự ping KHÔNG hiện ở đây): tiêu đề `"{count} thiết bị chưa quét — vui lòng ghi chú lý do"` màu `danger` w600 14. Mỗi thiết bị 1 thẻ nền `accentSoft`, viền `accentSoftBorder`, bo 8, padding 12: tên (`deviceCode - deviceName`, w600) + ô nhập ghi chú cao 36 (placeholder "Ghi chú vấn đề (không bắt buộc)...").
 - **Kiểm tra network** (chỉ với mục `usesNetworkPing = true`): tiêu đề w600 + nút **Tối nhỏ** (nền `#191C1E`, chữ trắng 12 w600, icon `Wifi` 14, bo 6) "Kiểm tra network" / "Kiểm tra lại"; đang gọi: "Đang kiểm tra...". Kết quả: hộp nền `background`, viền `border`, bo 8, dòng đầu `"{reachable}/{total} IP phản hồi"` — xanh `success` nếu tất cả phản hồi, đỏ `danger` nếu không; danh sách IP lỗi mỗi dòng icon `XCircle` 14 + `"{deviceCode} ({ipAddress})"` màu `danger`.
-- **Mục kiểm tra thủ công**: mỗi mục 1 thẻ nền trắng, viền `border`, bo 8, padding 12. Dòng trên: tên mục (w600 14) — phải là **2 nút OK / NG** (bo 6, padding 12×4, chữ 12 w600): đang chọn OK → nền `success` chữ trắng; đang chọn NG → nền `danger` chữ trắng; chưa chọn → nền `surfaceMuted #F1F5F9` chữ `textBody`. Bên dưới ô ghi chú cao 36 (hiện khi cần).
+- **Mục kiểm tra thủ công** (gồm cả **"Máy lạnh"** — mục thường như các mục khác, dựng động theo `manualResults`; máy lạnh không còn là thiết bị trong `items`): mỗi mục 1 thẻ nền trắng, viền `border`, bo 8, padding 12. Dòng trên: tên mục (w600 14) — phải là **2 nút OK / NG** (bo 6, padding 12×4, chữ 12 w600): đang chọn OK → nền `success` chữ trắng; đang chọn NG → nền `danger` chữ trắng; chưa chọn → nền `surfaceMuted #F1F5F9` chữ `textBody`. Bên dưới ô ghi chú cao 36 (hiện khi cần).
 - Footer: "Huỷ" (outline) + "Xác nhận kết thúc" (primary; đang gửi: "Đang kết thúc..."). Chỉ cho xác nhận khi đã chọn OK/NG **đủ toàn bộ** mục thủ công.
+- **`POST /end` chậm** (server ping các máy tự-ping trong request, ~10–60s): khi đang gửi phải **khoá cả 2 nút + không cho đóng dialog bằng chạm nền/back**, nút chính hiện spinner + "Đang kết thúc...", và `receiveTimeout` của request này ≥ 120s.
 
 ---
 
@@ -302,6 +305,9 @@ Bottom sheet/dialog theo 6.6. Thân cuộn, các khối cách nhau 24:
 | Tiến độ | Tiến độ quét |
 | Còn chưa quét | Còn {count} thiết bị chưa quét |
 | Đã đủ | Đã quét đủ toàn bộ thiết bị |
+| Khối tự kiểm tra | Tự kiểm tra ({count} thiết bị) |
+| Mô tả tự kiểm tra | Không cần quét QR — hệ thống tự ping khi bạn kết thúc phiên. |
+| Thông báo trong dialog | {count} thiết bị không cần quét sẽ được hệ thống tự ping khi bấm xác nhận (có thể mất vài chục giây). |
 | Nút kết thúc | Kết thúc phiên quét |
 | Tiêu đề dialog | Kết thúc phiên quét |
 | Xác nhận / đang | Xác nhận kết thúc / Đang kết thúc... |
@@ -318,7 +324,8 @@ Bottom sheet/dialog theo 6.6. Thân cuộn, các khối cách nhau 24:
 | Chưa phân công | Chưa được phân công xưởng |
 | Mô tả chưa phân công | Tài khoản của bạn chưa được phân công xưởng kiểm tra server. Vui lòng liên hệ Admin để được phân công. |
 | Nhãn xưởng | Xưởng phụ trách |
-| Tên nhóm | Server · Network · UPS · Máy lạnh |
+| Tên nhóm | Server · Network · UPS |
+| Mục thủ công máy lạnh | Máy lạnh (lấy nguyên `manualItemName` từ server) |
 
 Chuỗi lỗi ưu tiên lấy `message` từ envelope server; chỉ dùng chuỗi mặc định ở trên khi không có.
 
@@ -361,6 +368,8 @@ Dùng gói Flutter `lucide_icons` (hoặc `lucide_icons_flutter`). Cỡ: trong n
 - [ ] Nút chính đỏ `#E3000F`; NG/lỗi `#930006`; OK `#1A7F37`; không có indigo.
 - [ ] Card trắng viền `#E0E3E5` bo 12; danh sách nhóm có header overline.
 - [ ] Ô quét viền đỏ 2px, luôn focus, tự xoá + focus lại sau mỗi lần quét.
+- [ ] Màn quét CHỈ liệt kê máy `requiresScan=true`; máy `false` nằm ở khối "Tự kiểm tra" không có trạng thái; tiến độ dùng `scannedCount/totalCount` của server.
+- [ ] Dialog kết thúc: có dòng báo tự ping, khoá nút khi đang gửi, timeout ≥ 120s; "Máy lạnh" render như mục thủ công thường.
 - [ ] Đủ 5 trạng thái màn: chưa phân công · chưa bắt đầu · đang quét · hoàn thành · dialog kết thúc.
 - [ ] Thanh đáy cố định có nút "Kết thúc phiên quét", danh sách có padding dưới đủ lớn.
 - [ ] Mọi thao tác ghi có SnackBar thành công + lỗi; dùng đúng chuỗi mục 8.

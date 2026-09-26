@@ -21,6 +21,10 @@ namespace Asset.Application.Services
         private const int PingCount = 10;
         private const int MinSuccessesForOk = 8;
         private const int PingTimeoutMs = 1000;
+        // Pings to one IP are spaced 1s apart, like the Windows `ping` command. Back-to-back pings make Dell
+        // iDRAC controllers rate-limit ICMP (only ~7/10 replies) and flip a healthy iDRAC to NG.
+        private const int PingIntervalMs = 1000;
+        private const int MaxParallelIps = 200;
 
         public ServerCheckService(IAssetUnitOfWork unitOfWork, IHttpContextAccessor httpContextAccessor, IServerCheckTemplateService templateService) : base(unitOfWork)
         {
@@ -117,6 +121,15 @@ namespace Asset.Application.Services
             var item = await _unitOfWork.ServerCheckItems.FirstOrDefaultAsync(x => x.SessionId == sessionId && x.DeviceId == device.Id);
             if (item == null) throw new DomainException($"Thiết bị '{deviceCode}' không thuộc phạm vi kiểm tra hằng ngày hôm nay.");
 
+            // Only physical iDRAC/SAN-type devices are scanned; the rest are pinged automatically at session
+            // end (asset-module.md §1.19), so a scan of them is a mistake worth flagging rather than accepting.
+            var requiresScan = (await _unitOfWork.Devices.SelectAsync(
+                predicate: d => d.Id == device.Id,
+                selector: d => d.DeviceType.RequiresQrScan
+            )).FirstOrDefault();
+            if (!requiresScan)
+                throw new DomainException($"Thiết bị '{deviceCode}' không cần quét QR — hệ thống tự ping khi kết thúc phiên.");
+
             // Quét lại 1 máy đã Ok vẫn hợp lệ (idempotent) — chỉ cập nhật giờ quét mới nhất, không báo lỗi.
             item.ScannedAt = TimeHelper.GetCurrentUtcTime();
             item.ScannedBy = GetCurrentUser();
@@ -173,12 +186,20 @@ namespace Asset.Application.Services
 
             var noteByItemId = request.Items.ToDictionary(x => x.ServerCheckItemId, x => x.Note);
 
-            foreach (var item in pendingItems)
+            var scanRequiredByDeviceId = (await _unitOfWork.ServerCheckItems.SelectAsync(
+                predicate: x => x.SessionId == sessionId,
+                selector: x => new { x.DeviceId, x.Device.DeviceType.RequiresQrScan }
+            )).ToDictionary(x => x.DeviceId, x => x.RequiresQrScan);
+
+            // Scan-required devices still pending were not scanned → NG (with the free-text note).
+            foreach (var item in pendingItems.Where(i => scanRequiredByDeviceId.GetValueOrDefault(i.DeviceId)))
             {
                 item.Status = (int)ServerCheckItemStatus.Ng;
                 item.Note = noteByItemId.TryGetValue(item.Id, out var note) ? note : null;
                 _unitOfWork.ServerCheckItems.Update(item);
             }
+
+            await ResolveAutoCheckItemsAsync(pendingItems.Where(i => !scanRequiredByDeviceId.GetValueOrDefault(i.DeviceId)).ToList());
 
             foreach (var manual in request.ManualResults.Where(x => activeManualItemIds.Contains(x.ManualItemId)))
             {
@@ -207,20 +228,21 @@ namespace Asset.Application.Services
         {
             var items = await _unitOfWork.ServerCheckManualItems.SelectAsync(
                 predicate: x => !x.IsDeleted,
-                selector: x => new ServerCheckManualItemDto { Id = x.Id, Name = x.Name, DisplayOrder = x.DisplayOrder, UsesNetworkPing = x.UsesNetworkPing }
+                selector: x => new ServerCheckManualItemDto { Id = x.Id, Name = x.Name, DisplayOrder = x.DisplayOrder, UsesNetworkPing = x.UsesNetworkPing, IsAirConditioner = x.IsAirConditioner }
             );
             return items.OrderBy(x => x.DisplayOrder).ToList();
         }
 
         // Pings the IPs of Server/Network/UPS devices (asset-module.md §1.20) so staff can verify the
         // "Network - Factory"/"Network - Server" checklist items on the spot instead of by hand.
-        // AirConditioner is excluded — those devices are not expected to have network IPs. Scope is
-        // narrowed to AssetSetting.NetworkCheckBranchId when set (Admin-configurable), otherwise all
+        // Scope is narrowed to AssetSetting.NetworkCheckBranchId when set (Admin-configurable), otherwise all
         // branches. Only IPs actually assigned to a Device are pinged (Available IPs have no host to
         // reach). Pings run in parallel (capped concurrency) with a short timeout so a large subnet
         // still finishes in a few seconds.
         public async Task<NetworkPingResultDto> PingNetworkAsync()
         {
+            // Scope = every device the Admin ticked RequiresDailyCheck, including the QR-scanned IDR group
+            // (their ping is informational; only non-scan devices are auto-resolved by EndSessionAsync).
             // Xưởng của người quét (§1.21) ưu tiên hơn AssetSetting.ServerCheckBranchId — cấu hình chung
             // đó chỉ còn là fallback cho tài khoản chưa được phân công xưởng (vd Admin).
             var branchId = await GetAssignedBranchIdAsync();
@@ -235,7 +257,7 @@ namespace Asset.Application.Services
                     && !ip.Device!.IsDeleted
                     && ip.Device.Status == (int)DeviceStatus.InUse
                     && ip.Device.DeviceType.ServerCheckCategory != null
-                    && ip.Device.DeviceType.ServerCheckCategory != (int)ServerCheckCategory.AirConditioner
+                    && ip.Device.RequiresDailyCheck
                     && (branchId == null || ip.Device.BranchId == branchId),
                 selector: ip => new PingTargetRow
                 {
@@ -247,8 +269,65 @@ namespace Asset.Application.Services
                 }
             );
 
+            var items = await PingTargetsAsync(targets);
+            return new NetworkPingResultDto
+            {
+                TotalCount = items.Count,
+                ReachableCount = items.Count(r => r.Reachable),
+                AllReachable = items.All(r => r.Reachable),
+                Items = items
+            };
+        }
+
+        // Turns the still-Pending items of devices that are NOT scanned by QR into OK/NG: ping every IP
+        // assigned to the device (all must be reachable); a device with no IP can't be verified, so it is NG.
+        private async Task ResolveAutoCheckItemsAsync(List<ServerCheckItem> autoItems)
+        {
+            if (autoItems.Count == 0) return;
+
+            var deviceIds = autoItems.Select(i => i.DeviceId).ToList();
+            var targets = await _unitOfWork.IpAddresses.SelectAsync(
+                predicate: ip => !ip.IsDeleted && ip.DeviceId != null && deviceIds.Contains(ip.DeviceId.Value),
+                selector: ip => new PingTargetRow
+                {
+                    IpAddress = ip.IpAddress1,
+                    DeviceId = ip.Device!.Id,
+                    DeviceCode = ip.Device.DeviceCode,
+                    DeviceName = ip.Device.DeviceName,
+                    Category = ip.Device.DeviceType.ServerCheckCategory ?? 0
+                }
+            );
+
+            var pingByDevice = (await PingTargetsAsync(targets)).ToLookup(r => r.DeviceId);
+            var now = TimeHelper.GetCurrentUtcTime();
+
+            foreach (var item in autoItems)
+            {
+                var pings = pingByDevice[item.DeviceId].ToList();
+                item.ScannedAt = now;
+
+                if (pings.Count == 0)
+                {
+                    item.Status = (int)ServerCheckItemStatus.Ng;
+                    item.Note = "Chưa có IP để ping";
+                }
+                else
+                {
+                    var failed = pings.Where(p => !p.Reachable).Select(p => p.IpAddress).ToList();
+                    item.Status = (int)(failed.Count == 0 ? ServerCheckItemStatus.Ok : ServerCheckItemStatus.Ng);
+                    item.Note = failed.Count == 0 ? null : $"Không ping được: {string.Join(", ", failed)}";
+                }
+
+                _unitOfWork.ServerCheckItems.Update(item);
+            }
+        }
+
+        // Exactly PingCount pings per IP, run in parallel (capped) — shared by the preview endpoint and the
+        // auto-resolve at session end.
+        private static async Task<List<NetworkPingItemDto>> PingTargetsAsync(IEnumerable<PingTargetRow> targets)
+        {
             var results = new ConcurrentBag<NetworkPingItemDto>();
-            using var throttle = new SemaphoreSlim(30);
+            using var throttle = new SemaphoreSlim(MaxParallelIps);
 
             await Task.WhenAll(targets.Select(async target =>
             {
@@ -263,6 +342,7 @@ namespace Asset.Application.Services
                     var replyTimes = new List<long>();
                     for (var attempt = 0; attempt < PingCount; attempt++)
                     {
+                        var attemptWatch = System.Diagnostics.Stopwatch.StartNew();
                         try
                         {
                             using var ping = new Ping();
@@ -277,6 +357,9 @@ namespace Asset.Application.Services
                         {
                             // count as a failed ping
                         }
+
+                        var remaining = PingIntervalMs - (int)attemptWatch.ElapsedMilliseconds;
+                        if (attempt < PingCount - 1 && remaining > 0) await Task.Delay(remaining);
                     }
                     var reachable = successCount >= MinSuccessesForOk;
                     long? roundtripMs = replyTimes.Count > 0 ? (long)Math.Round(replyTimes.Average()) : null;
@@ -299,14 +382,7 @@ namespace Asset.Application.Services
                 }
             }));
 
-            var items = results.OrderBy(r => r.Category).ThenBy(r => r.DeviceCode).ToList();
-            return new NetworkPingResultDto
-            {
-                TotalCount = items.Count,
-                ReachableCount = items.Count(r => r.Reachable),
-                AllReachable = items.All(r => r.Reachable),
-                Items = items
-            };
+            return results.OrderBy(r => r.Category).ThenBy(r => r.DeviceCode).ToList();
         }
 
         public async Task<PagedResponse<ServerCheckSessionDto>> GetSessionsPagedAsync(int pageIndex, int pageSize, DateTime? fromDate, DateTime? toDate, int? branchId)
@@ -334,8 +410,9 @@ namespace Asset.Application.Services
                     EndedBy = x.EndedBy,
                     Status = x.Status,
                     StatusText = x.Status == (int)ServerCheckSessionStatus.InProgress ? "Đang quét" : "Đã hoàn thành",
-                    TotalCount = x.Items.Count,
-                    ScannedCount = x.Items.Count(i => i.Status == (int)ServerCheckItemStatus.Ok)
+                    // Progress counts only devices that must be scanned; ping-verified ones resolve at session end.
+                    TotalCount = x.Items.Count(i => i.Device.DeviceType.RequiresQrScan),
+                    ScannedCount = x.Items.Count(i => i.Device.DeviceType.RequiresQrScan && i.Status == (int)ServerCheckItemStatus.Ok)
                 }
             );
         }
@@ -370,7 +447,7 @@ namespace Asset.Application.Services
 
             var manualResults = await _unitOfWork.ServerCheckManualResults.SelectAsync(
                 predicate: x => sessionIds.Contains(x.SessionId),
-                selector: x => new { x.SessionId, x.ManualItemId, ManualItemName = x.ManualItem.Name, x.Status, x.Note, x.ConfirmedBy, x.ConfirmedAt }
+                selector: x => new { x.SessionId, x.ManualItemId, ManualItemName = x.ManualItem.Name, IsAirConditioner = x.ManualItem.IsAirConditioner, x.Status, x.Note, x.ConfirmedBy, x.ConfirmedAt }
             );
 
             // "Người kiểm" hiển thị họ tên thay vì tên đăng nhập: Session.EndedBy chỉ lưu username (Identity.Name),
@@ -408,7 +485,11 @@ namespace Asset.Application.Services
                 var (serverStatus, serverNote) = Aggregate(s.Status, sessionItems, ServerCheckCategory.Server);
                 var (networkStatus, networkNote) = Aggregate(s.Status, sessionItems, ServerCheckCategory.Network);
                 var (upsStatus, upsNote) = Aggregate(s.Status, sessionItems, ServerCheckCategory.Ups);
-                var (acStatus, acNote) = Aggregate(s.Status, sessionItems, ServerCheckCategory.AirConditioner);
+                // Máy lạnh is a manual tick (no device): OK/NG comes from its manual result, and it is kept
+                // out of ManualResults so the generic manual columns stay unchanged.
+                var acResult = manualBySession[s.Id].FirstOrDefault(m => m.IsAirConditioner);
+                bool? acStatus = acResult == null ? null : acResult.Status == (int)ServerCheckItemStatus.Ok;
+                var acNote = acResult != null && acStatus == false ? acResult.Note : null;
 
                 return new ServerCheckReportRowDto
                 {
@@ -426,7 +507,7 @@ namespace Asset.Application.Services
                     UpsNote = upsNote,
                     AirConditionerStatus = acStatus,
                     AirConditionerNote = acNote,
-                    ManualResults = manualBySession[s.Id].Select(m => new ServerCheckManualResultDto
+                    ManualResults = manualBySession[s.Id].Where(m => !m.IsAirConditioner).Select(m => new ServerCheckManualResultDto
                     {
                         ManualItemId = m.ManualItemId,
                         ManualItemName = m.ManualItemName,
@@ -453,7 +534,7 @@ namespace Asset.Application.Services
             // Factory/Server/Gởi nhận Mail/Backup - File Srv/OES/Domain) theo DisplayOrder 1..7 — không
             // ghi lại tên cột, chỉ cần map giá trị theo ĐÚNG thứ tự này, KHÔNG theo ManualItemId cụ thể
             // (id thật do DB sinh, có thể khác nhau giữa các môi trường).
-            var manualItemIdsInOrder = (await GetManualItemsAsync()).Select(x => x.Id).ToList();
+            var manualItemIdsInOrder = (await GetManualItemsAsync()).Where(x => !x.IsAirConditioner).Select(x => x.Id).ToList();
 
             using var workbook = new XLWorkbook(new MemoryStream(_templateService.GetCheckSheetTemplateBytes()));
             var sheet = workbook.Worksheet("Sheet1");
@@ -556,7 +637,6 @@ namespace Asset.Application.Services
                     CategoryText = x.Category == (int)ServerCheckCategory.Server ? "Server"
                         : x.Category == (int)ServerCheckCategory.Network ? "Network"
                         : x.Category == (int)ServerCheckCategory.Ups ? "UPS"
-                        : x.Category == (int)ServerCheckCategory.AirConditioner ? "Máy lạnh"
                         : "Không xác định",
                     ScannedAt = x.ScannedAt,
                     ScannedBy = x.ScannedBy,
@@ -565,7 +645,8 @@ namespace Asset.Application.Services
                         : x.Status == (int)ServerCheckItemStatus.Ok ? "OK"
                         : x.Status == (int)ServerCheckItemStatus.Ng ? "NG"
                         : "Không xác định",
-                    Note = x.Note
+                    Note = x.Note,
+                    RequiresScan = x.Device.DeviceType.RequiresQrScan
                 }
             );
 
@@ -590,8 +671,8 @@ namespace Asset.Application.Services
                 EndedBy = session.EndedBy,
                 Status = session.Status,
                 StatusText = session.Status.GetServerCheckSessionStatusText(),
-                TotalCount = items.Count,
-                ScannedCount = items.Count(i => i.Status == (int)ServerCheckItemStatus.Ok),
+                TotalCount = items.Count(i => i.RequiresScan),
+                ScannedCount = items.Count(i => i.RequiresScan && i.Status == (int)ServerCheckItemStatus.Ok),
                 Items = items.OrderBy(i => i.Category).ThenBy(i => i.DeviceCode).ToList(),
                 ManualResults = manualResults
             };

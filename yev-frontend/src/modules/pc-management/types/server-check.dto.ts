@@ -1,4 +1,4 @@
-// Khớp asset-api-fe.md §7d. Category: 0=Server, 1=Network, 2=Ups, 3=AirConditioner.
+// Khớp asset-api-fe.md §7d. Category: 0=Server, 1=Network, 2=Ups.
 // ItemStatus: 0=Pending (chưa quét), 1=Ok, 2=Ng. SessionStatus: 0=InProgress, 1=Completed.
 export interface ServerCheckItemDto {
     id: number;
@@ -12,6 +12,8 @@ export interface ServerCheckItemDto {
     status: number;
     statusText: string;
     note: string | null;
+    // true = phải quét QR; false = BE tự ping (NG nếu không có IP) khi kết thúc phiên.
+    requiresScan: boolean;
 }
 
 export interface ServerCheckManualResultDto {
@@ -47,6 +49,8 @@ export interface ServerCheckManualItemDto {
     name: string;
     displayOrder: number;
     usesNetworkPing: boolean;
+    // true = mục "Máy lạnh" (nhân viên tự tick OK/NG); báo cáo hiển thị ở cột Máy lạnh riêng.
+    isAirConditioner: boolean;
 }
 
 // GET /api/ServerCheck/network-ping — pings the IP of every Server/Network/UPS device in scope

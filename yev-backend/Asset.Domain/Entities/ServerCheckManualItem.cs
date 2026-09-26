@@ -17,6 +17,10 @@ public partial class ServerCheckManualItem
     // "Kiểm tra network" ping button on those 2 items instead of matching on Name (fragile).
     public bool UsesNetworkPing { get; set; }
 
+    // True for the single "Máy lạnh" item: staff tick OK/NG themselves (no device to scan/ping). The report
+    // shows it in the paper form's dedicated Máy lạnh column instead of the generic manual columns.
+    public bool IsAirConditioner { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual ICollection<ServerCheckManualResult> Results { get; set; } = new List<ServerCheckManualResult>();

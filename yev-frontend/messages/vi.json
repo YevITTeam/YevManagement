@@ -1992,12 +1992,13 @@
       "deleteMessage": "Bạn có chắc muốn xoá loại thiết bị <b>{name}</b> không? Hành động này không thể hoàn tác.",
       "colServerCheckCategory": "Kiểm tra hằng ngày",
       "fieldServerCheckCategory": "Nhóm kiểm tra hằng ngày (QR)",
-      "fieldServerCheckCategoryHint": "Chọn nếu thiết bị thuộc loại này cần quét QR kiểm tra mỗi ngày (xem module Kiểm tra Server).",
+      "fieldServerCheckCategoryHint": "Chọn nếu thiết bị thuộc loại này cần kiểm tra mỗi ngày (xem module Kiểm tra Server).",
+      "fieldRequiresQrScan": "Phải quét QR",
+      "fieldRequiresQrScanHint": "Bật: nhân viên quét QR từng máy. Tắt: hệ thống tự ping khi kết thúc phiên.",
       "serverCheckCategoryNone": "Không thuộc phạm vi kiểm tra",
       "serverCheckCategoryServer": "Server",
       "serverCheckCategoryNetwork": "Network",
-      "serverCheckCategoryUps": "UPS",
-      "serverCheckCategoryAirConditioner": "Máy lạnh"
+      "serverCheckCategoryUps": "UPS"
     },
     "ServerCheck": {
       "noAssignmentTitle": "Chưa được phân công xưởng",
@@ -2038,6 +2039,9 @@
       "scanError": "Không tìm thấy thiết bị hoặc thiết bị không thuộc phạm vi kiểm tra hôm nay.",
       "progressLabel": "Tiến độ quét",
       "pendingCountLabel": "Còn {count} thiết bị chưa quét",
+      "autoCheckSectionTitle": "Tự kiểm tra ({count} thiết bị)",
+      "autoCheckHint": "Không cần quét QR — hệ thống tự ping khi bạn kết thúc phiên.",
+      "autoCheckNotice": "{count} thiết bị không cần quét sẽ được hệ thống tự ping khi bấm xác nhận (có thể mất vài chục giây).",
       "allScannedLabel": "Đã quét đủ toàn bộ thiết bị",
       "endButton": "Kết thúc phiên quét",
       "endSuccess": "Kết thúc phiên kiểm tra thành công.",

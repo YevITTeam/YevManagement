@@ -10,6 +10,7 @@ export interface DeviceTypeFormValues {
     typeCode: string;
     typeName: string;
     serverCheckCategory: number | null;
+    requiresQrScan: boolean;
 }
 
 // Khớp Asset.Domain.Enums.ServerCheckCategory bên BE.
@@ -17,7 +18,6 @@ const SERVER_CHECK_CATEGORY_OPTIONS = [
     { value: 0, labelKey: "serverCheckCategoryServer" },
     { value: 1, labelKey: "serverCheckCategoryNetwork" },
     { value: 2, labelKey: "serverCheckCategoryUps" },
-    { value: 3, labelKey: "serverCheckCategoryAirConditioner" },
 ] as const;
 
 interface DeviceTypeFormProps {
@@ -29,7 +29,7 @@ interface DeviceTypeFormProps {
     onSubmit: (values: DeviceTypeFormValues) => void | Promise<void>;
 }
 
-const emptyValues: DeviceTypeFormValues = { typeCode: "", typeName: "", serverCheckCategory: null };
+const emptyValues: DeviceTypeFormValues = { typeCode: "", typeName: "", serverCheckCategory: null, requiresQrScan: false };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -43,7 +43,12 @@ export default function DeviceTypeForm({ isOpen, mode, initial, loading = false,
     useDialogReset(isOpen, initial, (current) => {
         setValues(
             current
-                ? { typeCode: current.typeCode, typeName: current.typeName, serverCheckCategory: current.serverCheckCategory ?? null }
+                ? {
+                    typeCode: current.typeCode,
+                    typeName: current.typeName,
+                    serverCheckCategory: current.serverCheckCategory ?? null,
+                    requiresQrScan: current.requiresQrScan ?? false,
+                }
                 : emptyValues
         );
     });
@@ -131,6 +136,22 @@ export default function DeviceTypeForm({ isOpen, mode, initial, loading = false,
                             ))}
                         </select>
                     </label>
+
+                    {values.serverCheckCategory !== null && (
+                        <label className="flex cursor-pointer items-start gap-2">
+                            <input
+                                type="checkbox"
+                                checked={values.requiresQrScan}
+                                onChange={(event) => setValues((current) => ({ ...current, requiresQrScan: event.target.checked }))}
+                                disabled={loading}
+                                className="mt-0.5 h-4 w-4 cursor-pointer accent-[#e3000f]"
+                            />
+                            <span>
+                                <span className="block text-sm font-semibold text-[#191c1e]">{t("fieldRequiresQrScan")}</span>
+                                <span className="block text-xs text-[#8a8f94]">{t("fieldRequiresQrScanHint")}</span>
+                            </span>
+                        </label>
+                    )}
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button
