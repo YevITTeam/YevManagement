@@ -34,7 +34,7 @@ type PrioritySort = "none" | "asc" | "desc";
 export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, onSynced }: DeviceSoftwarePickerDialogProps) {
     const [items, setItems] = useState<PickerItemWithPriority[]>([]);
     const [search, setSearch] = useState("");
-    const [prioritySort, setPrioritySort] = useState<PrioritySort>("none");
+    const [prioritySort, setPrioritySort] = useState<PrioritySort>("asc");
 
     const [originalSelectedIds, setOriginalSelectedIds] = useState<Set<number>>(new Set());
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -43,7 +43,7 @@ export default function DeviceSoftwarePickerDialog({ isOpen, deviceId, onClose, 
 
     useDialogReset(isOpen, deviceId, () => {
         setSearch("");
-        setPrioritySort("none");
+        setPrioritySort("asc");
     });
 
     const { isLoading } = useFetchEffect(
