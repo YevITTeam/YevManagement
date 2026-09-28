@@ -37,14 +37,37 @@ public static class ApprovalStepCoordinatorPermissions
     public const string ProductionUpdateCode = "Attendance.ProductionApprovalStep.Update";
 
     // Sửa giới hạn OT cá nhân (2026-08-29) — cấp cho CẢ Người phụ trách Bộ phận lẫn Nhóm (mở rộng cho
-    // Nhóm ngày 2026-09-28, trước chỉ Bộ phận), scope theo đúng Bộ phận/Nhóm họ phụ trách, xem
-    // EmployeeService.EnsureCanManageDeptOrGroupScopeAsync. Nhân sự dưới chuyền
-    // (ProductionEmployee.View/Update/Import/Export) và import Excel lũy kế
-    // (EmployeeAccumulation.Import) KHÔNG còn tự cấp từ 2026-09-26 — phải được Admin chỉ định rõ (theo
-    // Chức vụ qua JobTitlePermissionWhitelist, hoặc gán từng user).
+    // Nhóm ngày 2026-09-28), scope theo đúng Bộ phận/Nhóm họ phụ trách, xem
+    // EmployeeService.EnsureCanManageDeptOrGroupScopeAsync.
     public const string EmployeeUpdateOtLimitCode = "Attendance.Employee.UpdateOtLimit";
 
     // Sửa tay lũy kế 1 nhân viên (2026-09-26) — cấp cho CẢ Người phụ trách Bộ phận lẫn Nhóm, scope theo
     // đúng Bộ phận/Nhóm họ phụ trách, xem EmployeeService.EnsureCanManageDeptOrGroupScopeAsync.
     public const string EmployeeAccumulationUpdateCode = "Attendance.EmployeeAccumulation.Update";
+
+    // Import Excel lũy kế hàng loạt (2026-09-28, theo yêu cầu người dùng — trước đó KHÔNG tự cấp, phải
+    // Admin chỉ định tay) — cùng scope Bộ phận/Nhóm với EmployeeAccumulationUpdateCode ở trên, vì đây
+    // chỉ là "sửa hàng loạt" đúng field đã cho sửa từng người; scope THEO TỪNG DÒNG file Excel, xem
+    // EmployeeImportService.ImportOtHourLimitsAsync/ImportMonthlyAccumulationAsync.
+    public const string EmployeeAccumulationImportCode = "Attendance.EmployeeAccumulation.Import";
+
+    // Coordinator = "y hệt Admin nhưng trong đúng phạm vi" (2026-09-28, theo yêu cầu người dùng) — 3
+    // quyền hồ sơ nhân viên đầy đủ (Code/Tên/Group/Chức vụ, không chỉ 2 field OT-limit/lũy kế hẹp ở
+    // trên), TRƯỚC ĐÓ cố tình 100% Admin-only vì "sửa Code/Tên/Group của MỌI nhân viên, quá rộng" —
+    // giờ đổi hướng: vẫn rộng như Admin, nhưng khoá cứng theo Bộ phận/Nhóm phụ trách (xem
+    // EmployeeService.EnsureCanManageDeptOrGroupScopeAsync/EnsureAssignmentInCallerScopeAsync). Cấp cho
+    // CẢ Bộ phận lẫn Nhóm, đối xứng với EmployeeUpdateOtLimitCode/EmployeeAccumulationUpdateCode.
+    public const string EmployeeCreateCode = "Attendance.Employee.Create";
+    public const string EmployeeUpdateCode = "Attendance.Employee.Update";
+    public const string EmployeeDeleteCode = "Attendance.Employee.Delete";
+
+    // Nhân sự dưới chuyền (2026-09-28, theo yêu cầu người dùng) — CHỈ cấp cho Người phụ trách BỘ PHẬN,
+    // KHÔNG cấp cho Người phụ trách Nhóm (dữ liệu "dưới chuyền" là khái niệm cấp Phòng ban — gắn với
+    // Line/Team/Nhóm ca của cả 1 Phòng ban sản xuất, không tách theo từng Nhóm con). Scope THEO Phòng
+    // ban ở mọi endpoint dùng các mã này (View/Update/Export theo `IDepartmentAccessGuard`; Import qua
+    // ProductionEmployeeImportService đã hardcode cứng 1 Phòng ban "CT" từ trước).
+    public const string ProductionEmployeeViewCode = "Attendance.ProductionEmployee.View";
+    public const string ProductionEmployeeUpdateCode = "Attendance.ProductionEmployee.Update";
+    public const string ProductionEmployeeImportCode = "Attendance.ProductionEmployee.Import";
+    public const string ProductionEmployeeExportCode = "Attendance.ProductionEmployee.Export";
 }

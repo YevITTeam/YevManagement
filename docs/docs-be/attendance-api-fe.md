@@ -718,7 +718,7 @@ field Id/Code không bao giờ lệch nhau. **Lưu ý**: dữ liệu sửa ở �
   ],
   "processPart": { "isEat": true, "mainTicketCount": 3, "secondaryTicketCount": 1, "milkCount": 0,
                     "isTransportation": false, "isUseCopyRoom": false,
-                    "anotherSuggestionVn": null, "anotherSuggestionJp": null }, // optional, cả object hoặc null
+                    "anotherSuggestionVn": null, "anotherSuggestionJp": null }, // vẫn optional ở body, nhưng BE LUÔN tạo ProcessPart + ép isEat=true dù gửi gì (xem ngay dưới)
   "secondaryPassword": "..."                                                  // [Required], mới 2026-08-28 — xem §4.4
 }
 ```
@@ -734,7 +734,12 @@ field Id/Code không bao giờ lệch nhau. **Lưu ý**: dữ liệu sửa ở �
 - `employees[].employeeId` **phải cùng `groupId`** với đơn — khác nhóm → 400 (`DomainException`).
 - **`departmentId` phải đúng là Department của `groupId` đã chọn** (`Group.DepartmentId`, mới 2026-07-17) — gửi cặp `groupId`/`departmentId` không khớp nhau → 400 "Nhóm '...' không thuộc Bộ phận đã chọn." Dùng đúng cascading dropdown §3.2 (chọn Department trước, Group lọc theo `by-department/{id}`) sẽ không bao giờ gặp lỗi này.
 - **KHÔNG có field chữ ký nào trong body** — chữ ký (nếu bước nào đó trong chuỗi yêu cầu) chỉ bắt buộc lúc Duyệt (§4.4), không phải lúc tạo. Đơn vào chuỗi duyệt **ngay lập tức** (`status=InApproval`), hoặc `status=Completed` ngay nếu chuỗi rỗng (người tạo đã ở cấp cao nhất áp dụng cho `otCaseId` đó) — không còn khái niệm Draft. `approvalHistories` của response sẽ **rỗng** (chưa ai duyệt).
-- **`processPart.mainTicketCount`/`secondaryTicketCount`/`milkCount`** (số nguyên `int`, mặc định `0`) — số lượng phiếu ăn theo loại (phiếu chính/phiếu phụ/sữa), chỉ có ý nghĩa khi `isEat = true`. Người lập đơn **tự nhập tay 3 ô số lượng này** cho **cả đơn** (không phải theo từng nhân viên) — BE không tự tính, không validate tổng khớp `numberOfEmployee` hay `employees[].mealTicketType`. FE nên ẩn 3 ô này khi `isEat = false`.
+- **`processPart.isEat` LUÔN `true` (bắt buộc cho MỌI đơn, 2026-09-28, theo yêu cầu người dùng)** — BE
+  (`OtFormService.FinalizeCreateAsync`) LUÔN tạo `ProcessPart` cho đơn mới bất kể `request.ProcessPart`
+  có gửi lên hay `null`, và luôn ép `IsEat = true` dù client gửi `false`. `CreateOtFormPage.tsx` không
+  còn checkbox "Ăn uống" để tắt nữa — 2 mục `isTransportation`/`isUseCopyRoom` vẫn tuỳ chọn thật.
+  `ProcessPart` cố định sau khi tạo (không sửa được qua `PUT /api/OtForm/{id}`, xem §4.1b).
+- **`processPart.mainTicketCount`/`secondaryTicketCount`/`milkCount`** (số nguyên `int`, mặc định `0`) — số lượng phiếu ăn theo loại (phiếu chính/phiếu phụ/sữa). Người lập đơn **tự nhập tay 3 ô số lượng này** cho **cả đơn** (không phải theo từng nhân viên) — BE không tự tính, không validate tổng khớp `numberOfEmployee` hay `employees[].mealTicketType`.
 - **Điều kiện được phép tạo** (đổi 2026-08-07, Giai đoạn 3.1 — bỏ nhánh `UserApprovalScope(Submitter)`): tài khoản đang gọi API phải được liên kết với 1 `Employee` (`Employee.UserName`) có **đúng `groupId` với đơn**, hoặc là Admin (không giới hạn phạm vi). Không thoả → 400 (`DomainException` "Bạn chỉ được tạo/sửa đơn cho đúng Nhóm/Bộ phận của mình..."). Employee liên kết với người tạo cũng chính là cơ sở để suy luận chuỗi duyệt (Admin tạo hộ thì coi như cấp thấp nhất — chuỗi vẫn chạy đầy đủ từ bước đầu của Department).
 - **Chuỗi duyệt không đủ KHÔNG chặn tạo đơn** — nếu Department chưa cấu hình cây duyệt, hoặc thiếu người giữ đúng Chức vụ ở 1 bước nào đó, đơn vẫn được tạo với chuỗi cắt cụt tới đâu hay tới đó; `response.data.approvalChainWarning` (string, `null` nếu đủ) cho biết lý do cụ thể — FE hiện banner cảnh báo trên màn chi tiết đơn khi field này khác `null` (xem §4.3).
 - Response `201 Created` (Location header trỏ `GET /{id}`), `data` = `OtFormDto` (§4.3) đầy đủ luôn — không cần gọi lại `GetById`.
@@ -763,6 +768,10 @@ trả 404. Kênh email (§4.5a mục "Kênh email") **không đổi**, vẫn dù
     // cùng Line/Nhóm ca với NV còn lại của đơn (xem attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn).
     { "employeeId": 100, "startTime": "18:00:00", "endTime": "20:00:00", "didEat": true, "noteVn": null, "noteJp": null },  // startTime null = giữ nguyên
     { "employeeId": 205, "endTime": "19:00:00", "didEat": false, "noteVn": null, "noteJp": null }
+    // didEat: đơn Theo chuyền (isProductionForm=true) BE LUÔN ép true bất kể gửi gì lên (2026-09-28,
+    // Ăn uống bắt buộc — xem OtFormService.ResolveDidEat); đơn Theo Nhóm giữ nguyên như FE gửi, ý nghĩa
+    // field KHÔNG đổi (true = ăn TRONG ca, bị trừ MealBreakDeductionHours) — FE chỉ hiển thị đảo ngược
+    // dưới nhãn "Ăn sau" (xem attendance-module.md §Có ăn hay không theo từng nhân viên).
   ],
   "removedEmployees": [
     { "employeeId": 101, "reason": "Nghỉ đột xuất" }  // NV đang có trong đơn nhưng KHÔNG có mặt ở employees[] phải khai ở đây, nếu không BE trả 400

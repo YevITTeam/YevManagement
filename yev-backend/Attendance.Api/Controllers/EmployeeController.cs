@@ -131,7 +131,7 @@ namespace Attendance.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateEmployeeDto request)
         {
-            var result = await _employeeService.CreateAsync(request);
+            var result = await _employeeService.CreateAsync(CurrentUserName, User.IsInRole(AdminRole), request);
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Thêm nhân viên thành công.");
         }
 
@@ -141,7 +141,7 @@ namespace Attendance.Api.Controllers
         {
             if (id != request.Id) return Fail<bool>("Id không khớp.");
 
-            await _employeeService.UpdateAsync(request);
+            await _employeeService.UpdateAsync(CurrentUserName, User.IsInRole(AdminRole), request);
             return Success(true, "Cập nhật nhân viên thành công.");
         }
 
@@ -149,7 +149,7 @@ namespace Attendance.Api.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Delete(int id)
         {
-            await _employeeService.DeleteAsync(id);
+            await _employeeService.DeleteAsync(CurrentUserName, User.IsInRole(AdminRole), id);
             return Success(true, "Xóa nhân viên thành công.");
         }
 
@@ -185,6 +185,18 @@ namespace Attendance.Api.Controllers
         {
             var result = await _employeeService.UpdateOtLimitAsync(CurrentUserName, User.IsInRole(AdminRole), id, request);
             return Success(result, "Cập nhật giới hạn OT thành công.");
+        }
+
+        // Chạy tay 1 lần mỗi khi ĐỔI LUẬT cấp tự động trong code (SyncAutoGrantedPermissionsCoreAsync) —
+        // cơ chế sync chỉ chạy theo sự kiện (gán/gỡ Coordinator...), không tự áp lại cho Coordinator đã
+        // gán từ trước khi luật đổi (2026-09-28). Admin-only, cùng permission "quản trị" dùng cho các
+        // hành động cấu hình toàn hệ thống khác trong module này.
+        [RequirePermission("Attendance.Department.Create")]
+        [HttpPost("resync-coordinator-permissions")]
+        public async Task<ActionResult<ApiResponse<int>>> ResyncCoordinatorPermissions()
+        {
+            var count = await _employeeService.ResyncAllCoordinatorPermissionsAsync();
+            return Success(count, $"Đã đồng bộ lại quyền tự động cho {count} người phụ trách.");
         }
     }
 }

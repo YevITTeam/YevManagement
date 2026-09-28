@@ -41,9 +41,15 @@ namespace Attendance.Application.Interfaces.Service
         Task<List<EmployeeDto>> GetByDepartmentIdAsync(int departmentId);
         Task<EmployeeDto> GetByIdAsync(int id);
         Task<EmployeeDto> GetByUserNameAsync(string userName);
-        Task<EmployeeDto> CreateAsync(CreateEmployeeDto request);
-        Task UpdateAsync(UpdateEmployeeDto request);
-        Task DeleteAsync(int id);
+        // callerUserName/isAdmin dùng để SCOPE theo Bộ phận/Nhóm phụ trách (2026-09-28, theo yêu cầu
+        // người dùng — Coordinator được cấp quyền y hệt Admin nhưng chỉ trong đúng phạm vi mình quản):
+        // Create chỉ tạo được vào đúng Bộ phận/Nhóm phụ trách; Update/Delete chỉ tác động được nhân
+        // viên hiện thuộc đúng phạm vi, và Update đổi Group/Chức vụ thì phạm vi MỚI cũng phải hợp lệ
+        // (không cho "chuyển" nhân viên ra ngoài phạm vi mình quản) — xem
+        // EmployeeService.EnsureCanManageDeptOrGroupScopeAsync/EnsureAssignmentInCallerScopeAsync.
+        Task<EmployeeDto> CreateAsync(string callerUserName, bool isAdmin, CreateEmployeeDto request);
+        Task UpdateAsync(string callerUserName, bool isAdmin, UpdateEmployeeDto request);
+        Task DeleteAsync(string callerUserName, bool isAdmin, int id);
 
         // Tính lại TOÀN BỘ permission tự động cấp (theo Chức vụ + theo vai trò "Người phụ trách Cây
         // duyệt") cho 1 Employee rồi đồng bộ vào Identity — gọi từ DepartmentApprovalStepCoordinatorService/
@@ -52,6 +58,13 @@ namespace Attendance.Application.Interfaces.Service
         // bộ theo Chức vụ đang có. No-op nếu Employee chưa liên kết UserName — lần UpdateAsync liên
         // kết UserName sau này sẽ tự cấp đúng bộ quyền hiện hành.
         Task SyncAutoGrantedPermissionsForEmployeeAsync(int employeeId);
+
+        // Chạy lại đúng logic trên cho MỌI Employee đang là Coordinator (Bộ phận hoặc Nhóm) hiện có
+        // (2026-09-28) — cần thiết mỗi khi ĐỔI LUẬT cấp tự động trong code (thêm/bớt permission ở
+        // SyncAutoGrantedPermissionsCoreAsync), vì cơ chế sync chỉ chạy theo SỰ KIỆN (gán/gỡ Coordinator,
+        // sửa quyền theo Chức vụ, liên kết UserName...) — đổi RULE trong code không tự kích hoạt lại cho
+        // các Coordinator đã gán từ trước. Trả về số Employee đã đồng bộ lại.
+        Task<int> ResyncAllCoordinatorPermissionsAsync();
 
         // Gán/gỡ Chức vụ CÓ PHẠM VI (2026-08-11c) — khác PUT /{id} (UpdateAsync, sửa toàn bộ hồ sơ,
         // chỉ Admin qua Attendance.Employee.Update): 2 hàm này gọi bởi CẢ Admin lẫn Người phụ trách Cây

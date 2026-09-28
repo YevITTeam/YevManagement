@@ -823,6 +823,14 @@ namespace Attendance.Application.Services
             return creatorSignature.SignatureImage;
         }
 
+        // Ăn uống bắt buộc cho MỌI đơn tăng ca (2026-09-28, theo yêu cầu người dùng) — đơn Theo chuyền
+        // (Sản xuất) không còn cho từng người tự chọn "Có ăn"/"Không ăn" nữa (FE đã bỏ hẳn checkbox
+        // này cho loại đơn này), luôn coi như có ăn (DidEat=true) bất kể FE gửi gì lên (phòng vệ ở tầng
+        // Service). Đơn Theo Nhóm (Văn phòng) giữ nguyên Ý NGHĨA field DidEat như cũ (true = có ăn
+        // TRONG ca, bị trừ MealBreakDeductionHours) — chỉ đổi NHÃN + default hiển thị ở FE thành "Ăn
+        // sau" (mặc định tích sẵn = DidEat false = không trừ giờ), BE không cần đổi gì thêm ở field này.
+        private static bool ResolveDidEat(bool isProductionForm, bool requestedDidEat) => isProductionForm || requestedDidEat;
+
         // Phần đuôi dùng chung cho cả 2 kiểu tạo đơn (2026-08-24) — thêm OtForm/OtFormEmployee(kèm
         // snapshot ProductionEmployee nếu có)/ProcessPart/chuỗi bước duyệt, lưu, rồi cộng luỹ kế ngay
         // nếu Completed hoặc báo email cho bước đầu tiên nếu còn InApproval.
@@ -834,10 +842,13 @@ namespace Attendance.Application.Services
 
             var mealSettings = await _attendanceSettingService.GetAsync();
 
+            var didEatByEmployeeId = request.Employees.ToDictionary(
+                x => x.EmployeeId, x => ResolveDidEat(newOtForm.IsProductionForm, x.DidEat));
+
             // Chặn CỨNG trước khi ghi bất kỳ gì — vượt giới hạn ngày/tháng/năm của bất kỳ nhân viên nào
             // thì từ chối tạo cả đơn (2026-08-26, xem ValidateOtHourLimitsAsync).
             var newHoursByEmployeeId = request.Employees.ToDictionary(
-                x => x.EmployeeId, x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, x.DidEat, mealSettings));
+                x => x.EmployeeId, x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
             await ValidateOtHourLimitsAsync(request.Date, newHoursByEmployeeId, mealSettings, excludeFormId: null);
 
             // Chụp lại Dự kiến "trước khi thêm đơn này" — query CHƯA thấy đơn đang tạo (chưa
@@ -859,7 +870,7 @@ namespace Attendance.Application.Services
                     EmployeeId = item.EmployeeId,
                     StartTime = item.StartTime ?? request.StartTime,
                     EndTime = item.EndTime,
-                    DidEat = item.DidEat,
+                    DidEat = didEatByEmployeeId[item.EmployeeId],
                     NoteVn = item.NoteVn,
                     NoteJp = item.NoteJp,
                     MonthToDate = projectedMonthBefore,
@@ -872,21 +883,22 @@ namespace Attendance.Application.Services
                 });
             }
 
-            if (request.ProcessPart != null)
+            // ProcessPart giờ LUÔN được tạo, bất kể request.ProcessPart có gửi lên hay không — "Ăn uống"
+            // (IsEat) bắt buộc true cho MỌI đơn (2026-09-28, theo yêu cầu người dùng), không còn tuỳ
+            // chọn tắt như trước. 3 mục còn lại (Xe đưa đón/Phòng photo/Đề nghị khác) vẫn tuỳ chọn,
+            // mặc định rỗng/false nếu request không gửi.
+            await _unitOfWork.ProcessParts.AddAsync(new ProcessPart
             {
-                await _unitOfWork.ProcessParts.AddAsync(new ProcessPart
-                {
-                    OtForm = newOtForm,
-                    IsEat = request.ProcessPart.IsEat,
-                    MainTicketCount = request.ProcessPart.MainTicketCount,
-                    SecondaryTicketCount = request.ProcessPart.SecondaryTicketCount,
-                    MilkCount = request.ProcessPart.MilkCount,
-                    IsTransportation = request.ProcessPart.IsTransportation,
-                    IsUseCopyRoom = request.ProcessPart.IsUseCopyRoom,
-                    AnotherSuggestionVn = request.ProcessPart.AnotherSuggestionVn,
-                    AnotherSuggestionJp = request.ProcessPart.AnotherSuggestionJp
-                });
-            }
+                OtForm = newOtForm,
+                IsEat = true,
+                MainTicketCount = request.ProcessPart?.MainTicketCount ?? 0,
+                SecondaryTicketCount = request.ProcessPart?.SecondaryTicketCount ?? 0,
+                MilkCount = request.ProcessPart?.MilkCount ?? 0,
+                IsTransportation = request.ProcessPart?.IsTransportation ?? false,
+                IsUseCopyRoom = request.ProcessPart?.IsUseCopyRoom ?? false,
+                AnotherSuggestionVn = request.ProcessPart?.AnotherSuggestionVn,
+                AnotherSuggestionJp = request.ProcessPart?.AnotherSuggestionJp
+            });
 
             // Snapshot chuỗi bước duyệt — mọi bước tạo Status=Pending ngay từ đầu; "bước đang chờ xử
             // lý" thật sự là bước Pending có StepOrder nhỏ nhất (xem GetPendingApprovalsAsync).
@@ -1125,12 +1137,18 @@ namespace Attendance.Application.Services
 
             var mealSettings = await _attendanceSettingService.GetAsync();
 
+            // Ăn uống bắt buộc cho MỌI đơn (2026-09-28) — đơn Theo chuyền hardcode DidEat=true bất kể
+            // FE gửi gì, xem ResolveDidEat. Đơn Theo Nhóm giữ nguyên field như FE gửi lên (chỉ đổi
+            // nhãn/default hiển thị "Ăn sau" ở FE).
+            var didEatByEmployeeId = request.Employees.ToDictionary(
+                x => x.EmployeeId, x => ResolveDidEat(otForm.IsProductionForm, x.DidEat));
+
             // Chặn CỨNG nếu giờ sửa lại khiến ai đó vượt ngày/tháng/năm — excludeFormId: otForm.Id vì
             // các dòng OtFormEmployee hiện có của CHÍNH đơn này đang bị thay thế/sửa, không được cộng
             // dồn ngược lại với giá trị cũ của chính nó (xem ValidateOtHourLimitsAsync). Áp dụng cho cả
             // NV giữ nguyên lẫn NV mới thêm.
             var newHoursByEmployeeId = request.Employees.ToDictionary(
-                x => x.EmployeeId, x => CalculateOtHours(startTimeByEmployeeId[x.EmployeeId], x.EndTime, x.DidEat, mealSettings));
+                x => x.EmployeeId, x => CalculateOtHours(startTimeByEmployeeId[x.EmployeeId], x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
             await ValidateOtHourLimitsAsync(otForm.Date, newHoursByEmployeeId, mealSettings, excludeFormId: otForm.Id);
 
             // NV mới cần thêm 2 check chỉ áp dụng lúc THÊM (không áp dụng cho NV giữ nguyên — ngày/giờ
@@ -1191,7 +1209,7 @@ namespace Attendance.Application.Services
                     existingRow.RemoveReason = null;
                     existingRow.StartTime = startTimeByEmployeeId[employeeId];
                     existingRow.EndTime = addRequest.EndTime;
-                    existingRow.DidEat = addRequest.DidEat;
+                    existingRow.DidEat = didEatByEmployeeId[employeeId];
                     existingRow.NoteVn = addRequest.NoteVn;
                     existingRow.NoteJp = addRequest.NoteJp;
                     _unitOfWork.OtFormEmployees.Update(existingRow);
@@ -1205,7 +1223,7 @@ namespace Attendance.Application.Services
                         EmployeeId = employeeId,
                         StartTime = startTimeByEmployeeId[employeeId],
                         EndTime = addRequest.EndTime,
-                        DidEat = addRequest.DidEat,
+                        DidEat = didEatByEmployeeId[employeeId],
                         NoteVn = addRequest.NoteVn,
                         NoteJp = addRequest.NoteJp,
                         MonthToDate = projectedMonthBefore,
@@ -1237,9 +1255,10 @@ namespace Attendance.Application.Services
                 if (existing.EndTime != item.EndTime)
                     await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.TimeChanged,
                         item.EmployeeId, code, "EndTime", existing.EndTime.ToString("HH:mm"), item.EndTime.ToString("HH:mm"));
-                if (existing.DidEat != item.DidEat)
+                var resolvedDidEat = didEatByEmployeeId[item.EmployeeId];
+                if (existing.DidEat != resolvedDidEat)
                     await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.TimeChanged,
-                        item.EmployeeId, code, "DidEat", existing.DidEat ? "Có ăn" : "Không ăn", item.DidEat ? "Có ăn" : "Không ăn");
+                        item.EmployeeId, code, "DidEat", existing.DidEat ? "Có ăn" : "Không ăn", resolvedDidEat ? "Có ăn" : "Không ăn");
                 if (existing.NoteVn != item.NoteVn)
                     await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.NoteChanged,
                         item.EmployeeId, code, "NoteVn", existing.NoteVn, item.NoteVn);
@@ -1249,7 +1268,7 @@ namespace Attendance.Application.Services
 
                 existing.StartTime = newStartTime;
                 existing.EndTime = item.EndTime;
-                existing.DidEat = item.DidEat;
+                existing.DidEat = resolvedDidEat;
                 existing.NoteVn = item.NoteVn;
                 existing.NoteJp = item.NoteJp;
                 _unitOfWork.OtFormEmployees.Update(existing);
@@ -1802,8 +1821,9 @@ namespace Attendance.Application.Services
 
         // Gọi lại sau bất kỳ thay đổi nào tới danh sách/DidEat của nhân viên trong đơn SAU lúc tạo
         // (sửa thực tích, loại người khỏi đơn) để phiếu ăn không bị lệch với thực tế — chỉ đụng tới
-        // MainTicketCount/SecondaryTicketCount, giữ nguyên MilkCount (luôn nhập tay). Không làm gì nếu
-        // đơn chưa từng bật "Ăn uống" lúc tạo (không có ProcessPart).
+        // MainTicketCount/SecondaryTicketCount, giữ nguyên MilkCount (luôn nhập tay). Mọi đơn từ
+        // 2026-09-28 đều LUÔN có ProcessPart (Ăn uống bắt buộc, xem FinalizeCreateAsync) — guard null
+        // dưới đây chỉ còn ý nghĩa phòng vệ cho đơn cũ tạo trước mốc này (nếu còn sót, dev DB đã xoá).
         private async Task RecalculateMealTicketCountsAsync(
             int otFormId, IEnumerable<OtFormEmployee> activeEmployees, AttendanceSettingDto settings)
         {

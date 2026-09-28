@@ -528,7 +528,7 @@ export default function DeviceList() {
           className={`overflow-x-auto overflow-y-auto ${isDragScrolling ? "cursor-grabbing select-none" : "cursor-grab"}`}
           style={{ maxHeight: "calc(100vh - 250px)", minHeight: 320 }}
         >
-          <table className="min-w-full border-collapse text-left">
+          <table className="w-auto border-collapse text-left">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-[11px] font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
                 <th className="w-10 whitespace-nowrap px-3 py-1.5">
@@ -560,7 +560,7 @@ export default function DeviceList() {
                 <th className="whitespace-nowrap px-3 py-1.5">Email</th>
                 <th className="whitespace-nowrap px-3 py-1.5">Mua / Hết hạn</th>
                 <th className="whitespace-nowrap px-3 py-1.5">Trạng thái</th>
-                <th className="whitespace-nowrap px-3 py-1.5">Ghi chú</th>
+                <th className="w-full px-3 py-1.5">Ghi chú</th>
                 <th className="sticky right-0 z-10 w-10 whitespace-nowrap bg-[#f8fafc] px-2 py-1.5 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                   <span className="sr-only">Hành động</span>
                 </th>
@@ -608,7 +608,7 @@ export default function DeviceList() {
                       {device.groupName || "-"}
                     </div>
                   </td>
-                  <td className="min-w-[150px] px-3 py-1.5 align-top">
+                  <td className="px-3 py-1.5 align-top">
                     {device.ipAddresses.length > 0 ? (
                       <div className="flex flex-col items-start gap-0.5">
                         {device.ipAddresses.map((ip, index) => (
@@ -625,7 +625,7 @@ export default function DeviceList() {
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 align-top text-sm text-[#191c1e]">{device.manager || "-"}</td>
-                  <td className="min-w-[180px] px-3 py-1.5 align-top">
+                  <td className="whitespace-nowrap px-3 py-1.5 align-top">
                     {device.emails.length > 0 ? (
                       <div className="flex flex-col gap-0.5">
                         {device.emails.map((email, index) => (
@@ -650,8 +650,8 @@ export default function DeviceList() {
                       {statusLabels[device.status] ?? "Không xác định"}
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 align-top">
-                    <div className="line-clamp-2 min-w-[180px] max-w-[260px] text-xs text-[#5e3f3a]" title={device.note ?? undefined}>
+                  <td className="w-full px-3 py-1.5 align-top">
+                    <div className="line-clamp-2 text-xs text-[#5e3f3a]" title={device.note ?? undefined}>
                       {device.note || "-"}
                     </div>
                   </td>
@@ -681,7 +681,6 @@ export default function DeviceList() {
             </tbody>
           </table>
         </div>
-
         <div className="flex items-center justify-between border-t border-[#e0e3e5] px-3 py-1.5">
           <button
             className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs! text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"

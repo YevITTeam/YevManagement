@@ -66,7 +66,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     // GetPagedAsync/GetAllActiveAsync từ trước — đây chỉ là UX, không phải lớp chặn bảo mật).
     const [scope, setScope] = useState<EmployeeScopeDto | null>(null);
     const isScopeRestricted = scope !== null && !scope.companyWide;
-    const showDepartmentFilter = scope === null || scope.companyWide || scope.departmentId !== null;
+    const showDepartmentFilter = scope === null || scope.companyWide || scope.departments.length > 0;
 
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -111,15 +111,16 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     }, []);
 
     // Chờ biết phạm vi trước khi tải dropdown — tránh chớp hiện đủ Phòng ban/Nhóm công ty rồi mới rút
-    // gọn lại. Trường hợp bị giới hạn theo Phòng ban vẫn tải danh sách Nhóm CON của đúng Phòng ban đó
-    // (không phải chỉ 1 Nhóm) — họ được xem cả Phòng ban, chỉ riêng dropdown Phòng ban mới khoá cứng.
+    // gọn lại. Bị giới hạn thì dùng THẲNG danh sách BE đã trả sẵn trong `scope` (2026-09-28 — trước đó
+    // chỉ tải Nhóm CON của 1 Phòng ban duy nhất, không đúng khi phạm vi gồm NHIỀU Phòng ban/Nhóm).
     useEffect(() => {
         if (scope === null) return;
         if (scope.companyWide) {
             DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
             GroupApi.getAllGroups().then(setGroups).catch((err) => console.error(err));
-        } else if (scope.departmentId !== null) {
-            GroupApi.getGroupsByDepartment(scope.departmentId).then(setGroups).catch((err) => console.error(err));
+        } else {
+            setDepartments(scope.departments);
+            setGroups(scope.groups);
         }
     }, [scope]);
 
@@ -127,18 +128,18 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         setDepartmentId(nextId);
         setGroupId("");
         setPageIndex(1);
+        if (isScopeRestricted) {
+            // Phạm vi đã cố định sẵn trong `scope.groups` (gồm đủ Nhóm của MỌI Phòng ban trong phạm
+            // vi) — chỉ cần lọc lại theo Phòng ban vừa chọn/bỏ chọn, không cần gọi thêm API.
+            setGroups(typeof nextId === "number" ? scope!.groups.filter((g) => g.departmentId === nextId) : scope!.groups);
+            return;
+        }
         if (typeof nextId === "number") {
             GroupApi.getGroupsByDepartment(nextId)
                 .then(setGroups)
                 .catch((err) => console.error(err));
-        } else if (!isScopeRestricted) {
+        } else {
             GroupApi.getAllGroups()
-                .then(setGroups)
-                .catch((err) => console.error(err));
-        } else if (scope?.departmentId !== null && scope?.departmentId !== undefined) {
-            // Bị giới hạn theo Phòng ban, người dùng gỡ lựa chọn đang chọn — quay về đúng Nhóm con của
-            // Phòng ban mình, KHÔNG tải toàn bộ Nhóm công ty (sẽ phá mất phần thu hẹp ở trên).
-            GroupApi.getGroupsByDepartment(scope.departmentId)
                 .then(setGroups)
                 .catch((err) => console.error(err));
         }
@@ -149,35 +150,16 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         setPageIndex(1);
     };
 
-    const departmentOptions: SelectOption[] = isScopeRestricted
-        ? scope!.departmentId !== null
-            ? [
-                  {
-                      value: scope!.departmentId,
-                      label: scope!.departmentNameVn ?? "",
-                      searchText: (scope!.departmentNameVn ?? "").toLowerCase(),
-                  },
-              ]
-            : []
-        : departments.map((d) => ({
-              value: d.id,
-              label: d.departmentNameVn,
-              searchText: d.departmentNameVn.toLowerCase(),
-          }));
-    const groupOptions: SelectOption[] =
-        isScopeRestricted && scope!.groupId !== null
-            ? [
-                  {
-                      value: scope!.groupId,
-                      label: scope!.groupNameVn ?? "",
-                      searchText: (scope!.groupNameVn ?? "").toLowerCase(),
-                  },
-              ]
-            : groups.map((g) => ({
-                  value: g.id,
-                  label: g.groupNameVn,
-                  searchText: g.groupNameVn.toLowerCase(),
-              }));
+    const departmentOptions: SelectOption[] = departments.map((d) => ({
+        value: d.id,
+        label: d.departmentNameVn,
+        searchText: d.departmentNameVn.toLowerCase(),
+    }));
+    const groupOptions: SelectOption[] = groups.map((g) => ({
+        value: g.id,
+        label: g.groupNameVn,
+        searchText: g.groupNameVn.toLowerCase(),
+    }));
 
     const { isLoading, error, refetch: fetchEmployees } = useFetchEffect(
         () =>
@@ -589,6 +571,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 loading={isSaving}
                 onClose={closeForm}
                 onSubmit={handleSubmitForm}
+                scope={scope}
             />
 
             <ConfirmDialog

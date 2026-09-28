@@ -7,4 +7,6 @@ export interface DeviceTypeDto {
     serverCheckCategoryText?: string | null;
     // true = thiết bị loại này phải quét QR khi kiểm tra hằng ngày; false = hệ thống tự ping lúc kết thúc phiên.
     requiresQrScan?: boolean;
+    // true = loại này được đưa vào đợt kiểm kê thiết bị (asset-module.md §1.22).
+    includedInInventory?: boolean;
 }

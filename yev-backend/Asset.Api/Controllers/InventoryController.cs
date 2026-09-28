@@ -67,21 +67,12 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Asset.Inventory.View")]
-        [HttpGet("report")]
-        public async Task<ActionResult<ApiResponse<List<InventoryReportRowDto>>>> GetReport(
-            [FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId = null)
-        {
-            var result = await _inventoryService.GetReportAsync(fromDate, toDate, branchId);
-            return Success(result);
-        }
-
         // Trả file .xlsx — KHÔNG phải ApiResponse<T> (cùng lý do ServerCheckController.ExportReport).
         [RequirePermission("Asset.Inventory.View")]
-        [HttpGet("report/export")]
-        public async Task<IActionResult> ExportReport([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId = null)
+        [HttpGet("{id}/export")]
+        public async Task<IActionResult> ExportSession(int id)
         {
-            var (content, fileName) = await _inventoryService.ExportReportAsync(fromDate, toDate, branchId);
+            var (content, fileName) = await _inventoryService.ExportSessionAsync(id);
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
     }

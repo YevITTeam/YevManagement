@@ -8,6 +8,11 @@ namespace Asset.Application.Dtos.Inventory
         public int DeviceId { get; set; }
         public string DeviceCode { get; set; } = null!;
         public string DeviceName { get; set; } = null!;
+        public string? DeviceTypeName { get; set; }
+        public string? Manager { get; set; }
+        public string? GroupName { get; set; }
+        public string? DepartmentName { get; set; }
+        public string? SerialNumber { get; set; }
         public DateTime? ScannedAt { get; set; }
         public string? ScannedBy { get; set; }
         public int Status { get; set; }

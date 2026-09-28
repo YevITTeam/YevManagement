@@ -22,7 +22,8 @@ namespace Attendance.Application.Interfaces.Service
             int? productionLineId, int? teamId, int? shiftTeamId, int? departmentId);
 
         // Sửa tay Line/Team/Nhóm ca/Trưởng nhóm — bổ sung cho Import Excel (2026-09-04), xem
-        // UpdateProductionEmployeeDto.
-        Task UpdateAsync(int id, UpdateProductionEmployeeDto request);
+        // UpdateProductionEmployeeDto. callerUserName/isAdmin dùng để SCOPE theo Bộ phận phụ trách
+        // (2026-09-28, cùng mô hình GetPagedAsync — CHỈ Bộ phận, không có Nhóm).
+        Task UpdateAsync(int id, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin);
     }
 }

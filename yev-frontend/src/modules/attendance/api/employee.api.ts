@@ -1,6 +1,8 @@
 import { api } from "@/lib/client";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import type { EmployeeAccumulationHistoryYearDto, UpdateEmployeeAccumulationDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
+import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -25,16 +27,15 @@ const ENDPOINTS = {
     },
 } as const;
 
-// Phạm vi xem nhân viên của người gọi (2026-09-03) — Admin/company-wide hay chỉ đúng 1 Phòng ban/Nhóm.
-// FE dùng để thu hẹp dropdown lọc ở EmployeeList.tsx, KHÔNG dùng để enforce (BE đã tự scope
-// GetPagedAsync/GetAllActiveAsync rồi, đây chỉ phục vụ UX — chọn ngoài phạm vi trước đây ra bảng rỗng
-// không rõ lý do).
+// Phạm vi xem nhân viên của người gọi (2026-09-03, đổi sang danh sách 2026-09-28) — Admin/company-wide
+// hay danh sách Phòng ban/Nhóm (có thể NHIỀU hơn 1 — vị trí thật + mọi nơi đang là Coordinator, xem
+// EmployeeService.ResolveCallerScopeAsync). FE dùng để thu hẹp dropdown lọc ở EmployeeList.tsx, KHÔNG
+// dùng để enforce (BE đã tự scope GetPagedAsync/GetAllActiveAsync rồi, đây chỉ phục vụ UX — chọn ngoài
+// phạm vi trước đây ra bảng rỗng không rõ lý do).
 export interface EmployeeScopeDto {
     companyWide: boolean;
-    departmentId: number | null;
-    departmentNameVn: string | null;
-    groupId: number | null;
-    groupNameVn: string | null;
+    departments: DepartmentDto[];
+    groups: GroupDto[];
 }
 
 export interface GetEmployeePageNationParams {

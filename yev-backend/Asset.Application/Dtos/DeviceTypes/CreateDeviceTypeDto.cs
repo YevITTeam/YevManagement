@@ -18,5 +18,8 @@ namespace Asset.Application.Dtos.DeviceTypes
 
         // True = thiết bị loại này phải quét QR khi kiểm tra hằng ngày; false = hệ thống tự ping lúc kết thúc phiên.
         public bool RequiresQrScan { get; set; }
+
+        // True = loại này được đưa vào đợt kiểm kê thiết bị (asset-module.md §1.22).
+        public bool IncludedInInventory { get; set; } = true;
     }
 }

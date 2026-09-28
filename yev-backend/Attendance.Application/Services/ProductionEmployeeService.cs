@@ -158,22 +158,14 @@ namespace Attendance.Application.Services
             var (todayYear, todayMonth) = GetTodayYearMonth();
             var trimmedKeyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim();
 
-            // Scope theo Người phụ trách (2026-09-28, theo yêu cầu người dùng) — trước đây có quyền
-            // Attendance.ProductionEmployee.View là xem được TOÀN công ty. Admin bỏ qua; không Admin thì
-            // chỉ thấy nhân sự dưới chuyền thuộc Bộ phận mình phụ trách (toàn phòng) hoặc Nhóm mình phụ
-            // trách (đúng nhóm đó) — cùng mô hình với EmployeeService.EnsureCanManageDeptOrGroupScopeAsync.
-            // Dòng ProductionEmployee CHƯA gắn Employee (chưa resolve) không xác định được phạm vi nên
-            // luôn bị ẩn khỏi người xem có scope hẹp.
-            HashSet<int>? managedDepartmentIds = null;
-            HashSet<int>? managedGroupIds = null;
-            if (!isAdmin)
-            {
-                managedDepartmentIds = await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
-                managedGroupIds = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
-                        x => x.Employee.UserName == callerUserName && !x.IsDeleted))
-                    .Select(x => x.GroupId)
-                    .ToHashSet();
-            }
+            // Scope theo Người phụ trách BỘ PHẬN (2026-09-28, theo yêu cầu người dùng — "dữ liệu dưới
+            // chuyền" là khái niệm cấp Phòng ban, CHỈ Người phụ trách Bộ phận mới có quyền thao tác,
+            // KHÔNG cấp cho Người phụ trách Nhóm dù đúng lý luôn giống mô hình dept-or-group ở các chỗ
+            // khác — xem ApprovalStepCoordinatorPermissions.ProductionEmployeeViewCode). Admin bỏ qua;
+            // không Admin thì chỉ thấy nhân sự dưới chuyền thuộc Bộ phận mình phụ trách. Dòng
+            // ProductionEmployee CHƯA gắn Employee (chưa resolve) không xác định được phạm vi nên luôn
+            // bị ẩn khỏi người xem có scope hẹp.
+            var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
 
             var query = _unitOfWork.ProductionEmployees.GetQueryable(false).Where(x => !x.IsDeleted
                 && (productionLineId == null || x.ProductionLineId == productionLineId)
@@ -185,8 +177,7 @@ namespace Attendance.Application.Services
                     || (x.Employee != null && (x.Employee.LastName.Contains(trimmedKeyword) || x.Employee.FirstName.Contains(trimmedKeyword))))
                 && (isAdmin || (x.EmployeeId != null && x.Employee != null && (
                         (x.Employee.DepartmentId != null && managedDepartmentIds!.Contains(x.Employee.DepartmentId.Value))
-                        || (x.Employee.Group != null && managedDepartmentIds!.Contains(x.Employee.Group.DepartmentId))
-                        || (x.Employee.GroupId != null && managedGroupIds!.Contains(x.Employee.GroupId.Value))))));
+                        || (x.Employee.Group != null && managedDepartmentIds!.Contains(x.Employee.Group.DepartmentId))))));
 
             var orderedQuery = query.OrderBy(x => x.EmployeeCode.Length).ThenBy(x => x.EmployeeCode);
 
@@ -236,9 +227,29 @@ namespace Attendance.Application.Services
         // IsLeader ảnh hưởng trực tiếp candidate duyệt "theo chuyền" của Line này
         // (JobTitleApprovalChainService, xem docs §Cây duyệt Chuyền), ghi thẳng không cần đồng bộ gì
         // thêm (đọc SỐNG lúc resolve chuỗi duyệt, không cache ở đâu khác).
-        public async Task UpdateAsync(int id, UpdateProductionEmployeeDto request)
+        public async Task UpdateAsync(int id, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin)
         {
             var entity = (await _unitOfWork.ProductionEmployees.GetByIdAsync(id)).OrThrowNotFound("Nhân viên dưới chuyền", id);
+
+            // Scope theo Bộ phận phụ trách (2026-09-28, theo yêu cầu người dùng — cùng mô hình
+            // GetPagedAsync, CHỈ Bộ phận). Dòng chưa gắn Employee (chưa resolve) không xác định được
+            // Bộ phận nên non-Admin luôn bị chặn.
+            if (!isAdmin)
+            {
+                int? resolvedDepartmentId = null;
+                if (entity!.EmployeeId.HasValue)
+                {
+                    var employee = (await _unitOfWork.Employees.SelectAsync(
+                        x => x.Id == entity.EmployeeId.Value,
+                        x => new { x.DepartmentId, GroupDepartmentId = x.Group != null ? (int?)x.Group.DepartmentId : null }))
+                        .FirstOrDefault();
+                    resolvedDepartmentId = employee?.DepartmentId ?? employee?.GroupDepartmentId;
+                }
+
+                var managedDepartmentIds = await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
+                if (resolvedDepartmentId == null || !managedDepartmentIds.Contains(resolvedDepartmentId.Value))
+                    throw new DomainException("Bạn chỉ được sửa nhân sự dưới chuyền thuộc Bộ phận mình phụ trách.");
+            }
 
             if (request.ProductionLineId.HasValue)
             {

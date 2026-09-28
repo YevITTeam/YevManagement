@@ -20,6 +20,10 @@ public partial class DeviceType
     // (or auto-OK when they have no IP, e.g. air conditioners) — see asset-module.md §1.19.
     public bool RequiresQrScan { get; set; }
 
+    // True = devices of this type are snapshotted into an inventory session (asset-module.md §1.22).
+    // Existing types default to true when the column was added.
+    public bool IncludedInInventory { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual ICollection<Device> Devices { get; set; } = new List<Device>();

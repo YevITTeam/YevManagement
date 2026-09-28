@@ -16,6 +16,7 @@ namespace Attendance.Application.Services
     public class ProductionEmployeeExportService : BaseService<IAttendanceUnitOfWork>, IProductionEmployeeExportService
     {
         private const string UnknownDepartmentLabel = "Chưa xác định";
+        private readonly IDepartmentAccessGuard _departmentAccessGuard;
 
         // Đúng vị trí cột A..O của file mẫu — cột rỗng (L/M/N) giữ chỗ để LEADER rơi đúng cột O.
         private static readonly string[] Headers =
@@ -24,12 +25,24 @@ namespace Attendance.Application.Services
             "BLOCK", "NHOM", "GROUP", "", "", "", "LEADER"
         };
 
-        public ProductionEmployeeExportService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
-
-        public async Task<(byte[] Content, string FileName)> ExportAsync()
+        public ProductionEmployeeExportService(IAttendanceUnitOfWork unitOfWork, IDepartmentAccessGuard departmentAccessGuard)
+            : base(unitOfWork)
         {
+            _departmentAccessGuard = departmentAccessGuard;
+        }
+
+        public async Task<(byte[] Content, string FileName)> ExportAsync(string callerUserName, bool isAdmin)
+        {
+            // Scope theo Bộ phận phụ trách (2026-09-28) — dòng chưa gắn Employee (chưa resolve, không
+            // xác định được Bộ phận) đã bị loại ở filter `x.EmployeeId != null` sẵn có bên dưới, nên
+            // không cần xử lý riêng như GetPagedAsync/UpdateAsync.
+            var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
+
             var rows = await _unitOfWork.ProductionEmployees.SelectAsync(
-                x => !x.IsDeleted && x.EmployeeId != null,
+                x => !x.IsDeleted && x.EmployeeId != null
+                    && (managedDepartmentIds == null || (x.Employee != null && (
+                        (x.Employee.DepartmentId != null && managedDepartmentIds.Contains(x.Employee.DepartmentId.Value))
+                        || (x.Employee.Group != null && managedDepartmentIds.Contains(x.Employee.Group.DepartmentId))))),
                 x => new
                 {
                     EmployeeId = x.EmployeeId!.Value,

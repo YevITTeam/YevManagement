@@ -11,6 +11,7 @@ import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableS
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import type { EmployeeScopeDto } from "@/modules/attendance/api/employee.api";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
@@ -45,6 +46,11 @@ interface EmployeeFormProps {
     loading?: boolean;
     onClose: () => void;
     onSubmit: (values: EmployeeFormValues) => void | Promise<void>;
+    // Phạm vi Coordinator của người gọi (2026-09-28, xem EmployeeList.tsx) — không phải Admin/toàn công
+    // ty thì chỉ hiện đúng Bộ phận/Nhóm mình phụ trách trong 2 dropdown bên dưới, khớp với những gì BE
+    // thật sự cho phép tạo/sửa (EmployeeService.EnsureAssignmentInCallerScopeAsync) — tránh chọn xong
+    // mới bị 400. `undefined`/`null`/`companyWide` → giữ hành vi cũ (tải toàn bộ công ty).
+    scope?: EmployeeScopeDto | null;
 }
 
 const emptyValues: EmployeeFormValues = {
@@ -63,7 +69,7 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: EmployeeFormProps) {
+export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit, scope }: EmployeeFormProps) {
     const t = useTranslations("Attendance.Employee");
     const tCommon = useTranslations("Common");
     const { setting } = useAttendanceSetting();
@@ -77,21 +83,30 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     // riêng). null = chưa chọn tay, lấy theo Bộ phận của Nhóm đang chọn.
     const [departmentFilter, setDepartmentFilter] = useState<number | "" | null>(null);
 
+    // Bị giới hạn theo Coordinator (2026-09-28) — dùng THẲNG danh sách BE đã trả sẵn trong `scope` (khớp
+    // đúng phạm vi BE thật sự cho phép, xem EmployeeList.tsx) thay vì gọi API "toàn công ty" + set lại
+    // qua state riêng (tránh setState đồng bộ trong effect, CLAUDE.md §4.5).
+    const isScopeRestricted = Boolean(scope && !scope.companyWide);
+    const effectiveGroups = isScopeRestricted ? scope!.groups : groups;
+    const effectiveDepartments = isScopeRestricted ? scope!.departments : departments;
+
     useEffect(() => {
         if (!isOpen) return;
-        GroupApi.getAllGroups()
-            .then((data) => setGroups(data))
-            .catch((err) => console.error(err));
-        DepartmentApi.getAllDepartments()
-            .then((data) => setDepartments(data))
-            .catch((err) => console.error(err));
+        if (!isScopeRestricted) {
+            GroupApi.getAllGroups()
+                .then((data) => setGroups(data))
+                .catch((err) => console.error(err));
+            DepartmentApi.getAllDepartments()
+                .then((data) => setDepartments(data))
+                .catch((err) => console.error(err));
+        }
         JobTitleApi.getAllJobTitles()
             .then((data) => setJobTitles(data))
             .catch((err) => console.error(err));
         AuthApi.getAllUsersWithRoles()
             .then((data) => setUsersWithRoles(data))
             .catch((err) => console.error(err));
-    }, [isOpen]);
+    }, [isOpen, isScopeRestricted]);
 
     useDialogReset(isOpen, initial, (current) => {
         setDepartmentFilter(null);
@@ -119,18 +134,18 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     const needsGroup = terminalLevel === TERMINAL_LEVEL_NONE;
     const needsDepartment = terminalLevel === TERMINAL_LEVEL_DEPARTMENT_MANAGER;
 
-    const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.groupNameVn, searchText: g.groupNameVn.toLowerCase() }));
-    const departmentOptions: SelectOption[] = departments.map((d) => ({
+    const groupOptions: SelectOption[] = effectiveGroups.map((g) => ({ value: g.id, label: g.groupNameVn, searchText: g.groupNameVn.toLowerCase() }));
+    const departmentOptions: SelectOption[] = effectiveDepartments.map((d) => ({
         value: d.id,
         label: d.departmentNameVn,
         searchText: d.departmentNameVn.toLowerCase(),
     }));
 
-    const selectedGroup = groups.find((g) => g.id === values.groupId);
+    const selectedGroup = effectiveGroups.find((g) => g.id === values.groupId);
     const effectiveDepartmentFilter = departmentFilter ?? selectedGroup?.departmentId ?? "";
     const filteredGroupOptions = effectiveDepartmentFilter === ""
         ? groupOptions
-        : groups
+        : effectiveGroups
               .filter((g) => g.departmentId === effectiveDepartmentFilter)
               .map((g) => ({ value: g.id, label: g.groupNameVn, searchText: g.groupNameVn.toLowerCase() }));
 
@@ -138,7 +153,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         setDepartmentFilter(v);
         // Nhóm đang chọn không thuộc Bộ phận mới → bỏ chọn để phải chọn lại Nhóm đúng Bộ phận.
         setValues((current) => {
-            const currentGroup = groups.find((g) => g.id === current.groupId);
+            const currentGroup = effectiveGroups.find((g) => g.id === current.groupId);
             return v !== "" && currentGroup && currentGroup.departmentId !== v ? { ...current, groupId: null } : current;
         });
     };

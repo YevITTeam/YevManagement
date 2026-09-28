@@ -1,6 +1,8 @@
 using Attendance.Application.Dtos.AttendanceSettings;
+using Attendance.Application.Dtos.Departments;
 using Attendance.Application.Dtos.EmployeeAccumulationHistories;
 using Attendance.Application.Dtos.Employees;
+using Attendance.Application.Dtos.Groups;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Constants;
 using Attendance.Domain.Entities;
@@ -48,8 +50,14 @@ namespace Attendance.Application.Services
         //   - TerminalLevel=WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc): toàn công ty.
         //   - Có DepartmentId (Manager): nhân viên có DepartmentId trùng, hoặc Group.DepartmentId trùng.
         //   - Còn lại (Staff/Group Leader/Team Leader, cấp Nhóm): chỉ nhân viên có GroupId trùng.
-        private readonly record struct EmployeeScope(bool CompanyWide, int? DepartmentId, int? GroupId);
+        private readonly record struct EmployeeScope(bool CompanyWide, HashSet<int> DepartmentIds, HashSet<int> GroupIds);
 
+        // Phạm vi XEM = hợp nhất vị trí THẬT trong Cây chức vụ (Manager có DepartmentId/Staff có GroupId)
+        // VÀ mọi Bộ phận/Nhóm đang được gán làm "Người phụ trách" (Coordinator, gán tay qua Cây duyệt,
+        // KHÔNG liên quan Chức vụ — xem §Chốt mô hình Coordinator, 2026-09-28). Trước đó 2 nguồn này lệch
+        // nhau: 1 người được Admin gán Coordinator cho 1 Nhóm/Bộ phận KHÁC vị trí thật của mình thì có
+        // quyền SỬA OT-limit/lũy kế/dưới chuyền của Nhóm/Bộ phận đó (đã cấp tự động), nhưng màn "Nhân
+        // viên" (chỉ dùng vị trí thật) không hiện được người cần sửa — quyền cấp ra không dùng được.
         private async Task<EmployeeScope> ResolveCallerScopeAsync(string callerUserName)
         {
             var caller = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == callerUserName && !x.IsDeleted, x => x.JobTitle!);
@@ -57,32 +65,41 @@ namespace Attendance.Application.Services
                 throw new DomainException("Tài khoản của bạn chưa liên kết với hồ sơ Nhân viên nào.");
 
             var callerTerminalLevel = (JobTitleTerminalLevel)(caller.JobTitle?.TerminalLevel ?? (int)JobTitleTerminalLevel.None);
-
             if (callerTerminalLevel == JobTitleTerminalLevel.WorkshopManager || callerTerminalLevel == JobTitleTerminalLevel.GeneralDirector)
-                return new EmployeeScope(true, null, null);
-            if (caller.DepartmentId.HasValue)
-                return new EmployeeScope(false, caller.DepartmentId.Value, null);
-            if (caller.GroupId.HasValue)
-                return new EmployeeScope(false, null, caller.GroupId.Value);
+                return new EmployeeScope(true, new HashSet<int>(), new HashSet<int>());
 
-            throw new DomainException("Tài khoản của bạn chưa được gán Nhóm/Bộ phận nào.");
+            var departmentIds = await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
+            var groupIds = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                    x => x.Employee.UserName == callerUserName && !x.IsDeleted))
+                .Select(x => x.GroupId)
+                .ToHashSet();
+
+            if (caller.DepartmentId.HasValue) departmentIds.Add(caller.DepartmentId.Value);
+            if (caller.GroupId.HasValue) groupIds.Add(caller.GroupId.Value);
+
+            if (departmentIds.Count == 0 && groupIds.Count == 0)
+                throw new DomainException("Tài khoản của bạn chưa được gán Nhóm/Bộ phận nào.");
+
+            return new EmployeeScope(false, departmentIds, groupIds);
         }
 
         private static IQueryable<Employee> ApplyScope(IQueryable<Employee> query, EmployeeScope scope)
         {
             if (scope.CompanyWide) return query;
-            if (scope.DepartmentId.HasValue)
-            {
-                var departmentId = scope.DepartmentId.Value;
-                return query.Where(x => x.DepartmentId == departmentId || (x.Group != null && x.Group.DepartmentId == departmentId));
-            }
-            var groupId = scope.GroupId!.Value;
-            return query.Where(x => x.GroupId == groupId);
+            var departmentIds = scope.DepartmentIds;
+            var groupIds = scope.GroupIds;
+            return query.Where(x =>
+                (x.DepartmentId != null && departmentIds.Contains(x.DepartmentId.Value))
+                || (x.Group != null && departmentIds.Contains(x.Group.DepartmentId))
+                || (x.GroupId != null && groupIds.Contains(x.GroupId.Value)));
         }
 
         // Cho FE thu hẹp dropdown lọc Phòng ban/Nhóm ở màn "Nhân viên" — thuần UX, không phục vụ enforce
-        // (đã enforce ở GetPagedAsync/GetAllActiveAsync rồi). Kèm tên hiển thị để FE không cần gọi thêm
-        // DepartmentApi/GroupApi chỉ để lấy đúng 1 tên.
+        // (đã enforce ở GetPagedAsync/GetAllActiveAsync rồi). Trả ĐỦ danh sách Phòng ban/Nhóm trong
+        // phạm vi (2026-09-28, sửa lỗi thật: bản cũ chỉ chứa được đúng 1 Phòng ban HOẶC 1 Nhóm, nên
+        // người vừa có vị trí thật là Nhóm VỪA là Coordinator của 1 Phòng ban khác thì trả rỗng cả 2,
+        // khiến dropdown Nhóm ở FE hiện "Không tìm thấy kết quả" dù bảng chính vẫn đúng dữ liệu) — FE
+        // dùng thẳng, không cần gọi thêm DepartmentApi/GroupApi.
         public async Task<EmployeeScopeDto> GetMyScopeAsync(string callerUserName, bool isAdmin)
         {
             if (isAdmin) return new EmployeeScopeDto { CompanyWide = true };
@@ -90,14 +107,31 @@ namespace Attendance.Application.Services
             var scope = await ResolveCallerScopeAsync(callerUserName);
             if (scope.CompanyWide) return new EmployeeScopeDto { CompanyWide = true };
 
-            if (scope.DepartmentId.HasValue)
-            {
-                var department = await _unitOfWork.Departments.GetByIdAsync(scope.DepartmentId.Value);
-                return new EmployeeScopeDto { DepartmentId = scope.DepartmentId, DepartmentNameVn = department?.DepartmentNameVn };
-            }
+            var departments = scope.DepartmentIds.Count == 0
+                ? new List<DepartmentDto>()
+                : (await _unitOfWork.Departments.SelectAsync(
+                    x => scope.DepartmentIds.Contains(x.Id) && !x.IsDeleted,
+                    x => new DepartmentDto { Id = x.Id, DepartmentCode = x.DepartmentCode, DepartmentNameVn = x.DepartmentNameVn, DepartmentNameJp = x.DepartmentNameJp }))
+                    .ToList();
 
-            var group = await _unitOfWork.Groups.GetByIdAsync(scope.GroupId!.Value);
-            return new EmployeeScopeDto { GroupId = scope.GroupId, GroupNameVn = group?.GroupNameVn };
+            // Nhóm CON của mọi Phòng ban trên (để dropdown Nhóm đủ lựa chọn khi lọc theo 1 Phòng ban cụ
+            // thể) HỢP với Nhóm đang là Coordinator trực tiếp (có thể thuộc Phòng ban khác, hiếm).
+            var groups = (scope.DepartmentIds.Count == 0 && scope.GroupIds.Count == 0)
+                ? new List<GroupDto>()
+                : (await _unitOfWork.Groups.SelectAsync(
+                    x => !x.IsDeleted && (scope.DepartmentIds.Contains(x.DepartmentId) || scope.GroupIds.Contains(x.Id)),
+                    x => new GroupDto
+                    {
+                        Id = x.Id,
+                        GroupCode = x.GroupCode,
+                        GroupNameVn = x.GroupNameVn,
+                        GroupNameJp = x.GroupNameJp,
+                        DepartmentId = x.DepartmentId,
+                        DepartmentNameVn = x.Department.DepartmentNameVn
+                    }))
+                    .ToList();
+
+            return new EmployeeScopeDto { Departments = departments, Groups = groups };
         }
 
         public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(
@@ -448,6 +482,37 @@ namespace Attendance.Application.Services
             throw new DomainException(errorMessage);
         }
 
+        // Biến thể của EnsureCanManageDeptOrGroupScopeAsync ở trên, dùng cho Create/Update khi CHƯA có
+        // sẵn Employee entity để đọc GroupId/DepartmentId — nhận thẳng cặp (groupId, departmentId) ĐÃ
+        // được ValidateOrganizationAssignmentAsync resolve xong (2026-09-28, theo yêu cầu người dùng:
+        // Coordinator được cấp quyền Create/Update/Delete y hệt Admin nhưng chỉ trong đúng phạm vi).
+        // Cả 2 field null (Trưởng Xưởng/Giám đốc, dùng chung toàn công ty) luôn NGOÀI phạm vi Coordinator
+        // bất kỳ — chỉ Admin mới gán được vai trò này.
+        private async Task EnsureAssignmentInCallerScopeAsync(string callerUserName, bool isAdmin, int? groupId, int? departmentId, string errorMessage)
+        {
+            if (isAdmin) return;
+
+            if (!groupId.HasValue && !departmentId.HasValue)
+                throw new DomainException(errorMessage);
+
+            var managedDepartmentIds = await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
+
+            if (departmentId.HasValue)
+            {
+                if (managedDepartmentIds.Contains(departmentId.Value)) return;
+                throw new DomainException(errorMessage);
+            }
+
+            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == groupId!.Value && !x.IsDeleted);
+            if (group != null && managedDepartmentIds.Contains(group.DepartmentId)) return;
+
+            var isGroupCoordinator = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                x => x.GroupId == groupId!.Value && x.Employee.UserName == callerUserName && !x.IsDeleted)).Count > 0;
+            if (isGroupCoordinator) return;
+
+            throw new DomainException(errorMessage);
+        }
+
         private async Task<EmployeeAccumulationHistoryYearDto> BuildAccumulationYearDtoAsync(Employee employee, int year)
         {
             var employeeId = employee.Id;
@@ -571,7 +636,7 @@ namespace Attendance.Application.Services
             };
         }
 
-        public async Task<EmployeeDto> CreateAsync(CreateEmployeeDto request)
+        public async Task<EmployeeDto> CreateAsync(string callerUserName, bool isAdmin, CreateEmployeeDto request)
         {
             var exists = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Code == request.Code && !x.IsDeleted);
             if (exists != null) throw new DomainException($"Mã nhân viên '{request.Code}' đã tồn tại.");
@@ -583,6 +648,8 @@ namespace Attendance.Application.Services
             }
 
             var (groupId, departmentId) = await ValidateOrganizationAssignmentAsync(request.JobTitleId, request.GroupId, request.DepartmentId);
+            await EnsureAssignmentInCallerScopeAsync(callerUserName, isAdmin, groupId, departmentId,
+                "Bạn chỉ được tạo nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
 
             var newEmployee = new Employee
             {
@@ -606,10 +673,15 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(newEmployee.Id);
         }
 
-        public async Task UpdateAsync(UpdateEmployeeDto request)
+        public async Task UpdateAsync(string callerUserName, bool isAdmin, UpdateEmployeeDto request)
         {
-            var employee = await _unitOfWork.Employees.GetByIdAsync(request.Id);
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == request.Id, x => x.Group!);
             employee.OrThrowNotFound("Nhân viên", request.Id);
+
+            // Phạm vi HIỆN TẠI của nhân viên đang sửa (2026-09-28) — Coordinator chỉ sửa được người
+            // đang thuộc đúng Bộ phận/Nhóm mình phụ trách.
+            await EnsureCanManageDeptOrGroupScopeAsync(callerUserName, isAdmin, employee!,
+                "Bạn chỉ được sửa nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
 
             if (employee!.Code != request.Code)
             {
@@ -624,6 +696,10 @@ namespace Attendance.Application.Services
             }
 
             var (groupId, departmentId) = await ValidateOrganizationAssignmentAsync(request.JobTitleId, request.GroupId, request.DepartmentId);
+            // Phạm vi MỚI (nếu đổi Nhóm/Chức vụ) cũng phải hợp lệ — không cho "chuyển" nhân viên ra
+            // ngoài phạm vi Coordinator đang quản (2026-09-28).
+            await EnsureAssignmentInCallerScopeAsync(callerUserName, isAdmin, groupId, departmentId,
+                "Bạn chỉ được chuyển nhân viên vào đúng Bộ phận/Nhóm mình phụ trách.");
 
             // Chụp lại UserName CŨ trước khi ghi đè — cần để thu hồi quyền tự động cấp khỏi tài khoản
             // cũ nếu Employee này vừa được link sang 1 UserName khác (xem SyncJobTitlePermissionsAsync).
@@ -672,10 +748,13 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(employeeId);
         }
 
-        public async Task DeleteAsync(int id)
+        public async Task DeleteAsync(string callerUserName, bool isAdmin, int id)
         {
-            var employee = await _unitOfWork.Employees.GetByIdAsync(id);
+            var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == id, x => x.Group!);
             employee.OrThrowNotFound("Nhân viên", id);
+
+            await EnsureCanManageDeptOrGroupScopeAsync(callerUserName, isAdmin, employee!,
+                "Bạn chỉ được xoá nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
 
             employee!.IsDeleted = true;
 
@@ -714,14 +793,25 @@ namespace Attendance.Application.Services
             {
                 coordinatorCodes.AddRange(ApprovalStepCoordinatorPermissions.BaseViewCodes);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeAccumulationUpdateCode);
-                // Trước chỉ tự cấp cho phụ trách Phòng ban (2026-09-28: mở thêm cho phụ trách Nhóm —
-                // UpdateOtLimitAsync giờ scope theo cả 2 cấp, xem EnsureCanManageDeptOrGroupScopeAsync).
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeUpdateOtLimitCode);
+                // Import Excel hàng loạt (2026-09-28) — cùng scope Bộ phận/Nhóm với 2 quyền sửa-từng-
+                // người ở trên, xem ghi chú tại ApprovalStepCoordinatorPermissions.
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeAccumulationImportCode);
+                // Hồ sơ nhân viên đầy đủ — y hệt Admin nhưng khoá theo scope (2026-09-28).
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeCreateCode);
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeUpdateCode);
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeDeleteCode);
             }
             if (isDeptCoordinator)
             {
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.DepartmentUpdateCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionUpdateCode);
+                // Nhân sự dưới chuyền (2026-09-28, theo yêu cầu người dùng) — CHỈ Người phụ trách Bộ
+                // phận, không cấp cho Nhóm (xem ghi chú tại ApprovalStepCoordinatorPermissions).
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeViewCode);
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeUpdateCode);
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeImportCode);
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeExportCode);
             }
             if (isGroupCoordinator)
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.GroupUpdateCode);
@@ -735,6 +825,20 @@ namespace Attendance.Application.Services
             var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
             if (employee == null) return;
             await SyncAutoGrantedPermissionsCoreAsync(employee);
+        }
+
+        public async Task<int> ResyncAllCoordinatorPermissionsAsync()
+        {
+            var deptCoordinatorEmployeeIds = (await _unitOfWork.DepartmentApprovalStepCoordinators.FindAsync(x => !x.IsDeleted))
+                .Select(x => x.EmployeeId);
+            var groupCoordinatorEmployeeIds = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(x => !x.IsDeleted))
+                .Select(x => x.EmployeeId);
+            var employeeIds = deptCoordinatorEmployeeIds.Union(groupCoordinatorEmployeeIds).ToList();
+
+            foreach (var employeeId in employeeIds)
+                await SyncAutoGrantedPermissionsForEmployeeAsync(employeeId);
+
+            return employeeIds.Count;
         }
 
         public async Task<EmployeeDto> AssignDepartmentJobTitleAsync(string userName, bool isAdmin, int employeeId, int departmentId, int? jobTitleId)

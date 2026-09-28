@@ -6,6 +6,8 @@ namespace Attendance.Api.Controllers
 {
     public class ProductionEmployeeExportController : BaseController
     {
+        private const string AdminRole = "Admin";
+
         private readonly IProductionEmployeeExportService _productionEmployeeExportService;
 
         public ProductionEmployeeExportController(IProductionEmployeeExportService productionEmployeeExportService)
@@ -19,7 +21,7 @@ namespace Attendance.Api.Controllers
         [HttpGet("export")]
         public async Task<IActionResult> Export()
         {
-            var (content, fileName) = await _productionEmployeeExportService.ExportAsync();
+            var (content, fileName) = await _productionEmployeeExportService.ExportAsync(CurrentUserName, User.IsInRole(AdminRole));
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
     }

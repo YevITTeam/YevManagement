@@ -1,4 +1,4 @@
-using Asset.Application.Dtos.DeviceTypes;
+﻿using Asset.Application.Dtos.DeviceTypes;
 using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
 using Asset.Domain.Enums;
@@ -32,6 +32,7 @@ namespace Asset.Application.Services
                     TypeName = x.TypeName,
                     ServerCheckCategory = x.ServerCheckCategory,
                     RequiresQrScan = x.RequiresQrScan,
+                    IncludedInInventory = x.IncludedInInventory,
                     // Duplicated ternary (not the extension method) because this is an Expression<Func<>>
                     // translated by EF into SQL — same reason DeviceService.StatusText inlines it (§1.4 asset-module.md).
                     ServerCheckCategoryText = x.ServerCheckCategory == (int)ServerCheckCategory.Server ? "Server"
@@ -53,6 +54,7 @@ namespace Asset.Application.Services
                     TypeName = x.TypeName,
                     ServerCheckCategory = x.ServerCheckCategory,
                     RequiresQrScan = x.RequiresQrScan,
+                    IncludedInInventory = x.IncludedInInventory,
                     ServerCheckCategoryText = x.ServerCheckCategory == (int)ServerCheckCategory.Server ? "Server"
                         : x.ServerCheckCategory == (int)ServerCheckCategory.Network ? "Network"
                         : x.ServerCheckCategory == (int)ServerCheckCategory.Ups ? "UPS"
@@ -80,6 +82,7 @@ namespace Asset.Application.Services
                 TypeName = request.TypeName,
                 ServerCheckCategory = request.ServerCheckCategory,
                 RequiresQrScan = request.RequiresQrScan,
+                IncludedInInventory = request.IncludedInInventory,
                 IsDeleted = false
             };
 
@@ -101,6 +104,7 @@ namespace Asset.Application.Services
             deviceType.TypeName = request.TypeName;
             deviceType.ServerCheckCategory = request.ServerCheckCategory;
             deviceType.RequiresQrScan = request.RequiresQrScan;
+            deviceType.IncludedInInventory = request.IncludedInInventory;
 
             _unitOfWork.DeviceTypes.Update(deviceType);
             await _unitOfWork.SaveChangesAsync();
@@ -123,6 +127,7 @@ namespace Asset.Application.Services
             TypeName = deviceType.TypeName,
             ServerCheckCategory = deviceType.ServerCheckCategory,
             RequiresQrScan = deviceType.RequiresQrScan,
+            IncludedInInventory = deviceType.IncludedInInventory,
             ServerCheckCategoryText = deviceType.ServerCheckCategory?.GetServerCheckCategoryText()
         };
     }

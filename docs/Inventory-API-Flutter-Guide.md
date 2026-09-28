@@ -185,7 +185,7 @@ Permission: `Asset.Inventory.Scan`. Không tham số (không nhận `branchId` �
 Permission: `Asset.Inventory.Scan`. Không body.
 
 - Nếu xưởng **chưa có phiên đang chạy** → tạo mới, snapshot **thiết bị đang trong trạng thái "Đang sử
-  dụng"** của xưởng (2026-09-23 — máy "Chờ sử dụng"/"Chờ thanh lý"/đã thanh lý **không** được đưa vào
+  dụng"** của xưởng, thuộc loại thiết bị được Admin bật "Đưa vào kiểm kê" (2026-09-23 — máy "Chờ sử dụng"/"Chờ thanh lý"/đã thanh lý **không** được đưa vào
   đợt kiểm kê), trả về `status=0`, `items` đủ danh sách nhưng tất cả đang `status=0` ("Chưa tìm thấy").
 - Nếu xưởng **đã có phiên `InProgress`** (do chính mình hoặc **đồng nghiệp khác** mở trước) → trả lại
   **nguyên phiên đó** (giữ nguyên các item đã quét bởi bất kỳ ai), **không** tạo phiên mới — đây là cách
@@ -215,6 +215,7 @@ Permission: `Asset.Inventory.Scan`. Không body.
       "deviceId": 55,
       "deviceCode": "PC-0123",            // MÃ QUÉT — dòng 1 của QR, dùng để so khớp khi quét
       "deviceName": "Dell OptiPlex 7080",
+      "deviceTypeName": "Desktop", // + manager, groupName, departmentName, serialNumber (đều nullable) — thông tin cơ bản để hiển thị/đối chiếu
       "scannedAt": "2026-09-23T08:12:03", // null nếu chưa quét
       "scannedBy": "n.van.a",             // null nếu chưa quét — có thể là NGƯỜI KHÁC trong cùng xưởng
       "status": 1,                        // 0=Pending(chưa tìm thấy), 1=Found, 2=Missing
@@ -288,8 +289,7 @@ Nếu app mobile còn muốn làm thêm màn "Xem lại lịch sử"/"Báo cáo"
 - `GET /Inventory/{id}` (View) — chi tiết 1 phiên bất kỳ (không giới hạn xưởng của mình nếu có quyền View).
 - `GET /Inventory/grid-list?pageIndex=&pageSize=&fromDate=&toDate=&branchId=` (View) — danh sách phiên
   theo trang.
-- `GET /Inventory/report?fromDate=&toDate=&branchId=` (View) — dữ liệu tổng hợp dạng báo cáo, kèm danh
-  sách thiết bị Missing của từng phiên — không phải nhu cầu chính của app quét.
+- `GET /Inventory/{id}/export` (View) — tải file Excel danh sách thiết bị của phiên (không phải JSON).
 
 ## 7. Bảng tra enum
 

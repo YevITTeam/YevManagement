@@ -11,6 +11,7 @@ export interface DeviceTypeFormValues {
     typeName: string;
     serverCheckCategory: number | null;
     requiresQrScan: boolean;
+    includedInInventory: boolean;
 }
 
 // Khớp Asset.Domain.Enums.ServerCheckCategory bên BE.
@@ -29,7 +30,7 @@ interface DeviceTypeFormProps {
     onSubmit: (values: DeviceTypeFormValues) => void | Promise<void>;
 }
 
-const emptyValues: DeviceTypeFormValues = { typeCode: "", typeName: "", serverCheckCategory: null, requiresQrScan: false };
+const emptyValues: DeviceTypeFormValues = { typeCode: "", typeName: "", serverCheckCategory: null, requiresQrScan: false, includedInInventory: true };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -48,6 +49,7 @@ export default function DeviceTypeForm({ isOpen, mode, initial, loading = false,
                     typeName: current.typeName,
                     serverCheckCategory: current.serverCheckCategory ?? null,
                     requiresQrScan: current.requiresQrScan ?? false,
+                    includedInInventory: current.includedInInventory ?? true,
                 }
                 : emptyValues
         );
@@ -152,6 +154,20 @@ export default function DeviceTypeForm({ isOpen, mode, initial, loading = false,
                             </span>
                         </label>
                     )}
+
+                    <label className="flex cursor-pointer items-start gap-2">
+                        <input
+                            type="checkbox"
+                            checked={values.includedInInventory}
+                            onChange={(event) => setValues((current) => ({ ...current, includedInInventory: event.target.checked }))}
+                            disabled={loading}
+                            className="mt-0.5 h-4 w-4 cursor-pointer accent-[#e3000f]"
+                        />
+                        <span>
+                            <span className="block text-sm font-semibold text-[#191c1e]">{t("fieldIncludedInInventory")}</span>
+                            <span className="block text-xs text-[#8a8f94]">{t("fieldIncludedInInventoryHint")}</span>
+                        </span>
+                    </label>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

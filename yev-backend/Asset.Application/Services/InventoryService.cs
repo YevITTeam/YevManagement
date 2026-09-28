@@ -43,11 +43,11 @@ namespace Asset.Application.Services
                 return await BuildSessionDtoAsync(existing);
             }
 
-            // Phạm vi 1 đợt kiểm kê = Device !IsDeleted, Status = InUse("Đang sử dụng") của xưởng (2026-09-23,
-            // thu hẹp từ "mọi status trừ Liquidated" — PendingUse/PendingLiquidation không đưa vào kiểm kê,
-            // quyết định người dùng, CLAUDE.md §2 luật 2).
+            // Phạm vi 1 đợt kiểm kê = Device !IsDeleted, Status = InUse("Đang sử dụng") của xưởng, và loại
+            // thiết bị đang bật DeviceType.IncludedInInventory (quyết định người dùng, CLAUDE.md §2 luật 2).
             var deviceIds = await _unitOfWork.Devices.SelectAsync(
-                predicate: d => !d.IsDeleted && d.Status == (int)DeviceStatus.InUse && d.BranchId == branchId,
+                predicate: d => !d.IsDeleted && d.Status == (int)DeviceStatus.InUse && d.BranchId == branchId
+                    && d.DeviceType.IncludedInInventory,
                 selector: d => d.Id
             );
 
@@ -183,97 +183,50 @@ namespace Asset.Application.Services
             );
         }
 
-        public async Task<List<InventoryReportRowDto>> GetReportAsync(DateTime fromDate, DateTime toDate, int? branchId)
-        {
-            var from = fromDate.Date;
-            var to = toDate.Date.AddDays(1);
-            var effectiveBranchId = await ResolveViewBranchIdAsync(branchId);
-
-            var sessions = await _unitOfWork.InventorySessions.SelectAsync(
-                predicate: x => x.StartedAt >= from && x.StartedAt < to && (effectiveBranchId == null || x.BranchId == effectiveBranchId),
-                selector: x => new
-                {
-                    x.Id,
-                    x.BranchId,
-                    BranchName = x.Branch.BranchName,
-                    x.StartedAt,
-                    x.EndedAt,
-                    x.EndedBy,
-                    x.Status
-                }
-            );
-
-            if (sessions.Count == 0) return new List<InventoryReportRowDto>();
-
-            var sessionIds = sessions.Select(s => s.Id).ToList();
-
-            var items = await _unitOfWork.InventorySessionItems.SelectAsync(
-                predicate: x => sessionIds.Contains(x.SessionId),
-                selector: x => new { x.SessionId, x.Status, x.Note, x.Device.DeviceCode, x.Device.DeviceName }
-            );
-
-            var itemsBySession = items.ToLookup(x => x.SessionId);
-
-            return sessions.OrderByDescending(s => s.StartedAt).Select(s =>
-            {
-                var sessionItems = itemsBySession[s.Id].ToList();
-                var missingItems = sessionItems
-                    .Where(i => i.Status == (int)InventoryItemStatus.Missing)
-                    .Select(i => new InventoryMissingItemDto { DeviceCode = i.DeviceCode, DeviceName = i.DeviceName, Note = i.Note })
-                    .ToList();
-
-                return new InventoryReportRowDto
-                {
-                    SessionId = s.Id,
-                    BranchId = s.BranchId,
-                    BranchName = s.BranchName,
-                    StartedAt = s.StartedAt,
-                    EndedAt = s.EndedAt,
-                    Status = s.Status,
-                    StatusText = s.Status.GetInventorySessionStatusText(),
-                    TotalCount = sessionItems.Count,
-                    FoundCount = sessionItems.Count(i => i.Status == (int)InventoryItemStatus.Found),
-                    MissingCount = missingItems.Count,
-                    MissingItems = missingItems,
-                    CheckedBy = s.EndedBy
-                };
-            }).ToList();
-        }
-
         // Không có file mẫu công ty cho kiểm kê (khác ServerCheck) — tự dựng workbook mới bằng ClosedXML,
         // layout riêng (CLAUDE.md §4.8 chỉ bắt buộc PDF phải vẽ ở FE, Excel do BE dựng vẫn hợp lệ).
-        public async Task<(byte[] Content, string FileName)> ExportReportAsync(DateTime fromDate, DateTime toDate, int? branchId)
+        // 1 dòng = 1 thiết bị của phiên, cùng dữ liệu với màn báo cáo.
+        public async Task<(byte[] Content, string FileName)> ExportSessionAsync(int sessionId)
         {
-            var rows = await GetReportAsync(fromDate, toDate, branchId);
+            var session = await GetSessionByIdAsync(sessionId);
 
             using var workbook = new XLWorkbook();
             var sheet = workbook.Worksheets.Add("Kiểm kê thiết bị");
 
-            string[] headers = { "Xưởng", "Bắt đầu", "Kết thúc", "Trạng thái", "Tổng số", "Đã kiểm kê", "Thiếu", "Người kết thúc", "Danh sách thiết bị thiếu" };
+            sheet.Cell(1, 1).Value = $"Kiểm kê thiết bị - {session.BranchName}";
+            sheet.Cell(1, 1).Style.Font.Bold = true;
+            sheet.Cell(2, 1).Value = $"Bắt đầu: {session.StartedAt:dd/MM/yyyy HH:mm}"
+                + (session.EndedAt.HasValue ? $" - Kết thúc: {session.EndedAt.Value:dd/MM/yyyy HH:mm}" : string.Empty)
+                + $" - {session.StatusText}";
+            sheet.Cell(3, 1).Value = $"Tổng: {session.TotalCount} - Đã kiểm: {session.FoundCount} - Thiếu: {session.MissingCount}";
+
+            string[] headers = { "STT", "Mã máy", "Tên thiết bị", "Loại", "Người quản lý", "Nhóm", "Bộ phận", "Serial", "Trạng thái", "Người kiểm", "Thời điểm kiểm", "Ghi chú" };
+            const int headerRow = 5;
             for (var col = 0; col < headers.Length; col++)
-                sheet.Cell(1, col + 1).Value = headers[col];
-            sheet.Row(1).Style.Font.Bold = true;
+                sheet.Cell(headerRow, col + 1).Value = headers[col];
+            sheet.Range(headerRow, 1, headerRow, headers.Length).Style.Font.Bold = true;
 
-            for (var i = 0; i < rows.Count; i++)
+            for (var i = 0; i < session.Items.Count; i++)
             {
-                var row = rows[i];
-                var excelRow = i + 2;
+                var item = session.Items[i];
+                var r = headerRow + 1 + i;
 
-                sheet.Cell(excelRow, 1).Value = row.BranchName ?? string.Empty;
-                sheet.Cell(excelRow, 2).Value = row.StartedAt;
-                sheet.Cell(excelRow, 2).Style.DateFormat.Format = "dd/MM/yyyy HH:mm";
-                if (row.EndedAt.HasValue)
+                sheet.Cell(r, 1).Value = i + 1;
+                sheet.Cell(r, 2).Value = item.DeviceCode;
+                sheet.Cell(r, 3).Value = item.DeviceName;
+                sheet.Cell(r, 4).Value = item.DeviceTypeName ?? string.Empty;
+                sheet.Cell(r, 5).Value = item.Manager ?? string.Empty;
+                sheet.Cell(r, 6).Value = item.GroupName ?? string.Empty;
+                sheet.Cell(r, 7).Value = item.DepartmentName ?? string.Empty;
+                sheet.Cell(r, 8).Value = item.SerialNumber ?? string.Empty;
+                sheet.Cell(r, 9).Value = item.StatusText;
+                sheet.Cell(r, 10).Value = item.ScannedBy ?? string.Empty;
+                if (item.ScannedAt.HasValue)
                 {
-                    sheet.Cell(excelRow, 3).Value = row.EndedAt.Value;
-                    sheet.Cell(excelRow, 3).Style.DateFormat.Format = "dd/MM/yyyy HH:mm";
+                    sheet.Cell(r, 11).Value = item.ScannedAt.Value;
+                    sheet.Cell(r, 11).Style.DateFormat.Format = "dd/MM/yyyy HH:mm";
                 }
-                sheet.Cell(excelRow, 4).Value = row.StatusText;
-                sheet.Cell(excelRow, 5).Value = row.TotalCount;
-                sheet.Cell(excelRow, 6).Value = row.FoundCount;
-                sheet.Cell(excelRow, 7).Value = row.MissingCount;
-                sheet.Cell(excelRow, 8).Value = row.CheckedBy ?? string.Empty;
-                sheet.Cell(excelRow, 9).Value = string.Join("; ", row.MissingItems.Select(m =>
-                    string.IsNullOrWhiteSpace(m.Note) ? $"{m.DeviceCode} - {m.DeviceName}" : $"{m.DeviceCode} - {m.DeviceName}: {m.Note}"));
+                sheet.Cell(r, 12).Value = item.Note ?? string.Empty;
             }
 
             sheet.Columns().AdjustToContents();
@@ -281,10 +234,7 @@ namespace Asset.Application.Services
             using var output = new MemoryStream();
             workbook.SaveAs(output);
 
-            var fileName = fromDate.Date == toDate.Date
-                ? $"KiemKeThietBi_{fromDate:yyyyMMdd}.xlsx"
-                : $"KiemKeThietBi_{fromDate:yyyyMMdd}-{toDate:yyyyMMdd}.xlsx";
-            return (output.ToArray(), fileName);
+            return (output.ToArray(), $"KiemKeThietBi_{session.BranchName}_{session.StartedAt:yyyyMMdd}.xlsx");
         }
 
         private async Task<InventorySessionDto> BuildSessionDtoAsync(InventorySession session)
@@ -297,6 +247,11 @@ namespace Asset.Application.Services
                     DeviceId = x.DeviceId,
                     DeviceCode = x.Device.DeviceCode,
                     DeviceName = x.Device.DeviceName,
+                    DeviceTypeName = x.Device.DeviceType.TypeName,
+                    Manager = x.Device.Manager,
+                    GroupName = x.Device.DeviceGroup != null ? x.Device.DeviceGroup.GroupName : null,
+                    DepartmentName = x.Device.DeviceDepartment != null ? x.Device.DeviceDepartment.DepartmentName : null,
+                    SerialNumber = x.Device.SerialNumber,
                     ScannedAt = x.ScannedAt,
                     ScannedBy = x.ScannedBy,
                     Status = x.Status,

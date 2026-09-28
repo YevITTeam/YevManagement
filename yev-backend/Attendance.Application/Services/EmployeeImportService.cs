@@ -479,12 +479,16 @@ namespace Attendance.Application.Services
             var employeesByCode = (await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && codes.Contains(x.Code)))
                 .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
 
-            // Scope THEO TỪNG DÒNG (2026-08-29) — file này nhận EmployeeCode tự do, không hardcode 1
-            // Phòng ban như ProductionEmployeeImportService. Admin bỏ qua hoàn toàn; non-Admin phải là
-            // Coordinator đúng Phòng ban thật của nhân viên đó (trực tiếp qua DepartmentId, hoặc gián
-            // tiếp qua Group.DepartmentId — FindAsync không include navigation nên tra riêng 1 lượt) —
-            // xem docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban.
+            // Scope THEO TỪNG DÒNG (2026-08-29, mở rộng thêm Nhóm 2026-09-28) — file này nhận
+            // EmployeeCode tự do, không hardcode 1 Phòng ban như ProductionEmployeeImportService. Admin
+            // bỏ qua hoàn toàn; non-Admin phải là Coordinator đúng Phòng ban HOẶC đúng Nhóm thật của
+            // nhân viên đó (trực tiếp qua DepartmentId, hoặc gián tiếp qua Group.DepartmentId —
+            // FindAsync không include navigation nên tra riêng 1 lượt) — cùng scope với sửa-từng-người
+            // (EnsureCanManageDeptOrGroupScopeAsync), xem docs/docs-be/attendance-module.md §Phân quyền
+            // theo Phòng ban.
             var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
+            var managedGroupIds = isAdmin ? null : (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                x => x.Employee.UserName == userName && !x.IsDeleted)).Select(x => x.GroupId).ToHashSet();
             var groupIdsNeeded = employeesByCode.Values
                 .Where(x => x.DepartmentId == null && x.GroupId.HasValue)
                 .Select(x => x.GroupId!.Value)
@@ -518,7 +522,9 @@ namespace Attendance.Application.Services
                         resolvedDepartmentId = deptFromGroup;
                     }
 
-                    if (resolvedDepartmentId == null || !managedDepartmentIds.Contains(resolvedDepartmentId.Value))
+                    var inDepartmentScope = resolvedDepartmentId.HasValue && managedDepartmentIds.Contains(resolvedDepartmentId.Value);
+                    var inGroupScope = employee.GroupId.HasValue && managedGroupIds!.Contains(employee.GroupId.Value);
+                    if (!inDepartmentScope && !inGroupScope)
                     {
                         result.SkippedCount++;
                         result.Rows.Add(new EmployeeOtHourLimitImportRowResultDto
@@ -526,7 +532,7 @@ namespace Attendance.Application.Services
                             RowNumber = row.RowNumber,
                             EmployeeCode = row.EmployeeCode,
                             Success = false,
-                            Error = "Nhân viên không thuộc Phòng ban bạn phụ trách."
+                            Error = "Nhân viên không thuộc Phòng ban/Nhóm bạn phụ trách."
                         });
                         continue;
                     }
@@ -610,13 +616,15 @@ namespace Attendance.Application.Services
             var codes = dataRows.Select(r => r.EmployeeCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var employeesByCode = (await _unitOfWork.Employees.SelectAsync(
                 x => !x.IsDeleted && codes.Contains(x.Code),
-                x => new { x.Id, x.Code, DepartmentId = x.DepartmentId ?? (x.Group != null ? (int?)x.Group.DepartmentId : null) }))
+                x => new { x.Id, x.Code, x.GroupId, DepartmentId = x.DepartmentId ?? (x.Group != null ? (int?)x.Group.DepartmentId : null) }))
                 .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
 
-            // Scope THEO TỪNG DÒNG (EmployeeCode tự do, không hardcode 1 Phòng ban) — cùng nguyên tắc
-            // ImportOtHourLimitsAsync/ApplyAccumulationAsync, xem docs/docs-be/attendance-module.md
-            // §Phân quyền theo Phòng ban.
+            // Scope THEO TỪNG DÒNG (EmployeeCode tự do, không hardcode 1 Phòng ban), mở rộng thêm Nhóm
+            // (2026-09-28) — cùng nguyên tắc ImportOtHourLimitsAsync/ApplyAccumulationAsync, xem
+            // docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban.
             var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
+            var managedGroupIds = isAdmin ? null : (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                x => x.Employee.UserName == userName && !x.IsDeleted)).Select(x => x.GroupId).ToHashSet();
 
             var employeeIds = employeesByCode.Values.Select(x => x.Id).ToList();
             var existingLedgerRows = employeeIds.Count == 0
@@ -647,15 +655,20 @@ namespace Attendance.Application.Services
                     continue;
                 }
 
-                if (managedDepartmentIds != null && (employee.DepartmentId == null || !managedDepartmentIds.Contains(employee.DepartmentId.Value)))
+                if (managedDepartmentIds != null)
                 {
-                    result.SkippedCount++;
-                    result.SkippedRows.Add(new ProductionEmployeeAccumulationSkippedRowDto
+                    var inDepartmentScope = employee.DepartmentId.HasValue && managedDepartmentIds.Contains(employee.DepartmentId.Value);
+                    var inGroupScope = employee.GroupId.HasValue && managedGroupIds!.Contains(employee.GroupId.Value);
+                    if (!inDepartmentScope && !inGroupScope)
                     {
-                        EmployeeCode = row.EmployeeCode,
-                        Reason = "Nhân viên không thuộc Phòng ban bạn phụ trách."
-                    });
-                    continue;
+                        result.SkippedCount++;
+                        result.SkippedRows.Add(new ProductionEmployeeAccumulationSkippedRowDto
+                        {
+                            EmployeeCode = row.EmployeeCode,
+                            Reason = "Nhân viên không thuộc Phòng ban/Nhóm bạn phụ trách."
+                        });
+                        continue;
+                    }
                 }
 
                 var changedMonth = false;

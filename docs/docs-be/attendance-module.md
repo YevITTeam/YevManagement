@@ -275,17 +275,28 @@ thì giữ nguyên **4h** (bỏ hẳn phần +30 phút cộng bù trước đây
   ăn/hiện checkbox "Có ăn" (đúng quy tắc "không dùng công thức này" ở trên) — không có cột "giờ OT thực
   tính" nào ở màn này cần đổi. `OtFormPrintView.tsx` (bản in) chỉ in giờ vào/ra thô của từng người
   (`StartTime`–`EndTime`), không in số giờ tính toán nào — không cần đổi.
-- **Giá trị mặc định "Có ăn" đồng bộ theo "Ăn uống" (2026-08-06)** — `ProcessPart.IsEat` (cấp cả đơn,
-  đặt suất ăn) và `OtFormEmployee.DidEat` (cấp từng người, quyết định có bị trừ 30 phút hay không) là
-  2 field **độc lập ở BE**, nhưng dễ khiến người lập đơn nhầm 2 cái liên quan nhau (bỏ tích "Ăn uống"
-  nhưng quên đổi tay "Có ăn" từng người → giờ OT của họ vẫn bị trừ dù thực tế không đặt suất ăn cho ai).
-  Chỉ sửa ở
-  FE (`CreateOtFormPage.tsx`, `mealServiceActive = processPartEnabled && processPart.isEat`), **không**
-  đổi logic BE: giá trị mặc định của "Có ăn" khi chọn nhân viên mới, và khi bấm sửa giờ/ghi chú trước
-  khi tick "Có ăn", đều lấy theo `mealServiceActive` thay vì hardcode `true`; mỗi lần bật/tắt "Ăn uống"
-  (hoặc cả khối "Yêu cầu hỗ trợ khác") đồng bộ lại "Có ăn" cho MỌI người đang chọn theo giá trị mới —
-  vẫn sửa tay được từng người sau đó. Chỉ áp dụng màn Tạo mới; màn Sửa đơn khoá hẳn khối này nên không
-  áp dụng (tránh ghi đè `didEat` vừa tải từ đơn cũ).
+- **"Ăn uống" bắt buộc cho MỌI đơn — bỏ hẳn checkbox "Có ăn" ở đơn Theo chuyền, đổi thành "Ăn sau" ở
+  đơn Theo Nhóm (2026-09-28, theo yêu cầu người dùng)** — thay thế hoàn toàn cơ chế "đồng bộ mặc định
+  theo `mealServiceActive`" (2026-08-06, đã xoá):
+  - `ProcessPart.IsEat` LUÔN `true` — không còn checkbox "Ăn uống" trong khối "Yêu cầu hỗ trợ khác"
+    (`CreateOtFormPage.tsx`), FE luôn gửi `isEat: true`, BE (`FinalizeCreateAsync`) cũng LUÔN tạo
+    `ProcessPart` (kể cả `request.ProcessPart` null) và ép `IsEat = true` — không còn đơn nào thiếu
+    suất ăn. 2 mục Xe đưa đón/Phòng photo vẫn tuỳ chọn như cũ.
+  - **Đơn Theo chuyền (Sản xuất, `IsProductionForm = true`)**: bỏ hẳn cột "Có ăn" khỏi UI (bảng "Theo
+    chuyền" và "Sửa đơn" khi đơn đang sửa là loại này) — chỉ còn hiện badge "Loại phiếu ăn". `OtFormService`
+    hardcode `DidEat = true` cho MỌI nhân viên của đơn loại này bất kể FE gửi gì lên (helper
+    `ResolveDidEat(isProductionForm, requestedDidEat)`, áp dụng ở cả `FinalizeCreateAsync` lẫn
+    `UpdateAsync`) → luôn trừ đủ `MealBreakDeductionHours` cho ai đủ ngưỡng, không ai được loại trừ nữa.
+  - **Đơn Theo Nhóm (Văn phòng, `IsProductionForm = false`)**: field `OtFormEmployee.DidEat` giữ NGUYÊN
+    Ý NGHĨA ở BE (`true` = ăn TRONG ca, bị trừ giờ) — chỉ đổi cách HIỂN THỊ ở FE (bảng "Theo Nhóm" và
+    "Sửa đơn" khi đơn đang sửa là loại này): nhãn cột đổi thành **"Ăn sau"**, giá trị hiện = `!didEat`
+    (đảo ngược), mặc định khi chọn nhân viên mới là **tích sẵn** ("Ăn sau" = true ↔ `didEat` lưu
+    `false`, tức KHÔNG trừ giờ — coi như ăn sau khi tan ca). Bỏ tích "Ăn sau" → coi như ăn trong ca
+    (`didEat = true`, trừ giờ như thường). Loại phiếu ăn tính không đổi (đã độc lập `DidEat` từ
+    2026-09-24). FE: `defaultDidEatForNewEmployee = formMode === "production"` (dùng làm giá trị mặc
+    định DidEat khi thêm 1 người mới ở CẢ 2 loại đơn, thay hằng số `mealServiceActive` cũ).
+  - Không hồi tố — áp dụng đơn tạo/sửa SAU thời điểm đổi; dữ liệu OT cũ đã bị xoá cùng đợt (dev DB,
+    xem `docs/...` lịch sử reset dữ liệu) nên không có đơn cũ nào cần xử lý riêng.
 - **Số phiếu tự tính cũng loại người "Không ăn" (2026-08-06)** — `mealTicketCounts` (`CreateOtFormPage.tsx`)
   trước đây chỉ tính theo giờ OT, không đọc `didEat`, nên người tick "Không ăn" vẫn bị tính vào phiếu
   chính/phụ. Sửa lại: người đủ ngưỡng mà `didEat=false` → **không tính vào phiếu nào cả** (không ăn thì
@@ -2906,6 +2917,81 @@ suy luận theo Chức vụ) thay vì phát minh khái niệm mới hay dùng `J
   (chỉ verify được: Admin vẫn hoạt động bình thường qua mọi endpoint đã sửa, và logic scope đã review
   kỹ qua code). Nên test tay qua UI thật với 1 tài khoản Coordinator thật trước khi coi là ổn định.
 
+### §Chốt mô hình Coordinator — Bộ phận/Nhóm cùng quyền nhân viên+lũy kế, riêng "dưới chuyền" CHỈ Bộ phận (2026-09-28)
+
+**Chốt hướng người dùng** (CLAUDE.md §2 luật 2): khi 1 Employee được gán làm Coordinator (Bộ phận hoặc
+Nhóm, qua màn "Cây duyệt" — không đổi khái niệm, xem §Phân quyền theo Phòng ban ở trên), quyền tự động
+cấp chia làm 2 nhóm:
+
+1. **Dữ liệu nhân viên + lũy kế — Bộ phận VÀ Nhóm đều được, đối xứng nhau**: sửa giới hạn OT/tháng/năm
+   1 người (`EmployeeUpdateOtLimitCode`), sửa tay lũy kế 1 người (`EmployeeAccumulationUpdateCode`), và
+   **import Excel hàng loạt cùng 2 loại dữ liệu này** (`EmployeeAccumulationImportCode`, mới — trước đây
+   hoàn toàn KHÔNG tự cấp, phải Admin gán tay). Phụ trách Bộ phận thao tác được cả phòng; phụ trách Nhóm
+   chỉ thao tác được đúng Nhóm đó. Cả 3 permission tự cấp CHUNG 1 điều kiện `isDeptCoordinator ||
+   isGroupCoordinator` trong `EmployeeService.SyncAutoGrantedPermissionsCoreAsync`. Scope thực thi:
+   - Sửa 1 người: `EmployeeService.EnsureCanManageDeptOrGroupScopeAsync` (đã có từ trước).
+   - Import Excel (`EmployeeImportService.ImportOtHourLimitsAsync`/`ImportMonthlyAccumulationAsync`):
+     scope THEO TỪNG DÒNG, mở rộng thêm điều kiện Nhóm bên cạnh Bộ phận đã có — dòng ngoài cả 2 phạm vi
+     bị skip với lý do "Nhân viên không thuộc Phòng ban/Nhóm bạn phụ trách." (không huỷ cả file).
+2. **Dữ liệu "nhân sự dưới chuyền" (`ProductionEmployee`) — CHỈ Bộ phận, KHÔNG cấp cho Nhóm**: đây là
+   khái niệm cấp Phòng ban (gắn Line/Team/Nhóm ca của cả 1 Phòng ban sản xuất — thường "Chế Tạo"),
+   không tách theo từng Nhóm con. 4 permission `ProductionEmployeeViewCode`/`UpdateCode`/`ImportCode`/
+   `ExportCode` chỉ tự cấp trong nhánh `if (isDeptCoordinator)` — Coordinator chỉ phụ trách Nhóm
+   (không đồng thời phụ trách Bộ phận nào) sẽ KHÔNG có 4 quyền này. Scope thực thi (đã sửa lại đồng bộ,
+   trước đó Update/Export hoàn toàn không kiểm tra gì):
+   - `ProductionEmployeeService.GetPagedAsync` — lọc còn CHỈ Bộ phận phụ trách (bỏ nhánh Nhóm đã thêm
+     nhầm trước đó cùng ngày, xem §Sửa lỗ hổng phân quyền Attendance-OT bên dưới).
+   - `ProductionEmployeeService.UpdateAsync` (mới thêm `callerUserName`/`isAdmin`) — resolve Bộ phận
+     thật của `ProductionEmployee.EmployeeId` (`Employee.DepartmentId ?? Employee.Group.DepartmentId`),
+     ném `DomainException` nếu ngoài phạm vi hoặc dòng chưa gắn Employee.
+   - `ProductionEmployeeExportService.ExportAsync` (mới thêm `callerUserName`/`isAdmin`) — lọc ngay ở
+     query trước khi xuất, không còn xuất được sheet của Bộ phận khác.
+   - `ProductionEmployeeImportService` (Preview/Confirm hardcode "CT", `ApplyAccumulationAsync` scope
+     theo từng dòng) — **giữ nguyên CHỈ Bộ phận**, không mở rộng Nhóm dù dùng chung permission
+     `EmployeeAccumulationImportCode` với mục 1 — vì đây vẫn là thao tác trên dữ liệu "dưới chuyền".
+- **FE không cần sửa gì thêm** — mọi nút/tab liên quan (`EmployeeList.tsx`, `otRoutePermissions.ts`,
+  `ProductionEmployeeList.tsx`) đã gate đúng theo từng permission code này từ trước (`hasPermission`),
+  nên Coordinator chỉ phụ trách Nhóm sẽ tự động KHÔNG thấy các nút/tab "Nhân sự dưới chuyền" (đúng yêu
+  cầu "phần không nằm trong quyền thì ẩn đi") mà không cần đổi UI.
+- Không hồi tố — chỉ ảnh hưởng thao tác SAU khi đổi.
+
+### §Coordinator = "y hệt Admin nhưng trong scope" cho hồ sơ nhân viên (2026-09-28)
+
+**Chốt hướng người dùng** (CLAUDE.md §2 luật 2 — đảo ngược quyết định cũ 2026-08-29 "Employee.Update
+quá rộng, chỉ Admin"): `Attendance.Employee.Create`/`Update`/`Delete` (hồ sơ đầy đủ — Code/Tên/Group/
+Chức vụ, KHÁC 2 field OT-limit/lũy kế hẹp ở §Chốt mô hình Coordinator trên) giờ tự cấp thêm cho CẢ
+Coordinator Bộ phận LẪN Nhóm (đối xứng, cùng nhánh `isDeptCoordinator || isGroupCoordinator`), khoá
+cứng theo scope thay vì mở hoàn toàn:
+
+- **`CreateAsync`**: sau khi `ValidateOrganizationAssignmentAsync` resolve xong `(groupId, departmentId)`
+  theo TerminalLevel Chức vụ đã chọn (xem §Cây chức vụ), gọi thêm
+  `EnsureAssignmentInCallerScopeAsync(callerUserName, isAdmin, groupId, departmentId, ...)` (helper mới) —
+  Coordinator Bộ phận tạo được vào bất kỳ Nhóm nào thuộc Bộ phận mình (hoặc thẳng vào Bộ phận nếu Chức vụ
+  = Trưởng phòng), Coordinator Nhóm CHỈ tạo được vào đúng Nhóm mình. Chức vụ Trưởng Xưởng/Giám đốc
+  (`groupId`/`departmentId` đều null, dùng chung toàn công ty) LUÔN ngoài phạm vi bất kỳ Coordinator nào
+  — chỉ Admin gán được vai trò này.
+- **`UpdateAsync`/`DeleteAsync`**: check phạm vi HIỆN TẠI của nhân viên đang sửa/xoá qua
+  `EnsureCanManageDeptOrGroupScopeAsync` (dùng lại y hệt cơ chế OT-limit/lũy kế) NGAY ĐẦU hàm — nhân
+  viên phải thuộc đúng Bộ phận/Nhóm phụ trách mới được đụng vào. `UpdateAsync` sau khi resolve
+  `(groupId, departmentId)` MỚI (nếu đổi Nhóm/Chức vụ) còn check thêm lần 2 qua
+  `EnsureAssignmentInCallerScopeAsync` — chặn "chuyển" nhân viên ra khỏi phạm vi mình quản (vd Coordinator
+  Nhóm A không đổi được `GroupId` của 1 nhân viên trong Nhóm A sang Nhóm B ngoài phạm vi).
+- **`EmployeeCreateCode`/`UpdateCode`/`DeleteCode`** (permission có sẵn, KHÔNG migration mới — chỉ đổi
+  logic auto-grant trong `SyncAutoGrantedPermissionsCoreAsync`, xem `ApprovalStepCoordinatorPermissions`).
+- **FE**: `EmployeeForm.tsx` nhận thêm prop `scope?: EmployeeScopeDto | null` (từ `EmployeeList.tsx`,
+  cùng nguồn `GetMyScopeAsync` đã dùng cho dropdown lọc) — Coordinator bị giới hạn thì dropdown Bộ
+  phận/Nhóm trong form Tạo/Sửa cũng chỉ hiện đúng phạm vi (dùng thẳng `scope.groups`/`scope.departments`,
+  không gọi lại `getAllGroups`/`getAllDepartments`), tránh chọn xong mới bị BE từ chối. Nút Sửa/Xoá/Thêm
+  mới ở `EmployeeList.tsx` đã gate theo đúng permission này từ trước, không cần đổi thêm gì.
+- **Vẫn Admin-only, không đụng tới** (theo yêu cầu người dùng): gán Chức vụ
+  (`AssignDepartmentJobTitle`/`AssignGroupJobTitle` — đã sẵn có cho Coordinator từ trước, không liên
+  quan lần này), import liên kết Identity (`Identity.User.BulkImport`), và mọi Danh mục khác
+  (Department/Group/JobTitle/Reason/OtCase/AttendanceSetting).
+- **Sau khi đổi rule cấp tự động — nhớ chạy lại** `POST /api/Employee/resync-coordinator-permissions`
+  (xem mục ngay dưới) để Coordinator ĐÃ gán từ trước cũng có ngay 3 quyền mới, không phải đợi ai đó
+  gán/gỡ lại họ.
+- Không hồi tố — chỉ ảnh hưởng thao tác SAU khi đổi.
+
 ### §Vá lỗ hổng: `Employee.View` theo Chức vụ trả nguyên danh sách TOÀN CÔNG TY (2026-09-03)
 
 Rà soát lại phân quyền Attendance theo yêu cầu người dùng, phát hiện `Attendance.Employee.View`
@@ -2924,9 +3010,29 @@ cấp toàn công ty qua Chức vụ nhưng AN TOÀN vì `OtFormService.ApproveA
   Giai đoạn 8) — suy theo ĐÚNG vị trí Cây chức vụ của người gọi (Admin: không giới hạn; Trưởng
   Xưởng/Giám đốc: toàn công ty; có `DepartmentId` (Manager): theo Phòng ban; còn lại: theo `GroupId`).
   Trích logic này ra 2 helper dùng chung trong `EmployeeService`: `ResolveCallerScopeAsync(callerUserName)`
-  (trả `EmployeeScope { CompanyWide, DepartmentId, GroupId }`, throw `DomainException` nếu người gọi
-  chưa liên kết Employee hoặc chưa gán Nhóm/Bộ phận) + `ApplyScope(query, scope)` (áp lên
-  `IQueryable<Employee>`). `GetInScopeAsync` đổi sang gọi qua 2 helper này (hành vi không đổi).
+  + `ApplyScope(query, scope)` (áp lên `IQueryable<Employee>`). `GetInScopeAsync` đổi sang gọi qua 2
+  helper này (hành vi không đổi).
+  **Mở rộng (2026-09-28, theo yêu cầu người dùng — "phụ trách Nhóm/Bộ phận chỉ thấy đúng phạm vi đó,
+  Admin mới quản lý hết")**: `EmployeeScope` đổi từ 1 cặp `DepartmentId?/GroupId?` sang
+  `{ CompanyWide, DepartmentIds: HashSet<int>, GroupIds: HashSet<int> }` — `ResolveCallerScopeAsync`
+  giờ HỢP NHẤT vị trí thật (Manager/Staff, như cũ) VỚI mọi Bộ phận/Nhóm đang được gán làm Coordinator
+  (`IDepartmentAccessGuard.GetManagedDepartmentIdsAsync` + `GroupApprovalStepCoordinators`). Lý do: trước
+  đó 2 nguồn phạm vi (vị trí thật vs. Coordinator) độc lập nhau — 1 người được Admin gán Coordinator cho
+  1 Nhóm/Bộ phận KHÁC vị trí thật của mình thì có quyền SỬA OT-limit/lũy kế/dưới chuyền của Nhóm/Bộ phận
+  đó (tự cấp, xem §Chốt mô hình Coordinator ở trên) nhưng màn "Nhân viên" không hiện được người cần sửa
+  — quyền cấp ra không dùng được. `throw` "chưa được gán Nhóm/Bộ phận nào" giờ chỉ xảy ra khi CẢ vị trí
+  thật LẪN Coordinator đều rỗng.
+  **`EmployeeScopeDto` (contract FE) đổi từ 1 cặp `DepartmentId?/GroupId?` sang 2 danh sách
+  `Departments: DepartmentDto[]`/`Groups: GroupDto[]`** — bản đầu chỉ trả được ĐÚNG 1 giá trị nên khi
+  phạm vi thật gồm CẢ vị trí thật (vd Nhóm, do giữ Chức vụ Tổ trưởng) LẪN 1 Bộ phận khác (do được gán
+  Coordinator) thì trả rỗng cả 2 — **bug thật phát hiện lúc test tay** (`tl_cvit`: dropdown "Tất cả
+  nhóm" ở `EmployeeList.tsx` hiện "Không tìm thấy kết quả" dù bảng chính vẫn đúng 174 dòng, vì
+  `groups` state chỉ được đổ khi `scope.departmentId !== null`, không xảy ra ở case rỗng-cả-2 này).
+  `GetMyScopeAsync` giờ trả ĐỦ danh sách (Departments = mọi Phòng ban trong phạm vi;
+  Groups = Nhóm CON của các Phòng ban đó HỢP với Nhóm đang là Coordinator trực tiếp dù khác Phòng ban).
+  `EmployeeList.tsx` đổi theo: `departments`/`groups` state đổ thẳng từ `scope.departments`/
+  `scope.groups` khi bị giới hạn (không gọi thêm API), chọn 1 Phòng ban trong dropdown chỉ lọc lại
+  `scope.groups` theo `departmentId` ở phía client (không cần gọi lại API vì đã có đủ dữ liệu).
 - **`GetPagedAsync`/`GetAllActiveAsync`** — thêm tham số `(callerUserName, isAdmin)`, không phải Admin
   thì áp `ApplyScope` TRƯỚC khi áp filter `departmentId`/`groupId` tuỳ chọn (2 filter đó giờ chỉ còn
   tác dụng thu hẹp THÊM trong đúng phạm vi, không mở rộng ra ngoài được). `EmployeeController.GetPaged`/

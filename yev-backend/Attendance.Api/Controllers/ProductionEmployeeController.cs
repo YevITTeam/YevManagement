@@ -73,7 +73,7 @@ namespace Attendance.Api.Controllers
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateProductionEmployeeDto request)
         {
-            await _productionEmployeeService.UpdateAsync(id, request);
+            await _productionEmployeeService.UpdateAsync(id, request, CurrentUserName, User.IsInRole(AdminRole));
             return Success(true, "Cập nhật nhân viên dưới chuyền thành công.");
         }
     }

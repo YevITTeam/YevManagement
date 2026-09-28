@@ -5,6 +5,11 @@ export interface InventorySessionItemDto {
     deviceId: number;
     deviceCode: string;
     deviceName: string;
+    deviceTypeName: string | null;
+    manager: string | null;
+    groupName: string | null;
+    departmentName: string | null;
+    serialNumber: string | null;
     scannedAt: string | null;
     scannedBy: string | null;
     status: number;
@@ -35,27 +40,6 @@ export interface EndInventoryItemInputDto {
 
 export interface EndInventorySessionDto {
     items: EndInventoryItemInputDto[];
-}
-
-export interface InventoryMissingItemDto {
-    deviceCode: string;
-    deviceName: string;
-    note: string | null;
-}
-
-export interface InventoryReportRowDto {
-    sessionId: number;
-    branchId: number;
-    branchName: string | null;
-    startedAt: string;
-    endedAt: string | null;
-    status: number;
-    statusText: string;
-    totalCount: number;
-    foundCount: number;
-    missingCount: number;
-    missingItems: InventoryMissingItemDto[];
-    checkedBy: string | null;
 }
 
 // GET /api/InventoryAssignment — mỗi user đúng 1 xưởng, nhưng nhiều user có thể cùng 1 xưởng

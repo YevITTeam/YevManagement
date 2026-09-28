@@ -18,8 +18,6 @@ namespace Asset.Application.Interfaces.Service
 
         Task<PagedResponse<InventorySessionDto>> GetSessionsPagedAsync(int pageIndex, int pageSize, DateTime? fromDate, DateTime? toDate, int? branchId);
 
-        Task<List<InventoryReportRowDto>> GetReportAsync(DateTime fromDate, DateTime toDate, int? branchId);
-
-        Task<(byte[] Content, string FileName)> ExportReportAsync(DateTime fromDate, DateTime toDate, int? branchId);
+        Task<(byte[] Content, string FileName)> ExportSessionAsync(int sessionId);
     }
 }

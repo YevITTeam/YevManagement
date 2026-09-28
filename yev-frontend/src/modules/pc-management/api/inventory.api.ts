@@ -1,7 +1,6 @@
 import { api, getForBlob, type BlobDownloadResult } from "@/lib/client";
 import type {
     EndInventorySessionDto,
-    InventoryReportRowDto,
     InventorySessionDto,
     InventorySessionItemDto,
 } from "@/modules/pc-management/types/inventory.dto";
@@ -15,8 +14,7 @@ const ENDPOINTS = {
         scan: (id: number) => `/Inventory/${id}/scan`,
         end: (id: number) => `/Inventory/${id}/end`,
         gridList: "/Inventory/grid-list",
-        report: "/Inventory/report",
-        reportExport: "/Inventory/report/export",
+        exportSession: (id: number) => `/Inventory/${id}/export`,
     },
 } as const;
 
@@ -62,17 +60,6 @@ export const InventoryApi = {
         const response = await api.get<ApiResponseWithPageNation<InventorySessionDto>>(url);
         return response.data;
     },
-    getReport: async (fromDate: string, toDate: string, branchId?: number) => {
-        const query = new URLSearchParams({ fromDate, toDate });
-        if (branchId !== undefined) query.set("branchId", String(branchId));
-        const response = await api.get<ApiResponse<InventoryReportRowDto[]>>(`${ENDPOINTS.INVENTORY.report}?${query.toString()}`);
-        return response.data;
-    },
-    // Trả file .xlsx do BE tự dựng (không có file mẫu công ty, khác ServerCheck) — đọc bằng getForBlob()
-    // (asset-module.md §1.22).
-    exportReport: async (fromDate: string, toDate: string, branchId?: number): Promise<BlobDownloadResult> => {
-        const query = new URLSearchParams({ fromDate, toDate });
-        if (branchId !== undefined) query.set("branchId", String(branchId));
-        return getForBlob(`${ENDPOINTS.INVENTORY.reportExport}?${query.toString()}`);
-    },
+    // Trả file .xlsx do BE tự dựng, 1 dòng/thiết bị của phiên — đọc bằng getForBlob() (asset-module.md §1.22).
+    exportSession: async (id: number): Promise<BlobDownloadResult> => getForBlob(ENDPOINTS.INVENTORY.exportSession(id)),
 };
