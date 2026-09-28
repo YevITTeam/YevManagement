@@ -362,6 +362,88 @@ namespace Attendance.Application.Services
             if (!isAdmin)
                 await EnsureInAccumulationScopeAsync(callerUserName, employee!);
 
+            return await BuildAccumulationYearDtoAsync(employee!, year);
+        }
+
+        // Cùng dữ liệu với GetAccumulationHistoryAsync nhưng cho người được quyền SỬA lũy kế (Admin /
+        // Người phụ trách đúng Bộ phận/Nhóm của nhân viên) — không đòi Attendance.OTForm.Approve.
+        public async Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryForManageAsync(string callerUserName, bool isAdmin, int employeeId, int year)
+        {
+            var employee = (await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId && !x.IsDeleted, x => x.Group!))
+                .OrThrowNotFound("Nhân viên", employeeId);
+            await EnsureCanManageAccumulationAsync(callerUserName, isAdmin, employee);
+            return await BuildAccumulationYearDtoAsync(employee, year);
+        }
+
+        // Đặt lại số giờ từng tháng + số dư đầu kỳ (Month = 0) của 1 năm. Không bắt lý do, không ghi log
+        // (đã chốt: chỉ người có quyền mới vào được). Dòng chưa có mà giá trị 0 thì không tạo mới.
+        public async Task<EmployeeAccumulationHistoryYearDto> UpdateAccumulationHistoryAsync(
+            string callerUserName, bool isAdmin, int employeeId, UpdateEmployeeAccumulationDto request)
+        {
+            var employee = (await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId && !x.IsDeleted, x => x.Group!))
+                .OrThrowNotFound("Nhân viên", employeeId);
+            await EnsureCanManageAccumulationAsync(callerUserName, isAdmin, employee);
+
+            var hoursByMonth = new Dictionary<int, decimal> { [0] = request.InitialBalanceHours };
+            foreach (var m in request.Months)
+            {
+                if (m.Month < 1 || m.Month > 12)
+                    throw new DomainException("Tháng phải từ 1 đến 12.");
+                if (m.TotalHours < 0)
+                    throw new DomainException("Số giờ không được âm.");
+                hoursByMonth[m.Month] = Math.Round(m.TotalHours, 2);
+            }
+            hoursByMonth[0] = Math.Round(request.InitialBalanceHours, 2);
+
+            var existing = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(x => x.EmployeeId == employeeId && x.Year == request.Year);
+            foreach (var (month, hours) in hoursByMonth)
+            {
+                var row = existing.FirstOrDefault(x => x.Month == month);
+                if (row != null)
+                {
+                    row.TotalHours = hours;
+                    _unitOfWork.EmployeeAccumulationHistories.Update(row);
+                }
+                else if (hours != 0)
+                {
+                    await _unitOfWork.EmployeeAccumulationHistories.AddAsync(new EmployeeAccumulationHistory
+                    {
+                        EmployeeId = employeeId,
+                        Year = request.Year,
+                        Month = month,
+                        TotalHours = hours
+                    });
+                }
+            }
+            await _unitOfWork.SaveChangesAsync();
+
+            return await BuildAccumulationYearDtoAsync(employee, request.Year);
+        }
+
+        // Admin: luôn được. Người khác: phải là Người phụ trách (Admin gán tay) đúng Bộ phận chứa nhân
+        // viên, hoặc đúng Nhóm của nhân viên — Người phụ trách Nhóm chỉ đụng được nhân viên trong Nhóm đó.
+        private async Task EnsureCanManageAccumulationAsync(string callerUserName, bool isAdmin, Employee employee)
+        {
+            if (isAdmin) return;
+
+            var departmentId = employee.DepartmentId ?? employee.Group?.DepartmentId;
+            if (departmentId.HasValue && (await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName)).Contains(departmentId.Value))
+                return;
+
+            if (employee.GroupId.HasValue)
+            {
+                var groupId = employee.GroupId.Value;
+                var isGroupCoordinator = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                    x => x.GroupId == groupId && x.Employee.UserName == callerUserName && !x.IsDeleted)).Count > 0;
+                if (isGroupCoordinator) return;
+            }
+
+            throw new DomainException("Bạn chỉ được sửa lũy kế của nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
+        }
+
+        private async Task<EmployeeAccumulationHistoryYearDto> BuildAccumulationYearDtoAsync(Employee employee, int year)
+        {
+            var employeeId = employee.Id;
             var rows = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(x => x.EmployeeId == employeeId && x.Year == year);
             var hoursByMonth = rows.ToDictionary(x => x.Month, x => x.TotalHours);
 
@@ -377,7 +459,7 @@ namespace Attendance.Application.Services
 
             return new EmployeeAccumulationHistoryYearDto
             {
-                EmployeeId = employee!.Id,
+                EmployeeId = employee.Id,
                 EmployeeCode = employee.Code,
                 EmployeeFullName = $"{employee.LastName} {employee.FirstName}",
                 Year = year,
@@ -623,13 +705,14 @@ namespace Attendance.Application.Services
 
             var coordinatorCodes = new List<string>();
             if (isDeptCoordinator || isGroupCoordinator)
+            {
                 coordinatorCodes.AddRange(ApprovalStepCoordinatorPermissions.BaseViewCodes);
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeAccumulationUpdateCode);
+            }
             if (isDeptCoordinator)
             {
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.DepartmentUpdateCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionUpdateCode);
-                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeImportCode);
-                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeAccumulationImportCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeUpdateOtLimitCode);
             }
             if (isGroupCoordinator)

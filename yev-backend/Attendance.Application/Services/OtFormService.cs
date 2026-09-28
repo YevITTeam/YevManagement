@@ -710,11 +710,10 @@ namespace Attendance.Application.Services
         // ProductionEmployee thay vì theo Group cố định, xem docs/docs-be/attendance-module.md
         // §Đơn theo chuyền. Không có Group để check "ai được tạo đơn cho Group này" như Mode A.
         //
-        // Sửa 2026-08-28 (theo yêu cầu người dùng): quy tắc CŨ bắt creator phải nằm trong chính danh
-        // sách nhân viên của đơn ("có tăng ca") — sai bản chất, chặn nhầm Line Leader lập đơn hộ cả
-        // Line mà chính họ không tăng ca hôm đó. Quy tắc MỚI: Admin luôn được tạo; người thường phải
-        // là Line Leader thật (ProductionEmployee.IsLeader=true) của ÍT NHẤT 1 Line có mặt trong đơn —
-        // không cần chính họ có tên trong danh sách tăng ca.
+        // Ai được tạo đơn theo chuyền do QUYỀN quyết định (Attendance.OTForm.CreateProduction, kiểm ở
+        // OtFormController.Create, cấu hình theo Chức vụ/từng user) — không còn ép "phải là Line Leader
+        // của Line trong đơn" như trước (2026-09-26). Người thường vẫn cần liên kết với 1 Employee để
+        // suy luận chuỗi duyệt.
         private async Task<OtFormDto> CreateProductionFormAsync(
             string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
         {
@@ -736,18 +735,6 @@ namespace Attendance.Application.Services
                     x => x.UserName == createdByUserName && !x.IsDeleted, x => x.JobTitle!);
                 if (creatorEmployee == null)
                     throw new DomainException("Tài khoản chưa liên kết với nhân viên nào. Liên hệ Admin nếu tài khoản chưa liên kết đúng nhân viên.");
-
-                var orderLineIds = (await _unitOfWork.ProductionEmployees.SelectAsync(
-                    predicate: x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted,
-                    selector: x => x.ProductionLineId))
-                    .Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
-
-                var isLineLeaderOfAnyLine = orderLineIds.Count > 0 && (await _unitOfWork.ProductionEmployees.FindAsync(
-                    x => x.EmployeeId == creatorEmployee.Id && x.IsLeader && !x.IsDeleted
-                        && x.ProductionLineId.HasValue && orderLineIds.Contains(x.ProductionLineId.Value))).Count > 0;
-
-                if (!isLineLeaderOfAnyLine)
-                    throw new DomainException("Bạn phải là Line Leader của ít nhất 1 Line trong danh sách nhân viên mới được tạo đơn này.");
             }
 
             // Nhóm ca bắt buộc trước khi tạo đơn (2026-08-28, theo yêu cầu người dùng) — phòng vệ thêm

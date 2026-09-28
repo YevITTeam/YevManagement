@@ -291,6 +291,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // "không giới hạn phạm vi tạo đơn" khi GET /my-create-scopes trả mảng rỗng (phân biệt với tài
     // khoản Nhân viên/Trưởng nhóm chưa được cấu hình gì — trường hợp đó phải chặn hẳn màn này).
     const isUnrestrictedAdmin = hasPermission(user, "Attendance.Department.Create");
+    // Tạo đơn THEO CHUYỀN cần quyền riêng (Admin cấu hình theo Chức vụ/từng user) — không có thì ẩn tab "Theo chuyền".
+    const canCreateProductionForm = hasPermission(user, "Attendance.OTForm.CreateProduction");
 
     // "Theo Nhóm" (mặc định, hiện tại) hay "Theo chuyền" (Chế tạo, 2026-08-24) — chỉ chọn được lúc TẠO
     // MỚI, đơn đã tạo giữ nguyên chế độ ban đầu (isProductionForm trả về từ BE, không đổi được khi sửa).
@@ -1032,7 +1034,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 </div>
             )}
 
-            {!isEditMode && (
+            {!isEditMode && canCreateProductionForm && (
                 <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">
                     {(["group", "production"] as const).map((mode) => (
                         <button

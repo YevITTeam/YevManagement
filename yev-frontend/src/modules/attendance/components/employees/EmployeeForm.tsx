@@ -73,6 +73,9 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     const [jobTitles, setJobTitles] = useState<JobTitleDto[]>([]);
     const [usersWithRoles, setUsersWithRoles] = useState<UserDto[]>([]);
     const [showUserSuggestions, setShowUserSuggestions] = useState(false);
+    // Bộ phận dùng để LỌC danh sách Nhóm cho nhân viên thường (Bộ phận của họ suy ra từ Nhóm, không lưu
+    // riêng). null = chưa chọn tay, lấy theo Bộ phận của Nhóm đang chọn.
+    const [departmentFilter, setDepartmentFilter] = useState<number | "" | null>(null);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -91,6 +94,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     }, [isOpen]);
 
     useDialogReset(isOpen, initial, (current) => {
+        setDepartmentFilter(null);
         setValues(
             current
                 ? {
@@ -121,6 +125,23 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         label: d.departmentNameVn,
         searchText: d.departmentNameVn.toLowerCase(),
     }));
+
+    const selectedGroup = groups.find((g) => g.id === values.groupId);
+    const effectiveDepartmentFilter = departmentFilter ?? selectedGroup?.departmentId ?? "";
+    const filteredGroupOptions = effectiveDepartmentFilter === ""
+        ? groupOptions
+        : groups
+              .filter((g) => g.departmentId === effectiveDepartmentFilter)
+              .map((g) => ({ value: g.id, label: g.groupNameVn, searchText: g.groupNameVn.toLowerCase() }));
+
+    const handleDepartmentFilterChange = (v: number | "") => {
+        setDepartmentFilter(v);
+        // Nhóm đang chọn không thuộc Bộ phận mới → bỏ chọn để phải chọn lại Nhóm đúng Bộ phận.
+        setValues((current) => {
+            const currentGroup = groups.find((g) => g.id === current.groupId);
+            return v !== "" && currentGroup && currentGroup.departmentId !== v ? { ...current, groupId: null } : current;
+        });
+    };
 
     const handleJobTitleChange = (value: string) => {
         const nextJobTitleId = value ? Number(value) : null;
@@ -271,9 +292,22 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
 
                     {needsGroup && (
                         <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
+                            <SearchableSelect
+                                options={departmentOptions}
+                                value={effectiveDepartmentFilter}
+                                onChange={(v) => handleDepartmentFilterChange(v)}
+                                placeholder={t("fieldDepartmentPlaceholder")}
+                                disabled={loading}
+                            />
+                        </label>
+                    )}
+
+                    {needsGroup && (
+                        <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
                             <SearchableSelect
-                                options={groupOptions}
+                                options={filteredGroupOptions}
                                 value={values.groupId ?? ""}
                                 onChange={(v) => setValues((current) => ({ ...current, groupId: v === "" ? null : v }))}
                                 placeholder={t("fieldGroupPlaceholder")}

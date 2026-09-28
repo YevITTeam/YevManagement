@@ -52,9 +52,9 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Màn "Nhân viên dưới chuyền" — dùng chung quyền xem Nhân viên (2026-08-27, chỉ là 1 view khác
-        // của cùng dữ liệu nhân sự, không phải năng lực mới cần permission riêng).
-        [RequirePermission("Attendance.Employee.View")]
+        // Màn "Nhân viên dưới chuyền" — quyền xem RIÊNG (2026-09-26): trước đây dùng chung
+        // Attendance.Employee.View nên mọi Người phụ trách/Trưởng nhóm đều vào xem được.
+        [RequirePermission("Attendance.ProductionEmployee.View")]
         [HttpGet("page-nation")]
         public async Task<ActionResult<ApiResponse<PagedResponse<ProductionEmployeeListItemDto>>>> GetPaged(
             [FromQuery] int pageIndex, [FromQuery] int pageSize, [FromQuery] string? keyword,

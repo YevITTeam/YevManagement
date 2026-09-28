@@ -18,3 +18,11 @@ export interface EmployeeAccumulationHistoryYearDto {
     yearTotalHours: number;
     initialBalanceHours?: number;
 }
+
+// Sửa tay lũy kế 1 năm (Attendance.EmployeeAccumulation.Update): đặt lại giờ từng tháng + số dư đầu kỳ.
+// Tổng cả năm = initialBalanceHours + tổng 12 tháng.
+export interface UpdateEmployeeAccumulationDto {
+    year: number;
+    initialBalanceHours: number;
+    months: EmployeeAccumulationHistoryMonthDto[];
+}

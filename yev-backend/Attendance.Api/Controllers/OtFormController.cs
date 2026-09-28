@@ -1,3 +1,4 @@
+using Shared.Core.Exceptions;
 using Attendance.Application.Dtos.OtForms;
 using Attendance.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
@@ -160,6 +161,10 @@ namespace Attendance.Api.Controllers
         public async Task<IActionResult> Create([FromBody] CreateOtFormDto request)
         {
             var isAdmin = User.IsInRole(AdminRole);
+            // Đơn theo chuyền cần quyền riêng (Admin chỉ định theo Chức vụ hoặc từng user) — không còn
+            // hardcode "phải là Line Leader" trong service.
+            if (request.IsProductionForm && !User.HasClaim("Permission", "Attendance.OTForm.CreateProduction"))
+                throw new DomainException("Bạn không có quyền tạo đơn tăng ca theo chuyền.");
             var result = await _otFormService.CreateAsync(CurrentUserName, CurrentFullName, isAdmin, request);
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công.");
         }

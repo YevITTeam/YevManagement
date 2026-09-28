@@ -17,6 +17,9 @@ public static class JobTitlePermissionWhitelist
         "Attendance.OTForm.Approve",
         "Attendance.OTForm.RemoveEmployee",
         "Attendance.OTForm.AddEmployee",
+        // Tạo đơn tăng ca THEO CHUYỀN (2026-09-26) — trước chỉ Line Leader làm được (kiểm cứng ở
+        // OtFormService), nay là quyền cấu hình được theo Chức vụ hoặc từng user.
+        "Attendance.OTForm.CreateProduction",
         "Attendance.UserSignature.View",
         "Attendance.UserSignature.Update",
         "Attendance.SecondaryPassword.Update",
@@ -27,5 +30,12 @@ public static class JobTitlePermissionWhitelist
         "Attendance.Employee.View",
         "Attendance.JobTitle.View",
         "Attendance.ProductionOtReport.View",
+        // Nhân sự dưới chuyền + các chức năng Excel (2026-09-26): KHÔNG còn tự cấp cho Người phụ trách
+        // Cây duyệt — Admin chỉ định rõ Chức vụ nào được vào/nhập/xuất ở đây (hoặc gán cho từng user).
+        "Attendance.ProductionEmployee.View",
+        "Attendance.ProductionEmployee.Update",
+        "Attendance.ProductionEmployee.Import",
+        "Attendance.ProductionEmployee.Export",
+        "Attendance.EmployeeAccumulation.Import",
     };
 }

@@ -8,6 +8,8 @@ import { History, Inbox, Search } from "lucide-react";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 import AccumulationHistoryModal from "./AccumulationHistoryModal";
 
 const PAGE_SIZE = 10;
@@ -21,6 +23,8 @@ export default function AccumulationLookupPage() {
     const t = useTranslations("Attendance.AccumulationHistory");
     const tCommon = useTranslations("Common");
 
+    const { user } = useAuth();
+    const canUpdateAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Update");
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
     const [pageIndex, setPageIndex] = useState(1);
@@ -159,6 +163,7 @@ export default function AccumulationLookupPage() {
                 <AccumulationHistoryModal
                     employeeId={selectedEmployee.id}
                     employeeLabel={`${selectedEmployee.lastName} ${selectedEmployee.firstName} (${selectedEmployee.code})`}
+                    canEdit={canUpdateAccumulation}
                     onClose={() => setSelectedEmployee(null)}
                 />
             )}

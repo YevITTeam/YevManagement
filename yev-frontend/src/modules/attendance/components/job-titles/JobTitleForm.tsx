@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { X } from "lucide-react";
+import { useRef, useState } from "react";
+import { ChevronDown, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import { jobTitleTerminalLevelLabels } from "@/modules/attendance/types/enums";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
-import JobTitlePermissionSection from "./JobTitlePermissionSection";
+import JobTitlePermissionSection, { type JobTitlePermissionSectionHandle } from "./JobTitlePermissionSection";
 
 export interface JobTitleFormValues {
     code: string;
@@ -27,14 +27,16 @@ const terminalLevelOptions = [0, 1, 2, 3];
 
 const emptyValues: JobTitleFormValues = { code: "", name: "", terminalLevel: 0 };
 
-const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+const fieldLabelClassName = "mb-1 block text-xs font-semibold text-[#5e3f3a]";
 const fieldClassName =
-    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+    "h-9 w-full rounded-md border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 export default function JobTitleForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: JobTitleFormProps) {
     const t = useTranslations("Attendance.JobTitle");
     const tCommon = useTranslations("Common");
     const [values, setValues] = useState<JobTitleFormValues>(emptyValues);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const permissionRef = useRef<JobTitlePermissionSectionHandle>(null);
 
     useDialogReset(isOpen, initial, (current) => {
         setValues(
@@ -50,31 +52,41 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
 
     if (!isOpen) return null;
 
-    const handleSubmit = (event: React.FormEvent) => {
+    const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!values.code.trim() || !values.name.trim()) return;
-        onSubmit(values);
+        setIsSubmitting(true);
+        try {
+            // Permission mapping is a separate API; save it first so a failure keeps the dialog open.
+            const permissionsSaved = (await permissionRef.current?.save()) ?? true;
+            if (!permissionsSaved) return;
+            await onSubmit(values);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
+
+    const isEdit = mode === "edit" && !!initial;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="fixed inset-0 bg-black/40" onClick={() => !loading && onClose()} />
+            <div className="fixed inset-0 bg-black/40" onClick={() => !loading && !isSubmitting && onClose()} />
 
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="job-title-form-title"
-                className={`z-60 mx-4 flex max-h-[85vh] w-full flex-col overflow-y-auto rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl ${
-                    mode === "edit" ? "max-w-lg" : "max-w-md"
+                className={`z-60 mx-4 flex max-h-[88vh] w-full flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl ${
+                    isEdit ? "max-w-3xl" : "max-w-md"
                 }`}
             >
-                <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
-                    <h3 id="job-title-form-title" className="text-lg font-semibold text-[#191c1e]">
+                <div className="flex items-center justify-between border-b border-[#e0e3e5] px-5 py-3">
+                    <h3 id="job-title-form-title" className="text-base font-semibold text-[#191c1e]">
                         {mode === "create" ? t("createTitle") : t("editTitle")}
                     </h3>
                     <button
                         type="button"
-                        onClick={() => !loading && onClose()}
+                        onClick={() => !loading && !isSubmitting && onClose()}
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label={tCommon("close")}
                     >
@@ -82,69 +94,75 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
-                        <input
-                            value={values.code}
-                            onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
-                            placeholder={t("fieldCodePlaceholder")}
-                            disabled={loading}
-                            autoFocus
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex min-h-0 flex-1 flex-col gap-3 px-5 py-3">
+                        <div className={isEdit ? "grid gap-3 sm:grid-cols-[1fr_1.6fr_1.2fr]" : "space-y-3"}>
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldCode")}</span>
+                                <input
+                                    value={values.code}
+                                    onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
+                                    placeholder={t("fieldCodePlaceholder")}
+                                    disabled={loading || isSubmitting}
+                                    autoFocus
+                                    required
+                                    className={fieldClassName}
+                                />
+                            </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldName")}</span>
-                        <input
-                            value={values.name}
-                            onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))}
-                            placeholder={t("fieldNamePlaceholder")}
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldName")}</span>
+                                <input
+                                    value={values.name}
+                                    onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))}
+                                    placeholder={t("fieldNamePlaceholder")}
+                                    disabled={loading || isSubmitting}
+                                    required
+                                    className={fieldClassName}
+                                />
+                            </label>
 
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldTerminalLevel")}</span>
+                                <div className="relative">
+                                    <select
+                                        value={values.terminalLevel}
+                                        onChange={(event) => setValues((current) => ({ ...current, terminalLevel: Number(event.target.value) }))}
+                                        disabled={loading || isSubmitting}
+                                        className={`${fieldClassName} appearance-none pr-8`}
+                                    >
+                                        {terminalLevelOptions.map((level) => (
+                                            <option key={level} value={level}>
+                                                {jobTitleTerminalLevelLabels[level]}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
+                                </div>
+                            </label>
+                        </div>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldTerminalLevel")}</span>
-                        <select
-                            value={values.terminalLevel}
-                            onChange={(event) => setValues((current) => ({ ...current, terminalLevel: Number(event.target.value) }))}
-                            disabled={loading}
-                            className={fieldClassName}
-                        >
-                            {terminalLevelOptions.map((level) => (
-                                <option key={level} value={level}>
-                                    {jobTitleTerminalLevelLabels[level]}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                        {isEdit && initial && <JobTitlePermissionSection ref={permissionRef} jobTitleId={initial.id} />}
+                    </div>
 
-                    <div className="flex justify-end gap-3 pt-2">
+                    <div className="flex justify-end gap-2 border-t border-[#e0e3e5] px-5 py-3">
                         <button
                             type="button"
                             onClick={onClose}
-                            disabled={loading}
-                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={loading || isSubmitting}
+                            className="h-9 cursor-pointer rounded-md border border-[#e0e3e5] bg-white px-4 text-sm! font-semibold! text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {tCommon("cancel")}
                         </button>
                         <button
                             type="submit"
-                            disabled={loading}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={loading || isSubmitting}
+                            className="h-9 cursor-pointer rounded-md bg-[#e3000f] px-4 text-sm! font-semibold! text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
+                            {loading || isSubmitting ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
                         </button>
                     </div>
                 </form>
-
-                {mode === "edit" && initial && <JobTitlePermissionSection jobTitleId={initial.id} />}
             </div>
         </div>
     );

@@ -18,6 +18,12 @@ namespace Attendance.Application.Interfaces.Service
         // Lịch sử lũy kế 12 tháng của 1 năm — cùng phạm vi truy cập với GetInScopeAsync.
         Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, int year);
 
+        // Xem + SỬA TAY lũy kế 1 năm — Admin hoặc Người phụ trách đúng Bộ phận/Nhóm của nhân viên
+        // (quyền Attendance.EmployeeAccumulation.Update, scope kiểm ở service).
+        Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryForManageAsync(string callerUserName, bool isAdmin, int employeeId, int year);
+
+        Task<EmployeeAccumulationHistoryYearDto> UpdateAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, UpdateEmployeeAccumulationDto request);
+
         // Không phải Admin: cũng tự giới hạn theo phạm vi Cây chức vụ của người gọi, cùng lý do với
         // GetPagedAsync ở trên (endpoint "/all" trả nguyên DTO có lũy kế/giới hạn OT, không được để hở).
         Task<List<EmployeeDto>> GetAllActiveAsync(string callerUserName, bool isAdmin);

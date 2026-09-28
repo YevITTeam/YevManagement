@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Check } from "lucide-react";
+import { Check, Info, Search } from "lucide-react";
 
 import { JobTitlePermissionApi } from "@/modules/attendance/api/job-title-permission.api";
 import { PermissionApi } from "@/modules/auth/api/permission.api";
@@ -11,26 +11,32 @@ import type { PermissionDto } from "@/modules/auth/types/permission.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
+// Lets the parent form save this mapping together with its own fields (one "Lưu" button in the dialog).
+export interface JobTitlePermissionSectionHandle {
+    isDirty: () => boolean;
+    // Resolves true when nothing needed saving or the save succeeded.
+    save: () => Promise<boolean>;
+}
+
 interface JobTitlePermissionSectionProps {
     jobTitleId: number;
+    ref?: React.Ref<JobTitlePermissionSectionHandle>;
 }
 
 // Tích hợp thẳng vào JobTitleForm (2026-09-03d, theo yêu cầu người dùng — trước đó là tab riêng
 // "Quyền theo Chức vụ" ở CategoryManagement.tsx, nay gộp vào đúng modal Sửa chức vụ để không phải
-// chuyển tab). Rút gọn từ JobTitlePermissionManager.tsx cũ (đã xoá) — bỏ phần chọn Chức vụ (nhận thẳng
-// `jobTitleId` từ form cha), giữ nguyên logic tick/lưu + nguồn dữ liệu
-// (GET /JobTitlePermission/allowed-codes, GET .../by-job-title/{id}, PUT .../by-job-title/{id}) — xem
-// docs/docs-be/attendance-module.md §Cây chức vụ, mục "Quyền theo Chức vụ". Lưu RIÊNG với Save chính
-// của JobTitleForm (2 API khác nhau — sửa Code/Name/TerminalLevel không liên quan gì tới mapping quyền
-// này), có nút Lưu độc lập ngay trong section.
-export default function JobTitlePermissionSection({ jobTitleId }: JobTitlePermissionSectionProps) {
+// chuyển tab). Nguồn dữ liệu: GET /JobTitlePermission/allowed-codes, GET .../by-job-title/{id},
+// PUT .../by-job-title/{id} — xem docs/docs-be/attendance-module.md §Cây chức vụ, mục "Quyền theo
+// Chức vụ". Vẫn là API riêng với Code/Name/TerminalLevel, nhưng nút Lưu của form cha gọi `save()`
+// của section này trước khi lưu phần còn lại, nên người dùng chỉ thấy 1 nút Lưu.
+export default function JobTitlePermissionSection({ jobTitleId, ref }: JobTitlePermissionSectionProps) {
     const t = useTranslations("Attendance.JobTitlePermission");
 
     const [allowedCodes, setAllowedCodes] = useState<string[]>([]);
     const [allPermissions, setAllPermissions] = useState<PermissionDto[]>([]);
     const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
-    const [isSaving, setIsSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
+    const [keyword, setKeyword] = useState("");
 
     const { isLoading } = useFetchEffect(
         () =>
@@ -49,6 +55,23 @@ export default function JobTitlePermissionSection({ jobTitleId }: JobTitlePermis
         t("loadMappingError")
     );
 
+    useImperativeHandle(ref, () => ({
+        isDirty: () => isDirty,
+        save: async () => {
+            if (!isDirty) return true;
+            try {
+                const data = await JobTitlePermissionApi.replaceByJobTitle(jobTitleId, Array.from(selectedCodes));
+                setSelectedCodes(new Set(data.map((x) => x.permissionCode)));
+                setIsDirty(false);
+                return true;
+            } catch (err) {
+                console.error(err);
+                toast.error(getApiErrorMessage(err, t("saveError")));
+                return false;
+            }
+        },
+    }));
+
     const handleToggle = (code: string) => {
         setSelectedCodes((current) => {
             const next = new Set(current);
@@ -59,32 +82,62 @@ export default function JobTitlePermissionSection({ jobTitleId }: JobTitlePermis
         setIsDirty(true);
     };
 
-    const handleSave = async () => {
-        setIsSaving(true);
-        try {
-            const data = await JobTitlePermissionApi.replaceByJobTitle(jobTitleId, Array.from(selectedCodes));
-            setSelectedCodes(new Set(data.map((x) => x.permissionCode)));
-            setIsDirty(false);
-            toast.success(t("saveSuccess"));
-        } catch (err) {
-            console.error(err);
-            toast.error(getApiErrorMessage(err, t("saveError")));
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
     // Chỉ hiện đúng permission nằm trong danh sách BE cho phép — thứ tự giữ theo thứ tự allowedCodes
     // (đã nhóm sẵn theo Module > Entity) thay vì thứ tự ngẫu nhiên sau khi flatten.
     const allowedPermissions = allowedCodes
         .map((code) => allPermissions.find((p) => p.code === code))
         .filter((p): p is PermissionDto => p !== undefined);
 
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    const visiblePermissions = normalizedKeyword
+        ? allowedPermissions.filter(
+              (p) => p.description.toLowerCase().includes(normalizedKeyword) || p.code.toLowerCase().includes(normalizedKeyword)
+          )
+        : allowedPermissions;
+
+    const setMany = (codes: string[], checked: boolean) => {
+        setSelectedCodes((current) => {
+            const next = new Set(current);
+            codes.forEach((code) => (checked ? next.add(code) : next.delete(code)));
+            return next;
+        });
+        setIsDirty(true);
+    };
+    const allVisibleChecked = visiblePermissions.length > 0 && visiblePermissions.every((p) => selectedCodes.has(p.code));
+
     return (
-        <div className="space-y-3 border-t border-[#e0e3e5] pt-4">
-            <div>
-                <h4 className="text-sm font-semibold text-[#191c1e]">{t("sectionTitle")}</h4>
-                <p className="mt-1 text-xs text-[#5e3f3a]">{t("description")}</p>
+        <div className="flex min-h-0 flex-1 flex-col gap-2 border-t border-[#e0e3e5] pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+                <h4 className="flex items-center gap-1.5 text-sm font-semibold text-[#191c1e]">
+                    {t("sectionTitle")}
+                    <span title={t("description")} className="cursor-help text-[#8a8f94]">
+                        <Info className="h-3.5 w-3.5" />
+                    </span>
+                </h4>
+                {!isLoading && allowedPermissions.length > 0 && (
+                    <>
+                        <span className="rounded-full bg-[#f2f4f7] px-2 text-[11px] font-semibold leading-5 text-[#5e3f3a]">
+                            {t("selectedCount", { count: allowedPermissions.filter((p) => selectedCodes.has(p.code)).length, total: allowedPermissions.length })}
+                        </span>
+                        <div className="relative ml-auto w-44">
+                            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
+                            <input
+                                value={keyword}
+                                onChange={(event) => setKeyword(event.target.value)}
+                                onKeyDown={(event) => event.key === "Enter" && event.preventDefault()}
+                                placeholder={t("searchPlaceholder")}
+                                className="h-7 w-full rounded-md border border-[#e0e3e5] bg-white pl-7 pr-2 text-xs! text-[#191c1e] outline-none transition focus:border-[#e3000f]"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setMany(visiblePermissions.map((p) => p.code), !allVisibleChecked)}
+                            className="cursor-pointer text-xs! font-semibold! text-[#e3000f] transition hover:text-[#b40009]"
+                        >
+                            {allVisibleChecked ? t("clearAll") : t("selectAll")}
+                        </button>
+                    </>
+                )}
             </div>
 
             {isLoading ? (
@@ -92,43 +145,33 @@ export default function JobTitlePermissionSection({ jobTitleId }: JobTitlePermis
             ) : allowedPermissions.length === 0 ? (
                 <p className="text-sm text-[#5e3f3a]">{t("noAllowedPermissions")}</p>
             ) : (
-                <>
-                    <ul className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-[#e0e3e5] p-2">
-                        {allowedPermissions.map((permission) => {
-                            const checked = selectedCodes.has(permission.code);
-                            return (
-                                <li key={permission.code}>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleToggle(permission.code)}
-                                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border border-transparent px-2 py-1.5 text-left text-sm transition hover:bg-[#f8fafc]"
+                <ul className="grid min-h-0 flex-1 auto-rows-min gap-x-2 gap-y-0.5 overflow-y-auto rounded-lg border border-[#e0e3e5] p-1.5 sm:grid-cols-2">
+                    {visiblePermissions.map((permission) => {
+                        const checked = selectedCodes.has(permission.code);
+                        return (
+                            <li key={permission.code}>
+                                <button
+                                    type="button"
+                                    onClick={() => handleToggle(permission.code)}
+                                    title={permission.code}
+                                    aria-pressed={checked}
+                                    className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-[13px]! transition hover:bg-[#f2f4f7] ${
+                                        checked ? "bg-[#fff4f2]" : ""
+                                    }`}
+                                >
+                                    <span
+                                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                                            checked ? "border-[#e3000f] bg-[#e3000f] text-white" : "border-[#c7ccd1] bg-white"
+                                        }`}
                                     >
-                                        <span
-                                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                                                checked ? "border-[#e3000f] bg-[#e3000f] text-white" : "border-[#e0e3e5] bg-white"
-                                            }`}
-                                        >
-                                            {checked && <Check size={11} />}
-                                        </span>
-                                        <span className="text-[#191c1e]">{permission.description}</span>
-                                        <span className="ml-auto shrink-0 font-mono text-xs text-[#8a8f94]">{permission.code}</span>
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
-
-                    <div className="flex justify-end">
-                        <button
-                            type="button"
-                            onClick={handleSave}
-                            disabled={!isDirty || isSaving}
-                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {isSaving ? t("saving") : t("saveButton")}
-                        </button>
-                    </div>
-                </>
+                                        {checked && <Check size={11} />}
+                                    </span>
+                                    <span className="min-w-0 truncate text-[#191c1e]">{permission.description}</span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
             )}
         </div>
     );

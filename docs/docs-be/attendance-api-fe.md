@@ -473,6 +473,16 @@ mà KHÔNG cần `Attendance.Employee.View` (mọi action đọc khác trên `Em
 - Còn lại (Staff/Group Leader/Team Leader, cấp Nhóm) → chỉ nhân viên có `GroupId` trùng.
 - Người gọi chưa liên kết Employee (`UserName` không khớp ai) → 400.
 
+**Sửa tay lũy kế** (quyền `Attendance.EmployeeAccumulation.Update` — Admin + Người phụ trách Bộ phận/Nhóm
+tự động có; scope: Bộ phận phụ trách → mọi nhân viên trong Bộ phận, Nhóm phụ trách → chỉ nhân viên trong Nhóm,
+Admin → tất cả; không bắt lý do, không ghi log):
+- `GET /api/Employee/{id}/accumulation-history/manage?year=` → cùng `EmployeeAccumulationHistoryYearDto` như
+  endpoint bên dưới nhưng gate bằng quyền Update (không đòi `OTForm.Approve`).
+- `PUT /api/Employee/{id}/accumulation-history` body `{ year, initialBalanceHours, months: [{month 1..12, totalHours}] }`
+  → đặt lại số giờ từng tháng + số dư đầu kỳ (dòng `Month = 0` của ledger); trả `EmployeeAccumulationHistoryYearDto` mới.
+  Tổng cả năm = `initialBalanceHours` + tổng 12 tháng; FE cho nhập thẳng tổng năm rồi tự quy ra `initialBalanceHours`
+  (không được âm). Giá trị 0 mà chưa có dòng thì không tạo dòng.
+
 `GET /api/Employee/{id}/accumulation-history?year=2026` (`Attendance.OTForm.Approve`, cùng phạm vi
 trên) → `EmployeeAccumulationHistoryYearDto`:
 ```jsonc
@@ -613,8 +623,8 @@ xem `attendance-module.md` §Import/Export nhân sự dưới chuyền.
 View đọc thẳng bảng `ProductionEmployees` (KHÁC `Employee/grid-list` §3.1 đọc bảng `Employees`) — hiển
 thị đúng dữ liệu chuyền mới nhất (Line/Team/Nhóm ca/Công đoạn/Trưởng nhóm) thay vì Nhóm/Phòng ban/Chức
 vụ tổ chức. Nguồn chính vẫn là Import lại Excel (§3.8, nạp đè hết mỗi tháng) — `PUT /{id}` bên dưới
-(2026-09-04) chỉ để sửa nhanh 1 dòng giữa 2 đợt import. Permission xem dùng chung
-`Attendance.Employee.View` (chỉ là 1 view khác của cùng dữ liệu nhân sự).
+(2026-09-04) chỉ để sửa nhanh 1 dòng giữa 2 đợt import. Permission xem RIÊNG
+`Attendance.ProductionEmployee.View` (từ 2026-09-26; trước đó dùng chung `Attendance.Employee.View` nên Người phụ trách/Trưởng nhóm đều xem được) — Admin chỉ định theo Chức vụ hoặc từng user.
 
 ```jsonc
 // GET /api/ProductionEmployee/page-nation?PageIndex=1&PageSize=10&Keyword=&ProductionLineId=&TeamId=&ShiftTeamId=
@@ -1338,7 +1348,7 @@ thiết kế BE ở [attendance-module.md §Đơn tổng](attendance-module.md).
 | `/api/ProductionOtReport` (mở rộng 2026-09-03c) | thêm `ticket-batch?date=&departmentId=` (JSON, dữ liệu nền phiếu YEV-22-024 xuất hàng loạt — FE lấy chữ ký/lý do qua `GET /api/OtForm/{primaryOtFormId}`), `qry-export-excel?date=&departmentId=` ("Qry_EXPORT_EXCEL", 17 cột), `sum-export-data?date=&departmentId=` ("SUM_EXPORT_DATA", 7 cột) — cả 3 gate `Attendance.ProductionOtReport.View` như 3 endpoint cũ. Tên file Excel theo quy tắc thật `"{TenQuery}_{yyyy-MM-d}_{MaPhongBan}.xlsx"` (ngày KHÔNG số 0 đầu) — xem `attendance-module.md §3 export mới + phiếu PDF hàng loạt theo Line/Nhóm` |
 | `/api/ProductionEmployeeImport` | `preview`, `confirm`, `apply-accumulation` (quyền riêng, ảnh hưởng lương — §3.8) |
 | `/api/ProductionEmployeeExport` | `export` (GET, trả file .xlsx — §3.8) |
-| `/api/ProductionEmployee` | `search`, `line-options`, `team-options`, `shift-team-options` (màn "Theo chuyền" tạo đơn OT, gate `OTForm.Create`), `page-nation` (màn "Nhân viên dưới chuyền" đọc-only, gate `Employee.View` — mới 2026-08-27b, §3.8b) |
+| `/api/ProductionEmployee` | `search`, `line-options`, `team-options`, `shift-team-options` (màn "Theo chuyền" tạo đơn OT, gate `OTForm.Create`), `page-nation` (màn "Nhân viên dưới chuyền" đọc-only, gate `ProductionEmployee.View` — đổi từ `Employee.View` 2026-09-26, §3.8b) |
 | `/api/ProductionOtReport` | `ticket-report?date=&departmentId=` (JSON), `hours-report-excel`/`times-report-excel`/`qry-export-excel`/`sum-export-data` (file .xlsx, 4 kiểu Excel độc lập), `ticket-batch?date=&departmentId=` (JSON, dữ liệu nền cho FE xuất PDF hàng loạt zip) — báo cáo dưới chuyền theo ngày, gate `Attendance.ProductionOtReport.View` — mới 2026-08-28, mở rộng 2026-09-03c, §11 |
 | `/api/EmployeeIdentityLinkImport` | `preview`, `confirm` (CẢ 2 nhận file trực tiếp, không phải rows JSON — có thể kèm ảnh chữ ký nhúng), `template` — liên kết Employee↔Identity User + tự tạo tài khoản nếu chưa có + gán chữ ký + gán Chức vụ/Người phụ trách Cây duyệt (cột B=MNV, C=UserName, D=RoleName, E=MaChucVu, F=NguoiPhuTrach="1", phạm vi Chức vụ/Người phụ trách LUÔN suy theo Bộ phận/Nhóm hiện tại của Employee — mở rộng 2026-09-03b), gate `Identity.User.BulkImport` (Admin-only, mới 2026-09-03, xem `attendance-module.md §Import Excel liên kết Identity ↔ Attendance`) |
 

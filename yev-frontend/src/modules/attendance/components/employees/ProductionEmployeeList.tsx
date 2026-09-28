@@ -55,6 +55,7 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
     const { setting } = useAttendanceSetting();
     const { user } = useAuth();
     const canUpdateOtLimit = hasPermission(user, "Attendance.Employee.UpdateOtLimit");
+    const canUpdateAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Update");
     // Sửa tay Team/Line/Nhóm ca/Trưởng nhóm (2026-09-04) — permission RIÊNG với Import (khác population:
     // Import nạp cả file, Update sửa nhanh 1 người), xem ProductionEmployeeEditDialog.tsx.
     const canUpdateProduction = hasPermission(user, "Attendance.ProductionEmployee.Update");
@@ -241,7 +242,7 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
             <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse text-left">
                     <thead>
-                        <tr className="whitespace-nowrap border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                        <tr className="whitespace-nowrap border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.08em] text-[#5e3f3a]">
                             <th className="px-3 py-2">{t("colCode")}</th>
                             <th className="px-3 py-2">{t("colFullName")}</th>
                             <th className="px-3 py-2">{t("colDepartment")}</th>
@@ -251,15 +252,14 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                             <th className="px-3 py-2">{t("colShiftTeam")}</th>
                             <th className="px-3 py-2">{t("colTaskName")}</th>
                             <th className="px-3 py-2">{t("colLeader")}</th>
-                            <th className="px-3 py-2">{t("colMonthToDate")}</th>
-                            <th className="px-3 py-2">{t("colYearToDate")}</th>
+                            <th className="px-3 py-2">{t("colAccumulation")}</th>
                             <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {!isLoading && items.length === 0 && (
                             <tr>
-                                <td colSpan={12} className="px-4 py-12">
+                                <td colSpan={11} className="px-4 py-12">
                                     <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                         <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                         {t("noData")}
@@ -295,17 +295,17 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                                             "-"
                                         )}
                                     </td>
-                                    <td className="px-3 py-2 text-sm">
-                                        <span className={accumulationBadgeClass(isMonthOverLimit)}>
-                                            {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                            {item.monthToDate}h
-                                        </span>
-                                    </td>
-                                    <td className="px-3 py-2 text-sm">
-                                        <span className={accumulationBadgeClass(isYearOverLimit)}>
-                                            {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                            {item.yearToDate}h
-                                        </span>
+                                    <td className="px-3 py-1.5 text-sm">
+                                        <div className="inline-flex items-center gap-1.5">
+                                            <span className={accumulationBadgeClass(isMonthOverLimit)} title={t("colMonthToDate")}>
+                                                {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                                {t("accMonthShort")} {item.monthToDate}h
+                                            </span>
+                                            <span className={accumulationBadgeClass(isYearOverLimit)} title={t("colYearToDate")}>
+                                                {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                                {t("accYearShort")} {item.yearToDate}h
+                                            </span>
+                                        </div>
                                     </td>
                                     <td className="px-3 py-2 text-right text-sm">
                                         {item.employeeId !== null && (
@@ -373,6 +373,7 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                 <AccumulationHistoryModal
                     employeeId={historyItem.employeeId}
                     employeeLabel={historyItem.label}
+                    canEdit={canUpdateAccumulation}
                     onClose={() => setHistoryItem(null)}
                 />
             )}

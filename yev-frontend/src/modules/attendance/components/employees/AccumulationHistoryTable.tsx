@@ -16,57 +16,57 @@ const badgeClass = (overLimit: boolean) =>
         overLimit ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]" : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
     }`;
 
-// Bảng 12 tháng lũy kế THẬT của 1 năm — dùng chung cho AccumulationHistoryModal (Admin ở EmployeeList,
-// người duyệt ở OtFormDetail) và AccumulationLookupPage (màn "Lũy kế nhân viên"). Ngưỡng cảnh báo tái
-// dùng đúng AttendanceSetting.monthlyOtHourLimit/yearlyOtHourLimit, cùng công thức badge đỏ đã có ở
-// EmployeeList.tsx (2026-08-11d, xem docs/docs-be/attendance-module.md §Lịch sử lũy kế).
+// Lũy kế THẬT của 1 năm, dạng lưới 12 ô (4 cột × 3 hàng) cho gọn — dùng trong AccumulationHistoryModal.
+// Ngưỡng cảnh báo tái dùng đúng AttendanceSetting.monthlyOtHourLimit/yearlyOtHourLimit (2026-08-11d, xem
+// docs/docs-be/attendance-module.md §Lịch sử lũy kế).
 export default function AccumulationHistoryTable({ data, setting }: AccumulationHistoryTableProps) {
     const t = useTranslations("Attendance.AccumulationHistory");
     const isYearOverLimit = data.yearTotalHours > setting.yearlyOtHourLimit;
+    const hasInitialBalance = data.initialBalanceHours !== undefined && data.initialBalanceHours !== 0;
 
     return (
         <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-2.5">
-                <span className="text-sm font-semibold text-[#191c1e]">{t("yearTotalLabel", { year: data.year })}</span>
-                <span className={badgeClass(isYearOverLimit)}>
-                    {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
-                    {data.yearTotalHours}h
-                </span>
+            <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-2.5">
+                <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-[#191c1e]">{t("yearTotalLabel", { year: data.year })}</span>
+                    <span className={badgeClass(isYearOverLimit)}>
+                        {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
+                        {data.yearTotalHours}h
+                    </span>
+                </div>
+                {hasInitialBalance && (
+                    <div className="mt-1 flex items-center justify-between text-xs text-[#5e3f3a]">
+                        <span>{t("initialBalanceLabel")}</span>
+                        <span className="font-semibold">{data.initialBalanceHours}h</span>
+                    </div>
+                )}
             </div>
-            <table className="min-w-full border-collapse text-left">
-                <thead>
-                    <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                        <th className="px-4 py-2">{t("colMonth")}</th>
-                        <th className="px-4 py-2">{t("colTotalHours")}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {data.initialBalanceHours !== undefined && data.initialBalanceHours !== 0 && (
-                        <tr className="border-b border-[#e0e3e5] bg-[#f8fafc]/60 font-medium">
-                            <td className="px-4 py-2 text-sm text-[#191c1e]">{t("initialBalanceLabel")}</td>
-                            <td className="px-4 py-2 text-sm">
-                                <span className={badgeClass(false)}>
-                                    {data.initialBalanceHours}h
-                                </span>
-                            </td>
-                        </tr>
-                    )}
-                    {data.months.map((month) => {
-                        const isOverLimit = month.totalHours > setting.monthlyOtHourLimit;
-                        return (
-                            <tr key={month.month} className="border-b border-[#f1f5f9]">
-                                <td className="px-4 py-2 text-sm text-[#5e3f3a]">{t("monthLabel", { month: month.month })}</td>
-                                <td className="px-4 py-2 text-sm">
-                                    <span className={badgeClass(isOverLimit)}>
-                                        {isOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                        {month.totalHours}h
-                                    </span>
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+
+            <div className="grid grid-cols-4 gap-2">
+                {data.months.map((month) => {
+                    const isOverLimit = month.totalHours > setting.monthlyOtHourLimit;
+                    return (
+                        <div
+                            key={month.month}
+                            className={`rounded-lg border px-2 py-1.5 text-center ${
+                                isOverLimit ? "border-[#e9bcb6] bg-[#fff4f2]" : "border-[#e0e3e5] bg-white"
+                            }`}
+                        >
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#8a8f94]">
+                                {t("monthShort", { month: month.month })}
+                            </div>
+                            <div
+                                className={`flex items-center justify-center gap-1 text-sm font-semibold ${
+                                    isOverLimit ? "text-[#930006]" : month.totalHours === 0 ? "text-[#b0b5ba]" : "text-[#191c1e]"
+                                }`}
+                            >
+                                {isOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                {month.totalHours}h
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }

@@ -7,6 +7,7 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
+import { OT_CATEGORIES_PERMISSIONS } from "@/modules/attendance/lib/otRoutePermissions";
 
 interface OtNavItem {
     key: string;
@@ -52,12 +53,7 @@ const navItems: OtNavItem[] = [
         key: "otCategories",
         href: "/ot/categories",
         icon: FolderCog,
-        permissions: [
-            "Attendance.Department.Create",
-            "Attendance.DepartmentApprovalStep.Update",
-            "Attendance.GroupApprovalStep.Update",
-            "Attendance.ProductionOtReport.View",
-        ],
+        permissions: OT_CATEGORIES_PERMISSIONS,
     },
     { key: "otSignature", href: "/ot/signature", icon: PenTool, permissions: ["Attendance.UserSignature.Update"] },
     {

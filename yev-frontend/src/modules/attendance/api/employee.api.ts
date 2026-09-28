@@ -1,6 +1,6 @@
 import { api } from "@/lib/client";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
-import type { EmployeeAccumulationHistoryYearDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
+import type { EmployeeAccumulationHistoryYearDto, UpdateEmployeeAccumulationDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -19,6 +19,8 @@ const ENDPOINTS = {
         assignGroupJobTitle: (id: number, groupId: number) => `/Employee/${id}/group-job-title?groupId=${groupId}`,
         getInMyScope: "/Employee/in-my-scope",
         getAccumulationHistory: (id: number, year: number) => `/Employee/${id}/accumulation-history?year=${year}`,
+        getAccumulationHistoryForManage: (id: number, year: number) => `/Employee/${id}/accumulation-history/manage?year=${year}`,
+        updateAccumulationHistory: (id: number) => `/Employee/${id}/accumulation-history`,
         getMyScope: "/Employee/my-scope",
     },
 } as const;
@@ -162,6 +164,14 @@ export const EmployeeApi = {
     },
     getAccumulationHistory: async (id: number, year: number) => {
         const response = await api.get<ApiResponse<EmployeeAccumulationHistoryYearDto>>(ENDPOINTS.EMPLOYEE.getAccumulationHistory(id, year));
+        return response.data;
+    },
+    getAccumulationHistoryForManage: async (id: number, year: number) => {
+        const response = await api.get<ApiResponse<EmployeeAccumulationHistoryYearDto>>(ENDPOINTS.EMPLOYEE.getAccumulationHistoryForManage(id, year));
+        return response.data;
+    },
+    updateAccumulationHistory: async (id: number, data: UpdateEmployeeAccumulationDto) => {
+        const response = await api.put<ApiResponse<EmployeeAccumulationHistoryYearDto>>(ENDPOINTS.EMPLOYEE.updateAccumulationHistory(id), data);
         return response.data;
     },
     getMyScope: async () => {

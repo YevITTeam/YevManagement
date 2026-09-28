@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { useRouter } from "@/navigation";
+import { useRouter, usePathname } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
-import { hasModuleAccess } from "@/modules/auth/lib/permissions";
+import { hasAnyPermission, hasModuleAccess } from "@/modules/auth/lib/permissions";
+import { OT_ROUTE_PERMISSIONS } from "@/modules/attendance/lib/otRoutePermissions";
 
 // Chặn truy cập trực tiếp bằng URL vào /ot/* nếu user không có permission module Attendance —
 // mirror PcAccessGuard.tsx (src/app/[locale]/(pc-manager)/PcAccessGuard.tsx).
 export default function OtAccessGuard({ children }: { children: ReactNode }) {
     const router = useRouter();
     const { user, isLoading } = useAuth();
-    const canAccess = hasModuleAccess(user, "Attendance");
+    const pathname = usePathname() || "";
+    // Ngoài quyền module, từng trang còn phải đủ quyền riêng của nó (vào thẳng URL cũng bị chặn, không
+    // chỉ ẩn menu) — bảng quyền dùng chung với sidebar, xem otRoutePermissions.ts.
+    const routeRule = OT_ROUTE_PERMISSIONS.find((rule) => pathname === rule.prefix || pathname.startsWith(rule.prefix + "/"));
+    const canAccess = hasModuleAccess(user, "Attendance") && (!routeRule || hasAnyPermission(user, routeRule.permissions));
 
     useEffect(() => {
         if (!isLoading && !canAccess) {

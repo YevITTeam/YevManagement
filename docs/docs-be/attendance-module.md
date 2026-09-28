@@ -579,6 +579,13 @@ Confirm dùng lại được mỗi tháng, cộng thêm vài thay đổi nghiệ
 - **Permission mới** (migration Identity `AddProductionEmployeeImportPermissions`, gán theo Role đang
   giữ `Attendance.Employee.Create`): `Attendance.ProductionEmployee.Import`,
   `Attendance.ProductionEmployee.Export`, `Attendance.EmployeeAccumulation.Import`.
+- **Sửa tay lũy kế + đổi Bộ phận/Nhóm nhân viên** (2026-09-26): quyền `Attendance.EmployeeAccumulation.Update`
+  (migration Identity `AddEmployeeAccumulationUpdatePermission`, gán theo Role đang giữ `Attendance.Employee.Update`;
+  Người phụ trách Bộ phận HOẶC Nhóm tự động có — `ApprovalStepCoordinatorPermissions.EmployeeAccumulationUpdateCode`).
+  `EmployeeService.UpdateAccumulationHistoryAsync` ghi đè trực tiếp `EmployeeAccumulationHistory` (từng tháng 1..12 +
+  số dư đầu kỳ Month=0), scope kiểm ở `EnsureCanManageAccumulationAsync`. FE: nút "Sửa lũy kế" trong
+  `AccumulationHistoryModal` (`canEdit`), form ở `AccumulationHistoryEditor.tsx`. `EmployeeForm` có thêm ô Bộ phận
+  lọc danh sách Nhóm (Bộ phận của nhân viên thường vẫn suy ra từ Nhóm, không lưu riêng).
 
 ### §Lũy kế dự kiến — cảnh báo cả những đơn khác đang chờ duyệt (2026-08-06, REDESIGN 2026-08-19)
 
@@ -2259,13 +2266,12 @@ Nhóm"). Hệ quả sai: Line Leader đứng ra lập đơn OT cho cả Line mì
 tăng ca hôm đó sẽ bị chặn vô lý bởi thông báo "Bạn chỉ được tạo đơn có chính bạn trong danh sách nhân
 viên."
 
-**Quy tắc mới** (đã xác nhận với người dùng): Admin luôn được tạo (không đổi); người thường phải là
-**Line Leader thật** (`ProductionEmployee.IsLeader=true`) của **ít nhất 1 Line** có mặt trong danh
-sách nhân viên của đơn — không còn yêu cầu chính họ có tên trong danh sách tăng ca. Sửa
-`OtFormService.CreateProductionFormAsync`: suy `orderLineIds` (các `ProductionLineId` phân biệt của
-những nhân viên trong `request.Employees`, qua `ProductionEmployee`), rồi kiểm tra
-`creatorEmployee.Id` có ít nhất 1 dòng `ProductionEmployee.IsLeader=true` trùng 1 trong các
-`orderLineIds` đó không.
+**Quy tắc hiện hành (2026-09-26):** ai được tạo đơn theo chuyền do QUYỀN `Attendance.OTForm.CreateProduction`
+quyết định — kiểm ở `OtFormController.Create` khi `IsProductionForm = true`, KHÔNG còn ép "phải là Line Leader thật
+của Line trong đơn" trong `OtFormService`. Admin cấu hình quyền theo Chức vụ (đã thêm vào `JobTitlePermissionWhitelist`;
+tick sẵn cho Chức vụ "Line Leader") hoặc gán riêng từng user. Người thường vẫn phải liên kết với 1 `Employee`. FE
+(`CreateOtFormPage`) ẩn tab "Theo chuyền" nếu thiếu quyền. Trước đây: bắt buộc `ProductionEmployee.IsLeader=true` của ít
+nhất 1 Line trong đơn — bỏ vì cần cấu hình được cho user/chức vụ khác.
 
 Không đổi `AddEmployeeAsync`/`UpdateAsync` (đơn theo chuyền) — 2 hàm đó vốn đã dùng đúng quy tắc
 "candidate của bước Pending hiện tại", không mắc lỗi tương tự.
@@ -2474,6 +2480,17 @@ hoạch chi tiết + lý do từng quyết định: `~/.claude/plans/attendance-
   "chưa giữ Role X" (không còn tra được theo Role nữa, BE chặn bằng permission ở tầng Service).
   `OtFormTabsPage.tsx`: tab "Chờ tôi ký duyệt" trước đây ẩn cho ai không giữ Role `Trưởng nhóm`, nay
   hiện cho mọi người có `Attendance.OTForm.Create` (không còn cách nào tra "là Trưởng nhóm" từ FE).
+
+> **Cập nhật 2026-09-26 (theo yêu cầu người dùng):** `Attendance.ProductionEmployee.Import` và
+> `Attendance.EmployeeAccumulation.Import` **không còn tự cấp** cho Người phụ trách (migration Identity
+> `AddProductionEmployeeViewPermission` đã gỡ các dòng `IsAutoGranted` cũ). Màn "Nhân viên dưới chuyền" có
+> quyền xem riêng `Attendance.ProductionEmployee.View`; cả nhóm quyền `ProductionEmployee.View/Update/Import/Export` +
+> `EmployeeAccumulation.Import` do Admin chỉ định rõ — theo Chức vụ (đã thêm vào `JobTitlePermissionWhitelist`, chọn ở
+> mục Quyền của Chức vụ) hoặc gán từng user. Menu Excel và công tắc "Nhân viên / Nhân viên dưới chuyền" ở FE tự ẩn nếu
+> không có quyền tương ứng.
+> **Ẩn mục theo quyền (FE):** mỗi tab ở "Danh mục" gate riêng theo quyền quản trị của nó (`CategoryManagement.tsx`);
+> bảng quyền theo trang `/ot/*` nằm ở `modules/attendance/lib/otRoutePermissions.ts`, dùng chung cho menu
+> (`OtManagerSidebar`) và chặn vào thẳng URL (`OtAccessGuard`).
 
 ### §Báo cáo dưới chuyền theo ngày (2026-08-28)
 
@@ -2839,8 +2856,7 @@ suy luận theo Chức vụ) thay vì phát minh khái niệm mới hay dùng `J
 - **Tự động cấp quyền cho Coordinator** — mở rộng `ApprovalStepCoordinatorPermissions` (đã có sẵn cơ
   chế `SyncAutoGrantedPermissionsCoreAsync` cấp `DepartmentApprovalStep.Update` cho Coordinator từ
   trước) thêm 3 permission mới, TẤT CẢ tự cấp NGAY khi Admin gán ai đó làm Coordinator của 1 Phòng ban
-  (không cần bước gán Role riêng): `Attendance.ProductionEmployee.Import`,
-  `Attendance.EmployeeAccumulation.Import`, `Attendance.Employee.UpdateOtLimit` (mới, xem dưới) — hiệu
+  (không cần bước gán Role riêng): `Attendance.Employee.UpdateOtLimit` (mới, xem dưới) — hiệu
   lực ngay, không cần đăng nhập lại (cùng cơ chế `SyncAutoGrantedPermissionsAsync` đã có).
 - **`ProductionEmployeeImportService.PreviewAsync`/`ConfirmAsync`** — thêm `(userName, isAdmin)`, check
   1 LẦN cho cả file qua `EnsureManufacturingDepartmentAccessAsync` (đích đã hardcode cứng vào Phòng ban

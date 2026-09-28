@@ -41,6 +41,10 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const canUpdateEmployee = hasPermission(user, "Attendance.Employee.Update");
     const canDeleteEmployee = hasPermission(user, "Attendance.Employee.Delete");
     const canUpdateOtLimit = hasPermission(user, "Attendance.Employee.UpdateOtLimit");
+    const canUpdateAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Update");
+    const canCreateEmployee = hasPermission(user, "Attendance.Employee.Create");
+    // Chế độ "Nhân viên dưới chuyền" chỉ hiện với người được Admin cấp quyền xem riêng (2026-09-26).
+    const canViewProduction = hasPermission(user, "Attendance.ProductionEmployee.View");
     // Import liên kết Identity ↔ Attendance + tự tạo tài khoản + chữ ký (2026-09-03) — permission riêng
     // CHỈ Admin có sẵn (không auto-grant qua JobTitle/Coordinator), xem docs/docs-be/attendance-module.md.
     const canImportIdentityLink = hasPermission(user, "Identity.User.BulkImport");
@@ -294,53 +298,49 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     // Import lũy kế OT theo THÁNG, tổng quát cho MỌI Phòng ban (2026-09-03) — dùng lại đúng permission
     // đã tự động cấp cho Người phụ trách Bộ phận từ trước, không phải permission mới.
     const canImportMonthlyAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Import");
-    const productionExcelActions = (
-        <ActionMenu
-            label={t("excelActionsLabel")}
-            icon={<FileSpreadsheet className="h-3.5 w-3.5" />}
-            items={[
-                ...(canImportProduction ? [{ label: t("importProductionExcel"), onClick: () => setProductionImportOpen(true) }] : []),
-                ...(canExportProduction
-                    ? [
-                          {
-                              label: isExportingProduction ? t("exportingProduction") : t("exportProductionExcel"),
-                              onClick: handleExportProduction,
-                              disabled: isExportingProduction,
-                          },
-                      ]
-                    : []),
-                ...(canUpdateOtLimit
-                    ? [{ label: t("otHourLimitImportMenuLabel"), onClick: () => setOtHourLimitImportOpen(true) }]
-                    : []),
-                ...(canImportMonthlyAccumulation
-                    ? [{ label: t("monthlyAccumulationImportMenuLabel"), onClick: () => setMonthlyAccumulationImportOpen(true) }]
-                    : []),
-            ]}
-        />
-    );
+    const productionExcelItems = [
+        ...(canImportProduction ? [{ label: t("importProductionExcel"), onClick: () => setProductionImportOpen(true) }] : []),
+        ...(canExportProduction
+            ? [
+                  {
+                      label: isExportingProduction ? t("exportingProduction") : t("exportProductionExcel"),
+                      onClick: handleExportProduction,
+                      disabled: isExportingProduction,
+                  },
+              ]
+            : []),
+        ...(canUpdateOtLimit ? [{ label: t("otHourLimitImportMenuLabel"), onClick: () => setOtHourLimitImportOpen(true) }] : []),
+        ...(canImportMonthlyAccumulation
+            ? [{ label: t("monthlyAccumulationImportMenuLabel"), onClick: () => setMonthlyAccumulationImportOpen(true) }]
+            : []),
+    ];
+    // Không còn mục nào được phép → ẩn hẳn nút Excel thay vì hiện menu rỗng.
+    const productionExcelActions =
+        productionExcelItems.length > 0 ? (
+            <ActionMenu label={t("excelActionsLabel")} icon={<FileSpreadsheet className="h-3.5 w-3.5" />} items={productionExcelItems} />
+        ) : null;
 
     // Gom "Import Excel" + "Liên kết tài khoản đăng nhập" + "Áp dụng lũy kế OT theo tháng" vào 1 menu
     // (mirror productionExcelActions ở trên) thay vì nhiều nút rời — giảm số nút tràn hàng trên toolbar
     // view "Nhân viên" (2026-09-04, theo yêu cầu người dùng "làm lại giao diện cho đẹp lại"). Mục lũy kế
     // trước đó CHỈ có ở menu Excel của tab "Nhân viên dưới chuyền" dù BE đã tổng quát cho mọi Phòng ban
     // (kể cả văn phòng) — thiếu sót phát hiện khi người dùng hỏi lại, bổ sung nốt ở đây.
-    const employeeExcelActions = (
-        <ActionMenu
-            label={t("excelActionsLabel")}
-            icon={<FileSpreadsheet className="h-3.5 w-3.5" />}
-            items={[
-                { label: t("importExcel"), onClick: () => setImportOpen(true) },
-                ...(canImportIdentityLink ? [{ label: t("identityLinkMenuLabel"), onClick: () => setIdentityLinkImportOpen(true) }] : []),
-                ...(canImportMonthlyAccumulation
-                    ? [{ label: t("monthlyAccumulationImportMenuLabel"), onClick: () => setMonthlyAccumulationImportOpen(true) }]
-                    : []),
-            ]}
-        />
-    );
+    const employeeExcelItems = [
+        ...(canCreateEmployee ? [{ label: t("importExcel"), onClick: () => setImportOpen(true) }] : []),
+        ...(canImportIdentityLink ? [{ label: t("identityLinkMenuLabel"), onClick: () => setIdentityLinkImportOpen(true) }] : []),
+        ...(canImportMonthlyAccumulation
+            ? [{ label: t("monthlyAccumulationImportMenuLabel"), onClick: () => setMonthlyAccumulationImportOpen(true) }]
+            : []),
+    ];
+    const employeeExcelActions =
+        employeeExcelItems.length > 0 ? (
+            <ActionMenu label={t("excelActionsLabel")} icon={<FileSpreadsheet className="h-3.5 w-3.5" />} items={employeeExcelItems} />
+        ) : null;
 
     // Công tắc Nhân viên / Nhân viên dưới chuyền — đặt ngay đầu thanh công cụ của từng bảng (trước là 1 hàng
     // riêng phía trên) để bớt 1 hàng, nhường chỗ cho bảng.
-    const viewModeSwitch = (
+    const effectiveViewMode: ViewMode = canViewProduction ? viewMode : "employee";
+    const viewModeSwitch = !canViewProduction ? null : (
         <div className="inline-flex h-9 shrink-0 items-center rounded-lg border border-[#e0e3e5] bg-white p-0.5">
             {(["employee", "production"] as const).map((mode) => (
                 <button
@@ -348,7 +348,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     type="button"
                     onClick={() => setViewMode(mode)}
                     className={`h-full cursor-pointer whitespace-nowrap rounded-md px-2.5 text-[13px] font-semibold transition ${
-                        viewMode === mode ? "bg-[#fff4f2] text-[#e3000f]" : "text-[#5e3f3a] hover:text-[#191c1e]"
+                        effectiveViewMode === mode ? "bg-[#fff4f2] text-[#e3000f]" : "text-[#5e3f3a] hover:text-[#191c1e]"
                     }`}
                 >
                     {mode === "employee" ? t("viewModeEmployee") : t("viewModeProduction")}
@@ -359,7 +359,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
 
     return (
         <div className="space-y-4">
-            {viewMode === "production" ? (
+            {effectiveViewMode === "production" ? (
                 <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                     <ProductionEmployeeList ref={productionListRef} actions={productionExcelActions} leading={viewModeSwitch} />
                 </section>
@@ -611,6 +611,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 <AccumulationHistoryModal
                     employeeId={historyEmployee.id}
                     employeeLabel={`${historyEmployee.lastName} ${historyEmployee.firstName} (${historyEmployee.code})`}
+                    canEdit={canUpdateAccumulation}
                     onClose={() => setHistoryEmployee(null)}
                 />
             )}

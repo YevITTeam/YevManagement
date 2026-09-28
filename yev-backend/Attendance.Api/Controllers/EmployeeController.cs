@@ -98,6 +98,23 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
+        // Xem/sửa tay lũy kế — Admin hoặc Người phụ trách Bộ phận/Nhóm (scope kiểm ở service).
+        [RequirePermission("Attendance.EmployeeAccumulation.Update")]
+        [HttpGet("{id}/accumulation-history/manage")]
+        public async Task<ActionResult<ApiResponse<EmployeeAccumulationHistoryYearDto>>> GetAccumulationHistoryForManage(int id, [FromQuery] int year)
+        {
+            var result = await _employeeService.GetAccumulationHistoryForManageAsync(CurrentUserName, User.IsInRole(AdminRole), id, year);
+            return Success(result);
+        }
+
+        [RequirePermission("Attendance.EmployeeAccumulation.Update")]
+        [HttpPut("{id}/accumulation-history")]
+        public async Task<ActionResult<ApiResponse<EmployeeAccumulationHistoryYearDto>>> UpdateAccumulationHistory(int id, [FromBody] UpdateEmployeeAccumulationDto request)
+        {
+            var result = await _employeeService.UpdateAccumulationHistoryAsync(CurrentUserName, User.IsInRole(AdminRole), id, request);
+            return Success(result, "Cập nhật lũy kế thành công.");
+        }
+
         // Admin dùng ở màn "Phân quyền duyệt" (UserApprovalScope) để tra userName bất kỳ đang thuộc
         // Group/Department nào trước khi gán scope — gợi ý, không bắt buộc (404 nếu userName đó chưa
         // được gán Employee.UserName, thường gặp với Trưởng phòng/Trưởng xưởng/TGĐ vì họ không nhất

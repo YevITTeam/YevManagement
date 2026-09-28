@@ -31,32 +31,48 @@ export default function CategoryManagement() {
     const t = useTranslations("Attendance.CategoryManagement");
     const tCommon = useTranslations("Common");
     const { user } = useAuth();
-    // "Danh mục" vốn chỉ dành cho Admin/Người phụ trách Cây duyệt — 8 tab quản trị vẫn gate chung theo
-    // 3 permission này (giữ nguyên hành vi cũ). Riêng tab "Báo cáo" (2026-08-28b, theo yêu cầu người
-    // dùng cho Group Leader tự xem) gate RIÊNG bằng ProductionOtReport.View — ai chỉ có permission này
-    // (không có 3 permission trên) vẫn vào được "Danh mục" nhưng CHỈ thấy đúng 1 tab "Báo cáo", không
-    // thấy 8 tab quản trị còn lại (tránh lộ UI CRUD Department/Group/... cho người không có quyền).
-    const canManageCategories = hasAnyPermission(user, [
-        "Attendance.Department.Create",
-        "Attendance.DepartmentApprovalStep.Update",
-        "Attendance.GroupApprovalStep.Update",
-    ]);
+    // Mỗi tab tự gate theo ĐÚNG quyền quản trị của nó (2026-09-26) — trước đây 8 tab chung 1 điều kiện
+    // "canManageCategories" nên Người phụ trách Cây duyệt thấy cả tab Bộ phận/Nhóm/Lý do/Cấu hình...
+    // dù không có quyền gì trong đó. Dùng .Create/.Update (không dùng .View vì View đã cấp rộng cho
+    // Trưởng nhóm/Người phụ trách chỉ để nạp dropdown).
     const canViewReports = hasPermission(user, "Attendance.ProductionOtReport.View");
+    const canCreateEmployee = hasPermission(user, "Attendance.Employee.Create");
     // "settings" không có addLabel — tab này không phải danh sách CRUD nên không có nút "Thêm mới"
     // (xem chỗ ẩn nút bên dưới).
     const allTabs: { key: CategoryTab; label: string; addLabel: string | null; visible: boolean }[] = [
-        { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments"), visible: canManageCategories },
-        { key: "groups", label: t("tabGroups"), addLabel: t("addGroups"), visible: canManageCategories },
-        { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons"), visible: canManageCategories },
-        { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases"), visible: canManageCategories },
-        { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles"), visible: canManageCategories },
-        { key: "approval-steps", label: t("tabApprovalSteps"), addLabel: null, visible: canManageCategories },
-        { key: "employees", label: t("tabEmployees"), addLabel: t("addEmployees"), visible: canManageCategories },
+        { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments"), visible: hasPermission(user, "Attendance.Department.Create") },
+        { key: "groups", label: t("tabGroups"), addLabel: t("addGroups"), visible: hasPermission(user, "Attendance.Group.Create") },
+        { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons"), visible: hasPermission(user, "Attendance.Reason.Create") },
+        { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases"), visible: hasPermission(user, "Attendance.OtCase.Create") },
+        { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles"), visible: hasPermission(user, "Attendance.JobTitle.Create") },
+        {
+            key: "approval-steps",
+            label: t("tabApprovalSteps"),
+            addLabel: null,
+            visible: hasAnyPermission(user, [
+                "Attendance.DepartmentApprovalStep.Update",
+                "Attendance.GroupApprovalStep.Update",
+                "Attendance.ProductionApprovalStep.Update",
+            ]),
+        },
+        {
+            key: "employees",
+            label: t("tabEmployees"),
+            addLabel: canCreateEmployee ? t("addEmployees") : null,
+            visible: hasAnyPermission(user, [
+                "Attendance.Employee.Create",
+                "Attendance.Employee.Update",
+                "Attendance.Employee.Delete",
+                "Attendance.Employee.UpdateOtLimit",
+                "Attendance.EmployeeAccumulation.Update",
+                "Attendance.ProductionEmployee.View",
+            ]),
+        },
         { key: "reports", label: t("tabReports"), addLabel: null, visible: canViewReports },
-        { key: "settings", label: t("tabSettings"), addLabel: null, visible: canManageCategories },
+        { key: "settings", label: t("tabSettings"), addLabel: null, visible: hasPermission(user, "Attendance.Setting.Update") },
     ];
     const tabs = allTabs.filter((tab) => tab.visible);
-    const defaultTabKey: CategoryTab = canManageCategories ? "departments" : canViewReports ? "reports" : "departments";
+    const defaultTabKey: CategoryTab = tabs[0]?.key ?? "departments";
     const [activeTab, setActiveTabState] = useState<CategoryTab>(defaultTabKey);
     // Nếu tab đang chọn không còn nằm trong danh sách thấy được (vd permission user thay đổi giữa
     // chừng, hoặc lần render đầu "user" từ AuthContext chưa kịp có) thì tự chuyển về tab mặc định phù
