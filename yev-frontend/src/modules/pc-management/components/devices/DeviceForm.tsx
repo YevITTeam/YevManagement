@@ -81,9 +81,9 @@ function toDateInputValue(value: string | null | undefined) {
     return value.slice(0, 10);
 }
 
-const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+const fieldLabelClassName = "mb-1 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
-    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+    "h-10 [@media(max-height:820px)]:h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 export default function DeviceForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: DeviceFormProps) {
     const [values, setValues] = useState<DeviceFormValues>(emptyValues);
@@ -257,16 +257,16 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center py-8 [@media(max-height:820px)]:py-2">
             <div className="fixed inset-0 bg-black/40" onClick={() => !loading && onClose()} />
 
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="device-form-title"
-                className="z-60 mx-4 w-full max-w-4xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 max-h-full w-full max-w-4xl overflow-y-auto rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl [@media(max-height:820px)]:p-4"
             >
-                <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4 [@media(max-height:820px)]:mb-3 [@media(max-height:820px)]:pb-2">
                     <h3 id="device-form-title" className="text-lg font-semibold text-[#191c1e]">
                         {mode === "create" ? "Thêm thiết bị" : "Cập nhật thiết bị"}
                     </h3>
@@ -280,8 +280,8 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <form onSubmit={handleSubmit} className="space-y-4 [@media(max-height:820px)]:space-y-3">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 [@media(max-height:820px)]:gap-3">
                         <label className="block">
                             <span className={fieldLabelClassName}>Mã thiết bị</span>
                             <input
@@ -617,7 +617,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                         />
                     </label>
 
-                    <div className="flex justify-end gap-3 pt-2">
+                    <div className="sticky bottom-0 -mb-px flex justify-end gap-3 bg-white pt-2 [@media(max-height:820px)]:pt-1">
                         <button
                             type="button"
                             onClick={onClose}
