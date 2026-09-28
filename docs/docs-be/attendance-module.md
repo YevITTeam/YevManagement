@@ -2266,12 +2266,14 @@ Nhóm"). Hệ quả sai: Line Leader đứng ra lập đơn OT cho cả Line mì
 tăng ca hôm đó sẽ bị chặn vô lý bởi thông báo "Bạn chỉ được tạo đơn có chính bạn trong danh sách nhân
 viên."
 
-**Quy tắc hiện hành (2026-09-26):** ai được tạo đơn theo chuyền do QUYỀN `Attendance.OTForm.CreateProduction`
-quyết định — kiểm ở `OtFormController.Create` khi `IsProductionForm = true`, KHÔNG còn ép "phải là Line Leader thật
-của Line trong đơn" trong `OtFormService`. Admin cấu hình quyền theo Chức vụ (đã thêm vào `JobTitlePermissionWhitelist`;
-tick sẵn cho Chức vụ "Line Leader") hoặc gán riêng từng user. Người thường vẫn phải liên kết với 1 `Employee`. FE
-(`CreateOtFormPage`) ẩn tab "Theo chuyền" nếu thiếu quyền. Trước đây: bắt buộc `ProductionEmployee.IsLeader=true` của ít
-nhất 1 Line trong đơn — bỏ vì cần cấu hình được cho user/chức vụ khác.
+**Quy tắc hiện hành (2026-09-28):** ai được tạo đơn theo chuyền do QUYỀN `Attendance.OTForm.CreateProduction`
+quyết định (kiểm ở `OtFormController.Create` khi `IsProductionForm = true`) — Admin cấu hình quyền theo Chức vụ
+(đã thêm vào `JobTitlePermissionWhitelist`; tick sẵn cho Chức vụ "Line Leader") hoặc gán riêng từng user, KHÔNG
+còn hardcode "chỉ Line Leader" như trước. Nhưng có quyền không có nghĩa được tạo cho MỌI Line: `OtFormService.
+CreateProductionFormAsync` vẫn giữ lại (không phải Admin) yêu cầu creator có `ProductionEmployee.IsLeader=true`
+của ÍT NHẤT 1 Line trong danh sách nhân viên của đơn — scope theo Line vẫn còn, chỉ khác là AI được cấp quyền
+"tạo đơn theo chuyền" giờ cấu hình được thay vì cứng hoá "phải là Line Leader". Người thường vẫn phải liên kết
+với 1 `Employee`. FE (`CreateOtFormPage`) ẩn tab "Theo chuyền" nếu thiếu quyền.
 
 Không đổi `AddEmployeeAsync`/`UpdateAsync` (đơn theo chuyền) — 2 hàm đó vốn đã dùng đúng quy tắc
 "candidate của bước Pending hiện tại", không mắc lỗi tương tự.
@@ -2488,6 +2490,11 @@ hoạch chi tiết + lý do từng quyết định: `~/.claude/plans/attendance-
 > `EmployeeAccumulation.Import` do Admin chỉ định rõ — theo Chức vụ (đã thêm vào `JobTitlePermissionWhitelist`, chọn ở
 > mục Quyền của Chức vụ) hoặc gán từng user. Menu Excel và công tắc "Nhân viên / Nhân viên dưới chuyền" ở FE tự ẩn nếu
 > không có quyền tương ứng.
+> **Scope theo Người phụ trách (2026-09-28):** có quyền `Attendance.ProductionEmployee.View` không còn nghĩa là xem
+> được TOÀN công ty — `ProductionEmployeeService.GetPagedAsync` (nhận thêm `callerUserName`/`isAdmin`) lọc còn lại
+> nhân sự thuộc Phòng ban (`GetManagedDepartmentIdsAsync`) hoặc Nhóm (`GroupApprovalStepCoordinators`) mà người gọi
+> đang phụ trách; Admin không bị lọc. Dòng `ProductionEmployee` chưa gắn `Employee` (chưa resolve) luôn bị ẩn khỏi
+> người xem có scope hẹp vì không xác định được Phòng ban/Nhóm.
 > **Ẩn mục theo quyền (FE):** mỗi tab ở "Danh mục" gate riêng theo quyền quản trị của nó (`CategoryManagement.tsx`);
 > bảng quyền theo trang `/ot/*` nằm ở `modules/attendance/lib/otRoutePermissions.ts`, dùng chung cho menu
 > (`OtManagerSidebar`) và chặn vào thẳng URL (`OtAccessGuard`).
@@ -2871,7 +2878,9 @@ suy luận theo Chức vụ) thay vì phát minh khái niệm mới hay dùng `J
   `Attendance.Employee.Update` (permission đó còn cho sửa Code/Tên/Group/... của MỌI nhân viên, quá
   rộng để cấp cho người phụ trách 1 Phòng ban). Endpoint mới `PUT /api/Employee/{id}/ot-limit`
   (`EmployeeService.UpdateOtLimitAsync`) — CHỈ set `CustomMonthlyOtHourLimit`/`CustomYearlyOtHourLimit`,
-  scope qua `IDepartmentAccessGuard` (resolve Phòng ban nhân viên đó rồi check). `UpdateEmployeeDto`/
+  scope qua `EnsureCanManageDeptOrGroupScopeAsync` (2026-09-28: mở rộng từ chỉ-Phòng-ban sang cả Phòng
+  ban lẫn Nhóm — phụ trách Phòng ban sửa được cả phòng, chỉ phụ trách Nhóm thì chỉ sửa được đúng Nhóm
+  đó; tự cấp cho CẢ 2 vai trò qua `SyncAutoGrantedPermissionsCoreAsync`). `UpdateEmployeeDto`/
   `EmployeeService.UpdateAsync` (PUT /{id} chung) KHÔNG còn đụng 2 field này nữa (cố ý — tránh
   wipe về null mỗi khi Admin sửa thông tin cơ bản qua form chung) — đã verify sống: set giá trị test
   qua endpoint mới → gọi PUT /{id} chung với dữ liệu khác không đổi → xác nhận 2 field KHÔNG bị mất →

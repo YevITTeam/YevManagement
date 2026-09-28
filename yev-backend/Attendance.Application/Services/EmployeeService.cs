@@ -371,7 +371,8 @@ namespace Attendance.Application.Services
         {
             var employee = (await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId && !x.IsDeleted, x => x.Group!))
                 .OrThrowNotFound("Nhân viên", employeeId);
-            await EnsureCanManageAccumulationAsync(callerUserName, isAdmin, employee);
+            await EnsureCanManageDeptOrGroupScopeAsync(callerUserName, isAdmin, employee,
+                "Bạn chỉ được sửa lũy kế của nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
             return await BuildAccumulationYearDtoAsync(employee, year);
         }
 
@@ -382,7 +383,8 @@ namespace Attendance.Application.Services
         {
             var employee = (await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId && !x.IsDeleted, x => x.Group!))
                 .OrThrowNotFound("Nhân viên", employeeId);
-            await EnsureCanManageAccumulationAsync(callerUserName, isAdmin, employee);
+            await EnsureCanManageDeptOrGroupScopeAsync(callerUserName, isAdmin, employee,
+                "Bạn chỉ được sửa lũy kế của nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
 
             var hoursByMonth = new Dictionary<int, decimal> { [0] = request.InitialBalanceHours };
             foreach (var m in request.Months)
@@ -422,7 +424,12 @@ namespace Attendance.Application.Services
 
         // Admin: luôn được. Người khác: phải là Người phụ trách (Admin gán tay) đúng Bộ phận chứa nhân
         // viên, hoặc đúng Nhóm của nhân viên — Người phụ trách Nhóm chỉ đụng được nhân viên trong Nhóm đó.
-        private async Task EnsureCanManageAccumulationAsync(string callerUserName, bool isAdmin, Employee employee)
+        // Dùng chung cho mọi thao tác "sửa 1 Employee cụ thể" mà quyền được cấp theo Người phụ trách
+        // (lũy kế, giới hạn OT): phụ trách Phòng ban → sửa được cả phòng; chỉ phụ trách Nhóm → chỉ sửa
+        // được đúng Nhóm đó. Admin luôn qua (2026-09-28, theo yêu cầu người dùng — Attendance.Employee.
+        // UpdateOtLimit trước đây chỉ scope theo Phòng ban qua IDepartmentAccessGuard, không cho Người
+        // phụ trách Nhóm dùng được dù đã được cấp quyền).
+        private async Task EnsureCanManageDeptOrGroupScopeAsync(string callerUserName, bool isAdmin, Employee employee, string errorMessage)
         {
             if (isAdmin) return;
 
@@ -438,7 +445,7 @@ namespace Attendance.Application.Services
                 if (isGroupCoordinator) return;
             }
 
-            throw new DomainException("Bạn chỉ được sửa lũy kế của nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
+            throw new DomainException(errorMessage);
         }
 
         private async Task<EmployeeAccumulationHistoryYearDto> BuildAccumulationYearDtoAsync(Employee employee, int year)
@@ -643,21 +650,20 @@ namespace Attendance.Application.Services
         }
 
         // Sửa RIÊNG giới hạn OT/tháng/năm (2026-08-29) — permission hẹp
-        // Attendance.Employee.UpdateOtLimit, scope theo Phòng ban qua IDepartmentAccessGuard (Admin bỏ
-        // qua). Chỉ set đúng 2 field này, không đụng field nào khác của Employee — xem
-        // docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban.
+        // Attendance.Employee.UpdateOtLimit, scope theo Người phụ trách Phòng ban/Nhóm (2026-09-28: đổi
+        // từ chỉ-Phòng-ban sang dùng chung EnsureCanManageDeptOrGroupScopeAsync — phụ trách Phòng ban
+        // sửa được cả phòng, chỉ phụ trách Nhóm thì chỉ sửa được đúng Nhóm đó). Chỉ set đúng 2 field
+        // này, không đụng field nào khác của Employee — xem docs/docs-be/attendance-module.md §Phân
+        // quyền theo Phòng ban.
         public async Task<EmployeeDto> UpdateOtLimitAsync(string userName, bool isAdmin, int employeeId, UpdateEmployeeOtLimitDto request)
         {
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId && !x.IsDeleted, x => x.Group!);
             employee.OrThrowNotFound("Nhân viên", employeeId);
 
-            var resolvedDepartmentId = employee!.DepartmentId ?? employee.Group?.DepartmentId;
-            if (resolvedDepartmentId == null)
-                throw new DomainException("Nhân viên chưa thuộc Phòng ban/Nhóm nào — không xác định được phạm vi để sửa.");
+            await EnsureCanManageDeptOrGroupScopeAsync(userName, isAdmin, employee!,
+                "Bạn chỉ được sửa giới hạn OT của nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
 
-            await _departmentAccessGuard.EnsureCanManageDepartmentAsync(userName, isAdmin, resolvedDepartmentId.Value);
-
-            employee.CustomMonthlyOtHourLimit = request.CustomMonthlyOtHourLimit;
+            employee!.CustomMonthlyOtHourLimit = request.CustomMonthlyOtHourLimit;
             employee.CustomYearlyOtHourLimit = request.CustomYearlyOtHourLimit;
 
             _unitOfWork.Employees.Update(employee);
@@ -708,12 +714,14 @@ namespace Attendance.Application.Services
             {
                 coordinatorCodes.AddRange(ApprovalStepCoordinatorPermissions.BaseViewCodes);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeAccumulationUpdateCode);
+                // Trước chỉ tự cấp cho phụ trách Phòng ban (2026-09-28: mở thêm cho phụ trách Nhóm —
+                // UpdateOtLimitAsync giờ scope theo cả 2 cấp, xem EnsureCanManageDeptOrGroupScopeAsync).
+                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeUpdateOtLimitCode);
             }
             if (isDeptCoordinator)
             {
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.DepartmentUpdateCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionUpdateCode);
-                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeUpdateOtLimitCode);
             }
             if (isGroupCoordinator)
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.GroupUpdateCode);

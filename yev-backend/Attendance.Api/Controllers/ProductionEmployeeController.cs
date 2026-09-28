@@ -8,6 +8,8 @@ namespace Attendance.Api.Controllers
 {
     public class ProductionEmployeeController : BaseController
     {
+        private const string AdminRole = "Admin";
+
         private readonly IProductionEmployeeService _productionEmployeeService;
 
         public ProductionEmployeeController(IProductionEmployeeService productionEmployeeService)
@@ -61,7 +63,7 @@ namespace Attendance.Api.Controllers
             [FromQuery] int? productionLineId, [FromQuery] int? teamId, [FromQuery] int? shiftTeamId, [FromQuery] int? departmentId)
         {
             var result = await _productionEmployeeService.GetPagedAsync(
-                pageIndex, pageSize, keyword, productionLineId, teamId, shiftTeamId, departmentId);
+                CurrentUserName, User.IsInRole(AdminRole), pageIndex, pageSize, keyword, productionLineId, teamId, shiftTeamId, departmentId);
             return Success(result);
         }
 

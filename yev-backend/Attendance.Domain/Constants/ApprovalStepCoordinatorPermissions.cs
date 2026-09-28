@@ -36,14 +36,15 @@ public static class ApprovalStepCoordinatorPermissions
     // Cùng scope Bộ phận với DepartmentUpdateCode — xem ghi chú BaseViewCodes ở trên (2026-09-04).
     public const string ProductionUpdateCode = "Attendance.ProductionApprovalStep.Update";
 
-    // Người phụ trách Bộ phận được cấp thêm quyền sửa giới hạn OT cá nhân (2026-08-29) — tự scope theo
-    // ĐÚNG Bộ phận qua IDepartmentAccessGuard, xem EmployeeService.UpdateOtLimitAsync. Nhân sự dưới
-    // chuyền (ProductionEmployee.View/Update/Import/Export) và import Excel lũy kế
+    // Sửa giới hạn OT cá nhân (2026-08-29) — cấp cho CẢ Người phụ trách Bộ phận lẫn Nhóm (mở rộng cho
+    // Nhóm ngày 2026-09-28, trước chỉ Bộ phận), scope theo đúng Bộ phận/Nhóm họ phụ trách, xem
+    // EmployeeService.EnsureCanManageDeptOrGroupScopeAsync. Nhân sự dưới chuyền
+    // (ProductionEmployee.View/Update/Import/Export) và import Excel lũy kế
     // (EmployeeAccumulation.Import) KHÔNG còn tự cấp từ 2026-09-26 — phải được Admin chỉ định rõ (theo
     // Chức vụ qua JobTitlePermissionWhitelist, hoặc gán từng user).
     public const string EmployeeUpdateOtLimitCode = "Attendance.Employee.UpdateOtLimit";
 
     // Sửa tay lũy kế 1 nhân viên (2026-09-26) — cấp cho CẢ Người phụ trách Bộ phận lẫn Nhóm, scope theo
-    // đúng Bộ phận/Nhóm họ phụ trách (xem EmployeeService.EnsureCanManageAccumulationAsync).
+    // đúng Bộ phận/Nhóm họ phụ trách, xem EmployeeService.EnsureCanManageDeptOrGroupScopeAsync.
     public const string EmployeeAccumulationUpdateCode = "Attendance.EmployeeAccumulation.Update";
 }

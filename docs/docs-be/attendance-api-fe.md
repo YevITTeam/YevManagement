@@ -625,6 +625,9 @@ thị đúng dữ liệu chuyền mới nhất (Line/Team/Nhóm ca/Công đoạn
 vụ tổ chức. Nguồn chính vẫn là Import lại Excel (§3.8, nạp đè hết mỗi tháng) — `PUT /{id}` bên dưới
 (2026-09-04) chỉ để sửa nhanh 1 dòng giữa 2 đợt import. Permission xem RIÊNG
 `Attendance.ProductionEmployee.View` (từ 2026-09-26; trước đó dùng chung `Attendance.Employee.View` nên Người phụ trách/Trưởng nhóm đều xem được) — Admin chỉ định theo Chức vụ hoặc từng user.
+Có quyền không có nghĩa xem được toàn công ty: từ 2026-09-28, response tự lọc còn lại nhân sự thuộc Phòng
+ban/Nhóm mà `callerUserName` đang phụ trách (Admin không bị lọc) — FE không cần tự lọc thêm, chỉ cần
+truyền đúng token.
 
 ```jsonc
 // GET /api/ProductionEmployee/page-nation?PageIndex=1&PageSize=10&Keyword=&ProductionLineId=&TeamId=&ShiftTeamId=

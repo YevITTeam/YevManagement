@@ -17,11 +17,14 @@ namespace Attendance.Application.Services
     public class ProductionEmployeeService : BaseService<IAttendanceUnitOfWork>, IProductionEmployeeService
     {
         private readonly IAttendanceSettingService _attendanceSettingService;
+        private readonly IDepartmentAccessGuard _departmentAccessGuard;
 
-        public ProductionEmployeeService(IAttendanceUnitOfWork unitOfWork, IAttendanceSettingService attendanceSettingService)
+        public ProductionEmployeeService(
+            IAttendanceUnitOfWork unitOfWork, IAttendanceSettingService attendanceSettingService, IDepartmentAccessGuard departmentAccessGuard)
             : base(unitOfWork)
         {
             _attendanceSettingService = attendanceSettingService;
+            _departmentAccessGuard = departmentAccessGuard;
         }
 
         // targetDate = ngày trên đơn đang tạo (2026-08-26, mirror EmployeeService.GetByGroupIdAsync) —
@@ -149,10 +152,28 @@ namespace Attendance.Application.Services
         // tháng) — UpdateAsync bên dưới (2026-09-04) chỉ để sửa nhanh Line/Team/Nhóm ca/Trưởng nhóm
         // giữa 2 đợt import, sẽ bị GHI ĐÈ lại đúng theo file ở lần import kế tiếp.
         public async Task<PagedResponse<ProductionEmployeeListItemDto>> GetPagedAsync(
-            int pageIndex, int pageSize, string? keyword, int? productionLineId, int? teamId, int? shiftTeamId, int? departmentId)
+            string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword,
+            int? productionLineId, int? teamId, int? shiftTeamId, int? departmentId)
         {
             var (todayYear, todayMonth) = GetTodayYearMonth();
             var trimmedKeyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim();
+
+            // Scope theo Người phụ trách (2026-09-28, theo yêu cầu người dùng) — trước đây có quyền
+            // Attendance.ProductionEmployee.View là xem được TOÀN công ty. Admin bỏ qua; không Admin thì
+            // chỉ thấy nhân sự dưới chuyền thuộc Bộ phận mình phụ trách (toàn phòng) hoặc Nhóm mình phụ
+            // trách (đúng nhóm đó) — cùng mô hình với EmployeeService.EnsureCanManageDeptOrGroupScopeAsync.
+            // Dòng ProductionEmployee CHƯA gắn Employee (chưa resolve) không xác định được phạm vi nên
+            // luôn bị ẩn khỏi người xem có scope hẹp.
+            HashSet<int>? managedDepartmentIds = null;
+            HashSet<int>? managedGroupIds = null;
+            if (!isAdmin)
+            {
+                managedDepartmentIds = await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
+                managedGroupIds = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                        x => x.Employee.UserName == callerUserName && !x.IsDeleted))
+                    .Select(x => x.GroupId)
+                    .ToHashSet();
+            }
 
             var query = _unitOfWork.ProductionEmployees.GetQueryable(false).Where(x => !x.IsDeleted
                 && (productionLineId == null || x.ProductionLineId == productionLineId)
@@ -161,7 +182,11 @@ namespace Attendance.Application.Services
                 && (departmentId == null || (x.Employee != null && x.Employee.Group != null && x.Employee.Group.DepartmentId == departmentId))
                 && (trimmedKeyword == null
                     || x.EmployeeCode.Contains(trimmedKeyword)
-                    || (x.Employee != null && (x.Employee.LastName.Contains(trimmedKeyword) || x.Employee.FirstName.Contains(trimmedKeyword)))));
+                    || (x.Employee != null && (x.Employee.LastName.Contains(trimmedKeyword) || x.Employee.FirstName.Contains(trimmedKeyword))))
+                && (isAdmin || (x.EmployeeId != null && x.Employee != null && (
+                        (x.Employee.DepartmentId != null && managedDepartmentIds!.Contains(x.Employee.DepartmentId.Value))
+                        || (x.Employee.Group != null && managedDepartmentIds!.Contains(x.Employee.Group.DepartmentId))
+                        || (x.Employee.GroupId != null && managedGroupIds!.Contains(x.Employee.GroupId.Value))))));
 
             var orderedQuery = query.OrderBy(x => x.EmployeeCode.Length).ThenBy(x => x.EmployeeCode);
 

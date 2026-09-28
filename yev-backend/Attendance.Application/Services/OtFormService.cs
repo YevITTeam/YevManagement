@@ -746,6 +746,23 @@ namespace Attendance.Application.Services
             if (missingShiftTeam.Count > 0)
                 throw new DomainException($"Nhân viên chưa có Nhóm ca, cần cập nhật trước khi tạo đơn: {string.Join(", ", missingShiftTeam)}.");
 
+            // Phạm vi Line (2026-09-28, theo quyết định người dùng) — có quyền
+            // Attendance.OTForm.CreateProduction KHÔNG có nghĩa được tạo đơn cho MỌI Line, chỉ được tạo
+            // cho (những) Line mà chính người tạo đang là Line Leader (IsLeader=true). Admin bỏ qua.
+            if (!isAdmin)
+            {
+                var orderLineIds = productionEmployeesForCheck
+                    .Where(x => x.ProductionLineId.HasValue)
+                    .Select(x => x.ProductionLineId!.Value)
+                    .Distinct()
+                    .ToList();
+                var isLineLeaderOfAnyLine = orderLineIds.Count > 0 && (await _unitOfWork.ProductionEmployees.FindAsync(
+                    x => x.EmployeeId == creatorEmployee!.Id && x.IsLeader && !x.IsDeleted
+                        && x.ProductionLineId.HasValue && orderLineIds.Contains(x.ProductionLineId.Value))).Count > 0;
+                if (!isLineLeaderOfAnyLine)
+                    throw new DomainException("Bạn phải là Line Leader của ít nhất 1 Line trong danh sách nhân viên mới được tạo đơn này.");
+            }
+
             var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
 
             var employeeTimes = request.Employees.ToDictionary(
