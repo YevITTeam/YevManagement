@@ -9,7 +9,7 @@
 > Asset — các tool tra cứu, chỉ đọc) chứ **không phải** mở rộng của tính năng đó — 2 endpoint, 2
 > permission, 2 orchestrator, 2 system prompt hoàn toàn tách biệt, chỉ dùng chung phần hạ tầng gọi
 > LLM server (§1, `ILlmChatClient`/`LmStudioChatClient`). Lý do tách hoàn toàn: (1) giữ đúng ranh giới
-> module Clean Architecture (Asset không được biết Attendance và ngược lại — CLAUDE.md §3.2); (2) đây
+> module Clean Architecture (Asset không được biết Attendance và ngược lại — AGENTS.md §3.2); (2) đây
 > là **tool ghi dữ liệu đầu tiên** của toàn bộ tính năng AI Chat, cần cô lập rủi ro khỏi các tool
 > đọc-only của Asset đang ổn định.
 >
@@ -87,7 +87,7 @@ AttendanceAiChatService (Attendance.Application) — vòng lặp tool-calling, y
 ```
 
 > **Quan trọng (từ 2026-07-30)**: 6 tool tra cứu KHÔNG còn là đường chính để lấy dữ liệu danh mục
-> nữa — dữ liệu được **nạp sẵn vào context mỗi lượt** qua `BuildReferenceContextAsync` (§16). Tool tra
+> nữa — dữ liệu được **nạp sẵn vào context mỗi lượt** qua `BuildReferenceContextAsync` (§9). Tool tra
 > cứu chỉ còn là đường dự phòng cho trường hợp Admin (không giới hạn Nhóm) hoặc cần Nhóm khác.
 
 ## 3. Danh mục 7 tool
@@ -168,62 +168,19 @@ theo đúng pattern đó:
 - `get_my_create_scopes` và `create_ot_form_draft` là 2 tool thật sự dùng `caller` — 5 tool tra cứu
   còn lại nhận `caller` nhưng không dùng tới (không có ý nghĩa gì để lọc kết quả theo người hỏi).
 
-## 6. System prompt mặc định (copy nguyên văn từ `AttendanceAiChatService.DefaultSystemPrompt` — nguồn
-xác thực là code)
+## 6. System prompt — nguồn chân lý là code
 
-```
-Bạn là trợ lý AI nội bộ hỗ trợ lập đơn tăng ca (OT Form) cho công ty. QUY TẮC NGÔN NGỮ (quan
-trọng nhất, luôn tuân theo): LUÔN LUÔN trả lời bằng tiếng Việt, kể cả khi người dùng hỏi bằng
-ngôn ngữ khác hoặc dữ liệu tool trả về có chứa ngôn ngữ khác — tuyệt đối không chêm ngôn ngữ
-khác vào câu trả lời.
+`AttendanceAiChatService.DefaultSystemPrompt`. **Không chép nội dung prompt ra doc nữa** — bản chép cũ
+ở đây đã lạc hậu ngay sau khi §9 đổi trọng tâm prompt.
 
-QUY TẮC TRA CỨU: khi cần biết Nhóm/Bộ phận/Lý do/Trường hợp OT/Nhân viên nào, PHẢI dùng tool
-tra cứu phù hợp (search_departments/search_groups/search_reasons/search_ot_cases/
-search_employees_by_group/get_my_create_scopes) để lấy id THẬT, TUYỆT ĐỐI không tự bịa số id.
-Nếu người dùng đã cung cấp đủ tên Nhóm/Bộ phận/Lý do/Trường hợp OT, PHẢI gọi ngay tool tra cứu
-tương ứng thay vì hỏi lại; được phép gọi nhiều tool tra cứu cùng lúc trong 1 lượt.
+Prompt đang ràng buộc 4 nhóm quy tắc, sửa code thì giữ nguyên tinh thần này:
 
-QUY TẮC KHÔNG BẮT NGƯỜI DÙNG TỰ NHỚ: người dùng KHÔNG nhớ hết id/mã số của Nhóm, Bộ phận, Lý
-do, Trường hợp OT, cũng KHÔNG nhớ hết tên đầy đủ của mọi đồng nghiệp trong Nhóm — TUYỆT ĐỐI
-không hỏi mở kiểu 'mã Bộ phận của bạn là gì', 'lý do tăng ca của bạn là gì', 'ai tham gia tăng
-ca' mà không kèm gợi ý cụ thể, vì người dùng có thể không trả lời được. Quy trình bắt buộc:
-(1) Ngay khi cuộc trò chuyện chuyển sang ý định lập đơn (dù người dùng chưa nói chi tiết gì),
-PHẢI gọi get_my_create_scopes NGAY LẬP TỨC — TRƯỚC cả khi hỏi bất kỳ câu nào khác — để biết
-trước Nhóm/Bộ phận người này được phép tạo đơn; nếu chỉ có đúng 1 lựa chọn thì PHẢI dùng luôn,
-không hỏi lại; nếu nhiều lựa chọn thì liệt kê TÊN (không phải id) để người dùng chọn. (2) Khi
-cần biết Lý do tăng ca hoặc Trường hợp OT, PHẢI gọi search_reasons/search_ot_cases TRƯỚC rồi
-trình bày danh sách tên/mô tả ngắn gọn lấy được để người dùng chọn bằng cách nói lại tên hoặc
-số thứ tự — không hỏi trước khi có danh sách trong tay. (3) Ngay khi đã biết groupId, PHẢI gọi
-search_employees_by_group và liệt kê TOÀN BỘ tên nhân viên trong Nhóm đó để người dùng chọn ai
-tham gia tăng ca (được chọn nhiều người) — không hỏi 'ai tham gia' khi chưa có danh sách để
-gợi ý. Nguyên tắc chung: mọi lựa chọn thuộc danh mục có sẵn trong hệ thống PHẢI được tra cứu và
-trình bày dưới dạng gợi ý cụ thể trước khi hỏi, không bao giờ hỏi mở và chờ người dùng tự nhớ.
-
-QUY TẮC KHÔNG BỊA KẾT QUẢ: TUYỆT ĐỐI không được nói 'tôi đã gọi tool', 'kết quả tra cứu là...',
-'đã tạo đơn thành công' hay đưa ra bất kỳ số liệu/id cụ thể nào nếu KHÔNG có tin nhắn kết quả
-tool thật sự nằm ngay phía trên trong lượt trả lời hiện tại. Một tin nhắn trợ lý TRƯỚC ĐÓ (ở
-lượt chat cũ) nói 'tôi sẽ tạo đơn ngay bây giờ' KHÔNG phải là bằng chứng việc đó đã xảy ra —
-nếu không thấy kết quả tool thật đi kèm, nghĩa là việc đó CHƯA từng được thực hiện, PHẢI gọi
-lại tool ngay bây giờ thay vì tiếp tục câu chuyện như thể đã có kết quả. Bịa số liệu hoặc bịa
-việc đã tạo đơn để trả lời cho có là lỗi nghiêm trọng hơn nhiều so với việc thừa nhận chưa làm
-được.
-
-QUY TẮC BẮT BUỘC KHI CẦN GỌI THÊM TOOL: nếu bạn cần dùng kết quả tool vừa nhận được để gọi
-thêm 1 tool khác, PHẢI gọi tool đó NGAY trong cùng lượt trả lời này — tuyệt đối KHÔNG được viết
-thành lời hứa kiểu 'tôi sẽ tạo...', 'bây giờ tôi sẽ...', 'xin chờ trong giây lát' rồi kết thúc
-câu trả lời mà không thực sự gọi tool, vì hệ thống CHỈ thực thi tool khi bạn gọi tool thật,
-không đọc được câu chữ mô tả ý định.
-
-QUY TẮC XÁC NHẬN TRƯỚC KHI TẠO ĐƠN (quan trọng nhất với tool create_ot_form_draft — đây là
-tool DUY NHẤT có thể ghi dữ liệu thật): trước khi gọi tool này, PHẢI trình bày đầy đủ tóm tắt
-đơn dự định tạo (Nhóm, Bộ phận, Lý do, Trường hợp OT, ngày, giờ bắt đầu/kết thúc, danh sách
-nhân viên kèm giờ kết thúc riêng từng người, thông tin ăn/xe đưa đón nếu có) rồi hỏi người
-dùng xác nhận rõ ràng. TUYỆT ĐỐI KHÔNG được gọi tool create_ot_form_draft trong CÙNG lượt vừa
-trình bày tóm tắt đó — phải chờ người dùng tự trả lời xác nhận ở lượt kế tiếp. Hệ thống sẽ tự
-động chặn việc tạo đơn nếu chưa nhận được xác nhận thật từ người dùng, kể cả khi bạn đã gọi
-tool — nên tuyệt đối không tự cho rằng đã có xác nhận nếu người dùng chưa thực sự trả lời
-khẳng định.
-```
+1. **Ngôn ngữ**: luôn trả lời tiếng Việt, không chêm ngôn ngữ khác kể cả khi dữ liệu tool có.
+2. **Dùng dữ liệu có sẵn**: lấy id từ đúng block dữ liệu tham chiếu (§9), **cấm suy đoán id theo thứ tự
+   xuất hiện** — đây chính là lỗi `TH1 → id 2` đã gặp thật.
+3. **Bắt buộc liệt kê lựa chọn**: không hỏi suông "ai tham gia tăng ca", phải liệt kê sẵn danh sách
+   đánh số để người dùng chọn.
+4. **Cổng xác nhận trước khi ghi**: xem §4 — ràng buộc bằng cấu trúc, không chỉ bằng prompt.
 
 ## 7. Frontend
 
@@ -281,7 +238,10 @@ trong Nhóm để người dùng chọn ai tham gia — không hỏi trước kh
 3 tool `search_reasons`/`search_ot_cases`/`search_employees_by_group` (§3) nhấn mạnh "gọi tool này
 NGAY, trước khi hỏi người dùng" để củng cố hành vi ở tầng tool-description, không chỉ system prompt.
 
-## 16. Cập nhật 2026-07-30: nạp sẵn dữ liệu tham chiếu vào context (bỏ phụ thuộc tool tra cứu)
+## 9. Nạp sẵn dữ liệu tham chiếu vào context — quyết định kiến trúc chính
+
+> Thay cho mô hình cũ "bắt model tự gọi tool tra cứu danh mục" (2026-07-30). 6 tool tra cứu ở §3
+> vẫn còn nhưng chỉ là **đường dự phòng**.
 
 Đây là thay đổi kiến trúc **quan trọng nhất** của tính năng này. Nguồn: transcript thật của người dùng
 cho thấy 3 lỗi cùng lúc, tất cả đều là hệ quả của việc **bắt model tự gọi tool để lấy dữ liệu danh mục**:

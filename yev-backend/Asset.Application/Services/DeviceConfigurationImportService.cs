@@ -317,7 +317,7 @@ namespace Asset.Application.Services
             // Batch-fetch device/IP/serial lookups thay vì query từng dòng: file Tanium export có thể
             // lên tới hàng nghìn dòng, mỗi dòng trước đây bắn 3 query riêng (device theo mã, IP theo
             // taniumIp, device theo serial) → hàng nghìn round-trip DB tuần tự (2026-08-11, xem
-            // CLAUDE.md §hiệu năng). Gom về 3 query duy nhất bằng `Contains` (SQL IN), dựng Dictionary
+            // AGENTS.md §hiệu năng). Gom về 3 query duy nhất bằng `Contains` (SQL IN), dựng Dictionary
             // để tra trong bộ nhớ — kết quả nghiệp vụ giữ nguyên (collation SQL vẫn không phân biệt
             // hoa/thường như query cũ, GroupBy...First giữ đúng 1 bản ghi/khoá khi trùng mã ngoài ý muốn).
             var candidateCodes = rawRows

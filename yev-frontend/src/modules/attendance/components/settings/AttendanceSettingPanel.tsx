@@ -30,7 +30,7 @@ type TimeKey = "earlyMealWindowStartTime" | "earlyMealWindowEndTime" | "batchAut
 const fieldClassName =
     "h-8 w-full rounded-md border border-[#e0e3e5] bg-white px-2.5 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// Tab "Cấu hình" trong màn Danh mục (CLAUDE.md §2 luật 2 — đã chốt qua AskUserQuestion 2026-08-01):
+// Tab "Cấu hình" trong màn Danh mục (AGENTS.md §2 luật 2 — đã chốt qua AskUserQuestion 2026-08-01):
 // GET /api/AttendanceSetting mở cho mọi tài khoản đăng nhập, PUT chỉ Admin — nhưng cả tab "Danh mục"
 // này vốn đã bị khoá sau permission Attendance.Department.Create (chỉ Admin), nên KHÔNG cần tự kiểm
 // tra quyền lần nữa ở đây, khác các List CRUD khác vẫn tự ẩn nút theo quyền vì màn của chúng mở rộng

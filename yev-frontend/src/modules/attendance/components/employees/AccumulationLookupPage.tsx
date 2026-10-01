@@ -35,7 +35,7 @@ export default function AccumulationLookupPage() {
     const [selectedEmployee, setSelectedEmployee] = useState<EmployeeDto | null>(null);
 
     // Đổi từ khoá tìm thì về lại trang 1 — so sánh snapshot ngay trong render thay vì dùng effect
-    // (xem CLAUDE.md "Reset state khi 1 giá trị đổi").
+    // (xem AGENTS.md "Reset state khi 1 giá trị đổi").
     const [prevAppliedKeyword, setPrevAppliedKeyword] = useState(appliedKeyword);
     if (prevAppliedKeyword !== appliedKeyword) {
         setPrevAppliedKeyword(appliedKeyword);

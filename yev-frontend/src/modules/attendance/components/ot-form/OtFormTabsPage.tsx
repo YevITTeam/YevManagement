@@ -45,7 +45,7 @@ export default function OtFormTabsPage() {
     const [visitedTabs, setVisitedTabs] = useState<Set<OtFormTabKey>>(new Set());
 
     // Chọn tab đầu tiên user thấy được làm mặc định — so sánh snapshot ngay trong render (không dùng
-    // effect để setState, xem CLAUDE.md), chỉ chạy đúng 1 lần cho tới khi activeTab được set.
+    // effect để setState, xem AGENTS.md), chỉ chạy đúng 1 lần cho tới khi activeTab được set.
     const defaultTab = visibleTabs[0]?.key ?? null;
     if (activeTab === null && defaultTab !== null) {
         setActiveTab(defaultTab);

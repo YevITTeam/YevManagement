@@ -14,7 +14,7 @@
 | Mã phiếu | `YEV-22-024` |
 | Tên phiếu | GIẤY ĐỀ NGHỊ LÀM NGOÀI GIỜ (残業申請書) |
 | Lần ban hành | **Lần 5**, ngày cải chính **03/02/2024** (in ở footer mọi trang) |
-| File nguồn | `docs/docs-be/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO (A4).doc` (khổ A4, tối đa 40 nhân viên/đơn, chia 2 trang) và bản `(A5).doc` (khổ A5, tối đa 12 nhân viên/đơn, 1 trang) |
+| File nguồn | `docs/Data/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO (A4).doc` (khổ A4, tối đa 40 nhân viên/đơn, chia 2 trang) và bản `(A5).doc` (khổ A5, tối đa 12 nhân viên/đơn, 1 trang) |
 | Khác biệt A4 vs A5 | **Chỉ khác số dòng danh sách nhân viên** (A4: 10 dòng trang 1 + 30 dòng trang 2 = 40; A5: 12 dòng) và vài chữ Nhật phụ đề không ảnh hưởng field. **Cấu trúc field giữa 2 khổ giống hệt nhau** — bảng mapping bên dưới dùng chung cho cả 2, chỉ khác số dòng tối đa khi FE dựng bảng nhân viên. |
 
 **Quy trình khi có phiếu mới (đổi lần ban hành)**: mở file `.doc` mới bằng Word (hoặc `antiword` nếu chỉ cần đọc nhanh không dấu), so từng ô với bảng ở §1-§2 bên dưới — ô nào giữ nguyên ý nghĩa thì giữ mapping cũ, ô nào đổi vị trí/label thì sửa lại dòng tương ứng, ô nào **hoàn toàn mới** thì thêm vào §3. Đừng xoá bản ghi "Lần ban hành" cũ — đổi tên mục §0 thành lịch sử (VD "Lần 5 → 03/02/2024 (cũ)", "Lần 6 → dd/mm/yyyy (hiện hành)") để biết đơn in trước đó theo mẫu nào.
@@ -55,7 +55,7 @@ khi thay bằng `Group`/`Department` — đúng cho đơn "theo Nhóm" nhưng đ
 | Theo Nhóm (`isProductionForm=false`) | `${departmentNameVn} — ${groupNameVn}` | Không đổi so với trước |
 | Theo chuyền (`isProductionForm=true`) | Gộp theo GIÁ TRỊ PHÂN BIỆT từ `employees[].teamCodeSnapshot` / `.blockCodeSnapshot` / `.shiftTeamCodeSnapshot` (bỏ qua `isRemoved=true`), nối `"{teamCodes}   {lineCodes}   {shiftTeamCodes}"` | **Sửa 2026-08-27**: trước dùng nhầm `.congDoanSnapshot` ở vị trí giữa (ra mã tắt vô nghĩa như "HC GT HC"), người dùng xác nhận công thức đúng là **Team + Line + Nhóm Ca** — `.blockCodeSnapshot` (= "Line", vì `ProductionLineId` khớp `BlockCode`) thay cho `.congDoanSnapshot`. Snapshot lấy từ `ProductionEmployee` lúc thêm người vào đơn (xem `OtFormEmployee.BlockCodeSnapshot`/`TeamCodeSnapshot`/`ShiftTeamCodeSnapshot`, `attendance-module.md §Chế tạo`). Mỗi phần có thể có NHIỀU giá trị nếu nhân viên trong đơn không cùng Team/Line/Nhóm ca — nối bằng `/` |
 
-**Quy trình chung khi gặp ô kiểu này ở phiếu mới**: KHÔNG tự ý nhét dữ liệu có sẵn khi chưa xác nhận — chỉ để trống/note "cần bổ sung" và hỏi người yêu cầu nghiệp vụ trước (đúng CLAUDE.md §2 luật 2 — không tự bịa nghiệp vụ khi thiếu thông tin).
+**Quy trình chung khi gặp ô kiểu này ở phiếu mới**: KHÔNG tự ý nhét dữ liệu có sẵn khi chưa xác nhận — chỉ để trống/note "cần bổ sung" và hỏi người yêu cầu nghiệp vụ trước (đúng AGENTS.md §2 luật 2 — không tự bịa nghiệp vụ khi thiếu thông tin).
 
 ## 4. Khối "Phần xử lý / 処理欄"
 

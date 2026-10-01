@@ -12,39 +12,39 @@
 
 ## MỤC LỤC ĐỌC NHANH — đọc file này theo lát cắt
 
-> ⚠ **File ~375 KB. KHÔNG `Read` cả file** — đọc trọn nó đốt sạch context của phiên (CLAUDE.md §2 luật 7).
-> Cách dùng: tra bảng dưới → `Read` với `offset`/`limit` đúng dải dòng (dư ±20 dòng là đủ).
-> Số dòng có thể lệch sau khi ai đó sửa file → `Grep` pattern `^#{2,4} ` trên chính file này để lấy lại
-> mục lục kèm số dòng. Cần 1 tên field/endpoint cụ thể thì `Grep` thẳng chuỗi đó, đừng đọc tuần tự.
+> ⚠ **File >400 KB. KHÔNG `Read` cả file** — đọc trọn nó đốt sạch context của phiên (AGENTS.md §2 luật 7).
+> Cách dùng: tra bảng dưới lấy **tên mục**, `Grep` chính chuỗi đó trên file này để biết số dòng, rồi
+> `Read` với `offset`/`limit` (dư ±20 dòng là đủ). Cần 1 tên field/endpoint cụ thể thì `Grep` thẳng nó.
+> *(Bảng này cố ý KHÔNG ghi số dòng — file sửa gần như hằng tuần, số dòng sẽ sai ngay.)*
 
-| Cần biết gì | Dải dòng | Mục |
-|---|---|---|
-| Entity + business logic gốc của OT Form | 47–171 | §Entity, §Business Logic, §Sửa đơn Draft/Pending |
-| **Lũy kế** (ledger, snapshot đóng băng, lũy kế dự kiến) | 172–201, 581–651 | 4 mục §Lũy kế… |
-| **Phiếu ăn** (ngưỡng giờ, 3 bậc, trừ 30 phút, đồng bộ khi sửa đơn) | 202–402 | 5 mục §Phiếu ăn / §Có ăn hay không |
-| **Giới hạn giờ OT** (chặn cứng ngày/tháng/năm + gia hạn riêng từng NV) | 403–472 | 2 mục §Giới hạn |
-| **Nhân sự dưới chuyền** (`ProductionEmployee`, import/export file Chế Tạo) | 473–580 | §Import/Export nhân sự dưới chuyền |
-| Song ngữ Vn/Jp trên DTO | 652–662 | §Song ngữ Vn/Jp |
-| **Đơn tổng** (`OtFormBatch`) | 663–763 | §Đơn tổng |
-| **Email**: mail tổng hợp hằng ngày, token xác thực, font/dark-mode | 764–852, 3316–3342 | 3 mục §…email |
-| Mật khẩu cấp 2 | 853–890 | §Mật khẩu cấp 2 |
-| Loại nhân viên khỏi đơn (route riêng JWT + kênh email, khôi phục 2026-09-30) | 891–993, 3475–3519 | §Loại nhân viên, §Khôi phục "Loại khỏi đơn"… |
-| Luật giao diện + ghép chuỗi song ngữ | 994–1020, 3260–3288 | 2 mục §…giao diện |
-| **Cây chức vụ / Cây duyệt / đơn "theo chuyền"** — Giai đoạn 1→16 | 1021–2316 | §Cây chức vụ + 16 mục con |
-| Migration & DB | 2317–2321 | §DB |
-| **Danh sách controller/endpoint đã có** | 2322–2461 | §1. Cấu trúc code đã có |
-| **Báo cáo & export Excel/PDF** (4 báo cáo + phiếu PDF hàng loạt) | 2462–2779 | 5 mục §Báo cáo/§Excel/§PDF |
-| **Phân quyền** theo Chức vụ / Phòng ban / Coordinator | 2780–2950 | §Gộp tab Quyền…, §Phân quyền theo Phòng ban, §Vá lỗ hổng Employee.View |
-| **Import Excel** (lũy kế tháng, liên kết Identity, bẫy ClosedXML) | 2951–3119 | 4 mục §Import… |
-| Sửa đơn / duyệt hàng loạt / filter danh sách | 3120–3242 | 3 mục §… |
-| Bug đã sửa (Coordinator Chuyền, Team A/B) | 3243–3259, 3289–3315 | 2 mục §Fix bug |
-| Wiring Host + **việc còn nợ / cố ý chưa làm** | 3343–hết | §2, §3 |
+| Cần biết gì | Grep mục |
+|---|---|
+| Entity + business logic gốc, sửa đơn Draft/Pending | `§Entity`, `§Business Logic`, `§Sửa đơn khi đang Draft` |
+| **Lũy kế** (ledger, snapshot đóng băng, dự kiến, bỏ cache) | `§Lũy kế` (4 mục) |
+| **Phiếu ăn** (ngưỡng giờ, 3 bậc, trừ 30 phút, đồng bộ khi sửa đơn) | `§Phiếu ăn`, `§Có ăn hay không`, `§Cấu hình phiếu ăn` |
+| **Giới hạn giờ OT** (chặn cứng ngày/tháng/năm + gia hạn riêng từng NV) | `§Giới hạn giờ OT`, `§Giới hạn OT/tháng/năm RIÊNG` |
+| **Nhân sự dưới chuyền** (`ProductionEmployee`, import/export file Chế Tạo) | `§Import/Export nhân sự dưới chuyền` |
+| **Đơn tổng** (`OtFormBatch`) | `§Đơn tổng` |
+| **Email**: mail tổng hợp, token xác thực, mail từ chối, font/dark-mode | `§Bỏ mail riêng`, `§Xác thực qua email`, `§Mail báo người lập đơn`, `§Template email` |
+| Mật khẩu cấp 2 · song ngữ Vn/Jp | `§Mật khẩu cấp 2`, `§Song ngữ Vn/Jp` |
+| Loại / khôi phục nhân viên khỏi đơn | `§Loại nhân viên khỏi đơn`, `§Khôi phục "Loại khỏi đơn"` |
+| **Cây chức vụ / Cây duyệt / đơn "theo chuyền"** — Giai đoạn 1→17 | `§Cây chức vụ` rồi `#### §Giai đoạn <n>` |
+| **Phân quyền Coordinator** (Bộ phận/Nhóm, quyền tự cấp, 3 guard scope) | `§Phân quyền Coordinator` |
+| Phân quyền khác: quyền theo Chức vụ, vá lỗ hổng `Employee.View` | `§Giai đoạn 6`, `§Gộp tab "Quyền theo Chức vụ"`, `§Vá lỗ hổng` |
+| Migration & DB | `### §DB` |
+| **Danh sách controller/endpoint đã có** | `## 1. Cấu trúc code đã có` |
+| **Báo cáo & export Excel/PDF** (4 báo cáo + phiếu PDF hàng loạt) | `§Báo cáo dưới chuyền`, `§Excel "`, `§3 export mới`, `§Phiếu PDF hàng loạt` |
+| **Import Excel** (lũy kế tháng, liên kết Identity, bẫy ClosedXML) | `§Import lũy kế OT`, `§Import Excel liên kết Identity`, `§Phát hiện + sửa lỗi ClosedXML` |
+| Sửa đơn / duyệt hàng loạt / filter danh sách | `§Gộp thêm/xóa NV`, `§Nâng cấp màn Duyệt hàng loạt`, `§Mở rộng filter` |
+| Luật giao diện (màu, khung cuộn modal, SearchableSelect) | `§Giao diện & song ngữ`, `§Chuẩn giao diện rút ra` |
+| **Việc còn nợ / cố ý chưa làm** | `## 3. Còn nợ` |
 
-**Quy ước viết tiếp file này** (CLAUDE.md §2 luật 8): sửa thẳng vào mục đang mô tả phần đó, **không**
-nối thêm mục `§… (ngày)` cho mỗi lần chỉnh. Quyết định cũ bị thay thế → gộp/xoá mục cũ, giữ 1 dòng
-"trước làm X, bỏ vì Y" nếu lý do còn giá trị. Vài mục dưới đây đã được gộp lại theo đúng cách này.
+**Quy ước viết tiếp file này** (AGENTS.md §2 luật 8): sửa thẳng vào mục đang mô tả phần đó, **không** nối
+thêm mục `§… (ngày)` cho mỗi lần chỉnh. Quyết định cũ bị thay thế → gộp/xoá mục cũ, giữ 1 dòng "trước
+làm X, bỏ vì Y" nếu lý do còn giá trị. Các mục có hậu tố "— trạng thái chốt" là đã được gộp theo cách này.
 
-## 0. Chốt yêu cầu (CLAUDE.md §2 luật 2)
+
+## 0. Chốt yêu cầu (AGENTS.md §2 luật 2)
 
 ### §Entity (`Attendance.Domain/Entities/`)
 
@@ -160,7 +160,7 @@ cảnh báo ở đầu §Business Logic (chuỗi bước giờ động theo Cây
   1. Chỉ **chính người tạo** (`OtForm.CreatedByUserName == CurrentUserName`) mới sửa được — không phải Admin, không phải Trưởng nhóm (trừ khi Trưởng nhóm đó cũng chính là người tạo), không phải cấp duyệt nào khác.
   2. Chỉ khi `Status` là `Draft`, `PendingGroupHead` hoặc `Pending` (**chưa tới cấp Trưởng phòng duyệt**, `IsEditableStatus`) — qua cấp Trưởng phòng trở lên là khóa cứng, ném `DomainException` "Đơn đã được Trưởng phòng duyệt trở lên, không thể sửa nữa.". Đây chính là câu trả lời cho câu hỏi "khi nào không được sửa thông tin đơn nữa".
 - `OtFormDto.IsEditable` / `OtFormListItemDto.IsEditable` = `IsEditableStatus(Status)` — FE dùng field này để hiện/ẩn nút "Sửa", không cần tự so sánh status.
-- **Giới hạn lại phạm vi sửa (2026-07-31, breaking)**: trước đây `UpdateAsync` cho sửa **toàn bộ** đơn (danh mục + danh sách nhân viên + `ProcessPart`), giống hệt `CreateAsync`. Người dùng phản hồi: đơn chỉ nên sửa được **"thực tích của nhân viên"** — tức giờ kết thúc OT thực tế của từng người — chốt qua AskUserQuestion (CLAUDE.md §2 luật 2) 2 điểm:
+- **Giới hạn lại phạm vi sửa (2026-07-31, breaking)**: trước đây `UpdateAsync` cho sửa **toàn bộ** đơn (danh mục + danh sách nhân viên + `ProcessPart`), giống hệt `CreateAsync`. Người dùng phản hồi: đơn chỉ nên sửa được **"thực tích của nhân viên"** — tức giờ kết thúc OT thực tế của từng người — chốt qua AskUserQuestion (AGENTS.md §2 luật 2) 2 điểm:
   1. **Field được sửa**: CHỈ `EndTime` của từng nhân viên ĐANG có trong đơn. Không còn sửa `NoteVn`/`NoteJp`.
   2. **Field/danh sách bị khoá**: `GroupId`/`DepartmentId`/`ReasonId`/`OtCaseId`/`Date`/`StartTime`/`EndTime`(chung)/`SubReason`/`ProcessPart` và cả **danh sách nhân viên** (không thêm/bớt được ai) đều **cố định** sau khi tạo đơn — muốn bớt 1 người dùng riêng tính năng "Loại khỏi đơn" (`POST /{id}/employees/remove`, xem §Loại nhân viên khỏi đơn), không qua endpoint này nữa.
   - **DTO đổi hẳn**: `UpdateOtFormDto` từ giống `CreateOtFormDto` (10 field) rút gọn còn `{ Employees: List<UpdateOtFormEmployeeTimeDto { EmployeeId, EndTime }> }` — không còn field nào khác. `UpdateOtFormEmployeeTimeDto` là DTO mới, thay `CreateOtFormEmployeeItemDto` (không có `NoteVn`/`NoteJp`).
@@ -214,7 +214,7 @@ cảnh báo ở đầu §Business Logic (chuỗi bước giờ động theo Cây
   đơn đổi SAU lúc tạo — xem §Đồng bộ phiếu ăn khi sửa đơn/loại nhân viên.
 
 ### §Cấu hình phiếu ăn & giới hạn lũy kế (2026-08-01)
-**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): 2 nhóm quy tắc
+**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, AGENTS.md §2 luật 2): 2 nhóm quy tắc
 trước đây hardcode trong code (mốc 2h nhận phiếu ăn ở BE; ngưỡng cảnh báo lũy kế 25h/tháng, 300h/năm ở
 FE) nay gộp thành 1 bảng cấu hình Admin tự sửa được, không cần deploy lại khi chính sách đổi.
 
@@ -229,12 +229,12 @@ FE) nay gộp thành 1 bảng cấu hình Admin tự sửa được, không cầ
 
 ### §Có ăn hay không theo từng nhân viên — trừ 30 phút nếu có ăn (2026-08-06, đổi hướng 2026-08-26)
 
-**Yêu cầu người dùng gốc** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2, 2026-08-06):
+**Yêu cầu người dùng gốc** (chốt qua AskUserQuestion trước khi code, AGENTS.md §2 luật 2, 2026-08-06):
 nhân viên đủ ngưỡng nhận phiếu ăn (`IsEligibleForMeal`) mà **không ăn** thì được cộng bù **30 phút**
 vào lũy kế tháng/năm — khác hẳn `ProcessPart.IsEat`/`MainTicketCount` hiện có (cờ + số lượng **chung
 cho cả đơn**, nhập tay, không theo từng người).
 
-**Đổi hướng (2026-08-26, chốt qua AskUserQuestion, CLAUDE.md §2 luật 2)**: lật ngược công thức — VÍ DỤ
+**Đổi hướng (2026-08-26, chốt qua AskUserQuestion, AGENTS.md §2 luật 2)**: lật ngược công thức — VÍ DỤ
 14h-18h (4h, đủ ngưỡng) → **có ăn** thì giờ OT thực tính = **3.5h** (trừ 30 phút nghỉ ăn); **không ăn**
 thì giữ nguyên **4h** (bỏ hẳn phần +30 phút cộng bù trước đây). Khác biệt quan trọng so với bản gốc:
 áp dụng cho **CẢ giờ hiển thị** trên đơn/danh sách/bản in, **không còn** chỉ ảnh hưởng lũy kế.
@@ -371,7 +371,7 @@ có cách nào tự suy luận số sữa từ danh sách nhân viên. (mirror `
 ### §Phiếu ăn — REDESIGN 3 bậc + khung OT sớm đặc cách (2026-08-26)
 
 **Thay thế hoàn toàn** mô hình 2 bậc (Chính/Phụ, không sàn dưới) mô tả ở §Cấu hình phiếu ăn & giới hạn
-lũy kế và §Có ăn hay không phía trên — chốt qua nhiều vòng trao đổi với người dùng (CLAUDE.md §2 luật
+lũy kế và §Có ăn hay không phía trên — chốt qua nhiều vòng trao đổi với người dùng (AGENTS.md §2 luật
 2), dựa trên `docs/Note_OT.txt`:
 
 - **3 bậc, tính trên giờ THỰC TÍCH** (`actualHours`, sau khi trừ `MealBreakDeductionHours` nếu có ăn —
@@ -416,7 +416,7 @@ lũy kế và §Có ăn hay không phía trên — chốt qua nhiều vòng trao
 ### §Giới hạn giờ OT ngày/tháng/năm — CHẶN CỨNG tạo/sửa đơn (2026-08-26)
 
 **Đảo ngược hoàn toàn** hành vi cũ ở §Cấu hình phiếu ăn & giới hạn lũy kế phía trên (Monthly/YearlyOtHourLimit
-trước đây chỉ tô đỏ cảnh báo, KHÔNG chặn) — chốt qua trao đổi với người dùng (CLAUDE.md §2 luật 2), dựa
+trước đây chỉ tô đỏ cảnh báo, KHÔNG chặn) — chốt qua trao đổi với người dùng (AGENTS.md §2 luật 2), dựa
 trên `docs/Note_OT.txt` dòng "Ngày: không tăng ca quá 4 tiếng":
 
 - **3 mốc `AttendanceSetting`**: `DailyOtHourLimit` (mới, mặc định **4h**), `MonthlyOtHourLimit` (mặc
@@ -454,7 +454,7 @@ trên `docs/Note_OT.txt` dòng "Ngày: không tăng ca quá 4 tiếng":
 
 ### §Giới hạn OT/tháng/năm RIÊNG theo từng nhân viên — "gia hạn" cao hơn mặc định (2026-08-26)
 
-**Yêu cầu người dùng** (chốt qua trao đổi, CLAUDE.md §2 luật 2), dựa trên `docs/Note_OT.txt` dòng
+**Yêu cầu người dùng** (chốt qua trao đổi, AGENTS.md §2 luật 2), dựa trên `docs/Note_OT.txt` dòng
 "Import lại số giờ giới hạn tăng ca của nhân viên": nhân viên có thể được "gia hạn" giờ OT cao hơn mức
 mặc định chung ở trên — thường dùng cho công nhân **dưới chuyền**.
 
@@ -485,7 +485,7 @@ mặc định chung ở trên — thường dùng cho công nhân **dưới chuy
 
 ### §Import/Export nhân sự dưới chuyền (`ProductionEmployee`) theo file mẫu Chế Tạo (2026-08-27)
 
-**Yêu cầu người dùng** (chốt qua nhiều vòng trao đổi, CLAUDE.md §2 luật 2), dựa trên format thật
+**Yêu cầu người dùng** (chốt qua nhiều vòng trao đổi, AGENTS.md §2 luật 2), dựa trên format thật
 `docs/Data/Import_Nhan_Su_Che_Tao.xlsx` (sheet `OT(N+1)`) — trước đợt này, 1688 dòng `ProductionEmployees`
 hiện có trong DB là nạp TAY 1 lần (không qua UI), đúng luật "phải resolve đủ Line/Team/ShiftTeam mới
 nạp" đã ghi sẵn trong comment `ProductionEmployee.cs`. Đợt này biến luật đó thành 1 tính năng Preview →
@@ -650,7 +650,7 @@ vẫn là 27/7), mốc rollover bị đẩy sang tháng 8 rồi lại kéo về 
 giá trị hợp lệ của lần trước thay vì cộng dồn đúng. Gốc rễ: mốc rollover dựa theo **ngày trên đơn được
 xử lý gần nhất**, không phải **ngày thực tế hôm nay**.
 
-**Yêu cầu chốt lại** (CLAUDE.md §2 luật 2): (1) 1 đơn ghi ngày tương lai, dù được duyệt xong sớm, chỉ
+**Yêu cầu chốt lại** (AGENTS.md §2 luật 2): (1) 1 đơn ghi ngày tương lai, dù được duyệt xong sớm, chỉ
 được cộng vào lũy kế THẬT khi lịch thực tế đã tới đúng tháng đó — "chỉ là họ đăng ký trước thôi"; (2)
 Dự kiến áp dụng luật y hệt; (3) sau khi thấy tính năng "Admin chỉnh tay `MonthToDate`/`YearToDate`"
 (§Lũy kế tháng/năm bản cũ) không thể tồn tại song song với ledger mà không mất tính nhất quán (chỉnh
@@ -692,7 +692,7 @@ từng đơn, không phụ thuộc thứ tự xử lý) — không cần sửa g
 > company-wide — 1 batch/cấp/ngày). Chi tiết đổi gì ở §Bỏ mail riêng ở 3 cấp quản lý bên dưới.
 
 **Yêu cầu người dùng**: Trưởng phòng phải duyệt từng đơn một, rất mất công khi 1 Phòng ban có nhiều Bộ
-phận cùng gửi đơn trong ngày. Chốt qua AskUserQuestion (CLAUDE.md §2 luật 2):
+phận cùng gửi đơn trong ngày. Chốt qua AskUserQuestion (AGENTS.md §2 luật 2):
 - Mỗi ngày **15:00** (giờ hệ thống, `TimeHelper.GetCurrentUtcTime()` = UTC+7), job tự động gom **các đơn
   MỚI, chưa từng vào batch nào**, theo `DepartmentId` thành 1 `OtFormBatch` mới, gửi mail lần đầu. Batch
   cũ chưa xử lý xong được gửi **mail nhắc lại** (token mới, KHÔNG tạo batch mới, KHÔNG gộp thêm đơn) —
@@ -785,7 +785,7 @@ chối/loại nhân viên):
 
 **Yêu cầu người dùng**: Trưởng phòng/Trưởng Xưởng/Giám đốc quá tải vì vừa nhận mail riêng NGAY khi 1
 đơn tới lượt họ (`NotifyEligibleApproversAsync`, xem §Xác thực qua email bên dưới) VỪA nhận mail tổng
-hợp mỗi ngày 15:00 (§Đơn tổng ở trên) — trùng lặp cho cùng 1 đơn. Chốt qua AskUserQuestion (CLAUDE.md
+hợp mỗi ngày 15:00 (§Đơn tổng ở trên) — trùng lặp cho cùng 1 đơn. Chốt qua AskUserQuestion (AGENTS.md
 §2 luật 2): bỏ hẳn mail riêng ở **cả 3 cấp quản lý** (DepartmentManager/WorkshopManager/GeneralDirector),
 chỉ giữ đúng 1 kênh mail tổng hợp/ngày cho cả 3 cấp. Cấp trung gian (`TerminalLevel=None` — Staff/Group
 Leader/Team Leader/SUP/CHIEF...) **không đổi gì** — vẫn nhận mail riêng ngay như cũ vì chưa có cơ chế
@@ -885,7 +885,7 @@ Vn/Jp, không có nút CTA), chạy nền qua `IBackgroundTaskQueue` như mail d
 - Chưa verify mail thật gửi tới hộp thư (mới `dotnet build` sạch).
 
 ### §Mật khẩu cấp 2 khi ký/duyệt OtForm (2026-07-30)
-**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): thêm 1 lớp xác
+**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, AGENTS.md §2 luật 2): thêm 1 lớp xác
 thực bổ sung (giống PIN giao dịch ngân hàng) cho hành vi có tính pháp lý — ký/duyệt phiếu tăng ca.
 Mỗi user tự đăng ký 1 **mật khẩu cấp 2** riêng (khác hẳn mật khẩu đăng nhập AD), và phải nhập lại
 đúng mật khẩu này ở **MỌI** bước ký/duyệt: `POST /{id}/submit` (Trưởng nhóm ký "Người đề nghị"),
@@ -923,7 +923,7 @@ bỏ qua cho user chưa thiết lập (chặn cứng, bắt thiết lập trư�
 - Hợp đồng FE đầy đủ ở [attendance-api-fe.md §6c](attendance-api-fe.md).
 
 ### §Loại nhân viên khỏi đơn (2026-07-30)
-**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, CLAUDE.md §2 luật 2): đơn nhiều
+**Yêu cầu người dùng** (chốt qua AskUserQuestion trước khi code, AGENTS.md §2 luật 2): đơn nhiều
 người tăng ca, cấp đang ký/duyệt không đồng ý cho **1 người cụ thể** — trước đây chỉ có lựa chọn Từ
 chối cả đơn (`RejectAsync`), buộc lập lại từ đầu dù 9/10 người vẫn hợp lệ. Thêm khả năng loại đúng
 người đó rồi vẫn ký/duyệt được phần còn lại.
@@ -1194,7 +1194,7 @@ trách nhiệm" (phương án linh hoạt nhất trong 3 phương án đưa ra �
 Thay máu hoàn toàn cơ chế xác định người duyệt OT — persist chuỗi đã suy luận vào entity mới
 `OtFormApprovalStep`/`OtFormApprovalStepCandidate` (snapshot lúc TẠO đơn, không tính lại theo tổ chức
 hiện tại sau đó), thay thế `Submitter`/`GroupHead`/`UserApprovalScope`/`OtFormStatus` 6-giá-trị cũ.
-Quyết định thêm đã chốt qua trao đổi với người dùng khi bắt tay code (CLAUDE.md §2 luật 2):
+Quyết định thêm đã chốt qua trao đổi với người dùng khi bắt tay code (AGENTS.md §2 luật 2):
 1. **Ai được tạo/sửa đơn cho 1 Group** — bỏ hẳn nhánh `UserApprovalScope(Submitter)`, chỉ còn
    `Employee.GroupId == request.GroupId` (suy qua `Employee.UserName == người gọi`) hoặc Admin. Không
    còn khái niệm "được Admin cấp quyền tạo hộ Group khác mình" — mỗi user chỉ tạo được đơn cho đúng
@@ -2387,7 +2387,7 @@ Người dùng phát hiện 2 lỗi liên quan tới `Attendance.OTForm.CreatePr
      **0 tổ hợp** (có quyền `CreateProduction` nhưng không phải Line Leader, vd tài khoản Admin cấu
      hình riêng) → giữ nguyên dropdown tự do như trước.
    - Bẫy kỹ thuật: 2 khối "reset khi đổi Team/Line" có sẵn từ trước (so sánh snapshot ngay trong render,
-     CLAUDE.md §4.5) sẽ VÔ TÌNH xoá mất giá trị Line/Nhóm ca vừa tự điền sẵn (Team đổi từ `""` sang có
+     AGENTS.md §4.5) sẽ VÔ TÌNH xoá mất giá trị Line/Nhóm ca vừa tự điền sẵn (Team đổi từ `""` sang có
      giá trị vẫn tính là "đổi Team" dù do code gán, không phải người dùng bấm) — phải thêm điều kiện bỏ
      qua reset khi `isProductionScopeLocked`.
 
@@ -2878,7 +2878,7 @@ ngày" cạnh 2 nút xuất đã có trong `ProductionOtReportPanel.tsx`, dùng 
 Người dùng gửi 6 file thật (`docs/Data/Reports/`, trừ `22-08.pdf`/`22-08.xlsx` — 2 file đó là tham
 chiếu khác, không thuộc bộ deliverable hàng ngày) — đúng nguyên văn các file kế toán lương nhận được
 mỗi ngày SAU KHI Trưởng phòng ký: 3 Excel + N PDF (N = số Block-Nhóm có OT hôm đó). Phân tích tên file +
-đối chiếu dữ liệu thật rồi chốt với người dùng (không tự bịa — CLAUDE.md §2 luật 2):
+đối chiếu dữ liệu thật rồi chốt với người dùng (không tự bịa — AGENTS.md §2 luật 2):
 
 **Quy tắc đặt tên (áp dụng cho MỌI export mới ở mục này)**:
 - Excel: `"{TenQuery}_{yyyy-MM-d}_{MaPhongBan}.xlsx"` — ngày dùng đặc tả `"yyyy-MM-d"` (`d` KHÔNG
@@ -2978,7 +2978,7 @@ bản nhỏ — convention hiện có, đừng gom helper chung). Đo chữ bằ
 
 **Bài học `html2canvas` — đừng quay lại:** đã vá 3 lần vẫn hỏng, vì thư viện hỗ trợ CSS không đầy đủ ở
 `overflow:hidden`+`nowrap`, `flex align-items:center`, `display:table-cell`, và `aspect-ratio` (lệch tỷ
-lệ tích luỹ theo chiều dọc — càng xuống cuối trang càng lệch). Xem `CLAUDE.md §4.8`.
+lệ tích luỹ theo chiều dọc — càng xuống cuối trang càng lệch). Xem `AGENTS.md §4.8`.
 
 **Phần vẫn dùng cho bản in đơn lẻ:** `AutoFitLine` + hook `useAutoFitLineWidth` (đo `scrollWidth`/
 `clientWidth` thật rồi thu nhỏ cỡ chữ, sàn 55%; canh giữa dọc bằng `line-height` = chiều cao thật của ô,
@@ -3006,7 +3006,7 @@ quyền cần Id của Chức vụ đã tồn tại).
 - Đổi `useEffect` gọi trực tiếp `Promise.all().then()` (bản `JobTitlePermissionManager.tsx` cũ) sang
   **`useFetchEffect`** khi viết lại — bản cũ set `setIsLoading(true)` NGAY ĐẦU effect (đồng bộ) từng
   lọt qua vì chưa từng bật React Compiler lint kiểm tra file này, nhưng khi viết file MỚI thì
-  `react-hooks/set-state-in-effect` chặn ngay (đúng luật CLAUDE.md §4.3 "Fetch dữ liệu — luôn dùng
+  `react-hooks/set-state-in-effect` chặn ngay (đúng luật AGENTS.md §4.3 "Fetch dữ liệu — luôn dùng
   useFetchEffect") — sửa bằng cách gộp cả 3 nguồn dữ liệu (`allowed-codes`/`PermissionApi.getAll`/
   `by-job-title`) vào 1 `Promise.all` làm fetcher duy nhất truyền cho hook.
 - **Verify**: `npx tsc --noEmit` + `pnpm lint` sạch (2 cảnh báo/lỗi cũ ở `CreateOtFormPage.tsx`/
@@ -3014,141 +3014,77 @@ quyền cần Id của Chức vụ đã tồn tại).
   modal mới trên trình duyệt (chỉ đổi UI, không đổi API/logic quyền nào — rủi ro thấp, nhưng cần bấm
   thử 1 lần trước khi coi ổn định).
 
-### §Phân quyền theo Phòng ban — mở rộng vai trò Coordinator (2026-08-29)
+### §Phân quyền Coordinator (Bộ phận / Nhóm) — trạng thái chốt
 
-Người dùng muốn "người phụ trách 1 Phòng ban" tự làm được, KHÔNG cần Admin: cập nhật nhân sự dưới
-chuyền, cập nhật lũy kế, sửa giới hạn OT/tháng/năm riêng từng người — TẤT CẢ chỉ giới hạn trong ĐÚNG
-Phòng ban họ phụ trách (không phải toàn công ty). Đã có sẵn "cây duyệt" dùng cơ chế tương tự — TÁI SỬ
-DỤNG nguyên khái niệm `DepartmentApprovalStepCoordinator` (Admin gán tay qua UI "Cây duyệt", KHÔNG
-suy luận theo Chức vụ) thay vì phát minh khái niệm mới hay dùng `JobTitlePermissionWhitelist` (whitelist
-đó cố tình loại trừ permission "quản trị" để tránh 1 người tự leo thang quyền qua đổi Chức vụ).
+> Gộp từ 3 mục rời (2026-08-29, và 2 mục 2026-09-28 trong đó 1 mục **đảo ngược** quyết định cũ) — đọc
+> riêng lẻ sẽ ra kết luận trái ngược nhau. Đây là trạng thái đang chạy.
 
-- **`IDepartmentAccessGuard`** (`Attendance.Application/Interfaces/Service/IDepartmentAccessGuard.cs` +
-  `DepartmentAccessGuardService.cs`) — trích ra từ logic riêng lẻ trước đó của
-  `DepartmentApprovalStepService.EnsureCanManageDepartmentAsync`, dùng CHUNG cho mọi tính năng scope
-  theo Phòng ban: `EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId)` (Admin bỏ qua, else
-  bắt buộc có dòng Coordinator đúng Phòng ban) + `GetManagedDepartmentIdsAsync(userName)` (dùng khi cần
-  scope THEO TỪNG DÒNG dữ liệu tự do, không hardcode 1 Phòng ban).
-- **Tự động cấp quyền cho Coordinator** — mở rộng `ApprovalStepCoordinatorPermissions` (đã có sẵn cơ
-  chế `SyncAutoGrantedPermissionsCoreAsync` cấp `DepartmentApprovalStep.Update` cho Coordinator từ
-  trước) thêm 3 permission mới, TẤT CẢ tự cấp NGAY khi Admin gán ai đó làm Coordinator của 1 Phòng ban
-  (không cần bước gán Role riêng): `Attendance.Employee.UpdateOtLimit` (mới, xem dưới) — hiệu
-  lực ngay, không cần đăng nhập lại (cùng cơ chế `SyncAutoGrantedPermissionsAsync` đã có).
-- **`ProductionEmployeeImportService.PreviewAsync`/`ConfirmAsync`** — thêm `(userName, isAdmin)`, check
-  1 LẦN cho cả file qua `EnsureManufacturingDepartmentAccessAsync` (đích đã hardcode cứng vào Phòng ban
-  "CT" — `ManufacturingDepartmentCode`, nên không cần scope theo dòng).
-- **`ApplyAccumulationAsync`** — khác ở trên (nhận `EmployeeCode` TỰ DO từ Excel, không hardcode 1
-  Phòng ban): scope THEO TỪNG DÒNG — lấy trước `GetManagedDepartmentIdsAsync`, mỗi dòng resolve Phòng
-  ban thật của nhân viên đó (`employee.DepartmentId ?? employee.Group.DepartmentId`, projection
-  `int?` an toàn — KHÔNG dùng `x.Group!.DepartmentId` trực tiếp, dễ vỡ khi Group null), dòng ngoài phạm
-  vi bị skip với lý do "Nhân viên không thuộc Phòng ban bạn phụ trách." (không throw huỷ cả file).
-- **`Attendance.Employee.UpdateOtLimit`** (permission MỚI, migration `AddEmployeeUpdateOtLimitPermission`
-  — Identity DB, gán thêm cho Role đang giữ `Attendance.Employee.Update`) — tách RIÊNG khỏi
-  `Attendance.Employee.Update` (permission đó còn cho sửa Code/Tên/Group/... của MỌI nhân viên, quá
-  rộng để cấp cho người phụ trách 1 Phòng ban). Endpoint mới `PUT /api/Employee/{id}/ot-limit`
-  (`EmployeeService.UpdateOtLimitAsync`) — CHỈ set `CustomMonthlyOtHourLimit`/`CustomYearlyOtHourLimit`,
-  scope qua `EnsureCanManageDeptOrGroupScopeAsync` (2026-09-28: mở rộng từ chỉ-Phòng-ban sang cả Phòng
-  ban lẫn Nhóm — phụ trách Phòng ban sửa được cả phòng, chỉ phụ trách Nhóm thì chỉ sửa được đúng Nhóm
-  đó; tự cấp cho CẢ 2 vai trò qua `SyncAutoGrantedPermissionsCoreAsync`). `UpdateEmployeeDto`/
-  `EmployeeService.UpdateAsync` (PUT /{id} chung) KHÔNG còn đụng 2 field này nữa (cố ý — tránh
-  wipe về null mỗi khi Admin sửa thông tin cơ bản qua form chung) — đã verify sống: set giá trị test
-  qua endpoint mới → gọi PUT /{id} chung với dữ liệu khác không đổi → xác nhận 2 field KHÔNG bị mất →
-  khôi phục lại giá trị gốc.
-- **`EmployeeImportController.ImportOtHourLimits`/`DownloadOtHourLimitTemplate`** — đổi permission gate
-  từ `Attendance.Employee.Update` sang `Attendance.Employee.UpdateOtLimit`;
-  `EmployeeImportService.ImportOtHourLimitsAsync` thêm scope THEO TỪNG DÒNG (cùng cách `ApplyAccumulationAsync`
-  — `FindAsync` không include navigation nên tra riêng 1 lượt `Group.DepartmentId` cho các dòng
-  `DepartmentId=null`).
-- **FE**: `EmployeeForm.tsx` bỏ 2 field giới hạn OT khỏi form Sửa nhân viên chung, CHỈ còn hiện lúc Tạo
-  mới; sửa sau này đi qua dialog mới `EmployeeOtLimitDialog.tsx` (gọi `PUT /{id}/ot-limit`), nút mở
-  dialog + nút Sửa/Xoá nhân viên + các mục trong menu Excel (Import/Xuất nhân sự dưới chuyền, Import
-  giới hạn OT) đều gate RIÊNG theo đúng permission tương ứng trong `EmployeeList.tsx` (không còn dùng
-  chung 1 điều kiện hiển thị) — người chỉ có 1-2 trong các quyền trên sẽ chỉ thấy đúng hành động họ
-  được phép.
-- **KHÔNG cần sửa `CategoryManagement.tsx`/`OtManagerSidebar.tsx`** — cả 2 nơi đã gate tab "Nhân viên"/
-  mục sidebar "Danh mục" theo `hasAnyPermission([...,"Attendance.DepartmentApprovalStep.Update",...])`
-  từ trước; vì Coordinator ĐÃ được tự động cấp permission đó, họ tự động thấy được tab/mục nav này mà
-  không cần sửa gì thêm — kiểm tra kỹ trước khi định thêm điều kiện mới, tránh trùng lặp không cần thiết.
-- **Giới hạn đã biết của lượt verify này**: `windows-login` chỉ đăng nhập được bằng Windows Negotiate
-  của user hiện tại (không có cách lấy JWT cho 1 tài khoản khác để giả lập không phải Admin) — nên
-  CHƯA test sống được đường non-Admin bị chặn đúng khi thao tác ngoài phạm vi Phòng ban của họ
-  (chỉ verify được: Admin vẫn hoạt động bình thường qua mọi endpoint đã sửa, và logic scope đã review
-  kỹ qua code). Nên test tay qua UI thật với 1 tài khoản Coordinator thật trước khi coi là ổn định.
+**Khái niệm:** "Coordinator" = người được Admin **gán tay** qua màn "Cây duyệt"
+(`DepartmentApprovalStepCoordinator` / `GroupApprovalStepCoordinator`) để tự quản nhân sự trong đúng
+phạm vi mình phụ trách, **không cần Admin**. Cố ý **không** suy luận theo Chức vụ và **không** dùng
+`JobTitlePermissionWhitelist` (whitelist đó cố tình loại trừ permission "quản trị" để không ai tự leo
+thang quyền bằng cách đổi Chức vụ của mình).
 
-### §Chốt mô hình Coordinator — Bộ phận/Nhóm cùng quyền nhân viên+lũy kế, riêng "dưới chuyền" CHỈ Bộ phận (2026-09-28)
+**Quyền tự cấp** — qua `EmployeeService.SyncAutoGrantedPermissionsCoreAsync`
+(xem `ApprovalStepCoordinatorPermissions`), **hiệu lực ngay, không cần đăng nhập lại**:
 
-**Chốt hướng người dùng** (CLAUDE.md §2 luật 2): khi 1 Employee được gán làm Coordinator (Bộ phận hoặc
-Nhóm, qua màn "Cây duyệt" — không đổi khái niệm, xem §Phân quyền theo Phòng ban ở trên), quyền tự động
-cấp chia làm 2 nhóm:
+| Permission | Dept Coordinator | Group Coordinator |
+|---|---|---|
+| `DepartmentApprovalStep.Update` | ✔ | – |
+| `Employee.UpdateOtLimit` · `EmployeeAccumulation.Update` · `EmployeeAccumulation.Import` | ✔ | ✔ |
+| `Employee.Create` / `.Update` / `.Delete` (hồ sơ đầy đủ) | ✔ | ✔ |
+| `ProductionEmployee.View` / `.Update` / `.Import` / `.Export` | ✔ | ✖ **không cấp** |
 
-1. **Dữ liệu nhân viên + lũy kế — Bộ phận VÀ Nhóm đều được, đối xứng nhau**: sửa giới hạn OT/tháng/năm
-   1 người (`EmployeeUpdateOtLimitCode`), sửa tay lũy kế 1 người (`EmployeeAccumulationUpdateCode`), và
-   **import Excel hàng loạt cùng 2 loại dữ liệu này** (`EmployeeAccumulationImportCode`, mới — trước đây
-   hoàn toàn KHÔNG tự cấp, phải Admin gán tay). Phụ trách Bộ phận thao tác được cả phòng; phụ trách Nhóm
-   chỉ thao tác được đúng Nhóm đó. Cả 3 permission tự cấp CHUNG 1 điều kiện `isDeptCoordinator ||
-   isGroupCoordinator` trong `EmployeeService.SyncAutoGrantedPermissionsCoreAsync`. Scope thực thi:
-   - Sửa 1 người: `EmployeeService.EnsureCanManageDeptOrGroupScopeAsync` (đã có từ trước).
-   - Import Excel (`EmployeeImportService.ImportOtHourLimitsAsync`/`ImportMonthlyAccumulationAsync`):
-     scope THEO TỪNG DÒNG, mở rộng thêm điều kiện Nhóm bên cạnh Bộ phận đã có — dòng ngoài cả 2 phạm vi
-     bị skip với lý do "Nhân viên không thuộc Phòng ban/Nhóm bạn phụ trách." (không huỷ cả file).
-2. **Dữ liệu "nhân sự dưới chuyền" (`ProductionEmployee`) — CHỈ Bộ phận, KHÔNG cấp cho Nhóm**: đây là
-   khái niệm cấp Phòng ban (gắn Line/Team/Nhóm ca của cả 1 Phòng ban sản xuất — thường "Chế Tạo"),
-   không tách theo từng Nhóm con. 4 permission `ProductionEmployeeViewCode`/`UpdateCode`/`ImportCode`/
-   `ExportCode` chỉ tự cấp trong nhánh `if (isDeptCoordinator)` — Coordinator chỉ phụ trách Nhóm
-   (không đồng thời phụ trách Bộ phận nào) sẽ KHÔNG có 4 quyền này. Scope thực thi (đã sửa lại đồng bộ,
-   trước đó Update/Export hoàn toàn không kiểm tra gì):
-   - `ProductionEmployeeService.GetPagedAsync` — lọc còn CHỈ Bộ phận phụ trách (bỏ nhánh Nhóm đã thêm
-     nhầm trước đó cùng ngày, xem §Sửa lỗ hổng phân quyền Attendance-OT bên dưới).
-   - `ProductionEmployeeService.UpdateAsync` (mới thêm `callerUserName`/`isAdmin`) — resolve Bộ phận
-     thật của `ProductionEmployee.EmployeeId` (`Employee.DepartmentId ?? Employee.Group.DepartmentId`),
-     ném `DomainException` nếu ngoài phạm vi hoặc dòng chưa gắn Employee.
-   - `ProductionEmployeeExportService.ExportAsync` (mới thêm `callerUserName`/`isAdmin`) — lọc ngay ở
-     query trước khi xuất, không còn xuất được sheet của Bộ phận khác.
-   - `ProductionEmployeeImportService` (Preview/Confirm hardcode "CT", `ApplyAccumulationAsync` scope
-     theo từng dòng) — **giữ nguyên CHỈ Bộ phận**, không mở rộng Nhóm dù dùng chung permission
-     `EmployeeAccumulationImportCode` với mục 1 — vì đây vẫn là thao tác trên dữ liệu "dưới chuyền".
-- **FE không cần sửa gì thêm** — mọi nút/tab liên quan (`EmployeeList.tsx`, `otRoutePermissions.ts`,
-  `ProductionEmployeeList.tsx`) đã gate đúng theo từng permission code này từ trước (`hasPermission`),
-  nên Coordinator chỉ phụ trách Nhóm sẽ tự động KHÔNG thấy các nút/tab "Nhân sự dưới chuyền" (đúng yêu
-  cầu "phần không nằm trong quyền thì ẩn đi") mà không cần đổi UI.
-- Không hồi tố — chỉ ảnh hưởng thao tác SAU khi đổi.
+`ProductionEmployee` là khái niệm **cấp Phòng ban** (gắn Line/Team/Nhóm ca của cả 1 phòng sản xuất,
+thường "Chế Tạo") nên không tách theo Nhóm con — nhánh `if (isDeptCoordinator)`.
+`Employee.Create/Update/Delete` **đảo ngược** quyết định 2026-08-29 ("quá rộng, chỉ Admin"): nay cấp cho
+cả 2 vai trò nhưng **khoá cứng theo scope** thay vì mở hoàn toàn.
 
-### §Coordinator = "y hệt Admin nhưng trong scope" cho hồ sơ nhân viên (2026-09-28)
+**Đổi rule auto-grant thì phải chạy lại** `POST /api/Employee/resync-coordinator-permissions` — nếu không,
+Coordinator đã gán từ trước sẽ thiếu quyền mới cho tới khi có ai gán/gỡ lại họ.
 
-**Chốt hướng người dùng** (CLAUDE.md §2 luật 2 — đảo ngược quyết định cũ 2026-08-29 "Employee.Update
-quá rộng, chỉ Admin"): `Attendance.Employee.Create`/`Update`/`Delete` (hồ sơ đầy đủ — Code/Tên/Group/
-Chức vụ, KHÁC 2 field OT-limit/lũy kế hẹp ở §Chốt mô hình Coordinator trên) giờ tự cấp thêm cho CẢ
-Coordinator Bộ phận LẪN Nhóm (đối xứng, cùng nhánh `isDeptCoordinator || isGroupCoordinator`), khoá
-cứng theo scope thay vì mở hoàn toàn:
+**3 guard thực thi phạm vi** — dùng lại, đừng viết guard mới:
+- `IDepartmentAccessGuard` (`DepartmentAccessGuardService`): `EnsureCanManageDepartmentAsync(userName,
+  isAdmin, departmentId)` (Admin bỏ qua) + `GetManagedDepartmentIdsAsync(userName)` khi cần scope theo
+  từng dòng dữ liệu tự do.
+- `EmployeeService.EnsureCanManageDeptOrGroupScopeAsync` — phạm vi **hiện tại** của nhân viên đang
+  sửa/xoá; gọi NGAY ĐẦU hàm `UpdateAsync`/`DeleteAsync`.
+- `EmployeeService.EnsureAssignmentInCallerScopeAsync` — phạm vi **sắp gán tới**, chạy sau khi
+  `ValidateOrganizationAssignmentAsync` resolve `(groupId, departmentId)`. `UpdateAsync` phải gọi **cả
+  hai** để chặn "chuyển" nhân viên từ Nhóm mình quản sang Nhóm ngoài phạm vi. Chức vụ Trưởng Xưởng/Giám
+  đốc (`groupId` và `departmentId` đều null) LUÔN ngoài phạm vi mọi Coordinator — chỉ Admin gán được.
 
-- **`CreateAsync`**: sau khi `ValidateOrganizationAssignmentAsync` resolve xong `(groupId, departmentId)`
-  theo TerminalLevel Chức vụ đã chọn (xem §Cây chức vụ), gọi thêm
-  `EnsureAssignmentInCallerScopeAsync(callerUserName, isAdmin, groupId, departmentId, ...)` (helper mới) —
-  Coordinator Bộ phận tạo được vào bất kỳ Nhóm nào thuộc Bộ phận mình (hoặc thẳng vào Bộ phận nếu Chức vụ
-  = Trưởng phòng), Coordinator Nhóm CHỈ tạo được vào đúng Nhóm mình. Chức vụ Trưởng Xưởng/Giám đốc
-  (`groupId`/`departmentId` đều null, dùng chung toàn công ty) LUÔN ngoài phạm vi bất kỳ Coordinator nào
-  — chỉ Admin gán được vai trò này.
-- **`UpdateAsync`/`DeleteAsync`**: check phạm vi HIỆN TẠI của nhân viên đang sửa/xoá qua
-  `EnsureCanManageDeptOrGroupScopeAsync` (dùng lại y hệt cơ chế OT-limit/lũy kế) NGAY ĐẦU hàm — nhân
-  viên phải thuộc đúng Bộ phận/Nhóm phụ trách mới được đụng vào. `UpdateAsync` sau khi resolve
-  `(groupId, departmentId)` MỚI (nếu đổi Nhóm/Chức vụ) còn check thêm lần 2 qua
-  `EnsureAssignmentInCallerScopeAsync` — chặn "chuyển" nhân viên ra khỏi phạm vi mình quản (vd Coordinator
-  Nhóm A không đổi được `GroupId` của 1 nhân viên trong Nhóm A sang Nhóm B ngoài phạm vi).
-- **`EmployeeCreateCode`/`UpdateCode`/`DeleteCode`** (permission có sẵn, KHÔNG migration mới — chỉ đổi
-  logic auto-grant trong `SyncAutoGrantedPermissionsCoreAsync`, xem `ApprovalStepCoordinatorPermissions`).
-- **FE**: `EmployeeForm.tsx` nhận thêm prop `scope?: EmployeeScopeDto | null` (từ `EmployeeList.tsx`,
-  cùng nguồn `GetMyScopeAsync` đã dùng cho dropdown lọc) — Coordinator bị giới hạn thì dropdown Bộ
-  phận/Nhóm trong form Tạo/Sửa cũng chỉ hiện đúng phạm vi (dùng thẳng `scope.groups`/`scope.departments`,
-  không gọi lại `getAllGroups`/`getAllDepartments`), tránh chọn xong mới bị BE từ chối. Nút Sửa/Xoá/Thêm
-  mới ở `EmployeeList.tsx` đã gate theo đúng permission này từ trước, không cần đổi thêm gì.
-- **Vẫn Admin-only, không đụng tới** (theo yêu cầu người dùng): gán Chức vụ
-  (`AssignDepartmentJobTitle`/`AssignGroupJobTitle` — đã sẵn có cho Coordinator từ trước, không liên
-  quan lần này), import liên kết Identity (`Identity.User.BulkImport`), và mọi Danh mục khác
-  (Department/Group/JobTitle/Reason/OtCase/AttendanceSetting).
-- **Sau khi đổi rule cấp tự động — nhớ chạy lại** `POST /api/Employee/resync-coordinator-permissions`
-  (xem mục ngay dưới) để Coordinator ĐÃ gán từ trước cũng có ngay 3 quyền mới, không phải đợi ai đó
-  gán/gỡ lại họ.
-- Không hồi tố — chỉ ảnh hưởng thao tác SAU khi đổi.
+**Luật scope theo từng dòng (import Excel):** `ImportOtHourLimitsAsync` /
+`ImportMonthlyAccumulationAsync` / `ApplyAccumulationAsync` resolve Phòng ban/Nhóm thật của từng
+`EmployeeCode` (`employee.DepartmentId ?? employee.Group.DepartmentId`, projection `int?` an toàn —
+**không** viết `x.Group!.DepartmentId`, vỡ khi Group null) rồi **skip dòng ngoài phạm vi** với lý do
+"Nhân viên không thuộc Phòng ban/Nhóm bạn phụ trách" — **không throw huỷ cả file**.
+`ProductionEmployeeImportService.Preview/Confirm` thì hardcode Phòng ban "CT"
+(`ManufacturingDepartmentCode`) nên check 1 lần cho cả file.
+`ProductionEmployeeService.GetPagedAsync`/`UpdateAsync` và `ProductionEmployeeExportService.ExportAsync`
+đều lọc/chặn theo **chỉ Bộ phận** phụ trách (Export lọc ngay ở query, không xuất được sheet phòng khác).
+
+**`Employee.UpdateOtLimit` tách riêng khỏi `Employee.Update`** vì `Update` còn cho sửa Code/Tên/Group của
+mọi nhân viên. Endpoint `PUT /api/Employee/{id}/ot-limit` CHỈ set `CustomMonthlyOtHourLimit`/
+`CustomYearlyOtHourLimit`; `UpdateEmployeeDto` + `UpdateAsync` (PUT chung) **cố ý không đụng 2 field này**
+để Admin sửa thông tin cơ bản không wipe chúng về null (đã verify sống).
+
+**FE:** `EmployeeForm.tsx` nhận prop `scope?: EmployeeScopeDto | null` (nguồn `GetMyScopeAsync`, cùng
+nguồn với dropdown lọc) → dropdown Bộ phận/Nhóm trong form Tạo/Sửa chỉ hiện đúng phạm vi, không gọi lại
+`getAllGroups`/`getAllDepartments`. 2 field giới hạn OT chỉ còn ở form Tạo mới; sửa sau đi qua
+`EmployeeOtLimitDialog.tsx`. Mọi nút/tab (`EmployeeList.tsx`, `ProductionEmployeeList.tsx`,
+`otRoutePermissions.ts`, `CategoryManagement.tsx`, `OtManagerSidebar.tsx`) đã gate **theo từng permission
+code** từ trước → Coordinator chỉ phụ trách Nhóm tự động không thấy phần "Nhân sự dưới chuyền", **không
+cần sửa UI khi đổi rule auto-grant**. Kiểm tra kỹ chỗ này trước khi định thêm điều kiện mới.
+
+**Vẫn Admin-only:** gán Chức vụ (`AssignDepartmentJobTitle`/`AssignGroupJobTitle`), import liên kết
+Identity (`Identity.User.BulkImport`), và mọi Danh mục khác (Department/Group/JobTitle/Reason/OtCase/
+AttendanceSetting).
+
+**Chưa test sống đường non-Admin:** `windows-login` chỉ lấy được JWT của chính user hiện tại nên không
+giả lập được tài khoản Coordinator thật — chỉ verify Admin vẫn chạy đúng qua mọi endpoint đã sửa. Test
+tay qua UI bằng 1 tài khoản Coordinator thật trước khi coi là ổn định. Không hồi tố: chỉ ảnh hưởng thao
+tác sau khi đổi.
 
 ### §Vá lỗ hổng: `Employee.View` theo Chức vụ trả nguyên danh sách TOÀN CÔNG TY (2026-09-03)
 
@@ -3696,21 +3632,21 @@ duyệt thật) rồi gọi `IEmailService.SendAsync`; trả `bool`, `false` →
 3. `Attendance.Api.csproj`: thêm `ProjectReference` tới `Attendance.Application` (cần cho DTO/Interface Service).
 4. Scrutor tự động đăng ký toàn bộ `*Repository`/`*UnitOfWork`/`*Service` trong assembly `Attendance.*` (không cần khai báo `AddScoped` thủ công).
 
-## 3. Còn nợ / cố ý chưa làm (cập nhật 2026-09-10)
-
-> Mục này thay cho 2 mục cũ "Đã smoke-test (2026-07-14)" + "Còn thiếu / bước tiếp theo" — cả hai đã lỗi
-> thời (còn nhắc `UserApprovalScope` đã xoá 2026-08-08, "FE chưa có" trong khi FE đã chạy production).
+## 3. Còn nợ / cố ý chưa làm (cập nhật 2026-10-01)
 
 **Cố ý chưa làm — chờ yêu cầu, đừng tự triển khai:**
 - **Cột `KHOI SU`** trong file mẫu Chế Tạo: export để trống, import bỏ qua (xem §Import/Export nhân sự
   dưới chuyền).
-- **Import hàng loạt số giờ giới hạn OT riêng theo từng nhân viên** — "quyết định sau" (xem §Giới hạn
-  OT/tháng/năm RIÊNG theo từng nhân viên).
-- **Backfill lũy kế lịch sử từ hệ thống cũ** vào `EmployeeAccumulationHistories` — việc riêng, không nằm
-  trong luồng import nhân sự.
 - **Báo cáo thứ 4 trở đi** (mục 9 trong danh sách báo cáo gốc).
 - **Làm đẹp giao diện đợt 2** cho phần CRUD danh mục/phạm vi duyệt/chữ ký/mật khẩu cấp 2.
 
+**Đã làm xong rồi, ĐỪNG làm lại** (từng nằm trong danh sách còn nợ): import hàng loạt giới hạn OT riêng
+theo từng nhân viên (`POST /api/EmployeeImport/ot-hour-limits`), và nạp lũy kế năm qua cột D của file
+import lũy kế tháng.
+
 **Việc vận hành khi dựng server production:** import cert self-signed của `VNMAIL04` vào
 `Cert:\LocalMachine\Root` trên chính server đó (hoặc nhờ IT đẩy qua GPO domain `yev.vn`) — nếu không,
-SMTP sẽ fail TLS. SMTP đã verify gửi được từ máy dev (2026-07-17).
+SMTP sẽ fail TLS. SMTP đã verify gửi được từ máy dev.
+
+**Chưa xong, chặn bởi hạ tầng:** AI Chat lập đơn tăng ca treo ~5 phút rồi lỗi vì LM Studio không xử lý
+được request kèm `tools` — xem `asset-module.md §1.18` (blocker dùng chung cho cả 2 AI Chat).

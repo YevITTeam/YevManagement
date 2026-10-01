@@ -70,7 +70,7 @@ function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListPa
     if (params?.pageSize) query.set("PageSize", String(params.pageSize));
     if (params?.fromDate) query.set("FromDate", params.fromDate);
     if (params?.toDate) query.set("ToDate", params.toDate);
-    // status=0 (Pending) là giá trị hợp lệ — không được dùng truthy check kẻo rớt mất (CLAUDE.md §4.4).
+    // status=0 (Pending) là giá trị hợp lệ — không được dùng truthy check kẻo rớt mất (AGENTS.md §4.4).
     if (params?.status !== undefined) query.set("Status", String(params.status));
     if (params?.groupId !== undefined) query.set("GroupId", String(params.groupId));
     if (params?.departmentId !== undefined) query.set("DepartmentId", String(params.departmentId));

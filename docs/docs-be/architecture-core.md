@@ -106,7 +106,7 @@ Middleware `CompanySystem.HostApi/Middlewares/HandleExceptionMiddleware.cs` map 
 ## 8. Pipeline Host (Program.cs) — thứ tự
 ```
 HandleExceptionMiddleware → (Dev) MapOpenApi + MapScalarApiReference
-→ UseHttpsRedirection → UseCors("AllowNextJs" = localhost:3000, 10.45.1.181:3000, AllowCredentials)
+→ UseHttpsRedirection → UseCors("AllowNextJs" — danh sách origin xem Program.cs, AllowCredentials)
 → UseForwardedHeaders → UseAuthentication → UseAuthorization → MapControllers
 ```
 

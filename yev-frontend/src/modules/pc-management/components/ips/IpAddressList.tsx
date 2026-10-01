@@ -81,7 +81,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
     const canBulkSelect = statusFilter === "0" || statusFilter === "1";
 
     // Đổi trang/lọc → bỏ chọn hết (dữ liệu hiển thị đã khác), theo pattern "adjusting state
-    // when a prop changes" ở CLAUDE.md thay vì dùng effect.
+    // when a prop changes" ở AGENTS.md thay vì dùng effect.
     const filtersKey = `${pageIndex}|${appliedKeyword}|${statusFilter}`;
     const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
     if (prevFiltersKey !== filtersKey) {

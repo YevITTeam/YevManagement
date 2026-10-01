@@ -65,7 +65,7 @@ export default function WorkflowRequestList() {
     );
 
     // Reset trang khi đổi tab/filter — so sánh snapshot trong thân render, không dùng effect
-    // (CLAUDE.md §4.5, mirror pattern các list khác đã dùng).
+    // (AGENTS.md §4.5, mirror pattern các list khác đã dùng).
     const filterKey = `${tab}:${statusFilter}`;
     const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
     if (prevFilterKey !== filterKey) {

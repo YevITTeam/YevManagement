@@ -24,7 +24,7 @@ export const DEFAULT_ATTENDANCE_SETTING: AttendanceSettingDto = {
 // Cấu hình này gần như không đổi nhưng lại cần ở RẤT nhiều màn (tạo đơn, chi tiết đơn, danh sách nhân
 // viên, bản in, trang xác nhận qua email...). Cache ở tầng module để nhiều component cùng mount chỉ tốn
 // đúng 1 request, thay vì mỗi component tự gọi lại — dự án không dùng React Query nên tự memo hoá
-// promise là cách gọn nhất, đúng tinh thần "chỉ fetch wrapper thủ công" ở CLAUDE.md §4.1.
+// promise là cách gọn nhất, đúng tinh thần "chỉ fetch wrapper thủ công" ở AGENTS.md §4.1.
 let cachedSettingPromise: Promise<AttendanceSettingDto> | null = null;
 
 function getCachedAttendanceSetting(): Promise<AttendanceSettingDto> {

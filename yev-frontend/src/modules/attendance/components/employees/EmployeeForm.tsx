@@ -85,7 +85,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
 
     // Bị giới hạn theo Coordinator (2026-09-28) — dùng THẲNG danh sách BE đã trả sẵn trong `scope` (khớp
     // đúng phạm vi BE thật sự cho phép, xem EmployeeList.tsx) thay vì gọi API "toàn công ty" + set lại
-    // qua state riêng (tránh setState đồng bộ trong effect, CLAUDE.md §4.5).
+    // qua state riêng (tránh setState đồng bộ trong effect, AGENTS.md §4.5).
     const isScopeRestricted = Boolean(scope && !scope.companyWide);
     const effectiveGroups = isScopeRestricted ? scope!.groups : groups;
     const effectiveDepartments = isScopeRestricted ? scope!.departments : departments;
