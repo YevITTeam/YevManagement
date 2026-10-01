@@ -826,7 +826,7 @@
       "descMyActions": "あなたがいずれかのレベルで承認・不承認した申請の一覧です（処理完了済みの申請も含みます）。",
       "descMyParticipations": "作成者・署名者・承認者でなくても、あなたが社員として名前が記載されている申請の一覧です。",
       "descAllForms": "作成者や承認範囲に関係なく、システム内のすべての残業申請です(管理者)。",
-      "colDepartmentGroup": "部署 / グループ",
+      "colDepartmentGroup": "部署",
       "colProductionLine": "ライン / シフトグループ",
       "colOtCase": "ケース",
       "colDate": "日付",

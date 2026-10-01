@@ -826,7 +826,7 @@
       "descMyActions": "Danh sách đơn tăng ca bạn đã Phê duyệt/Không phê duyệt ở bất kỳ cấp nào (kể cả đơn đã xử lý xong).",
       "descMyParticipations": "Danh sách đơn tăng ca bạn CÓ TÊN trong danh sách nhân viên, dù không phải người tạo/phê duyệt.",
       "descAllForms": "Toàn bộ đơn tăng ca trong hệ thống, không phân biệt người tạo hay phạm vi duyệt (Admin).",
-      "colDepartmentGroup": "Bộ phận / Nhóm",
+      "colDepartmentGroup": "Bộ phận",
       "colProductionLine": "Line / Nhóm ca",
       "colOtCase": "Trường hợp",
       "colDate": "Ngày",

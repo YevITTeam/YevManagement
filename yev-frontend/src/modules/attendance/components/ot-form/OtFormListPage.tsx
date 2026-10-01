@@ -736,9 +736,9 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                         />
                                     </th>
                                 )}
-                                <th className="whitespace-nowrap px-3 py-2.5">{t("colDepartmentGroup")}</th>
-                                <th className="whitespace-nowrap px-3 py-2.5">{t("colProductionLine")}</th>
-                                <th className="whitespace-nowrap px-3 py-2.5">{t("colOtCase")}</th>
+                                <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colDepartmentGroup")}</th>
+                                <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colProductionLine")}</th>
+                                <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colOtCase")}</th>
                                 <th className="whitespace-nowrap px-3 py-2.5">{t("colDate")}</th>
                                 <th className="whitespace-nowrap px-3 py-2.5">{t("colTotalHour")}</th>
                                 <th className="whitespace-nowrap px-3 py-2.5">{t("colNumberOfEmployee")}</th>
@@ -775,7 +775,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                             />
                                         </td>
                                     )}
-                                    <td className="px-3 py-2.5 align-top">
+                                    <td className="whitespace-nowrap px-3 py-2.5 align-top">
                                         <div className="text-sm font-semibold text-[#191c1e]">
                                             {bilingualText(form.departmentNameVn, form.departmentNameJp)}
                                         </div>
@@ -793,7 +793,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                             "—"
                                         )}
                                     </td>
-                                    <td className="px-3 py-2.5 align-top text-sm text-[#191c1e]">{form.otCaseCode}</td>
+                                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]">{form.otCaseCode}</td>
                                     <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
                                     <td className="px-3 py-2.5 align-top text-sm text-[#191c1e]">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">

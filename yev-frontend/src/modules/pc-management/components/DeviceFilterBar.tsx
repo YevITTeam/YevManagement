@@ -86,7 +86,7 @@ const advancedFields: (keyof DeviceFilters)[] = [
     "requiresDailyCheck",
     "groupId",
     "manager",
-    "ipAddress",
+    "departmentId",
 ];
 
 const fieldClassName =
@@ -216,12 +216,11 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         onChange={(value) => handleChange("deviceType", value)}
                         placeholder="Loại thiết bị"
                     />
-                    <IconSelect
-                        icon={Users}
-                        options={deviceDepartments.map((d) => ({ value: d.id, label: d.departmentName, searchText: d.departmentName.toLowerCase() }))}
-                        value={filters.departmentId}
-                        onChange={(value) => handleChange("departmentId", value)}
-                        placeholder="Bộ phận"
+                    <IconInput
+                        icon={MapPin}
+                        value={filters.ipAddress}
+                        onChange={(value) => handleChange("ipAddress", value)}
+                        placeholder="Địa chỉ IP"
                     />
                     <NativeSelect
                         value={filters.status}
@@ -270,8 +269,14 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         <Field label="Người quản lý" icon={User}>
                             <IconInput icon={User} value={filters.manager} onChange={(value) => handleChange("manager", value)} placeholder="Tên người quản lý" />
                         </Field>
-                        <Field label="Địa chỉ IP" icon={MapPin}>
-                            <IconInput icon={MapPin} value={filters.ipAddress} onChange={(value) => handleChange("ipAddress", value)} placeholder="Địa chỉ IP" />
+                        <Field label="Bộ phận" icon={Users}>
+                            <IconSelect
+                                icon={Users}
+                                options={deviceDepartments.map((d) => ({ value: d.id, label: d.departmentName, searchText: d.departmentName.toLowerCase() }))}
+                                value={filters.departmentId}
+                                onChange={(value) => handleChange("departmentId", value)}
+                                placeholder="Tất cả bộ phận"
+                            />
                         </Field>
                         <Field label="Nhà cung cấp" icon={Truck}>
                             <IconInput icon={Truck} value={filters.supplierName} onChange={(value) => handleChange("supplierName", value)} placeholder="Tên nhà cung cấp" />

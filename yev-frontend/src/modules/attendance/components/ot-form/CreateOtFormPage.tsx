@@ -173,7 +173,7 @@ function TimePicker24h({
     // 1 khung viền chung cho cả "giờ : phút" (thay vì 2 ô rời có viền riêng) — gọn, giống 1 ô nhập thời gian
     // thật; viền/vòng focus đổi theo cả khung (focus-within). Ô số không viền, nền trong suốt.
     const segmentClassName = `bg-transparent text-center font-medium tabular-nums text-[#191c1e] outline-none placeholder:text-[#c7ccd1] disabled:cursor-not-allowed ${
-        compact ? "w-5 text-xs" : "w-7 text-sm"
+        compact ? "w-8 text-xs" : "w-10 text-sm"
     }`;
 
     return (
