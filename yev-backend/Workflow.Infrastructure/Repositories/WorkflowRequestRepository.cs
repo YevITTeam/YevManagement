@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Shared.Infrastructure.Repositories;
 using Workflow.Application.Interfaces.Repository;
 using Workflow.Domain.Entities;
@@ -9,6 +10,13 @@ namespace Workflow.Infrastructure.Repositories
     {
         public WorkflowRequestRepository(WorkflowDbContext dbContext) : base(dbContext)
         {
+        }
+
+        public async Task LockForUpdateAsync(int workflowRequestId)
+        {
+            await _dbContext.Database
+                .SqlQuery<int>($"SELECT Id FROM WorkflowRequests WITH (UPDLOCK, HOLDLOCK) WHERE Id = {workflowRequestId}")
+                .ToListAsync();
         }
     }
 }

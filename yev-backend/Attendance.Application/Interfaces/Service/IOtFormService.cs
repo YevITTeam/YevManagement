@@ -58,6 +58,11 @@ namespace Attendance.Application.Interfaces.Service
 
         // Scopes / Validations
         Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin);
+
+        // (Những) tổ hợp Team/Line/Nhóm ca mà người gọi đang là Line Leader — dùng để FE khoá cứng 3
+        // dropdown ở chế độ "Theo chuyền" (2026-09-28). Xem OtFormService.GetMyProductionCreateScopesAsync.
+        Task<List<MyProductionCreateScopeItemDto>> GetMyProductionCreateScopesAsync(string userName, bool isAdmin);
+
         Task<List<int>> CheckOverlapAsync(CheckOtFormOverlapDto request);
 
         // Mutations
@@ -80,9 +85,14 @@ namespace Attendance.Application.Interfaces.Service
 
         // Kênh bổ sung qua email ([AllowAnonymous] ở Controller) — token tự nó là thông tin xác thực,
         // KHÔNG cần mật khẩu cấp 2 (khác Approve/Reject qua email vẫn giữ) — xem docs/attendance-module.md.
-        // Kênh trong-app (thêm/loại nhân viên) đã gộp vào UpdateAsync (2026-09-04) — xem
-        // docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn.
         Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request);
+
+        // Kênh trong-app (JWT), khôi phục 2026-09-30 ngay trên màn Duyệt — thay cho việc gộp hẳn vào
+        // UpdateAsync (2026-09-04) vốn chỉ cho phép người tạo (đơn theo Nhóm) sửa/loại người, khiến các
+        // cấp đang DUYỆT (không phải người tạo) mất khả năng loại người dù đúng là candidate bước hiện
+        // tại. Gọi thẳng RemoveEmployeeCoreAsync — luật "candidate bước Pending hiện tại" vốn đã đúng cho
+        // CẢ 2 loại đơn — xem docs/attendance-module.md §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web).
+        Task<OtFormDto> RemoveEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request);
 
         // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate, không resolve lại được) — soft-delete,
         // chặn nếu đơn đã Completed (đã cộng lũy kế thật). Xem docs/attendance-module.md §Cây chức vụ.

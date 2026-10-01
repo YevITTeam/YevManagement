@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Shared.Application.Authorization
@@ -9,7 +10,8 @@ namespace Shared.Application.Authorization
             AuthorizationHandlerContext context,
             PermissionRequirement requirement)
         {
-            if (context.User.HasClaim("Permission", requirement.Permission))
+            // OR — chỉ cần có 1 trong các permission liệt kê (xem PermissionRequirement).
+            if (requirement.Permissions.Any(permission => context.User.HasClaim("Permission", permission)))
             {
                 context.Succeed(requirement);
             }

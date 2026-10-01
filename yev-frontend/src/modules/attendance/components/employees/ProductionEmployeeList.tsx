@@ -252,14 +252,18 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                             <th className="px-3 py-2">{t("colShiftTeam")}</th>
                             <th className="px-3 py-2">{t("colTaskName")}</th>
                             <th className="px-3 py-2">{t("colLeader")}</th>
-                            <th className="px-3 py-2">{t("colAccumulation")}</th>
+                            {/* Trước đây nhồi chung 2 badge "T"/"N" vào 1 ô — dễ vỡ layout khi bảng đã có
+                                11 cột (badge bị bóp méo, xem phản hồi người dùng 2026-09-28). Tách thành 2
+                                cột text riêng, giống cách các bảng OT khác trong module đang hiển thị. */}
+                            <th className="whitespace-nowrap px-3 py-2 text-center">{t("colMonthToDate")}</th>
+                            <th className="whitespace-nowrap px-3 py-2 text-center">{t("colYearToDate")}</th>
                             <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {!isLoading && items.length === 0 && (
                             <tr>
-                                <td colSpan={11} className="px-4 py-12">
+                                <td colSpan={12} className="px-4 py-12">
                                     <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                         <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                         {t("noData")}
@@ -270,12 +274,6 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                         {items.map((item) => {
                             const isMonthOverLimit = item.monthToDate > setting.monthlyOtHourLimit;
                             const isYearOverLimit = item.yearToDate > setting.yearlyOtHourLimit;
-                            const accumulationBadgeClass = (overLimit: boolean) =>
-                                `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                                    overLimit
-                                        ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                        : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                                }`;
                             return (
                                 <tr key={item.id} className="whitespace-nowrap border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
@@ -295,17 +293,21 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                                             "-"
                                         )}
                                     </td>
-                                    <td className="px-3 py-1.5 text-sm">
-                                        <div className="inline-flex items-center gap-1.5">
-                                            <span className={accumulationBadgeClass(isMonthOverLimit)} title={t("colMonthToDate")}>
-                                                {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                                {t("accMonthShort")} {item.monthToDate}h
-                                            </span>
-                                            <span className={accumulationBadgeClass(isYearOverLimit)} title={t("colYearToDate")}>
-                                                {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                                {t("accYearShort")} {item.yearToDate}h
-                                            </span>
-                                        </div>
+                                    <td
+                                        className={`whitespace-nowrap px-3 py-2 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}
+                                    >
+                                        <span className="inline-flex items-center gap-1">
+                                            {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                            {item.monthToDate}h
+                                        </span>
+                                    </td>
+                                    <td
+                                        className={`whitespace-nowrap px-3 py-2 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}
+                                    >
+                                        <span className="inline-flex items-center gap-1">
+                                            {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
+                                            {item.yearToDate}h
+                                        </span>
                                     </td>
                                     <td className="px-3 py-2 text-right text-sm">
                                         {item.employeeId !== null && (

@@ -22,7 +22,11 @@ export const OT_CATEGORIES_PERMISSIONS = [
 
 // Khớp theo tiền tố đường dẫn (không gồm locale); mục đầu tiên khớp sẽ được dùng.
 export const OT_ROUTE_PERMISSIONS: { prefix: string; permissions: string[] }[] = [
-    { prefix: "/ot/create", permissions: ["Attendance.OTForm.Create"] },
+    // Create/CreateProduction là 2 quyền TÁCH RỜI (xem attendance-module.md §Giai đoạn 14/17) — Line
+    // Leader chỉ có CreateProduction (không có Create) vẫn phải vào được màn này để tạo đơn theo chuyền
+    // (2026-09-28, sửa lỗi thật: route guard trước đây chỉ khớp Create, chặn thẳng trước khi kịp vào
+    // trang dù CreateOtFormPage.tsx đã tự chuyển sang tab "Theo chuyền" đúng cho trường hợp này).
+    { prefix: "/ot/create", permissions: ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"] },
     { prefix: "/ot/ai-chat", permissions: ["Attendance.AiChat.Use"] },
     { prefix: "/ot/list", permissions: ["Attendance.OTForm.View"] },
     { prefix: "/ot/forms", permissions: ["Attendance.OTForm.View"] },

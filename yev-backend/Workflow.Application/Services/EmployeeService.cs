@@ -138,13 +138,25 @@ namespace Workflow.Application.Services
             (await _unitOfWork.Employees.GetByIdAsync(employeeId)).OrThrowNotFound("Nhân sự", employeeId);
 
             // workflow-module.md §3.1 EmployeeOrgUnits — validate ở Service (không dùng ràng buộc DB
-            // vì có thời hiệu): tối đa 1 dòng IsPrimary=1 còn hiệu lực; 1 cặp (OrgUnitId, JobTitleId)
-            // chỉ 1 người tại 1 thời điểm.
-            if (request.Items.Count(x => x.IsPrimary) > 1)
-                throw new DomainException("Chỉ được chọn tối đa 1 đơn vị chính cho mỗi nhân sự.");
+            // vì có thời hiệu): tối đa 1 dòng IsPrimary=1 có khoảng hiệu lực chồng nhau tại 1 thời điểm
+            // bất kỳ; 1 cặp (OrgUnitId, JobTitleId) chỉ 1 người có khoảng hiệu lực chồng nhau tại 1
+            // thời điểm bất kỳ — cả hai đều so theo ValidFrom/ValidTo, không chỉ "đang hiệu lực ngay
+            // bây giờ" (tránh chặn nhầm/bỏ sót các khoảng hiệu lực trong quá khứ hoặc tương lai).
+            var primaryItems = request.Items.Where(x => x.IsPrimary).ToList();
+            for (var i = 0; i < primaryItems.Count; i++)
+            {
+                for (var j = i + 1; j < primaryItems.Count; j++)
+                {
+                    if (DateRangesOverlap(primaryItems[i].ValidFrom, primaryItems[i].ValidTo, primaryItems[j].ValidFrom, primaryItems[j].ValidTo))
+                        throw new DomainException("Có 2 đơn vị chính chồng khoảng thời gian hiệu lực — chỉ được 1 đơn vị chính tại 1 thời điểm.");
+                }
+            }
 
             foreach (var item in request.Items)
             {
+                if (item.ValidFrom is not null && item.ValidTo is not null && item.ValidTo < item.ValidFrom)
+                    throw new DomainException("Ngày kết thúc hiệu lực phải sau ngày bắt đầu.");
+
                 (await _unitOfWork.OrgUnits.GetByIdAsync(item.OrgUnitId)).OrThrowNotFound("Đơn vị tổ chức", item.OrgUnitId);
 
                 if (item.JobTitleId is not null)
@@ -156,10 +168,10 @@ namespace Workflow.Application.Services
                     // §10, chốt 2026-08-26).
                     if (jobTitle.IsUniquePerOrgUnit)
                     {
-                        var holder = await _unitOfWork.EmployeeOrgUnits.FirstOrDefaultAsync(x =>
+                        var otherHolders = await _unitOfWork.EmployeeOrgUnits.FindAsync(x =>
                             x.OrgUnitId == item.OrgUnitId && x.JobTitleId == item.JobTitleId && !x.IsDeleted && x.EmployeeId != employeeId);
-                        if (holder is not null)
-                            throw new DomainException("Chức danh này tại đơn vị đã có người khác đang giữ.");
+                        if (otherHolders.Any(h => DateRangesOverlap(h.ValidFrom, h.ValidTo, item.ValidFrom, item.ValidTo)))
+                            throw new DomainException("Chức danh này tại đơn vị đã có người khác đang giữ trong cùng khoảng thời gian.");
                     }
                 }
             }
@@ -188,6 +200,10 @@ namespace Workflow.Application.Services
 
             return await GetOrgUnitsAsync(employeeId);
         }
+
+        // Null bound means "open-ended" on that side.
+        private static bool DateRangesOverlap(DateTime? aFrom, DateTime? aTo, DateTime? bFrom, DateTime? bTo) =>
+            (aFrom is null || bTo is null || aFrom <= bTo) && (bFrom is null || aTo is null || bFrom <= aTo);
 
         private async Task GuardUserIdNotTakenAsync(int? userId, int? currentEmployeeId)
         {

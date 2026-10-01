@@ -56,4 +56,12 @@ namespace Workflow.Application.Dtos.WorkflowRequests
         [MaxLength(500)]
         public string? Reason { get; set; }
     }
+
+    // Resubmits a SentBack request. Edit DataJson via UpdateDraftAsync first, then call this to push
+    // the target step back to Current — approvers are not re-resolved.
+    public class ResubmitRequestDto
+    {
+        [MaxLength(1000)]
+        public string? Comment { get; set; }
+    }
 }

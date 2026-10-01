@@ -21,6 +21,7 @@ import type { ProductionEmployeeSearchItemDto, ProductionOptionDto } from "@/mod
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type {
     MyCreateScopeItemDto,
+    MyProductionCreateScopeItemDto,
     OtFormEmployeeDto,
     OtFormEmployeeInputDto,
     ProcessPartDto,
@@ -297,10 +298,22 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const isUnrestrictedAdmin = hasPermission(user, "Attendance.Department.Create");
     // Tạo đơn THEO CHUYỀN cần quyền riêng (Admin cấu hình theo Chức vụ/từng user) — không có thì ẩn tab "Theo chuyền".
     const canCreateProductionForm = hasPermission(user, "Attendance.OTForm.CreateProduction");
+    // Tạo đơn THEO NHÓM cần Attendance.OTForm.Create — tài khoản CHỈ có CreateProduction không được coi
+    // là "có thể dùng chế độ Theo Nhóm" nữa (2026-09-28): ẩn hẳn tab "Theo Nhóm" khỏi bộ chuyển chế độ
+    // thay vì hiện ra rồi chặn bằng banner lỗi, đúng nguyên tắc "quyền không có thì ẩn đi".
+    const canUseGroupMode = isUnrestrictedAdmin || hasPermission(user, "Attendance.OTForm.Create");
 
     // "Theo Nhóm" (mặc định, hiện tại) hay "Theo chuyền" (Chế tạo, 2026-08-24) — chỉ chọn được lúc TẠO
     // MỚI, đơn đã tạo giữ nguyên chế độ ban đầu (isProductionForm trả về từ BE, không đổi được khi sửa).
-    const [formMode, setFormMode] = useState<"group" | "production">("group");
+    // Mặc định "group", TRỪ tài khoản CHỈ có quyền "Theo chuyền" (không có Attendance.OTForm.Create,
+    // không phải Admin) — suy được NGAY từ permission có sẵn trong `user` lúc mount, không cần đợi API
+    // my-create-scopes trả lời rồi mới tự chuyển tab như trước (2026-09-28, theo phản hồi người dùng:
+    // để kiểu cũ có 1 nhịp/trường hợp vẫn đứng nguyên ở "Theo Nhóm" kèm màn chặn — "mở thẳng UI tạo đơn
+    // luôn" mới đúng ý). Effect fetch getMyCreateScopes bên dưới vẫn giữ nhánh tự chuyển làm lưới an
+    // toàn thứ 2 cho case hiếm hơn: có Create NHƯNG scope Nhóm thật lại rỗng (chưa gán Employee.GroupId).
+    const [formMode, setFormMode] = useState<"group" | "production">(() =>
+        canCreateProductionForm && !canUseGroupMode ? "production" : "group"
+    );
 
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [groups, setGroups] = useState<GroupDto[]>([]);
@@ -317,6 +330,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [productionShiftTeamId, setProductionShiftTeamId] = useState<number | "">("");
     const [productionKeyword, setProductionKeyword] = useState("");
     const [productionResults, setProductionResults] = useState<ProductionEmployeeSearchItemDto[]>([]);
+    // (Những) tổ hợp Team/Line/Nhóm ca người tạo đang là Line Leader — null = chưa tải xong (2026-09-28,
+    // xem effect fetch bên dưới cạnh createScopes).
+    const [productionCreateScopes, setProductionCreateScopes] = useState<MyProductionCreateScopeItemDto[] | null>(null);
+    const isProductionScopeRestricted = productionCreateScopes !== null && productionCreateScopes.length > 0;
+    // Đúng 1 tổ hợp (trường hợp phổ biến — 1 Line Leader phụ trách 1 Line) → khoá cứng cả 3 dropdown.
+    // Nhiều hơn 1 tổ hợp (hiếm — Line Leader của nhiều Line) → không khoá cứng, chỉ giới hạn lựa chọn
+    // trong đúng các tổ hợp được phép (xem visibleTeamOptions/visibleLineOptions/visibleShiftTeamOptions
+    // bên dưới). Khai báo ngay cạnh state (thay vì cạnh effect fetch) vì khối reset-on-change của Team/
+    // Line/Nhóm ca ngay bên dưới cần dùng tới trước khi effect fetch được khai báo.
+    const isProductionScopeLocked = isProductionScopeRestricted && productionCreateScopes!.length === 1;
 
     const [departmentId, setDepartmentId] = useState<number | null>(null);
     const [groupId, setGroupId] = useState<number | null>(null);
@@ -397,11 +420,17 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, []);
 
     // Chọn lại Team → Line đang chọn (nếu có) có thể không còn thuộc Team mới, reset về rỗng — so
-    // sánh snapshot ngay trong render, không dùng effect để setState (CLAUDE.md §4.5).
+    // sánh snapshot ngay trong render, không dùng effect để setState (CLAUDE.md §4.5). Bỏ qua khi đã
+    // khoá cứng theo Line Leader (isProductionScopeLocked, 2026-09-28) — nếu không, lần tự điền sẵn cả
+    // 3 giá trị Team/Line/Nhóm ca CÙNG LÚC (effect fetch productionCreateScopes bên dưới) sẽ bị chính
+    // khối này xoá mất Line ngay trong cùng 1 lượt render (Team đổi từ "" sang có giá trị vẫn tính là
+    // "đổi Team" dù là gán tự động, không phải người dùng tự bấm).
     const [prevProductionTeamId, setPrevProductionTeamId] = useState(productionTeamId);
     if (prevProductionTeamId !== productionTeamId) {
         setPrevProductionTeamId(productionTeamId);
-        setProductionLineId("");
+        if (!isProductionScopeLocked) {
+            setProductionLineId("");
+        }
     }
 
     // Line = con thật của Team (ProductionLine.TeamId là FK, xem ProductionLine.cs) — tải lại danh
@@ -419,11 +448,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // THẬT: chỉ hiện Nhóm ca nào thực sự có người trong đúng Line/Team đang lọc (2026-08-25, yêu cầu
     // người dùng). Đổi Line/Team → Nhóm ca đang chọn có thể không còn hợp lệ, reset về rỗng — so sánh
     // snapshot ngay trong render (CLAUDE.md §4.5).
+    // Cùng lý do bỏ qua khi khoá cứng như khối reset Line ở trên.
     const shiftTeamFilterKey = `${productionLineId}|${productionTeamId}`;
     const [prevShiftTeamFilterKey, setPrevShiftTeamFilterKey] = useState(shiftTeamFilterKey);
     if (prevShiftTeamFilterKey !== shiftTeamFilterKey) {
         setPrevShiftTeamFilterKey(shiftTeamFilterKey);
-        setProductionShiftTeamId("");
+        if (!isProductionScopeLocked) {
+            setProductionShiftTeamId("");
+        }
     }
 
     useFetchEffect(
@@ -469,12 +501,51 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     setDepartmentId(scopes[0].departmentId);
                     setGroupId(scopes[0].groupId);
                 }
+                // Chức vụ CHỈ có quyền "Theo chuyền" (không có bất kỳ phạm vi Nhóm nào ở "Theo Nhóm") sẽ có
+                // scopes rỗng — trước đây formMode mặc định luôn là "group" nên isBlockedNoScope chặn hẳn
+                // màn trước khi người dùng kịp bấm sang tab "Theo chuyền", dù canCreateProductionForm=true
+                // (2026-09-28, sửa lỗi 2 quyền bị dính nhau). Tự chuyển sang "production" trong đúng trường
+                // hợp này; người dùng vẫn tự bấm lại "Theo Nhóm" được nếu muốn (không khoá tab).
+                if (!isEditMode && scopes.length === 0 && !isUnrestrictedAdmin && canCreateProductionForm) {
+                    setFormMode("production");
+                }
             })
             .catch((err) => {
                 console.error(err);
                 setCreateScopes([]); // Lỗi tải → không chặn màn, coi như không có gợi ý (fallback dropdown tự do).
             });
+        // isUnrestrictedAdmin/canCreateProductionForm suy ra từ `user` (ổn định trong vòng đời trang,
+        // AuthGuard đã đảm bảo có user trước khi mount) — không cần refetch createScopes mỗi khi đổi.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isEditMode]);
+
+    // (Những) tổ hợp Team/Line/Nhóm ca người tạo đang là Line Leader — cùng cơ chế tự điền sẵn/khoá
+    // cứng với createScopes ở trên, áp cho 3 dropdown "Theo chuyền" (2026-09-28, theo yêu cầu người
+    // dùng: "hiện giờ phải nhập team line nhóm ca ... cũng cố định luôn"). Chỉ gọi khi có quyền
+    // CreateProduction — người không có quyền này gọi sẽ luôn 403.
+    useEffect(() => {
+        if (isEditMode || !canCreateProductionForm) return;
+        OtFormApi.getMyProductionCreateScopes()
+            .then((scopes) => {
+                setProductionCreateScopes(scopes);
+                // Bộ phận gắn với CHÍNH người gọi — giống nhau ở mọi phần tử, tự điền sẵn + khoá cứng
+                // luôn (xem isProductionDepartmentLocked) dù có 1 hay nhiều tổ hợp Team/Line/Nhóm ca
+                // (2026-09-28, theo yêu cầu người dùng: "các chỗ thuộc Nhóm/thông tin đi kèm người tạo
+                // đơn thì cố định hết").
+                if (scopes.length > 0) {
+                    setDepartmentId(scopes[0].departmentId);
+                }
+                if (scopes.length === 1) {
+                    setProductionTeamId(scopes[0].teamId);
+                    setProductionLineId(scopes[0].productionLineId);
+                    setProductionShiftTeamId(scopes[0].shiftTeamId);
+                }
+            })
+            .catch((err) => {
+                console.error(err);
+                setProductionCreateScopes([]); // Lỗi tải → không chặn màn, coi như không có gợi ý (fallback dropdown tự do).
+            });
+    }, [isEditMode, canCreateProductionForm]);
 
     const isScopeRestricted = createScopes !== null && createScopes.length > 0;
     // Chỉ khoá cứng dropdown lúc Tạo mới — Sửa đơn vẫn cho đổi Bộ phận/Phòng ban trong phạm vi (docs §4.1b).
@@ -508,6 +579,40 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }
         return options;
     }, [isScopeRestricted, createScopes, groups, departmentId, groupId]);
+
+    // 3 dropdown "Theo chuyền" bị giới hạn trong đúng các tổ hợp Line Leader được phép khi
+    // isProductionScopeRestricted — mirror visibleDepartments/visibleGroups ở trên, nhưng lấy dữ liệu
+    // trực tiếp từ productionCreateScopes thay vì gọi lại API catalog (teamOptions/lineOptions/
+    // shiftTeamOptions vẫn được tải như cũ, chỉ không dùng tới khi bị giới hạn). Line phụ thuộc Team đã
+    // chọn, Nhóm ca phụ thuộc cả Team lẫn Line đã chọn — cùng thứ bậc lọc với 3 dropdown gốc.
+    const visibleTeamOptions = useMemo((): ProductionOptionDto[] => {
+        if (!isProductionScopeRestricted) return teamOptions;
+        const map = new Map<number, ProductionOptionDto>();
+        productionCreateScopes!.forEach((s) => map.set(s.teamId, { id: s.teamId, code: s.teamCode, nameVn: s.teamNameVn }));
+        return Array.from(map.values());
+    }, [isProductionScopeRestricted, productionCreateScopes, teamOptions]);
+
+    const visibleLineOptions = useMemo((): ProductionOptionDto[] => {
+        if (!isProductionScopeRestricted) return lineOptions;
+        const map = new Map<number, ProductionOptionDto>();
+        productionCreateScopes!
+            .filter((s) => productionTeamId === "" || s.teamId === productionTeamId)
+            .forEach((s) => map.set(s.productionLineId, { id: s.productionLineId, code: s.lineCode, nameVn: s.lineNameVn }));
+        return Array.from(map.values());
+    }, [isProductionScopeRestricted, productionCreateScopes, lineOptions, productionTeamId]);
+
+    const visibleShiftTeamOptions = useMemo((): ProductionOptionDto[] => {
+        if (!isProductionScopeRestricted) return shiftTeamOptions;
+        const map = new Map<number, ProductionOptionDto>();
+        productionCreateScopes!
+            .filter(
+                (s) =>
+                    (productionTeamId === "" || s.teamId === productionTeamId) &&
+                    (productionLineId === "" || s.productionLineId === productionLineId)
+            )
+            .forEach((s) => map.set(s.shiftTeamId, { id: s.shiftTeamId, code: s.shiftTeamCode, nameVn: s.shiftTeamNameVn }));
+        return Array.from(map.values());
+    }, [isProductionScopeRestricted, productionCreateScopes, shiftTeamOptions, productionTeamId, productionLineId]);
 
     useEffect(() => {
         if (isEditMode) return; // Sửa đơn không ký lại — không cần kiểm tra chữ ký.
@@ -667,14 +772,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }));
     };
 
-    // Kiểm tra trùng giờ tăng ca (chỉ chạy khi đã nhập đủ ngày, giờ bắt đầu và có ít nhất 1 nhân viên)
+    // Kiểm tra trùng giờ tăng ca (chỉ chạy khi đã nhập đủ ngày, giờ bắt đầu và có ít nhất 1 nhân viên).
+    // setState CHỈ được gọi trong callback (setTimeout/.then/.catch), không đồng bộ ở thân effect
+    // (CLAUDE.md §4.5 — react-hooks/set-state-in-effect).
     useEffect(() => {
-        if (!date || !startTime || selectedEmployeeIds.length === 0) {
-            setOverlappingEmployeeIds([]);
-            return;
-        }
-
         const timeout = setTimeout(() => {
+            if (!date || !startTime || selectedEmployeeIds.length === 0) {
+                setOverlappingEmployeeIds([]);
+                return;
+            }
+
             const reqEmployees = selectedEmployeeIds.map(id => ({
                 employeeId: id,
                 startTime: `${employeeOverrides[id]?.startTime || startTime}:00`,
@@ -985,9 +1092,36 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }
 
     if (isBlockedNoScope) {
+        // Vẫn hiện tiêu đề + tab đổi chế độ (nếu có quyền "Theo chuyền") thay vì chặn nguyên trang — trước
+        // đây return sớm 1 khối duy nhất khiến người có CẢ 2 quyền nhưng đang lỡ đứng ở tab "Theo Nhóm"
+        // (không có phạm vi Nhóm nào) bị kẹt luôn, không còn cách nào bấm quay lại tab "Theo chuyền"
+        // (2026-09-28, sửa cùng lỗi 2 quyền bị dính nhau ở trên).
         return (
-            <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">
-                {t("blockedNoScopeMessage")}
+            <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h1 className="text-xl font-semibold text-[#191c1e]">{t("titleCreate")}</h1>
+                    {canCreateProductionForm && canUseGroupMode && (
+                        <div className="inline-flex gap-1 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-1">
+                            {(["group", "production"] as const).map((mode) => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => handleModeChange(mode)}
+                                    className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                                        formMode === mode
+                                            ? "bg-white text-[#e3000f] shadow-sm"
+                                            : "text-[#5e3f3a] hover:text-[#191c1e]"
+                                    }`}
+                                >
+                                    {mode === "group" ? t("modeGroupLabel") : t("modeProductionLabel")}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">
+                    {t("blockedNoScopeMessage")}
+                </div>
             </div>
         );
     }
@@ -999,7 +1133,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 segmented control gọn để tiết kiệm chiều cao (2026-09-28, theo yêu cầu người dùng). */}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h1 className="text-xl font-semibold text-[#191c1e]">{isEditMode ? t("titleEdit", { id: otFormId }) : t("titleCreate")}</h1>
-                {!isEditMode && canCreateProductionForm && (
+                {!isEditMode && canCreateProductionForm && canUseGroupMode && (
                     <div className="inline-flex gap-1 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-1">
                         {(["group", "production"] as const).map((mode) => (
                             <button
@@ -1026,6 +1160,20 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             {!isEditMode && isScopeRestricted && !isScopeLocked && (
                 <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
                     {t("scopeRestrictedMessage", { groupNames: createScopes!.map((s) => s.groupNameVn).join(", ") })}
+                </div>
+            )}
+
+            {/* Cùng nguyên tắc với banner Nhóm ở trên — isProductionScopeLocked (đúng 1 tổ hợp) không cần
+                banner vì 3 dropdown Team/Line/Nhóm ca bên dưới đã tự điền sẵn + khoá cứng rồi. Nhiều tổ
+                hợp (hiếm — Line Leader của nhiều Line) mới cần banner để biết còn được chọn giữa các tổ
+                hợp nào (2026-09-28). */}
+            {!isEditMode && formMode === "production" && isProductionScopeRestricted && !isProductionScopeLocked && (
+                <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
+                    {t("productionScopeRestrictedMessage", {
+                        combos: productionCreateScopes!
+                            .map((s) => `${s.teamNameVn || s.teamCode} / ${s.lineCode} / ${s.shiftTeamNameVn || s.shiftTeamCode}`)
+                            .join(", "),
+                    })}
                 </div>
             )}
 
@@ -1057,7 +1205,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 value={departmentId ?? ""}
                                 onChange={handleDepartmentChange}
                                 placeholder={t("fieldDepartmentPlaceholder")}
-                                disabled={isSubmitting || isScopeLocked || isEditMode}
+                                // "Theo Nhóm" khoá theo isScopeLocked (createScopes); "Theo chuyền" khoá theo
+                                // isProductionScopeRestricted (productionCreateScopes) — Bộ phận của Line
+                                // Leader luôn xác định được ngay khi có ít nhất 1 tổ hợp trả về, không cần
+                                // đợi đúng 1 tổ hợp như Team/Line/Nhóm ca (2026-09-28, xem MyProductionCreateScopeItemDto).
+                                disabled={isSubmitting || isEditMode || (formMode === "group" ? isScopeLocked : isProductionScopeRestricted)}
                             />
                         </label>
 
@@ -1651,7 +1803,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("productionFilterTeamLabel")}</span>
                                     <SearchableSelect
-                                        options={teamOptions.map((option) => ({
+                                        options={visibleTeamOptions.map((option) => ({
                                             value: option.id,
                                             label: option.nameVn || option.code,
                                             searchText: `${option.code} ${option.nameVn ?? ""}`.toLowerCase(),
@@ -1659,13 +1811,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         value={productionTeamId}
                                         onChange={setProductionTeamId}
                                         placeholder={t("productionFilterTeamPlaceholder")}
-                                        disabled={!isCoreFormInfoFilled}
+                                        disabled={!isCoreFormInfoFilled || isProductionScopeLocked}
                                     />
                                 </label>
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("productionFilterLineLabel")}</span>
                                     <SearchableSelect
-                                        options={lineOptions.map((option) => ({
+                                        options={visibleLineOptions.map((option) => ({
                                             value: option.id,
                                             label: option.nameVn || option.code,
                                             searchText: `${option.code} ${option.nameVn ?? ""}`.toLowerCase(),
@@ -1675,13 +1827,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         placeholder={
                                             productionTeamId === "" ? t("productionFilterLinePlaceholderNeedTeam") : t("productionFilterLinePlaceholder")
                                         }
-                                        disabled={!isCoreFormInfoFilled || productionTeamId === ""}
+                                        disabled={!isCoreFormInfoFilled || productionTeamId === "" || isProductionScopeLocked}
                                     />
                                 </label>
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("productionFilterShiftTeamLabel")}</span>
                                     <SearchableSelect
-                                        options={shiftTeamOptions.map((option) => ({
+                                        options={visibleShiftTeamOptions.map((option) => ({
                                             value: option.id,
                                             label: option.nameVn || option.code,
                                             searchText: `${option.code} ${option.nameVn ?? ""}`.toLowerCase(),
@@ -1689,7 +1841,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         value={productionShiftTeamId}
                                         onChange={setProductionShiftTeamId}
                                         placeholder={t("productionFilterShiftTeamPlaceholder")}
-                                        disabled={!isCoreFormInfoFilled}
+                                        disabled={!isCoreFormInfoFilled || isProductionScopeLocked}
                                     />
                                 </label>
                                 <label className="block">

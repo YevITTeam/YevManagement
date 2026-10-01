@@ -11,6 +11,7 @@ import type {
     SendBackRequestDto,
     AddApproverRequestDto,
     CancelRequestDto,
+    ResubmitRequestDto,
 } from "@/modules/workflow/types/workflow-request.dto";
 import type { FormFieldDto } from "@/modules/workflow/types/form-field.dto";
 import type { FormFieldConditionDto } from "@/modules/workflow/types/form-field-condition.dto";
@@ -32,6 +33,7 @@ const ENDPOINTS = {
         approve: (id: number) => `/Workflow/WorkflowRequest/${id}/approve`,
         reject: (id: number) => `/Workflow/WorkflowRequest/${id}/reject`,
         sendBack: (id: number) => `/Workflow/WorkflowRequest/${id}/send-back`,
+        resubmit: (id: number) => `/Workflow/WorkflowRequest/${id}/resubmit`,
         addApprover: (id: number) => `/Workflow/WorkflowRequest/${id}/add-approver`,
         uploadAttachment: (id: number) => `/Workflow/WorkflowRequest/${id}/attachments`,
         deleteAttachment: (attachmentId: number) => `/Workflow/WorkflowRequest/attachments/${attachmentId}`,
@@ -60,8 +62,8 @@ export interface GetWorkflowRequestListParams {
 
 function buildListQuery(params?: GetWorkflowRequestListParams) {
     const query = new URLSearchParams();
-    if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
-    if (params?.pageSize) query.set("PageSize", String(params.pageSize));
+    if (params?.pageIndex !== undefined) query.set("PageIndex", String(params.pageIndex));
+    if (params?.pageSize !== undefined) query.set("PageSize", String(params.pageSize));
     if (params?.status !== undefined) query.set("Status", String(params.status));
     const queryString = query.toString();
     return queryString ? `?${queryString}` : "";
@@ -141,6 +143,11 @@ export const WorkflowRequestApi = {
 
     sendBack: async (id: number, data: SendBackRequestDto) => {
         const response = await api.post<ApiResponse<WorkflowRequestDto>>(ENDPOINTS.WORKFLOW_REQUEST.sendBack(id), data);
+        return response.data;
+    },
+
+    resubmit: async (id: number, data: ResubmitRequestDto) => {
+        const response = await api.post<ApiResponse<WorkflowRequestDto>>(ENDPOINTS.WORKFLOW_REQUEST.resubmit(id), data);
         return response.data;
     },
 

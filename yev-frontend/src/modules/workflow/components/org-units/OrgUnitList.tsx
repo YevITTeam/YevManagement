@@ -21,13 +21,12 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 
 // Flatten cây -> option cho select "Đơn vị cha", label thụt lề theo độ sâu. excludeId dùng khi sửa
-// 1 node để nó không tự chọn chính mình làm cha (BE vẫn tự chặn vòng lặp sâu hơn ở Service).
+// 1 node để loại cả nhánh con của nó khỏi danh sách (chọn con làm cha của cha sẽ tạo vòng lặp).
 function flattenTree(nodes: OrgUnitTreeDto[], depth = 0, excludeId?: number | null): FlatOrgUnitOption[] {
     const result: FlatOrgUnitOption[] = [];
     for (const node of nodes) {
-        if (node.id !== excludeId) {
-            result.push({ id: node.id, label: `${"— ".repeat(depth)}${node.code} · ${node.nameVn}` });
-        }
+        if (node.id === excludeId) continue;
+        result.push({ id: node.id, label: `${"— ".repeat(depth)}${node.code} · ${node.nameVn}` });
         result.push(...flattenTree(node.children, depth + 1, excludeId));
     }
     return result;

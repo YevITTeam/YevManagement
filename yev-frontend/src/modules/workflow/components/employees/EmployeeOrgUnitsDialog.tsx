@@ -13,12 +13,16 @@ import type { OrgUnitTreeDto } from "@/modules/workflow/types/org-unit.dto";
 import type { JobTitleDto } from "@/modules/workflow/types/job-title.dto";
 import type { ReplaceEmployeeOrgUnitItemDto } from "@/modules/workflow/types/employee-org-unit.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { randomClientId } from "@/lib/uuid";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 interface EmployeeOrgUnitsDialogProps {
     employee: EmployeeDto;
     onClose: () => void;
 }
+
+// clientId is local-only (React key), stripped before sending to the API.
+type EditableRow = ReplaceEmployeeOrgUnitItemDto & { clientId: string };
 
 interface FlatUnit {
     id: number;
@@ -41,7 +45,7 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
     const t = useTranslations("Workflow.Employee");
     const tCommon = useTranslations("Common");
 
-    const [items, setItems] = useState<ReplaceEmployeeOrgUnitItemDto[]>([]);
+    const [items, setItems] = useState<EditableRow[]>([]);
     const [flatUnits, setFlatUnits] = useState<FlatUnit[]>([]);
     const [jobTitles, setJobTitles] = useState<JobTitleDto[]>([]);
     const [isSaving, setIsSaving] = useState(false);
@@ -59,6 +63,7 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
         (result) => {
             setItems(
                 result.assigned.map((x) => ({
+                    clientId: randomClientId(),
                     orgUnitId: x.orgUnitId,
                     jobTitleId: x.jobTitleId,
                     isPrimary: x.isPrimary,
@@ -77,18 +82,18 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
         if (flatUnits.length === 0) return;
         setItems((current) => [
             ...current,
-            { orgUnitId: flatUnits[0].id, jobTitleId: null, isPrimary: current.length === 0, validFrom: null, validTo: null },
+            { clientId: randomClientId(), orgUnitId: flatUnits[0].id, jobTitleId: null, isPrimary: current.length === 0, validFrom: null, validTo: null },
         ]);
     };
 
-    const removeRow = (index: number) => {
-        setItems((current) => current.filter((_, i) => i !== index));
+    const removeRow = (clientId: string) => {
+        setItems((current) => current.filter((item) => item.clientId !== clientId));
     };
 
-    const updateRow = (index: number, patch: Partial<ReplaceEmployeeOrgUnitItemDto>) => {
+    const updateRow = (clientId: string, patch: Partial<ReplaceEmployeeOrgUnitItemDto>) => {
         setItems((current) =>
-            current.map((item, i) => {
-                if (i !== index) {
+            current.map((item) => {
+                if (item.clientId !== clientId) {
                     // BE chỉ cho tối đa 1 dòng IsPrimary=1 (workflow-module.md §3.1) — nếu dòng đang sửa
                     // vừa được đánh dấu chính, bỏ tick ở mọi dòng khác ngay trên UI.
                     return patch.isPrimary ? { ...item, isPrimary: false } : item;
@@ -98,10 +103,32 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
         );
     };
 
+    const findDuplicateRowError = (): string | null => {
+        const seen = new Set<string>();
+        for (const item of items) {
+            const key = `${item.orgUnitId}:${item.jobTitleId ?? "none"}`;
+            if (seen.has(key)) return t("orgUnitsDuplicateRow");
+            seen.add(key);
+        }
+        return null;
+    };
+
     const handleSave = async () => {
+        const duplicateError = findDuplicateRowError();
+        if (duplicateError) {
+            toast.error(duplicateError);
+            return;
+        }
         setIsSaving(true);
         try {
-            await EmployeeApi.replaceEmployeeOrgUnits(employee.id, items);
+            const payload: ReplaceEmployeeOrgUnitItemDto[] = items.map((item) => ({
+                orgUnitId: item.orgUnitId,
+                jobTitleId: item.jobTitleId,
+                isPrimary: item.isPrimary,
+                validFrom: item.validFrom,
+                validTo: item.validTo,
+            }));
+            await EmployeeApi.replaceEmployeeOrgUnits(employee.id, payload);
             toast.success(t("orgUnitsSaveSuccess"));
             onClose();
         } catch (err) {
@@ -168,12 +195,12 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
                                             </td>
                                         </tr>
                                     )}
-                                    {items.map((item, index) => (
-                                        <tr key={index} className="border-b border-[#f1f5f9]">
+                                    {items.map((item) => (
+                                        <tr key={item.clientId} className="border-b border-[#f1f5f9]">
                                             <td className="py-2 pr-3">
                                                 <select
                                                     value={item.orgUnitId}
-                                                    onChange={(event) => updateRow(index, { orgUnitId: Number(event.target.value) })}
+                                                    onChange={(event) => updateRow(item.clientId, { orgUnitId: Number(event.target.value) })}
                                                     disabled={isSaving}
                                                     className={fieldClassName}
                                                 >
@@ -188,7 +215,7 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
                                                 <select
                                                     value={item.jobTitleId ?? 0}
                                                     onChange={(event) =>
-                                                        updateRow(index, {
+                                                        updateRow(item.clientId, {
                                                             jobTitleId: Number(event.target.value) === 0 ? null : Number(event.target.value),
                                                         })
                                                     }
@@ -207,7 +234,7 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
                                                 <input
                                                     type="checkbox"
                                                     checked={item.isPrimary}
-                                                    onChange={(event) => updateRow(index, { isPrimary: event.target.checked })}
+                                                    onChange={(event) => updateRow(item.clientId, { isPrimary: event.target.checked })}
                                                     disabled={isSaving}
                                                     className="h-4 w-4 rounded border-[#e0e3e5] text-[#e3000f] focus:ring-[#e3000f]"
                                                 />
@@ -215,7 +242,7 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
                                             <td className="py-2 pr-1 text-right">
                                                 <button
                                                     type="button"
-                                                    onClick={() => removeRow(index)}
+                                                    onClick={() => removeRow(item.clientId)}
                                                     disabled={isSaving}
                                                     className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-[#930006] hover:bg-[#fff4f2] disabled:opacity-50"
                                                 >

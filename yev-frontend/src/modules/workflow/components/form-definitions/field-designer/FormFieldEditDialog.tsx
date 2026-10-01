@@ -17,6 +17,9 @@ interface OptionRow {
 
 interface FormFieldEditDialogProps {
     field: EditableField;
+    // fieldKey (lowercased) of every OTHER field on this form — used to reject a rename that would
+    // collide with another field's key.
+    existingFieldKeys: string[];
     onClose: () => void;
     onSave: (updated: EditableField) => void;
     // true ở chế độ tài liệu (workflow-module.md §1.5) — ColumnSpan không có tác dụng khi vị trí field
@@ -44,7 +47,7 @@ function parseOptions(json: string | null): OptionRow[] {
 // Sửa chi tiết 1 field trong bộ nhớ cục bộ — KHÔNG gọi API, chỉ trả field đã sửa về cho FieldCanvas.
 // Trường hiện thêm tuỳ DataType: Dropdown/Radio/MultiSelect có bảng Options + chọn FormDataSource
 // thay thế; Number/Decimal có Min/Max; Text/TextArea có MaxLength.
-export default function FormFieldEditDialog({ field, onClose, onSave, hideColumnSpan }: FormFieldEditDialogProps) {
+export default function FormFieldEditDialog({ field, existingFieldKeys, onClose, onSave, hideColumnSpan }: FormFieldEditDialogProps) {
     const t = useTranslations("Workflow.FormDefinition");
     const tCommon = useTranslations("Common");
 
@@ -73,13 +76,18 @@ export default function FormFieldEditDialog({ field, onClose, onSave, hideColumn
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!values.fieldKey.trim() || !values.labelVn.trim()) return;
+        const trimmedFieldKey = values.fieldKey.trim();
+        if (!trimmedFieldKey || !values.labelVn.trim()) return;
+        if (existingFieldKeys.includes(trimmedFieldKey.toLowerCase())) {
+            toast.error(t("fieldKeyDuplicate"));
+            return;
+        }
 
         const optionsJson = hasOptions && options.length > 0 ? JSON.stringify(options.filter((o) => o.value.trim())) : hasOptions ? "[]" : null;
 
         onSave({
             ...values,
-            fieldKey: values.fieldKey.trim(),
+            fieldKey: trimmedFieldKey,
             labelVn: values.labelVn.trim(),
             labelJp: values.labelJp?.trim() ? values.labelJp.trim() : null,
             placeholder: values.placeholder?.trim() ? values.placeholder.trim() : null,

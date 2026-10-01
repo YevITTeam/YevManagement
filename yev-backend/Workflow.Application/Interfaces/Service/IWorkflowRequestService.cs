@@ -21,6 +21,7 @@ namespace Workflow.Application.Interfaces.Service
         Task<WorkflowRequestDto> ApproveAsync(int id, ApproveRequestDto request, int? currentUserId);
         Task<WorkflowRequestDto> RejectAsync(int id, RejectRequestDto request, int? currentUserId);
         Task<WorkflowRequestDto> SendBackAsync(int id, SendBackRequestDto request, int? currentUserId);
+        Task<WorkflowRequestDto> ResubmitAsync(int id, ResubmitRequestDto request, int? currentUserId);
         Task<WorkflowRequestDto> AddApproverAsync(int id, AddApproverRequestDto request, int? currentUserId);
         Task<WorkflowRequestDto> CancelAsync(int id, CancelRequestDto request, int? currentUserId);
 

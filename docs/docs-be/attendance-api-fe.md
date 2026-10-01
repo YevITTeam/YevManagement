@@ -58,9 +58,12 @@
   Endpoint xem trước `GET /api/JobTitle/resolve-chain` vẫn còn nhưng **không còn UI**.
 - **Mật khẩu cấp 2** bắt buộc ở `POST /api/OtForm`, `PUT /api/OtForm/{id}`, Duyệt, Từ chối, và
   bulk-approve/bulk-reject. **Không** bắt buộc ở kênh email (token trong URL đã là xác thực).
-- **Thêm/bớt nhân viên trong đơn** gộp hết vào `PUT /api/OtForm/{id}` (`employees[]` nhận NV mới,
-  `removedEmployees[]` để loại — §4.1b). 2 endpoint `employees/add` và kênh trong-app của
-  `employees/remove` **đã xoá (404)**; kênh email của `employees/remove` vẫn còn (§4.5a).
+- **Thêm nhân viên** gộp vào `PUT /api/OtForm/{id}` (`employees[]` nhận NV mới — §4.1b, endpoint
+  `employees/add` cũ vẫn 404). **Loại nhân viên** có 2 đường: `removedEmployees[]` trong `PUT /{id}`
+  (đi kèm việc sửa giờ/note của người khác trong cùng lượt Sửa đơn) HOẶC route riêng
+  `POST /{id}/employees/remove` (§4.5a, khôi phục 2026-09-30) để loại nhanh ngay trên màn Duyệt mà
+  không cần vào Sửa đơn — route riêng dùng đúng luật "candidate bước hiện tại" nên approver không phải
+  creator cũng gọi được (khác `PUT /{id}` với đơn theo Nhóm, vẫn creator-only).
 - **Đơn "theo chuyền"** (`isProductionForm=true`, Chế Tạo): sửa được theo TỪNG BƯỚC (candidate của bước
   Pending hiện tại), NV thêm vào phải cùng Line/Nhóm ca với NV còn lại; ứng viên bước Line Leader lấy từ
   `ProductionEmployee.IsLeader` + `ProductionLineId`, không đọc `Employee.JobTitleId`.
@@ -646,6 +649,11 @@ truyền đúng token.
 ```
 - 3 dropdown lọc (`ProductionLineId`/`TeamId`/`ShiftTeamId`) dùng lại đúng 3 API option đã có sẵn cho
   màn "Theo chuyền" khi tạo đơn OT: `GET /api/ProductionEmployee/line-options|team-options|shift-team-options`.
+  Permission của 4 endpoint `search`/`line-options`/`team-options`/`shift-team-options` (`ProductionEmployeeController`):
+  `Attendance.OTForm.Create` **OR** `Attendance.OTForm.CreateProduction` (2026-09-28 — trước đó chỉ nhận
+  `Create`, khiến Line Leader chỉ có `CreateProduction` bị 403 ngay ở bước tìm nhân viên "Theo chuyền",
+  triệu chứng FE là "Không tìm thấy ai khớp bộ lọc" thay vì lỗi 403 hiện rõ vì FE `.catch()` nuốt lỗi và
+  giữ nguyên danh sách rỗng).
 - `monthToDate`/`yearToDate` là lũy kế THẬT (từ `EmployeeAccumulationHistory`, scope theo năm/tháng
   thực tế hôm nay) — cùng công thức `EmployeeService.GetPagedAsync`, không phải số tĩnh từ file import.
 - `productionLineId`/`teamId`/`shiftTeamId` (mới 2026-09-04) — dùng để FE chọn sẵn đúng giá trị hiện tại
@@ -671,6 +679,7 @@ field Id/Code không bao giờ lệch nhau. **Lưu ý**: dữ liệu sửa ở �
 | Method | Route | Permission | Việc gì |
 |---|---|---|---|
 | GET | `/api/OtForm/my-create-scopes` | `Attendance.OTForm.Create` | Bộ phận/Phòng ban mà **chính mình** được phép tạo đơn (tối đa 1 phần tử) — gọi TRƯỚC khi mở màn "Tạo đơn tăng ca" (§4.0a) |
+| GET | `/api/OtForm/my-production-create-scopes` | `Attendance.OTForm.CreateProduction` | (Những) tổ hợp Team/Line/Nhóm ca mà **chính mình** đang là Line Leader — gọi TRƯỚC khi mở tab "Theo chuyền" (§4.0b, mới 2026-09-28) |
 | POST | `/api/OtForm` | `Attendance.OTForm.Create` | Tạo đơn — vào chuỗi duyệt Cây chức vụ **ngay lập tức** (`status=InApproval`, hoặc `Completed` nếu chuỗi rỗng), không còn Draft (§4.1) |
 | GET | `/api/OtForm/my-forms?pageIndex=&pageSize=&groupId=&departmentId=&productionLineId=&productionTeamId=&productionShiftTeamId=` | `Attendance.OTForm.View` | Đơn do **chính mình** tạo |
 | GET | `/api/OtForm/pending-approvals?pageIndex=&pageSize=&groupId=&departmentId=&productionLineId=&productionTeamId=&productionShiftTeamId=` | `Attendance.OTForm.Approve` | Đơn đang **chờ chính mình** xử lý — tự lọc theo bước hiện tại (`Status=Pending`, `StepOrder` nhỏ nhất) có mặt trong `Candidates`; mỗi item có `currentStepCandidateCount` (§4.2, mới 2026-08-08) + `productionLineNames`/`productionShiftTeamNames` (§4.2, mới 2026-09-04) |
@@ -683,7 +692,7 @@ field Id/Code không bao giờ lệch nhau. **Lưu ý**: dữ liệu sửa ở �
 | POST | `/api/OtForm/{id}/approve` | `Attendance.OTForm.Approve` | Duyệt "bước đang chờ" hiện tại — tự cộng lũy kế nhân viên nếu đạt Completed |
 | POST | `/api/OtForm/{id}/reject` | `Attendance.OTForm.Approve` | Từ chối đơn ở bước đang chờ (dừng luồng, các bước Pending còn lại chuyển Skipped) |
 | POST | `/api/OtForm/{id}/employees/add` | — | **ĐÃ XOÁ (2026-09-04)** — trả 404, gộp vào `PUT /{id}` (§4.5b) |
-| POST | `/api/OtForm/{id}/employees/remove` | — | **ĐÃ XOÁ kênh trong-app (2026-09-04)** — trả 404, gộp vào `PUT /{id}` (§4.5a); kênh email `email-confirm/{token}/employees/remove` bên dưới vẫn còn |
+| POST | `/api/OtForm/{id}/employees/remove` | `Attendance.OTForm.RemoveEmployee` | Loại 1 nhân viên khỏi đơn, ngay trên màn Duyệt — candidate bước hiện tại, KHÔNG cần creator (§4.5a, khôi phục 2026-09-30) |
 | POST | `/api/OtForm/{id}/delete` | `Attendance.OTForm.Delete` (Admin only) | Xoá đơn kẹt vĩnh viễn — 400 nếu `Completed` (§4.1c, mới 2026-08-08) |
 | GET | `/api/OtForm/email-confirm/{token}` | Không cần (`[AllowAnonymous]`) | Xem trước đơn để duyệt qua link email — xem §4.6 |
 | POST | `/api/OtForm/email-confirm/{token}/approve` | Không cần (`[AllowAnonymous]`) | Duyệt qua link email — xem §4.6 |
@@ -704,6 +713,29 @@ field Id/Code không bao giờ lệch nhau. **Lưu ý**: dữ liệu sửa ở �
 - **Trả về nhiều phần tử** (1 Trưởng nhóm được Admin gán quyền cho nhiều Bộ phận, hiếm gặp): hiện dropdown Bộ phận nhưng **chỉ liệt kê đúng các phần tử trong mảng này**, không phải toàn bộ `Group/all` — chọn 1 thì Phòng ban tự điền theo `departmentId` tương ứng.
 - **Trả về mảng rỗng**: 2 trường hợp — (1) tài khoản Admin (Admin không giới hạn phạm vi, FE hiện lại đúng dropdown chọn tự do như trước 2026-07-17, dùng `Department/all` + `Group/by-department/{id}` như cũ); (2) tài khoản Role "Nhân viên"/"Trưởng nhóm" nhưng **chưa được cấu hình gì cả** (chưa gán `UserApprovalScope(Submitter)`, chưa liên kết `Employee.userName`) — trường hợp này nên chặn hẳn màn "Tạo đơn tăng ca", báo "Tài khoản chưa được cấp quyền tạo đơn cho Bộ phận nào, liên hệ Admin" thay vì cho vào form rồi chọn linh tinh.
 - Permission: `Attendance.OTForm.Create` — dùng chung với quyền tạo đơn, không cần permission riêng.
+
+### 4.0b `GET /api/OtForm/my-production-create-scopes` — Tổ hợp Team/Line/Nhóm ca của Line Leader (mới, 2026-09-28)
+
+```jsonc
+// response — data: MyProductionCreateScopeItemDto[]
+[
+  {
+    "departmentId": 7, "departmentNameVn": "Chế tạo",                    // Bộ phận của CHÍNH người gọi — giống nhau ở MỌI phần tử (mới 2026-09-28)
+    "productionLineId": 12, "lineCode": "SHIDO", "lineNameVn": null,     // lineNameVn luôn null — ProductionLine không có tên riêng, chỉ có mã (giống ProductionOptionDto)
+    "teamId": 2, "teamCode": "B", "teamNameVn": "Team B",
+    "shiftTeamId": 1, "shiftTeamCode": "G", "shiftTeamNameVn": "Green"
+  }
+]
+```
+
+Mirror `my-create-scopes` (§4.0a) nhưng cho chế độ "Theo chuyền" — gọi TRƯỚC khi mở tab "Theo chuyền" để tự điền sẵn/khoá dropdown Bộ phận + Team/Line/Nhóm ca thay vì bắt Line Leader tự chọn lại đúng Line mình phụ trách mỗi lần tạo đơn.
+
+- `departmentId`/`departmentNameVn`: suy từ `Employee.DepartmentId ?? Employee.Group.DepartmentId` của CHÍNH người gọi (Line Leader thường được gán qua Group, vd Group "SHIDO" thuộc Bộ phận "Chế tạo", không set thẳng `DepartmentId` trên `Employee`) — **luôn khoá cứng ô "Bộ phận"** ngay khi mảng có ≥ 1 phần tử (không phụ thuộc đúng 1 hay nhiều tổ hợp Line, khác 3 field Team/Line/Nhóm ca bên dưới). Không resolve được Bộ phận nào (Employee không có cả `DepartmentId` lẫn `GroupId`) → không trả tổ hợp nào (mảng rỗng), giữ dropdown Bộ phận tự do.
+- **Đúng 1 phần tử** (đa số Line Leader chỉ phụ trách 1 Line): FE tự điền sẵn cả 3 dropdown Team/Line/Nhóm ca + khoá cứng (readonly/disabled).
+- **Nhiều phần tử** (Line Leader của nhiều Line, hiếm): FE giới hạn 3 dropdown Team/Line/Nhóm ca trong đúng các tổ hợp trả về (không khoá cứng, vẫn cho chọn giữa các tổ hợp) — riêng Bộ phận vẫn khoá cứng như trên.
+- **Mảng rỗng**: Admin (không giới hạn, giữ dropdown tự do gọi `ProductionEmployee/team-options`/`line-options`/`shift-team-options` như cũ), hoặc tài khoản có quyền `CreateProduction` nhưng không phải Line Leader của bất kỳ tổ hợp nào (vd tài khoản Admin cấu hình quyền riêng cho HR) — cũng giữ dropdown tự do, KHÔNG chặn màn (khác `my-create-scopes`, ở đây mảng rỗng không phải lỗi cấu hình).
+- Chỉ trả về tổ hợp có ĐỦ cả 3 FK resolve được (`ProductionEmployee.ProductionLineId`/`TeamId`/`ShiftTeamId` đều khác `null`) — đúng policy nạp dữ liệu Import.
+- Permission: `Attendance.OTForm.CreateProduction`.
 
 ### 4.1 `POST /api/OtForm` — Tạo đơn
 ```jsonc
@@ -754,11 +786,13 @@ còn gọi endpoint này sẽ nhận 404.
 
 ### 4.1b `PUT /api/OtForm/{id}` — Sửa đơn (2026-07-16, giới hạn lại 2026-07-31, **gộp thêm/xóa NV 2026-09-04**)
 
-**2026-09-04 (mới nhất — thay thế §4.5a/§4.5b bản trong-app bên dưới)**: `employees[]` giờ có thể chứa
-**cả NV MỚI** (không có trong đơn trước đó) — BE tự diff so với danh sách active hiện có để suy ai giữ
-nguyên/ai mới thêm; loại NV đi qua field mới `removedEmployees[]` (bắt buộc `reason`). Không còn 2 action
-riêng `POST {id}/employees/add`/`POST {id}/employees/remove` (bản trong-app) — cả 2 route này **đã xoá**,
-trả 404. Kênh email (§4.5a mục "Kênh email") **không đổi**, vẫn dùng route riêng của nó.
+**2026-09-04**: `employees[]` giờ có thể chứa **cả NV MỚI** (không có trong đơn trước đó) — BE tự diff so
+với danh sách active hiện có để suy ai giữ nguyên/ai mới thêm; loại NV đi qua field mới
+`removedEmployees[]` (bắt buộc `reason`) — dùng khi loại người CÙNG LÚC với sửa giờ/note trong 1 lượt
+"Sửa đơn". `POST {id}/employees/add` (bản trong-app) vẫn đã xoá, trả 404. **`POST {id}/employees/remove`
+đã khôi phục lại (2026-09-30, §4.5a)** làm route riêng cho case chỉ muốn loại nhanh 1 người ngay trên màn
+Duyệt mà không phải vào Sửa đơn — và quan trọng hơn: route riêng này authorize theo candidate bước hiện
+tại, còn `PUT /{id}` với đơn theo Nhóm vẫn chỉ creator mới gọi được.
 ```jsonc
 // UpdateOtFormDto — 2026-09-04
 {
@@ -1013,23 +1047,35 @@ Cùng shape `OtFormListItemDto` như §4.2, nhưng nguồn dữ liệu khác h�
 Bước đang chờ chuyển `Rejected`, mọi bước `Pending` còn lại (StepOrder lớn hơn) chuyển `Skipped`,
 `OtForm.status → Rejected`, dừng hẳn luồng. `secondaryPassword` cũng bắt buộc, cùng luật với §4.4.
 
-### 4.5a `POST /api/OtForm/{id}/employees/remove` — kênh **trong-app đã XOÁ HẲN (2026-09-04)**, chỉ còn kênh email
+### 4.5a `POST /api/OtForm/{id}/employees/remove` — loại 1 nhân viên khỏi đơn, ngay trên màn Duyệt
 
 **Lịch sử**: route này (mới 2026-07-30) từng là cách duy nhất để loại 1 người khỏi đơn mà không phải Từ
-chối cả đơn, dùng permission riêng `Attendance.OTForm.RemoveEmployee`, `secondaryPassword` bắt buộc từ
-2026-08-28. **2026-09-04**: kênh trong-app này đã gộp vào `PUT /api/OtForm/{id}` (§4.1b,
-`removedEmployees[]`) — gọi route cũ giờ trả **404**. Lý do BE/luật loại người (không đổi `status`, không
-huỷ chữ ký cấp trước, chặn khi chỉ còn 1 người) đọc ở `attendance-module.md` §Gộp thêm/xóa NV vào Sửa đơn.
+chối cả đơn. **2026-09-04** gộp tạm vào `PUT /api/OtForm/{id}` (`removedEmployees[]`) — nhưng vì
+`UpdateAsync` cho đơn theo Nhóm chỉ cho phép chính **người tạo** sửa, các cấp đang **duyệt** (không phải
+người tạo) mất hẳn khả năng loại người dù đúng candidate bước hiện tại. **2026-09-30 khôi phục lại route
+riêng này** (không đổi hành vi so với bản gốc 2026-07-30/2026-08-28) — xem
+`attendance-module.md` §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web).
 
-**Kênh email KHÔNG đổi, vẫn hoạt động y nguyên** (`OtFormEmailConfirmPage.tsx`):
+```jsonc
+// body — RemoveOtFormEmployeeDto
+{ "employeeId": 100, "reason": "Không đủ điều kiện tăng ca đợt này." }   // KHÔNG có secondaryPassword
+```
+Permission riêng `Attendance.OTForm.RemoveEmployee` (đã seed sẵn theo Chức vụ từ 2026-08-28, không cần
+migration mới). Authorization thật nằm trong `RemoveEmployeeCoreAsync`: candidate của bước `Pending`
+StepOrder nhỏ nhất mới gọi được — **đúng luật này áp dụng như nhau cho CẢ đơn theo Nhóm lẫn theo
+chuyền** (khác `UpdateAsync` vốn phân biệt creator-only cho đơn theo Nhóm). KHÔNG cần `secondaryPassword`
+(cùng quyết định 2026-07-31). Không đổi `OtForm.Status`, không huỷ chữ ký cấp trước, chặn 400 nếu chỉ
+còn ≤1 người chưa bị loại (dùng Từ chối cả đơn thay thế). Trả `data: OtFormDto` đầy đủ, ghi 1 dòng
+`OtFormEditLog` (`actionType=EmployeeRemoved`).
+
+**Kênh email dùng chung lõi, vẫn hoạt động y nguyên** (`OtFormEmailConfirmPage.tsx`):
 ```jsonc
 // body — POST /api/OtForm/email-confirm/{token}/employees/remove — RemoveOtFormEmployeeByEmailTokenDto
 { "employeeId": 100, "reason": "Không đủ điều kiện tăng ca đợt này." }   // KHÔNG có secondaryPassword — token tự nó là thông tin xác thực
 ```
-`OtFormService.RemoveEmployeeByEmailTokenAsync` (gọi `RemoveEmployeeCoreAsync` — phần lõi vẫn dùng chung
-với `UpdateAsync` sau 2026-09-04) KHÔNG tiêu (consume) token — người duyệt có thể loại nhiều người rồi
-mới Duyệt/Từ chối bằng đúng token đó. Trả `data: OtFormDto` đầy đủ, ghi 1 dòng `OtFormEditLog`
-(`actionType=EmployeeRemoved`) như trước.
+`OtFormService.RemoveEmployeeByEmailTokenAsync` (gọi `RemoveEmployeeCoreAsync` — phần lõi dùng chung với
+kênh JWT ở trên) KHÔNG tiêu (consume) token — người duyệt có thể loại nhiều người rồi mới Duyệt/Từ chối
+bằng đúng token đó.
 
 ### 4.5b `POST /api/OtForm/{id}/employees/add` — **ĐÃ XOÁ HẲN (2026-09-04)**
 

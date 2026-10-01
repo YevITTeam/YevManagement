@@ -417,16 +417,20 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                                     {employee.mealTicketType === MEAL_TICKET_MAIN || employee.mealTicketType === MEAL_TICKET_SECONDARY ? (
                                                                         <span className="inline-flex items-center gap-1.5">
                                                                             <MealTicketTypeBadge type={employee.mealTicketType} t={tDetail} />
-                                                                            <span
-                                                                                title={employee.didEat ? tDetail("didEatYes") : `${tDetail("didEatNo")} — ${tDetail("didEatNoHint")}`}
-                                                                                className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                                                    employee.didEat
-                                                                                        ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-                                                                                        : "border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]"
-                                                                                }`}
-                                                                            >
-                                                                                {employee.didEat ? <Check size={12} /> : <X size={12} />}
-                                                                            </span>
+                                                                            {/* Đơn Theo chuyền không có khái niệm "ăn sau" (DidEat luôn true) — chỉ hiện
+                                                                                loại phiếu (2026-09-28, theo yêu cầu người dùng). */}
+                                                                            {!form.isProductionForm && (
+                                                                                <span
+                                                                                    title={employee.didEat ? tDetail("didEatYes") : `${tDetail("didEatNo")} — ${tDetail("didEatNoHint")}`}
+                                                                                    className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${
+                                                                                        employee.didEat
+                                                                                            ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+                                                                                            : "border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]"
+                                                                                    }`}
+                                                                                >
+                                                                                    {employee.didEat ? <Check size={12} /> : <X size={12} />}
+                                                                                </span>
+                                                                            )}
                                                                         </span>
                                                                     ) : (
                                                                         <span className="text-[#c7ccd1]">–</span>

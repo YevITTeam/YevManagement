@@ -25,7 +25,7 @@ namespace Workflow.Infrastructure.Services
             var ext = Path.GetExtension(originalFileName);
             var storedFileName = $"{Guid.NewGuid():N}{ext}";
             var relativePath = Path.Combine(workflowRequestId.ToString(), storedFileName);
-            var physicalPath = Path.Combine(_rootPath, relativePath);
+            var physicalPath = ResolveContainedPath(relativePath);
 
             Directory.CreateDirectory(Path.GetDirectoryName(physicalPath)!);
             await using (var fileStream = File.Create(physicalPath))
@@ -38,11 +38,21 @@ namespace Workflow.Infrastructure.Services
 
         public void Delete(string relativePath)
         {
-            var physicalPath = Path.Combine(_rootPath, relativePath);
+            var physicalPath = ResolveContainedPath(relativePath);
             if (File.Exists(physicalPath))
                 File.Delete(physicalPath);
         }
 
-        public string GetPhysicalPath(string relativePath) => Path.Combine(_rootPath, relativePath);
+        public string GetPhysicalPath(string relativePath) => ResolveContainedPath(relativePath);
+
+        // Defense in depth: reject any relativePath that resolves outside the storage root (e.g. via "..").
+        private string ResolveContainedPath(string relativePath)
+        {
+            var fullPath = Path.GetFullPath(Path.Combine(_rootPath, relativePath));
+            var rootFullPath = Path.GetFullPath(_rootPath) + Path.DirectorySeparatorChar;
+            if (!fullPath.StartsWith(rootFullPath, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Resolved path escapes the attachment storage root.", nameof(relativePath));
+            return fullPath;
+        }
     }
 }

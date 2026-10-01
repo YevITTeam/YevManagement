@@ -238,10 +238,17 @@ namespace Workflow.Application.Services
 
             foreach (var field in existing.Where(x => !incomingIds.Contains(x.Id)))
             {
-                var blockingCondition = await _unitOfWork.FormFieldConditions.FirstOrDefaultAsync(
+                var blockingSourceCondition = await _unitOfWork.FormFieldConditions.FirstOrDefaultAsync(
                     c => c.SourceFieldId == field.Id && !c.IsDeleted);
-                if (blockingCondition is not null)
+                if (blockingSourceCondition is not null)
                     throw new DomainException($"Không thể xóa ô '{field.LabelVn}' vì đang được 1 điều kiện hiển thị khác dùng làm nguồn giá trị.");
+
+                // Also block when the field is a condition's TARGET — otherwise the FK's DB-level
+                // cascade delete would silently remove that condition with no warning to the designer.
+                var blockingTargetCondition = await _unitOfWork.FormFieldConditions.FirstOrDefaultAsync(
+                    c => c.TargetFieldId == field.Id && !c.IsDeleted);
+                if (blockingTargetCondition is not null)
+                    throw new DomainException($"Không thể xóa ô '{field.LabelVn}' vì đang là ô đích của 1 điều kiện hiển thị khác.");
 
                 _unitOfWork.FormFields.Delete(field);
             }
@@ -949,6 +956,12 @@ namespace Workflow.Application.Services
             if (hasAnyField is null)
                 throw new DomainException("Form chưa có ô nhập nào, không thể publish.");
 
+            // ReplaceRoutesAsync guarantees every saved route already has >=1 step, so checking route
+            // existence here is enough to prevent publishing a form no submission could ever route.
+            var hasAnyRoute = await _unitOfWork.FormRoutes.FirstOrDefaultAsync(x => x.FormDefinitionId == formDefinitionId && !x.IsDeleted);
+            if (hasAnyRoute is null)
+                throw new DomainException("Form chưa cấu hình nhánh duyệt nào, không thể publish.");
+
             if (entity.IsPublished)
                 entity.Version += 1;
             else
@@ -963,10 +976,12 @@ namespace Workflow.Application.Services
             return await GetByIdAsync(formDefinitionId);
         }
 
-        // Sao chép FormFields + FormFieldConditions sang 1 FormDefinition mới (Id mới hoàn toàn, FE
-        // không thể lẫn lộn với form gốc). KHÔNG sao chép FormAccesses (§3.2, xem CloneFormDefinitionDto).
-        // Toàn bộ nằm trong 1 transaction ngầm của SaveChangesAsync duy nhất ở cuối — nếu fail giữa
-        // chừng thì chưa gọi SaveChanges nên chưa ghi gì xuống DB.
+        // Copies FormFields + FormFieldConditions + FormRoutes/FormApprovalSteps/
+        // FormApprovalStepParticipants into a brand-new FormDefinition. Does NOT copy FormAccesses
+        // (§3.2, see CloneFormDefinitionDto) — access is configured per form, never inherited.
+        // Needs several intermediate SaveChangesAsync calls to get real Ids for the new route/step/
+        // field before creating their children; a mid-way failure leaves orphaned rows under clone.Id,
+        // but since that's a fresh unpublished form, the admin can just delete it and retry.
         public async Task<FormDefinitionDto> CloneAsync(int formDefinitionId, CloneFormDefinitionDto request, int? currentUserId)
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
@@ -1067,6 +1082,66 @@ namespace Workflow.Application.Services
                     SortOrder = condition.SortOrder,
                     IsDeleted = false
                 });
+            }
+
+            // Copy FormRoutes + FormApprovalSteps + FormApprovalStepParticipants so the clone can
+            // actually be published and routed, not just look complete.
+            var sourceRoutes = (await _unitOfWork.FormRoutes.FindAsync(x => x.FormDefinitionId == formDefinitionId && !x.IsDeleted))
+                .OrderBy(x => x.SortOrder).ToList();
+            foreach (var route in sourceRoutes)
+            {
+                var newRoute = new FormRoute
+                {
+                    FormDefinitionId = clone.Id,
+                    NameVn = route.NameVn,
+                    NameJp = route.NameJp,
+                    SortOrder = route.SortOrder,
+                    MinValue = route.MinValue,
+                    MaxValue = route.MaxValue,
+                    ClassValue = route.ClassValue,
+                    IsDefault = route.IsDefault,
+                    IsDeleted = false
+                };
+                await _unitOfWork.FormRoutes.AddAsync(newRoute);
+                await _unitOfWork.SaveChangesAsync(); // need newRoute.Id before creating its steps
+
+                var sourceSteps = (await _unitOfWork.FormApprovalSteps.FindAsync(s => s.FormRouteId == route.Id))
+                    .OrderBy(s => s.StepOrder).ToList();
+                foreach (var step in sourceSteps)
+                {
+                    var newStep = new FormApprovalStep
+                    {
+                        FormRouteId = newRoute.Id,
+                        StepOrder = step.StepOrder,
+                        NameVn = step.NameVn,
+                        NameJp = step.NameJp,
+                        StepType = step.StepType,
+                        OrgUnitScope = step.OrgUnitScope,
+                        OrgUnitId = step.OrgUnitId,
+                        ApproverMode = step.ApproverMode,
+                        RequireSignature = step.RequireSignature,
+                        AllowSendBack = step.AllowSendBack,
+                        AllowAddApprover = step.AllowAddApprover,
+                        IsDeleted = false
+                    };
+                    await _unitOfWork.FormApprovalSteps.AddAsync(newStep);
+                    await _unitOfWork.SaveChangesAsync(); // need newStep.Id before creating its participants
+
+                    var sourceParticipants = await _unitOfWork.FormApprovalStepParticipants.FindAsync(p => p.FormApprovalStepId == step.Id);
+                    foreach (var participant in sourceParticipants)
+                    {
+                        await _unitOfWork.FormApprovalStepParticipants.AddAsync(new FormApprovalStepParticipant
+                        {
+                            FormApprovalStepId = newStep.Id,
+                            ParticipantSource = participant.ParticipantSource,
+                            EmployeeId = participant.EmployeeId,
+                            JobTitleId = participant.JobTitleId,
+                            ParticipantRole = participant.ParticipantRole,
+                            SortOrder = participant.SortOrder,
+                            IsDeleted = false
+                        });
+                    }
+                }
             }
 
             await _unitOfWork.SaveChangesAsync();

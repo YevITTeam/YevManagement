@@ -34,6 +34,7 @@ namespace Workflow.Application.Services
                 throw new DomainException("Ngày kết thúc phải sau ngày bắt đầu.");
 
             await GuardNoDelegationChainAsync(currentEmployeeId, request.DelegateEmployeeId);
+            await GuardNoOverlappingDelegationAsync(currentEmployeeId, request.FormDefinitionId, request.FromDate, request.ToDate);
 
             var entity = new ApprovalDelegation
             {
@@ -70,6 +71,7 @@ namespace Workflow.Application.Services
                 throw new DomainException("Ngày kết thúc phải sau ngày bắt đầu.");
 
             await GuardNoDelegationChainAsync(currentEmployeeId, request.DelegateEmployeeId, excludeId: id);
+            await GuardNoOverlappingDelegationAsync(currentEmployeeId, request.FormDefinitionId, request.FromDate, request.ToDate, excludeId: id);
 
             entity.DelegateEmployeeId = request.DelegateEmployeeId;
             entity.FormDefinitionId = request.FormDefinitionId;
@@ -102,13 +104,29 @@ namespace Workflow.Application.Services
         private async Task GuardNoDelegationChainAsync(int delegatorEmployeeId, int delegateEmployeeId, int? excludeId = null)
         {
             var now = TimeHelper.GetCurrentUtcTime();
-            var active = (await _unitOfWork.ApprovalDelegations.FindAsync(x => !x.IsDeleted && x.Id != (excludeId ?? 0) && x.ToDate >= now)).ToList();
+            // "active" must match ResolveActingCapabilityAsync's definition (FromDate <= now <= ToDate),
+            // not just ToDate >= now — otherwise a not-yet-started delegation wrongly blocks an unrelated one.
+            var active = (await _unitOfWork.ApprovalDelegations.FindAsync(
+                x => !x.IsDeleted && x.Id != (excludeId ?? 0) && x.FromDate <= now && x.ToDate >= now)).ToList();
 
             if (active.Any(x => x.DelegatorEmployeeId == delegateEmployeeId))
                 throw new DomainException("Người được ủy quyền đang là người ủy quyền ở một dòng khác — không hỗ trợ ủy quyền dây chuyền.");
 
             if (active.Any(x => x.DelegateEmployeeId == delegatorEmployeeId))
                 throw new DomainException("Bạn đang là người được ủy quyền duyệt thay ở một dòng khác — không hỗ trợ ủy quyền dây chuyền.");
+        }
+
+        // Prevents the same delegator from having two overlapping delegations that could match the same
+        // approval step (same form, or either one is "all forms") — avoids ambiguous approver resolution.
+        private async Task GuardNoOverlappingDelegationAsync(int delegatorEmployeeId, int? formDefinitionId, DateTime fromDate, DateTime toDate, int? excludeId = null)
+        {
+            var candidates = await _unitOfWork.ApprovalDelegations.FindAsync(
+                x => !x.IsDeleted && x.Id != (excludeId ?? 0) && x.DelegatorEmployeeId == delegatorEmployeeId &&
+                     x.FromDate <= toDate && x.ToDate >= fromDate);
+
+            var overlapping = candidates.Any(x => x.FormDefinitionId == null || formDefinitionId == null || x.FormDefinitionId == formDefinitionId);
+            if (overlapping)
+                throw new DomainException("Bạn đã có một ủy quyền khác chồng khoảng thời gian này cho cùng loại đơn.");
         }
 
         private async Task<List<ApprovalDelegationDto>> ToDtoListAsync(List<ApprovalDelegation> items)
