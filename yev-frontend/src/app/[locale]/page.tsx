@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { ArrowRight, CalendarClock, Cpu, ExternalLink, FileText, MessagesSquare, Network, Notebook } from "lucide-react";
+import { ArrowRight, CalendarClock, Cpu, ExternalLink, FileText, MessagesSquare, Network, Notebook, ShoppingCart } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -76,6 +76,16 @@ export default function Home() {
       isExternal: true,
       accent: "#b45309",
       tint: "#fff4e5",
+    },
+    {
+      title: t("purchaseOrderTitle"),
+      desc: t("purchaseOrderDesc"),
+      link: "http://10.45.1.49:9001",
+      icon: <ShoppingCart className="h-6 w-6" />,
+      visible: true,
+      isExternal: true,
+      accent: "#7c3aed",
+      tint: "#f2edfe",
     },
     {
       title: t("chatTitle"),

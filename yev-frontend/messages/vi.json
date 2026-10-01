@@ -1236,6 +1236,8 @@
     "scheduleDesc": "Kế hoạch, thời gian và lưu trình làm",
     "contractsTitle": "Quản lý hợp đồng",
     "contractsDesc": "Soạn thảo và lưu trữ hồ sơ",
+    "purchaseOrderTitle": "Quản lý đặt hàng",
+    "purchaseOrderDesc": "Theo dõi đơn đặt hàng",
     "overtimeTitle": "Quản lý tăng ca",
     "overtimeDesc": "Đăng ký hoặc phê duyệt tăng ca",
     "reportsTitle": "Báo cáo thống kê",

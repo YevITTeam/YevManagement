@@ -1235,6 +1235,8 @@
     "scheduleDesc": "計画・期間・作業フロー",
     "contractsTitle": "契約管理",
     "contractsDesc": "書類の作成・保管",
+    "purchaseOrderTitle": "発注管理",
+    "purchaseOrderDesc": "発注状況の追跡",
     "overtimeTitle": "残業管理",
     "overtimeDesc": "残業の申請・承認",
     "reportsTitle": "統計レポート",
