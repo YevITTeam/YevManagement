@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 
 import OtFormListPage from "./OtFormListPage";
 import { useAuth } from "@/modules/auth/context/AuthContext";
-import { hasPermission } from "@/modules/auth/lib/permissions";
+import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
 
 type OtFormTabKey = "my-forms" | "pending-approvals" | "my-actions" | "my-participations" | "all-forms";
@@ -25,7 +25,9 @@ export default function OtFormTabsPage() {
         { key: "all-forms", label: t("tabAllForms") },
     ];
     const { user } = useAuth();
-    const canCreate = hasPermission(user, "Attendance.OTForm.Create");
+    // Create/CreateProduction tách rời — Line Leader chỉ có CreateProduction vẫn cần thấy tab "Đơn của
+    // tôi" (đơn theo chuyền họ tạo cũng nằm ở đây, 2026-09-28, đồng bộ với otRoutePermissions.ts).
+    const canCreate = hasAnyPermission(user, ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"]);
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
     // Tab "Tất cả đơn" — chỉ Admin (permission riêng Attendance.OTForm.ViewAll, 2026-09-04).
     const canViewAll = hasPermission(user, "Attendance.OTForm.ViewAll");

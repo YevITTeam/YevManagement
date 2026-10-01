@@ -98,6 +98,25 @@ export interface MyCreateScopeItemDto {
     departmentNameVn: string;
 }
 
+// GET /api/OtForm/my-production-create-scopes — (những) tổ hợp Team/Line/Nhóm ca mà CHÍNH user gọi
+// đang là Line Leader (suy từ ProductionEmployee.IsLeader, 2026-09-28). Dùng để FE tự điền sẵn + khoá
+// cứng 3 dropdown ở chế độ "Theo chuyền" thay vì bắt Line Leader tự chọn lại. Mảng rỗng = Admin (không
+// giới hạn) HOẶC người gọi không phải Line Leader của bất kỳ tổ hợp nào — FE giữ dropdown tự do.
+export interface MyProductionCreateScopeItemDto {
+    // Bộ phận của CHÍNH người gọi — giống nhau ở mọi phần tử của mảng (2026-09-28).
+    departmentId: number;
+    departmentNameVn: string;
+    productionLineId: number;
+    lineCode: string;
+    lineNameVn: string | null;
+    teamId: number;
+    teamCode: string;
+    teamNameVn: string | null;
+    shiftTeamId: number;
+    shiftTeamCode: string;
+    shiftTeamNameVn: string | null;
+}
+
 // Body POST /api/OtForm — §4.1. Không còn field chữ ký (BE tự lấy từ UserSignature/me).
 // groupId/isProductionForm (2026-08-24): đơn "theo Nhóm" (mặc định) bắt buộc groupId, isProductionForm
 // = false; đơn "theo chuyền" (Chế tạo) groupId = null, isProductionForm = true — xem CreateOtFormPage.tsx.
@@ -337,9 +356,18 @@ export interface DeleteOtFormDto {
 }
 
 // Body POST /api/OtForm/email-confirm/{token}/employees/remove — §4.5a. Kênh email KHÔNG cần mật khẩu
-// cấp 2 (token tự nó là thông tin xác thực) — kênh trong-app đã gộp vào PUT /api/OtForm/{id}
-// (UpdateOtFormDto.removedEmployees) từ 2026-09-04, không còn endpoint riêng nữa.
+// cấp 2 (token tự nó là thông tin xác thực).
 export interface RemoveOtFormEmployeeByEmailTokenDto {
+    employeeId: number;
+    reason: string;
+}
+
+// Body POST /api/OtForm/{id}/employees/remove — kênh trong-app (JWT), khôi phục 2026-09-30 ngay trên
+// màn Duyệt (§Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web)) — TÁCH RIÊNG khỏi UpdateOtFormDto
+// (chỉ người tạo mới gọi được cho đơn theo Nhóm): endpoint này dùng đúng luật "candidate bước Pending
+// hiện tại" nên approver không phải người tạo cũng loại được. KHÔNG có secondaryPassword, cùng quyết
+// định 2026-07-31 áp dụng cho kênh email.
+export interface RemoveOtFormEmployeeDto {
     employeeId: number;
     reason: string;
 }

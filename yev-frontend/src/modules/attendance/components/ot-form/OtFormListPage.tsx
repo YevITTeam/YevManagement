@@ -16,7 +16,7 @@ import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
 import { useAuth } from "@/modules/auth/context/AuthContext";
-import { hasPermission } from "@/modules/auth/lib/permissions";
+import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -108,7 +108,9 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const router = useRouter();
     const locale = useLocale();
     const { user } = useAuth();
-    const canCreate = hasPermission(user, "Attendance.OTForm.Create");
+    // Create/CreateProduction tách rời — Line Leader chỉ có CreateProduction vẫn cần thấy nút "Tạo đơn"
+    // (2026-09-28, đồng bộ với otRoutePermissions.ts).
+    const canCreate = hasAnyPermission(user, ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"]);
     const canBulkApprove = mode === "pending-approvals" && hasPermission(user, "Attendance.OTForm.Approve");
     const [forms, setForms] = useState<OtFormListItemDto[]>([]);
 

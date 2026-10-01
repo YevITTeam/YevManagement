@@ -134,6 +134,7 @@ export default function FieldCanvas({ fields, onChange }: FieldCanvasProps) {
             {editingField && (
                 <FormFieldEditDialog
                     field={editingField}
+                    existingFieldKeys={fields.filter((f) => f.clientId !== editingField.clientId).map((f) => f.fieldKey.toLowerCase())}
                     onClose={() => setEditingClientId(null)}
                     onSave={(updated) => {
                         onChange(fields.map((f) => (f.clientId === updated.clientId ? updated : f)));

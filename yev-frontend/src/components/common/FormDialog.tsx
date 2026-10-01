@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 interface FormDialogProps {
     isOpen: boolean;
@@ -29,14 +29,33 @@ export default function FormDialog({
     maxWidthClassName = "max-w-sm",
     children,
 }: FormDialogProps) {
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (!isOpen || loading) return;
+            if (e.key === "Escape") {
+                e.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [isOpen, loading, onClose]);
+
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="fixed inset-0 bg-black/40" onClick={() => !loading && onClose()} />
 
-            <div role="dialog" aria-modal="true" className={`z-60 mx-4 w-full ${maxWidthClassName} rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl`}>
-                <h3 className="mb-4 text-lg font-semibold text-[#191c1e]">{title}</h3>
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="form-dialog-title"
+                className={`z-60 mx-4 w-full ${maxWidthClassName} rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl`}
+            >
+                <h3 id="form-dialog-title" className="mb-4 text-lg font-semibold text-[#191c1e]">
+                    {title}
+                </h3>
 
                 <div className="space-y-4">{children}</div>
 

@@ -18,8 +18,13 @@ namespace Attendance.Api.Controllers
         }
 
         // Dùng chung quyền tạo đơn OT hiện có — không tạo permission riêng (2026-08-24, theo yêu cầu
-        // người dùng — xem docs/docs-be/attendance-module.md §Đơn theo chuyền).
-        [RequirePermission("Attendance.OTForm.Create")]
+        // người dùng — xem docs/docs-be/attendance-module.md §Đơn theo chuyền). Create/CreateProduction
+        // là 2 quyền TÁCH RỜI (Giai đoạn 14/17) — 4 endpoint dưới đây CHỈ phục vụ tìm/lọc nhân sự dưới
+        // chuyền để tạo đơn "Theo chuyền", nên OR cả CreateProduction vào, không thì Line Leader chỉ có
+        // CreateProduction (không có Create) bị 403 ngay từ bước tìm nhân viên — 403 rơi vào .catch() ở
+        // FE nên không có lỗi hiện rõ, chỉ thấy triệu chứng "Không tìm thấy ai khớp bộ lọc" (2026-09-28,
+        // sửa cùng đợt với OtFormController.Create/Update/check-overlap).
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
         [HttpGet("search")]
         public async Task<ActionResult<ApiResponse<List<ProductionEmployeeSearchItemDto>>>> Search(
             [FromQuery] int? productionLineId, [FromQuery] int? teamId, [FromQuery] int? shiftTeamId,
@@ -29,7 +34,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create")]
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
         [HttpGet("line-options")]
         public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetLineOptions([FromQuery] int? teamId)
         {
@@ -37,7 +42,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create")]
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
         [HttpGet("team-options")]
         public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetTeamOptions()
         {
@@ -45,7 +50,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create")]
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
         [HttpGet("shift-team-options")]
         public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetShiftTeamOptions(
             [FromQuery] int? productionLineId, [FromQuery] int? teamId)

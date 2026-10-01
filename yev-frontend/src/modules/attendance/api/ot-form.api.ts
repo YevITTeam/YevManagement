@@ -8,11 +8,13 @@ import type {
     CreateOtFormDto,
     DeleteOtFormDto,
     MyCreateScopeItemDto,
+    MyProductionCreateScopeItemDto,
     OtFormDto,
     OtFormListItemDto,
     PendingApprovalDateCountDto,
     RejectOtFormDto,
     RemoveOtFormEmployeeByEmailTokenDto,
+    RemoveOtFormEmployeeDto,
     UpdateOtFormDto,
 } from "@/modules/attendance/types/ot-form.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
@@ -21,6 +23,7 @@ import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 const ENDPOINTS = {
     OT_FORM: {
         getMyCreateScopes: "/OtForm/my-create-scopes",
+        getMyProductionCreateScopes: "/OtForm/my-production-create-scopes",
         checkOverlap: "/OtForm/check-overlap",
         createOtForm: "/OtForm",
         getMyForms: "/OtForm/my-forms",
@@ -34,6 +37,7 @@ const ENDPOINTS = {
         updateOtForm: (id: number) => `/OtForm/${id}`,
         approveOtForm: (id: number) => `/OtForm/${id}/approve`,
         rejectOtForm: (id: number) => `/OtForm/${id}/reject`,
+        removeOtFormEmployee: (id: number) => `/OtForm/${id}/employees/remove`,
         bulkApprove: "/OtForm/bulk-approve",
         bulkReject: "/OtForm/bulk-reject",
         deleteOtForm: (id: number) => `/OtForm/${id}/delete`,
@@ -82,6 +86,12 @@ export const OtFormApi = {
         const response = await api.get<ApiResponse<MyCreateScopeItemDto[]>>(ENDPOINTS.OT_FORM.getMyCreateScopes);
         return response.data;
     },
+    // (Những) tổ hợp Team/Line/Nhóm ca CHÍNH user đang là Line Leader — gọi TRƯỚC khi mở tab "Theo
+    // chuyền" để tự điền sẵn/khoá cứng 3 dropdown Team/Line/Nhóm ca (2026-09-28).
+    getMyProductionCreateScopes: async () => {
+        const response = await api.get<ApiResponse<MyProductionCreateScopeItemDto[]>>(ENDPOINTS.OT_FORM.getMyProductionCreateScopes);
+        return response.data;
+    },
     // Frontend proactive conflict check
     checkOverlap: async (data: CheckOtFormOverlapDto) => {
         const response = await api.post<ApiResponse<number[]>>(ENDPOINTS.OT_FORM.checkOverlap, data);
@@ -95,6 +105,13 @@ export const OtFormApi = {
     // Chỉ chính người tạo, chỉ khi còn Pending — data trả về OtFormDto đầy đủ (docs §4.1b).
     updateOtForm: async (id: number, data: UpdateOtFormDto) => {
         const response = await api.put<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.updateOtForm(id), data);
+        return response.data;
+    },
+    // Loại 1 nhân viên khỏi đơn ngay trên màn Duyệt (JWT, khôi phục 2026-09-30) — KHÔNG cần
+    // secondaryPassword. Dùng đúng luật "candidate bước Pending hiện tại" nên khác updateOtForm (chỉ
+    // người tạo mới gọi được cho đơn theo Nhóm) — xem RemoveOtFormEmployeeDto.
+    removeOtFormEmployee: async (id: number, data: RemoveOtFormEmployeeDto) => {
+        const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.removeOtFormEmployee(id), data);
         return response.data;
     },
     getMyForms: async (params?: GetOtFormListParams) => {

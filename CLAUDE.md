@@ -5,7 +5,19 @@
 > người dùng không phải dán lại mã nguồn.
 >
 > **Ngôn ngữ:** trả lời người dùng bằng **tiếng Việt**. Text hiển thị trên UI: **tiếng Việt**.
-> **Comment trong code: tiếng Anh.**
+>
+> **Comment trong code: TIẾNG ANH, ngắn gọn, mô tả hành vi HIỆN TẠI của đoạn code.**
+> KHÔNG viết comment kiểu nhật ký: không ngày tháng, không "trước đây làm X, nay đổi thành Y",
+> không kể lại bug đã gặp / ai yêu cầu / đã thử cách nào. Lý do và lịch sử thuộc về `docs/` và
+> `git log` — code chỉ nói **nó đang làm gì**. Comment cũ sai quy ước thì sửa khi đụng tới, đừng
+> đi sửa hàng loạt nếu không được yêu cầu.
+>
+> ```cs
+> // ❌ Bật lại (2026-08-22) nhưng đổi việc: không còn tự chuyển trạng thái Device
+> //    PendingUse/InUse -> PendingLiquidation -> Liquidated nữa (chuyển trạng thái giờ chỉ còn
+> //    thao tác thủ công hoặc import thanh lý hàng loạt) — job chỉ còn tự soft-delete...
+> // ✅ Soft-deletes devices already marked Liquidated. Status transitions are manual only.
+> ```
 
 ---
 

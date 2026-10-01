@@ -211,8 +211,9 @@ namespace Workflow.Application.Services
 
             if (entity.CreatedByEmployeeId != currentEmployeeId)
                 throw new DomainException("Chỉ người tạo đơn mới được sửa đơn này.");
-            if (entity.Status != RequestStatus.Draft)
-                throw new DomainException("Chỉ đơn ở trạng thái Nháp mới sửa được.");
+            // SentBack also allows editing DataJson before resubmitting (see ResubmitAsync).
+            if (entity.Status is not (RequestStatus.Draft or RequestStatus.SentBack))
+                throw new DomainException("Chỉ đơn ở trạng thái Nháp hoặc Trả về mới sửa được.");
 
             var fields = (await _unitOfWork.FormFields.FindAsync(x => x.FormDefinitionId == entity.FormDefinitionId && !x.IsDeleted)).ToList();
             entity.DataJson = NormalizeDraftDataJson(fields, request.DataJson);
@@ -578,6 +579,55 @@ namespace Workflow.Application.Services
             return await GetByIdAsync(id, currentUserId, true);
         }
 
+        // Pushes a SentBack request back into the approval flow. Does NOT re-resolve approvers — reuses
+        // the WorkflowRequestSteps/Participants snapshot from the original Submit.
+        public async Task<WorkflowRequestDto> ResubmitAsync(int id, ResubmitRequestDto request, int? currentUserId)
+        {
+            var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
+            var currentEmployee = (await _unitOfWork.Employees.GetByIdAsync(currentEmployeeId)).OrThrowNotFound("Nhân sự", currentEmployeeId);
+            var entity = (await _unitOfWork.WorkflowRequests.GetByIdAsync(id)).OrThrowNotFound("Đơn", id);
+
+            if (entity.CreatedByEmployeeId != currentEmployeeId)
+                throw new DomainException("Chỉ người tạo đơn mới được nộp lại đơn này.");
+            if (entity.Status != RequestStatus.SentBack)
+                throw new DomainException("Chỉ đơn đang ở trạng thái Trả về mới nộp lại được.");
+
+            var steps = await LoadStepsAsync(id);
+            // CurrentStepOrder holds SentBackToStepOrder (0 = back to requester -> reactivate the
+            // first step, since there is no real step 0).
+            var reactivateStepOrder = entity.CurrentStepOrder == 0 ? steps.Min(s => s.StepOrder) : entity.CurrentStepOrder;
+            var targetStep = steps.FirstOrDefault(s => s.StepOrder == reactivateStepOrder && s.Status == StepStatus.Waiting)
+                ?? throw new DomainException("Không tìm thấy bước duyệt để nộp lại.");
+
+            var now = TimeHelper.GetCurrentUtcTime();
+            targetStep.Status = StepStatus.Current;
+            targetStep.ActedByEmployeeId = null;
+            targetStep.ActedAt = null;
+            _unitOfWork.WorkflowRequestSteps.Update(targetStep);
+
+            entity.CurrentStepOrder = reactivateStepOrder;
+            entity.Status = RequestStatus.InProgress;
+            _unitOfWork.WorkflowRequests.Update(entity);
+
+            await _unitOfWork.WorkflowRequestHistories.AddAsync(new WorkflowRequestHistory
+            {
+                WorkflowRequestId = entity.Id,
+                StepOrder = reactivateStepOrder,
+                ActorEmployeeId = currentEmployeeId,
+                ActorNameSnapshot = currentEmployee.FullName,
+                Action = RequestAction.Resubmit,
+                Comment = request.Comment,
+                ActionAt = now
+            });
+
+            await _unitOfWork.SaveChangesAsync();
+
+            // Same as ApplyApprovalAsync: notify the step's approvers after saving.
+            await NotifyStepApproversAsync(targetStep, entity);
+
+            return await GetByIdAsync(id, currentUserId, true);
+        }
+
         public async Task<WorkflowRequestDto> AddApproverAsync(int id, AddApproverRequestDto request, int? currentUserId)
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
@@ -856,64 +906,78 @@ namespace Workflow.Application.Services
             int? onBehalfOfEmployeeId, string? comment, string? signatureImageBase64, int? currentUserId)
         {
             var now = TimeHelper.GetCurrentUtcTime();
-            var participants = (await _unitOfWork.WorkflowRequestStepParticipants.FindAsync(
-                p => p.WorkflowRequestStepId == currentStep.Id && p.ParticipantRole == ParticipantRole.Approver)).ToList();
 
-            var actingAsEmployeeId = onBehalfOfEmployeeId ?? actorEmployeeId;
-            var actingParticipant = participants.FirstOrDefault(p => p.EmployeeId == actingAsEmployeeId)
-                ?? throw new DomainException("Không tìm thấy người duyệt tương ứng ở bước này.");
-            if (actingParticipant.ActedAt is not null)
-                throw new DomainException("Bạn đã duyệt bước này rồi.");
-
-            actingParticipant.ActedAt = now;
-            _unitOfWork.WorkflowRequestStepParticipants.Update(actingParticipant);
-
-            var stepDone = currentStep.ApproverModeSnapshot == ApproverMode.Any ||
-                participants.All(p => p.Id == actingParticipant.Id || p.ActedAt is not null);
-
-            byte[]? signatureBytes = string.IsNullOrEmpty(signatureImageBase64) ? null : Convert.FromBase64String(signatureImageBase64);
-
-            await _unitOfWork.WorkflowRequestHistories.AddAsync(new WorkflowRequestHistory
-            {
-                WorkflowRequestId = entity.Id,
-                StepOrder = currentStep.StepOrder,
-                ActorEmployeeId = actorEmployeeId,
-                OnBehalfOfEmployeeId = onBehalfOfEmployeeId,
-                ActorNameSnapshot = actorFullName,
-                Action = RequestAction.Approve,
-                Comment = comment,
-                SignatureImage = signatureBytes,
-                ActionAt = now
-            });
-
+            // Lock the request row so two concurrent approvals on an ApproverMode.All step can't both
+            // read the participant list before either one's ActedAt update is visible to the other.
             WorkflowRequestStep? nextStep = null;
-            if (stepDone)
+            await _unitOfWork.BeginTransactionAsync();
+            try
             {
-                currentStep.Status = StepStatus.Approved;
-                currentStep.ActedByEmployeeId = actorEmployeeId;
-                currentStep.ActedAt = now;
-                _unitOfWork.WorkflowRequestSteps.Update(currentStep);
+                await _unitOfWork.WorkflowRequests.LockForUpdateAsync(entity.Id);
 
-                var steps = await LoadStepsAsync(entity.Id);
-                nextStep = steps.Where(s => s.StepOrder > currentStep.StepOrder && s.Status == StepStatus.Waiting).OrderBy(s => s.StepOrder).FirstOrDefault();
-                if (nextStep is null)
+                var participants = (await _unitOfWork.WorkflowRequestStepParticipants.FindAsync(
+                    p => p.WorkflowRequestStepId == currentStep.Id && p.ParticipantRole == ParticipantRole.Approver)).ToList();
+
+                var actingAsEmployeeId = onBehalfOfEmployeeId ?? actorEmployeeId;
+                var actingParticipant = participants.FirstOrDefault(p => p.EmployeeId == actingAsEmployeeId)
+                    ?? throw new DomainException("Không tìm thấy người duyệt tương ứng ở bước này.");
+                if (actingParticipant.ActedAt is not null)
+                    throw new DomainException("Bạn đã duyệt bước này rồi.");
+
+                actingParticipant.ActedAt = now;
+                _unitOfWork.WorkflowRequestStepParticipants.Update(actingParticipant);
+
+                var stepDone = currentStep.ApproverModeSnapshot == ApproverMode.Any ||
+                    participants.All(p => p.Id == actingParticipant.Id || p.ActedAt is not null);
+
+                byte[]? signatureBytes = string.IsNullOrEmpty(signatureImageBase64) ? null : Convert.FromBase64String(signatureImageBase64);
+
+                await _unitOfWork.WorkflowRequestHistories.AddAsync(new WorkflowRequestHistory
                 {
-                    entity.Status = RequestStatus.Approved;
-                    entity.CompletedAt = now;
-                }
-                else
+                    WorkflowRequestId = entity.Id,
+                    StepOrder = currentStep.StepOrder,
+                    ActorEmployeeId = actorEmployeeId,
+                    OnBehalfOfEmployeeId = onBehalfOfEmployeeId,
+                    ActorNameSnapshot = actorFullName,
+                    Action = RequestAction.Approve,
+                    Comment = comment,
+                    SignatureImage = signatureBytes,
+                    ActionAt = now
+                });
+
+                if (stepDone)
                 {
-                    nextStep.Status = StepStatus.Current;
-                    _unitOfWork.WorkflowRequestSteps.Update(nextStep);
-                    entity.CurrentStepOrder = nextStep.StepOrder;
-                    entity.Status = RequestStatus.InProgress;
+                    currentStep.Status = StepStatus.Approved;
+                    currentStep.ActedByEmployeeId = actorEmployeeId;
+                    currentStep.ActedAt = now;
+                    _unitOfWork.WorkflowRequestSteps.Update(currentStep);
+
+                    var steps = await LoadStepsAsync(entity.Id);
+                    nextStep = steps.Where(s => s.StepOrder > currentStep.StepOrder && s.Status == StepStatus.Waiting).OrderBy(s => s.StepOrder).FirstOrDefault();
+                    if (nextStep is null)
+                    {
+                        entity.Status = RequestStatus.Approved;
+                        entity.CompletedAt = now;
+                    }
+                    else
+                    {
+                        nextStep.Status = StepStatus.Current;
+                        _unitOfWork.WorkflowRequestSteps.Update(nextStep);
+                        entity.CurrentStepOrder = nextStep.StepOrder;
+                        entity.Status = RequestStatus.InProgress;
+                    }
+                    _unitOfWork.WorkflowRequests.Update(entity);
                 }
-                _unitOfWork.WorkflowRequests.Update(entity);
+
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
             }
 
-            await _unitOfWork.SaveChangesAsync();
-
-            // Pha 4C: bước kế vừa chuyển Current — gửi email cho Approver của nó, SAU khi đã lưu xong.
+            // Notify the next step's approvers only after the transaction has committed.
             if (nextStep is not null)
                 await NotifyStepApproversAsync(nextStep, entity);
 
@@ -1273,9 +1337,10 @@ namespace Workflow.Application.Services
             var str = value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : value.GetRawText();
             return condition.Operator switch
             {
-                ConditionOperator.Equals => string.Equals(str, condition.CompareValue, StringComparison.Ordinal),
-                ConditionOperator.NotEquals => !string.Equals(str, condition.CompareValue, StringComparison.Ordinal),
-                ConditionOperator.Contains => condition.CompareValue is not null && str.Contains(condition.CompareValue, StringComparison.Ordinal),
+                // Case-insensitive, matching SelectRoute's ClassValue comparison on the same submitted data.
+                ConditionOperator.Equals => string.Equals(str, condition.CompareValue, StringComparison.OrdinalIgnoreCase),
+                ConditionOperator.NotEquals => !string.Equals(str, condition.CompareValue, StringComparison.OrdinalIgnoreCase),
+                ConditionOperator.Contains => condition.CompareValue is not null && str.Contains(condition.CompareValue, StringComparison.OrdinalIgnoreCase),
                 ConditionOperator.GreaterThan => condition.CompareValue is not null && string.CompareOrdinal(str, condition.CompareValue) > 0,
                 ConditionOperator.LessThan => condition.CompareValue is not null && string.CompareOrdinal(str, condition.CompareValue) < 0,
                 ConditionOperator.Between => condition.CompareValue is not null && condition.CompareValue2 is not null &&

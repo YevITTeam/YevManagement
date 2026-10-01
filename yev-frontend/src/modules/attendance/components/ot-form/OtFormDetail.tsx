@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { TimeRange } from "@/modules/attendance/components/ot-form/TimeRange";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
-import { Car, Check, ChevronDown, Clock, History, MessageCircle, Printer, Trash2, User, Utensils, X } from "lucide-react";
+import { Car, Check, ChevronDown, Clock, History, MessageCircle, Printer, Trash2, User, UserX, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalStepDto, OtFormDto, OtFormEditLogDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
@@ -137,6 +137,12 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // duyệt mới thấy nút này (xem canApprove bên dưới), modal dùng chung với EmployeeList.tsx.
     const [historyEmployee, setHistoryEmployee] = useState<OtFormEmployeeDto | null>(null);
 
+    // "Loại khỏi đơn" ngay trên màn Duyệt (khôi phục 2026-09-30) — KHÔNG cần mật khẩu cấp 2, cùng
+    // quyết định 2026-07-31 áp dụng cho kênh email (xem RemoveOtFormEmployeeDto).
+    const [removeTarget, setRemoveTarget] = useState<OtFormEmployeeDto | null>(null);
+    const [removeReason, setRemoveReason] = useState("");
+    const [isRemovingEmployee, setIsRemovingEmployee] = useState(false);
+
     const { isLoading, error, refetch: fetchForm } = useFetchEffect(
         () => OtFormApi.getOtFormById(id),
         [id],
@@ -147,6 +153,11 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     );
 
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
+    // Nút "Loại khỏi đơn" ngay trên màn Duyệt (khôi phục 2026-09-30, xem docs/attendance-module.md
+    // §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web)) — permission riêng, KHÔNG dùng chung canEdit
+    // (canEdit đơn theo Nhóm chỉ đúng cho người tạo; loại người ở đây đi qua endpoint riêng dùng luật
+    // "candidate bước Pending hiện tại" cho CẢ 2 loại đơn, BE là nguồn chặn thật nếu bấm sai lượt).
+    const canRemoveEmployee = hasPermission(user, "Attendance.OTForm.RemoveEmployee");
     // Bước đang chờ xử lý — StepOrder nhỏ nhất còn Pending trong chuỗi đã snapshot (xem docs §Cây
     // chức vụ). null khi đơn đã Hoàn tất/Từ chối hoặc chuỗi rỗng (đơn tự Hoàn tất ngay lúc tạo).
     const currentStep = form?.approvalSteps.find((s) => s.status === 0) ?? null;
@@ -157,10 +168,15 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // tạo; đơn "theo chuyền" (Giai đoạn 5, 2026-08-27) sửa được theo TỪNG BƯỚC — giống cách nút Duyệt/
     // Từ chối bên dưới cũng không tự lọc theo candidate ở FE, để BE là nguồn chặn thật (trả lỗi rõ ràng
     // nếu bấm Sửa mà không phải candidate của bước hiện tại).
+    // Create/CreateProduction tách rời (2026-09-28) — đơn "theo chuyền" đúng quyền là CreateProduction
+    // (Line Leader chỉ có quyền này vẫn phải sửa được đơn theo chuyền của họ, khớp OtFormService.
+    // UpdateAsync tự check lại theo candidate bước hiện tại), đơn "theo Nhóm" vẫn đúng quyền Create +
+    // phải là chính người tạo — không dùng chung 1 điều kiện `Create` cho cả 2 như trước nữa.
     const canEdit =
         Boolean(form?.isEditable) &&
-        hasPermission(user, "Attendance.OTForm.Create") &&
-        (form?.isProductionForm || form?.createdByUserName === user?.userName);
+        (form?.isProductionForm
+            ? hasPermission(user, "Attendance.OTForm.CreateProduction")
+            : hasPermission(user, "Attendance.OTForm.Create") && form?.createdByUserName === user?.userName);
 
     // Nút "Xoá đơn" (Admin only, mới 2026-08-08) — chặn khi đã Completed (status=1, đã cộng lũy kế thật).
     const canDelete = hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;
@@ -255,6 +271,39 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         }
     };
 
+    const openRemove = (employee: OtFormEmployeeDto) => {
+        setRemoveReason("");
+        setRemoveTarget(employee);
+    };
+
+    const closeRemove = () => {
+        if (isRemovingEmployee) return;
+        setRemoveTarget(null);
+    };
+
+    const handleRemoveEmployee = async () => {
+        if (!removeTarget) return;
+        if (!removeReason.trim()) {
+            toast.error(t("removeReasonRequiredError"));
+            return;
+        }
+        setIsRemovingEmployee(true);
+        try {
+            const updated = await OtFormApi.removeOtFormEmployee(id, {
+                employeeId: removeTarget.employeeId,
+                reason: removeReason.trim(),
+            });
+            setForm(updated);
+            toast.success(t("removeSuccess", { name: removeTarget.fullName }));
+            setRemoveTarget(null);
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("removeError")));
+        } finally {
+            setIsRemovingEmployee(false);
+        }
+    };
+
     // Nhãn hiển thị 1 dòng Lịch sử chỉnh sửa (mới 2026-08-28) — actionType: 0=TimeChanged,
     // 1=NoteChanged, 2=EmployeeAdded, 3=EmployeeRemoved (enum OtFormEditActionType).
     const editLogActionLabel = (log: OtFormEditLogDto) => {
@@ -311,7 +360,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // Cột Ghi chú chỉ hiện khi có ít nhất 1 người còn trong đơn có ghi chú — toàn "-" chỉ tốn chỗ.
     const hasNotes = activeEmployees.some((employee) => Boolean(employee.noteVn || employee.noteJp));
     // Số cột phía sau Mã NV + Họ tên (dòng "đã bị loại" gộp ô cho hết phần còn lại).
-    const removedColSpan = 5 + (hasNotes ? 1 : 0) + (form.isProductionForm ? 3 : 0);
+    const removedColSpan = 5 + (hasNotes ? 1 : 0) + (form.isProductionForm ? 3 : 0) + (canRemoveEmployee ? 1 : 0);
 
     return (
         <div className="space-y-4">
@@ -571,9 +620,12 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                 {t("totalWorkedHoursLabel", { hours: formatHours(totalWorkedHours) })}
                             </span>
                         </div>
-                        <div className="overflow-x-auto">
+                        {/* Danh sách nhân viên có thể rất dài (cả trăm dòng) — cuộn NGAY TRONG khung bảng
+                            thay vì đẩy cả trang dài ra, header dính lại (sticky) khi cuộn (2026-09-28,
+                            theo yêu cầu người dùng). */}
+                        <div className="max-h-[560px] overflow-auto">
                             <table className="min-w-full border-collapse text-left [&_td]:border-r [&_td]:border-[#eef1f3] [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-[#e0e3e5]">
-                                <thead>
+                                <thead className="sticky top-0 z-10">
                                     <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                         <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colEmployeeCode")}</th>
                                         <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colFullName")}</th>
@@ -589,6 +641,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                         <th colSpan={2} className="whitespace-nowrap border-b border-[#e0e3e5] px-3 py-1.5 text-center">{t("colAccumulation")}</th>
                                         <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 text-center align-bottom">{t("colMeal")}</th>
                                         {hasNotes && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colNote")}</th>}
+                                        {canRemoveEmployee && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom" />}
                                     </tr>
                                     <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                         <th className="whitespace-nowrap px-3 py-1.5 text-center">{t("colMonth")}</th>
@@ -673,11 +726,13 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                     </span>
                                                 </td>
                                                 {/* Gộp cột "Có ăn" cũ vào đây: luôn hiện loại phiếu, kèm nhãn "không ăn" khi người này
-                                                    không ăn (trước là cột ✓/✗ riêng, lặp ý với loại phiếu). */}
+                                                    không ăn (trước là cột ✓/✗ riêng, lặp ý với loại phiếu). Đơn Theo chuyền không có
+                                                    khái niệm "ăn sau" (Ăn uống bắt buộc, DidEat luôn true — xem CreateOtFormPage), nên
+                                                    chỉ hiện loại phiếu, không hiện nhãn này (2026-09-28, theo yêu cầu người dùng). */}
                                                 <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm">
                                                     <span className="inline-flex items-center justify-center gap-1.5">
                                                         <MealTicketTypeBadge type={employee.mealTicketType} t={t} />
-                                                        {!employee.didEat && (
+                                                        {!form.isProductionForm && !employee.didEat && (
                                                             <span
                                                                 title={t("didEatNoHint")}
                                                                 className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#9a5b00]"
@@ -690,6 +745,21 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                 </td>
                                                 {hasNotes && (
                                                     <td className="px-3 py-2.5 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
+                                                )}
+                                                {canRemoveEmployee && (
+                                                    <td className="px-3 py-2.5 text-right">
+                                                        {activeEmployees.length > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openRemove(employee)}
+                                                                title={t("removeEmployeeButton")}
+                                                                aria-label={t("removeEmployeeButton")}
+                                                                className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-[#e9bcb6] bg-white p-1.5 text-[#930006] transition hover:bg-[#fff4f2]"
+                                                            >
+                                                                <UserX className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </td>
                                                 )}
                                             </tr>
                                         );
@@ -915,6 +985,65 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                     className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isDeletingForm ? tCommon("processing") : t("confirmDelete")}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {removeTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+                    <div className="fixed inset-0 bg-black/40" onClick={closeRemove} />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                    >
+                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                            <h3 className="text-lg font-semibold text-[#191c1e]">{t("removeModalTitle", { name: removeTarget.fullName })}</h3>
+                            <button
+                                onClick={closeRemove}
+                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                aria-label={tCommon("close")}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <p className="text-sm text-[#5e3f3a]">{t("removeModalDesc")}</p>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {t("removeReasonLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <textarea
+                                    value={removeReason}
+                                    onChange={(event) => setRemoveReason(event.target.value)}
+                                    disabled={isRemovingEmployee}
+                                    rows={3}
+                                    required
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={closeRemove}
+                                    disabled={isRemovingEmployee}
+                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {tCommon("cancel")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveEmployee}
+                                    disabled={isRemovingEmployee}
+                                    className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isRemovingEmployee ? tCommon("processing") : t("confirmRemove")}
                                 </button>
                             </div>
                         </div>

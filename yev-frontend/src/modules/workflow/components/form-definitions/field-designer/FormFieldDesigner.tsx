@@ -21,8 +21,10 @@ interface FormFieldDesignerProps {
     // Layout .docx đã lưu của form (workflow-module.md §1.5) — NULL = chế độ lưới hiện tại.
     layoutHtml: string | null;
     // Gọi lại sau khi lưu/xoá layout để FormDefinitionDetail nạp lại FormDefinitionDto (badge/chế độ
-    // hiển thị đúng ngay cả khi component này không unmount).
-    onLayoutChange: () => void;
+    // hiển thị đúng ngay cả khi component này không unmount). handleSave await hàm này TRƯỚC khi xoá
+    // pendingDocxBytes — nếu không, có khoảng hở đơn hiện tạm về chế độ lưới trước khi layoutHtml mới
+    // (từ refetch) tới nơi.
+    onLayoutChange: () => Promise<void>;
 }
 
 function toReplaceItems(fields: EditableField[]) {
@@ -85,8 +87,10 @@ export default function FormFieldDesigner({ formDefinitionId, layoutHtml, onLayo
 
                 const html = documentCanvasRef.current?.getHtml() ?? "";
                 await FormDefinitionApi.updateLayout(formDefinitionId, html);
+                // Wait for the parent's layoutHtml prop to refresh before switching away from
+                // pendingDocxBytes, so the canvas never briefly renders with neither source set.
+                await onLayoutChange();
                 setPendingDocxBytes(null);
-                onLayoutChange();
             } else {
                 const savedFields = await FormDefinitionApi.replaceFields(formDefinitionId, toReplaceItems(fields));
                 setFields(savedFields.map(fromFormFieldDto));
@@ -180,6 +184,7 @@ export default function FormFieldDesigner({ formDefinitionId, layoutHtml, onLayo
             {isDocumentMode && editingField && (
                 <FormFieldEditDialog
                     field={editingField}
+                    existingFieldKeys={fields.filter((f) => f.clientId !== editingField.clientId).map((f) => f.fieldKey.toLowerCase())}
                     hideColumnSpan
                     onClose={() => setEditingClientId(null)}
                     onSave={(updated) => {

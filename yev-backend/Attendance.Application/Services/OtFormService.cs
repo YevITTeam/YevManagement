@@ -749,6 +749,10 @@ namespace Attendance.Application.Services
             // Phạm vi Line (2026-09-28, theo quyết định người dùng) — có quyền
             // Attendance.OTForm.CreateProduction KHÔNG có nghĩa được tạo đơn cho MỌI Line, chỉ được tạo
             // cho (những) Line mà chính người tạo đang là Line Leader (IsLeader=true). Admin bỏ qua.
+            //
+            // Phải khớp TOÀN BỘ Line trong đơn, không phải chỉ cần giao nhau ≥ 1 phần tử (sửa lỗi
+            // 2026-09-29: bản cũ dùng "isLineLeaderOfAnyLine" nên Line Leader của Line A có thể nhét
+            // thêm nhân viên Line B/C mà mình không quản lý, chỉ cần đơn có ít nhất 1 người của Line A).
             if (!isAdmin)
             {
                 var orderLineIds = productionEmployeesForCheck
@@ -756,11 +760,12 @@ namespace Attendance.Application.Services
                     .Select(x => x.ProductionLineId!.Value)
                     .Distinct()
                     .ToList();
-                var isLineLeaderOfAnyLine = orderLineIds.Count > 0 && (await _unitOfWork.ProductionEmployees.FindAsync(
-                    x => x.EmployeeId == creatorEmployee!.Id && x.IsLeader && !x.IsDeleted
-                        && x.ProductionLineId.HasValue && orderLineIds.Contains(x.ProductionLineId.Value))).Count > 0;
-                if (!isLineLeaderOfAnyLine)
-                    throw new DomainException("Bạn phải là Line Leader của ít nhất 1 Line trong danh sách nhân viên mới được tạo đơn này.");
+                var leaderLineIds = (await _unitOfWork.ProductionEmployees.FindAsync(
+                    x => x.EmployeeId == creatorEmployee!.Id && x.IsLeader && !x.IsDeleted && x.ProductionLineId.HasValue))
+                    .Select(x => x.ProductionLineId!.Value)
+                    .ToHashSet();
+                if (orderLineIds.Count == 0 || !orderLineIds.All(leaderLineIds.Contains))
+                    throw new DomainException("Bạn chỉ được tạo đơn cho nhân viên thuộc (những) Line mà mình là Line Leader.");
             }
 
             var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
@@ -994,6 +999,55 @@ namespace Attendance.Application.Services
                     DepartmentNameVn = group.Department.DepartmentNameVn
                 }
             };
+        }
+
+        // (Những) tổ hợp Team/Line/Nhóm ca mà người gọi đang là Line Leader — dùng để FE tự điền sẵn +
+        // khoá cứng 3 dropdown Team/Line/Nhóm ca ở chế độ "Theo chuyền" (2026-09-28, theo yêu cầu người
+        // dùng: "hiện giờ phải nhập team line nhóm ca ... cũng cố định luôn") — mirror GetMyCreateScopesAsync
+        // của chế độ "Theo Nhóm". Admin/người không phải Line Leader trả mảng rỗng → FE giữ nguyên dropdown
+        // tự do như hiện tại (không có gì để khoá). Chỉ tính các dòng ProductionEmployee đã resolve ĐỦ cả 3
+        // FK (ProductionLineId/TeamId/ShiftTeamId) — đúng policy nạp dữ liệu ghi ở ProductionEmployee.cs.
+        public async Task<List<MyProductionCreateScopeItemDto>> GetMyProductionCreateScopesAsync(string userName, bool isAdmin)
+        {
+            if (isAdmin) return new List<MyProductionCreateScopeItemDto>();
+
+            var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(
+                x => x.UserName == userName && !x.IsDeleted, x => x.Group!);
+            if (callerEmployee == null) return new List<MyProductionCreateScopeItemDto>();
+
+            // Line Leader thường được gán qua Group (vd "SHIDO" thuộc Bộ phận "Chế tạo"), KHÔNG set thẳng
+            // Employee.DepartmentId — cùng thứ tự ưu tiên với EnsureCanManageDeptOrGroupScopeAsync. Không
+            // resolve được Bộ phận nào → không có gì để khoá, trả rỗng (fallback dropdown tự do như cũ).
+            var departmentId = callerEmployee.DepartmentId ?? callerEmployee.Group?.DepartmentId;
+            if (departmentId == null) return new List<MyProductionCreateScopeItemDto>();
+
+            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == departmentId.Value && !x.IsDeleted);
+            if (department == null) return new List<MyProductionCreateScopeItemDto>();
+
+            var leaderRows = await _unitOfWork.ProductionEmployees.SelectAsync(
+                x => x.EmployeeId == callerEmployee.Id && x.IsLeader && !x.IsDeleted
+                    && x.ProductionLineId != null && x.TeamId != null && x.ShiftTeamId != null,
+                x => new MyProductionCreateScopeItemDto
+                {
+                    DepartmentId = department.Id,
+                    DepartmentNameVn = department.DepartmentNameVn,
+                    ProductionLineId = x.ProductionLineId!.Value,
+                    LineCode = x.ProductionLine!.LineCode,
+                    LineNameVn = null,
+                    TeamId = x.TeamId!.Value,
+                    TeamCode = x.Team!.Code,
+                    TeamNameVn = x.Team!.NameVn,
+                    ShiftTeamId = x.ShiftTeamId!.Value,
+                    ShiftTeamCode = x.ShiftTeam!.Code,
+                    ShiftTeamNameVn = x.ShiftTeam!.NameVn
+                });
+
+            // 1 Line Leader có thể xuất hiện ở nhiều dòng ProductionEmployee cùng 1 tổ hợp (vd nhiều
+            // CongDoan/TaskName khác nhau cùng ngày) — gộp về đúng tổ hợp duy nhất.
+            return leaderRows
+                .GroupBy(x => (x.ProductionLineId, x.TeamId, x.ShiftTeamId))
+                .Select(g => g.First())
+                .ToList();
         }
 
         public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request)
@@ -1478,9 +1532,7 @@ namespace Attendance.Application.Services
             return results;
         }
 
-        // Kênh trong-app (nút "Loại khỏi đơn"/"Thêm nhân viên" ở OtFormDetail) đã gộp vào UpdateAsync
-        // (2026-09-04, xem docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn) — chỉ còn kênh email
-        // dùng RemoveEmployeeCoreAsync trực tiếp.
+        // Kênh email — token tự nó là thông tin xác thực, dùng RemoveEmployeeCoreAsync trực tiếp.
         public async Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request)
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: false);
@@ -1492,6 +1544,20 @@ namespace Attendance.Application.Services
                 isAdmin: false, request.EmployeeId, request.Reason, secondaryPassword: null);
 
             QueueEmployeesRemovedNotification(emailToken.OtFormId, new List<int> { request.EmployeeId });
+            return result;
+        }
+
+        // Kênh trong-app (JWT) — khôi phục 2026-09-30 ngay trên màn Duyệt, xem docs/attendance-module.md
+        // §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web). Cùng RemoveEmployeeCoreAsync với kênh
+        // email (authorization đã đúng "candidate bước Pending hiện tại" cho CẢ đơn theo Nhóm lẫn theo
+        // chuyền) — KHÔNG cần SecondaryPassword, cùng quyết định 2026-07-31.
+        public async Task<OtFormDto> RemoveEmployeeAsync(
+            int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request)
+        {
+            var result = await RemoveEmployeeCoreAsync(
+                id, userName, fullName, isAdmin, request.EmployeeId, request.Reason, secondaryPassword: null);
+
+            QueueEmployeesRemovedNotification(id, new List<int> { request.EmployeeId });
             return result;
         }
 

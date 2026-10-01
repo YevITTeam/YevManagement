@@ -28,7 +28,7 @@
 | **Đơn tổng** (`OtFormBatch`) | 663–763 | §Đơn tổng |
 | **Email**: mail tổng hợp hằng ngày, token xác thực, font/dark-mode | 764–852, 3316–3342 | 3 mục §…email |
 | Mật khẩu cấp 2 | 853–890 | §Mật khẩu cấp 2 |
-| Loại nhân viên khỏi đơn (in-app đã xoá, còn kênh email) | 891–993 | 2 mục §Loại nhân viên |
+| Loại nhân viên khỏi đơn (route riêng JWT + kênh email, khôi phục 2026-09-30) | 891–993, 3475–3519 | §Loại nhân viên, §Khôi phục "Loại khỏi đơn"… |
 | Luật giao diện + ghép chuỗi song ngữ | 994–1020, 3260–3288 | 2 mục §…giao diện |
 | **Cây chức vụ / Cây duyệt / đơn "theo chuyền"** — Giai đoạn 1→16 | 1021–2316 | §Cây chức vụ + 16 mục con |
 | Migration & DB | 2317–2321 | §DB |
@@ -2282,9 +2282,11 @@ quyết định (kiểm ở `OtFormController.Create` khi `IsProductionForm = tr
 (đã thêm vào `JobTitlePermissionWhitelist`; tick sẵn cho Chức vụ "Line Leader") hoặc gán riêng từng user, KHÔNG
 còn hardcode "chỉ Line Leader" như trước. Nhưng có quyền không có nghĩa được tạo cho MỌI Line: `OtFormService.
 CreateProductionFormAsync` vẫn giữ lại (không phải Admin) yêu cầu creator có `ProductionEmployee.IsLeader=true`
-của ÍT NHẤT 1 Line trong danh sách nhân viên của đơn — scope theo Line vẫn còn, chỉ khác là AI được cấp quyền
-"tạo đơn theo chuyền" giờ cấu hình được thay vì cứng hoá "phải là Line Leader". Người thường vẫn phải liên kết
-với 1 `Employee`. FE (`CreateOtFormPage`) ẩn tab "Theo chuyền" nếu thiếu quyền.
+của **TOÀN BỘ** Line xuất hiện trong danh sách nhân viên của đơn — scope theo Line vẫn còn, chỉ khác là AI được
+cấp quyền "tạo đơn theo chuyền" giờ cấu hình được thay vì cứng hoá "phải là Line Leader". (Sửa 2026-09-29 —
+bản gốc chỉ đòi giao nhau ≥ 1 Line nên Line Leader của Line A có thể nhét thêm nhân viên Line B/C mà mình
+không phụ trách, chỉ cần đơn có ≥ 1 người Line A là qua được check.) Người thường vẫn phải liên kết với 1
+`Employee`. FE (`CreateOtFormPage`) ẩn tab "Theo chuyền" nếu thiếu quyền.
 
 Không đổi `AddEmployeeAsync`/`UpdateAsync` (đơn theo chuyền) — 2 hàm đó vốn đã dùng đúng quy tắc
 "candidate của bước Pending hiện tại", không mắc lỗi tương tự.
@@ -2348,6 +2350,162 @@ Các cột khác (Loại phiếu ăn — 3 trạng thái, không rút gọn về
 
 **Đã verify** — `tsc --noEmit`/`eslint` sạch trên `OtFormDetail.tsx`. Chưa test tay qua UI thật (cần
 mở lại 1 đơn theo chuyền để xem — đơn #47 trong ảnh chụp màn hình người dùng gửi là ví dụ phù hợp).
+
+#### §Giai đoạn 17 — Sửa lỗi tách quyền Theo chuyền/Theo Nhóm bị dính nhau + khoá cứng Team/Line/Nhóm ca cho Line Leader (2026-09-28)
+
+Người dùng phát hiện 2 lỗi liên quan tới `Attendance.OTForm.CreateProduction` (Giai đoạn 14):
+
+1. **Chức vụ CHỈ có `CreateProduction` (không có `CreateGroup`/không thuộc Nhóm nào) bị chặn hẳn màn
+   "Tạo đơn tăng ca"**, dù có quyền tạo đơn "Theo chuyền". Nguyên nhân: `formMode` mặc định luôn là
+   `"group"` khi mở màn; `GetMyCreateScopesAsync` (chế độ "Theo Nhóm") trả mảng rỗng cho tài khoản này
+   → `isBlockedNoScope` bật lên và `return` sớm nguyên trang **trước khi** người dùng kịp bấm sang tab
+   "Theo chuyền". Sửa ở `CreateOtFormPage.tsx`: sau khi tải `createScopes` xong, nếu rỗng + không phải
+   Admin + có `canCreateProductionForm` → tự chuyển `formMode` sang `"production"`. Đồng thời màn chặn
+   (`isBlockedNoScope`) giờ vẫn giữ tiêu đề + tab đổi chế độ thay vì thay hẳn bằng 1 khối lỗi cụt, để
+   người dùng luôn bấm quay lại tab "Theo chuyền" được nếu lỡ đứng ở tab "Theo Nhóm" mà không có phạm
+   vi Nhóm nào (không bị kẹt màn).
+
+2. **"Hiện giờ phải nhập Team/Line/Nhóm ca, cái đó cũng cố định luôn"** — Line Leader tạo đơn cho đúng
+   Line mình phụ trách vẫn phải tự chọn lại 3 dropdown Team/Line/Nhóm ca mỗi lần, dù giá trị luôn cố
+   định (đúng Line họ đang là `ProductionEmployee.IsLeader=true`). Thêm endpoint mới mirror
+   `GetMyCreateScopesAsync`/`my-create-scopes` của chế độ "Theo Nhóm":
+   - `OtFormService.GetMyProductionCreateScopesAsync(userName, isAdmin)`: Admin → mảng rỗng (không giới
+     hạn, giữ nguyên dropdown tự do). Người khác → toàn bộ tổ hợp `(ProductionLineId, TeamId,
+     ShiftTeamId)` DISTINCT trong `ProductionEmployees` mà `EmployeeId` khớp chính họ, `IsLeader=true`,
+     `!IsDeleted`, và ĐỦ cả 3 FK resolve được (đúng policy nạp dữ liệu — xem `ProductionEmployee.cs`).
+   - `GET /api/OtForm/my-production-create-scopes` (`[RequirePermission("Attendance.OTForm.CreateProduction")]`)
+     → `List<MyProductionCreateScopeItemDto>` (`ProductionLineId/LineCode/LineNameVn` luôn null —
+     `ProductionLine` không có tên riêng, giống `ProductionOptionDto` — `/TeamId/TeamCode/TeamNameVn/
+     ShiftTeamId/ShiftTeamCode/ShiftTeamNameVn`).
+   - FE (`CreateOtFormPage.tsx`): gọi API này khi có `canCreateProductionForm` (bỏ qua lúc Sửa đơn).
+     **Đúng 1 tổ hợp** (đa số Line Leader chỉ phụ trách 1 Line) → tự điền sẵn CẢ 3 dropdown + khoá cứng
+     (`isProductionScopeLocked`, disable input, không cho đổi) — không cần gọi API catalog
+     Team/Line/Nhóm ca nữa, `canSearchProduction` tự đúng ngay khi vào tab. **Nhiều hơn 1 tổ hợp** (hiếm
+     — Line Leader của nhiều Line) → không khoá cứng, chỉ GIỚI HẠN 3 dropdown trong đúng các tổ hợp được
+     phép (`visibleTeamOptions`/`visibleLineOptions`/`visibleShiftTeamOptions`, lọc client-side từ chính
+     danh sách tổ hợp, cascade Team→Line→Nhóm ca như 3 dropdown gốc) + hiện banner liệt kê các tổ hợp.
+     **0 tổ hợp** (có quyền `CreateProduction` nhưng không phải Line Leader, vd tài khoản Admin cấu
+     hình riêng) → giữ nguyên dropdown tự do như trước.
+   - Bẫy kỹ thuật: 2 khối "reset khi đổi Team/Line" có sẵn từ trước (so sánh snapshot ngay trong render,
+     CLAUDE.md §4.5) sẽ VÔ TÌNH xoá mất giá trị Line/Nhóm ca vừa tự điền sẵn (Team đổi từ `""` sang có
+     giá trị vẫn tính là "đổi Team" dù do code gán, không phải người dùng bấm) — phải thêm điều kiện bỏ
+     qua reset khi `isProductionScopeLocked`.
+
+Không đổi ràng buộc BE ở lần sửa này (`CreateProductionFormAsync` vẫn chặn theo `ProductionLineId` của
+danh sách nhân viên, xem Giai đoạn 14) — thay đổi ở đây thuần UX (FE khoá/gợi ý dropdown). Ràng buộc BE
+tự nó có 1 lỗi riêng (giao nhau ≥ 1 Line thay vì toàn bộ) được sửa sau đó, xem Giai đoạn 14.
+
+**Đã verify** — `dotnet build Attendance.Api`/`tsc --noEmit`/`eslint` sạch (2 vấn đề lint còn lại trên
+`CreateOtFormPage.tsx` là nợ kỹ thuật có sẵn từ trước, không liên quan). Chưa test tay qua UI thật.
+
+**Sửa tiếp (2026-09-28, phát hiện NGAY SAU khi người dùng thử tick CHỈ `CreateProduction` cho Line
+Leader, bỏ hẳn `Attendance.OTForm.Create`):** dù Giai đoạn 14 đã nói "ai được tạo đơn theo chuyền do
+QUYỀN `CreateProduction` quyết định", trên thực tế `Create`/`CreateProduction` vẫn bị dính nhau ở
+**4 chỗ khác** ngoài `CreateOtFormPage.tsx` (chỗ đã sửa ở trên chỉ giải quyết được lúc ĐÃ vào trang) —
+khiến Line Leader chỉ có `CreateProduction` **không thể tạo đơn được, kể cả đơn theo chuyền vốn đúng
+quyền của họ**:
+
+1. **BE — cổng chặn CỨNG trước khi vào action**: `[RequirePermission("Attendance.OTForm.Create")]` trên
+   cả 3 endpoint `POST /api/OtForm` (Create), `PUT /api/OtForm/{id}` (Update), `POST /api/OtForm/
+   check-overlap` — 403 ngay từ tầng middleware, không bao giờ chạy tới được đoạn code phân biệt
+   Create/CreateProduction bên trong action. Đây là chặn CỨNG nhất, không FE nào né được.
+   - Mở rộng hạ tầng permission để hỗ trợ **OR nhiều permission trong 1 policy**: `PermissionRequirement`
+     đổi từ 1 `Permission:string` sang `Permissions:string[]`; `PermissionAuthorizationHandler` succeed
+     nếu user có BẤT KỲ 1 permission nào trong danh sách; `PermissionPolicyProvider` parse policy string
+     tách bằng `|` (`PermissionSeparator`, permission code luôn dạng `Module.Entity.Action` nên không
+     bao giờ chứa `|`, tách an toàn); `RequirePermissionAttribute` đổi constructor sang
+     `params string[] permissions`. Tương thích ngược 100% — action cũ chỉ truyền 1 permission hành vi
+     không đổi (`Policy = "Permission:" + permission`, y hệt trước).
+   - 3 endpoint trên đổi thành `[RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]`
+     (OR — có 1 trong 2 là qua cổng). Action `Create` (POST) vẫn giữ + bổ sung logic phân biệt LẠI đúng
+     quyền theo TỪNG CHẾ ĐỘ đơn ngay bên trong (đơn theo chuyền đòi `CreateProduction`, đơn theo Nhóm
+     đòi `Create`) — nếu không, người chỉ có `CreateProduction` sẽ lách được sang tạo đơn theo Nhóm.
+     Action `Update` (PUT) KHÔNG cần thêm check vì `OtFormService.UpdateAsync` đã tự phân biệt quyền
+     thật theo scope/bước duyệt (candidate bước Pending cho đơn theo chuyền,
+     `EnsureCanCreateOrEditForScopeAsync` cho đơn theo Nhóm — cả 2 đều không dựa vào claim Create/
+     CreateProduction, xem Giai đoạn 5). `check-overlap` không cần check thêm (chỉ đọc, không ghi).
+
+2. **FE — 5 chỗ khác vẫn hardcode CHỈ `Attendance.OTForm.Create`, độc lập với sửa ở `CreateOtFormPage.tsx`
+   phía trên**:
+   - `otRoutePermissions.ts` (route guard `OtAccessGuard`, khớp tiền tố `/ot/create`) — **chỗ chặn SỚM
+     NHẤT ở FE**, chặn thẳng trước khi vào được `CreateOtFormPage.tsx`, làm mọi sửa trong trang đó thành
+     vô nghĩa với Line Leader thuần.
+   - `OtManagerSidebar.tsx` (mục menu "Tạo đơn") — ẩn hẳn link nếu thiếu `Create`.
+   - `OtFormListPage.tsx`/`OtFormTabsPage.tsx` (`canCreate`) — ẩn nút "+ Tạo đơn" và tab "Đơn của tôi".
+   - `OtFormDetail.tsx` (`canEdit`, nút "Sửa" ở màn Chi tiết đơn) — đơn theo chuyền đúng quyền phải là
+     `CreateProduction`, không phải `Create`; sửa tách hẳn điều kiện theo `form.isProductionForm` thay vì
+     dùng chung 1 điều kiện `Create` cho cả 2 loại đơn như trước.
+   - Toàn bộ đổi sang `hasAnyPermission(user, ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"])`
+     (hoặc mảng `permissions` OR có sẵn ở `otRoutePermissions.ts`/`OtManagerSidebar.tsx`) — đồng bộ với
+     comment gốc "Có 1 TRONG các quyền là vào được" đã ghi sẵn ở `otRoutePermissions.ts` nhưng riêng
+     mục `/ot/create` trước đó quên áp dụng đúng.
+
+**Bài học rút ra**: khi 1 quyền mới được thiết kế là "coi như tương đương/thay thế được" cho 1 quyền cũ
+ở 1 chức năng cụ thể (ở đây: `CreateProduction` tương đương `Create` nhưng CHỈ cho đơn theo chuyền),
+phải rà **toàn bộ** chỗ gate theo quyền cũ đó (BE `[RequirePermission]` + FE route guard/sidebar/nút bấm),
+không chỉ sửa đúng 1 màn hình chính — quyền càng lâu đời (`Create` có từ đầu module) càng dễ bị tham
+chiếu rải rác nhiều nơi ngoài dự kiến.
+
+**Đã verify** — `dotnet build Attendance.Api` sạch (build cả `YevManagement.slnx` bị lỗi copy file do
+`CompanySystem.HostApi` đang chạy sẵn — lỗi khoá file MSB3027, không phải lỗi biên dịch, cần restart
+backend để nhận code mới). `tsc --noEmit`/`eslint` sạch trên cả 5 file FE. Chưa test tay qua UI thật.
+
+**Sửa tiếp lần 2 (2026-09-28, ngay sau khi người dùng test tay bằng `TEST\ll_shido` — screenshot cho
+thấy vẫn đứng ở tab "Theo Nhóm" kèm banner chặn dù đã có `CreateProduction`):** nhánh tự chuyển
+`formMode` sang `"production"` ở effect `getMyCreateScopes` (sửa lần 1 phía trên) chỉ chạy SAU KHI API
+trả lời — vẫn có 1 nhịp (hoặc khi deploy chưa kịp cập nhật) người dùng thấy đúng tab "Theo Nhóm" bị chặn
+trước khi kịp tự chuyển, đúng như “để kiểu này không ổn” người dùng phản hồi. Đổi sang suy `formMode`
+MẶC ĐỊNH ngay lúc khởi tạo state (lazy initializer `useState(() => ...)`), dựa THẲNG vào permission có
+sẵn trong `user` lúc mount — không cần đợi round-trip API nào: tài khoản có `CreateProduction` nhưng
+KHÔNG có `Attendance.OTForm.Create` (và không phải Admin) → mặc định `"production"` ngay từ đầu, không
+còn hiện tab/banner "Theo Nhóm" thoáng qua nữa. Thêm biến `canUseGroupMode` (= Admin hoặc có
+`Attendance.OTForm.Create`) và **ẩn hẳn** bộ chuyển tab Theo Nhóm/Theo chuyền khi `!canUseGroupMode` (cả
+ở màn bình thường lẫn màn `isBlockedNoScope`) — tài khoản CHỈ có `CreateProduction` giờ vào thẳng UI
+"Theo chuyền", không còn đường nào quay lại tab "Theo Nhóm" họ không có quyền dùng (đúng nguyên tắc
+"quyền không có thì ẩn đi", đã chốt trước đó ở §Chốt mô hình Coordinator). Nhánh tự chuyển sau khi API
+trả lời (sửa lần 1) vẫn giữ nguyên làm lưới an toàn thứ 2 cho case hiếm: có `Create` thật nhưng scope
+Nhóm resolve rỗng (chưa gán `Employee.GroupId`) — case đó không suy được bằng permission tĩnh, phải đợi
+API. `isBlockedNoScope` gần như không còn đường nào chạy tới với tài khoản chỉ có `CreateProduction`.
+
+**Sửa tiếp lần 3 (2026-09-28, người dùng chỉ ra `TEST\ll_shido` thuộc Bộ phận "Chế tạo" nhưng vẫn phải
+tự chọn Bộ phận ở chế độ "Theo chuyền"):** ô "Bộ phận" trên form là field DÙNG CHUNG cho cả 2 chế độ,
+nhưng trước đó chỉ khoá theo `isScopeLocked` (phạm vi "Theo Nhóm") — ở chế độ "Theo chuyền" nó vẫn luôn
+là dropdown tự do, dù Line Leader cũng có Bộ phận cố định y hệt Team/Line/Nhóm ca. Mở rộng
+`MyProductionCreateScopeItemDto`/`GetMyProductionCreateScopesAsync` thêm `DepartmentId`/`DepartmentNameVn`
+— suy từ `callerEmployee.DepartmentId ?? callerEmployee.Group?.DepartmentId` (Line Leader thường được
+gán qua Group, vd Group "SHIDO" (Id 35) thuộc Bộ phận "Chế tạo" (Id 7), xác nhận qua SQL trực tiếp trên
+`TEST\ll_shido`; **không** set thẳng `Employee.DepartmentId` — cùng thứ tự ưu tiên với
+`EnsureCanManageDeptOrGroupScopeAsync`). Không resolve được Bộ phận nào (Employee không có cả 2) → trả
+mảng rỗng, giữ dropdown Bộ phận tự do như trước (fallback an toàn, không throw). `DepartmentId` GIỐNG
+NHAU ở mọi phần tử trả về (gắn với người gọi, không phải theo từng tổ hợp Line) — FE tự điền sẵn +
+**khoá cứng luôn** ô "Bộ phận" ở chế độ "Theo chuyền" ngay khi mảng có ≥ 1 phần tử, không cần đợi đúng
+1 tổ hợp Team/Line/Nhóm ca như 3 field kia (Bộ phận không có tính "nhiều lựa chọn" như Line).
+
+**Đã verify** — `dotnet build Attendance.Api`/`tsc --noEmit`/`eslint` sạch. Chưa test tay qua UI thật.
+
+**Sửa tiếp lần 4 (2026-09-28, người dùng test tay `TEST\ll_shido` thật, console log 403 hàng loạt +
+"Không tìm thấy ai khớp bộ lọc"):** rà lại "5 chỗ dính nhau" ở lần sửa 1 vẫn CHƯA đủ — bỏ sót nguyên 1
+controller khác: **`ProductionEmployeeController`**, 4 action `search`/`line-options`/`team-options`/
+`shift-team-options` (dropdown lọc + tìm kiếm nhân sự dưới chuyền, dùng ngay trong màn "Tạo đơn tăng ca"
+chế độ "Theo chuyền", KHÁC action `page-nation`/`{id}` của màn "Nhân viên dưới chuyền" vốn đã đúng
+`Attendance.ProductionEmployee.View`/`Update` riêng) vẫn hardcode `[RequirePermission("Attendance.OTForm.Create")]`
+từ hồi mới thêm (2026-08-24, lúc đó Create/CreateProduction chưa tách). Line Leader chỉ có
+`CreateProduction` bị 403 ngay từ bước gọi các API này — FE (`useFetchEffect`) nuốt lỗi vào `.catch()`,
+không có toast/thông báo rõ, chỉ để lại danh sách rỗng → triệu chứng nhìn thấy là **"Không tìm thấy ai
+khớp bộ lọc"**, trông giống lỗi filter/dữ liệu chứ không giống lỗi quyền, phải xem Console (F12) mới lộ
+ra 403. Đổi cả 4 action sang OR `Attendance.OTForm.Create`/`Attendance.OTForm.CreateProduction` (hạ tầng
+OR đã có sẵn từ lần sửa 1, chỉ cần áp dụng thêm).
+
+**Bài học nhắc lại lần 2**: `grep RequirePermission("Attendance.OTForm.Create")` toàn repo SAU KHI sửa
+xong lần 1 vẫn còn sót đúng chỗ này — controller khác nằm ngoài `OtFormController` (nơi tập trung sự chú
+ý), dễ bị bỏ qua nếu chỉ rà theo cảm giác "đơn theo chuyền liên quan tới OtForm" thay vì grep triệt để
+theo TÊN PERMISSION trên toàn solution. Đã grep xác nhận sau khi sửa lần này: chỉ còn đúng 1 chỗ dùng
+`RequirePermission("Attendance.OTForm.Create")` không OR trong `yev-backend/` — endpoint
+`GET /api/OtForm/my-create-scopes` (cố ý CHỈ Create, không OR — đây là API riêng cho scope "Theo Nhóm",
+403 của nó với tài khoản CreateProduction-only là ĐÚNG và đã được FE `.catch()` xử lý sạch từ đầu).
+
+**Đã verify** — `dotnet build Attendance.Api` sạch (0 lỗi 0 warning). Chưa test tay qua UI thật với build
+mới nhất — người dùng cần restart backend rồi thử lại `TEST\ll_shido`.
 
 ### §DB
 - DB: `YevOTManagement` (server `DASVRFAST`, conn `OTManagementConnection`). DbContext: `AttendanceDbContext`.
@@ -3315,6 +3473,51 @@ mật khẩu cấp 2 cho TOÀN BỘ thay đổi trong phiên sửa, không hỏi
   `CreateOtFormPage.tsx`). Smoke test 7 check qua `smoke.ps1` PASS hết; xác nhận route cũ
   `{id}/employees/add` trả 404. **Chưa test tay** luồng thêm/xóa NV thật trong Sửa đơn qua UI (cần tài
   khoản TEST có đơn theo chuyền đang chờ duyệt) — người dùng tự kiểm khi dùng thử.
+
+### §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web) (2026-09-30)
+
+**Vấn đề phát hiện**: đợt gộp 2026-09-04 ở trên đưa hành động loại người vào `UpdateAsync` — nhưng
+`UpdateAsync` với đơn theo Nhóm chỉ cho phép **chính người tạo** sửa (điều kiện gốc từ §Sửa đơn khi đang
+Draft/Pending, không đổi từ 2026-07-16). Hệ quả ngoài ý muốn: các cấp đang **duyệt** đơn theo Nhóm (Trưởng
+phòng, Trưởng Bộ phận, TGĐ...) — không phải người tạo — **mất hẳn khả năng loại người khỏi đơn**, trái với
+quyết định gốc 2026-07-30 ("Cấp được loại: MỌI cấp thực sự ký/duyệt đơn"). Đơn theo chuyền không bị ảnh
+hưởng tương đương vì `UpdateAsync` của nó vốn đã dùng đúng luật "candidate bước Pending hiện tại" — nhưng
+vẫn phải rời màn Duyệt sang màn Sửa đơn mới loại được, bất tiện thao tác.
+
+**Giải pháp** (phương án A, đối chiếu đúng bản chất khác nhau của 2 loại đơn thay vì gộp chung 1 cơ chế):
+khôi phục lại route JWT riêng `POST /api/OtForm/{id}/employees/remove` (đã xoá 2026-09-04), gọi thẳng
+`RemoveEmployeeCoreAsync` — hàm này **chưa từng bị xoá**, vẫn được dùng nội bộ bởi `UpdateAsync` (khi diff
+`removedEmployees[]`) và bởi kênh email suốt từ 2026-07-30, với authorization đúng theo `OtFormApprovalStep`
+(candidate của bước `Pending` StepOrder nhỏ nhất) — **luật này vốn đã đúng cho CẢ đơn theo Nhóm lẫn theo
+chuyền**, không phải chỉ đơn theo chuyền như tưởng nhầm ban đầu, vì nó không hề gọi tới
+`EnsureCanCreateOrEditForScopeAsync` (hàm creator-only chỉ `UpdateAsync` dùng). Nói cách khác: chỉ cần mở
+lại 1 cổng vào đúng logic cũ, KHÔNG cần viết thêm authorization mới.
+
+- **DTO khôi phục**: `RemoveOtFormEmployeeDto { EmployeeId, Reason }` (`Attendance.Application/Dtos/OtForms/`)
+  — y hệt bản gốc trước 2026-09-04, không có `SecondaryPassword` (giữ nguyên quyết định 2026-07-31).
+- **`IOtFormService.RemoveEmployeeAsync`/`OtFormService.RemoveEmployeeAsync`** (mới) — wrapper mỏng gọi
+  `RemoveEmployeeCoreAsync(id, userName, fullName, isAdmin, request.EmployeeId, request.Reason,
+  secondaryPassword: null)` rồi `QueueEmployeesRemovedNotification`, cùng pattern với
+  `RemoveEmployeeByEmailTokenAsync`.
+- **`OtFormController.RemoveEmployee`**: `[RequirePermission("Attendance.OTForm.RemoveEmployee")]`,
+  `POST {id}/employees/remove` — permission này **không cần seed lại**, đã gán đúng cho 7 Chức vụ
+  (Staff/Line Leader/Group Leader/Team Leader/Manager/Factory Manager/Director) từ đợt sửa lỗi Giai đoạn 15
+  (2026-08-28) và chưa từng bị gỡ khỏi `JobTitlePermissions`.
+- **`UpdateAsync` giữ nguyên hoàn toàn** — `removedEmployees[]` trong Sửa đơn vẫn dùng cho case loại người
+  CÙNG LÚC với sửa giờ/note của người khác trong 1 lượt lưu. 2 đường loại người (route riêng vs qua Sửa
+  đơn) cùng gọi `RemoveEmployeeCoreAsync` nên hành vi/audit trail (`OtFormEmployee.Removed*`,
+  `OtFormEditLog`) giống hệt nhau, không phân nhánh dữ liệu.
+- **FE `OtFormDetail.tsx`**: khôi phục nút "Loại khỏi đơn" (icon `UserX`) trên từng dòng nhân viên active
+  (ẩn khi chỉ còn 1 người), gate bằng permission riêng `canRemoveEmployee` (KHÔNG dùng chung `canEdit` —
+  `canEdit` đơn theo Nhóm vẫn creator-only, không liên quan tới hành động này nữa) + modal riêng (chỉ ô lý
+  do, không mật khẩu cấp 2) — tái dùng nguyên state/handler/UI pattern đã có sẵn ở
+  `OtFormEmailConfirmPage.tsx` (`removeTarget`/`removeReason`/`isRemovingEmployee`) và các message key
+  `removeEmployeeButton`/`removeModalTitle`/`removeModalDesc`/`removeReasonLabel`/`confirmRemove`/
+  `removeSuccess`/`removeError` (còn nguyên trong `vi.json`/`ja.json` từ trước 2026-09-04, không cần thêm
+  key mới). BE trả `OtFormDto` đầy đủ nên FE `setForm(updated)` trực tiếp, không gọi lại `GET /{id}`.
+- **Verify**: `dotnet build` sạch (0 warning), `npx tsc --noEmit`/`eslint` sạch trên các file đã sửa.
+  **Chưa test tay** qua UI thật (cần tài khoản TEST có đơn theo Nhóm đang chờ ở cấp không phải người tạo)
+  — người dùng tự kiểm khi dùng thử.
 
 ### §Nâng cấp màn Duyệt hàng loạt — lịch ngày chưa duyệt + lọc Line/Ca + xem/sửa trước khi xác nhận (2026-09-04)
 

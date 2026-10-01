@@ -8,5 +8,6 @@ public enum RequestAction
     SendBack = 4,
     Cancel = 5,
     AddApprover = 6,
-    Comment = 7
+    Comment = 7,
+    Resubmit = 8
 }

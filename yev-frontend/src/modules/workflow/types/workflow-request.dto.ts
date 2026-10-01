@@ -27,6 +27,7 @@ export const RequestAction = {
     Cancel: 5,
     AddApprover: 6,
     Comment: 7,
+    Resubmit: 8,
 } as const;
 export type RequestAction = (typeof RequestAction)[keyof typeof RequestAction];
 
@@ -209,6 +210,10 @@ export interface AddApproverRequestDto {
 
 export interface CancelRequestDto {
     reason: string | null;
+}
+
+export interface ResubmitRequestDto {
+    comment: string | null;
 }
 
 // Pha 4C: duyệt qua email — không có OnBehalfOfEmployeeId (không ủy quyền qua kênh email) và không có

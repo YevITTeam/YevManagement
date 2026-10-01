@@ -64,6 +64,7 @@ const ACTION_LABEL_KEY: Record<number, string> = {
     [RequestAction.Cancel]: "actionCancel",
     [RequestAction.AddApprover]: "actionAddApprover",
     [RequestAction.Comment]: "actionComment",
+    [RequestAction.Resubmit]: "actionResubmit",
 };
 
 function formatFileSize(bytes: number): string {
@@ -107,6 +108,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
 
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isResubmitting, setIsResubmitting] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
     const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 
@@ -183,30 +185,27 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
             let myEmployeeResult: MyEmployeeDto | null = null;
             let delegationsResult: ApprovalDelegationDto[] = [];
 
-            if (req.status === RequestStatus.Draft) {
-                const [schema, employees, orgUnitTree] = await Promise.all([
-                    WorkflowRequestApi.getFormSchema(req.formDefinitionId),
+            // SentBack needs both: the schema so the owner can edit the data, and myEmployee/delegations
+            // to check whether the current viewer is the owner (attachments block).
+            const needsEditableSchema = req.status === RequestStatus.Draft || req.status === RequestStatus.SentBack;
+            const needsApprovalContext =
+                req.status === RequestStatus.Submitted || req.status === RequestStatus.InProgress || req.status === RequestStatus.SentBack;
+
+            if (needsEditableSchema || needsApprovalContext) {
+                const [employees, schema, orgUnitTree, me, myDelegations] = await Promise.all([
                     EmployeeApi.getEmployeePageNation({ pageSize: 1000 }),
-                    OrgUnitApi.getOrgUnitTree(),
+                    needsEditableSchema ? WorkflowRequestApi.getFormSchema(req.formDefinitionId) : Promise.resolve(null),
+                    needsEditableSchema ? OrgUnitApi.getOrgUnitTree() : Promise.resolve<OrgUnitTreeDto[]>([]),
+                    needsApprovalContext ? WorkflowRequestApi.getMyEmployee() : Promise.resolve(null),
+                    needsApprovalContext ? ApprovalDelegationApi.getMine() : Promise.resolve<ApprovalDelegationDto[]>([]),
                 ]);
-                formSchemaResult = schema;
                 employeeOptionsResult = employees.data
                     .filter((x) => x.isActive)
                     .map((x) => ({ value: x.id, label: `${x.fullName} (${x.employeeCode})`, searchText: `${x.employeeCode} ${x.fullName}`.toLowerCase() }));
+                formSchemaResult = schema;
                 orgUnitOptionsResult = flattenOrgUnits(orgUnitTree);
-            } else if (req.status === RequestStatus.Submitted || req.status === RequestStatus.InProgress || req.status === RequestStatus.SentBack) {
-                // SentBack gộp chung nhánh này chỉ để có myEmployee (xác định chủ đơn cho khối Đính
-                // kèm, Pha 4B) — đơn SentBack không có bước Current nên canAct/currentStep vẫn false.
-                const [me, myDelegations, employees] = await Promise.all([
-                    WorkflowRequestApi.getMyEmployee(),
-                    ApprovalDelegationApi.getMine(),
-                    EmployeeApi.getEmployeePageNation({ pageSize: 1000 }),
-                ]);
                 myEmployeeResult = me;
                 delegationsResult = myDelegations;
-                employeeOptionsResult = employees.data
-                    .filter((x) => x.isActive)
-                    .map((x) => ({ value: x.id, label: `${x.fullName} (${x.employeeCode})`, searchText: `${x.employeeCode} ${x.fullName}`.toLowerCase() }));
             }
 
             return { req, formSchema: formSchemaResult, employeeOptions: employeeOptionsResult, orgUnitOptions: orgUnitOptionsResult, myEmployee: myEmployeeResult, delegations: delegationsResult };
@@ -232,7 +231,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
     // vì bắt tải ảnh lên mỗi lần duyệt — chỉ để hiển thị mặc định (initialBase64), KHÔNG ghi đè
     // signatureBase64 (giá trị người dùng chủ động chọn trong phiên này luôn thắng, xem handleApprove).
     // Im lặng khi lỗi/chưa đăng ký (không toast) — đây là trạng thái bình thường, không phải sự cố.
-    useFetchEffect(
+    const { isLoading: isSignatureLoading } = useFetchEffect(
         () => EmployeeSignatureApi.getMine(),
         [],
         (data) => setSavedSignatureBase64(data.signatureImage),
@@ -255,6 +254,8 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
     const statusMeta = STATUS_META[request.status];
     const currentStep = request.steps.find((s) => s.stepOrder === request.currentStepOrder && s.status === StepStatus.Current) ?? null;
     const canAct = request.status === RequestStatus.Submitted || request.status === RequestStatus.InProgress;
+    // Prevents starting a second action (e.g. Reject) while another one (e.g. Approve) is still in flight.
+    const isActionInFlight = isApproving || isRejecting || isSendingBack || isAddingApprover;
     const canCancel = !isNew && request.status !== RequestStatus.Approved && request.status !== RequestStatus.Rejected && request.status !== RequestStatus.Cancelled;
     // Chủ đơn được thêm/xoá đính kèm xuyên suốt tới khi đơn kết thúc (workflow-module.md §10, Pha 4B) —
     // BE (GuardCanEditAttachments) là nguồn xác thực thật, điều kiện này chỉ để ẩn/hiện nút cho gọn UI.
@@ -264,6 +265,8 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
         request.status !== RequestStatus.Rejected &&
         request.status !== RequestStatus.Cancelled &&
         (request.status === RequestStatus.Draft || myEmployee?.id === request.createdByEmployeeId);
+    // UI-only gate for showing the edit/resubmit buttons — BE (UpdateDraftAsync/ResubmitAsync) enforces it for real.
+    const canEditAndResubmit = !isNew && request.status === RequestStatus.SentBack && myEmployee?.id === request.createdByEmployeeId;
 
     const onBehalfOptions: SelectOption[] = (() => {
         if (!myEmployee || !currentStep) return [];
@@ -322,6 +325,22 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
             toast.error(getApiErrorMessage(err, t("submitError")));
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleResubmit = async () => {
+        setIsResubmitting(true);
+        try {
+            await WorkflowRequestApi.updateDraft(request.id, { dataJson: draftData });
+            await WorkflowRequestApi.resubmit(request.id, { comment: comment || null });
+            toast.success(t("resubmitSuccess"));
+            setComment("");
+            await refetch();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("resubmitError")));
+        } finally {
+            setIsResubmitting(false);
         }
     };
 
@@ -464,7 +483,8 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
             link.href = url;
             link.download = fileName ?? fallbackName;
             link.click();
-            URL.revokeObjectURL(url);
+            // Revoking immediately can abort the download in some browsers before it starts reading the blob.
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch (err) {
             console.error(err);
             toast.error(getApiErrorMessage(err, t("downloadAttachmentError")));
@@ -511,12 +531,14 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
             </div>
 
             {request.status === RequestStatus.SentBack && (
-                <div className="rounded-lg border border-[#f5d0a9] bg-[#fff8ee] px-4 py-3 text-sm text-[#8a5a00]">{t("sentBackNotice")}</div>
+                <div className="rounded-lg border border-[#f5d0a9] bg-[#fff8ee] px-4 py-3 text-sm text-[#8a5a00]">
+                    {canEditAndResubmit ? t("sentBackEditableNotice") : t("sentBackNotice")}
+                </div>
             )}
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("dataSectionTitle")}</h2>
-                {request.status === RequestStatus.Draft && formSchema?.layoutHtml ? (
+                {(request.status === RequestStatus.Draft || (request.status === RequestStatus.SentBack && canEditAndResubmit)) && formSchema?.layoutHtml ? (
                     <DocumentFormRenderer
                         layoutHtml={formSchema.layoutHtml}
                         fields={formSchema.fields}
@@ -526,7 +548,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                         employeeOptions={employeeOptions}
                         orgUnitOptions={orgUnitOptions}
                     />
-                ) : request.status === RequestStatus.Draft && formSchema ? (
+                ) : (request.status === RequestStatus.Draft || (request.status === RequestStatus.SentBack && canEditAndResubmit)) && formSchema ? (
                     <DynamicFormRenderer
                         fields={formSchema.fields}
                         conditions={formSchema.conditions}
@@ -619,6 +641,25 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                 </div>
             )}
 
+            {canEditAndResubmit && (
+                <div className="flex justify-end gap-2">
+                    <button
+                        onClick={handleSaveDraft}
+                        disabled={isSavingDraft || isResubmitting}
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                    >
+                        <Save className="h-3.5 w-3.5" /> {isSavingDraft ? tCommon("processing") : t("saveEditButton")}
+                    </button>
+                    <button
+                        onClick={handleResubmit}
+                        disabled={isSavingDraft || isResubmitting}
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:opacity-50"
+                    >
+                        <Send className="h-3.5 w-3.5" /> {isResubmitting ? tCommon("processing") : t("resubmitButton")}
+                    </button>
+                </div>
+            )}
+
             {request.steps.length > 0 && (
                 <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                     <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("stepsSectionTitle")}</h2>
@@ -686,21 +727,28 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                     {currentStep.requireSignatureSnapshot && (
                         <div className="mb-3 max-w-sm">
                             <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("signatureLabel")}</span>
-                            <SignatureUpload onChange={setSignatureBase64} initialBase64={savedSignatureBase64} />
+                            {isSignatureLoading ? (
+                                <Skeleton className="h-20 w-full" />
+                            ) : (
+                                // Mounted only after the signature fetch settles, so its lazy initial state
+                                // (SignatureUpload.tsx) never captures a stale null before the real value arrives.
+                                <SignatureUpload onChange={setSignatureBase64} initialBase64={savedSignatureBase64} />
+                            )}
                         </div>
                     )}
 
                     <div className="flex flex-wrap gap-2">
                         <button
                             onClick={handleApprove}
-                            disabled={isApproving}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#1e7a34] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#166028] disabled:opacity-50"
+                            disabled={isActionInFlight}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#1e7a34] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#166028] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <CheckCircle2 className="h-3.5 w-3.5" /> {isApproving ? tCommon("processing") : t("approveButton")}
                         </button>
                         <button
                             onClick={() => setRejectConfirmOpen(true)}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005]"
+                            disabled={isActionInFlight}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <XCircle className="h-3.5 w-3.5" /> {t("rejectButton")}
                         </button>
@@ -710,7 +758,8 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                                     setSendBackTarget(0);
                                     setSendBackOpen(true);
                                 }}
-                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                disabled={isActionInFlight}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <RotateCcw className="h-3.5 w-3.5" /> {t("sendBackButton")}
                             </button>
@@ -721,7 +770,8 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                                     setAddApproverInsertAfter(request.currentStepOrder);
                                     setAddApproverOpen(true);
                                 }}
-                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                disabled={isActionInFlight}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <UserPlus className="h-3.5 w-3.5" /> {t("addApproverButton")}
                             </button>

@@ -146,7 +146,24 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create")]
+        // (Những) tổ hợp Team/Line/Nhóm ca mà người gọi đang là Line Leader — FE gọi trước khi mở tab
+        // "Theo chuyền" để tự điền sẵn + khoá cứng 3 dropdown thay vì bắt họ tự chọn lại đúng Team/Line/
+        // Nhóm ca của chính mình mỗi lần (2026-09-28, theo yêu cầu người dùng). Mảng rỗng cho Admin hoặc
+        // người không phải Line Leader → FE giữ nguyên dropdown tự do như hiện tại.
+        [RequirePermission("Attendance.OTForm.CreateProduction")]
+        [HttpGet("my-production-create-scopes")]
+        public async Task<ActionResult<ApiResponse<List<MyProductionCreateScopeItemDto>>>> GetMyProductionCreateScopes()
+        {
+            var isAdmin = User.IsInRole(AdminRole);
+            var result = await _otFormService.GetMyProductionCreateScopesAsync(CurrentUserName, isAdmin);
+            return Success(result);
+        }
+
+        // Create/CreateProduction là 2 quyền TÁCH RỜI (Giai đoạn 14/17) — người chỉ có CreateProduction
+        // (vd Line Leader thuần, không tạo đơn Theo Nhóm bao giờ) vẫn phải gọi được endpoint này để tự
+        // check trùng giờ trước khi submit đơn theo chuyền, nên cổng OR cả 2 (2026-09-28, sửa lỗi
+        // Line Leader chỉ có CreateProduction bị 403 ngay từ bước check-overlap, không tạo đơn được).
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
         [HttpPost("check-overlap")]
         public async Task<ActionResult<ApiResponse<List<int>>>> CheckOverlap([FromBody] CheckOtFormOverlapDto request)
         {
@@ -156,15 +173,27 @@ namespace Attendance.Api.Controllers
 
         // Create a form — tạo xong vào chuỗi duyệt Cây chức vụ NGAY LẬP TỨC, không còn giai đoạn Draft
         // (2026-08-07, Giai đoạn 3.1, xem docs/attendance-module.md §Cây chức vụ).
-        [RequirePermission("Attendance.OTForm.Create")]
+        //
+        // Create/CreateProduction là 2 quyền TÁCH RỜI — cổng [RequirePermission] chỉ cần CÓ 1 TRONG 2 để
+        // không chặn nhầm người chỉ có CreateProduction (Line Leader thuần) ngay từ đầu (2026-09-28, sửa
+        // lỗi thật: Admin bỏ hẳn Create, chỉ tick CreateProduction cho Line Leader → 403 luôn, không tạo
+        // được đơn nào kể cả đơn theo chuyền vốn dĩ ĐÚNG quyền của họ). Nhưng phải tự phân biệt lại ĐÚNG
+        // quyền theo TỪNG CHẾ ĐỘ đơn ngay bên dưới — nếu không, người chỉ có CreateProduction sẽ lách
+        // được sang tạo đơn Theo Nhóm dù không có Create (và ngược lại).
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateOtFormDto request)
         {
             var isAdmin = User.IsInRole(AdminRole);
-            // Đơn theo chuyền cần quyền riêng (Admin chỉ định theo Chức vụ hoặc từng user) — không còn
-            // hardcode "phải là Line Leader" trong service.
-            if (request.IsProductionForm && !User.HasClaim("Permission", "Attendance.OTForm.CreateProduction"))
-                throw new DomainException("Bạn không có quyền tạo đơn tăng ca theo chuyền.");
+            if (request.IsProductionForm)
+            {
+                if (!User.HasClaim("Permission", "Attendance.OTForm.CreateProduction"))
+                    throw new DomainException("Bạn không có quyền tạo đơn tăng ca theo chuyền.");
+            }
+            else if (!User.HasClaim("Permission", "Attendance.OTForm.Create"))
+            {
+                throw new DomainException("Bạn không có quyền tạo đơn tăng ca theo Nhóm.");
+            }
             var result = await _otFormService.CreateAsync(CurrentUserName, CurrentFullName, isAdmin, request);
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công.");
         }
@@ -172,13 +201,33 @@ namespace Attendance.Api.Controllers
         // Đơn theo Nhóm: chỉ người tạo, chỉ khi Status=InApproval VÀ chưa bước nào Approved. Đơn "theo
         // chuyền": theo TỪNG BƯỚC — ai đang là candidate của bước Pending hiện tại thì sửa được (Giai
         // đoạn 5, 2026-08-27, xem OtFormService.UpdateAsync + docs/attendance-module.md §Chế tạo).
-        [RequirePermission("Attendance.OTForm.Create")]
+        //
+        // Cùng lý do OR như Create ở trên — Line Leader chỉ có CreateProduction vẫn phải sửa được đơn
+        // theo chuyền của chính họ. OtFormService.UpdateAsync tự phân biệt lại quyền theo TỪNG BƯỚC/scope
+        // thật (candidate bước Pending cho đơn theo chuyền, EnsureCanCreateOrEditForScopeAsync cho đơn
+        // theo Nhóm) — không dựa vào claim Create/CreateProduction nữa nên không cần check thêm ở đây
+        // như Create (2026-09-28).
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> Update(int id, [FromBody] UpdateOtFormDto request)
         {
             var isAdmin = User.IsInRole(AdminRole);
             var result = await _otFormService.UpdateAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
             return Success(result, "Cập nhật đơn tăng ca thành công.");
+        }
+
+        // Khôi phục 2026-09-30 ngay trên màn Duyệt — trước 2026-09-04 đã gộp vào Update (chỉ người tạo,
+        // đơn theo Nhóm), khiến các cấp đang DUYỆT (không phải người tạo) mất khả năng loại người dù
+        // đúng là candidate bước hiện tại. Gọi thẳng RemoveEmployeeCoreAsync (không qua UpdateAsync) —
+        // permission có sẵn từ trước, đã seed đúng JobTitlePermissions (xem docs/attendance-module.md
+        // §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web)). KHÔNG cần SecondaryPassword.
+        [RequirePermission("Attendance.OTForm.RemoveEmployee")]
+        [HttpPost("{id}/employees/remove")]
+        public async Task<ActionResult<ApiResponse<OtFormDto>>> RemoveEmployee(int id, [FromBody] RemoveOtFormEmployeeDto request)
+        {
+            var isAdmin = User.IsInRole(AdminRole);
+            var result = await _otFormService.RemoveEmployeeAsync(id, CurrentUserName, CurrentFullName, isAdmin, request);
+            return Success(result, "Loại nhân viên khỏi đơn thành công.");
         }
 
         [RequirePermission("Attendance.OTForm.Approve")]

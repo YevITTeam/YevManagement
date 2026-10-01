@@ -141,6 +141,14 @@ namespace Workflow.Api.Controllers
         }
 
         [RequirePermission("Workflow.Request.Create")]
+        [HttpPost("{id}/resubmit")]
+        public async Task<ActionResult<ApiResponse<WorkflowRequestDto>>> Resubmit(int id, [FromBody] ResubmitRequestDto request)
+        {
+            var result = await _workflowRequestService.ResubmitAsync(id, request, CurrentUserId);
+            return Success(result, "Nộp lại đơn thành công.");
+        }
+
+        [RequirePermission("Workflow.Request.Create")]
         [HttpPost("{id}/add-approver")]
         public async Task<ActionResult<ApiResponse<WorkflowRequestDto>>> AddApprover(int id, [FromBody] AddApproverRequestDto request)
         {

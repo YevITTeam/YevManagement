@@ -9,6 +9,11 @@ namespace Shared.Application.Authorization
     {
         public const string PolicyPrefix = "Permission:";
 
+        // Nhiều permission trong CÙNG 1 policy string được nối bằng ký tự này (quan hệ OR, xem
+        // PermissionRequirement) — permission code luôn dạng "Module.Entity.Action" nên không bao giờ
+        // chứa ký tự này, tách an toàn (2026-09-28).
+        public const string PermissionSeparator = "|";
+
         private readonly DefaultAuthorizationPolicyProvider _fallbackPolicyProvider;
 
         public PermissionPolicyProvider(IOptions<AuthorizationOptions> options)
@@ -24,10 +29,11 @@ namespace Shared.Application.Authorization
         {
             if (policyName.StartsWith(PolicyPrefix, StringComparison.OrdinalIgnoreCase))
             {
-                var permission = policyName.Substring(PolicyPrefix.Length);
+                var permissions = policyName.Substring(PolicyPrefix.Length)
+                    .Split(PermissionSeparator, StringSplitOptions.RemoveEmptyEntries);
 
                 var policy = new AuthorizationPolicyBuilder()
-                    .AddRequirements(new PermissionRequirement(permission))
+                    .AddRequirements(new PermissionRequirement(permissions))
                     .Build();
 
                 return Task.FromResult<AuthorizationPolicy?>(policy);
