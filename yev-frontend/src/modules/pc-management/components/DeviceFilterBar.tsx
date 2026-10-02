@@ -278,6 +278,15 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                 placeholder="Tất cả bộ phận"
                             />
                         </Field>
+                        <Field label="Nhóm" icon={Layers}>
+                            <IconSelect
+                                icon={Layers}
+                                options={deviceGroups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
+                                value={filters.groupId}
+                                onChange={(value) => handleChange("groupId", value)}
+                                placeholder="Tất cả nhóm"
+                            />
+                        </Field>
                         <Field label="Nhà cung cấp" icon={Truck}>
                             <IconInput icon={Truck} value={filters.supplierName} onChange={(value) => handleChange("supplierName", value)} placeholder="Tên nhà cung cấp" />
                         </Field>
@@ -293,15 +302,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         <Field label="Hết hạn trước" icon={Calendar}>
                             <input type="date" value={filters.expiryDate} onChange={(event) => handleChange("expiryDate", event.target.value)} className={fieldClassName} />
                         </Field>
-                        <Field label="Nhóm" icon={Layers}>
-                            <IconSelect
-                                icon={Layers}
-                                options={deviceGroups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
-                                value={filters.groupId}
-                                onChange={(value) => handleChange("groupId", value)}
-                                placeholder="Tất cả nhóm"
-                            />
-                        </Field>
+
                         <Field label="Cho phép dùng USB">
                             <NativeSelect
                                 value={filters.isUseUsb}

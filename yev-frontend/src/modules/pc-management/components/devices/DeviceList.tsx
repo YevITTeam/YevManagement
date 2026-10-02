@@ -120,6 +120,8 @@ export default function DeviceList() {
 
   // undefined = mặc định sort theo purchaseDate giảm dần (BE mặc định); true/false = theo deviceCode tăng/giảm dần.
   const [sortDeviceCodeAscending, setSortDeviceCodeAscending] = useState<boolean | undefined>(undefined);
+  // Sắp xếp theo IP (số học); chỉ một trong hai kiểu sort được bật tại một thời điểm.
+  const [sortIpAddressAscending, setSortIpAddressAscending] = useState<boolean | undefined>(undefined);
   const [transferringDevice, setTransferringDevice] = useState<{ id: number; deviceCode: string; deviceName: string } | null>(null);
   // docs/asset-api-fe.md §5.10 — điền sẵn máy mới khi mở "Chuyển máy" từ gợi ý pendingTransfers của Import Excel.
   const [transferPresetNewDeviceId, setTransferPresetNewDeviceId] = useState<number | null>(null);
@@ -130,7 +132,13 @@ export default function DeviceList() {
   const [qrPrintDeviceIds, setQrPrintDeviceIds] = useState<number[] | null>(null);
 
   const toggleSortDeviceCode = () => {
+    setSortIpAddressAscending(undefined);
     setSortDeviceCodeAscending((current) => (current === undefined ? true : current === true ? false : undefined));
+  };
+
+  const toggleSortIpAddress = () => {
+    setSortDeviceCodeAscending(undefined);
+    setSortIpAddressAscending((current) => (current === undefined ? true : current === true ? false : undefined));
   };
 
   // Bảng có nhiều cột (IP/email nhiều dòng) nên thường rộng hơn màn hình — cho phép
@@ -179,6 +187,7 @@ export default function DeviceList() {
     filters.groupId,
     filters.departmentId,
     sortDeviceCodeAscending,
+    sortIpAddressAscending,
   ]);
   const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
   if (prevFiltersKey !== filtersKey) {
@@ -212,6 +221,7 @@ export default function DeviceList() {
         isOutsourced: filters.status === "outsourced" ? true : undefined,
         expiryDate: filters.expiryDate || undefined,
         sortDeviceCodeAscending,
+        sortIpAddressAscending,
       }),
     [pageIndex, pageSize, filtersKey],
     (result) => {
@@ -555,7 +565,19 @@ export default function DeviceList() {
                 </th>
                 <th className="whitespace-nowrap px-3 py-1.5">Loại / NCC</th>
                 <th className="whitespace-nowrap px-3 py-1.5">Chi nhánh</th>
-                <th className="whitespace-nowrap px-3 py-1.5">Địa chỉ IP</th>
+                <th className="whitespace-nowrap px-3 py-1.5">
+                  <button
+                    type="button"
+                    onClick={toggleSortIpAddress}
+                    className="cursor-pointer inline-flex items-center gap-1.5 text-[11px]! font-semibold! uppercase tracking-[0.06em] text-[#5e3f3a] transition hover:text-[#191c1e]"
+                    title="Sắp xếp theo địa chỉ IP"
+                  >
+                    Địa chỉ IP
+                    {sortIpAddressAscending === undefined && <ArrowUpDown className="h-3.5 w-3.5" />}
+                    {sortIpAddressAscending === true && <ArrowDownAZ className="h-3.5 w-3.5" />}
+                    {sortIpAddressAscending === false && <ArrowUpAZ className="h-3.5 w-3.5" />}
+                  </button>
+                </th>
                 <th className="whitespace-nowrap px-3 py-1.5">Người quản lý</th>
                 <th className="whitespace-nowrap px-3 py-1.5">Email</th>
                 <th className="whitespace-nowrap px-3 py-1.5">Mua / Hết hạn</th>

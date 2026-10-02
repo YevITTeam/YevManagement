@@ -122,7 +122,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
             </div>
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                     <div>
                         <div className={infoLabelClassName}>Loại thiết bị</div>
                         <div className="mt-1 text-sm text-[#191c1e]">{device.deviceTypeName}</div>

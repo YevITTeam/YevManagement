@@ -34,6 +34,8 @@ namespace Asset.Application.Dtos.Devices
         // 2026-07-10: sort by DeviceCode, null = keep the default OrderByDescending(PurchaseDate).
         // true = ascending, false = descending.
         public bool? SortDeviceCodeAscending { get; set; }
+        // Sort by numeric IPv4 value; takes precedence over SortDeviceCodeAscending. true = ascending.
+        public bool? SortIpAddressAscending { get; set; }
 
         // 2026-07-30 — name-based filters, added for the AI chat (the grid UI filters by id via its own
         // dropdowns and does not send these; all optional, so nothing existing changes).

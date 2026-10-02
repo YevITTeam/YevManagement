@@ -24,25 +24,29 @@ interface DeviceConfigurationPanelProps {
 
 type ComponentFormValues = Record<keyof DeviceComponentFields, string>;
 
+// Fields shown in the UI. Hidden columns (see hiddenFieldKeys) stay in the API payload so stored values are never wiped.
 const componentFieldDefs: { key: keyof DeviceComponentFields; label: string }[] = [
-    { key: "mainboard", label: "Mainboard" },
+    { key: "maker", label: "Hãng sản xuất" },
+    { key: "model", label: "Model" },
     { key: "cpu", label: "CPU" },
     { key: "ram", label: "RAM" },
     { key: "hardDrive", label: "Ổ cứng" },
-    { key: "vga", label: "VGA" },
     { key: "monitor", label: "Màn hình" },
     { key: "os", label: "Hệ điều hành" },
-    { key: "mouse", label: "Chuột" },
-    { key: "keyboard", label: "Bàn phím" },
     { key: "headphone", label: "Tai nghe" },
-    { key: "speaker", label: "Loa" },
     { key: "ups", label: "UPS" },
-    { key: "psu", label: "Nguồn (PSU)" },
-    { key: "maker", label: "Hãng sản xuất" },
-    { key: "model", label: "Model" },
-    { key: "powerAdapter", label: "Sạc/Adapter" },
-    { key: "wirelessCard", label: "Card wifi" },
-    { key: "nic", label: "Card mạng (NIC)" },
+    { key: "nic", label: "MAC address LAN" },
+];
+
+const hiddenFieldKeys: (keyof DeviceComponentFields)[] = [
+    "mainboard",
+    "vga",
+    "mouse",
+    "keyboard",
+    "speaker",
+    "psu",
+    "powerAdapter",
+    "wirelessCard",
 ];
 
 const emptyComponentValues: ComponentFormValues = componentFieldDefs.reduce((acc, field) => {
@@ -145,6 +149,9 @@ export default function DeviceConfigurationPanel({ deviceId, deviceCode, configu
         componentFieldDefs.forEach((field) => {
             payload[field.key] = values[field.key].trim() ? values[field.key].trim() : null;
         });
+        hiddenFieldKeys.forEach((key) => {
+            payload[key] = configuration?.[key] ?? null;
+        });
         return payload;
     };
 
@@ -223,7 +230,7 @@ export default function DeviceConfigurationPanel({ deviceId, deviceCode, configu
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                         {componentFieldDefs.map((field) => (
                             <label key={field.key} className="block">
                                 <span className={fieldLabelClassName}>{field.label}</span>

@@ -17,12 +17,17 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { getApiErrorMessage } from "@/lib/apiError";
 
-const toIsoDate = (date: Date) => date.toISOString().slice(0, 10);
+const pad2 = (value: number) => String(value).padStart(2, "0");
 
-const startOfThisMonth = () => {
-    const now = new Date();
-    return toIsoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+// First and last day of the given month (month is 1-12) as yyyy-MM-dd, built without Date#toISOString to avoid UTC shifts.
+const monthRange = (year: number, month: number) => {
+    const lastDay = new Date(year, month, 0).getDate();
+    return { from: `${year}-${pad2(month)}-01`, to: `${year}-${pad2(month)}-${pad2(lastDay)}` };
 };
+
+const MONTHS = Array.from({ length: 12 }, (_, index) => index + 1);
+const selectClassName =
+    "h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
 const formatDate = (value: string) =>
     new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -44,8 +49,11 @@ export default function ServerCheckReportPage() {
     const t = useTranslations("Asset.ServerCheck");
     const tCommon = useTranslations("Common");
 
-    const [fromDate, setFromDate] = useState(startOfThisMonth());
-    const [toDate, setToDate] = useState(toIsoDate(new Date()));
+    const [now] = useState(() => new Date());
+    const [year, setYear] = useState(now.getFullYear());
+    const [month, setMonth] = useState(now.getMonth() + 1);
+    const { from: fromDate, to: toDate } = monthRange(year, month);
+    const years = Array.from({ length: 6 }, (_, index) => now.getFullYear() - index);
     const [rows, setRows] = useState<ServerCheckReportRowDto[]>([]);
     const [manualColumns, setManualColumns] = useState<ServerCheckManualItemDto[]>([]);
     const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
@@ -144,19 +152,26 @@ export default function ServerCheckReportPage() {
                             <option key={branch.id} value={branch.id}>{branch.branchName}</option>
                         ))}
                     </select>
-                    <input
-                        type="date"
-                        value={fromDate}
-                        onChange={(event) => setFromDate(event.target.value)}
-                        className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                    />
-                    <span className="text-sm text-[#5e3f3a]">{tCommon("to")}</span>
-                    <input
-                        type="date"
-                        value={toDate}
-                        onChange={(event) => setToDate(event.target.value)}
-                        className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                    />
+                    <select
+                        value={month}
+                        onChange={(event) => setMonth(Number(event.target.value))}
+                        aria-label={t("monthFilterLabel")}
+                        className={selectClassName}
+                    >
+                        {MONTHS.map((m) => (
+                            <option key={m} value={m}>{t("monthOption", { month: m })}</option>
+                        ))}
+                    </select>
+                    <select
+                        value={year}
+                        onChange={(event) => setYear(Number(event.target.value))}
+                        aria-label={t("yearFilterLabel")}
+                        className={selectClassName}
+                    >
+                        {years.map((y) => (
+                            <option key={y} value={y}>{y}</option>
+                        ))}
+                    </select>
                     <button
                         onClick={() => refetch()}
                         disabled={isLoading}
