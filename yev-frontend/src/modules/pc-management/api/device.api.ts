@@ -44,6 +44,7 @@ export interface GetDevicePageNationParams {
     // Thiết bị hết hạn vào hoặc trước ngày này (yyyy-MM-dd).
     expiryDate?: string;
     sortDeviceCodeAscending?: boolean;
+    sortIpAddressAscending?: boolean;
 }
 
 export const DeviceApi = {
@@ -69,6 +70,7 @@ export const DeviceApi = {
         if (params?.status !== undefined) query.set("Status", String(params.status));
         if (params?.expiryDate) query.set("ExpiryDate", params.expiryDate);
         if (params?.sortDeviceCodeAscending !== undefined) query.set("SortDeviceCodeAscending", String(params.sortDeviceCodeAscending));
+        if (params?.sortIpAddressAscending !== undefined) query.set("SortIpAddressAscending", String(params.sortIpAddressAscending));
 
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.DEVICE.getDevicePageNation}?${queryString}` : ENDPOINTS.DEVICE.getDevicePageNation;

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Asset.Application.Dtos.Devices;
 using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
@@ -147,6 +148,41 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.ExpirationDate != null && d.ExpirationDate <= request.ExpiryDate.Value);
             }
 
+            Expression<Func<Device, DeviceGridDto>> selector = d => new DeviceGridDto
+        {
+            Id = d.Id,
+            DeviceCode = d.DeviceCode,
+            DeviceName = d.DeviceName,
+            BranchName = d.Branch.BranchName,
+            SupplierName = d.Supplier.SupplierName,
+            DeviceTypeName = d.DeviceType.TypeName,
+            GroupName = d.DeviceGroup != null ? d.DeviceGroup.GroupName : null,
+            DepartmentName = d.DeviceDepartment != null ? d.DeviceDepartment.DepartmentName : null,
+            IpAddresses = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).ToList(),
+            PurchaseDate = d.PurchaseDate,
+            ExpirationDate = d.ExpirationDate,
+            Manager = d.Manager,
+            Note = d.Note,
+            Emails = d.DeviceEmails.Where(e => !e.IsDeleted).Select(e => e.Email).ToList(),
+            IsOutsourced = d.IsOutsourced,
+            SerialNumber = d.SerialNumber,
+            IsUseUsb = d.IsUseUsb,
+            RequiresDailyCheck = d.RequiresDailyCheck,
+            Status = d.Status,
+            // Duplicate the logic of GetStatusText here (instead of calling the method) because
+            // this is an Expression<Func<>> translated by EF into SQL, which doesn't support calling arbitrary C# methods.
+            StatusText = d.Status == (int)DeviceStatus.PendingUse ? "Chờ sử dụng"
+                : d.Status == (int)DeviceStatus.InUse ? "Đang sử dụng"
+                : d.Status == (int)DeviceStatus.PendingLiquidation ? "Chờ thanh lý"
+                : d.Status == (int)DeviceStatus.Liquidated ? "Đã thanh lý"
+                : "Không xác định"
+        };
+
+            if (request.SortIpAddressAscending.HasValue)
+            {
+                return await GetPagedSortedByIpAsync(query, request, selector);
+            }
+
             var orderedQuery = request.SortDeviceCodeAscending.HasValue
                 ? (request.SortDeviceCodeAscending.Value
                     ? query.OrderBy(d => d.DeviceCode)
@@ -157,36 +193,66 @@ namespace Asset.Application.Services
                 orderedQuery,
                 request.PageIndex,
                 request.PageSize,
-                d => new DeviceGridDto
+                selector);
+        }
+
+        // IPv4 strings do not sort numerically in SQL ("10.45.1.9" > "10.45.1.100"), so the filtered
+        // (Id, IPs) pairs are sorted in memory by numeric value and only the requested page is loaded in full.
+        // Ascending uses each device's lowest IP, descending its highest; devices without IP always come last.
+        private async Task<PagedResponse<DeviceGridDto>> GetPagedSortedByIpAsync(
+            IQueryable<Device> query,
+            DeviceFilterRequest request,
+            Expression<Func<Device, DeviceGridDto>> selector)
+        {
+            var ascending = request.SortIpAddressAscending!.Value;
+
+            var keys = await _unitOfWork.Devices.ToListAsync(
+                query,
+                d => new
                 {
-                    Id = d.Id,
-                    DeviceCode = d.DeviceCode,
-                    DeviceName = d.DeviceName,
-                    BranchName = d.Branch.BranchName,
-                    SupplierName = d.Supplier.SupplierName,
-                    DeviceTypeName = d.DeviceType.TypeName,
-                    GroupName = d.DeviceGroup != null ? d.DeviceGroup.GroupName : null,
-                    DepartmentName = d.DeviceDepartment != null ? d.DeviceDepartment.DepartmentName : null,
-                    IpAddresses = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).ToList(),
-                    PurchaseDate = d.PurchaseDate,
-                    ExpirationDate = d.ExpirationDate,
-                    Manager = d.Manager,
-                    Note = d.Note,
-                    Emails = d.DeviceEmails.Where(e => !e.IsDeleted).Select(e => e.Email).ToList(),
-                    IsOutsourced = d.IsOutsourced,
-                    SerialNumber = d.SerialNumber,
-                    IsUseUsb = d.IsUseUsb,
-                    RequiresDailyCheck = d.RequiresDailyCheck,
-                    Status = d.Status,
-                    // Duplicate the logic of GetStatusText here (instead of calling the method) because
-                    // this is an Expression<Func<>> translated by EF into SQL, which doesn't support calling arbitrary C# methods.
-                    StatusText = d.Status == (int)DeviceStatus.PendingUse ? "Chờ sử dụng"
-                        : d.Status == (int)DeviceStatus.InUse ? "Đang sử dụng"
-                        : d.Status == (int)DeviceStatus.PendingLiquidation ? "Chờ thanh lý"
-                        : d.Status == (int)DeviceStatus.Liquidated ? "Đã thanh lý"
-                        : "Không xác định"
-                }
-            );
+                    d.Id,
+                    d.DeviceCode,
+                    Ips = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).ToList()
+                });
+
+            var sortedIds = keys
+                .Select(k =>
+                {
+                    var values = k.Ips.Select(ToIpSortValue).ToList();
+                    long? key = values.Count == 0 ? null : (ascending ? values.Min() : values.Max());
+                    return (k.Id, k.DeviceCode, Key: key);
+                })
+                .OrderBy(k => k.Key == null)
+                .ThenBy(k => ascending ? k.Key : -k.Key)
+                .ThenBy(k => k.DeviceCode, StringComparer.OrdinalIgnoreCase)
+                .Select(k => k.Id)
+                .ToList();
+
+            var pageIds = sortedIds
+                .Skip((request.PageIndex - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .ToList();
+
+            var items = await _unitOfWork.Devices.ToListAsync(query.Where(d => pageIds.Contains(d.Id)), selector);
+            var position = pageIds.Select((id, index) => (id, index)).ToDictionary(x => x.id, x => x.index);
+            items = items.OrderBy(i => position[i.Id]).ToList();
+
+            return new PagedResponse<DeviceGridDto>(items, sortedIds.Count, request.PageIndex, request.PageSize);
+        }
+
+        // Non-IPv4 text maps to long.MaxValue so it sorts after real addresses.
+        private static long ToIpSortValue(string? ip)
+        {
+            var parts = (ip ?? string.Empty).Trim().Split('.');
+            if (parts.Length != 4) return long.MaxValue;
+
+            long value = 0;
+            foreach (var part in parts)
+            {
+                if (!byte.TryParse(part, out var octet)) return long.MaxValue;
+                value = (value << 8) | octet;
+            }
+            return value;
         }
 
         public async Task<List<DeviceGridDto>> GetAvailableForTransferAsync(string? keyword)
