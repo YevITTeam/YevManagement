@@ -8,6 +8,7 @@ import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface GroupFormValues {
     departmentId: number;
@@ -85,7 +86,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="group-form-title"
-                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 w-full max-w-xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="group-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -101,53 +102,55 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
-                        <SearchableSelect
-                            options={departmentOptions}
-                            value={values.departmentId || ""}
-                            onChange={(v) => setValues((current) => ({ ...current, departmentId: v === "" ? 0 : v }))}
-                            placeholder={t("fieldDepartmentPlaceholder")}
-                            disabled={loading}
-                        />
-                    </label>
+                <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldDepartment")}<RequiredMark /></span>
+                            <SearchableSelect
+                                options={departmentOptions}
+                                value={values.departmentId || ""}
+                                onChange={(v) => setValues((current) => ({ ...current, departmentId: v === "" ? 0 : v }))}
+                                placeholder={t("fieldDepartmentPlaceholder")}
+                                disabled={loading}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
-                        <input
-                            value={values.groupCode}
-                            onChange={(event) => setValues((current) => ({ ...current, groupCode: event.target.value }))}
-                            placeholder={t("fieldCodePlaceholder")}
-                            disabled={loading}
-                            autoFocus
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
+                            <input
+                                value={values.groupCode}
+                                onChange={(event) => setValues((current) => ({ ...current, groupCode: event.target.value }))}
+                                placeholder={t("fieldCodePlaceholder")}
+                                disabled={loading}
+                                autoFocus
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldNameVn")}</span>
-                        <input
-                            value={values.groupNameVn}
-                            onChange={(event) => setValues((current) => ({ ...current, groupNameVn: event.target.value }))}
-                            placeholder={t("fieldNameVnPlaceholder")}
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldNameVn")}<RequiredMark /></span>
+                            <input
+                                value={values.groupNameVn}
+                                onChange={(event) => setValues((current) => ({ ...current, groupNameVn: event.target.value }))}
+                                placeholder={t("fieldNameVnPlaceholder")}
+                                disabled={loading}
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
-                        <input
-                            value={values.groupNameJp ?? ""}
-                            onChange={(event) => setValues((current) => ({ ...current, groupNameJp: event.target.value }))}
-                            placeholder={t("fieldNameJpPlaceholder")}
-                            disabled={loading}
-                            className={fieldClassName}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
+                            <input
+                                value={values.groupNameJp ?? ""}
+                                onChange={(event) => setValues((current) => ({ ...current, groupNameJp: event.target.value }))}
+                                placeholder={t("fieldNameJpPlaceholder")}
+                                disabled={loading}
+                                className={fieldClassName}
+                            />
+                        </label>
+                    </div>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

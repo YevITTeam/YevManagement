@@ -2,8 +2,8 @@ using System.Text.Json.Nodes;
 
 namespace Attendance.Application.Dtos.AiChat
 {
-    // The tool catalogue sent as Ollama's `tools` field (docs/docs-be/attendance-aichat-be-huong-dan.md
-    // §5) — 6 read-only lookup tools + exactly 1 write tool (create_ot_form_draft). Keep this in sync
+    // The tool catalogue sent as Ollama's `tools` field (docs/docs-be/attendance-module.md
+    // §AttendanceAiChat) — 6 read-only lookup tools + exactly 1 write tool (create_ot_form_draft). Keep this in sync
     // with AttendanceAiChatToolExecutorService.ExecuteAsync (1 case per tool name here) — adding a
     // tool means updating both.
     public static class AttendanceAiChatToolDefinitions

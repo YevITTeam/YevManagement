@@ -1,4 +1,5 @@
 ﻿using Identity.Application.Authentication;
+using Identity.Application.Dtos.LoginQrDto;
 using Identity.Application.Dtos.UserDto;
 using Identity.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authentication;
@@ -17,6 +18,7 @@ namespace Identity.Api.Controllers
     {
         private readonly ITokenService _tokenService;
         private readonly IUserService _service;
+        private readonly ILoginQrService _loginQrService;
         private readonly IRoleService _roleService;
         private readonly IClaimsTransformation _claimsTransformation;
         private readonly IActiveDirectoryAuthService _adAuthService;
@@ -26,6 +28,7 @@ namespace Identity.Api.Controllers
         public AuthController(
             ITokenService tokenService,
             IUserService service,
+            ILoginQrService loginQrService,
             IRoleService roleService,
             IClaimsTransformation claimsTransformation,
             IActiveDirectoryAuthService adAuthService,
@@ -34,6 +37,7 @@ namespace Identity.Api.Controllers
         {
             _tokenService = tokenService;
             _service = service;
+            _loginQrService = loginQrService;
             _roleService = roleService;
             _claimsTransformation = claimsTransformation;
             _adAuthService = adAuthService;
@@ -109,6 +113,28 @@ namespace Identity.Api.Controllers
             var transformedPrincipal = await _claimsTransformation.TransformAsync(seedPrincipal);
 
             return Success(BuildSession(transformedPrincipal), "Đăng nhập thành công!");
+        }
+
+        // Logs in with the code scanned from a printed QR (YEV Scan mobile app). The code only maps to a
+        // user through the LoginQrCode table; the session is then built through the same
+        // MyClaimsTransformation path as the other login endpoints.
+        [AllowAnonymous]
+        [HttpPost("qr-login")]
+        public async Task<ActionResult<ApiResponse<LoginResponseDto>>> QrLogin([FromBody] QrLoginRequestDto request)
+        {
+            var userName = await _loginQrService.ConsumeAsync(
+                request.Code,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Request.Headers.UserAgent.ToString());
+
+            if (userName == null)
+                return Fail<LoginResponseDto>("Mã QR không hợp lệ hoặc đã bị thu hồi.");
+
+            var seedPrincipal = new ClaimsPrincipal(new ClaimsIdentity(
+                new[] { new Claim(ClaimTypes.Name, userName) }));
+            var transformedPrincipal = await _claimsTransformation.TransformAsync(seedPrincipal);
+
+            return Success(BuildSession(transformedPrincipal), "Đăng nhập bằng QR thành công!");
         }
 
         // Re-reads the current profile/permissions and renews the JWT using the Bearer token the caller

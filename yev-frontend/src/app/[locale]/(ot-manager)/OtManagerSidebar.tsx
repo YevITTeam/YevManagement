@@ -24,7 +24,7 @@ const navItems: OtNavItem[] = [
     // (2026-09-28, đồng bộ với otRoutePermissions.ts).
     { key: "otCreate", href: "/ot/create", icon: FilePlus2, permissions: ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"] },
     // Cách khác để tạo đơn — qua hội thoại AI thay vì form tay, kết quả vẫn là 1 đơn Draft y hệt
-    // (xem docs/docs-be/attendance-aichat-be-huong-dan.md). Permission riêng vì đây là tool ghi dữ
+    // (xem docs/docs-be/attendance-module.md §AttendanceAiChat). Permission riêng vì đây là tool ghi dữ
     // liệu đầu tiên của tính năng AI Chat, cố tình tách khỏi Attendance.OTForm.Create để kiểm soát
     // rollout độc lập.
     { key: "otAiChat", href: "/ot/ai-chat", icon: Bot, permissions: ["Attendance.AiChat.Use"] },

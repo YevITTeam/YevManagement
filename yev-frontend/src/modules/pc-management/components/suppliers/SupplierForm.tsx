@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { SupplierDto } from "@/modules/pc-management/types/supplier.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface SupplierFormValues {
     supplierCode: string;
@@ -73,7 +74,7 @@ export default function SupplierForm({ isOpen, mode, initial, loading = false, o
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
                         <input
                             value={values.supplierCode}
                             onChange={(event) => handleChange("supplierCode", event.target.value)}
@@ -86,7 +87,7 @@ export default function SupplierForm({ isOpen, mode, initial, loading = false, o
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldName")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldName")}<RequiredMark /></span>
                         <input
                             value={values.supplierName}
                             onChange={(event) => handleChange("supplierName", event.target.value)}

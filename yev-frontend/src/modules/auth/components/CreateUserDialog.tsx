@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { RoleDto } from "@/modules/auth/types/auth.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 interface Props {
     isOpen: boolean;
@@ -88,12 +89,13 @@ export default function CreateUserDialog({ isOpen, roles, onClose, onCreated }: 
                 <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
                     <label className="block">
                         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            Tên đăng nhập Windows *
+                            Tên đăng nhập Windows<RequiredMark />
                         </span>
                         <input
                             value={userName}
                             onChange={(event) => setUserName(event.target.value)}
                             disabled={isSaving}
+                            required
                             placeholder={"YEV\\n.v.a"}
                             className={inputClassName}
                         />

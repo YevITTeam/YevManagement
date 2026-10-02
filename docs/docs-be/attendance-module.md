@@ -2580,20 +2580,110 @@ Mỗi entity có đủ: `I{Entity}Repository` (Application/Interfaces/Repository
   read-only.
 
 ### AttendanceAiChat (`AttendanceAiChatController`) — trợ lý AI lập đơn tăng ca (2026-07-29)
+> **Mục này là nguồn chân lý về kiến trúc/code của Attendance AI Chat**; hợp đồng FE ở
+> [attendance-api-fe.md §10](attendance-api-fe.md). (File thiết kế gốc `attendance-aichat-be-huong-dan.md`
+> đã xoá 2026-10-02 — phần cốt lõi gom vào đây; tra `git log` nếu cần transcript/bối cảnh cũ.)
+
 - `POST /api/AttendanceAiChat/stream` (`Attendance.AiChat.Use`, seed migration `AddAttendanceAiChatPermission`,
   hiện chỉ gán Admin) — NDJSON streaming, cùng pattern deliberate exception "không bọc `ApiResponse<T>`"
-  như `Asset.Api.Controllers.AiChatController`. Thiết kế đầy đủ, bảng 7 tool, cơ chế xác nhận trước khi
-  ghi ở [attendance-aichat-be-huong-dan.md](attendance-aichat-be-huong-dan.md); hợp đồng FE ở
-  [attendance-api-fe.md §10](attendance-api-fe.md).
+  như `Asset.Api.Controllers.AiChatController`.
 - **Khác Asset AI Chat ở điểm cốt lõi**: đây là tool GHI dữ liệu đầu tiên (`create_ot_form_draft` gọi
   thẳng `OtFormService.CreateAsync` đã có — không business logic mới, không bypass validate/scope nào).
   `AttendanceAiChatController` phải tự đọc `CurrentUserName`/`CurrentFullName`/`User.IsInRole(AdminRole)`
-  rồi truyền tay xuống orchestrator (`AttendanceAiChatCallerContext`) — khác `AiChatController` của
-  Asset (không cần biết ai đang hỏi vì mọi tool đều read-only).
+  rồi truyền tay xuống orchestrator (`AttendanceAiChatCallerContext { UserName, FullName, IsAdmin }`)
+  → `IAttendanceAiChatToolExecutorService.ExecuteAsync(toolName, arguments, caller, ct)`. Phải truyền
+  tay vì `Attendance.Application` không có `IHttpContextAccessor` ở bất kỳ đâu — khác `AiChatController`
+  của Asset (không cần biết ai đang hỏi vì mọi tool đều read-only).
 - **`IOllamaChatClient`/`OllamaChatClient` dùng chung với Asset**, đã chuyển từ `Asset.Application`/
   `Asset.Infrastructure` sang `Shared.Application`/`Shared.Infrastructure` (2026-07-29) — 1 registration
   DI duy nhất phục vụ cả 2 module, `tools` (JSON schema) giờ là tham số thay vì hard-code
   `AiChatToolDefinitions` của Asset.
+
+#### 7 tool — `Attendance.Application/Dtos/AiChat/AttendanceAiChatToolDefinitions.cs`
+
+| Tool | Gọi tới | Ghi/Đọc |
+|---|---|---|
+| `search_departments` | `IDepartmentService.GetAllActiveAsync()` (lọc keyword ở executor) | Đọc |
+| `search_groups` | `IGroupService.GetAllActiveAsync()` / `GetByDepartmentIdAsync(id)` | Đọc |
+| `search_reasons` | `IReasonService.GetAllActiveAsync()` | Đọc |
+| `search_ot_cases` | `IOtCaseService.GetAllActiveAsync()` | Đọc |
+| `search_employees_by_group` | `IEmployeeService.GetByGroupIdAsync(groupId)` | Đọc |
+| `get_my_create_scopes` | `IOtFormService.GetMyCreateScopesAsync(caller.UserName, caller.IsAdmin)` — không tham số, luôn theo danh tính người đang chat. **Admin trả rỗng = KHÔNG giới hạn**, không phải không có quyền | Đọc |
+| `create_ot_form_draft` | `IOtFormService.CreateAsync(caller.UserName, caller.FullName, caller.IsAdmin, dto)` | **GHI** — tool duy nhất |
+
+`create_ot_form_draft` nhận đủ field như `CreateOtFormDto` thật (không rút gọn). Mọi id phải lấy từ
+block dữ liệu tham chiếu/tool tra cứu — **không có validate nào ở BE chặn model bịa id**; id sai thì
+`CreateAsync` ném `NotFoundException`/`DomainException`, executor bắt và trả JSON lỗi cho model đọc
+lại, không vỡ stream. Chỉ `get_my_create_scopes` và `create_ot_form_draft` thực sự dùng `caller`.
+
+#### Cổng xác nhận trước khi ghi — ràng buộc bằng CẤU TRÚC, không chỉ prompt
+
+Cả 2 lớp nằm trong `AttendanceAiChatService.cs`:
+
+1. **Prompt-level** — `DefaultSystemPrompt` có rule "QUY TẮC XÁC NHẬN TRƯỚC KHI TẠO ĐƠN". Cần nhưng
+   **không đủ**: model nhỏ đã chứng minh không tuân prompt ổn định.
+2. **Structural-level (lớp chặn thật)** — `ConfirmationPattern`, regex khớp từ khẳng định ở **ĐẦU tin
+   nhắn CỦA NGƯỜI DÙNG** (`request.Message`, KHÔNG phải câu model tự sinh):
+   `^\s*(đồng ý|dong y|xác nhận|xac nhan|ok(ay)?|được|duoc|tạo đi|tao di|yes|confirm)\b`.
+   Trước khi thực thi `tool_calls` tên `create_ot_form_draft`, orchestrator kiểm pattern này trên lượt
+   hiện tại; không khớp → không chuyển cho executor, tự tổng hợp 1 message `role:"tool"` báo "chưa xác
+   nhận" và tiếp tục vòng lặp. **Model không tự vượt qua được** kể cả khi hallucinate là đã có xác nhận
+   (đúng kiểu lỗi ở `asset-module.md §1.18`), vì điều kiện dựa trên chữ chính người dùng gõ.
+   Đánh đổi đã chấp nhận: "Ok nhưng..." vẫn khớp; diễn đạt lạ không khớp thì bị hỏi lại (an toàn hơn).
+3. `UnfulfilledPromisePattern` (port từ Asset, thêm `tạo` vào nhóm động từ hứa suông) + auto-retry
+   **cùng lượt**: text khớp pattern mà không có `tool_calls` → nhúng system message nhắc và gọi lại
+   model ngay trong cùng request, tối đa `MaxPromiseRetries = 2`.
+
+#### Nạp sẵn dữ liệu tham chiếu vào context (2026-07-30) — quyết định kiến trúc chính
+
+Mô hình cũ "bắt model tự gọi tool tra cứu danh mục" hỏng theo 3 cách cùng lúc: (1) model **bịa danh
+sách kèm id SAI** — nói `TH1 (ID: 2)` trong khi DB `TH1 = id 1`, đơn tạo ra sai Trường hợp OT mà trông
+hoàn toàn hợp lệ; (2) đốt hết ngân sách round (cần ≥4 lần tra trước khi tạo, `MaxToolRounds = 3`);
+(3) mất trắng kết quả tra giữa các lượt vì `AttendanceAiChatMessageDto` chỉ có role `user`/`assistant`,
+FE không bao giờ gửi lại `role:"tool"` → lượt sau model "nhớ" bằng cách bịa lại.
+
+Dữ liệu danh mục ở đây nhỏ, tĩnh và luôn cần (~83 dòng text: 1 phạm vi + 3 Trường hợp OT + 7 nhân viên
++ 72 Lý do) nên phải nạp **tất định**, không đặt sau tool call model có thể bỏ qua:
+
+- `IAttendanceAiChatToolExecutorService.BuildReferenceContextAsync(caller, ct)` trả 1 block **plain
+  text** (không JSON — model tái tạo "id 1 = TH1" chính xác hơn, tốn ít token hơn): ngày hôm nay,
+  phạm vi tạo đơn kèm `groupId`/`departmentId` thật, nhân viên của Nhóm (**chỉ nạp khi có đúng 1 phạm
+  vi**), toàn bộ Trường hợp OT, toàn bộ Lý do. Không bao giờ throw — lỗi tra cứu thì giữ phần lấy được
+  + chèn dòng CẢNH BÁO yêu cầu dùng tool cho phần thiếu (danh sách cắt dở chính là thứ model hay "hoàn
+  thiện" bằng cách bịa).
+- `StreamChatAsync` chèn block này thành **message `system` thứ hai, mỗi lượt** (không dựa history vì
+  history không mang dữ liệu tool).
+- Ngân sách round riêng: `AiChatSettings:AttendanceMaxToolRounds = 5` — **không** nâng `MaxToolRounds`
+  dùng chung, luồng read-only của Asset không cần headroom này (mỗi round ~20-30s trên Ollama CPU).
+- 6 tool tra cứu hạ xuống thành **đường dự phòng** (Admin không giới hạn phạm vi, hoặc cần Nhóm khác).
+
+Đo thật sau khi đổi: số tool call để hỏi xong thông tin 4+ → **0**; Trường hợp OT và nhân viên khớp
+100% id trong DB; tự nhận đúng Nhóm/Bộ phận thay vì hỏi lại.
+
+#### System prompt — nguồn chân lý là code
+
+`AttendanceAiChatService.DefaultSystemPrompt`, **không chép nội dung prompt ra doc**. Prompt ràng buộc
+4 nhóm quy tắc, sửa code thì giữ nguyên tinh thần: (1) luôn trả lời tiếng Việt; (2) lấy id từ đúng
+block dữ liệu tham chiếu, **cấm suy đoán id theo thứ tự xuất hiện**; (3) bắt buộc liệt kê lựa chọn
+đánh số thay vì hỏi suông ("ai tham gia tăng ca?") — gọi `search_reasons`/`search_ot_cases`/
+`search_employees_by_group` NGAY trước khi hỏi, không bắt người dùng tự nhớ tên/mã; (4) cổng xác nhận
+trước khi ghi.
+
+#### Còn nợ
+
+- Gán `Attendance.AiChat.Use` cho Role "Trưởng nhóm"/"Nhân viên" — cố tình chưa làm, chờ verify với Admin.
+- **Chưa rà lại sau Giai đoạn 3.1 (2026-08-07)**: `create_ot_form_draft` gọi `OtFormService.CreateAsync`
+  đã redesign (không còn Draft, vào chuỗi duyệt Cây chức vụ ngay — xem §4.1) nhưng tên tool và mô tả
+  "Draft" trong system prompt chưa sửa cho khớp. Kiểm tra trước khi coi tính năng chạy đúng ý.
+- Chưa test luồng model đưa `employeeId` khác Group với `groupId` đã chọn (`ValidateEmployeesAsync` sẽ
+  ném `DomainException`, executor bắt — đúng theo review code nhưng chưa có transcript thật).
+- Nếu số Lý do tăng lên hàng trăm, cân nhắc lọc sẵn phía server thay vì nạp full vào context.
+
+**FE**: `yev-frontend/src/modules/attendance-ai-chat/` — module top-level, song song `modules/ai-chat/`
+(Asset), KHÔNG lồng trong `modules/attendance/`. Dùng lại `readAiChatStream` + `MarkdownMessage` của
+Asset qua import thẳng (không fork). `AttendanceAiChatBox.tsx` fork từ `AiChatBox.tsx`: đổi
+`TOOL_LABELS`, đổi sự kiện `device`→`otform`, thêm dải cảnh báo cố định "xác nhận sẽ tạo THẬT + gửi
+THẬT email". Route `/ot/ai-chat`, tile ở `ot/page.tsx` **có** gate permission (khác 2 tile cũ).
 
 ### EmployeeImport (`EmployeeImportController`) — import Excel nhân sự (2026-07-16)
 - `POST /preview` (nhận file `.xlsx`), `POST /confirm` — pattern Preview/Confirm giống `DeviceImportController` ở module Asset (ClosedXML). Upsert theo `Employee.Code` (unique) — mã đã có thì cập nhật `FirstName/LastName/GroupId`, mã chưa có thì tạo mới kèm tự tạo `Department`/`Group` nếu mã chưa tồn tại. Gắn `[RequirePermission("Attendance.Employee.Create")]`.

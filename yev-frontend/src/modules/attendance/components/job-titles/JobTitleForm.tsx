@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import { jobTitleTerminalLevelLabels } from "@/modules/attendance/types/enums";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 import JobTitlePermissionSection, { type JobTitlePermissionSectionHandle } from "./JobTitlePermissionSection";
 
 export interface JobTitleFormValues {
@@ -98,7 +99,7 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                     <div className="flex min-h-0 flex-1 flex-col gap-3 px-5 py-3">
                         <div className={isEdit ? "grid gap-3 sm:grid-cols-[1fr_1.6fr_1.2fr]" : "space-y-3"}>
                             <label className="block">
-                                <span className={fieldLabelClassName}>{t("fieldCode")}</span>
+                                <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
                                 <input
                                     value={values.code}
                                     onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
@@ -111,7 +112,7 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                             </label>
 
                             <label className="block">
-                                <span className={fieldLabelClassName}>{t("fieldName")}</span>
+                                <span className={fieldLabelClassName}>{t("fieldName")}<RequiredMark /></span>
                                 <input
                                     value={values.name}
                                     onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))}

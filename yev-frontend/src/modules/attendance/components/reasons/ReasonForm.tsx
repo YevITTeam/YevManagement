@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ReasonDto } from "@/modules/attendance/types/reason.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface ReasonFormValues {
     reasonNameVn: string;
@@ -55,7 +56,7 @@ export default function ReasonForm({ isOpen, mode, initial, loading = false, onC
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="reason-form-title"
-                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="reason-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -72,29 +73,31 @@ export default function ReasonForm({ isOpen, mode, initial, loading = false, onC
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldNameVn")}</span>
-                        <input
-                            value={values.reasonNameVn}
-                            onChange={(event) => handleChange("reasonNameVn", event.target.value)}
-                            placeholder={t("fieldNameVnPlaceholder")}
-                            disabled={loading}
-                            autoFocus
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldNameVn")}<RequiredMark /></span>
+                            <input
+                                value={values.reasonNameVn}
+                                onChange={(event) => handleChange("reasonNameVn", event.target.value)}
+                                placeholder={t("fieldNameVnPlaceholder")}
+                                disabled={loading}
+                                autoFocus
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
-                        <input
-                            value={values.reasonNameJp ?? ""}
-                            onChange={(event) => handleChange("reasonNameJp", event.target.value)}
-                            placeholder={t("fieldNameJpPlaceholder")}
-                            disabled={loading}
-                            className={fieldClassName}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
+                            <input
+                                value={values.reasonNameJp ?? ""}
+                                onChange={(event) => handleChange("reasonNameJp", event.target.value)}
+                                placeholder={t("fieldNameJpPlaceholder")}
+                                disabled={loading}
+                                className={fieldClassName}
+                            />
+                        </label>
+                    </div>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

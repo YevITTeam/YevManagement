@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface BranchFormValues {
     branchCode: string;
@@ -73,7 +74,7 @@ export default function BranchForm({ isOpen, mode, initial, loading = false, onC
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
                         <input
                             value={values.branchCode}
                             onChange={(event) => handleChange("branchCode", event.target.value)}
@@ -86,7 +87,7 @@ export default function BranchForm({ isOpen, mode, initial, loading = false, onC
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldName")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldName")}<RequiredMark /></span>
                         <input
                             value={values.branchName}
                             onChange={(event) => handleChange("branchName", event.target.value)}

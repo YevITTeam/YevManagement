@@ -8,6 +8,7 @@ import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 interface Props {
     isOpen: boolean;
@@ -97,12 +98,13 @@ export default function EditUserDialog({ isOpen, user, onClose, onUpdated }: Pro
 
                     <label className="block">
                         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            Họ tên *
+                            Họ tên<RequiredMark />
                         </span>
                         <input
                             value={fullName}
                             onChange={(event) => setFullName(event.target.value)}
                             disabled={isSaving}
+                            required
                             placeholder="Nguyễn Văn A"
                             className={inputClassName}
                             autoFocus

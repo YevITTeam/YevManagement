@@ -7,6 +7,7 @@ import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import type { IpPrefixDto } from "@/modules/pc-management/types/ip.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface IpPrefixFormValues {
     prefix: string;
@@ -201,7 +202,7 @@ export default function IpPrefixForm({ isOpen, mode, initial, loading = false, o
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Dải mạng (Prefix)</span>
+                            <span className={fieldLabelClassName}>Dải mạng (Prefix)<RequiredMark /></span>
                             <input
                                 value={values.prefix}
                                 onChange={(event) => handleChange("prefix", event.target.value)}
@@ -214,7 +215,7 @@ export default function IpPrefixForm({ isOpen, mode, initial, loading = false, o
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Chi nhánh</span>
+                            <span className={fieldLabelClassName}>Chi nhánh<RequiredMark /></span>
                             <SearchableSelect
                                 options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
                                 value={values.branchId || ""}
@@ -227,7 +228,7 @@ export default function IpPrefixForm({ isOpen, mode, initial, loading = false, o
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Subnet mask</span>
+                            <span className={fieldLabelClassName}>Subnet mask<RequiredMark /></span>
                             <input
                                 value={values.subnetMask}
                                 onChange={(event) => handleChange("subnetMask", event.target.value)}
@@ -239,7 +240,7 @@ export default function IpPrefixForm({ isOpen, mode, initial, loading = false, o
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Gateway</span>
+                            <span className={fieldLabelClassName}>Gateway<RequiredMark /></span>
                             <input
                                 value={values.gateway}
                                 onChange={(event) => handleChange("gateway", event.target.value)}
@@ -253,7 +254,7 @@ export default function IpPrefixForm({ isOpen, mode, initial, loading = false, o
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
-                            <span className={fieldLabelClassName}>DNS ưu tiên</span>
+                            <span className={fieldLabelClassName}>DNS ưu tiên<RequiredMark /></span>
                             <input
                                 value={values.preferredDns}
                                 onChange={(event) => handleChange("preferredDns", event.target.value)}
@@ -265,7 +266,7 @@ export default function IpPrefixForm({ isOpen, mode, initial, loading = false, o
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>DNS thay thế</span>
+                            <span className={fieldLabelClassName}>DNS thay thế<RequiredMark /></span>
                             <input
                                 value={values.alternateDns}
                                 onChange={(event) => handleChange("alternateDns", event.target.value)}

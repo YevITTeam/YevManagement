@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Save, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Save, Search } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import { PermissionApi } from "@/modules/auth/api/permission.api";
@@ -15,6 +15,9 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 // Override giá trị đang chọn cho 1 permission trên UI (chưa lưu).
 // "inherit": không override, theo Role. "grant": cấp thêm riêng. "deny": thu hồi riêng.
 type OverrideChoice = "inherit" | "grant" | "deny";
+
+// get-all-users-with-roles trả toàn bộ user — phân trang client-side cho danh sách bên trái.
+const USERS_PAGE_SIZE = 10;
 
 export default function UserPermissionOverrideManager() {
     const { user: currentUser } = useAuth();
@@ -35,6 +38,11 @@ export default function UserPermissionOverrideManager() {
     const [autoGrantedIds, setAutoGrantedIds] = useState<Set<number>>(new Set());
     // Lựa chọn override đang chỉnh trên UI (chưa lưu) — chỉ gồm override THỦ CÔNG.
     const [choices, setChoices] = useState<Map<number, OverrideChoice>>(new Map());
+
+    // Cây quyền gộp theo Module > Entity, mặc định đóng hết — mirror RolePermissionManager.tsx, tránh
+    // hiển thị phẳng toàn bộ hàng trăm permission gây rối (cùng lý do đã sửa ở màn Phân quyền theo vai trò).
+    const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
+    const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
 
     const [isSaving, setIsSaving] = useState(false);
 
@@ -111,6 +119,21 @@ export default function UserPermissionOverrideManager() {
         );
     }, [users, userSearchTerm]);
 
+    const [userPageIndex, setUserPageIndex] = useState(1);
+    // Tìm kiếm đổi → về trang 1 (snapshot so sánh ngay trong render, không dùng effect — AGENTS.md §4.5.3).
+    const [prevUserSearchTerm, setPrevUserSearchTerm] = useState(userSearchTerm);
+    if (prevUserSearchTerm !== userSearchTerm) {
+        setPrevUserSearchTerm(userSearchTerm);
+        setUserPageIndex(1);
+    }
+
+    const userTotalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PAGE_SIZE));
+    const safeUserPageIndex = Math.min(userPageIndex, userTotalPages);
+    const paginatedUsers = filteredUsers.slice(
+        (safeUserPageIndex - 1) * USERS_PAGE_SIZE,
+        safeUserPageIndex * USERS_PAGE_SIZE
+    );
+
     const setChoice = (permissionId: number, choice: OverrideChoice) => {
         setChoices((prev) => {
             const next = new Map(prev);
@@ -118,6 +141,33 @@ export default function UserPermissionOverrideManager() {
             else next.set(permissionId, choice);
             return next;
         });
+    };
+
+    const toggleModuleExpand = (module: string) => {
+        setExpandedModules((prev) => {
+            const next = new Set(prev);
+            if (next.has(module)) next.delete(module);
+            else next.add(module);
+            return next;
+        });
+    };
+
+    const toggleEntityExpand = (entityKey: string) => {
+        setExpandedEntities((prev) => {
+            const next = new Set(prev);
+            if (next.has(entityKey)) next.delete(entityKey);
+            else next.add(entityKey);
+            return next;
+        });
+    };
+
+    // Hiệu lực hiện tại (Role/Chức vụ tự cấp, trừ khi bị override tay) — dùng để đếm số quyền "đang có"
+    // trong tiêu đề Module/Entity lúc đang thu gọn, cùng công thức effectiveHasAccess trong vòng lặp render.
+    const isPermissionEffectivelyGranted = (permissionId: number) => {
+        const choice = choices.get(permissionId) ?? "inherit";
+        if (choice === "grant") return true;
+        if (choice === "deny") return false;
+        return roleBaselineIds.has(permissionId) || autoGrantedIds.has(permissionId);
     };
 
     const handleSave = async () => {
@@ -186,11 +236,11 @@ export default function UserPermissionOverrideManager() {
                                 />
                             </div>
                         </div>
-                        <div className="max-h-[60vh] divide-y divide-[#f1f5f9] overflow-y-auto">
-                            {filteredUsers.length === 0 ? (
+                        <div className="divide-y divide-[#f1f5f9]">
+                            {paginatedUsers.length === 0 ? (
                                 <div className="px-4 py-6 text-center text-sm text-[#5e3f3a]">Không tìm thấy.</div>
                             ) : (
-                                filteredUsers.map((user) => (
+                                paginatedUsers.map((user) => (
                                     <button
                                         key={user.id}
                                         type="button"
@@ -201,11 +251,31 @@ export default function UserPermissionOverrideManager() {
                                                 : "text-[#191c1e] hover:bg-[#f8fafc]"
                                         }`}
                                     >
-                                        <div>{user.fullName || user.userName}</div>
-                                        <div className="text-xs font-normal text-[#5e3f3a]">{user.userName}</div>
+                                        {user.fullName || user.userName}
                                     </button>
                                 ))
                             )}
+                        </div>
+                        <div className="flex items-center justify-between border-t border-[#e0e3e5] px-3 py-2">
+                            <button
+                                type="button"
+                                className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-1.5 text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={safeUserPageIndex <= 1}
+                                onClick={() => setUserPageIndex(Math.max(1, safeUserPageIndex - 1))}
+                            >
+                                <ChevronLeft className="h-3.5 w-3.5" />
+                            </button>
+                            <div className="text-xs font-semibold text-[#191c1e]">
+                                {safeUserPageIndex}/{userTotalPages}
+                            </div>
+                            <button
+                                type="button"
+                                className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-1.5 text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={safeUserPageIndex >= userTotalPages}
+                                onClick={() => setUserPageIndex(Math.min(userTotalPages, safeUserPageIndex + 1))}
+                            >
+                                <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
                         </div>
                     </section>
 
@@ -238,16 +308,68 @@ export default function UserPermissionOverrideManager() {
                             <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">Đang tải quyền...</div>
                         ) : (
                             <div className="max-h-[60vh] divide-y divide-[#f1f5f9] overflow-y-auto">
-                                {moduleGroups.map((moduleGroup) => (
+                                {moduleGroups.map((moduleGroup) => {
+                                    const modulePermissions = moduleGroup.entities.flatMap((e) => e.permissions);
+                                    const moduleGrantedCount = modulePermissions.filter((p) => isPermissionEffectivelyGranted(p.id)).length;
+                                    const isModuleExpanded = expandedModules.has(moduleGroup.module);
+                                    return (
                                     <div key={moduleGroup.module} className="px-4 py-3">
-                                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                            {moduleGroup.module}
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleModuleExpand(moduleGroup.module)}
+                                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                aria-label={isModuleExpanded ? "Thu gọn" : "Mở rộng"}
+                                            >
+                                                {isModuleExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleModuleExpand(moduleGroup.module)}
+                                                className="flex flex-1 cursor-pointer items-center gap-2 text-left text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]"
+                                            >
+                                                {moduleGroup.module}
+                                                <span className="font-normal normal-case tracking-normal text-[#8a8f94]">
+                                                    ({moduleGrantedCount}/{modulePermissions.length})
+                                                </span>
+                                            </button>
                                         </div>
-                                        <div className="space-y-3 pl-2">
-                                            {moduleGroup.entities.map((entityGroup) => (
+                                        {isModuleExpanded && (
+                                        <div className="mt-2 space-y-3 pl-6">
+                                            {moduleGroup.entities.map((entityGroup) => {
+                                                const entityGrantedCount = entityGroup.permissions.filter((p) =>
+                                                    isPermissionEffectivelyGranted(p.id)
+                                                ).length;
+                                                const entityKey = `${moduleGroup.module}::${entityGroup.entity}`;
+                                                const isEntityExpanded = expandedEntities.has(entityKey);
+                                                return (
                                                 <div key={entityGroup.entity}>
-                                                    <div className="mb-1 text-xs font-semibold text-[#191c1e]">{entityGroup.entity}</div>
-                                                    <div className="space-y-1.5">
+                                                    <div className="mb-1 flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleEntityExpand(entityKey)}
+                                                            className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                            aria-label={isEntityExpanded ? "Thu gọn" : "Mở rộng"}
+                                                        >
+                                                            {isEntityExpanded ? (
+                                                                <ChevronDown className="h-3.5 w-3.5" />
+                                                            ) : (
+                                                                <ChevronRight className="h-3.5 w-3.5" />
+                                                            )}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleEntityExpand(entityKey)}
+                                                            className="flex flex-1 cursor-pointer items-center gap-2 text-left text-xs font-semibold text-[#191c1e]"
+                                                        >
+                                                            {entityGroup.entity}
+                                                            <span className="font-normal text-[#8a8f94]">
+                                                                ({entityGrantedCount}/{entityGroup.permissions.length})
+                                                            </span>
+                                                        </button>
+                                                    </div>
+                                                    {isEntityExpanded && (
+                                                    <div className="space-y-1.5 pl-6">
                                                         {entityGroup.permissions.map((permission) => {
                                                             const choice = choices.get(permission.id) ?? "inherit";
                                                             const roleHasAccess = roleBaselineIds.has(permission.id);
@@ -316,11 +438,15 @@ export default function UserPermissionOverrideManager() {
                                                             );
                                                         })}
                                                     </div>
+                                                    )}
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
+                                        )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </section>

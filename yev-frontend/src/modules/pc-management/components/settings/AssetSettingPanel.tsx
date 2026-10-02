@@ -9,6 +9,8 @@ import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { RequiredMark } from "@/components/ui/RequiredMark";
+import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]";
 const fieldClassName =
@@ -58,6 +60,12 @@ export default function AssetSettingPanel() {
         }
     };
 
+    const branchOptions: SelectOption[] = branches.map((branch) => ({
+        value: branch.id,
+        label: branch.branchName,
+        searchText: branch.branchName.toLowerCase(),
+    }));
+
     return (
         <div className="space-y-4">
             <div>
@@ -78,7 +86,7 @@ export default function AssetSettingPanel() {
                 ) : (
                     <form onSubmit={handleSubmit} className="mt-6 space-y-6">
                         <label className="block w-fit">
-                            <span className={fieldLabelClassName}>Số tháng giữa 2 lần tự động xóa</span>
+                            <span className={fieldLabelClassName}>Số tháng giữa 2 lần tự động xóa<RequiredMark /></span>
                             <input
                                 type="number"
                                 min={1}
@@ -92,19 +100,16 @@ export default function AssetSettingPanel() {
                         </label>
 
                         <div>
-                            <label className="block w-fit">
+                            <label className="block w-64">
                                 <span className={fieldLabelClassName}>Chi nhánh áp dụng &quot;Kiểm tra network&quot;</span>
-                                <select
+                                <SearchableSelect
+                                    options={branchOptions}
                                     value={serverCheckBranchId ?? ""}
-                                    onChange={(event) => setServerCheckBranchId(event.target.value ? Number(event.target.value) : null)}
+                                    onChange={(v) => setServerCheckBranchId(v === "" ? null : v)}
+                                    placeholder="Tất cả chi nhánh"
                                     disabled={isSaving}
-                                    className={`${fieldClassName} w-64`}
-                                >
-                                    <option value="">Tất cả chi nhánh</option>
-                                    {branches.map((branch) => (
-                                        <option key={branch.id} value={branch.id}>{branch.branchName}</option>
-                                    ))}
-                                </select>
+                                    triggerClassName={`${fieldClassName} w-64`}
+                                />
                             </label>
                             <p className="mt-1.5 max-w-md text-xs text-[#8a8f94]">
                                 Nút &quot;Kiểm tra network&quot; chỉ ping IP của thiết bị Server/Network/UPS thuộc chi nhánh

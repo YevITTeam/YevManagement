@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 
 const inputClassName =
@@ -31,24 +32,77 @@ interface SearchableSelectProps {
     triggerClassName?: string;
 }
 
+interface PanelPosition {
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+}
+
 export function SearchableSelect({ options, value, onChange, placeholder, disabled, triggerClassName }: SearchableSelectProps) {
     const [query, setQuery] = useState("");
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const listboxId = useId();
+    const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
 
-    // Đóng khi click ra ngoài
+    // Tính vị trí panel theo toạ độ thật của trigger trên viewport (dùng cho position: fixed) — gọi
+    // trong `open()` lúc click, KHÔNG trong effect (setState đồng bộ trong effect bị React Compiler
+    // cấm, xem AGENTS.md §4.5). Tự tính chiều cao còn lại theo viewport và lật lên trên nếu khoảng
+    // trống phía dưới quá hẹp, giống combobox chuẩn.
+    function computePosition(): PanelPosition | null {
+        const trigger = containerRef.current;
+        if (!trigger) return null;
+        const rect = trigger.getBoundingClientRect();
+        const margin = 8;
+        const minPanelHeight = 160;
+        const spaceBelow = window.innerHeight - rect.bottom - margin;
+        const spaceAbove = rect.top - margin;
+        const openUp = spaceBelow < minPanelHeight && spaceAbove > spaceBelow;
+        const maxHeight = Math.min(360, Math.max(minPanelHeight, openUp ? spaceAbove : spaceBelow));
+        const width = Math.max(rect.width, 240);
+        const left = Math.min(rect.left, window.innerWidth - width - margin);
+        return {
+            top: openUp ? rect.top - maxHeight - 4 : rect.bottom + 4,
+            left: Math.max(margin, left),
+            width,
+            maxHeight,
+        };
+    }
+
+    // Đóng khi click ra ngoài / cuộn trang / đổi cỡ cửa sổ — panel đã portal ra <body> + position: fixed
+    // theo toạ độ tính lúc mở, nên cuộn/resize thì đóng luôn thay vì định vị lại (giống RowActionsMenu.tsx,
+    // cùng pattern menu "3 chấm" dùng portal). Effect chỉ gắn khi đang mở, setState nằm trong callback của
+    // sự kiện DOM — không phải gọi đồng bộ trong thân effect.
     useEffect(() => {
+        if (!isOpen) return;
         function handleOutside(e: MouseEvent) {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-                setIsOpen(false);
-                setQuery("");
-            }
+            const target = e.target as Node;
+            if (containerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+            close();
+        }
+        // Scroll gắn ở capture phase trên window nên bắt được CẢ sự kiện cuộn bên trong chính <ul> của
+        // panel (dropdown) — phải loại trừ, không thì cuộn danh sách bên trong cũng bị coi là "cuộn
+        // trang" và tự đóng ngay lập tức.
+        function handleScroll(e: Event) {
+            const target = e.target as Node;
+            if (panelRef.current?.contains(target)) return;
+            close();
+        }
+        function handleResize() {
+            close();
         }
         document.addEventListener("mousedown", handleOutside);
-        return () => document.removeEventListener("mousedown", handleOutside);
-    }, []);
+        window.addEventListener("scroll", handleScroll, true);
+        window.addEventListener("resize", handleResize);
+        return () => {
+            document.removeEventListener("mousedown", handleOutside);
+            window.removeEventListener("scroll", handleScroll, true);
+            window.removeEventListener("resize", handleResize);
+        };
+    }, [isOpen]);
 
     const selectedLabel = options.find((o) => o.value === value)?.label ?? "";
 
@@ -59,16 +113,22 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
 
     function open() {
         if (disabled) return;
+        setPanelPosition(computePosition());
         setIsOpen(true);
         setQuery("");
         // Focus input sau khi render
         setTimeout(() => inputRef.current?.focus(), 0);
     }
 
-    function selectOption(v: number | "") {
-        onChange(v);
+    function close() {
         setIsOpen(false);
         setQuery("");
+        setPanelPosition(null);
+    }
+
+    function selectOption(v: number | "") {
+        onChange(v);
+        close();
     }
 
     return (
@@ -93,65 +153,80 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
                 />
             </div>
 
-            {/* Dropdown */}
-            {isOpen && (
-                <div className="absolute z-50 mt-1 w-full min-w-[240px] overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-lg">
-                    {/* Ô tìm kiếm */}
-                    <div className="border-b border-[#f1f5f9] p-2">
-                        <input
-                            ref={inputRef}
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Escape") { setIsOpen(false); setQuery(""); }
-                                if (e.key === "Enter" && filtered.length === 1) selectOption(filtered[0].value);
-                            }}
-                            placeholder="Tìm kiếm…"
-                            className="h-8 w-full rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
-                    </div>
-
-                    {/* Option: bỏ chọn */}
-                    {value !== "" && (
-                        <button
-                            onMouseDown={() => selectOption("")}
-                            className="flex w-full items-center gap-2 border-b border-[#f1f5f9] px-3 py-2 text-left text-xs text-[#8a8f94] transition-colors hover:bg-[#f8fafc]"
-                        >
-                            <X size={11} /> Bỏ chọn
-                        </button>
-                    )}
-
-                    {/* Danh sách */}
-                    <ul id={listboxId} role="listbox" className="max-h-52 overflow-y-auto">
-                        {filtered.length === 0 ? (
-                            <li className="px-3 py-4 text-center text-sm text-[#8a8f94]">
-                                Không tìm thấy kết quả
-                            </li>
-                        ) : (
-                            filtered.map((opt) => (
-                                <li
-                                    key={opt.value}
-                                    onMouseDown={() => selectOption(opt.value)}
-                                    className={`cursor-pointer px-3 py-2.5 text-sm transition-colors hover:bg-[#fff4f2] hover:text-[#e3000f] ${
-                                        opt.value === value
-                                            ? "bg-[#fff4f2] font-semibold text-[#e3000f]"
-                                            : "text-[#191c1e]"
-                                    }`}
-                                >
-                                    {opt.label}
-                                </li>
-                            ))
-                        )}
-                    </ul>
-
-                    {/* Đếm kết quả khi đang lọc */}
-                    {query.trim() !== "" && (
-                        <div className="border-t border-[#f1f5f9] px-3 py-1.5 text-right text-xs text-[#8a8f94]">
-                            {filtered.length} kết quả
+            {/* Dropdown — portal ra <body>, position: fixed theo panelPosition đã tính lúc mở (computePosition)
+                nên không bị modal cha cắt mất dù trigger nằm sát đáy dialog. */}
+            {isOpen &&
+                panelPosition &&
+                typeof document !== "undefined" &&
+                createPortal(
+                    <div
+                        ref={panelRef}
+                        style={{
+                            position: "fixed",
+                            top: panelPosition.top,
+                            left: panelPosition.left,
+                            width: panelPosition.width,
+                            maxHeight: panelPosition.maxHeight,
+                        }}
+                        className="z-[100] flex flex-col overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-lg"
+                    >
+                        {/* Ô tìm kiếm */}
+                        <div className="shrink-0 border-b border-[#f1f5f9] p-2">
+                            <input
+                                ref={inputRef}
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Escape") close();
+                                    if (e.key === "Enter" && filtered.length === 1) selectOption(filtered[0].value);
+                                }}
+                                placeholder="Tìm kiếm…"
+                                className="h-8 w-full rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            />
                         </div>
-                    )}
-                </div>
-            )}
+
+                        {/* Option: bỏ chọn */}
+                        {value !== "" && (
+                            <button
+                                onMouseDown={() => selectOption("")}
+                                className="flex w-full shrink-0 items-center gap-2 border-b border-[#f1f5f9] px-3 py-2 text-left text-xs text-[#8a8f94] transition-colors hover:bg-[#f8fafc]"
+                            >
+                                <X size={11} /> Bỏ chọn
+                            </button>
+                        )}
+
+                        {/* Danh sách — chiếm hết phần còn lại trong panelPosition.maxHeight, tự cuộn riêng */}
+                        <ul id={listboxId} role="listbox" className="flex-1 overflow-y-auto">
+                            {filtered.length === 0 ? (
+                                <li className="px-3 py-4 text-center text-sm text-[#8a8f94]">
+                                    Không tìm thấy kết quả
+                                </li>
+                            ) : (
+                                filtered.map((opt) => (
+                                    <li
+                                        key={opt.value}
+                                        onMouseDown={() => selectOption(opt.value)}
+                                        className={`cursor-pointer px-3 py-2.5 text-sm transition-colors hover:bg-[#fff4f2] hover:text-[#e3000f] ${
+                                            opt.value === value
+                                                ? "bg-[#fff4f2] font-semibold text-[#e3000f]"
+                                                : "text-[#191c1e]"
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </li>
+                                ))
+                            )}
+                        </ul>
+
+                        {/* Đếm kết quả khi đang lọc */}
+                        {query.trim() !== "" && (
+                            <div className="shrink-0 border-t border-[#f1f5f9] px-3 py-1.5 text-right text-xs text-[#8a8f94]">
+                                {filtered.length} kết quả
+                            </div>
+                        )}
+                    </div>,
+                    document.body
+                )}
         </div>
     );
 }

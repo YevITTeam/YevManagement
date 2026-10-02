@@ -102,7 +102,7 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="fixed inset-0 bg-black/40" onClick={handleClose} />
-            <div role="dialog" aria-modal="true" className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
+            <div role="dialog" aria-modal="true" className="z-60 mx-4 w-full max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 className="text-lg font-semibold text-[#191c1e]">
                         {t("editDialogTitle")} — {item.fullName} ({item.employeeCode})
@@ -117,40 +117,41 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                        <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("fieldTeam")}</span>
+                            <SearchableSelect
+                                options={toOptions(teamOptions)}
+                                value={teamId}
+                                onChange={handleSelectTeam}
+                                placeholder={t("filterTeamPlaceholder")}
+                                disabled={isSaving}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("fieldTeam")}</span>
-                        <SearchableSelect
-                            options={toOptions(teamOptions)}
-                            value={teamId}
-                            onChange={handleSelectTeam}
-                            placeholder={t("filterTeamPlaceholder")}
-                            disabled={isSaving}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("fieldLine")}</span>
+                            <SearchableSelect
+                                options={toOptions(lineOptions)}
+                                value={productionLineId}
+                                onChange={handleSelectLine}
+                                placeholder={t("filterBlockPlaceholder")}
+                                disabled={isSaving}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("fieldLine")}</span>
-                        <SearchableSelect
-                            options={toOptions(lineOptions)}
-                            value={productionLineId}
-                            onChange={handleSelectLine}
-                            placeholder={t("filterBlockPlaceholder")}
-                            disabled={isSaving}
-                        />
-                    </label>
-
-                    <label className="block">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("fieldShiftTeam")}</span>
-                        <SearchableSelect
-                            options={toOptions(shiftTeamOptions)}
-                            value={shiftTeamId}
-                            onChange={setShiftTeamId}
-                            placeholder={t("filterShiftTeamPlaceholder")}
-                            disabled={isSaving}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("fieldShiftTeam")}</span>
+                            <SearchableSelect
+                                options={toOptions(shiftTeamOptions)}
+                                value={shiftTeamId}
+                                onChange={setShiftTeamId}
+                                placeholder={t("filterShiftTeamPlaceholder")}
+                                disabled={isSaving}
+                            />
+                        </label>
+                    </div>
 
                     <label className="flex cursor-pointer items-center gap-2">
                         <input

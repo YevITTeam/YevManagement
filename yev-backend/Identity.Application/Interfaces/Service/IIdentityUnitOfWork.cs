@@ -19,5 +19,9 @@ namespace Identity.Application.Interfaces.Service
         IUserPermissionRepository UserPermissions { get; }
 
         ITestLoginAccountRepository TestLoginAccounts { get; }
+
+        ILoginQrCodeRepository LoginQrCodes { get; }
+
+        ILoginQrLogRepository LoginQrLogs { get; }
     }
 }

@@ -94,6 +94,27 @@ Authorization: Bearer <token>
   hệ thống gán quyền (role **"Kiểm kê thiết bị"** đã có sẵn `Asset.Inventory.Scan`) chứ không phải lỗi
   tích hợp.
 
+### 3b. Đăng nhập bằng quét mã QR (tuỳ chọn)
+
+Admin có thể in QR đăng nhập cho từng tài khoản (trang quản trị → Phân quyền người dùng → nút **QR**).
+App quét QR rồi gọi:
+
+```
+POST /api/Auth/qr-login
+Content-Type: application/json
+
+{ "code": "<toàn bộ chuỗi quét được, dạng YEVQR1:xxxxxxxx>" }
+```
+
+- **Không cần token.** Response thành công `data` **y hệt `/Auth/login`** (`{ user, token }`) → lưu token và
+  dùng `Bearer`, gia hạn bằng `GET /Auth/me` như mục 3.
+- QR **không chứa id người dùng**, chỉ là mã ngẫu nhiên; mã **dài hạn, dùng nhiều lần**, không tự hết hạn.
+  Chỉ mất hiệu lực khi Admin tạo mã mới hoặc thu hồi. Coi mã như mật khẩu: nếu muốn "nhớ đăng nhập" thì lưu
+  token/mã bằng `flutter_secure_storage`, không ghi log mã ra console.
+- Mã sai hoặc đã bị thu hồi → HTTP 400, `isSuccess:false`, message "Mã QR không hợp lệ hoặc đã bị thu hồi."
+  → báo lỗi và cho quét lại hoặc đăng nhập bằng mật khẩu.
+- Quyền (permission) của tài khoản vẫn do Admin gán như thường; đăng nhập QR không cấp thêm quyền nào.
+
 ## 4. Envelope response chung
 
 **Mọi** response (kể cả lỗi) đều bọc theo dạng:

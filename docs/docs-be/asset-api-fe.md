@@ -566,7 +566,7 @@ Item `Pending` không được liệt kê → server tự chuyển `Missing`, no
 Role **"Kiểm kê thiết bị"** chứa `Asset.Inventory.Scan`. Xuất PDF (màn báo cáo web) dựng ở FE bằng `jspdf`, không qua BE.
 
 ## 7f. AppRelease — `/api/AppRelease` (2026-09-23, quản lý bản cập nhật app Flutter "YEV Scan")
-Quản trị metadata bản phát hành app mobile nội bộ — chi tiết nghiệp vụ: [asset-module.md §1.23](asset-module.md). `apkUrl` chỉ là **string** — có thể là link ngoài dán tay (Drive...) hoặc link nội bộ do `POST /upload` sinh ra, FE/BE không phân biệt 2 loại. **Hợp đồng dành cho đội mobile (app Flutter "YEV Scan"): xem [docs/AppRelease-API-Flutter-Guide.md](../AppRelease-API-Flutter-Guide.md)** — chỉ cần `GET /latest` + tải file qua `apkUrl` trả về, không cần biết endpoint quản trị bên dưới.
+Quản trị metadata bản phát hành app mobile nội bộ — chi tiết nghiệp vụ: [asset-module.md §1.23](asset-module.md). `apkUrl` chỉ là **string** — có thể là link ngoài dán tay (Drive...) hoặc link nội bộ do `POST /upload` sinh ra, FE/BE không phân biệt 2 loại. App mobile "YEV Scan" chỉ dùng `GET /latest` + tải file qua `apkUrl` trả về, không cần biết endpoint quản trị bên dưới.
 
 - **`GET /latest`** — **`[AllowAnonymous]`, không cần token** (app gọi để kiểm tra cập nhật trước khi đăng nhập). → `AppReleaseDto | null` (`null` = chưa có bản nào). "Mới nhất" = `!isDeleted`, `versionCode` lớn nhất.
 ```jsonc

@@ -17,6 +17,7 @@ import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
 import type { DeviceEmailInputDto, DeviceGetDto, DeviceIpAddressDto } from "@/modules/pc-management/types/device.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface DeviceFormValues {
     deviceCode: string;
@@ -283,7 +284,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                 <form onSubmit={handleSubmit} className="space-y-4 [@media(max-height:820px)]:space-y-3">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 [@media(max-height:820px)]:gap-3">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Mã thiết bị</span>
+                            <span className={fieldLabelClassName}>Mã thiết bị<RequiredMark /></span>
                             <input
                                 value={values.deviceCode}
                                 onChange={(event) => handleChange("deviceCode", event.target.value)}
@@ -296,7 +297,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Tên thiết bị</span>
+                            <span className={fieldLabelClassName}>Tên thiết bị<RequiredMark /></span>
                             <input
                                 value={values.deviceName}
                                 onChange={(event) => handleChange("deviceName", event.target.value)}
@@ -308,7 +309,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Loại thiết bị</span>
+                            <span className={fieldLabelClassName}>Loại thiết bị<RequiredMark /></span>
                             <SearchableSelect
                                 options={deviceTypes.map((type) => ({ value: type.id, label: type.typeName, searchText: type.typeName.toLowerCase() }))}
                                 value={values.deviceTypeId || ""}
@@ -319,7 +320,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Nhà cung cấp</span>
+                            <span className={fieldLabelClassName}>Nhà cung cấp<RequiredMark /></span>
                             <SearchableSelect
                                 options={suppliers.map((s) => ({ value: s.id, label: s.supplierName, searchText: s.supplierName.toLowerCase() }))}
                                 value={values.supplierId || ""}
@@ -330,7 +331,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Chi nhánh</span>
+                            <span className={fieldLabelClassName}>Chi nhánh<RequiredMark /></span>
                             <SearchableSelect
                                 options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
                                 value={values.branchId || ""}
@@ -390,7 +391,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Ngày mua</span>
+                            <span className={fieldLabelClassName}>Ngày mua<RequiredMark /></span>
                             <input
                                 type="date"
                                 value={values.purchaseDate}
@@ -402,7 +403,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Thời gian khấu hao (tháng)</span>
+                            <span className={fieldLabelClassName}>Thời gian khấu hao (tháng)<RequiredMark /></span>
                             <input
                                 type="number"
                                 min={1}
@@ -605,7 +606,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                     </div>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Ghi chú</span>
+                        <span className={fieldLabelClassName}>Ghi chú<RequiredMark /></span>
                         <textarea
                             value={values.note}
                             onChange={(event) => handleChange("note", event.target.value)}

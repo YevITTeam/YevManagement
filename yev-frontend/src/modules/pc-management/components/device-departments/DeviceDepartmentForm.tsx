@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface DeviceDepartmentFormValues {
     departmentCode: string;
@@ -73,7 +74,7 @@ export default function DeviceDepartmentForm({ isOpen, mode, initial, loading = 
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
                         <input
                             value={values.departmentCode}
                             onChange={(event) => handleChange("departmentCode", event.target.value)}
@@ -86,7 +87,7 @@ export default function DeviceDepartmentForm({ isOpen, mode, initial, loading = 
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldName")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldName")}<RequiredMark /></span>
                         <input
                             value={values.departmentName}
                             onChange={(event) => handleChange("departmentName", event.target.value)}

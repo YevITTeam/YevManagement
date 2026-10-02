@@ -43,10 +43,9 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form b
 > `huong-dan-su-dung-attendance.md` đã xoá vì lạc hậu so với UI). Đừng viết lại loại tài liệu đó vào
 > `docs/` nếu không được yêu cầu.
 >
-> 4 file `docs/*-Flutter-Guide.md` là **tài liệu bàn giao cho đội app Flutter "YEV Scan"** (cố ý tự
-> chứa, trùng lặp với hợp đồng BE là có chủ đích): `ServerCheck-API`, `ServerCheck-Flutter-Design`,
-> `Inventory-API`, `AppRelease-API`. **Sửa API của 3 nghiệp vụ đó (`asset-api-fe.md §7d/§7e/§7f`) thì
-> phải cập nhật file Flutter tương ứng**, nếu không app sẽ tích hợp theo hợp đồng cũ.
+> 4 file `docs/*-Flutter-Guide.md` (bàn giao cho đội app Flutter "YEV Scan") đã xoá 2026-10-02 — đội
+> mobile tích hợp xong, không còn bên ngoài nào cần bản tự chứa. Hợp đồng duy nhất của 3 nghiệp vụ
+> ServerCheck/Inventory/AppRelease giờ là `asset-api-fe.md §7d/§7e/§7f` — đừng dựng lại bản sao.
 
 ### Bảng định tuyến task → doc phải đọc TRƯỚC khi code
 
@@ -64,7 +63,7 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form b
 | Đa ngôn ngữ (vi/ja) | §4.6 dưới đây (không còn doc riêng) |
 | In PDF phiếu tăng ca | [docs/docs-be/attendance-otform-pdf-mapping.md](docs/docs-be/attendance-otform-pdf-mapping.md) |
 | AI Chat tra cứu Asset (tool-calling, read-only) | kiến trúc/code + blocker hạ tầng: `asset-module.md §1.18` — hợp đồng FE: `asset-api-fe.md §7c` |
-| AI Chat lập đơn tăng ca Attendance (tool-calling, có tool ghi) | [docs/docs-be/attendance-aichat-be-huong-dan.md](docs/docs-be/attendance-aichat-be-huong-dan.md) — hợp đồng thật ở `attendance-api-fe.md §10` |
+| AI Chat lập đơn tăng ca Attendance (tool-calling, có tool ghi) | kiến trúc/code: `attendance-module.md §AttendanceAiChat` — hợp đồng FE: `attendance-api-fe.md §10` |
 
 > 3 file `*-api-fe.md` (Asset / Identity / Attendance) là **hợp đồng dùng chung FE↔BE**, chỉ tồn tại
 > 1 bản duy nhất trong `docs/docs-be/`. Đây là nguồn chân lý về tên field & shape — đừng đoán, đừng chép
@@ -268,7 +267,8 @@ src/
 ├─ navigation.ts            # Link / useRouter / usePathname của next-intl — DÙNG CÁI NÀY, không dùng next/link
 ├─ proxy.ts                 # middleware next-intl (chỉ có tác dụng khi dev)
 ├─ i18n/{routing,request}.ts
-├─ components/              # UI dùng chung: ui/(Button, Card, Input, Table), common/ConfirmDialog, LanguageSwitcher
+├─ components/              # UI dùng chung: ui/(Button, Card, Input, Table, SearchableSelect, TimePicker24h),
+│  #                          common/ConfirmDialog, LanguageSwitcher
 ├─ lib/
 │  ├─ client.ts             # fetch wrapper api.get/post/put/delete + Bearer token + auto re-login khi 401
 │  │                        # + postStream() (NDJSON cho AI Chat) + getForBlob()/postFormForBlob()

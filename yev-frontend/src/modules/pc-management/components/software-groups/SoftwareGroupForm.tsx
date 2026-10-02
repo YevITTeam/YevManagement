@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import type { SoftwareGroupDto } from "@/modules/pc-management/types/software-group.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface SoftwareGroupFormValues {
     groupCode: string;
@@ -70,7 +71,7 @@ export default function SoftwareGroupForm({ isOpen, mode, initial, loading = fal
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Mã nhóm phần mềm</span>
+                        <span className={fieldLabelClassName}>Mã nhóm phần mềm<RequiredMark /></span>
                         <input
                             value={values.groupCode}
                             onChange={(event) => handleChange("groupCode", event.target.value)}
@@ -83,7 +84,7 @@ export default function SoftwareGroupForm({ isOpen, mode, initial, loading = fal
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Tên nhóm phần mềm</span>
+                        <span className={fieldLabelClassName}>Tên nhóm phần mềm<RequiredMark /></span>
                         <input
                             value={values.groupName}
                             onChange={(event) => handleChange("groupName", event.target.value)}

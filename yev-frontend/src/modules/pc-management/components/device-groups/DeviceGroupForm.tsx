@@ -8,6 +8,7 @@ import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-d
 import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface DeviceGroupFormValues {
     departmentId: number;
@@ -94,9 +95,9 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldDepartment")}<RequiredMark /></span>
                         <SearchableSelect
                             options={departmentOptions}
                             value={values.departmentId || ""}
@@ -107,7 +108,7 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
                         <input
                             value={values.groupCode}
                             onChange={(event) => handleChange("groupCode", event.target.value)}
@@ -120,7 +121,7 @@ export default function DeviceGroupForm({ isOpen, mode, initial, loading = false
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldName")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldName")}<RequiredMark /></span>
                         <input
                             value={values.groupName}
                             onChange={(event) => handleChange("groupName", event.target.value)}

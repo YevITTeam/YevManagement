@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, Car, Check, Printer, RefreshCw, Undo2, UserMinus, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
@@ -28,6 +28,8 @@ import type {
     UpdateOtFormEmployeeTimeDto,
 } from "@/modules/attendance/types/ot-form.dto";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { RequiredMark } from "@/components/ui/RequiredMark";
+import TimePicker24h from "@/components/ui/TimePicker24h";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import SecondaryPasswordDialog from "@/modules/attendance/components/secondary-password/SecondaryPasswordDialog";
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
@@ -135,112 +137,6 @@ const compactFieldClassName = fieldClassName.replace("h-10", "h-9");
 // lấy màu nền của dòng (dòng nào cũng phải có nền đặc, xem zebra bên dưới) để che nội dung cuộn phía sau.
 const stickyActionCellClassName =
     "sticky right-0 z-10 bg-inherit px-2 py-2 align-middle text-center shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.15)]";
-
-// Kẹp về khoảng hợp lệ [0, max] CHỈ khi vượt mốc — giữ nguyên chuỗi số đã gõ trong mọi trường hợp còn
-// lại (không quy đổi qua Number rồi String lại, vì "05" → 5 → "5" sẽ tự ý xoá số 0 vừa gõ ngay trước
-// mắt người dùng). Không tự pad "0" khi còn đang gõ dở (vd đang gõ "1" định gõ tiếp "14") — chỉ pad lúc
-// rời khỏi ô, xem handleBlur.
-function clampDigits(raw: string, max: number): string {
-    const digits = raw.replace(/\D/g, "").slice(0, 2);
-    if (digits === "") return "";
-    return Number(digits) > max ? String(max) : digits;
-}
-
-// Input giờ/phút gõ trực tiếp bằng số (đổi từ 2 <select> ngày 2026-08-26, theo yêu cầu người dùng —
-// dropdown 24/60 lựa chọn quá bất tiện, dễ bấm nhầm mà không để ý, vd chọn nhầm giờ kết thúc khiến ca
-// OT vắt qua đêm dài bất thường mà không nhận ra ngay). Vẫn tự dựng thay <input type="time"> vì lý do
-// cũ: trình duyệt (đặc biệt Firefox) bỏ qua thuộc tính lang và hiển thị theo định dạng hệ điều hành
-// (có thể ra AM/PM) — tự dựng đảm bảo LUÔN nhập/hiển thị 24h bất kể trình duyệt/OS.
-function TimePicker24h({
-    value,
-    onChange,
-    disabled,
-    compact = false,
-}: {
-    value: string;
-    onChange: (value: string) => void;
-    disabled?: boolean;
-    // Bản nhỏ cho ô giờ trong bảng danh sách nhân viên (nhiều dòng, cần gọn).
-    compact?: boolean;
-}) {
-    const t = useTranslations("Attendance.CreateOtForm");
-    const minuteRef = useRef<HTMLInputElement>(null);
-    const [hour, minute] = value ? value.split(":") : ["", ""];
-
-    const commitHour = (nextHour: string) => onChange(`${nextHour}:${minute}`);
-    const commitMinute = (nextMinute: string) => onChange(`${hour}:${nextMinute}`);
-
-    // 1 khung viền chung cho cả "giờ : phút" (thay vì 2 ô rời có viền riêng) — gọn, giống 1 ô nhập thời gian
-    // thật; viền/vòng focus đổi theo cả khung (focus-within). Ô số không viền, nền trong suốt.
-    const segmentClassName = `bg-transparent text-center font-medium tabular-nums text-[#191c1e] outline-none placeholder:text-[#c7ccd1] disabled:cursor-not-allowed ${
-        compact ? "w-8 text-xs" : "w-10 text-sm"
-    }`;
-
-    return (
-        <div
-            className={`inline-flex items-center rounded-md border border-[#e0e3e5] bg-white transition focus-within:border-[#e3000f] focus-within:ring-2 focus-within:ring-[#ffe0e3] has-[:disabled]:bg-[#f8fafc] ${
-                compact ? "h-7 gap-0.5 px-1.5" : "h-9 gap-1 rounded-lg px-2.5"
-            }`}
-        >
-            <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={2}
-                value={hour}
-                onChange={(event) => {
-                    const next = clampDigits(event.target.value, 23);
-                    commitHour(next);
-                    // Gõ đủ 2 số giờ thì tự nhảy sang ô phút.
-                    if (next.length === 2 && event.target.value.length >= 2) minuteRef.current?.focus();
-                }}
-                // Read the DOM value, not the `hour` closure: auto-advance calls minuteRef.focus() inside onChange,
-                // which fires this blur BEFORE re-render — the stale closure ("1") would overwrite the typed "14".
-                onBlur={(event) => {
-                    const typed = event.currentTarget.value;
-                    if (typed !== "" && typed.length < 2) commitHour(typed.padStart(2, "0"));
-                }}
-                onFocus={(event) => event.target.select()}
-                // Enter = nhảy sang ô phút (và không submit form); gõ đè lên giá trị cũ nhờ select() khi focus.
-                onKeyDown={(event) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    minuteRef.current?.focus();
-                }}
-                disabled={disabled}
-                required
-                placeholder={t("hourPlaceholder")}
-                aria-label={t("hourPlaceholder")}
-                className={segmentClassName}
-            />
-            <span className="text-xs font-semibold text-[#8a8f94]">:</span>
-            <input
-                ref={minuteRef}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={2}
-                value={minute}
-                onChange={(event) => commitMinute(clampDigits(event.target.value, 59))}
-                onBlur={(event) => {
-                    const typed = event.currentTarget.value;
-                    if (typed !== "" && typed.length < 2) commitMinute(typed.padStart(2, "0"));
-                }}
-                onFocus={(event) => event.target.select()}
-                onKeyDown={(event) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    event.currentTarget.blur();
-                }}
-                disabled={disabled}
-                required
-                placeholder={t("minutePlaceholder")}
-                aria-label={t("minutePlaceholder")}
-                className={segmentClassName}
-            />
-        </div>
-    );
-}
 
 // Ô checkbox dạng chip có icon (thay checkbox+label phẳng) — viền/nền đổi màu khi chọn, cùng ngôn ngữ
 // hình ảnh (icon + badge xanh lá) với ProcessPartTile ở OtFormDetail.tsx/OtFormEmailConfirmPage.tsx.
@@ -1199,7 +1095,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     </div>
                     <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2">
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldDepartment")}<RequiredMark /></span>
                             <SearchableSelect
                                 options={visibleDepartments.map((d) => ({ value: d.id, label: d.label, searchText: d.label.toLowerCase() }))}
                                 value={departmentId ?? ""}
@@ -1215,7 +1111,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
                         {formMode === "group" && (
                             <label className="block">
-                                <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
+                                <span className={fieldLabelClassName}>{t("fieldGroup")}<RequiredMark /></span>
                                 <SearchableSelect
                                     options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
                                     value={groupId ?? ""}
@@ -1244,7 +1140,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         )}
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldDate")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldDate")}<RequiredMark /></span>
                             <input
                                 type="date"
                                 value={date}
@@ -1277,11 +1173,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <div className="block sm:col-span-2">
                             <div className="grid grid-cols-2 gap-3">
                                 <label className="block">
-                                    <span className={fieldLabelClassName}>{t("fieldStartTime")}</span>
+                                    <span className={fieldLabelClassName}>{t("fieldStartTime")}<RequiredMark /></span>
                                     <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting || isEditMode} />
                                 </label>
                                 <label className="block">
-                                    <span className={fieldLabelClassName}>{t("fieldEndTime")}</span>
+                                    <span className={fieldLabelClassName}>{t("fieldEndTime")}<RequiredMark /></span>
                                     <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting || isEditMode} />
                                 </label>
                             </div>
@@ -1294,7 +1190,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </div>
 
                         <label className="block sm:col-span-2">
-                            <span className={fieldLabelClassName}>{t("fieldReason")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldReason")}<RequiredMark /></span>
                             <SearchableSelect
                                 options={reasons.map((r) => ({ value: r.id, label: r.reasonNameVn, searchText: r.reasonNameVn.toLowerCase() }))}
                                 value={reasonId ?? ""}
@@ -1305,7 +1201,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </label>
 
                         <label className="block sm:col-span-2">
-                            <span className={fieldLabelClassName}>{t("fieldOtCase")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldOtCase")}<RequiredMark /></span>
                             <SearchableSelect
                                 options={otCases.map((otCase) => ({
                                     value: otCase.id,

@@ -9,7 +9,7 @@ using Attendance.Application.Interfaces.Service;
 namespace Attendance.Application.Services
 {
     // Implements the 6 read-only lookup tools + 1 write tool from
-    // docs/docs-be/attendance-aichat-be-huong-dan.md §5 by calling straight into the existing
+    // docs/docs-be/attendance-module.md §AttendanceAiChat by calling straight into the existing
     // Attendance Application services — no repository access of its own, no duplicated business rules.
     // The only write path (create_ot_form_draft) calls the exact same IOtFormService.CreateAsync the
     // manual "Tạo đơn tăng ca" screen uses, so every validation rule there (scope check, employee/group

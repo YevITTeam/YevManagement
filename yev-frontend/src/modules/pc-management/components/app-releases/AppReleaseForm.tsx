@@ -8,6 +8,7 @@ import type { AppReleaseDto } from "@/modules/pc-management/types/app-release.dt
 import { AppReleaseApi } from "@/modules/pc-management/api/app-release.api";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface AppReleaseFormValues {
     versionCode: number;
@@ -110,7 +111,7 @@ export default function AppReleaseForm({ isOpen, mode, initial, loading = false,
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldVersionCode")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldVersionCode")}<RequiredMark /></span>
                             <input
                                 type="number"
                                 value={values.versionCode}
@@ -123,7 +124,7 @@ export default function AppReleaseForm({ isOpen, mode, initial, loading = false,
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldVersionName")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldVersionName")}<RequiredMark /></span>
                             <input
                                 value={values.versionName}
                                 onChange={(event) => handleChange("versionName", event.target.value)}
@@ -136,7 +137,7 @@ export default function AppReleaseForm({ isOpen, mode, initial, loading = false,
                     </div>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldMinVersionCode")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldMinVersionCode")}<RequiredMark /></span>
                         <input
                             type="number"
                             value={values.minVersionCode}
@@ -148,7 +149,7 @@ export default function AppReleaseForm({ isOpen, mode, initial, loading = false,
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldApkUrl")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldApkUrl")}<RequiredMark /></span>
                         <input
                             value={values.apkUrl}
                             onChange={(event) => handleChange("apkUrl", event.target.value)}

@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Edit2, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Edit2, Pencil, Plus, QrCode, Search, Trash2 } from "lucide-react";
 import { AuthApi } from "@/modules/auth/api/auth.api";
-import type { UserDto, RoleDto } from "@/modules/auth/types/auth.dto";
+import { LoginQrApi } from "@/modules/auth/api/login-qr.api";
+import type { UserDto, RoleDto, LoginQrStatusDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleSelectModal from "./RoleSelectModal";
 import CreateUserDialog from "./CreateUserDialog";
 import EditUserDialog from "./EditUserDialog";
+import LoginQrDialog from "./LoginQrDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -17,6 +19,10 @@ interface Props {
     isOpen: boolean;
     onClose?: () => void;
 }
+
+// get-all-users-with-roles trả toàn bộ user (endpoint này còn dùng chung cho các dropdown chọn
+// nhân sự ở nơi khác nên không đổi sang phân trang BE) — phân trang client-side tại đây.
+const PAGE_SIZE = 15;
 
 export default function UserRoleModal({ isOpen, onClose }: Props) {
     const { user: currentUser } = useAuth();
@@ -32,6 +38,21 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [savingUserId, setSavingUserId] = useState<number | null>(null);
     const [deletingUser, setDeletingUser] = useState<UserDto | null>(null);
     const [isDeletingUser, setIsDeletingUser] = useState(false);
+    const [qrStatusByUser, setQrStatusByUser] = useState<Record<number, LoginQrStatusDto>>({});
+    const [qrUser, setQrUser] = useState<UserDto | null>(null);
+
+    // /api/LoginQr (tạo/thu hồi/xem nhật ký mã QR đăng nhập app YEV Scan) — 1 permission cho cả nhóm.
+    const canManageLoginQr = hasPermission(currentUser, "Identity.LoginQr.Manage");
+
+    const fetchQrStatuses = useCallback(async () => {
+        if (!canManageLoginQr) return;
+        try {
+            const active = await LoginQrApi.getActive();
+            setQrStatusByUser(Object.fromEntries(active.map((item) => [item.userId, item])));
+        } catch (error) {
+            console.error("Lỗi tải trạng thái mã QR:", error);
+        }
+    }, [canManageLoginQr]);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -51,13 +72,14 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                 initialRoleMap[user.id] = userRoleIds;
             });
             setSelectedRolesMap(initialRoleMap);
+            void fetchQrStatuses();
         } catch (error) {
             console.error("Lỗi tải dữ liệu:", error);
             toast.warn("Không thể tải dữ liệu. Vui lòng thử lại!");
         } finally {
             setIsLoading(false);
         }
-    }, [roleFilter]);
+    }, [roleFilter, fetchQrStatuses]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -86,6 +108,19 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
             );
         });
     }, [users, searchTerm]);
+
+    const [pageIndex, setPageIndex] = useState(1);
+    // Search/filter đổi → về trang 1 (snapshot so sánh ngay trong render, không dùng effect — AGENTS.md §4.5.3).
+    const filtersKey = `${searchTerm}|${roleFilter}`;
+    const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
+    if (prevFiltersKey !== filtersKey) {
+        setPrevFiltersKey(filtersKey);
+        setPageIndex(1);
+    }
+
+    const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+    const safePageIndex = Math.min(pageIndex, totalPages);
+    const paginatedUsers = filteredUsers.slice((safePageIndex - 1) * PAGE_SIZE, safePageIndex * PAGE_SIZE);
 
     const handleCheckboxChange = (userId: number, roleId: number, isChecked: boolean) => {
         setSelectedRolesMap((prev) => {
@@ -161,9 +196,9 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     {canCreateUser && (
                         <button
                             onClick={() => setIsCreateUserOpen(true)}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                         >
-                            + Tạo user
+                            <Plus className="h-4 w-4" /> Tạo user
                         </button>
                     )}
                     {onClose && (
@@ -212,16 +247,11 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                             </select>
                         </div>
                         <div className="text-sm font-medium text-[#5e3f3a]">
-                            Hiển thị {filteredUsers.length} bản ghi
+                            Hiển thị {paginatedUsers.length}/{filteredUsers.length} bản ghi (trang {safePageIndex}/{totalPages})
                         </div>
                     </div>
 
-                    {/* Danh sách dài (nhiều user) → cuộn RIÊNG trong khung này (Table Header sticky bên
-                        trên), không cuộn cả trang — khớp pattern TABLE_MAX_HEIGHT_PX ở DeviceList.tsx.
-                        max-h cố định bằng px (không phải vh/dvh) nên không tái phát bẫy "2 thanh cuộn
-                        chồng nhau" ở DESIGN_SYSTEM.md §3 (bẫy đó chỉ xảy ra khi 1 layout con tự khai lại
-                        chiều cao theo viewport). */}
-                    <div className="max-h-[640px] overflow-y-auto">
+                    <div>
                         {/* Table Header */}
                         <div className="sticky top-0 z-10 hidden border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a] md:grid md:grid-cols-[1.4fr_1.2fr_0.8fr]">
                             <div>Người dùng</div>
@@ -231,12 +261,12 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
 
                         {/* Table Body */}
                         <div className="divide-y divide-[#e0e3e5]">
-                            {filteredUsers.length === 0 ? (
+                            {paginatedUsers.length === 0 ? (
                                 <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">
                                     Không tìm thấy người dùng phù hợp.
                                 </div>
                             ) : (
-                                filteredUsers.map((user) => {
+                                paginatedUsers.map((user) => {
                                 const isSelf = currentUser?.userName === user.userName;
                                 const isDisabled = isSelf || !canUpdateUserRoles;
                                 const currentSelectedIds = selectedRolesMap[user.id] || [];
@@ -292,21 +322,33 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                         </div>
 
                                         <div className="flex items-center justify-end gap-3">
+                                            {canManageLoginQr && (
+                                                <button
+                                                    onClick={() => setQrUser(user)}
+                                                    title={qrStatusByUser[user.id] ? "Quản lý mã QR đăng nhập (đang có mã)" : "Tạo mã QR đăng nhập"}
+                                                    className={`flex cursor-pointer items-center gap-1.5 text-sm font-semibold transition hover:text-[#e3000f] ${
+                                                        qrStatusByUser[user.id] ? "text-[#e3000f]" : "text-[#191c1e]"
+                                                    }`}
+                                                >
+                                                    <QrCode className="h-3.5 w-3.5" />
+                                                    QR
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => setEditingUser(user)}
                                                 disabled={!canUpdateFullName}
                                                 title="Sửa họ tên hiển thị"
-                                                className="cursor-pointer text-sm font-semibold text-[#191c1e] transition hover:text-[#e3000f] disabled:cursor-not-allowed disabled:text-[#5e3f3a] disabled:opacity-60"
+                                                className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-[#191c1e] transition hover:text-[#e3000f] disabled:cursor-not-allowed disabled:text-[#5e3f3a] disabled:opacity-60"
                                             >
-                                                Sửa
+                                                <Pencil className="h-3.5 w-3.5" /> Sửa
                                             </button>
                                             <button
                                                 onClick={() => setDeletingUser(user)}
                                                 disabled={isSelf || !canDeleteUser}
                                                 title={isSelf ? "Không thể tự xoá chính mình" : "Xoá người dùng"}
-                                                className="cursor-pointer text-sm font-semibold text-[#930006] transition hover:text-[#e3000f] disabled:cursor-not-allowed disabled:text-[#5e3f3a] disabled:opacity-60"
+                                                className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-[#930006] transition hover:text-[#e3000f] disabled:cursor-not-allowed disabled:text-[#5e3f3a] disabled:opacity-60"
                                             >
-                                                Xoá
+                                                <Trash2 className="h-3.5 w-3.5" /> Xoá
                                             </button>
                                         </div>
                                     </div>
@@ -314,6 +356,28 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                             })
                             )}
                         </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#e0e3e5] px-4 py-2.5">
+                        <button
+                            type="button"
+                            className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={safePageIndex <= 1}
+                            onClick={() => setPageIndex(Math.max(1, safePageIndex - 1))}
+                        >
+                            <ChevronLeft className="h-3.5 w-3.5" /> Trang trước
+                        </button>
+                        <div className="text-xs font-semibold text-[#191c1e]">
+                            Trang {safePageIndex} / {totalPages}
+                        </div>
+                        <button
+                            type="button"
+                            className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-semibold text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={safePageIndex >= totalPages}
+                            onClick={() => setPageIndex(Math.min(totalPages, safePageIndex + 1))}
+                        >
+                            Trang sau <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
                     </div>
                 </section>
             )}
@@ -350,6 +414,14 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     setEditingUser(null);
                     void fetchData();
                 }}
+            />
+
+            <LoginQrDialog
+                isOpen={qrUser !== null}
+                user={qrUser}
+                status={qrUser ? (qrStatusByUser[qrUser.id] ?? null) : null}
+                onClose={() => setQrUser(null)}
+                onChanged={() => void fetchQrStatuses()}
             />
 
             <ConfirmDialog

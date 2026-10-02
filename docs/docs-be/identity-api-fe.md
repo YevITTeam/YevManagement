@@ -101,6 +101,16 @@ const res = await fetch("http://10.45.1.155:8081/api/Auth/login", {
 - FE nên giữ thêm nút gọi thẳng `windows-login` (Negotiate) làm lựa chọn phụ cho máy đã có SSO — đăng
   nhập 1 chạm không cần gõ mật khẩu, xem [identity-module.md §5.4](identity-module.md).
 
+## 2d. Đăng nhập bằng mã QR — `POST /api/Auth/qr-login` (app Flutter YEV Scan)
+`[AllowAnonymous]`, body `{ "code": "<nội dung QR quét được>" }` (cả chuỗi `YEVQR1:...`, có hay không tiền tố
+đều được). Response `data` **shape y hệt `/Auth/login`** (`{ user, token }`) — lưu `token`, gắn
+`Authorization: Bearer`, gia hạn bằng `GET /Auth/me` như bình thường.
+- Mã sai hoặc đã bị Admin thu hồi → HTTP 400, `isSuccess:false`, message "Mã QR không hợp lệ hoặc đã bị thu hồi."
+  → app xoá mã đã lưu (nếu có) và bắt quét lại / đăng nhập bằng mật khẩu.
+- Mã **dài hạn, dùng nhiều lần**, không tự hết hạn — chỉ mất hiệu lực khi Admin tạo mã mới hoặc thu hồi.
+  QR **không chứa user id**, là mã ngẫu nhiên; coi như mật khẩu.
+- Chi tiết thiết kế: [identity-module.md §5.8](identity-module.md).
+
 ## 3. Phân quyền hiển thị UI
 Dùng **`user.permissions`** (mảng `Module.Entity.Action`) để bật/tắt tính năng — **không** dùng `user.roles`. FE ẩn/hiện nút theo `user.permissions.includes(code)`; BE luôn enforce lại (thiếu permission → **403**). `user.permissions` đã là danh sách hiệu lực cuối (đã áp override). Lấy toàn bộ mã qua `GET /api/Permission/all` (mục 4.7). **Chỉ `Admin` seed full quyền**, 3 role còn lại cần Admin tự gán.
 
@@ -124,11 +134,22 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
   - `PUT /user/{userId}` (`Identity.User.UpdatePermissions`) — body `{grantPermissionIds:[12], denyPermissionIds:[5,8]}` **toàn bộ override THỦ CÔNG cuối** (2026-08-10, đổi hành vi: trước đó là toàn bộ override nói chung). 400 nếu 1 id ở cả 2 mảng. Không cần login lại. **Chỉ xoá/ghi lại phần `isAutoGranted=false`** — permission đang tự động cấp theo Chức vụ (`isAutoGranted=true`) không nằm trong 2 mảng này thì được **giữ nguyên**, không bị mất khi Admin lưu màn "Tuỳ chỉnh quyền" cho lý do khác. Nếu 1 id trong `grantPermissionIds`/`denyPermissionIds` trùng đúng permission đang `isAutoGranted=true` — coi là Admin **chiếm quyền thủ công** dòng đó (ghi đè `isGranted` + đổi `isAutoGranted=false`), từ đó dòng này không còn bị đồng bộ tự động theo Chức vụ nữa. FE (`UserPermissionOverrideManager.tsx`) chỉ đưa override `isAutoGranted=false` vào state chỉnh/gửi lên — permission tự động cấp hiện dạng nhãn riêng "Tự động (Chức vụ)", không đi vào 2 mảng trừ khi Admin chủ động bấm đổi.
 - **4.9 `POST /api/Auth/create-user`** (`Identity.User.Create`) — pre-provision trước khi người dùng login lần đầu. Body `{userName[Required], deviceName?, fullName?, roleIds?}`. 400 nếu thiếu/trùng `userName` hoặc `roleIds` sai. `deviceName` chỉ tham khảo (khớp login chỉ theo `userName`).
 
+- **4.10 Mã QR đăng nhập** (`/api/LoginQr`, **1 permission `Identity.LoginQr.Manage`** cho cả nhóm — chỉ Admin):
+  - `GET /api/LoginQr` → `[{userId, createdAt, lastUsedAt, useCount}]` — user đang có mã hoạt động.
+  - `POST /api/LoginQr/{userId}` → `{userId, userName, fullName, qrPayload, createdAt}`. Tạo mã mới và **vô hiệu
+    mã cũ**. `qrPayload` là chuỗi cần mã hoá thành ảnh QR (FE dùng `qrcode`); **chỉ có trong response này**, BE
+    chỉ lưu hash nên không lấy lại được. 404 nếu `userId` sai.
+  - `DELETE /api/LoginQr/{userId}` → thu hồi; 400 nếu user chưa có mã hoạt động.
+  - `GET /api/LoginQr/{userId}/logs` → 50 log gần nhất `[{id, userId, action, actorUserId, actorName, ipAddress,
+    userAgent, note, createdAt}]`, `action` ∈ `Created|Revoked|LoginSuccess|LoginFailed`, mới nhất trước.
+  - FE: nút "QR" trên mỗi dòng `UserRoleModal` → `LoginQrDialog.tsx`.
+
 ## 5. Tổng hợp endpoint
 | Method | Route | Permission |
 |---|---|---|
 | POST | `/api/Auth/windows-login` | Negotiate |
 | POST | `/api/Auth/login` | Public — tự bind AD (§2c) |
+| POST | `/api/Auth/qr-login` | Public — mã QR (§2d) |
 | GET | `/api/Auth/me` | Bearer (không cần permission) |
 | POST | `/api/Auth/create-user` | `Identity.User.Create` |
 | GET | `/api/Auth/get-all-users-with-roles` | `Identity.User.View` |
@@ -138,6 +159,7 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
 | POST | `/api/Auth/create-role` | `Identity.Role.Create` |
 | PUT | `/api/Auth/update-role/{roleId}` | `Identity.Role.Update` |
 | DELETE | `/api/Auth/delete-role/{roleId}` | `Identity.Role.Delete` |
+| GET/POST/DELETE | `/api/LoginQr[/{userId}[/logs]]` | `Identity.LoginQr.Manage` (§4.10) |
 | GET | `/api/Permission/all` | `Identity.Permission.View` |
 | GET/PUT | `/api/Permission/role/{roleId}` | View / `Identity.Role.Update` |
 | GET | `/api/Permission/user/{userId}[/effective]` | `Identity.Permission.View` |

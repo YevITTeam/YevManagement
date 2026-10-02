@@ -77,7 +77,7 @@ export default function ApprovalDelegationForm({ isOpen, mode, initial, employee
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
                     <label className="block">
                         <span className={fieldLabelClassName}>{t("delegateEmployeeLabel")}</span>
                         <SearchableSelect

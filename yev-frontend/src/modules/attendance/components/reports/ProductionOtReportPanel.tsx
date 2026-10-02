@@ -487,53 +487,64 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                         <Search className="h-3.5 w-3.5" /> {isLoading ? t("searching") : t("searchButton")}
                     </button>
                 </div>
+                <p className="mt-2 text-xs text-[#8a8f94]">{t("searchHint")}</p>
+            </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[#f1f5f9] pt-3">
-                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("exportExcelGroupLabel")}</span>
-                    <button
-                        type="button"
-                        onClick={handleExportExcel}
-                        disabled={isExportingExcel || !date}
-                        title={t("exportHoursTitle")}
-                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <FileSpreadsheet className="h-3.5 w-3.5" />
-                        {isExportingExcel ? t("exporting") : t("exportHoursButton")}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleExportTimes}
-                        disabled={isExportingTimes || !date}
-                        title={t("exportTimesTitle")}
-                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <FileSpreadsheet className="h-3.5 w-3.5" />
-                        {isExportingTimes ? t("exporting") : t("exportTimesButton")}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleExportQry}
-                        disabled={isExportingQry || !date}
-                        title={t("exportDetailTitle")}
-                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <FileSpreadsheet className="h-3.5 w-3.5" />
-                        {isExportingQry ? t("exporting") : t("exportDetailButton")}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleExportSum}
-                        disabled={isExportingSum || !date}
-                        title={t("exportSummaryTitle")}
-                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <FileSpreadsheet className="h-3.5 w-3.5" />
-                        {isExportingSum ? t("exporting") : t("exportSummaryButton")}
-                    </button>
+            <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+                <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
+                    <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#191c1e]">
+                        <FileSpreadsheet className="h-4 w-4 text-[#5e3f3a]" />
+                        {t("exportExcelGroupLabel")}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={handleExportExcel}
+                            disabled={isExportingExcel || !date}
+                            title={t("exportHoursTitle")}
+                            className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                            <span className="whitespace-nowrap">{isExportingExcel ? t("exporting") : t("exportHoursButton")}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleExportTimes}
+                            disabled={isExportingTimes || !date}
+                            title={t("exportTimesTitle")}
+                            className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                            <span className="whitespace-nowrap">{isExportingTimes ? t("exporting") : t("exportTimesButton")}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleExportQry}
+                            disabled={isExportingQry || !date}
+                            title={t("exportDetailTitle")}
+                            className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                            <span className="whitespace-nowrap">{isExportingQry ? t("exporting") : t("exportDetailButton")}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleExportSum}
+                            disabled={isExportingSum || !date}
+                            title={t("exportSummaryTitle")}
+                            className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                            <span className="whitespace-nowrap">{isExportingSum ? t("exporting") : t("exportSummaryButton")}</span>
+                        </button>
+                    </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[#f1f5f9] pt-3">
-                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("exportTicketGroupLabel")}</span>
+                <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
+                    <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#191c1e]">
+                        <FileText className="h-4 w-4 text-[#5e3f3a]" />
+                        {t("exportTicketGroupLabel")}
+                    </div>
                     <button
                         type="button"
                         onClick={handleExportTicketZip}
@@ -541,12 +552,14 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                         title={t("exportTicketZipTitle")}
                         className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        <FileText className="h-3.5 w-3.5" />
-                        {isExportingTickets
-                            ? ticketExportProgress
-                                ? t("exportTicketZipProgress", { done: ticketExportProgress.done, total: ticketExportProgress.total })
-                                : t("exportTicketZipPreparing")
-                            : t("exportTicketZipButton")}
+                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                        <span className="whitespace-nowrap">
+                            {isExportingTickets
+                                ? ticketExportProgress
+                                    ? t("exportTicketZipProgress", { done: ticketExportProgress.done, total: ticketExportProgress.total })
+                                    : t("exportTicketZipPreparing")
+                                : t("exportTicketZipButton")}
+                        </span>
                     </button>
                 </div>
             </div>

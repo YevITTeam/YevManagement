@@ -6,6 +6,7 @@ import type { SoftwareDto } from "@/modules/pc-management/types/software.dto";
 import type { SoftwareGroupDto } from "@/modules/pc-management/types/software-group.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface SoftwareFormValues {
     softwareCode: string;
@@ -101,7 +102,7 @@ export default function SoftwareForm({ isOpen, mode, initial, groups, loading = 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
-                            <span className={fieldLabelClassName}>Mã phần mềm</span>
+                            <span className={fieldLabelClassName}>Mã phần mềm<RequiredMark /></span>
                             <input
                                 value={values.softwareCode}
                                 onChange={(event) => handleChange("softwareCode", event.target.value)}
@@ -114,7 +115,7 @@ export default function SoftwareForm({ isOpen, mode, initial, groups, loading = 
                         </label>
 
                         <label className="block">
-                            <span className={fieldLabelClassName}>Tên phần mềm</span>
+                            <span className={fieldLabelClassName}>Tên phần mềm<RequiredMark /></span>
                             <input
                                 value={values.softwareName}
                                 onChange={(event) => handleChange("softwareName", event.target.value)}
@@ -127,7 +128,7 @@ export default function SoftwareForm({ isOpen, mode, initial, groups, loading = 
                     </div>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Nhóm phần mềm</span>
+                        <span className={fieldLabelClassName}>Nhóm phần mềm<RequiredMark /></span>
                         <SearchableSelect
                             options={groups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
                             value={values.softwareGroupId === "" ? "" : Number(values.softwareGroupId)}

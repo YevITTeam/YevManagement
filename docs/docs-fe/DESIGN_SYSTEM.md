@@ -224,6 +224,11 @@ Chung: `inline-flex items-center gap-2 rounded-lg text-sm font-semibold transiti
 
 Nút ở header trang dùng cỡ nhỏ: `px-3 py-1.5 text-xs`.
 
+**Nút rộng vừa đủ nội dung — KHÔNG kéo giãn.** Không dùng `w-full` hay đặt nút vào ô `grid` chia đều:
+chữ ngắn sẽ bị kéo dài ra, chừa khoảng trống lớn trông lệch. Nhóm nhiều nút đặt bằng
+`flex flex-wrap gap-2`, nhãn nút để `whitespace-nowrap` (không `truncate` — nút đã tự co theo chữ).
+Ngoại lệ hợp lệ: nút submit chiếm trọn bề ngang form hẹp (modal/login), nơi full-width là chủ ý.
+
 ### 4.3. Input & Filter bar
 
 Field chung:
@@ -232,6 +237,35 @@ h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c
 outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]
 ```
 
+- **Bề rộng ô nhập bám theo DỮ LIỆU, không bám theo ô lưới.** `w-full` chỉ đúng khi ô thật sự nhận
+  chuỗi dài (tên, email, ghi chú, ô tìm kiếm). Ô chứa 1-4 ký tự mà `w-full` trong `grid` chia đều sẽ
+  thành hộp rỗng dài ngoằng — lỗi đã gặp ở tab "Cấu hình" (số `2` nằm trong ô ~370px). Thang dùng chung:
+
+  | Loại dữ liệu | Rộng | Ví dụ |
+  |---|---|---|
+  | Số (giờ, số lượng, giới hạn) | `w-20` → `w-24` | `2` · `3.5` · `350` |
+  | Giờ/phút | `TimePicker24h` (tự co) | `06:00` |
+  | `type="date"` | `w-40` | `10/02/2026` |
+  | Mã / số hiệu ngắn | `w-32` | mã máy, mã NV |
+  | Tên, email, ghi chú, ô tìm | `w-full` hoặc `flex-1` | — |
+
+  Hàng nhiều field dùng `flex flex-wrap items-end gap-x-4 gap-y-2.5` để mỗi field tự co, **không**
+  `grid-cols-N` (lưới ép mọi ô bằng nhau bất kể nội dung).
+
+- **Nhập giờ: dùng `components/ui/TimePicker24h.tsx`, KHÔNG dùng `<input type="time">`.** Trình duyệt
+  (nhất là Firefox) bỏ qua thuộc tính `lang` và render ô đó theo locale hệ điều hành — có thể ra
+  `06:00 AM` kèm nút đồng hồ riêng, vừa sai khung 24h vừa bị cắt cụt trong ô hẹp. `TimePicker24h` là
+  **2 ô gõ số** (giờ : phút) trong 1 khung viền chung: gõ đủ 2 số tự nhảy ô, Enter sang ô kế, rời ô
+  tự pad `0`, kẹp 0-23 / 0-59 — luôn 24h bất kể trình duyệt/OS. Props: `value`/`onChange` dạng
+  `"HH:mm"`, `disabled?`, `compact?` (bản nhỏ cho ô trong bảng nhiều dòng), `required?`,
+  `hourLabel?`/`minuteLabel?` (ghi đè `aria-label` khi 1 hàng có nhiều ô giờ).
+  Entity BE kiểu `TimeOnly` trả `"HH:mm:ss"` — cắt/ghép `:00` ở biên UI, đừng đổi shape DTO.
+- **Đơn vị đặt cạnh ô, đừng nhét vào nhãn.** `<span className="text-xs text-[#8a8f94]">giờ</span>`
+  ngay sau input gọn hơn nhiều so với nhãn "Số giờ tối thiểu…", và một hàng nhiều ô cùng đơn vị đọc
+  nhanh hơn hẳn.
+- **2 ô là 2 đầu mút của 1 khoảng (từ–đến) thì dùng CHUNG 1 nhãn**, 2 input cách nhau bằng `–`, mỗi
+  input có `aria-label` riêng. Hai nhãn rời ("OT sớm — từ", "OT sớm — đến") đọc như 2 cấu hình không
+  liên quan.
 - **Filter đơn giản** (1 ô + nút tìm): toolbar `border-b border-[#e0e3e5] bg-[#f8fafc] p-4`, input `w-64`, nút "Tìm kiếm" = secondary.
 - **Filter nâng cao** (`DeviceFilterBar`): mỗi field bọc `<label>` + overline; input/select có icon `lucide-react` tuyệt đối trái (`absolute left-3 top-1/2 -translate-y-1/2`, input thêm `pl-9`); nút "Bộ lọc nâng cao" có badge đếm `rounded-full bg-[#e3000f] text-white`; filter đang bật hiện dạng **chip** `rounded-full border bg-[#f8fafc]` kèm nút `X`.
 - **Dữ liệu dropdown** (chi nhánh, loại thiết bị, NCC…) phải gọi API tương ứng trong `useEffect` (có cờ `isCancelled`), **không hard-code**.
@@ -355,6 +389,27 @@ Dùng `<Tabs tabs={[{key,label}, ...]} activeKey={activeTab} onChange={setActive
 </div>
 ```
 
+### 4.10. Chữ thừa — nhãn, mô tả, gợi ý
+
+Màn cấu hình/filter dễ phình vì mỗi ô được "giải thích" bằng một câu dài. Luật:
+
+- **Nhãn field là TÊN, không phải câu mô tả.** Tối đa ~3-4 từ. "Sàn giờ — dưới mốc này KHÔNG có phiếu
+  ăn" là mô tả, không phải nhãn.
+- **Ô cấu hình kiểu ngưỡng: viết nhãn thành mảnh câu mà giá trị điền vào chỗ trống.** Đọc liền nhãn +
+  ô là hiểu ngay, không cần chú thích: `Không phiếu ăn nếu dưới [2] giờ`, `Phiếu chính nếu từ [3.5] giờ`,
+  `Trừ khi có ăn [0.5] giờ`. Cách đặt tên trừu tượng ("Sàn giờ", "Giờ tối thiểu — phiếu chính") ngắn
+  nhưng người dùng vẫn phải đoán nghĩa. Section đã nêu ngữ cảnh thì nhãn chỉ cần phần còn thiếu —
+  dưới "Giới hạn lũy kế" chỉ cần `Mỗi ngày` / `Mỗi tháng` / `Mỗi năm`.
+- **Không `truncate` trên nhãn.** Nhãn bị cắt (`KHUNG OT SỚM — GIỜ BẮT ...`) là dấu hiệu nhãn quá dài,
+  không phải lý do để cắt nó — rút ngắn nhãn, dùng `whitespace-nowrap`.
+- **Giải thích dài đi vào `title` của nhãn (tooltip), không chiếm 1 dòng cố định.** Chỉ giữ dòng mô tả
+  hiển thị thường trực khi thiếu nó người dùng sẽ làm sai — vd điều kiện lọc của báo cáo
+  ("Chỉ tính đơn dưới chuyền đã hoàn tất"). Mô tả chỉ diễn giải lại tiêu đề section thì bỏ.
+- **Bỏ mô tả là bỏ cả key i18n.** Gỡ dòng mô tả khỏi JSX mà để key nằm lại `vi.json`/`ja.json` sẽ
+  thành rác chết — xoá key ở **cả hai** file cùng lúc.
+- Placeholder không lặp lại nhãn: nhãn "Email người nhận" + placeholder `vd: ten@yev.vn` là đúng;
+  placeholder "Nhập email người nhận" là thừa.
+
 ---
 
 ## 5. Blueprint trang danh sách (CRUD)
@@ -378,8 +433,11 @@ Ví dụ chuẩn: `BranchList` + `BranchForm`, `DeviceTypeList` + `DeviceTypeFor
 ---
 
 ## 6. Icon
-- Trang phức tạp / có filter: dùng `lucide-react` (`h-3.5 w-3.5` cho label, `h-4 w-4` trong input/nút).
-- Nút header đơn giản có thể dùng ký tự Unicode (`↻`, `+`, `⤴`, `📊`).
+- **Luôn dùng `lucide-react`** (`h-3.5 w-3.5` trong nút nhỏ/cạnh label, `h-4 w-4` trong input/nút
+  thường, `h-5 w-5` cho nút đóng modal). Icon inline cạnh text ngắn: `size={12}`–`size={16}`.
+- **Không gõ emoji / ký tự Unicode làm icon** (`✕ 🗑 🖨 ↻ ⬇ ← ⚙ ✓ ⚠`…) — kể cả nút đóng modal,
+  "Làm mới", in/xuất PDF, icon sắp xếp. *Ngoại lệ:* ô tick mô phỏng trên biểu mẫu giấy in PDF
+  (`OtFormPrintView.tsx`) giữ ký tự `✓` thuần — đó là nội dung tài liệu, không phải icon UI.
 - Không trộn 2 kiểu icon trong cùng một khối.
 
 ---
@@ -404,7 +462,14 @@ Toàn bộ text tiếng Việt, câu ngắn gọn nhất quán: "Hiển thị X 
 - [ ] Màu: primary `#e3000f`, nền `#f8fafc`, chữ `#191c1e`/`#5e3f3a`, viền `#e0e3e5`, danger `#930006`. **Không indigo.**
 - [ ] Card/section: `rounded-xl border border-[#e0e3e5] bg-white shadow-sm`.
 - [ ] Button đúng 4 biến thể (mục 4.2); input field chuẩn (mục 4.3).
+- [ ] **Không ô nào rộng quá nội dung**: nút vừa đủ chữ (4.2), ô nhập theo thang dữ liệu (4.3) — không
+      `w-full` trong lưới chia đều.
+- [ ] **Không chữ thừa** (4.10): nhãn ngắn & không `truncate`, giải thích dài nằm ở `title`, bỏ mô tả
+      thì xoá key ở cả `vi.json` lẫn `ja.json`.
 - [ ] CRUD list đủ: header → filter → error bar → table → pagination.
 - [ ] 1 modal form dùng chung create/edit; xoá dùng `ConfirmDialog`; thông báo dùng `toast`.
 - [ ] Dropdown lấy từ API, không hard-code.
 - [ ] Text tiếng Việt, đúng thang typography & spacing.
+- [ ] **Comment trong code bằng TIẾNG ANH, ngắn gọn, mô tả hành vi hiện tại** (AGENTS.md đầu file) —
+      text hiển thị cho người dùng mới là tiếng Việt. Comment cũ còn tiếng Việt trong đoạn đang sửa
+      thì chuyển luôn.

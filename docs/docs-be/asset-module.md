@@ -33,9 +33,9 @@
 | DTO · Repository/UnitOfWork · Service+API theo entity | §2, §3, §4 |
 | Migration đối chiếu DB thật · việc cần làm tiếp · checklist thêm entity | §5, §6, §7 |
 
-> §1.19–§1.23 còn có **bản bàn giao riêng cho đội app Flutter** ở `docs/ServerCheck-API-Flutter-Guide.md`,
-> `docs/ServerCheck-Flutter-Design-Guide.md`, `docs/Inventory-API-Flutter-Guide.md`,
-> `docs/AppRelease-API-Flutter-Guide.md` (cố ý tự chứa). **Đổi API ở đây thì cập nhật file đó kèm.**
+> 4 file bàn giao riêng cho đội app Flutter "YEV Scan" (`docs/*-Flutter-Guide.md`) đã xoá 2026-10-02 —
+> đội mobile tích hợp xong. Hợp đồng §1.19–§1.23 giờ chỉ còn ở [asset-api-fe.md](asset-api-fe.md)
+> §7d/§7e/§7f.
 
 
 ## 1. Domain Models (`Asset.Domain/Entities/`)
@@ -412,7 +412,7 @@ riêng phân biệt link ngoài/link nội bộ): admin có thể dán link ngo�
 - **Permission** (migration Identity `AddAppReleaseManagePermission`): `Asset.AppRelease.Manage`, đã gán `Admin`.
 - **DB thật**: migration Asset `AddAppRelease` + Identity `AddAppReleaseManagePermission` **đã apply** (2026-09-23). Smoke-test qua HTTP thật: `latest`→`null` lúc chưa có dữ liệu, tạo/sửa/xoá/trùng mã đều đúng kỳ vọng, dọn sạch dữ liệu test sau khi kiểm (`latest`→`null` trở lại). Upload/download file test riêng (không đụng DB): upload file `.apk` giả → nhận URL → tải anonymous → nội dung khớp byte-for-byte; path traversal (`..%2f..%2f`) → 404; file không tồn tại → 404; upload thiếu token → 401; sai đuôi file → 400. Dọn file test khỏi đĩa sau khi kiểm.
 - **FE**: `modules/pc-management/components/app-releases/` (`AppReleaseList`/`AppReleaseForm`, khuôn CRUD giống `branches/`, nút Thêm/Sửa/Xoá gate theo `hasPermission(user, "Asset.AppRelease.Manage")`), route `(pc-manager)/pc/app-releases`, `app-release.api.ts`/`app-release.dto.ts`, mục sidebar "Bản cập nhật app". `AppReleaseForm` có nút "Tải file .apk lên" cạnh ô `apkUrl` — upload xong tự điền URL vào ô đó (vẫn sửa tay được, vẫn cho dán link ngoài).
-- **Mobile**: hợp đồng cho đội Flutter ở [docs/AppRelease-API-Flutter-Guide.md](../AppRelease-API-Flutter-Guide.md).
+- **Mobile**: app "YEV Scan" chỉ cần `GET /latest` + tải file qua `apkUrl` trả về — xem [asset-api-fe.md §7f](asset-api-fe.md).
 
 ## 2. DTOs (`Asset.Application/Dtos/`)
 - **Master data** (Branches/Suplliers/DeviceTypes/SoftwareGroups): `{Entity}Dto`(Id/Code/Name), `Create...`(+`[Required]`), `Update...`.

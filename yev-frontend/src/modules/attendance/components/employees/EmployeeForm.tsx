@@ -8,6 +8,7 @@ import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -134,6 +135,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     const needsGroup = terminalLevel === TERMINAL_LEVEL_NONE;
     const needsDepartment = terminalLevel === TERMINAL_LEVEL_DEPARTMENT_MANAGER;
 
+    const jobTitleOptions: SelectOption[] = jobTitles.map((jt) => ({ value: jt.id, label: jt.name, searchText: jt.name.toLowerCase() }));
     const groupOptions: SelectOption[] = effectiveGroups.map((g) => ({ value: g.id, label: g.groupNameVn, searchText: g.groupNameVn.toLowerCase() }));
     const departmentOptions: SelectOption[] = effectiveDepartments.map((d) => ({
         value: d.id,
@@ -158,8 +160,8 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         });
     };
 
-    const handleJobTitleChange = (value: string) => {
-        const nextJobTitleId = value ? Number(value) : null;
+    const handleJobTitleChange = (value: number | "") => {
+        const nextJobTitleId = value === "" ? null : value;
         const nextJobTitle = jobTitles.find((jt) => jt.id === nextJobTitleId);
         const nextTerminalLevel = nextJobTitle?.terminalLevel ?? TERMINAL_LEVEL_NONE;
         // Đổi nhóm Chức vụ (thường/Trưởng phòng/Trưởng Xưởng-Giám đốc) làm giá trị Bộ phận/Phòng ban
@@ -197,7 +199,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="employee-form-title"
-                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 w-full max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="employee-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -213,23 +215,59 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
-                        <input
-                            value={values.code}
-                            onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
-                            placeholder={t("fieldCodePlaceholder")}
-                            disabled={loading}
-                            autoFocus
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
-
-                    <div className="grid grid-cols-2 gap-4">
+                <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+                    <div className="grid gap-4 sm:grid-cols-2">
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldLastName")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
+                            <input
+                                value={values.code}
+                                onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
+                                placeholder={t("fieldCodePlaceholder")}
+                                disabled={loading}
+                                autoFocus
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
+
+                        <label className="relative block">
+                            <span className={fieldLabelClassName}>{t("fieldUserName")}</span>
+                            <input
+                                value={values.userName ?? ""}
+                                onChange={(event) =>
+                                    setValues((current) => ({ ...current, userName: event.target.value.trim() ? event.target.value : null }))
+                                }
+                                onFocus={() => setShowUserSuggestions(true)}
+                                onBlur={() => setShowUserSuggestions(false)}
+                                placeholder={t("fieldUserNamePlaceholder")}
+                                disabled={loading}
+                                autoComplete="off"
+                                className={fieldClassName}
+                            />
+                            {showUserSuggestions && filteredUserSuggestions.length > 0 && (
+                                <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#e0e3e5] bg-white shadow-lg">
+                                    {filteredUserSuggestions.map((u) => (
+                                        <li key={u.id}>
+                                            <button
+                                                type="button"
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={() => {
+                                                    setValues((current) => ({ ...current, userName: u.userName }));
+                                                    setShowUserSuggestions(false);
+                                                }}
+                                                className="block w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[#f8fafc]"
+                                            >
+                                                <div className="font-semibold text-[#191c1e]">{u.fullName || u.userName}</div>
+                                                <div className="text-xs text-[#5e3f3a]">{u.userName}</div>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </label>
+
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldLastName")}<RequiredMark /></span>
                             <input
                                 value={values.lastName}
                                 onChange={(event) => setValues((current) => ({ ...current, lastName: event.target.value }))}
@@ -240,7 +278,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             />
                         </label>
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldFirstName")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldFirstName")}<RequiredMark /></span>
                             <input
                                 value={values.firstName}
                                 onChange={(event) => setValues((current) => ({ ...current, firstName: event.target.value }))}
@@ -250,109 +288,62 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                                 className={fieldClassName}
                             />
                         </label>
-                    </div>
 
-                    <label className="relative block">
-                        <span className={fieldLabelClassName}>{t("fieldUserName")}</span>
-                        <input
-                            value={values.userName ?? ""}
-                            onChange={(event) =>
-                                setValues((current) => ({ ...current, userName: event.target.value.trim() ? event.target.value : null }))
-                            }
-                            onFocus={() => setShowUserSuggestions(true)}
-                            onBlur={() => setShowUserSuggestions(false)}
-                            placeholder={t("fieldUserNamePlaceholder")}
-                            disabled={loading}
-                            autoComplete="off"
-                            className={fieldClassName}
-                        />
-                        {showUserSuggestions && filteredUserSuggestions.length > 0 && (
-                            <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#e0e3e5] bg-white shadow-lg">
-                                {filteredUserSuggestions.map((u) => (
-                                    <li key={u.id}>
-                                        <button
-                                            type="button"
-                                            onMouseDown={(event) => event.preventDefault()}
-                                            onClick={() => {
-                                                setValues((current) => ({ ...current, userName: u.userName }));
-                                                setShowUserSuggestions(false);
-                                            }}
-                                            className="block w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[#f8fafc]"
-                                        >
-                                            <div className="font-semibold text-[#191c1e]">{u.fullName || u.userName}</div>
-                                            <div className="text-xs text-[#5e3f3a]">{u.userName}</div>
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
+                        <label className={needsDepartment ? "block" : "block sm:col-span-2"}>
+                            <span className={fieldLabelClassName}>{t("fieldJobTitle")}</span>
+                            <SearchableSelect
+                                options={jobTitleOptions}
+                                value={values.jobTitleId ?? ""}
+                                onChange={handleJobTitleChange}
+                                placeholder={t("fieldJobTitlePlaceholder")}
+                                disabled={loading}
+                            />
+                        </label>
+
+                        {needsDepartment && (
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldDepartment")}<RequiredMark /></span>
+                                <SearchableSelect
+                                    options={departmentOptions}
+                                    value={values.departmentId ?? ""}
+                                    onChange={(v) => setValues((current) => ({ ...current, departmentId: v === "" ? null : v }))}
+                                    placeholder={t("fieldDepartmentPlaceholder")}
+                                    disabled={loading}
+                                />
+                            </label>
                         )}
-                    </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldJobTitle")}</span>
-                        <select
-                            value={values.jobTitleId ?? ""}
-                            onChange={(event) => handleJobTitleChange(event.target.value)}
-                            disabled={loading}
-                            className={fieldClassName}
-                        >
-                            <option value="">{t("fieldJobTitlePlaceholder")}</option>
-                            {jobTitles.map((jobTitle) => (
-                                <option key={jobTitle.id} value={jobTitle.id}>
-                                    {jobTitle.name}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                        {needsGroup && (
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
+                                <SearchableSelect
+                                    options={departmentOptions}
+                                    value={effectiveDepartmentFilter}
+                                    onChange={(v) => handleDepartmentFilterChange(v)}
+                                    placeholder={t("fieldDepartmentPlaceholder")}
+                                    disabled={loading}
+                                />
+                            </label>
+                        )}
 
-                    {needsGroup && (
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
-                            <SearchableSelect
-                                options={departmentOptions}
-                                value={effectiveDepartmentFilter}
-                                onChange={(v) => handleDepartmentFilterChange(v)}
-                                placeholder={t("fieldDepartmentPlaceholder")}
-                                disabled={loading}
-                            />
-                        </label>
-                    )}
+                        {needsGroup && (
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldGroup")}<RequiredMark /></span>
+                                <SearchableSelect
+                                    options={filteredGroupOptions}
+                                    value={values.groupId ?? ""}
+                                    onChange={(v) => setValues((current) => ({ ...current, groupId: v === "" ? null : v }))}
+                                    placeholder={t("fieldGroupPlaceholder")}
+                                    disabled={loading}
+                                />
+                            </label>
+                        )}
 
-                    {needsGroup && (
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldGroup")}</span>
-                            <SearchableSelect
-                                options={filteredGroupOptions}
-                                value={values.groupId ?? ""}
-                                onChange={(v) => setValues((current) => ({ ...current, groupId: v === "" ? null : v }))}
-                                placeholder={t("fieldGroupPlaceholder")}
-                                disabled={loading}
-                            />
-                        </label>
-                    )}
-
-                    {needsDepartment && (
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
-                            <SearchableSelect
-                                options={departmentOptions}
-                                value={values.departmentId ?? ""}
-                                onChange={(v) => setValues((current) => ({ ...current, departmentId: v === "" ? null : v }))}
-                                placeholder={t("fieldDepartmentPlaceholder")}
-                                disabled={loading}
-                            />
-                        </label>
-                    )}
-
-
-                    {/* Giới hạn OT riêng — CHỈ hiện lúc Tạo mới (2026-08-29, đã tách khỏi PUT /{id} —
-                        sửa sau này đi qua EmployeeOtLimitDialog.tsx, permission hẹp
-                        Attendance.Employee.UpdateOtLimit, không gộp vào form Sửa nhân viên chung này
-                        nữa). "gia hạn" cao hơn mặc định chung cho từng người (2026-08-26, theo yêu cầu
-                        người dùng, thường dùng cho công nhân dưới chuyền). */}
-                    {mode === "create" && (
-                        <>
-                            <div className="grid grid-cols-2 gap-4">
+                        {/* Giới hạn OT riêng — CHỈ hiện lúc Tạo mới (đã tách khỏi PUT /{id}, sửa sau này đi qua
+                            EmployeeOtLimitDialog.tsx, permission hẹp Attendance.Employee.UpdateOtLimit). "gia hạn"
+                            cao hơn mặc định chung cho từng người, thường dùng cho công nhân dưới chuyền. */}
+                        {mode === "create" && (
+                            <>
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("fieldCustomMonthlyOtHourLimit")}</span>
                                     <input
@@ -389,9 +380,9 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                                         className={fieldClassName}
                                     />
                                 </label>
-                            </div>
-                        </>
-                    )}
+                            </>
+                        )}
+                    </div>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

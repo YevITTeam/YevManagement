@@ -18,7 +18,9 @@ namespace Identity.Infrastructure.Repositories
             ILoginUserIPRepository loginUserIPs,
             IPermissionRepository permissions,
             IUserPermissionRepository userPermissions,
-            ITestLoginAccountRepository testLoginAccounts) : base(dbContext)
+            ITestLoginAccountRepository testLoginAccounts,
+            ILoginQrCodeRepository loginQrCodes,
+            ILoginQrLogRepository loginQrLogs) : base(dbContext)
         {
             Users = users;
             Roles = roles;
@@ -26,6 +28,8 @@ namespace Identity.Infrastructure.Repositories
             Permissions = permissions;
             UserPermissions = userPermissions;
             TestLoginAccounts = testLoginAccounts;
+            LoginQrCodes = loginQrCodes;
+            LoginQrLogs = loginQrLogs;
         }
 
         public IUserReposiory Users { get; }
@@ -34,5 +38,7 @@ namespace Identity.Infrastructure.Repositories
         public IPermissionRepository Permissions { get; }
         public IUserPermissionRepository UserPermissions { get; }
         public ITestLoginAccountRepository TestLoginAccounts { get; }
+        public ILoginQrCodeRepository LoginQrCodes { get; }
+        public ILoginQrLogRepository LoginQrLogs { get; }
     }
 }

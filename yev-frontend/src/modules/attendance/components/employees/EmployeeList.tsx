@@ -3,7 +3,21 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, FileSpreadsheet, History, Inbox, Pencil, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import {
+    AlertTriangle,
+    CalendarClock,
+    Clock,
+    Download,
+    FileSpreadsheet,
+    History,
+    Inbox,
+    Link2,
+    Pencil,
+    Search,
+    SlidersHorizontal,
+    Trash2,
+    Upload,
+} from "lucide-react";
 
 import { EmployeeApi, type EmployeeScopeDto } from "@/modules/attendance/api/employee.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
@@ -13,6 +27,7 @@ import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import ActionMenu from "@/components/ui/ActionMenu";
+import { Badge } from "@/components/ui/Badge";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
 import EmployeeImportDialog from "./EmployeeImportDialog";
 import EmployeeOtHourLimitImportDialog from "./EmployeeOtHourLimitImportDialog";
@@ -281,19 +296,30 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     // đã tự động cấp cho Người phụ trách Bộ phận từ trước, không phải permission mới.
     const canImportMonthlyAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Import");
     const productionExcelItems = [
-        ...(canImportProduction ? [{ label: t("importProductionExcel"), onClick: () => setProductionImportOpen(true) }] : []),
+        ...(canImportProduction
+            ? [{ label: t("importProductionExcel"), onClick: () => setProductionImportOpen(true), icon: <Upload className="h-3.5 w-3.5" /> }]
+            : []),
         ...(canExportProduction
             ? [
                   {
                       label: isExportingProduction ? t("exportingProduction") : t("exportProductionExcel"),
                       onClick: handleExportProduction,
                       disabled: isExportingProduction,
+                      icon: <Download className="h-3.5 w-3.5" />,
                   },
               ]
             : []),
-        ...(canUpdateOtLimit ? [{ label: t("otHourLimitImportMenuLabel"), onClick: () => setOtHourLimitImportOpen(true) }] : []),
+        ...(canUpdateOtLimit
+            ? [{ label: t("otHourLimitImportMenuLabel"), onClick: () => setOtHourLimitImportOpen(true), icon: <Clock className="h-3.5 w-3.5" /> }]
+            : []),
         ...(canImportMonthlyAccumulation
-            ? [{ label: t("monthlyAccumulationImportMenuLabel"), onClick: () => setMonthlyAccumulationImportOpen(true) }]
+            ? [
+                  {
+                      label: t("monthlyAccumulationImportMenuLabel"),
+                      onClick: () => setMonthlyAccumulationImportOpen(true),
+                      icon: <CalendarClock className="h-3.5 w-3.5" />,
+                  },
+              ]
             : []),
     ];
     // Không còn mục nào được phép → ẩn hẳn nút Excel thay vì hiện menu rỗng.
@@ -308,10 +334,20 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     // trước đó CHỈ có ở menu Excel của tab "Nhân viên dưới chuyền" dù BE đã tổng quát cho mọi Phòng ban
     // (kể cả văn phòng) — thiếu sót phát hiện khi người dùng hỏi lại, bổ sung nốt ở đây.
     const employeeExcelItems = [
-        ...(canCreateEmployee ? [{ label: t("importExcel"), onClick: () => setImportOpen(true) }] : []),
-        ...(canImportIdentityLink ? [{ label: t("identityLinkMenuLabel"), onClick: () => setIdentityLinkImportOpen(true) }] : []),
+        ...(canCreateEmployee
+            ? [{ label: t("importExcel"), onClick: () => setImportOpen(true), icon: <Upload className="h-3.5 w-3.5" /> }]
+            : []),
+        ...(canImportIdentityLink
+            ? [{ label: t("identityLinkMenuLabel"), onClick: () => setIdentityLinkImportOpen(true), icon: <Link2 className="h-3.5 w-3.5" /> }]
+            : []),
         ...(canImportMonthlyAccumulation
-            ? [{ label: t("monthlyAccumulationImportMenuLabel"), onClick: () => setMonthlyAccumulationImportOpen(true) }]
+            ? [
+                  {
+                      label: t("monthlyAccumulationImportMenuLabel"),
+                      onClick: () => setMonthlyAccumulationImportOpen(true),
+                      icon: <CalendarClock className="h-3.5 w-3.5" />,
+                  },
+              ]
             : []),
     ];
     const employeeExcelActions =
@@ -441,11 +477,9 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     </td>
                                     <td className="px-3 py-2 text-sm">
                                         {employee.jobTitleName ? (
-                                            <span className="text-[#5e3f3a]">{employee.jobTitleName}</span>
+                                            <Badge variant="info">{employee.jobTitleName}</Badge>
                                         ) : (
-                                            <span className="inline-flex items-center rounded-full border border-[#e9bcb6] bg-[#fff4f2] px-2.5 py-0.5 text-xs font-medium text-[#930006]">
-                                                {t("noJobTitle")}
-                                            </span>
+                                            <span className="text-xs italic text-[#8a8f94]">{t("noJobTitle")}</span>
                                         )}
                                     </td>
                                     <td className="px-3 py-2 text-sm">

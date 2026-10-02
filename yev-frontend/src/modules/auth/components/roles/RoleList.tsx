@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import type { RoleDto, CreateRoleDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleForm from "./RoleForm";
@@ -94,9 +94,9 @@ export default function RoleList() {
                 </div>
                 <button
                     onClick={() => setShowCreate(true)}
-                    className="cursor-pointer self-start rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] md:self-auto"
+                    className="flex cursor-pointer items-center gap-1.5 self-start rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] md:self-auto"
                 >
-                    + Thêm vai trò
+                    <Plus className="h-4 w-4" /> Thêm vai trò
                 </button>
             </div>
 
@@ -145,18 +145,22 @@ export default function RoleList() {
                                             </td>
                                             <td className="px-4 py-3 text-[#5e3f3a]">{r.description || "-"}</td>
                                             <td className="px-4 py-3 text-center">
-                                                <div className="inline-flex items-center gap-3">
+                                                <div className="inline-flex items-center gap-1.5">
                                                     <button
                                                         onClick={() => setEditing(r)}
-                                                        className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                        className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                        title="Sửa"
+                                                        aria-label="Sửa"
                                                     >
-                                                        Sửa
+                                                        <Pencil className="h-3.5 w-3.5" />
                                                     </button>
                                                     <button
                                                         onClick={() => openDeleteConfirm(r.id)}
-                                                        className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#e3000f]"
+                                                        className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e9bcb6] text-[#930006] transition hover:bg-[#fff4f2]"
+                                                        title="Xoá"
+                                                        aria-label="Xoá"
                                                     >
-                                                        Xoá
+                                                        <Trash2 className="h-3.5 w-3.5" />
                                                     </button>
                                                 </div>
                                             </td>
@@ -183,6 +187,17 @@ export default function RoleList() {
                             <h3 className="text-lg font-semibold text-[#191c1e]">
                                 {editing ? "Cập nhật vai trò" : "Thêm vai trò"}
                             </h3>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowCreate(false);
+                                    setEditing(null);
+                                }}
+                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                aria-label="Đóng"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
                         </div>
                         {editing ? (
                             <RoleForm

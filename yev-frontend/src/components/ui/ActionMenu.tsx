@@ -7,6 +7,7 @@ export interface ActionMenuItem {
     label: string;
     onClick: () => void;
     disabled?: boolean;
+    icon?: ReactNode;
 }
 
 interface ActionMenuProps {
@@ -67,8 +68,9 @@ export default function ActionMenu({ label, icon, items, disabled }: ActionMenuP
                                 setOpen(false);
                                 item.onClick();
                             }}
-                            className="block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="flex w-full cursor-pointer items-center gap-2 whitespace-nowrap px-4 py-2 text-left text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc] hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
                         >
+                            {item.icon}
                             {item.label}
                         </button>
                     ))}

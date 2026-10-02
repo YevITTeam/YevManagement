@@ -59,3 +59,35 @@ export interface LoginRequestDto {
   userName: string;
   password: string;
 }
+
+// Response của POST /api/LoginQr/{userId} — `qrPayload` là chuỗi duy nhất cần mã hoá thành ảnh QR; BE
+// chỉ lưu bản băm nên mã này chỉ lấy được đúng 1 lần ngay sau khi tạo (docs/identity-api-fe.md §4.10).
+export interface LoginQrGeneratedDto {
+  userId: number;
+  userName: string;
+  fullName: string | null;
+  qrPayload: string;
+  createdAt: string;
+}
+
+// 1 dòng của GET /api/LoginQr — user đang có mã QR còn hiệu lực.
+export interface LoginQrStatusDto {
+  userId: number;
+  createdAt: string;
+  lastUsedAt: string | null;
+  useCount: number;
+}
+
+export type LoginQrLogAction = "Created" | "Revoked" | "LoginSuccess" | "LoginFailed";
+
+export interface LoginQrLogDto {
+  id: number;
+  userId: number | null;
+  action: LoginQrLogAction;
+  actorUserId: number | null;
+  actorName: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  note: string | null;
+  createdAt: string;
+}

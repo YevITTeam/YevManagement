@@ -119,7 +119,7 @@ export default function AssignEmployeeDialog({ orgUnit, onClose }: AssignEmploye
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="assign-employee-title"
-                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <div>

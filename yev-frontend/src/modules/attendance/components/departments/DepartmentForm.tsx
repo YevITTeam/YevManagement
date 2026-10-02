@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface DepartmentFormValues {
     departmentCode: string;
@@ -67,7 +68,7 @@ export default function DepartmentForm({ isOpen, mode, initial, loading = false,
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="department-form-title"
-                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 w-full max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="department-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -84,41 +85,43 @@ export default function DepartmentForm({ isOpen, mode, initial, loading = false,
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
-                        <input
-                            value={values.departmentCode}
-                            onChange={(event) => handleChange("departmentCode", event.target.value)}
-                            placeholder={t("fieldCodePlaceholder")}
-                            disabled={loading}
-                            autoFocus
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
+                            <input
+                                value={values.departmentCode}
+                                onChange={(event) => handleChange("departmentCode", event.target.value)}
+                                placeholder={t("fieldCodePlaceholder")}
+                                disabled={loading}
+                                autoFocus
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldNameVn")}</span>
-                        <input
-                            value={values.departmentNameVn}
-                            onChange={(event) => handleChange("departmentNameVn", event.target.value)}
-                            placeholder={t("fieldNameVnPlaceholder")}
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldNameVn")}<RequiredMark /></span>
+                            <input
+                                value={values.departmentNameVn}
+                                onChange={(event) => handleChange("departmentNameVn", event.target.value)}
+                                placeholder={t("fieldNameVnPlaceholder")}
+                                disabled={loading}
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
-                        <input
-                            value={values.departmentNameJp ?? ""}
-                            onChange={(event) => handleChange("departmentNameJp", event.target.value)}
-                            placeholder={t("fieldNameJpPlaceholder")}
-                            disabled={loading}
-                            className={fieldClassName}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
+                            <input
+                                value={values.departmentNameJp ?? ""}
+                                onChange={(event) => handleChange("departmentNameJp", event.target.value)}
+                                placeholder={t("fieldNameJpPlaceholder")}
+                                disabled={loading}
+                                className={fieldClassName}
+                            />
+                        </label>
+                    </div>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

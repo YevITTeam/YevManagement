@@ -1495,8 +1495,8 @@ Tab **"Đơn tôi tham gia"** (**mới**, mọi role kể cả "Nhân viên") �
 
 ## 10. Attendance AI Chat (`POST /api/AttendanceAiChat/stream`) — 2026-07-29
 
-Trợ lý AI hỗ trợ lập đơn tăng ca qua hội thoại — thiết kế đầy đủ ở
-[attendance-aichat-be-huong-dan.md](attendance-aichat-be-huong-dan.md), đây chỉ tóm tắt hợp đồng FE↔BE.
+Trợ lý AI hỗ trợ lập đơn tăng ca qua hội thoại — kiến trúc/code ở
+[attendance-module.md §AttendanceAiChat](attendance-module.md), đây chỉ tóm tắt hợp đồng FE↔BE.
 
 - **Permission**: `Attendance.AiChat.Use` (migration `AddAttendanceAiChatPermission`, hiện chỉ gán Admin —
   mở rộng cho Role "Trưởng nhóm"/"Nhân viên" là việc làm sau qua UI gán permission có sẵn).
@@ -1527,7 +1527,7 @@ Trợ lý AI hỗ trợ lập đơn tăng ca qua hội thoại — thiết kế 
   > `OtFormService.CreateAsync` đã redesign (không còn Draft, vào chuỗi duyệt Cây chức vụ ngay lập
   > tức, xem §4.1) nhưng bản thân code/prompt của AI Chat (đặt tên tool, mô tả "Draft" trong system
   > prompt) CHƯA được rà lại cho khớp — cần kiểm tra kỹ trước khi coi tính năng này hoạt động đúng ý,
-  > xem [attendance-aichat-be-huong-dan.md §B3](attendance-aichat-be-huong-dan.md).
+  > xem [attendance-module.md §AttendanceAiChat](attendance-module.md) mục "Còn nợ".
 
 ## 11. ProductionOtReport (`/api/ProductionOtReport`) — báo cáo dưới chuyền theo ngày (mới, 2026-08-28;
 mở rộng 2026-08-29 — thêm `departmentId` + đủ 23 cột Excel)

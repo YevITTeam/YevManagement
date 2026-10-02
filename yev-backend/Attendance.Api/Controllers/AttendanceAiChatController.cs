@@ -11,7 +11,7 @@ namespace Attendance.Api.Controllers
     // deliberately does NOT use Success()/Fail() (ApiResponse<T> wrapper) like every other Attendance
     // controller, same precedented exception as Asset's AiChatController: the response body is a
     // sequence of independent JSON lines written incrementally as Ollama answers, not a single
-    // envelope available only at the end (see docs/docs-be/attendance-aichat-be-huong-dan.md).
+    // envelope available only at the end (see docs/docs-be/attendance-module.md §AttendanceAiChat).
     //
     // Unlike Asset's AiChatController, this one MUST resolve the acting user's identity here (same
     // pattern as OtFormController.Create) and thread it down to the orchestrator — the create tool

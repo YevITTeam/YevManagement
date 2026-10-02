@@ -28,6 +28,10 @@ public partial class IdentityDbContext : DbContext
 
     public virtual DbSet<TestLoginAccount> TestLoginAccounts { get; set; }
 
+    public virtual DbSet<LoginQrCode> LoginQrCodes { get; set; }
+
+    public virtual DbSet<LoginQrLog> LoginQrLogs { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Role>(entity =>
@@ -93,6 +97,26 @@ public partial class IdentityDbContext : DbContext
             entity.Property(e => e.FullName).HasMaxLength(100);
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
             entity.HasIndex(e => e.UserName).IsUnique();
+        });
+
+        modelBuilder.Entity<LoginQrCode>(entity =>
+        {
+            entity.Property(e => e.CodeHash).HasMaxLength(64).IsUnicode(false);
+            entity.HasIndex(e => e.CodeHash).IsUnique();
+            entity.HasIndex(e => e.UserId);
+
+            entity.HasOne(e => e.User).WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LoginQrLog>(entity =>
+        {
+            entity.Property(e => e.Action).HasMaxLength(30);
+            entity.Property(e => e.IpAddress).HasMaxLength(64);
+            entity.Property(e => e.UserAgent).HasMaxLength(300);
+            entity.Property(e => e.Note).HasMaxLength(300);
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt });
         });
 
         OnModelCreatingPartial(modelBuilder);

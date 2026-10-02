@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
 import { approvalLevelLabels } from "@/modules/attendance/types/enums";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface OtCaseFormValues {
     code: string;
@@ -66,7 +67,7 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="ot-case-form-title"
-                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 w-full max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="ot-case-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -83,48 +84,50 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldCode")}</span>
-                        <input
-                            value={values.code}
-                            onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
-                            placeholder={t("fieldCodePlaceholder")}
-                            disabled={loading}
-                            autoFocus
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
+                            <input
+                                value={values.code}
+                                onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
+                                placeholder={t("fieldCodePlaceholder")}
+                                disabled={loading}
+                                autoFocus
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldDescription")}</span>
-                        <input
-                            value={values.description ?? ""}
-                            onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))}
-                            placeholder={t("fieldDescriptionPlaceholder")}
-                            disabled={loading}
-                            className={fieldClassName}
-                        />
-                    </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldDescription")}</span>
+                            <input
+                                value={values.description ?? ""}
+                                onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))}
+                                placeholder={t("fieldDescriptionPlaceholder")}
+                                disabled={loading}
+                                className={fieldClassName}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldRequiredLevel")}</span>
-                        <select
-                            value={values.requiredApprovalLevel}
-                            onChange={(event) =>
-                                setValues((current) => ({ ...current, requiredApprovalLevel: Number(event.target.value) }))
-                            }
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        >
-                            {approvalLevelOptions.map((level) => (
-                                <option key={level} value={level}>
-                                    {approvalLevelLabels[level]}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldRequiredLevel")}<RequiredMark /></span>
+                            <select
+                                value={values.requiredApprovalLevel}
+                                onChange={(event) =>
+                                    setValues((current) => ({ ...current, requiredApprovalLevel: Number(event.target.value) }))
+                                }
+                                disabled={loading}
+                                required
+                                className={fieldClassName}
+                            >
+                                {approvalLevelOptions.map((level) => (
+                                    <option key={level} value={level}>
+                                        {approvalLevelLabels[level]}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    </div>
 
                     <label className="flex items-center gap-2">
                         <input

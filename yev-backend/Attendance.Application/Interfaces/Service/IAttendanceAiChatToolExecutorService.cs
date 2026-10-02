@@ -4,7 +4,7 @@ using Attendance.Application.Dtos.AiChat;
 namespace Attendance.Application.Interfaces.Service
 {
     // Dispatches 1 tool call chosen by the model to the matching internal Attendance service
-    // (docs/docs-be/attendance-aichat-be-huong-dan.md §5) and returns the JSON string to place in the
+    // (docs/docs-be/attendance-module.md §AttendanceAiChat) and returns the JSON string to place in the
     // "tool" role message. Unlike Asset's IAiChatToolExecutorService (17 read-only tools), exactly 1
     // tool here (create_ot_form_draft) WRITES data — it calls the exact same
     // IOtFormService.CreateAsync used by the manual "Tạo đơn tăng ca" screen, no duplicated business

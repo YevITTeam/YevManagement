@@ -11,6 +11,8 @@
 | `User` | `Id`, `UserName`(≤100), `FullName?`, `CreatedAt`, `DeviceName?` | N-N Roles, 1-N LoginUserIPs, 1-N UserPermissions | Không |
 | `Role` | `Id`, `RoleName`(≤50), `Description?`, `IsDeleted` | N-N Users, N-N Permissions | **Có** |
 | `LoginUserIP` | `Id`, `UserId`, `IPAddress`, `FirstLoginAt`, `LastLoginAt` | N-1 User | Không |
+| `LoginQrCode` | `Id`, `UserId`, `CodeHash`(SHA-256 hex, unique), `CreatedByUserId?`, `CreatedAt`, `RevokedAt?`, `RevokedByUserId?`, `LastUsedAt?`, `UseCount` | N-1 User (cascade) | Không (thu hồi = set `RevokedAt`) |
+| `LoginQrLog` | `Id`, `UserId?`, `QrCodeId?`, `Action`, `ActorUserId?`, `IpAddress?`, `UserAgent?`, `Note?`, `CreatedAt` | Không FK (giữ lịch sử khi xoá User) | Không |
 | `Permission` | `Id`, `Code`(≤150, unique, `Module.Entity.Action`), `Module`(≤50), `Description?` | N-N Roles, 1-N UserPermissions | Không (cố định, seed qua migration §9) |
 | `UserPermission` | khoá kép `(UserId, PermissionId)`, `IsGranted:bool` | N-1 User, N-1 Permission | Không (override theo User §9.1) |
 
@@ -179,6 +181,26 @@ permission tự động ngay, không cần bước "gọi lại PUT Employee" th
    `Approve` — khớp đúng cấu hình `JobTitlePermission` hiện có của Chức vụ "Staff", không phải lỗi mới).
    **Chưa test tay qua UI thật** việc tạo + duyệt hết 1 đơn "theo Nhóm" bằng đủ 4 cấp này.
 
+### 5.8. Đăng nhập bằng mã QR (app Flutter "YEV Scan")
+Admin in QR cho từng user; app quét QR → nhận JWT như đăng nhập thường. **QR KHÔNG chứa `UserId`** (id tuần tự,
+đoán được → ai cũng đăng nhập thay người khác) mà chứa mã ngẫu nhiên 32 byte, dạng `YEVQR1:<base64url>`.
+- **Lưu trữ:** `LoginQrCode` chỉ giữ **SHA-256** của mã → mã gốc chỉ lấy được **1 lần** ngay lúc tạo; muốn in lại
+  phải tạo mã mới. Mỗi user tối đa 1 mã hoạt động (`RevokedAt == null`): tạo mã mới tự thu hồi mã cũ.
+- **Vòng đời (phương án B, theo yêu cầu):** mã dài hạn, dùng nhiều lần, không tự hết hạn; chỉ hết hiệu lực khi
+  Admin thu hồi/tạo lại hoặc xoá User (cascade). Ai chụp được QR là đăng nhập được → coi như mật khẩu.
+- **Quét:** `POST /api/Auth/qr-login` (`[AllowAnonymous]`) body `{ code }` (nhận có/không tiền tố `YEVQR1:`).
+  `LoginQrService.ConsumeAsync` tra theo hash → lấy `User.UserName` → dựng `ClaimsPrincipal` mồi
+  `Name = UserName` → chạy qua đúng `MyClaimsTransformation` rồi `BuildSession` (cùng nhánh `login`), response
+  `{ user, token }` y hệt `login`. Mã sai/đã thu hồi → 400 "Mã QR không hợp lệ hoặc đã bị thu hồi."
+- **Quản trị:** `LoginQrController` (`api/LoginQr`), **1 permission `Identity.LoginQr.Manage`** (migration
+  `AddLoginQr`, chỉ gán `Admin`): `GET /` (user đang có mã), `POST /{userId}` (tạo mới + thu hồi cũ, trả
+  `qrPayload`), `DELETE /{userId}` (thu hồi), `GET /{userId}/logs` (50 mục gần nhất).
+- **Log (`LoginQrLog`):** `Created`/`Revoked` (kèm `ActorUserId` + IP admin), `LoginSuccess`/`LoginFailed` (IP +
+  User-Agent của máy quét; quét mã không tồn tại ghi `UserId = null`). Chưa có UI xem log tổng, chỉ log theo user
+  trong dialog QR.
+- Chưa làm: giới hạn số lần quét sai theo IP (mã 256-bit nên brute-force không khả thi, nhưng mỗi lần quét sai
+  vẫn ghi 1 dòng log).
+
 ### 5.7. `EnsureUserExistsAsync` — tạo User idempotent cho import cross-module *(2026-09-03)*
 Thêm method mới vào `IUserDirectoryService` (`Shared.Application/Interfaces/`, contract dùng chung để
 module khác gọi vào Identity mà không cần ProjectReference trực tiếp):
@@ -199,6 +221,7 @@ Admin) — xem `docs/docs-be/attendance-module.md §Import Excel liên kết Ide
 | POST | `windows-login` | Negotiate |
 | GET | `me` | Bearer, không cần permission (§5.3) |
 | POST | `login` | AllowAnonymous — tự bind AD bằng username/password (§5.4) |
+| POST | `qr-login` | AllowAnonymous — đăng nhập bằng mã QR (§5.8) |
 | POST | `create-user` | `Identity.User.Create` |
 | GET | `get-all-users-with-roles` | `Identity.User.View` |
 | POST | `update-user-roles` | `Identity.User.UpdateRoles` |
@@ -210,6 +233,14 @@ Admin) — xem `docs/docs-be/attendance-module.md §Import Excel liên kết Ide
 | DELETE | `delete-role/{roleId}` | `Identity.Role.Delete` |
 
 Seed role: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiêt bị`.
+
+### `LoginQrController` — `/api/LoginQr` (`Identity.LoginQr.Manage`, §5.8)
+| Method | Route | Mô tả |
+|---|---|---|
+| GET | `` | User đang có mã QR hoạt động |
+| POST | `{userId}` | Tạo mã mới (thu hồi mã cũ), trả `qrPayload` 1 lần |
+| DELETE | `{userId}` | Thu hồi mã |
+| GET | `{userId}/logs` | 50 log gần nhất |
 
 ### `PermissionController` — `/api/Permission`
 | Method | Route | Permission | Mô tả |
@@ -258,6 +289,7 @@ Mỗi action ↔ 1 mã `Module.Entity.Action`. Role sở hữu tập Permission 
 | `Identity.User` | View, UpdateRoles, UpdatePermissions, UpdateFullName, Create, Delete, **BulkImport** (mới 2026-09-03, migration `AddIdentityUserBulkImportPermission` — chỉ gán Admin, xem §5.7) |
 | `Identity.Role` | View, Create, Update, Delete |
 | `Identity.Permission` | View |
+| `Identity.LoginQr` | **Manage** (mới 2026-10-02, migration `AddLoginQr` — chỉ gán Admin, §5.8) |
 
 **Seed & deploy**: migration INSERT toàn bộ `Permissions` + gán full cho `Admin` (tra `WHERE RoleName=N'Admin'`, không hardcode Id) qua `migrationBuilder.Sql(...)` — tránh Admin mất quyền khi chuyển role-check → permission-check. Role khác **không** gán mặc định, Admin tự cấu hình qua `PUT /api/Permission/role/{roleId}`.
 

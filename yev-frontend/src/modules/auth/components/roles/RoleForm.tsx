@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from "react";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { RequiredMark } from "@/components/ui/RequiredMark";
 
 interface Props {
     initial?: { id?: number; roleName: string; description?: string };
@@ -37,7 +38,9 @@ export default function RoleForm({ initial, onCancel, onSubmit }: Props) {
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">Tên quyền</label>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                    Tên quyền<RequiredMark />
+                </label>
                 <input
                     value={roleName}
                     onChange={(e) => setRoleName(e.target.value)}

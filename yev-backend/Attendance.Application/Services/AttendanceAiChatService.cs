@@ -11,11 +11,11 @@ using Shared.Application.Interfaces.External;
 namespace Attendance.Application.Services
 {
     // Orchestrates 1 chat turn against the LLM server with tool-calling for OT-form creation (mirrors Asset's
-    // AiChatService — docs/docs-be/ai-chat-be-huong-dan.md §4/§14, adapted here in
-    // docs/docs-be/attendance-aichat-be-huong-dan.md). Stateless — the FE resends the whole history
-    // every turn, nothing is persisted server-side. Unlike Asset's version, this feature has exactly 1
-    // WRITE tool (create_ot_form_draft) — see the confirmation gate below (§B3 of the plan), which is
-    // the reason this orchestrator cannot just be a copy-paste of Asset's.
+    // AiChatService — docs/docs-be/asset-module.md §1.18, adapted here in
+    // docs/docs-be/attendance-module.md §AttendanceAiChat). Stateless — the FE resends the whole
+    // history every turn, nothing is persisted server-side. Unlike Asset's version, this feature has
+    // exactly 1 WRITE tool (create_ot_form_draft) — see the confirmation gate below, which is the
+    // reason this orchestrator cannot just be a copy-paste of Asset's.
     public class AttendanceAiChatService : IAttendanceAiChatService
     {
         // Own key (`AiChatSettings:AttendanceMaxToolRounds`), NOT Asset's shared `MaxToolRounds`: this
