@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // nhiều lần". Giờ trang /login là nơi DUY NHẤT chủ động gọi loginWithWindows()/loginWithPassword().
         // Nhánh "chưa có token" cũng phải đi qua Promise.resolve() rồi setState trong `.then()` — không
         // được setState thẳng trong thân effect — vì rule `react-hooks/set-state-in-effect` của React
-        // Compiler chỉ cho phép setState trong `.then()/.catch()/.finally()` (CLAUDE.md §4.5).
+        // Compiler chỉ cho phép setState trong `.then()/.catch()/.finally()` (AGENTS.md §4.5).
         const load = getAuthToken() ? AuthApi.me() : Promise.resolve(null);
 
         load

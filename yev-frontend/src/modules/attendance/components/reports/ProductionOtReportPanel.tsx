@@ -118,7 +118,7 @@ function registerVietnameseFont(doc: jsPDF) {
 // Màu mô phỏng ĐÚNG file PDF gốc docs/Data/Reports/22-08.pdf (2026-08-29, đọc trực tiếp file gốc chứ
 // không phải ảnh chụp) — dòng nhóm CA chữ TÍM đậm; dòng CA_Dãy con: cột nhãn/giờ/Phiếu Phụ chữ ĐEN
 // trên nền XÁM nhạt, riêng 2 cột Chính/Sữa chữ XANH LÁ (quirk của file mẫu, giữ nguyên); tiêu đề +
-// header bảng chi tiết chữ XANH LAM đậm. Không có trong bảng màu thương hiệu CLAUDE.md vì đây là bản
+// header bảng chi tiết chữ XANH LAM đậm. Không có trong bảng màu thương hiệu AGENTS.md vì đây là bản
 // in đối chiếu với hệ cũ, cố tình khác giao diện web của hệ thống.
 const PIVOT_BORDER_COLOR: [number, number, number] = [77, 208, 225];
 const TITLE_COLOR: [number, number, number] = [26, 115, 140];

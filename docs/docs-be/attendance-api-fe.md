@@ -3,7 +3,7 @@
 > Hợp đồng API quản lý Giấy tăng ca (OT Form). Implementation: [attendance-module.md](attendance-module.md).
 > Module Identity: [identity-api-fe.md](identity-api-fe.md) · Module Asset: [asset-api-fe.md](asset-api-fe.md).
 
-- **Base URL (Dev)**: `http://10.45.1.155:8081` (launchSettings hiện trỏ IP này, không phải `localhost:5000` — port đổi từ `8080` ngày 2026-08-26, xem CLAUDE.md) · Scalar UI `/scalar/v1`.
+- **Base URL (Dev)**: `http://10.45.1.155:8081` (launchSettings hiện trỏ IP này, không phải `localhost:5000` — port đổi từ `8080` ngày 2026-08-26, xem AGENTS.md) · Scalar UI `/scalar/v1`.
 - **Auth**: mọi endpoint cần `Authorization: Bearer <token>` (từ `windows-login`, xem [identity-api-fe.md](identity-api-fe.md)) **và** permission tương ứng (vd `Attendance.OTForm.Create`). Thiếu token→401, thiếu permission→403. FE dựa `user.permissions` ẩn/hiện nút.
 - Envelope `ApiResponse<T>`, phân trang, mã lỗi HTTP, pattern CRUD cơ bản — giống hệt Asset, xem [asset-api-fe.md §1](asset-api-fe.md#1-quy-ước-chung). Tóm tắt: mọi response bọc `{ isSuccess, message, data, errors, timestamp }`; `grid-list` trả `data.data[]` + `pageIndex/pageSize/totalCount/totalPages/hasNextPage/hasPreviousPage`.
 - **byte[] qua JSON**: field kiểu `byte[]` (chữ ký `SignatureImage`) serialize/deserialize thành **chuỗi base64** — FE convert ảnh (**upload file ảnh chữ ký có sẵn** — PNG/JPG chụp/scan chữ ký tay thật, KHÔNG phải vẽ bằng canvas/chuột trên web) sang base64 trước khi gửi, và decode base64 → hiển thị `<img src="data:image/png;base64,...">` khi nhận.
@@ -12,7 +12,7 @@
 
 ## MỤC LỤC ĐỌC NHANH — đọc file này theo lát cắt
 
-> ⚠ **File ~165 KB. KHÔNG `Read` cả file** (CLAUDE.md §2 luật 7). `Grep` pattern `^#{2,3} ` để lấy mục
+> ⚠ **File ~165 KB. KHÔNG `Read` cả file** (AGENTS.md §2 luật 7). `Grep` pattern `^#{2,3} ` để lấy mục
 > lục kèm số dòng hiện tại → `Read` đúng dải cần. Tra 1 field/endpoint cụ thể thì `Grep` thẳng chuỗi đó.
 
 | Cần gì | Mục |
@@ -878,7 +878,7 @@ riêng họ phải xử lý — xem `OtFormListPage.tsx`.
 ```
 GET /api/OtForm/my-forms?pageIndex=1&pageSize=50&fromDate=2026-08-01&toDate=2026-08-31&status=3
 ```
-FE: `OtFormApi.get*({ pageIndex, pageSize, fromDate, toDate, status })` (`ot-form.api.ts`) — `status` là số nên **phải** check `!== undefined` (không dùng truthy) vì `0` (Pending) là giá trị lọc hợp lệ, xem CLAUDE.md §4.4. UI bộ lọc (2 ô ngày + dropdown trạng thái + nút Tìm kiếm/Xoá lọc) nằm chung trong `OtFormListPage.tsx` — dùng cho cả 5 tab vì đây là 1 component tái dùng theo prop `mode`.
+FE: `OtFormApi.get*({ pageIndex, pageSize, fromDate, toDate, status })` (`ot-form.api.ts`) — `status` là số nên **phải** check `!== undefined` (không dùng truthy) vì `0` (Pending) là giá trị lọc hợp lệ, xem AGENTS.md §4.4. UI bộ lọc (2 ô ngày + dropdown trạng thái + nút Tìm kiếm/Xoá lọc) nằm chung trong `OtFormListPage.tsx` — dùng cho cả 5 tab vì đây là 1 component tái dùng theo prop `mode`.
 - **Hiển thị người tạo**: FE luôn dùng `createdByFullName ?? createdByUserName` (không hiển thị thẳng `createdByUserName` — yêu cầu "dữ liệu hiển thị lúc nào cũng phải là tên người dùng"). `createdByFullName` có thể `null` nếu tài khoản tạo đơn chưa từng có `FullName` trong Identity lúc tạo.
 - `isEditable` (đổi 2026-08-07) = `status == InApproval && !approvalSteps.some(Approved)`, tính độc lập với người xem — ở `pending-approvals`, 1 đơn `InApproval` vẫn có `isEditable=true` nhưng KHÔNG có nghĩa người duyệt hiện tại sửa được (chỉ chính người tạo mới sửa). FE chỉ hiện nút "Sửa" khi **cả 3 điều kiện**: `isEditable=true` **và** `createdByUserName == user hiện tại` **và** có permission `OTForm.Create` — tức thực tế nút này chỉ có ý nghĩa ở tab "Đơn của tôi" (`my-forms`).
 - **`approvalSummary`** — mảng rút gọn từng lần Ký/Duyệt/Từ chối đã xảy ra trên đơn (sắp theo `actionAt` tăng dần), có mặt trên **cả 5 endpoint danh sách**. Cùng shape với `approvalHistories` ở §4.3 nhưng bỏ `comment`/`signatureImage`/`hasSignature`. FE dùng field này để hiện ngay "đã được ai duyệt" trên từng dòng danh sách — danh sách **không** có tên bước đang chờ tiếp theo (field đó chỉ có ở chi tiết đơn qua `approvalSteps[]`, §4.3), FE hiện dòng "Đang chờ duyệt" chung chung khi `status==InApproval`.

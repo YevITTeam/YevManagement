@@ -44,7 +44,7 @@ namespace Asset.Application.Services
             }
 
             // Phạm vi 1 đợt kiểm kê = Device !IsDeleted, Status = InUse("Đang sử dụng") của xưởng, và loại
-            // thiết bị đang bật DeviceType.IncludedInInventory (quyết định người dùng, CLAUDE.md §2 luật 2).
+            // thiết bị đang bật DeviceType.IncludedInInventory (quyết định người dùng, AGENTS.md §2 luật 2).
             var deviceIds = await _unitOfWork.Devices.SelectAsync(
                 predicate: d => !d.IsDeleted && d.Status == (int)DeviceStatus.InUse && d.BranchId == branchId
                     && d.DeviceType.IncludedInInventory,
@@ -96,7 +96,7 @@ namespace Asset.Application.Services
 
             // Không có bản ghi item nghĩa là thiết bị này không thuộc phạm vi kiểm kê của xưởng đang chạy
             // phiên — bất kể lý do (thiết bị xưởng khác, hoặc chuyển vào xưởng này SAU khi đã snapshot).
-            // Quyết định người dùng: không ghi nhận gì trong trường hợp này (CLAUDE.md §2 luật 2).
+            // Quyết định người dùng: không ghi nhận gì trong trường hợp này (AGENTS.md §2 luật 2).
             var item = await _unitOfWork.InventorySessionItems.FirstOrDefaultAsync(x => x.SessionId == sessionId && x.DeviceId == device.Id);
             if (item == null) throw new DomainException($"Thiết bị '{deviceCode}' không thuộc phạm vi kiểm kê của xưởng này.");
 
@@ -184,7 +184,7 @@ namespace Asset.Application.Services
         }
 
         // Không có file mẫu công ty cho kiểm kê (khác ServerCheck) — tự dựng workbook mới bằng ClosedXML,
-        // layout riêng (CLAUDE.md §4.8 chỉ bắt buộc PDF phải vẽ ở FE, Excel do BE dựng vẫn hợp lệ).
+        // layout riêng (AGENTS.md §4.8 chỉ bắt buộc PDF phải vẽ ở FE, Excel do BE dựng vẫn hợp lệ).
         // 1 dòng = 1 thiết bị của phiên, cùng dữ liệu với màn báo cáo.
         public async Task<(byte[] Content, string FileName)> ExportSessionAsync(int sessionId)
         {

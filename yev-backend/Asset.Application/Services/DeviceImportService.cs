@@ -269,7 +269,7 @@ namespace Asset.Application.Services
 
             // Batch-fetch device-exists-by-code thay vì query từng dòng (file import có thể lên tới hàng
             // trăm dòng) — KHÔNG lọc !IsDeleted, giữ đúng hành vi cũ (unique index của DeviceCode là
-            // global, bản ghi xoá mềm vẫn giữ chỗ mã đó — xem CLAUDE.md §3.4 mục 7).
+            // global, bản ghi xoá mềm vẫn giữ chỗ mã đó — xem AGENTS.md §3.4 mục 7).
             var candidateCodes = rawRows
                 .Select(r => r.DeviceCode?.Trim())
                 .Where(c => !string.IsNullOrWhiteSpace(c))

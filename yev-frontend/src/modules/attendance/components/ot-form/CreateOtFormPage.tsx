@@ -420,7 +420,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, []);
 
     // Chọn lại Team → Line đang chọn (nếu có) có thể không còn thuộc Team mới, reset về rỗng — so
-    // sánh snapshot ngay trong render, không dùng effect để setState (CLAUDE.md §4.5). Bỏ qua khi đã
+    // sánh snapshot ngay trong render, không dùng effect để setState (AGENTS.md §4.5). Bỏ qua khi đã
     // khoá cứng theo Line Leader (isProductionScopeLocked, 2026-09-28) — nếu không, lần tự điền sẵn cả
     // 3 giá trị Team/Line/Nhóm ca CÙNG LÚC (effect fetch productionCreateScopes bên dưới) sẽ bị chính
     // khối này xoá mất Line ngay trong cùng 1 lượt render (Team đổi từ "" sang có giá trị vẫn tính là
@@ -447,7 +447,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // ProductionShiftTeam.cs) nên không cascade theo FK như Line được — thay vào đó suy ra TỪ DỮ LIỆU
     // THẬT: chỉ hiện Nhóm ca nào thực sự có người trong đúng Line/Team đang lọc (2026-08-25, yêu cầu
     // người dùng). Đổi Line/Team → Nhóm ca đang chọn có thể không còn hợp lệ, reset về rỗng — so sánh
-    // snapshot ngay trong render (CLAUDE.md §4.5).
+    // snapshot ngay trong render (AGENTS.md §4.5).
     // Cùng lý do bỏ qua khi khoá cứng như khối reset Line ở trên.
     const shiftTeamFilterKey = `${productionLineId}|${productionTeamId}`;
     const [prevShiftTeamFilterKey, setPrevShiftTeamFilterKey] = useState(shiftTeamFilterKey);
@@ -747,7 +747,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [selectedEmployeeIds, employeeOverrides, startTime, endTime, setting, defaultDidEatForNewEmployee]);
 
     // Đồng bộ kết quả tự tính vào ô nhập — so sánh snapshot NGAY TRONG RENDER thay vì dùng effect
-    // (CLAUDE.md §4.5: không setState đồng bộ trong useEffect). Dừng đồng bộ ngay khi người dùng tự gõ
+    // (AGENTS.md §4.5: không setState đồng bộ trong useEffect). Dừng đồng bộ ngay khi người dùng tự gõ
     // đè (autoMealTicket=false), và không chạy ở màn Sửa đơn vì khối này đã bị khoá.
     const autoMealTicketKey = `${mealTicketCounts.main}/${mealTicketCounts.secondary}`;
     const [prevAutoMealTicketKey, setPrevAutoMealTicketKey] = useState(autoMealTicketKey);
@@ -774,7 +774,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     // Kiểm tra trùng giờ tăng ca (chỉ chạy khi đã nhập đủ ngày, giờ bắt đầu và có ít nhất 1 nhân viên).
     // setState CHỈ được gọi trong callback (setTimeout/.then/.catch), không đồng bộ ở thân effect
-    // (CLAUDE.md §4.5 — react-hooks/set-state-in-effect).
+    // (AGENTS.md §4.5 — react-hooks/set-state-in-effect).
     useEffect(() => {
         const timeout = setTimeout(() => {
             if (!date || !startTime || selectedEmployeeIds.length === 0) {

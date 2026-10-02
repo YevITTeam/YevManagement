@@ -5,7 +5,19 @@
 > người dùng không phải dán lại mã nguồn.
 >
 > **Ngôn ngữ:** trả lời người dùng bằng **tiếng Việt**. Text hiển thị trên UI: **tiếng Việt**.
-> **Comment trong code: tiếng Anh.**
+>
+> **Comment trong code: TIẾNG ANH, ngắn gọn, mô tả hành vi HIỆN TẠI của đoạn code.**
+> KHÔNG viết comment kiểu nhật ký: không ngày tháng, không "trước đây làm X, nay đổi thành Y",
+> không kể lại bug đã gặp / ai yêu cầu / đã thử cách nào. Lý do và lịch sử thuộc về `docs/` và
+> `git log` — code chỉ nói **nó đang làm gì**. Comment cũ sai quy ước thì sửa khi đụng tới, đừng
+> đi sửa hàng loạt nếu không được yêu cầu.
+>
+> ```cs
+> // ❌ Bật lại (2026-08-22) nhưng đổi việc: không còn tự chuyển trạng thái Device
+> //    PendingUse/InUse -> PendingLiquidation -> Liquidated nữa (chuyển trạng thái giờ chỉ còn
+> //    thao tác thủ công hoặc import thanh lý hàng loạt) — job chỉ còn tự soft-delete...
+> // ✅ Soft-deletes devices already marked Liquidated. Status transitions are manual only.
+> ```
 
 ---
 
@@ -17,7 +29,7 @@ YevManagement_FE_BE/
 ├─ docs/
 │  ├─ docs-be/        ← thiết kế BE + HỢP ĐỒNG API (nguồn chân lý chung cho cả 2 phía)
 │  ├─ docs-fe/        ← khuôn mẫu code FE + design system + i18n
-│  ├─ deploy-config/  ← web.config cho IIS + AutoDeploy.ps1 + docker-deploy-guide.md
+│  ├─ deploy-config/  ← web.config cho IIS + AutoDeploy.ps1 (deploy THẬT là IIS, không Docker)
 │  └─ Data/           ← Excel/PDF nghiệp vụ thật (input để đối chiếu, KHÔNG phải doc)
 ├─ yev-backend/       ← .NET 10 modular monolith (`YevManagement.slnx`)
 └─ yev-frontend/      ← Next.js 16 App Router (static export)
@@ -27,8 +39,14 @@ YevManagement_FE_BE/
 Identity (user/role/permission, đăng nhập Windows AD + user/mật khẩu), Asset (quản lý PC/thiết bị),
 Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form builder động + duyệt nhiều cấp).
 
-> `docs/Guideline_PC.md` và `docs/huong-dan-su-dung-attendance.md` là **hướng dẫn cho người dùng cuối**,
-> không phải spec kỹ thuật — đừng suy schema/endpoint từ 2 file đó.
+> `docs/` **không còn hướng dẫn cho người dùng cuối** nào (2 file cũ `Guideline_PC.md` +
+> `huong-dan-su-dung-attendance.md` đã xoá vì lạc hậu so với UI). Đừng viết lại loại tài liệu đó vào
+> `docs/` nếu không được yêu cầu.
+>
+> 4 file `docs/*-Flutter-Guide.md` là **tài liệu bàn giao cho đội app Flutter "YEV Scan"** (cố ý tự
+> chứa, trùng lặp với hợp đồng BE là có chủ đích): `ServerCheck-API`, `ServerCheck-Flutter-Design`,
+> `Inventory-API`, `AppRelease-API`. **Sửa API của 3 nghiệp vụ đó (`asset-api-fe.md §7d/§7e/§7f`) thì
+> phải cập nhật file Flutter tương ứng**, nếu không app sẽ tích hợp theo hợp đồng cũ.
 
 ### Bảng định tuyến task → doc phải đọc TRƯỚC khi code
 
@@ -38,7 +56,7 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form b
 | Module Asset (BE) | [docs/docs-be/asset-module.md](docs/docs-be/asset-module.md) |
 | Module Identity (BE) | [docs/docs-be/identity-module.md](docs/docs-be/identity-module.md) |
 | Module Attendance (BE) | [docs/docs-be/attendance-module.md](docs/docs-be/attendance-module.md) |
-| **Module Workflow (BE + FE)** — form builder động + duyệt nhiều cấp | [docs/docs-be/workflow-module.md](docs/docs-be/workflow-module.md) + sơ đồ [docs/workflow-erd.drawio](docs/workflow-erd.drawio) |
+| **Module Workflow (BE + FE)** — form builder động + duyệt nhiều cấp | [docs/docs-be/workflow-module.md](docs/docs-be/workflow-module.md) (§2 có bản đồ 25 bảng; file `workflow-erd.drawio` đã xoá 2026-09) |
 | **Gọi API từ FE** (Asset / Identity / Attendance) | hợp đồng API tương ứng: [asset-api-fe.md](docs/docs-be/asset-api-fe.md) · [identity-api-fe.md](docs/docs-be/identity-api-fe.md) · [attendance-api-fe.md](docs/docs-be/attendance-api-fe.md) |
 | **Gọi API Workflow từ FE** | **không có** `workflow-api-fe.md` — hợp đồng nằm ngay trong [workflow-module.md](docs/docs-be/workflow-module.md) (§6 endpoint, §10 phần bổ sung cho FE) |
 | Viết file `*.api.ts` / `*.dto.ts` mới | [docs/docs-fe/huong-dan-viet-api-fe.md](docs/docs-fe/huong-dan-viet-api-fe.md) |
@@ -75,11 +93,14 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form b
 
    | Doc | Nặng | Đọc kiểu gì |
    |---|---|---|
-   | `attendance-module.md` | ~378 KB | **Bắt buộc** cắt lát |
-   | `attendance-api-fe.md` | ~162 KB | **Bắt buộc** cắt lát |
-   | `workflow-module.md` | ~135 KB | **Bắt buộc** cắt lát |
-   | `asset-module.md` | ~82 KB | Nên cắt lát |
-   | còn lại (`architecture-core.md`, `*-api-fe.md` nhỏ, `docs-fe/*`) | < 45 KB | Đọc cả file được |
+   | `attendance-module.md` | ~409 KB | **Bắt buộc** cắt lát |
+   | `attendance-api-fe.md` | ~168 KB | **Bắt buộc** cắt lát |
+   | `workflow-module.md` | ~140 KB | **Bắt buộc** cắt lát |
+   | `asset-module.md` | ~123 KB | **Bắt buộc** cắt lát |
+   | `asset-api-fe.md` | ~68 KB | Nên cắt lát |
+   | còn lại (`identity-*.md`, `architecture-core.md`, `docs-fe/*`) | < 30 KB | Đọc cả file được |
+
+   *(Con số chỉ để biết độ nặng tương đối — doc còn phình tiếp, đừng tin tuyệt đối.)*
 
    **Quy trình 3 bước:** (a) đọc bảng **"MỤC LỤC ĐỌC NHANH"** ở đầu mỗi doc lớn (chủ đề → mục/dải dòng);
    (b) `Grep` pattern `^#{2,3} ` trên file đó để lấy số dòng hiện tại của mục cần; (c) `Read` với
@@ -88,7 +109,7 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form b
 8. **Cập nhật doc thì viết theo trạng thái HIỆN TẠI, không viết nhật ký.** Sửa thẳng vào mục đang mô tả
    phần đó; chỉ thêm mục mới khi là nghiệp vụ mới. Khi một quyết định cũ bị thay thế → **xoá/gộp** mục
    cũ, giữ lại đúng 1 dòng "trước làm X, bỏ vì Y" nếu lý do còn giá trị. Đừng nối thêm mục
-   `§... (ngày)` cho mỗi lần sửa — đó là thứ đã làm `attendance-module.md` phình lên 410 KB.
+   `§... (ngày)` cho mỗi lần sửa — đó là thứ đã làm `attendance-module.md` phình lên hơn 400 KB.
 
 ---
 
@@ -109,6 +130,10 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form b
 # từ yev-backend/
 dotnet build YevManagement.slnx
 dotnet run --project CompanySystem.HostApi --launch-profile http
+
+# smoke test nhanh (start → 7 check read-only → stop) — chạy TẠI `yev-backend/`.
+# Có sẵn skill `run-yevmanagement` (scope `yev-backend/`) làm đúng việc này.
+& .claude\skills\run-yevmanagement\smoke.ps1   # thêm -KeepRunning để giữ API chạy
 
 # migration cho 1 module (chạy tại thư mục gốc solution = yev-backend/)
 dotnet ef migrations add <TenMigration> --project Asset.Infrastructure --startup-project CompanySystem.HostApi
@@ -144,14 +169,13 @@ Luật vàng phụ thuộc: **Domain không phụ thuộc gì. Application khôn
 | Module | DB | Trạng thái |
 |---|---|---|
 | Identity | `YevIdentityManagement` | Production. User/Role/Permission, Windows login → JWT. |
-| Asset | `YevPCManagement` | Đang phát triển. Device/Branch/Supplier/DeviceType/Software/IpAddress/TransferHistory/AuditTrail, import Excel, report, AI Chat. |
+| Asset | `YevPCManagement` | Đang phát triển. Device/Branch/Supplier/DeviceType/Software/IpAddress/TransferHistory/AuditTrail, import Excel, report, AI Chat. Thêm 2026-09: **ServerCheck** (kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR + ping), **Inventory** (kiểm kê thiết bị theo xưởng), **AppRelease** (phát hành app mobile "YEV Scan") — xem `asset-module.md §1.19→§1.23`. |
 | Attendance | (xem `attendance-module.md`) | Đã có code. OT Form: duyệt nhiều cấp + phạm vi tổ chức + chữ ký + gửi email. |
 | Workflow | `YevWorkflowManagement` | Đang phát triển, **đã có đủ 4 project + 27 entity + Migrations + FE**. Form builder động + duyệt nhiều cấp theo mô hình POWER EGG; Pha 1→4 (tổ chức/nhân sự → form designer kéo-thả → engine nộp/duyệt → chữ ký + đính kèm + duyệt qua email) đã xong BE lẫn FE. Phần còn nợ ghi ở đầu `workflow-module.md`. **Cố ý ĐỘC LẬP với Attendance** dù trùng 7 nhóm bảng — xem `workflow-module.md §1`. |
 
-> **Trước khi chạm DB Asset:** `PCManagementConnection` trong `appsettings.json` đang trỏ
-> `YevPCManagement`, nhưng dữ liệu production thật của PC Management nằm ở **`YevPCManagement_New`**
-> (2 DB chưa đồng bộ schema/dữ liệu — việc tách/migrate còn dở). Trước khi chạy migration hoặc đọc số
-> liệu "thật", **xác nhận lại đang nối DB nào**; đừng mặc định appsettings là production.
+> **DB Asset — đừng tự đổi connection string:** production thật là **`YevPCManagement_Production`**;
+> `PCManagementConnection` trong `appsettings.json` local trỏ `YevPCManagement` (dev/test) là **cố ý**.
+> Chạy migration hay đọc số liệu "thật" thì xác nhận trước đang nối DB nào.
 
 ### 3.4 Chuẩn code BE (BẮT BUỘC — chi tiết ở `architecture-core.md`)
 
@@ -237,7 +261,7 @@ npx tsc --noEmit    # CHẠY SAU MỖI THAY ĐỔI .ts/.tsx, trước khi báo x
 ```
 src/
 ├─ app/[locale]/            # mọi route nằm dưới [locale] (vi | ja)
-│  #                          route groups: (admin) (ot-manager) (pc-manager) (workflow-manager)
+│  #                          route groups: (admin) (ot-manager) (pc-manager) (pc-scan) (workflow-manager)
 │  #                          route công khai mở từ link email: login, xac-nhan-* (5 route)
 │  ├─ layout.tsx            # root: Header + ToastContainer + AuthProvider + AuthGuard (mount toàn cục)
 │  └─ .../page.tsx          # mỗi page CHỈ là wrapper mỏng render 1 component List/Page

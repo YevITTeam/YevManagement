@@ -15,7 +15,7 @@ cycle, or start it manually and call endpoints with a JWT obtained from
 
 All paths below are relative to the solution root (`yev-backend/`, where
 `YevManagement.slnx` lives). Project-wide conventions live in the repo root
-`CLAUDE.md`.
+`AGENTS.md`.
 
 ## Prerequisites
 

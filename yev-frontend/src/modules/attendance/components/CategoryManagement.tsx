@@ -76,7 +76,7 @@ export default function CategoryManagement() {
     const [activeTab, setActiveTabState] = useState<CategoryTab>(defaultTabKey);
     // Nếu tab đang chọn không còn nằm trong danh sách thấy được (vd permission user thay đổi giữa
     // chừng, hoặc lần render đầu "user" từ AuthContext chưa kịp có) thì tự chuyển về tab mặc định phù
-    // hợp — so sánh snapshot ngay trong render, không dùng effect (xem CLAUDE.md "Reset state khi 1
+    // hợp — so sánh snapshot ngay trong render, không dùng effect (xem AGENTS.md "Reset state khi 1
     // giá trị đổi").
     const [prevDefaultTabKey, setPrevDefaultTabKey] = useState(defaultTabKey);
     if (prevDefaultTabKey !== defaultTabKey && !tabs.some((tab) => tab.key === activeTab)) {

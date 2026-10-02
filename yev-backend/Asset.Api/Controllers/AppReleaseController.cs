@@ -87,7 +87,7 @@ namespace Asset.Api.Controllers
             return Success(downloadUrl, "Tải file lên thành công.");
         }
 
-        // Trả file nhị phân trực tiếp, KHÔNG bọc ApiResponse<T> (rule CLAUDE.md §3.4-1 chỉ áp dụng cho
+        // Trả file nhị phân trực tiếp, KHÔNG bọc ApiResponse<T> (rule AGENTS.md §3.4-1 chỉ áp dụng cho
         // JSON) — để app Flutter tải file bằng URL thuần. [AllowAnonymous] vì app gọi GetLatest() trước
         // khi đăng nhập rồi tải thẳng file này (cùng bề mặt anonymous với GetLatest).
         [AllowAnonymous]

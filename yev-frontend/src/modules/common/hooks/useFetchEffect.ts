@@ -7,7 +7,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 // tab (mất khi F5/đóng tab), không cần TTL/eviction vì quy mô danh mục của app này nhỏ.
 const cacheStore = new Map<string, unknown>();
 
-// Pattern chuẩn để fetch dữ liệu trong list/detail/panel — xem CLAUDE.md "Pattern fetch dữ liệu".
+// Pattern chuẩn để fetch dữ liệu trong list/detail/panel — xem AGENTS.md "Pattern fetch dữ liệu".
 // Lý do cần hook này thay vì viết `fetchXxx` async/await gọi thẳng trong `useEffect` (cách cũ): rule
 // `react-hooks/set-state-in-effect` (React Compiler) chỉ cho phép effect gọi hàm setState bên trong
 // `.then()/.catch()/.finally()`, không cho phép gọi `async function` (kể cả khi setState nằm sau
