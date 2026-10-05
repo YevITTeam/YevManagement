@@ -10,17 +10,23 @@ const ENDPOINTS = {
 } as const;
 
 export interface GetDeviceListReportParams {
-    deviceTypeId?: number;
+    // Empty or omitted = no device type filter; otherwise matches any listed type.
+    deviceTypeIds?: number[];
     branchId?: number;
-    keyword?: string;
+    departmentId?: number;
+    groupId?: number;
+    // 0 = Chưa sử dụng, 1 = Đang sử dụng; omitted = both.
+    status?: number;
 }
 
 export const ReportApi = {
     getDeviceListReport: async (params?: GetDeviceListReportParams) => {
         const query = new URLSearchParams();
-        if (params?.deviceTypeId !== undefined) query.set("DeviceTypeId", String(params.deviceTypeId));
+        params?.deviceTypeIds?.forEach((id) => query.append("DeviceTypeIds", String(id)));
         if (params?.branchId !== undefined) query.set("BranchId", String(params.branchId));
-        if (params?.keyword) query.set("Keyword", params.keyword);
+        if (params?.departmentId !== undefined) query.set("DepartmentId", String(params.departmentId));
+        if (params?.groupId !== undefined) query.set("GroupId", String(params.groupId));
+        if (params?.status !== undefined) query.set("Status", String(params.status));
 
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.REPORT.getDeviceListReport}?${queryString}` : ENDPOINTS.REPORT.getDeviceListReport;

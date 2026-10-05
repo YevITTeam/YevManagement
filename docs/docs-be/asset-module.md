@@ -117,8 +117,8 @@ Server luôn set `= PurchaseDate.AddMonths(DepreciationMonths)` trong Create/Upd
 - **Filter**: `DeviceFilterRequest.IpAddress?`/`Email?` (Contains, khớp bất kỳ IP/email qua `.Any(!IsDeleted)`).
 - **Hệ luỵ**: `TransferHistory` chuyển toàn bộ IP máy cũ→mới; import Tanium chỉ "cướp" IP đó, không đụng IP khác của Device.
 
-### 1.7. Báo cáo "DANH SÁCH DESKTOP" — `GET /api/Report/device-list?deviceTypeId=&branchId=&keyword=`
-Controller riêng `ReportController` (gom báo cáo tương lai). Trả thẳng `List<DeviceReportItemDto>` (**không phân trang**): `Stt`(đánh lại theo `OrderBy(DeviceCode)`), `DeviceCode`, `DeviceName`, `IpAddress`(toàn bộ IP nối `", "`), `PurchaseDate`, `ExpirationDate`, `IsExpired`(`ExpirationDate < hôm nay UTC`), `FinancialPeriod`, `Note`. Filter optional.
+### 1.7. Báo cáo "DANH SÁCH DESKTOP" — `GET /api/Report/device-list?DeviceTypeIds=&BranchId=&DepartmentId=&GroupId=&Status=&Keyword=`
+Controller riêng `ReportController` (gom báo cáo tương lai). Trả thẳng `List<DeviceReportItemDto>` (**không phân trang**): `Stt`(đánh lại theo `OrderBy(DeviceCode)`), `DeviceCode`, `DeviceName`, `IpAddress`(toàn bộ IP nối `", "`), `PurchaseDate`, `ExpirationDate`, `IsExpired`(`ExpirationDate < hôm nay UTC`), `FinancialPeriod`, `Note`. Filter optional, kết hợp AND: `DeviceTypeIds` (danh sách, khớp bất kỳ loại nào; FE dialog cho chọn nhiều loại), `BranchId`, `DepartmentId`, `GroupId` (`Device.DepartmentId`/`Device.GroupId`), `Status` (0/1, null = cả hai), `Keyword` (Contains mã/tên; chỉ AI Chat dùng, dialog xuất PDF đã bỏ). Dùng chung request DTO `DeviceReportFilterRequest` với AI Chat tool `GetDeviceReportAsync` (gửi 1 loại trong list).
 **Chỉ lấy thiết bị `Status == PendingUse || Status == InUse`** (2026-07-29) — báo cáo dùng để thống kê thiết bị chờ sử dụng + đang vận hành, không tính thiết bị chờ thanh lý/đã thanh lý.
 **Kỳ tài chính (`FinancialPeriod`)**: tính từ `ExpirationDate` (không phải PurchaseDate). Năm tài chính Yazaki **1/7→30/6**, đánh số từ 1941:
 ```

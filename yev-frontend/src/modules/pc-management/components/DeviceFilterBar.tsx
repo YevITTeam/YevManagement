@@ -132,12 +132,6 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
             })
             .catch((err) => console.error(err));
 
-        DeviceGroupApi.getAllDeviceGroups()
-            .then((data) => {
-                if (!isCancelled) setDeviceGroups(data);
-            })
-            .catch((err) => console.error(err));
-
         DeviceDepartmentApi.getAllDeviceDepartments()
             .then((data) => {
                 if (!isCancelled) setDeviceDepartments(data);
@@ -148,6 +142,22 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
             isCancelled = true;
         };
     }, []);
+
+    // Group list follows the selected department; with no department selected every group is listed.
+    useEffect(() => {
+        let isCancelled = false;
+        const departmentId = filters.departmentId === "" ? undefined : Number(filters.departmentId);
+
+        DeviceGroupApi.getAllDeviceGroups(departmentId)
+            .then((data) => {
+                if (!isCancelled) setDeviceGroups(data);
+            })
+            .catch((err) => console.error(err));
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [filters.departmentId]);
 
     // Tự động tìm kiếm sau khi người dùng ngừng gõ/thay đổi bộ lọc (debounce), không cần nút "Lọc dữ liệu".
     useEffect(() => {
@@ -176,7 +186,12 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
     );
 
     const handleChange = (field: keyof DeviceFilters, value: string) => {
-        setFilters((current) => ({ ...current, [field]: value }));
+        setFilters((current) => ({
+            ...current,
+            [field]: value,
+            // A group belongs to exactly one department, so a previously picked group is cleared when the department changes.
+            ...(field === "departmentId" ? { groupId: "" } : {}),
+        }));
     };
 
     const handleReset = () => {

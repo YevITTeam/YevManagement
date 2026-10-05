@@ -279,7 +279,7 @@ namespace Asset.Application.Services
 
             var request = new DeviceReportFilterRequest
             {
-                DeviceTypeId = deviceTypeId,
+                DeviceTypeIds = deviceTypeId.HasValue ? new List<int> { deviceTypeId.Value } : null,
                 BranchId = branchId,
                 Keyword = GetStringArg(args, "keyword")
             };

@@ -202,8 +202,8 @@ Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ 
 
 ### 5.7 `DELETE /{id}` — soft-delete, gỡ IP về `Available`. **Không** tự xóa Config/Software.
 
-### 5.8 Báo cáo — `GET /api/Report/device-list?deviceTypeId=&branchId=&keyword=`
-Controller riêng `/api/Report`. Không phân trang, `data` mảng thẳng. Filter optional (`keyword` Contains `deviceCode`/`deviceName`). Chỉ trả thiết bị **"Chờ sử dụng"/"Đang sử dụng"** (`PendingUse`/`InUse`) — thiết bị chờ thanh lý/đã thanh lý không xuất hiện trong báo cáo.
+### 5.8 Báo cáo — `GET /api/Report/device-list?DeviceTypeIds=&BranchId=&DepartmentId=&GroupId=&Status=&Keyword=`
+Controller riêng `/api/Report`. Không phân trang, `data` mảng thẳng. Filter optional, kết hợp AND: `DeviceTypeIds` lặp key (`?DeviceTypeIds=1&DeviceTypeIds=3`, khớp bất kỳ loại nào trong danh sách; bỏ trống = không lọc loại), `BranchId`, `DepartmentId`, `GroupId` (Nhóm đã thuộc 1 Bộ phận nên FE chọn Bộ phận trước rồi mới chọn Nhóm), `Status` (`0` Chưa sử dụng / `1` Đang sử dụng; bỏ trống = cả hai), `Keyword` Contains `deviceCode`/`deviceName` (dialog xuất PDF không còn ô này, chỉ AI Chat dùng). Chỉ trả thiết bị **"Chờ sử dụng"/"Đang sử dụng"** (`PendingUse`/`InUse`) — thiết bị chờ thanh lý/đã thanh lý không xuất hiện trong báo cáo.
 ```jsonc
 // data[] — sort deviceCode A-Z, stt đánh lại
 { "stt":1, "deviceCode":"...", "deviceName":"...", "ipAddress":null,  // nhiều IP nối ", "

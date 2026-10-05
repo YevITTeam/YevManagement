@@ -309,11 +309,23 @@ namespace Asset.Application.Services
                 .Where(d => !d.IsDeleted
                     && (d.Status == (int)DeviceStatus.PendingUse || d.Status == (int)DeviceStatus.InUse));
 
-            if (request.DeviceTypeId.HasValue)
-                query = query.Where(d => d.DeviceTypeId == request.DeviceTypeId.Value);
+            if (request.Status.HasValue)
+                query = query.Where(d => d.Status == request.Status.Value);
+
+            if (request.DeviceTypeIds is { Count: > 0 })
+            {
+                var deviceTypeIds = request.DeviceTypeIds;
+                query = query.Where(d => deviceTypeIds.Contains(d.DeviceTypeId));
+            }
 
             if (request.BranchId.HasValue)
                 query = query.Where(d => d.BranchId == request.BranchId.Value);
+
+            if (request.DepartmentId.HasValue)
+                query = query.Where(d => d.DepartmentId == request.DepartmentId.Value);
+
+            if (request.GroupId.HasValue)
+                query = query.Where(d => d.GroupId == request.GroupId.Value);
 
             if (!string.IsNullOrWhiteSpace(request.Keyword))
                 query = query.Where(d => d.DeviceCode.Contains(request.Keyword) || d.DeviceName.Contains(request.Keyword));
