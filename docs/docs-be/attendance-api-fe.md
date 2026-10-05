@@ -1242,8 +1242,9 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
   "earlyMealWindowStartTime": "06:00:00",  // TimeOnly "HH:mm:ss", [Required] khi PUT
   "earlyMealWindowEndTime": "08:00:00",    // TimeOnly "HH:mm:ss", [Required] khi PUT
   "dailyOtHourLimit": 4,           // decimal, [Range(0.5, 24)] khi PUT — MỚI 2026-08-26
-  "monthlyOtHourLimit": 25,        // decimal, [Range(1, 744)] khi PUT
-  "yearlyOtHourLimit": 300,        // decimal, [Range(1, 8784)] khi PUT
+  "monthlyOtHourLimit": 25,        // decimal, [Range(1, 744)] khi PUT — lũy kế tháng vượt mốc này => BẮT BUỘC TH3 (không chặn)
+  "yearlyOtHourLimit": 300,        // decimal, [Range(1, 8784)] khi PUT — lũy kế năm vượt mốc này => BẮT BUỘC TH3 (không chặn)
+  "dailyOtHourLimitHoliday": 12,   // decimal, [Range(0.5, 24)] khi PUT — mốc ngày dùng khi ngày đó nằm trong lịch ngày nghỉ (§6d-2)
   "batchAutoSendTime": "15:00:00"  // TimeOnly "HH:mm:ss", [Required] khi PUT — mới 2026-08-08, xem §6e
 }
 ```
@@ -1261,16 +1262,14 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
 - **`earlyMealWindowStartTime`/`earlyMealWindowEndTime`** — khung OT sớm đặc cách (mặc định 6h-8h). Ca
   OT có `startTime`/`endTime` khớp **ĐÚNG** 2 mốc này (không phải chỉ chồng lấn) luôn nhận phiếu Phụ và
   KHÔNG bị trừ `mealBreakDeductionHours`, bất kể `didEat`.
-- **`dailyOtHourLimit`/`monthlyOtHourLimit`/`yearlyOtHourLimit`** — REDESIGN 2026-08-26 (đảo ngược
-  hoàn toàn hành vi cũ): cả 3 mốc giờ đều **CHẶN CỨNG** `POST`/`PUT /api/OtForm` — nếu tổng giờ OT
-  thực tích của 1 nhân viên (SAU khi cộng thêm giờ của chính đơn đang tạo/sửa) vượt bất kỳ mốc nào,
-  BE trả 400 liệt kê tên các nhân viên vi phạm + mốc bị vượt, không tạo/sửa được đơn cho tới khi loại
-  nhân viên đó khỏi đơn hoặc giảm giờ (xem `OtFormService.ValidateOtHourLimitsAsync`). "Ngày" cộng dồn
-  TẤT CẢ ca OT của 1 nhân viên trong đúng ngày (nhiều đơn/nhiều ca cộng lại, không phải riêng lẻ từng
-  ca). Badge/pill đỏ ở `EmployeeList.tsx`/`CreateOtFormPage.tsx`/`OtFormDetail.tsx`/
-  `OtFormBatchDetail.tsx`/`OtFormPrintView.tsx` vẫn giữ nguyên vai trò cảnh báo SỚM (trước khi submit),
-  nhưng giờ BE mới là nguồn chặn thật — không chỉnh lũy kế thủ công qua `PUT /Employee/{id}` được nữa
-  (đã bỏ từ 2026-08-19, xem §3.6) nên không có đường vòng nào để né validate này.
+- **`dailyOtHourLimit`/`dailyOtHourLimitHoliday`** — **CHẶN CỨNG** `POST`/`PUT /api/OtForm`: tổng giờ OT thực tích
+  của 1 nhân viên trong đúng ngày (cộng mọi đơn/ca trong ngày, kể cả giờ của đơn đang tạo/sửa) vượt mốc
+  thì BE trả 400 liệt kê nhân viên vi phạm (xem `OtFormService.ValidateOtHourLimitsAsync`). Ngày nằm trong
+  lịch ngày nghỉ (§6d-2) dùng `dailyOtHourLimitHoliday`, còn lại dùng `dailyOtHourLimit`.
+- **`monthlyOtHourLimit`/`yearlyOtHourLimit`** — KHÔNG chặn: vượt thì đơn bắt buộc là TH3 (§6d-2). Badge/pill
+  đỏ ở `EmployeeList.tsx`/`CreateOtFormPage.tsx`/`OtFormDetail.tsx`/`OtFormBatchDetail.tsx`/
+  `OtFormPrintView.tsx` là cảnh báo SỚM. Không chỉnh lũy kế thủ công qua `PUT /Employee/{id}` được (đã bỏ
+  từ 2026-08-19, xem §3.6).
 - **FE cache dùng chung** (`useAttendanceSetting.ts`) — 1 promise cấp module, không gọi lại API mỗi màn
   mount; gọi `invalidateAttendanceSettingCache()` sau khi Admin lưu cấu hình mới để các màn mở sau đó
   thấy ngay, không cần F5 cả trang.
@@ -1278,6 +1277,39 @@ cảnh báo lũy kế 25h/tháng·300h/năm ở FE) nay gộp vào 1 bảng cấ
   — vẫn dùng cứng giá trị mặc định (2.5h/25h/300h) cho màu cảnh báo lũy kế. Chấp nhận được vì đây chỉ
   là gợi ý hiển thị, không phải số liệu quyết định nghiệp vụ.
 - Thành công → `data` = `AttendanceSettingDto` đầy đủ (cả GET lẫn PUT), không cần gọi lại `GetById`.
+
+## 6d-2. Lịch ngày nghỉ (`/api/WorkCalendar`) + Trường hợp OT tự động
+
+Lịch ngày nghỉ của công ty (Chủ nhật, ngày lễ, nghỉ đặc biệt). Ngày CÓ dòng trong lịch = ngày nghỉ, ngày
+không có dòng = ngày làm việc. Năm chưa import lịch thì mọi ngày là ngày làm việc.
+
+| Method | Route | Quyền | Mô tả |
+|---|---|---|---|
+| GET | `/api/WorkCalendar?year=2026` | mọi tài khoản đăng nhập | `WorkCalendarDayDto[]` sắp theo ngày |
+| GET | `/api/WorkCalendar/template?year=2026` | mọi tài khoản đăng nhập | file `.xlsx` mẫu: toàn bộ Chủ nhật của năm + các ngày đã lưu |
+| POST | `/api/WorkCalendar/import?year=2026` | `Attendance.Setting.Update` | multipart `file`; **thay thế toàn bộ** lịch của năm, all-or-nothing |
+
+```jsonc
+// WorkCalendarDayDto
+{ "date": "2026-02-16", "dayType": 2, "note": null }   // dayType: 1 Chủ nhật, 2 Ngày lễ, 3 Nghỉ đặc biệt
+```
+
+File Excel: sheet "Lịch nghỉ", hàng 1 là tiêu đề (`Ngày` · `Loại` · `Ghi chú`), từ hàng 2 mỗi dòng 1 ngày.
+`Loại` chỉ nhận `Chủ nhật` / `Ngày lễ` / `Nghỉ đặc biệt`. Ngày phải thuộc đúng năm import, không trùng. Có
+bất kỳ dòng lỗi nào thì không ghi gì và trả 400 liệt kê tối đa 10 lỗi.
+
+**Trường hợp OT (`otCaseId`) do hệ thống quyết định**, `POST /api/OtForm` (cả Theo Nhóm lẫn Theo chuyền)
+trả 400 nếu `otCaseId` gửi lên không khớp:
+
+1. Có nhân viên nào mà lũy kế tháng hoặc năm (đã cộng giờ của chính đơn) vượt `monthlyOtHourLimit` /
+   `yearlyOtHourLimit` (ưu tiên mốc riêng `customMonthlyOtHourLimit`/`customYearlyOtHourLimit` của nhân
+   viên nếu có) → **TH3**. Lũy kế ngày không bao giờ ép TH3.
+2. Ngược lại, ngày của đơn nằm trong lịch ngày nghỉ → **TH2**, còn lại → **TH1**.
+
+Chỉ mốc **ngày** còn chặn cứng, và cũng đổi theo lịch: ngày nghỉ dùng `dailyOtHourLimitHoliday`, ngày làm việc dùng
+`dailyOtHourLimit`. `PUT /api/OtForm/{id}` không đổi Trường hợp OT: nếu giờ sửa khiến nhân viên vượt mốc
+tháng/năm mà đơn chưa phải TH3 thì trả 400. FE (`CreateOtFormPage.tsx`) tự điền và khoá ô Trường hợp OT
+theo đúng các luật này.
 
 ## 6e. Đơn tổng (`/api/OtFormBatch`) — gom nhiều đơn theo cấp quản lý, duyệt 1 lần (mới, 2026-08-06; redesign 2026-08-07 Giai đoạn 3.2; mở rộng sang cả 3 cấp quản lý 2026-09-05)
 

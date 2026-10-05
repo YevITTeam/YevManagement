@@ -12,6 +12,7 @@ import type { DeviceGroupDto } from "@/modules/pc-management/types/device-group.
 import { DeviceDepartmentApi } from "@/modules/pc-management/api/device-department.api";
 import type { DeviceDepartmentDto } from "@/modules/pc-management/types/device-department.dto";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 export interface DeviceFilters {
     deviceCode: string;
@@ -227,12 +228,12 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                         onChange={(value) => handleChange("status", value)}
                         options={[
                             { value: "", label: "Tất cả trạng thái" },
-                            { value: "0", label: "Chưa sử dụng" },
-                            { value: "1", label: "Đang sử dụng" },
-                            { value: "2", label: "Chờ thanh lý" },
-                            { value: "3", label: "Đã thanh lý" },
+                            { value: "0", label: "Chưa sử dụng", dotClassName: "bg-[#94a3b8]" },
+                            { value: "1", label: "Đang sử dụng", dotClassName: "bg-[#16a34a]" },
+                            { value: "2", label: "Chờ thanh lý", dotClassName: "bg-[#f59e0b]" },
+                            { value: "3", label: "Đã thanh lý", dotClassName: "bg-[#dc2626]" },
                             // Not a Device.Status value (only 0-3) — separate filter on IsOutsourced sharing this dropdown.
-                            { value: "outsourced", label: "Thuê ngoài" },
+                            { value: "outsourced", label: "Thuê ngoài", dotClassName: "bg-[#2563eb]" },
                         ]}
                     />
 
@@ -444,22 +445,7 @@ function NativeSelect({
 }: {
     value: string;
     onChange: (value: string) => void;
-    options: { value: string; label: string }[];
+    options: { value: string; label: string; dotClassName?: string }[];
 }) {
-    return (
-        <div className="relative">
-            <select
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                className={`${fieldClassName} appearance-none pr-8 ${value === "" ? "text-[#8a8f94]" : ""}`}
-            >
-                {options.map((option) => (
-                    <option key={option.value} value={option.value} className="text-[#191c1e]">
-                        {option.label}
-                    </option>
-                ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
-        </div>
-    );
+    return <StyledSelect value={value} onChange={onChange} triggerClassName={`${fieldClassName} pr-8`} options={options} />;
 }

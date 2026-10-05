@@ -473,8 +473,7 @@ namespace Asset.Application.Services
                 var ngItems = group.Where(i => i.Status == (int)ServerCheckItemStatus.Ng).ToList();
                 if (ngItems.Count == 0) return (true, null);
 
-                var note = string.Join("; ", ngItems.Select(i =>
-                    string.IsNullOrWhiteSpace(i.Note) ? i.DeviceCode : $"{i.DeviceCode}: {i.Note}"));
+                var note = string.Join("; ", ngItems.Select(i => i.DeviceCode));
                 return (false, note);
             }
 
@@ -530,6 +529,17 @@ namespace Asset.Application.Services
         public async Task<(byte[] Content, string FileName)> ExportReportAsync(DateTime fromDate, DateTime toDate, int? branchId)
         {
             var rows = await GetReportAsync(fromDate, toDate, branchId);
+            // One entry per calendar day in the range; a day with no session keeps a null row so the
+            // printed sheet shows every date and leaves the unchecked days blank.
+            var rowsByDate = rows.ToLookup(r => r.CheckDate.Date);
+            var displayRows = new List<(DateTime Date, ServerCheckReportRowDto? Row)>();
+            for (var day = fromDate.Date; day <= toDate.Date; day = day.AddDays(1))
+            {
+                var dayRows = rowsByDate[day].ToList();
+                if (dayRows.Count == 0) displayRows.Add((day, null));
+                else displayRows.AddRange(dayRows.Select(r => (day, (ServerCheckReportRowDto?)r)));
+            }
+
             // Thứ tự cột F..L trong file mẫu ĐÃ IN SẴN đúng tên 7 mục (Tình trạng âm thanh.../Network -
             // Factory/Server/Gởi nhận Mail/Backup - File Srv/OES/Domain) theo DisplayOrder 1..7 — không
             // ghi lại tên cột, chỉ cần map giá trị theo ĐÚNG thứ tự này, KHÔNG theo ManualItemId cụ thể
@@ -543,15 +553,15 @@ namespace Asset.Application.Services
             const int templateLastDataRow = 34; // 26 dòng trống có sẵn trong file mẫu
             const int templateRowCount = templateLastDataRow - templateFirstDataRow + 1;
 
-            if (rows.Count < templateRowCount)
+            if (displayRows.Count < templateRowCount)
             {
                 // Bớt dòng thừa (kéo theo phần chú thích/chữ ký ở dưới tự trồi lên) để không in ra
                 // hàng loạt dòng trắng khi khoảng ngày lọc ngắn hơn 1 tháng.
-                sheet.Rows(templateFirstDataRow + rows.Count, templateLastDataRow).Delete();
+                sheet.Rows(templateFirstDataRow + displayRows.Count, templateLastDataRow).Delete();
             }
-            else if (rows.Count > templateRowCount)
+            else if (displayRows.Count > templateRowCount)
             {
-                var extraRows = rows.Count - templateRowCount;
+                var extraRows = displayRows.Count - templateRowCount;
                 var templateRow = sheet.Row(templateLastDataRow);
                 var inserted = templateRow.InsertRowsBelow(extraRows);
                 foreach (var newRow in inserted)
@@ -578,12 +588,14 @@ namespace Asset.Application.Services
                 null => string.Empty
             };
 
-            for (var i = 0; i < rows.Count; i++)
+            for (var i = 0; i < displayRows.Count; i++)
             {
-                var row = rows[i];
+                var (date, row) = displayRows[i];
                 var excelRow = templateFirstDataRow + i;
 
-                sheet.Cell(excelRow, 1).Value = singleMonth ? row.CheckDate.Day.ToString() : row.CheckDate.ToString("dd/MM/yyyy");
+                sheet.Cell(excelRow, 1).Value = singleMonth ? date.Day.ToString() : date.ToString("dd/MM/yyyy");
+                if (row == null) continue;
+
                 sheet.Cell(excelRow, 2).Value = StatusText(row.ServerStatus);
                 sheet.Cell(excelRow, 3).Value = StatusText(row.NetworkStatus);
                 sheet.Cell(excelRow, 4).Value = StatusText(row.UpsStatus);

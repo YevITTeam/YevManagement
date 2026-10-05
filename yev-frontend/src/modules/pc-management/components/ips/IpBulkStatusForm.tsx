@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { ipStatusLabels } from "./ip-status";
+import { ipStatusDotClasses, ipStatusLabels } from "./ip-status";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 // docs/asset-api-fe.md §4.2 — PUT /api/IpAddress/bulk-status: status chỉ nhận 0/1,
 // updateNote=false (mặc định) giữ nguyên note riêng từng IP.
@@ -72,15 +73,16 @@ export default function IpBulkStatusForm({ isOpen, selectedCount, loading = fals
 
                     <label className="block">
                         <span className={fieldLabelClassName}>Trạng thái mới</span>
-                        <select
+                        <StyledSelect
                             value={values.status}
-                            onChange={(event) => setValues((current) => ({ ...current, status: event.target.value as "0" | "1" }))}
+                            onChange={(status) => setValues((current) => ({ ...current, status }))}
                             disabled={loading}
-                            className={fieldClassName}
-                        >
-                            <option value="0">{ipStatusLabels[0]}</option>
-                            <option value="1">{ipStatusLabels[1]}</option>
-                        </select>
+                            triggerClassName={`${fieldClassName} pr-9`}
+                            options={[
+                                { value: "0" as const, label: ipStatusLabels[0], dotClassName: ipStatusDotClasses[0] },
+                                { value: "1" as const, label: ipStatusLabels[1], dotClassName: ipStatusDotClasses[1] },
+                            ]}
+                        />
                     </label>
 
                     <label className="flex items-center gap-2 text-sm text-[#191c1e]">

@@ -1,7 +1,15 @@
 import type { UserDto } from "@/modules/auth/types/auth.dto";
 
 // FE chỉ dùng permission để ẩn/hiện UI — BE luôn tự enforce lại ở tầng API (xem docs/identity-api-fe.md §3).
-export const hasPermission = (user: UserDto | null | undefined, code: string): boolean => {
+// Khu vực Admin hiện nếu user có ít nhất 1 permission quản trị Identity — dùng cho menu Header và guard route /admin.
+export const IDENTITY_ADMIN_PERMISSIONS = [
+    "Identity.User.View",
+    "Identity.User.UpdateRoles",
+    "Identity.Role.View",
+    "Identity.Permission.View",
+];
+
+export const hasPermission =(user: UserDto | null | undefined, code: string): boolean => {
     return Boolean(user?.permissions?.includes(code));
 };
 

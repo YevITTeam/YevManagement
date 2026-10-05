@@ -653,6 +653,8 @@ namespace Attendance.Application.Services
 
             var validatedEmployees = await ValidateEmployeesAsync(groupId, request.StartTime, request.EndTime, request.Employees);
 
+            await EnsureOtCaseMatchesRulesAsync(request, isProductionForm: false, otCase!);
+
             // Kiểm tra trùng giờ tăng ca — 1 nhân viên không được xuất hiện trong 2 đơn tăng ca có
             // giờ chồng chéo trong cùng 1 ngày. Chỉ xét các đơn chưa bị xóa và chưa bị từ chối.
             var employeeTimes = request.Employees.ToDictionary(
@@ -769,6 +771,8 @@ namespace Attendance.Application.Services
             }
 
             var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
+
+            await EnsureOtCaseMatchesRulesAsync(request, isProductionForm: true, otCase!);
 
             var employeeTimes = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => (x.StartTime ?? request.StartTime, x.EndTime));
@@ -1197,13 +1201,19 @@ namespace Attendance.Application.Services
             var didEatByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => ResolveDidEat(otForm.IsProductionForm, x.DidEat));
 
-            // Chặn CỨNG nếu giờ sửa lại khiến ai đó vượt ngày/tháng/năm — excludeFormId: otForm.Id vì
+            // Chặn CỨNG nếu giờ sửa lại khiến ai đó vượt giới hạn ngày — excludeFormId: otForm.Id vì
             // các dòng OtFormEmployee hiện có của CHÍNH đơn này đang bị thay thế/sửa, không được cộng
             // dồn ngược lại với giá trị cũ của chính nó (xem ValidateOtHourLimitsAsync). Áp dụng cho cả
             // NV giữ nguyên lẫn NV mới thêm.
             var newHoursByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => CalculateOtHours(startTimeByEmployeeId[x.EmployeeId], x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
             await ValidateOtHourLimitsAsync(otForm.Date, newHoursByEmployeeId, mealSettings, excludeFormId: otForm.Id);
+
+            // The OT case is fixed after creation, so edited hours may not push a non-TH3 form past the month/year limit.
+            var currentOtCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otForm.OtCaseId);
+            if (currentOtCase?.Code != "TH3"
+                && await ExceedsMonthYearLimitAsync(otForm.Date, newHoursByEmployeeId, mealSettings, excludeFormId: otForm.Id))
+                throw new DomainException("Giờ sửa khiến có nhân viên vượt giới hạn OT tháng/năm, đơn này phải là TH3. Vui lòng giảm giờ hoặc tạo đơn TH3 mới.");
 
             // NV mới cần thêm 2 check chỉ áp dụng lúc THÊM (không áp dụng cho NV giữ nguyên — ngày/giờ
             // của họ không đổi nên đã được validate từ lúc tạo/lần thêm trước): trùng giờ với đơn khác,
@@ -1968,20 +1978,15 @@ namespace Attendance.Application.Services
             }
         }
 
-        // === Lũy kế DỰ KIẾN (2026-08-06, tính-lúc-đọc từ 2026-08-19, batch từ 2026-08-19b) ===
-        //
-        // Không còn lưu trên Employee — tính trực tiếp từ OtFormEmployee/OtForm mỗi khi cần (ở đây: lúc
-        // snapshot vào OtFormEmployee.MonthToDate/YearToDate khi tạo đơn mới). Scope theo targetDate =
-        // NGÀY TRÊN ĐƠN đang xét (không phải hôm nay thực tế) — khớp đúng ý nghĩa "đã có bao nhiêu giờ
-        // Dự kiến của ĐÚNG tháng mà đơn này rơi vào". !IsRemoved + Status != Rejected + !IsDeleted =
-        // đơn còn "đang treo" (kể cả Completed — vẫn tính, xem docs/attendance-module.md §Lũy kế Dự kiến).
-        //
-        // Nhận CẢ DANH SÁCH employeeId, fetch 1 lượt duy nhất (mirror batch-fetch ledger đã có ở
-        // AccumulateEmployeeHoursAsync) — tránh N+1 khi đơn có nhiều người (CreateAsync trước đây gọi
-        // hàm này riêng cho từng người trong vòng lặp, N nhân viên = N query).
-        // excludeFormId: bỏ qua chính đơn đang sửa khi tính "trước" (UpdateAsync sửa giờ của các dòng
-        // đã tồn tại trên CHÍNH đơn này — không được cộng dồn ngược lại với chính nó). Create truyền
-        // null vì đơn chưa tồn tại, không có gì để loại trừ.
+        // Projected accumulation of a batch of employees around targetDate (the date on the form being checked,
+        // not today):
+        //   Day   = every valid form of the employee on that date (ledger has no daily figure);
+        //   Month = ledger rows of that month + forms still InApproval in that month;
+        //   Year  = ledger rows of the year (including the Month = 0 opening balance) + forms still InApproval that year.
+        // Completed forms are NOT added again for Month/Year because AccumulateEmployeeHoursAsync already put their
+        // hours in the ledger, which is also where imported and hand-edited figures live. A valid form is
+        // !IsRemoved && Status != Rejected && !IsDeleted. excludeFormId skips the form being edited so its current
+        // rows are not counted against its own new hours.
         private async Task<Dictionary<int, (decimal Day, decimal Month, decimal Year)>> ComputeAccumulatedHoursBatchAsync(
             IEnumerable<int> employeeIds, DateOnly targetDate, AttendanceSettingDto mealSettings, int? excludeFormId = null)
         {
@@ -1992,30 +1997,37 @@ namespace Attendance.Application.Services
                      && !x.OtForm.IsDeleted && x.OtForm.Date.Year == targetDate.Year
                      && (excludeFormId == null || x.OtFormId != excludeFormId.Value),
                 x => x.OtForm);
+            var ledgerRows = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
+                x => employeeIdList.Contains(x.EmployeeId) && x.Year == targetDate.Year);
 
-            return rows.GroupBy(x => x.EmployeeId).ToDictionary(
-                g => g.Key,
-                g => (
-                    Day: g.Where(x => x.OtForm.Date == targetDate)
+            var rowsByEmployee = rows.ToLookup(x => x.EmployeeId);
+            var ledgerByEmployee = ledgerRows.ToLookup(x => x.EmployeeId);
+
+            var result = new Dictionary<int, (decimal Day, decimal Month, decimal Year)>();
+            foreach (var employeeId in employeeIdList)
+            {
+                var employeeRows = rowsByEmployee[employeeId].ToList();
+                var pendingRows = employeeRows.Where(x => x.OtForm.Status != (int)OtFormStatus.Completed).ToList();
+                var ledger = ledgerByEmployee[employeeId].ToList();
+
+                result[employeeId] = (
+                    Day: employeeRows.Where(x => x.OtForm.Date == targetDate)
                         .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)),
-                    Month: g.Where(x => x.OtForm.Date.Month == targetDate.Month)
-                        .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)),
-                    Year: g.Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings))
-                ));
+                    Month: ledger.Where(x => x.Month == targetDate.Month).Sum(x => x.TotalHours)
+                        + pendingRows.Where(x => x.OtForm.Date.Month == targetDate.Month)
+                            .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)),
+                    Year: ledger.Sum(x => x.TotalHours)
+                        + pendingRows.Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)));
+            }
+            return result;
         }
 
-        // Chặn CỨNG tạo/sửa đơn nếu bất kỳ nhân viên nào vượt giới hạn ngày/tháng/năm SAU KHI cộng
-        // thêm giờ của đơn đang tạo/sửa (2026-08-26, theo yêu cầu người dùng — đảo ngược hành vi cũ
-        // "chỉ cảnh báo đỏ trên UI" của Monthly/YearlyOtHourLimit). "Ngày" cộng dồn theo TẤT CẢ ca OT
-        // của nhân viên đó trong đúng ngày (nhiều đơn/nhiều ca cộng lại), không phải riêng lẻ từng ca.
-        // Không tự động loại nhân viên khỏi đơn — ném lỗi liệt kê đủ tên, buộc người tạo/sửa đơn tự bỏ
-        // bớt (Update) hoặc bỏ chọn (Create) rồi thao tác lại.
-        // Ngày dùng CHUNG 1 mốc cho mọi người (AttendanceSetting.DailyOtHourLimit), KHÔNG override được
-        // per-employee (đã chốt với người dùng — "Ngày" không nằm trong 2 mốc cho phép gia hạn riêng).
-        // Tháng/Năm ưu tiên mốc riêng Employee.CustomMonthlyOtHourLimit/CustomYearlyOtHourLimit nếu đã
-        // gán (2026-08-26, "gia hạn" cao hơn mặc định cho từng người — thường dùng cho công nhân dưới
-        // chuyền), rơi về mặc định chung nếu chưa gán. Message theo đúng mẫu người dùng yêu cầu: "Nhân
-        // viên mã {code} quá ..." — mirror ở FE (CreateOtFormPage.tsx) để cảnh báo SỚM cùng câu chữ.
+        // Hard-blocks create/update when an employee's total OT hours in the day, including this form's hours,
+        // exceed the daily limit. The day total adds up every OT shift of that employee on that date (several
+        // forms count together). Non-working days (WorkCalendarDay) use DailyOtHourLimitHoliday, working days
+        // DailyOtHourLimit; there is no per-employee override. Month/year accumulation never blocks: passing
+        // MonthlyOtHourLimit/YearlyOtHourLimit (or the employee's own custom limit) forces the form to TH3 instead,
+        // see EnsureOtCaseMatchesRulesAsync. Message wording is mirrored in CreateOtFormPage.tsx.
         private async Task ValidateOtHourLimitsAsync(
             DateOnly date, Dictionary<int, decimal> newHoursByEmployeeId, AttendanceSettingDto settings, int? excludeFormId)
         {
@@ -2025,29 +2037,68 @@ namespace Attendance.Application.Services
             var employeesById = (await _unitOfWork.Employees.FindAsync(x => newHoursByEmployeeId.Keys.Contains(x.Id)))
                 .ToDictionary(x => x.Id);
 
+            var dailyLimit = await IsNonWorkingDayAsync(date) ? settings.DailyOtHourLimitHoliday : settings.DailyOtHourLimit;
+
             var violations = new List<string>();
             foreach (var (employeeId, newHours) in newHoursByEmployeeId)
             {
-                var (dayBefore, monthBefore, yearBefore) = accumulated.TryGetValue(employeeId, out var acc) ? acc : (0m, 0m, 0m);
-                var employee = employeesById.GetValueOrDefault(employeeId);
-                var code = employee?.Code ?? employeeId.ToString();
-                var monthlyLimit = employee?.CustomMonthlyOtHourLimit ?? settings.MonthlyOtHourLimit;
-                var yearlyLimit = employee?.CustomYearlyOtHourLimit ?? settings.YearlyOtHourLimit;
-
+                var dayBefore = accumulated.TryGetValue(employeeId, out var acc) ? acc.Day : 0m;
                 var dayAfter = dayBefore + newHours;
-                var monthAfter = monthBefore + newHours;
-                var yearAfter = yearBefore + newHours;
-
-                if (dayAfter > settings.DailyOtHourLimit)
-                    violations.Add($"Nhân viên mã {code} quá giới hạn OT ngày ({dayAfter:0.##}h > {settings.DailyOtHourLimit:0.##}h)");
-                if (monthAfter > monthlyLimit)
-                    violations.Add($"Nhân viên mã {code} quá giới hạn OT tháng ({monthAfter:0.##}h > {monthlyLimit:0.##}h)");
-                if (yearAfter > yearlyLimit)
-                    violations.Add($"Nhân viên mã {code} quá giới hạn OT năm ({yearAfter:0.##}h > {yearlyLimit:0.##}h)");
+                if (dayAfter > dailyLimit)
+                {
+                    var code = employeesById.GetValueOrDefault(employeeId)?.Code ?? employeeId.ToString();
+                    violations.Add($"Nhân viên mã {code} quá giới hạn OT ngày ({dayAfter:0.##}h > {dailyLimit:0.##}h)");
+                }
             }
 
             if (violations.Count > 0)
                 throw new DomainException(string.Join("; ", violations) + ". Vui lòng loại khỏi đơn hoặc giảm giờ OT rồi thử lại.");
+        }
+
+        private async Task<bool> IsNonWorkingDayAsync(DateOnly date) =>
+            (await _unitOfWork.WorkCalendarDays.FindAsync(x => x.Date == date)).Count > 0;
+
+        // True when any employee's month or year accumulation, including this form's hours, passes
+        // MonthlyOtHourLimit/YearlyOtHourLimit (the employee's custom limit wins when set). Such a form must be TH3.
+        private async Task<bool> ExceedsMonthYearLimitAsync(
+            DateOnly date, Dictionary<int, decimal> newHoursByEmployeeId, AttendanceSettingDto settings, int? excludeFormId)
+        {
+            if (newHoursByEmployeeId.Count == 0) return false;
+
+            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, date, settings, excludeFormId);
+            var employeesById = (await _unitOfWork.Employees.FindAsync(x => newHoursByEmployeeId.Keys.Contains(x.Id)))
+                .ToDictionary(x => x.Id);
+
+            return newHoursByEmployeeId.Any(kv =>
+            {
+                var (_, monthBefore, yearBefore) = accumulated.TryGetValue(kv.Key, out var acc) ? acc : (0m, 0m, 0m);
+                var employee = employeesById.GetValueOrDefault(kv.Key);
+                var monthlyLimit = employee?.CustomMonthlyOtHourLimit ?? settings.MonthlyOtHourLimit;
+                var yearlyLimit = employee?.CustomYearlyOtHourLimit ?? settings.YearlyOtHourLimit;
+                return monthBefore + kv.Value > monthlyLimit || yearBefore + kv.Value > yearlyLimit;
+            });
+        }
+
+        // The OT case is derived, not chosen: TH3 when ExceedsMonthYearLimitAsync, otherwise TH2 on a non-working
+        // day and TH1 on a working day. The daily total never forces TH3. Rejects a request whose OtCaseId differs
+        // from the derived case.
+        private async Task EnsureOtCaseMatchesRulesAsync(CreateOtFormDto request, bool isProductionForm, OtCase requestedCase)
+        {
+            var settings = await _attendanceSettingService.GetAsync();
+
+            var newHoursByEmployeeId = request.Employees.ToDictionary(
+                x => x.EmployeeId,
+                x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, ResolveDidEat(isProductionForm, x.DidEat), settings));
+            var exceedsTh3 = await ExceedsMonthYearLimitAsync(request.Date, newHoursByEmployeeId, settings, excludeFormId: null);
+
+            var expectedCode = exceedsTh3 ? "TH3" : (await IsNonWorkingDayAsync(request.Date) ? "TH2" : "TH1");
+            if (!string.Equals(requestedCase.Code, expectedCode, StringComparison.OrdinalIgnoreCase))
+            {
+                var reason = exceedsTh3
+                    ? "có nhân viên vượt giới hạn OT tháng/năm"
+                    : $"ngày {request.Date:dd/MM/yyyy} là {(expectedCode == "TH2" ? "ngày nghỉ" : "ngày làm việc")}";
+                throw new DomainException($"Trường hợp OT phải là {expectedCode} vì {reason}.");
+            }
         }
 
         // === "Đơn tổng" — REDESIGN theo Cây chức vụ (2026-08-07, Giai đoạn 3.2) ===

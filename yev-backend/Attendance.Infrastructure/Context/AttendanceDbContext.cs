@@ -29,6 +29,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<SecondaryPassword> SecondaryPasswords { get; set; }
     public virtual DbSet<PendingSecondaryPasswordConfirmation> PendingSecondaryPasswordConfirmations { get; set; }
     public virtual DbSet<AttendanceSetting> AttendanceSettings { get; set; }
+    public virtual DbSet<WorkCalendarDay> WorkCalendarDays { get; set; }
     public virtual DbSet<OtFormBatch> OtFormBatches { get; set; }
     public virtual DbSet<OtFormBatchEmailToken> OtFormBatchEmailTokens { get; set; }
     public virtual DbSet<JobTitle> JobTitles { get; set; }
@@ -60,6 +61,14 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.DailyOtHourLimit).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.MonthlyOtHourLimit).HasColumnType("decimal(10, 2)");
             entity.Property(e => e.YearlyOtHourLimit).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.DailyOtHourLimitHoliday).HasColumnType("decimal(5, 2)");
+        });
+
+        modelBuilder.Entity<WorkCalendarDay>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_WorkCalendarDays");
+            entity.HasIndex(e => e.Date, "IX_WorkCalendarDays_Date").IsUnique();
+            entity.Property(e => e.Note).HasMaxLength(255);
         });
 
         modelBuilder.Entity<Department>(entity =>

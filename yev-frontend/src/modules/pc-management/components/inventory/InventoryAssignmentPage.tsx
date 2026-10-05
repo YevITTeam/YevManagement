@@ -14,11 +14,12 @@ import type { InventoryAssignmentDto } from "@/modules/pc-management/types/inven
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { Link } from "@/navigation";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 
 const SCAN_ROLE_NAME = "Kiểm kê thiết bị";
 
 const selectClass =
-    "h-10 min-w-[14rem] rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+    "h-10 min-w-[14rem] rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
 // Admin gán user ↔ xưởng cho kiểm kê thiết bị (asset-module.md §1.22). Khác ServerCheckAssignmentPage:
 // nhiều user khác nhau được gán CHUNG 1 xưởng là bình thường (1 xưởng cần nhiều người cùng quét) — chỉ
@@ -29,8 +30,8 @@ export default function InventoryAssignmentPage() {
     const [assignments, setAssignments] = useState<InventoryAssignmentDto[]>([]);
     const [users, setUsers] = useState<UserDto[]>([]);
     const [branches, setBranches] = useState<BranchDto[]>([]);
-    const [userId, setUserId] = useState("");
-    const [branchId, setBranchId] = useState("");
+    const [userId, setUserId] = useState<number | "">("");
+    const [branchId, setBranchId] = useState<number | "">("");
     const [isSaving, setIsSaving] = useState(false);
     const [removingId, setRemovingId] = useState<number | null>(null);
 
@@ -47,8 +48,8 @@ export default function InventoryAssignmentPage() {
     );
 
     const handleSave = async () => {
-        const user = users.find((u) => u.id === Number(userId));
-        if (!user || !branchId) return;
+        const user = users.find((u) => u.id === userId);
+        if (!user || branchId === "") return;
 
         setIsSaving(true);
         try {
@@ -56,7 +57,7 @@ export default function InventoryAssignmentPage() {
                 userId: user.id,
                 userName: user.userName,
                 fullName: user.fullName,
-                branchId: Number(branchId),
+                branchId,
             });
             toast.success(t("assignmentSaved"));
             setUserId("");
@@ -100,29 +101,32 @@ export default function InventoryAssignmentPage() {
             <section className="flex flex-wrap items-end gap-3 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
                 <label className="flex flex-col gap-1 text-xs font-semibold text-[#5e3f3a]">
                     {t("assignmentUserLabel")}
-                    <select value={userId} onChange={(event) => setUserId(event.target.value)} className={selectClass}>
-                        <option value="">{t("assignmentUserPlaceholder")}</option>
-                        {users.map((u) => (
-                            <option key={u.id} value={u.id}>
-                                {u.fullName ? `${u.fullName} (${u.userName})` : u.userName}
-                                {assignedBranchByUser.has(u.id) ? ` — ${assignedBranchByUser.get(u.id)}` : ""}
-                                {hasScanRole(u) ? "" : ` [${t("assignmentNoScanRole")}]`}
-                            </option>
-                        ))}
-                    </select>
+                    <SearchableSelect
+                        value={userId}
+                        onChange={setUserId}
+                        placeholder={t("assignmentUserPlaceholder")}
+                        triggerClassName={selectClass}
+                        options={users.map((u) => {
+                            const label = `${u.fullName ? `${u.fullName} (${u.userName})` : u.userName}${
+                                assignedBranchByUser.has(u.id) ? ` — ${assignedBranchByUser.get(u.id)}` : ""
+                            }${hasScanRole(u) ? "" : ` [${t("assignmentNoScanRole")}]`}`;
+                            return { value: u.id, label, searchText: label.toLowerCase() };
+                        })}
+                    />
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-semibold text-[#5e3f3a]">
                     {t("assignmentBranchLabel")}
-                    <select value={branchId} onChange={(event) => setBranchId(event.target.value)} className={selectClass}>
-                        <option value="">{t("assignmentBranchPlaceholder")}</option>
-                        {branches.map((b) => (
-                            <option key={b.id} value={b.id}>{b.branchName}</option>
-                        ))}
-                    </select>
+                    <SearchableSelect
+                        value={branchId}
+                        onChange={setBranchId}
+                        placeholder={t("assignmentBranchPlaceholder")}
+                        triggerClassName={selectClass}
+                        options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
+                    />
                 </label>
                 <button
                     onClick={handleSave}
-                    disabled={!userId || !branchId || isSaving}
+                    disabled={userId === "" || branchId === "" || isSaving}
                     className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-5 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

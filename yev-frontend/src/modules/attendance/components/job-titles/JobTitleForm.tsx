@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import { jobTitleTerminalLevelLabels } from "@/modules/attendance/types/enums";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 import JobTitlePermissionSection, { type JobTitlePermissionSectionHandle } from "./JobTitlePermissionSection";
 
 export interface JobTitleFormValues {
@@ -125,21 +126,13 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
 
                             <label className="block">
                                 <span className={fieldLabelClassName}>{t("fieldTerminalLevel")}</span>
-                                <div className="relative">
-                                    <select
-                                        value={values.terminalLevel}
-                                        onChange={(event) => setValues((current) => ({ ...current, terminalLevel: Number(event.target.value) }))}
-                                        disabled={loading || isSubmitting}
-                                        className={`${fieldClassName} appearance-none pr-8`}
-                                    >
-                                        {terminalLevelOptions.map((level) => (
-                                            <option key={level} value={level}>
-                                                {jobTitleTerminalLevelLabels[level]}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
-                                </div>
+                                <StyledSelect
+                                    value={values.terminalLevel}
+                                    onChange={(level) => setValues((current) => ({ ...current, terminalLevel: level }))}
+                                    disabled={loading || isSubmitting}
+                                    triggerClassName={`${fieldClassName} pr-8`}
+                                    options={terminalLevelOptions.map((level) => ({ value: level, label: jobTitleTerminalLevelLabels[level] }))}
+                                />
                             </label>
                         </div>
 

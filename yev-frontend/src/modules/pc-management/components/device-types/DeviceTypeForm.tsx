@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 export interface DeviceTypeFormValues {
     typeCode: string;
@@ -120,24 +121,16 @@ export default function DeviceTypeForm({ isOpen, mode, initial, loading = false,
 
                     <label className="block">
                         <span className={fieldLabelClassName}>{t("fieldServerCheckCategory")}</span>
-                        <select
+                        <StyledSelect
                             value={values.serverCheckCategory ?? ""}
-                            onChange={(event) =>
-                                setValues((current) => ({
-                                    ...current,
-                                    serverCheckCategory: event.target.value === "" ? null : Number(event.target.value),
-                                }))
-                            }
+                            onChange={(v) => setValues((current) => ({ ...current, serverCheckCategory: v === "" ? null : v }))}
                             disabled={loading}
-                            className={fieldClassName}
-                        >
-                            <option value="">{t("serverCheckCategoryNone")}</option>
-                            {SERVER_CHECK_CATEGORY_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                    {t(option.labelKey)}
-                                </option>
-                            ))}
-                        </select>
+                            triggerClassName={`${fieldClassName} pr-9`}
+                            options={[
+                                { value: "" as const, label: t("serverCheckCategoryNone") },
+                                ...SERVER_CHECK_CATEGORY_OPTIONS.map((option) => ({ value: option.value as number, label: t(option.labelKey) })),
+                            ]}
+                        />
                     </label>
 
                     {values.serverCheckCategory !== null && (

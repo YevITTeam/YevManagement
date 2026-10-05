@@ -20,6 +20,7 @@ namespace Attendance.Application.Interfaces.Service
         ISecondaryPasswordRepository SecondaryPasswords { get; }
         IPendingSecondaryPasswordConfirmationRepository PendingSecondaryPasswordConfirmations { get; }
         IAttendanceSettingRepository AttendanceSettings { get; }
+        IWorkCalendarDayRepository WorkCalendarDays { get; }
         IOtFormBatchRepository OtFormBatches { get; }
         IOtFormBatchEmailTokenRepository OtFormBatchEmailTokens { get; }
         IJobTitleRepository JobTitles { get; }

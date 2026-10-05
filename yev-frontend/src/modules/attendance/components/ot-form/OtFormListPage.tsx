@@ -14,12 +14,14 @@ import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
-import { otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
+import { otFormStatusClasses, otFormStatusDotClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 const PAGE_SIZE = 10;
 
@@ -491,18 +493,19 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                         <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterStatusLabel")}
                         </span>
-                        <select
+                        <StyledSelect
                             value={statusInput}
-                            onChange={(event) => setStatusInput(event.target.value)}
-                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">{t("filterAllStatus")}</option>
-                            {Object.entries(otFormStatusLabels).map(([value, label]) => (
-                                <option key={value} value={value}>
-                                    {label}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={setStatusInput}
+                            triggerClassName="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            options={[
+                                { value: "", label: t("filterAllStatus") },
+                                ...Object.entries(otFormStatusLabels).map(([value, label]) => ({
+                                    value,
+                                    label,
+                                    dotClassName: otFormStatusDotClasses[Number(value)],
+                                })),
+                            ]}
+                        />
                     </label>
                     <div className="flex items-end gap-2">
                         <button
@@ -547,32 +550,32 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                         <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterDepartmentLabel")}
                         </span>
-                        <select
+                        <SearchableSelect
                             value={departmentId}
-                            onChange={(event) => setDepartmentId(event.target.value ? Number(event.target.value) : "")}
-                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">{t("filterAllDepartment")}</option>
-                            {departmentOptions.map((option) => (
-                                <option key={option.id} value={option.id}>{option.departmentNameVn}</option>
-                            ))}
-                        </select>
+                            onChange={setDepartmentId}
+                            placeholder={t("filterAllDepartment")}
+                            options={departmentOptions.map((option) => ({
+                                value: option.id,
+                                label: option.departmentNameVn,
+                                searchText: option.departmentNameVn.toLowerCase(),
+                            }))}
+                        />
                     </label>
                     <label className="block">
                         <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterGroupLabel")}
                         </span>
-                        <select
+                        <SearchableSelect
                             value={groupId}
-                            onChange={(event) => setGroupId(event.target.value ? Number(event.target.value) : "")}
+                            onChange={setGroupId}
                             disabled={departmentId === ""}
-                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                        >
-                            <option value="">{t("filterAllGroup")}</option>
-                            {groupOptions.map((option) => (
-                                <option key={option.id} value={option.id}>{option.groupNameVn}</option>
-                            ))}
-                        </select>
+                            placeholder={t("filterAllGroup")}
+                            options={groupOptions.map((option) => ({
+                                value: option.id,
+                                label: option.groupNameVn,
+                                searchText: option.groupNameVn.toLowerCase(),
+                            }))}
+                        />
                     </label>
                     {showProductionFilter && (
                         <>
@@ -580,46 +583,46 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                     {t("filterProductionTeamLabel")}
                                 </span>
-                                <select
+                                <SearchableSelect
                                     value={productionTeamId}
-                                    onChange={(event) => setProductionTeamId(event.target.value ? Number(event.target.value) : "")}
-                                    className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                                >
-                                    <option value="">{t("filterAllProductionTeam")}</option>
-                                    {teamOptions.map((option) => (
-                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
-                                    ))}
-                                </select>
+                                    onChange={setProductionTeamId}
+                                    placeholder={t("filterAllProductionTeam")}
+                                    options={teamOptions.map((option) => ({
+                                        value: option.id,
+                                        label: option.nameVn || option.code,
+                                        searchText: (option.nameVn || option.code).toLowerCase(),
+                                    }))}
+                                />
                             </label>
                             <label className="block">
                                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                     {t("filterProductionLineLabel")}
                                 </span>
-                                <select
+                                <SearchableSelect
                                     value={productionLineId}
-                                    onChange={(event) => setProductionLineId(event.target.value ? Number(event.target.value) : "")}
-                                    className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                                >
-                                    <option value="">{t("filterAllProductionLine")}</option>
-                                    {lineOptions.map((option) => (
-                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
-                                    ))}
-                                </select>
+                                    onChange={setProductionLineId}
+                                    placeholder={t("filterAllProductionLine")}
+                                    options={lineOptions.map((option) => ({
+                                        value: option.id,
+                                        label: option.nameVn || option.code,
+                                        searchText: (option.nameVn || option.code).toLowerCase(),
+                                    }))}
+                                />
                             </label>
                             <label className="block">
                                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                     {t("filterProductionShiftTeamLabel")}
                                 </span>
-                                <select
+                                <SearchableSelect
                                     value={productionShiftTeamId}
-                                    onChange={(event) => setProductionShiftTeamId(event.target.value ? Number(event.target.value) : "")}
-                                    className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                                >
-                                    <option value="">{t("filterAllProductionShiftTeam")}</option>
-                                    {shiftTeamOptions.map((option) => (
-                                        <option key={option.id} value={option.id}>{option.nameVn || option.code}</option>
-                                    ))}
-                                </select>
+                                    onChange={setProductionShiftTeamId}
+                                    placeholder={t("filterAllProductionShiftTeam")}
+                                    options={shiftTeamOptions.map((option) => ({
+                                        value: option.id,
+                                        label: option.nameVn || option.code,
+                                        searchText: (option.nameVn || option.code).toLowerCase(),
+                                    }))}
+                                />
                             </label>
                         </>
                     )}

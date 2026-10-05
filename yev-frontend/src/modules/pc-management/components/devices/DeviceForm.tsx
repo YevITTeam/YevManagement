@@ -17,6 +17,7 @@ import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
 import type { DeviceEmailInputDto, DeviceGetDto, DeviceIpAddressDto } from "@/modules/pc-management/types/device.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface DeviceFormValues {
@@ -50,10 +51,10 @@ interface DeviceFormProps {
 }
 
 const statusOptions = [
-    { value: 0, label: "Chờ sử dụng" },
-    { value: 1, label: "Đang sử dụng" },
-    { value: 2, label: "Chờ thanh lý" },
-    { value: 3, label: "Đã thanh lý" },
+    { value: 0, label: "Chờ sử dụng", dotClassName: "bg-[#94a3b8]" },
+    { value: 1, label: "Đang sử dụng", dotClassName: "bg-[#16a34a]" },
+    { value: 2, label: "Chờ thanh lý", dotClassName: "bg-[#f59e0b]" },
+    { value: 3, label: "Đã thanh lý", dotClassName: "bg-[#dc2626]" },
 ];
 
 const emptyValues: DeviceFormValues = {
@@ -418,18 +419,13 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
 
                         <label className="block">
                             <span className={fieldLabelClassName}>Trạng thái</span>
-                            <select
+                            <StyledSelect
                                 value={values.status}
-                                onChange={(event) => handleStatusChange(Number(event.target.value))}
+                                onChange={handleStatusChange}
                                 disabled={loading}
-                                className={fieldClassName}
-                            >
-                                {statusOptions.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                        {option.label}
-                                    </option>
-                                ))}
-                            </select>
+                                triggerClassName={`${fieldClassName} pr-9`}
+                                options={statusOptions}
+                            />
                         </label>
 
                         <label className="flex items-center gap-2 pt-6">

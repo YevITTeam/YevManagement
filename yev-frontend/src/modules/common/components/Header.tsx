@@ -6,18 +6,9 @@ import { useTranslations } from "next-intl";
 import { ChevronDown, ChevronUp, LogOut, RefreshCw, Settings } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/modules/auth/context/AuthContext";
-import { hasAnyPermission } from "@/modules/auth/lib/permissions";
+import { hasAnyPermission, IDENTITY_ADMIN_PERMISSIONS } from "@/modules/auth/lib/permissions";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useHeaderCollapse } from "@/modules/common/hooks/useHeaderCollapse";
-
-// Menu "Admin" hiện ra nếu user có ít nhất 1 permission quản trị Identity (docs/identity-api-fe.md §3 —
-// FE ẩn/hiện UI dựa trên user.permissions, không còn dựa vào role "Admin" cứng).
-const IDENTITY_ADMIN_PERMISSIONS = [
-  "Identity.User.View",
-  "Identity.User.UpdateRoles",
-  "Identity.Role.View",
-  "Identity.Permission.View",
-];
 
 export default function Header() {
   const t = useTranslations("Header");

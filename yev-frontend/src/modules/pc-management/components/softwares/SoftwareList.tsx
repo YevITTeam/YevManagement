@@ -12,6 +12,7 @@ import SoftwareForm, { type SoftwareFormValues } from "./SoftwareForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 const PAGE_SIZE = 10;
 const PRIORITY_FILTER_ALL = "all";
@@ -224,19 +225,16 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                         >
                             Tìm kiếm
                         </button>
-                        <select
+                        <StyledSelect
                             value={priorityFilter}
-                            onChange={(event) => handlePriorityFilterChange(event.target.value)}
-                            className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value={PRIORITY_FILTER_ALL}>Tất cả mức ưu tiên</option>
-                            {priorityOptions.values.map((value) => (
-                                <option key={value} value={value}>
-                                    Ưu tiên {value}
-                                </option>
-                            ))}
-                            {priorityOptions.hasNone && <option value={PRIORITY_FILTER_NONE}>Chưa đặt ưu tiên</option>}
-                        </select>
+                            onChange={handlePriorityFilterChange}
+                            triggerClassName="h-9 w-44 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            options={[
+                                { value: PRIORITY_FILTER_ALL, label: "Tất cả mức ưu tiên" },
+                                ...priorityOptions.values.map((value) => ({ value: String(value), label: `Ưu tiên ${value}` })),
+                                ...(priorityOptions.hasNone ? [{ value: PRIORITY_FILTER_NONE, label: "Chưa đặt ưu tiên" }] : []),
+                            ]}
+                        />
                     </div>
                     <div className="text-sm text-[#5e3f3a]">
                         {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${pagedSoftwares.length} / ${totalCount} bản ghi`}

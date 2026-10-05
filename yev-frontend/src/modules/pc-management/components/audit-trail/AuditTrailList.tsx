@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ChevronDown, FilterX, RefreshCw, Search } from "lucide-react";
+import { FilterX, RefreshCw, Search } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { AuditTrailApi } from "@/modules/pc-management/api/audit-trail.api";
@@ -9,6 +9,7 @@ import type { AuditTrailDto } from "@/modules/pc-management/types/audit-trail.dt
 import { auditActionClasses, auditActionLabels } from "./audit-trail-format";
 import AuditTrailDiffView from "./AuditTrailDiffView";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 const PAGE_SIZE = 20;
 
@@ -153,21 +154,12 @@ export default function AuditTrailList() {
                     </label>
                     <label className="block sm:w-32!">
                         <span className={fieldLabelClassName}>Hành động</span>
-                        <div className="relative">
-                            <select
-                                value={action}
-                                onChange={(event) => setAction(event.target.value)}
-                                className={`${fieldClassName} appearance-none pr-8 ${action === "" ? "text-[#8a8f94]" : ""}`}
-                            >
-                                <option value="">Tất cả</option>
-                                {Object.entries(auditActionLabels).map(([value, label]) => (
-                                    <option key={value} value={value} className="text-[#191c1e]">
-                                        {label}
-                                    </option>
-                                ))}
-                            </select>
-                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
-                        </div>
+                        <StyledSelect
+                            value={action}
+                            onChange={setAction}
+                            triggerClassName={`${fieldClassName} pr-8`}
+                            options={[{ value: "", label: "Tất cả" }, ...Object.entries(auditActionLabels).map(([value, label]) => ({ value, label }))]}
+                        />
                     </label>
                     <label className="block">
                         <span className={fieldLabelClassName}>Người thao tác</span>

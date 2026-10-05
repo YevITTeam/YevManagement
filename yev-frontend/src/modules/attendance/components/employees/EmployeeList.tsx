@@ -259,6 +259,22 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 toast.success(t("createSuccess"));
             } else if (editingEmployee) {
                 await EmployeeApi.updateEmployee(editingEmployee.id, values);
+                // OT limits are saved through their own endpoint (narrower permission) — only call it when changed.
+                if (
+                    canUpdateOtLimit &&
+                    (values.customMonthlyOtHourLimit !== editingEmployee.customMonthlyOtHourLimit ||
+                        values.customYearlyOtHourLimit !== editingEmployee.customYearlyOtHourLimit)
+                ) {
+                    try {
+                        await EmployeeApi.updateOtLimit(editingEmployee.id, {
+                            customMonthlyOtHourLimit: values.customMonthlyOtHourLimit,
+                            customYearlyOtHourLimit: values.customYearlyOtHourLimit,
+                        });
+                    } catch (limitErr) {
+                        console.error(limitErr);
+                        toast.error(getApiErrorMessage(limitErr, t("otLimitSaveError")));
+                    }
+                }
                 toast.success(t("updateSuccess"));
             }
             setFormOpen(false);
@@ -504,7 +520,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                             >
                                                 <History className="h-3.5 w-3.5" />
                                             </button>
-                                            {canUpdateOtLimit && (
+                                            {canUpdateOtLimit && !canUpdateEmployee && (
                                                 <button
                                                     onClick={() => setOtLimitEmployee(employee)}
                                                     className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
@@ -606,6 +622,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 onClose={closeForm}
                 onSubmit={handleSubmitForm}
                 scope={scope}
+                canEditOtLimit={canUpdateOtLimit}
             />
 
             <ConfirmDialog

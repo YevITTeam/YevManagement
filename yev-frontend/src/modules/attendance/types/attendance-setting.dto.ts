@@ -14,11 +14,13 @@ export interface AttendanceSettingDto {
     // TimeOnly "HH:mm:ss" — khung giờ OT sớm đặc cách (mặc định 06:00:00 - 08:00:00).
     earlyMealWindowStartTime: string;
     earlyMealWindowEndTime: string;
-    // Giới hạn giờ OT theo ngày/tháng/năm của 1 nhân viên — vượt bất kỳ mốc nào thì BE CHẶN tạo/sửa
-    // đơn (2026-08-26, không còn "chỉ cảnh báo" như trước).
+    // Ngày: vượt thì BE CHẶN tạo/sửa đơn. Tháng/năm: vượt (mốc riêng của nhân viên nếu có) thì đơn BẮT BUỘC
+    // là TH3, không chặn.
     dailyOtHourLimit: number;
     monthlyOtHourLimit: number;
     yearlyOtHourLimit: number;
+    // Giới hạn ngày khi ngày đó là ngày nghỉ theo lịch (mặc định 12).
+    dailyOtHourLimitHoliday: number;
     // TimeOnly "HH:mm:ss" — giờ hằng ngày hệ thống tự gom "Đơn tổng" gửi Trưởng phòng.
     batchAutoSendTime: string;
 }

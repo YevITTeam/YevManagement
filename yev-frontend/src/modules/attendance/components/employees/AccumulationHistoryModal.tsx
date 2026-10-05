@@ -9,6 +9,7 @@ import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeAccumulationHistoryYearDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 import AccumulationHistoryTable from "./AccumulationHistoryTable";
 import AccumulationHistoryEditor from "./AccumulationHistoryEditor";
 
@@ -60,21 +61,16 @@ export default function AccumulationHistoryModal({ employeeId, employeeLabel, ca
                         <p className="truncate text-sm text-[#5e3f3a]">{employeeLabel}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                        <select
+                        <StyledSelect
                             value={year}
-                            onChange={(e) => {
-                                setYear(Number(e.target.value));
+                            onChange={(v) => {
+                                setYear(v);
                                 setIsEditing(false);
                             }}
-                            aria-label={t("fieldYear")}
-                            className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            {YEAR_OPTIONS.map((y) => (
-                                <option key={y} value={y}>
-                                    {y}
-                                </option>
-                            ))}
-                        </select>
+                            ariaLabel={t("fieldYear")}
+                            triggerClassName="h-9 rounded-lg border border-[#e0e3e5] bg-white px-2 pr-7 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            options={YEAR_OPTIONS.map((y) => ({ value: y, label: String(y) }))}
+                        />
                         <button
                             type="button"
                             onClick={onClose}

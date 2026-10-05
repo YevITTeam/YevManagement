@@ -11,6 +11,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import DeviceSoftwarePickerDialog from "./DeviceSoftwarePickerDialog";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 interface DeviceSoftwarePanelProps {
     deviceId: number;
@@ -178,19 +179,16 @@ export default function DeviceSoftwarePanel({ deviceId, deviceStatus, softwares,
                         )}
                     </div>
                     <div className="flex items-center gap-2">
-                        <select
+                        <StyledSelect
                             value={priorityFilter}
-                            onChange={(event) => setPriorityFilter(event.target.value)}
-                            className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-xs text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value={PRIORITY_FILTER_ALL}>Tất cả mức ưu tiên</option>
-                            {priorityOptions.values.map((value) => (
-                                <option key={value} value={value}>
-                                    Ưu tiên {value}
-                                </option>
-                            ))}
-                            {priorityOptions.hasNone && <option value={PRIORITY_FILTER_NONE}>Chưa đặt ưu tiên</option>}
-                        </select>
+                            onChange={setPriorityFilter}
+                            triggerClassName="h-9 w-44 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-xs text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            options={[
+                                { value: PRIORITY_FILTER_ALL, label: "Tất cả mức ưu tiên" },
+                                ...priorityOptions.values.map((value) => ({ value: String(value), label: `Ưu tiên ${value}` })),
+                                ...(priorityOptions.hasNone ? [{ value: PRIORITY_FILTER_NONE, label: "Chưa đặt ưu tiên" }] : []),
+                            ]}
+                        />
                         <button
                             onClick={() => setPickerOpen(true)}
                             disabled={!canInstall}

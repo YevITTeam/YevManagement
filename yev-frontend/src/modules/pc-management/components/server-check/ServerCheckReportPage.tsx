@@ -16,6 +16,8 @@ import { Link } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
 
@@ -142,36 +144,27 @@ export default function ServerCheckReportPage() {
                             <Users className="h-3.5 w-3.5" /> {t("assignmentsButton")}
                         </Link>
                     )}
-                    <select
+                    <SearchableSelect
                         value={branchId ?? ""}
-                        onChange={(event) => setBranchId(event.target.value ? Number(event.target.value) : null)}
-                        aria-label={t("branchFilterLabel")}
-                        className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                    >
-                        {branches.map((branch) => (
-                            <option key={branch.id} value={branch.id}>{branch.branchName}</option>
-                        ))}
-                    </select>
-                    <select
+                        onChange={(v) => setBranchId(v === "" ? null : v)}
+                        placeholder={t("branchFilterLabel")}
+                        triggerClassName="h-9 w-44 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        options={branches.map((branch) => ({ value: branch.id, label: branch.branchName, searchText: branch.branchName.toLowerCase() }))}
+                    />
+                    <StyledSelect
                         value={month}
-                        onChange={(event) => setMonth(Number(event.target.value))}
-                        aria-label={t("monthFilterLabel")}
-                        className={selectClassName}
-                    >
-                        {MONTHS.map((m) => (
-                            <option key={m} value={m}>{t("monthOption", { month: m })}</option>
-                        ))}
-                    </select>
-                    <select
+                        onChange={setMonth}
+                        ariaLabel={t("monthFilterLabel")}
+                        triggerClassName={`${selectClassName} pr-9`}
+                        options={MONTHS.map((m) => ({ value: m, label: t("monthOption", { month: m }) }))}
+                    />
+                    <StyledSelect
                         value={year}
-                        onChange={(event) => setYear(Number(event.target.value))}
-                        aria-label={t("yearFilterLabel")}
-                        className={selectClassName}
-                    >
-                        {years.map((y) => (
-                            <option key={y} value={y}>{y}</option>
-                        ))}
-                    </select>
+                        onChange={setYear}
+                        ariaLabel={t("yearFilterLabel")}
+                        triggerClassName={`${selectClassName} pr-9`}
+                        options={years.map((y) => ({ value: y, label: String(y) }))}
+                    />
                     <button
                         onClick={() => refetch()}
                         disabled={isLoading}

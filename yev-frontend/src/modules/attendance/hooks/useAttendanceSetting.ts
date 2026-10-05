@@ -18,6 +18,7 @@ export const DEFAULT_ATTENDANCE_SETTING: AttendanceSettingDto = {
     dailyOtHourLimit: 4,
     monthlyOtHourLimit: 25,
     yearlyOtHourLimit: 300,
+    dailyOtHourLimitHoliday: 12,
     batchAutoSendTime: "15:00:00",
 };
 

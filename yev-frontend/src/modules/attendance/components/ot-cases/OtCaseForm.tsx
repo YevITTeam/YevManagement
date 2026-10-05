@@ -7,6 +7,7 @@ import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
 import { approvalLevelLabels } from "@/modules/attendance/types/enums";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 export interface OtCaseFormValues {
     code: string;
@@ -111,21 +112,13 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
 
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldRequiredLevel")}<RequiredMark /></span>
-                            <select
+                            <StyledSelect
                                 value={values.requiredApprovalLevel}
-                                onChange={(event) =>
-                                    setValues((current) => ({ ...current, requiredApprovalLevel: Number(event.target.value) }))
-                                }
+                                onChange={(level) => setValues((current) => ({ ...current, requiredApprovalLevel: level }))}
                                 disabled={loading}
-                                required
-                                className={fieldClassName}
-                            >
-                                {approvalLevelOptions.map((level) => (
-                                    <option key={level} value={level}>
-                                        {approvalLevelLabels[level]}
-                                    </option>
-                                ))}
-                            </select>
+                                triggerClassName={`${fieldClassName} pr-9`}
+                                options={approvalLevelOptions.map((level) => ({ value: level, label: approvalLevelLabels[level] }))}
+                            />
                         </label>
                     </div>
 

@@ -8,9 +8,10 @@ import type { IpAddressDto, IpAddressSkippedDto } from "@/modules/pc-management/
 import { getApiErrorMessage } from "@/lib/apiError";
 import IpForm, { type IpFormValues } from "./IpForm";
 import IpBulkStatusForm, { type IpBulkStatusFormValues } from "./IpBulkStatusForm";
-import { ipStatusClasses, ipStatusLabels, ipStatusOptions } from "./ip-status";
+import { ipStatusClasses, ipStatusDotClasses, ipStatusLabels, ipStatusOptions } from "./ip-status";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 // Lấy hẳn 254 địa chỉ IP (đúng số IP tối đa của 1 dải mạng /24, đã bỏ .0/.255) mỗi lần gọi API
 // để giảm số lần bấm "Trang sau" khi xem hết 1 prefix; UI chỉ hiển thị ~10 dòng
@@ -194,21 +195,22 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                         >
                             Tìm kiếm
                         </button>
-                        <select
+                        <StyledSelect
                             value={statusFilter}
-                            onChange={(event) => {
-                                setStatusFilter(event.target.value);
+                            onChange={(value) => {
+                                setStatusFilter(value);
                                 setPageIndex(1);
                             }}
-                            className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        >
-                            <option value="">Tất cả trạng thái</option>
-                            {ipStatusOptions.map((status) => (
-                                <option key={status} value={status}>
-                                    {ipStatusLabels[status]}
-                                </option>
-                            ))}
-                        </select>
+                            triggerClassName="h-9 w-44 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            options={[
+                                { value: "", label: "Tất cả trạng thái" },
+                                ...ipStatusOptions.map((status) => ({
+                                    value: String(status),
+                                    label: ipStatusLabels[status],
+                                    dotClassName: ipStatusDotClasses[status],
+                                })),
+                            ]}
+                        />
                         {canBulkSelect && selectedIds.size > 0 && (
                             <button
                                 onClick={() => setBulkFormOpen(true)}

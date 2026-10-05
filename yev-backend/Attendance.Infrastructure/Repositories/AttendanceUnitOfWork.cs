@@ -24,6 +24,7 @@ namespace Attendance.Infrastructure.Repositories
             ISecondaryPasswordRepository secondaryPasswords,
             IPendingSecondaryPasswordConfirmationRepository pendingSecondaryPasswordConfirmations,
             IAttendanceSettingRepository attendanceSettings,
+            IWorkCalendarDayRepository workCalendarDays,
             IOtFormBatchRepository otFormBatches,
             IOtFormBatchEmailTokenRepository otFormBatchEmailTokens,
             IJobTitleRepository jobTitles,
@@ -50,6 +51,7 @@ namespace Attendance.Infrastructure.Repositories
             ProductionEmployees = productionEmployees;
             ProductionApprovalSteps = productionApprovalSteps;
             AttendanceSettings = attendanceSettings;
+            WorkCalendarDays = workCalendarDays;
             OtFormBatches = otFormBatches;
             OtFormBatchEmailTokens = otFormBatchEmailTokens;
             JobTitles = jobTitles;
@@ -91,6 +93,7 @@ namespace Attendance.Infrastructure.Repositories
         public ISecondaryPasswordRepository SecondaryPasswords { get; }
         public IPendingSecondaryPasswordConfirmationRepository PendingSecondaryPasswordConfirmations { get; }
         public IAttendanceSettingRepository AttendanceSettings { get; }
+        public IWorkCalendarDayRepository WorkCalendarDays { get; }
         public IOtFormBatchRepository OtFormBatches { get; }
         public IOtFormBatchEmailTokenRepository OtFormBatchEmailTokens { get; }
         public IJobTitleRepository JobTitles { get; }

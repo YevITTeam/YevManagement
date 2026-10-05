@@ -46,6 +46,23 @@ export default function ServerCheckReportPrintView({ rows, manualColumns, fromDa
     const to = new Date(toDate);
     const singleMonth = from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth();
 
+    // One printed line per calendar day in the range; days without a session keep row = null and print blank.
+    const rowsByDay = new Map<string, ServerCheckReportRowDto[]>();
+    rows.forEach((r) => {
+        const day = r.checkDate.slice(0, 10);
+        rowsByDay.set(day, [...(rowsByDay.get(day) ?? []), r]);
+    });
+    const [fy, fm, fd] = fromDate.slice(0, 10).split("-").map(Number);
+    const [ty, tm, td2] = toDate.slice(0, 10).split("-").map(Number);
+    const endTime = Date.UTC(ty, tm - 1, td2);
+    const printRows: { key: string; day: string; row: ServerCheckReportRowDto | null }[] = [];
+    for (let t = Date.UTC(fy, fm - 1, fd); t <= endTime; t += 86_400_000) {
+        const day = new Date(t).toISOString().slice(0, 10);
+        const dayRows = rowsByDay.get(day) ?? [];
+        if (dayRows.length === 0) printRows.push({ key: day, day, row: null });
+        else dayRows.forEach((row) => printRows.push({ key: `${day}-${row.sessionId}`, day, row }));
+    }
+
     return (
         <div className="hidden print:block text-black">
             <style>{`@page { size: A4 landscape; margin: 10mm; }`}</style>
@@ -122,32 +139,32 @@ export default function ServerCheckReportPrintView({ rows, manualColumns, fromDa
                     </tr>
                 </thead>
                 <tbody>
-                    {rows.map((row) => (
-                        <tr key={row.sessionId}>
-                            <td className={td}>{formatDate(row.checkDate)}</td>
-                            <td className={td}>{cellText(row.serverStatus)}</td>
-                            <td className={td}>{cellText(row.networkStatus)}</td>
-                            <td className={td}>{cellText(row.upsStatus)}</td>
-                            <td className={td}>{cellText(row.airConditionerStatus)}</td>
+                    {printRows.map(({ key, day, row }) => (
+                        <tr key={key}>
+                            <td className={td}>{formatDate(day)}</td>
+                            <td className={td}>{row ? cellText(row.serverStatus) : ""}</td>
+                            <td className={td}>{row ? cellText(row.networkStatus) : ""}</td>
+                            <td className={td}>{row ? cellText(row.upsStatus) : ""}</td>
+                            <td className={td}>{row ? cellText(row.airConditionerStatus) : ""}</td>
                             {ambientColumn && (
                                 <td className={td}>
                                     {(() => {
-                                        const match = row.manualResults.find((m) => m.manualItemId === ambientColumn.id);
+                                        const match = row?.manualResults.find((m) => m.manualItemId === ambientColumn.id);
                                         return match ? cellText(match.status === 1) : "";
                                     })()}
                                 </td>
                             )}
                             {(otherColumns.length > 0 ? otherColumns : [null]).map((col, index) => {
                                 if (!col) return <td key={index} className={td} />;
-                                const match = row.manualResults.find((m) => m.manualItemId === col.id);
+                                const match = row?.manualResults.find((m) => m.manualItemId === col.id);
                                 return (
                                     <td key={col.id} className={td}>
                                         {match ? cellText(match.status === 1) : ""}
                                     </td>
                                 );
                             })}
-                            <td className={`${td} whitespace-nowrap`}>{row.checkedBy ?? ""}</td>
-                            <td className={`${td} text-left`}>{buildNote(row)}</td>
+                            <td className={`${td} whitespace-nowrap`}>{row?.checkedBy ?? ""}</td>
+                            <td className={`${td} text-left`}>{row ? buildNote(row) : ""}</td>
                         </tr>
                     ))}
                 </tbody>

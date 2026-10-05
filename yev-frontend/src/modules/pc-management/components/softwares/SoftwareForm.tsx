@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { SoftwareDto } from "@/modules/pc-management/types/software.dto";
 import type { SoftwareGroupDto } from "@/modules/pc-management/types/software-group.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface SoftwareFormValues {
@@ -141,28 +142,20 @@ export default function SoftwareForm({ isOpen, mode, initial, groups, loading = 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label className="block">
                             <span className={fieldLabelClassName}>Loại phần mềm</span>
-                            <div className="relative">
-                                <select
-                                    value={values.softwareType}
-                                    onChange={(event) => handleChange("softwareType", event.target.value)}
-                                    disabled={loading}
-                                    className={`${fieldClassName} appearance-none pr-9 ${values.softwareType === "" ? "text-[#8a8f94]" : ""}`}
-                                >
-                                    <option value="">-- Chọn loại phần mềm --</option>
-                                    {/* Keep a legacy free-text value selectable so editing old rows doesn't silently wipe it */}
-                                    {values.softwareType !== "" && !SOFTWARE_TYPES.includes(values.softwareType) && (
-                                        <option value={values.softwareType} className="text-[#191c1e]">
-                                            {values.softwareType}
-                                        </option>
-                                    )}
-                                    {SOFTWARE_TYPES.map((type) => (
-                                        <option key={type} value={type} className="text-[#191c1e]">
-                                            {type}
-                                        </option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8a8f94]" />
-                            </div>
+                            <StyledSelect
+                                value={values.softwareType}
+                                onChange={(type) => handleChange("softwareType", type)}
+                                disabled={loading}
+                                triggerClassName={`${fieldClassName} pr-9`}
+                                options={[
+                                    { value: "", label: "-- Chọn loại phần mềm --" },
+                                    // Keep a legacy free-text value selectable so editing old rows doesn't silently wipe it.
+                                    ...(values.softwareType !== "" && !SOFTWARE_TYPES.includes(values.softwareType)
+                                        ? [{ value: values.softwareType, label: values.softwareType }]
+                                        : []),
+                                    ...SOFTWARE_TYPES.map((type) => ({ value: type, label: type })),
+                                ]}
+                            />
                         </label>
 
                         <label className="block">

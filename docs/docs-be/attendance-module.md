@@ -23,6 +23,7 @@
 | **Lũy kế** (ledger, snapshot đóng băng, dự kiến, bỏ cache) | `§Lũy kế` (4 mục) |
 | **Phiếu ăn** (ngưỡng giờ, 3 bậc, trừ 30 phút, đồng bộ khi sửa đơn) | `§Phiếu ăn`, `§Có ăn hay không`, `§Cấu hình phiếu ăn` |
 | **Giới hạn giờ OT** (chặn cứng ngày/tháng/năm + gia hạn riêng từng NV) | `§Giới hạn giờ OT`, `§Giới hạn OT/tháng/năm RIÊNG` |
+| **Lịch ngày nghỉ + Trường hợp OT tự động** (TH1/TH2/TH3, mốc ngày nghỉ, import theo năm) | `§Lịch ngày nghỉ` |
 | **Nhân sự dưới chuyền** (`ProductionEmployee`, import/export file Chế Tạo) | `§Import/Export nhân sự dưới chuyền` |
 | **Đơn tổng** (`OtFormBatch`) | `§Đơn tổng` |
 | **Email**: mail tổng hợp, token xác thực, mail từ chối, font/dark-mode | `§Bỏ mail riêng`, `§Xác thực qua email`, `§Mail báo người lập đơn`, `§Template email` |
@@ -85,7 +86,8 @@ Nghiệp vụ OT Form:
 | `UserSignature` | `UserName:string`(unique), `SignatureImage:byte[]`, `UpdatedAt` | Không FK thật | Chữ ký đăng ký sẵn để auto-fill lúc duyệt — không phải nguồn sự thật cho audit (nguồn thật = `OtFormApprovalHistory.SignatureImage`). |
 | `SecondaryPassword` | `UserName:string`(unique), `PasswordHash:string`, `UpdatedAt` | Không FK thật | Mật khẩu cấp 2 (2026-07-30) — bắt buộc nhập lại ở MỌI hành động ký/duyệt OtForm (submit/approve/reject, kể cả kênh email), xem §Business Logic — Mật khẩu cấp 2. `PasswordHash` dùng `Microsoft.AspNetCore.Identity.PasswordHasher<object>`, không lưu plaintext. |
 | `PendingSecondaryPasswordConfirmation` | `UserName:string`, `PasswordHash:string`, `Token:string`(unique), `ExpiresAt`, `ConfirmedAt:DateTime?`, `CreatedAt` | Không FK thật | Y hệt `PendingSignatureConfirmation` — mật khẩu cấp 2 mới KHÔNG áp dụng ngay, chờ xác nhận qua email. |
-| `AttendanceSetting` | `MainMealTicketMinHours:decimal(5,2)`, `MonthlyOtHourLimit:decimal(10,2)`, `YearlyOtHourLimit:decimal(10,2)`, `BatchAutoSendTime:TimeOnly` | Không FK thật | Cấu hình dùng chung (2026-08-01) — bảng LUÔN đúng 1 dòng, mirror `Asset.Domain.Entities.AssetSetting`. Xem §Cấu hình phiếu ăn & giới hạn lũy kế. `BatchAutoSendTime` (mới 2026-08-08, mặc định 15:00) — giờ `OtFormBatchBackgroundService` chạy gom "Đơn tổng", xem §Đơn tổng. |
+| `WorkCalendarDay` | `Date:date` (unique), `DayType:int` (1 Chủ nhật / 2 Ngày lễ / 3 Nghỉ đặc biệt), `Note?:nvarchar(255)` | Không FK | Lịch ngày nghỉ của công ty, 1 dòng/ngày nghỉ, không `IsDeleted`. Xem §Lịch ngày nghỉ. |
+| `AttendanceSetting` | `MainMealTicketMinHours:decimal(5,2)`, `MonthlyOtHourLimit:decimal(10,2)`, `YearlyOtHourLimit:decimal(10,2)`, `DailyOtHourLimitHoliday:decimal(5,2)`, `BatchAutoSendTime:TimeOnly` | Không FK thật | Cấu hình dùng chung (2026-08-01) — bảng LUÔN đúng 1 dòng, mirror `Asset.Domain.Entities.AssetSetting`. Xem §Cấu hình phiếu ăn & giới hạn lũy kế. `BatchAutoSendTime` (mới 2026-08-08, mặc định 15:00) — giờ `OtFormBatchBackgroundService` chạy gom "Đơn tổng", xem §Đơn tổng. |
 
 Enum (`Attendance.Domain/Enums/`): `OtFormStatus` (redesign 2026-08-07: `InApproval=0/Completed=1/Rejected=2` — bỏ 6 giá trị cũ, KHÔNG cần tương thích ngược với đơn cũ, xem §Cây chức vụ Giai đoạn 3.1), `OtFormApprovalStepStatus` (mới — `Pending=0/Approved=1/Rejected=2/Skipped=3`), `ApprovalLevel` (Submitter/DepartmentManager/WorkshopManager/GeneralDirector/GroupHead — **không còn dùng bởi `OtFormService`**, chỉ còn ý nghĩa lịch sử/dùng bởi `UserApprovalScope`), `ApprovalAction` (Submitted/Approved/Rejected), `ScopeType` (Group/Department/All), `JobTitleTerminalLevel` (None/DepartmentManager/WorkshopManager/GeneralDirector — xem §Cây chức vụ). Lưu dưới dạng `int` trên entity, không dùng `HasConversion`.
 
@@ -415,6 +417,9 @@ lũy kế và §Có ăn hay không phía trên — chốt qua nhiều vòng trao
 
 ### §Giới hạn giờ OT ngày/tháng/năm — CHẶN CỨNG tạo/sửa đơn (2026-08-26)
 
+> **Đã đổi:** chỉ mốc NGÀY còn chặn cứng; mốc tháng/năm giờ là mốc ép TH3, không chặn — xem §Lịch ngày nghỉ.
+> Phần dưới mô tả thiết kế gốc cho cả 3 mốc.
+
 **Đảo ngược hoàn toàn** hành vi cũ ở §Cấu hình phiếu ăn & giới hạn lũy kế phía trên (Monthly/YearlyOtHourLimit
 trước đây chỉ tô đỏ cảnh báo, KHÔNG chặn) — chốt qua trao đổi với người dùng (AGENTS.md §2 luật 2), dựa
 trên `docs/Note_OT.txt` dòng "Ngày: không tăng ca quá 4 tiếng":
@@ -451,6 +456,32 @@ trên `docs/Note_OT.txt` dòng "Ngày: không tăng ca quá 4 tiếng":
   lại API (cùng cơ chế `useFetchEffect` deps đã có cho `productionResults`).
 - **Không retroactive**: đổi cấu hình chỉ ảnh hưởng đơn tạo/sửa SAU đó — không re-validate đơn đã tạo
   trước đó (kể cả đơn đang `InApproval` chưa ai duyệt) khi Admin đổi giới hạn.
+
+### §Lịch ngày nghỉ — Trường hợp OT tự động, mốc ngày nghỉ, import theo năm
+
+- **Bảng `WorkCalendarDays`** (`Date` unique, `DayType` 1 Chủ nhật / 2 Ngày lễ / 3 Nghỉ đặc biệt, `Note?`):
+  mỗi dòng là 1 ngày NGHỈ; ngày không có dòng là ngày làm việc. Không có `IsDeleted` — mỗi năm được thay
+  nguyên khối khi import. Migration `AddWorkCalendarAndOtCaseRules` seed lịch 2026 từ thẻ lịch Yazaki
+  (52 Chủ nhật + 11 ngày lễ + 32 nghỉ đặc biệt; ngày lễ trùng Chủ nhật giữ loại ngày lễ). Năm chưa có
+  lịch thì mọi ngày tính là ngày làm việc.
+- **Trường hợp OT là giá trị suy ra, không do người dùng chọn**
+  (`OtFormService.EnsureOtCaseMatchesRulesAsync`, gọi ở cả `CreateAsync` lẫn `CreateProductionFormAsync`):
+  TH3 nếu có nhân viên nào mà lũy kế tháng/năm cộng giờ của đơn vượt `AttendanceSetting.MonthlyOtHourLimit`
+  / `YearlyOtHourLimit` (mặc định 25/300; ưu tiên `Employee.CustomMonthlyOtHourLimit`/`CustomYearlyOtHourLimit`
+  nếu có; lũy kế ngày không tính); ngược lại TH2 nếu ngày nằm trong lịch, còn lại TH1
+  (`ExceedsMonthYearLimitAsync`). `OtFormDto`/`CreateOtFormDto` vẫn mang `otCaseId` để giữ hợp đồng, nhưng giá trị gửi
+  lên khác giá trị suy ra thì BE trả 400 ghi rõ phải là TH nào. Tra TH theo `OtCase.Code`.
+  Sửa đơn (`UpdateAsync`) không đổi Trường hợp OT đã có, nhưng từ chối nếu giờ sửa khiến đơn chưa phải TH3
+  vượt mốc tháng/năm.
+- **Mốc chặn cứng chỉ còn theo NGÀY** (`ValidateOtHourLimitsAsync`): ngày nghỉ dùng `DailyOtHourLimitHoliday`
+  (mặc định 12h), ngày làm việc dùng `DailyOtHourLimit` (4h). Phân loại theo ngày nên một nhân viên không có
+  chuyện vừa 4h vừa 12h trong cùng ngày. Mốc tháng/năm không còn chặn mà là mốc ép TH3.
+- **Import** (`WorkCalendarService`, `WorkCalendarController`): file mẫu xuất theo năm, import thay toàn bộ
+  lịch của năm, all-or-nothing; quyền `Attendance.Setting.Update` (dùng lại, không thêm permission mới
+  vào Identity). Giao diện: card "Lịch ngày nghỉ" ở tab Cấu hình của màn Danh mục (`AttendanceSettingPanel`): chọn năm, tải mẫu, import, và nút "Xem lịch" mở popup lịch 12 tháng chỉ đọc (`WorkCalendarDialog` + `WorkCalendarView`) tô xanh ngày lễ, vàng nghỉ đặc biệt, chữ đỏ Chủ nhật, rê chuột xem loại/ghi chú.
+  Hợp đồng API: `attendance-api-fe.md §6d-2`.
+- **AI Chat lập đơn** vẫn nhận `otCaseId` từ model; nếu model chọn sai TH thì lỗi 400 ở trên được trả
+  lại cho model để chọn lại.
 
 ### §Giới hạn OT/tháng/năm RIÊNG theo từng nhân viên — "gia hạn" cao hơn mặc định (2026-08-26)
 
@@ -610,10 +641,17 @@ vượt hạn mức. Bản chất: hệ thống "mù" trước các đơn khác 
 > HOÀN TOÀN** — xem §Lũy kế — bỏ cache trên Employee, tính lúc đọc bên dưới. 4 cột đó đã bị **xoá khỏi
 > `Employees`** cùng đợt với `MonthToDate`/`YearToDate` thật (`RemoveEmployeeAccumulationColumns`).
 
-**Thiết kế mới**: không lưu ở đâu cả — tính trực tiếp từ `OtFormEmployee`/`OtForm` mỗi lần cần, dùng
-CHUNG công thức `OtFormService.CalculateOtHours` với lũy kế thật. Điều kiện "đơn còn tính vào Dự kiến":
-`!IsRemoved && OtForm.Status != Rejected && !OtForm.IsDeleted` (Completed VẪN tính — khác lũy kế thật,
-Dự kiến là "tổng mọi đơn hợp lệ đang/đã claim giờ của người này", không chỉ đơn đã xong).
+**Thiết kế hiện hành**: không lưu ở đâu cả — tính lúc đọc, scope theo `targetDate`, dùng CHUNG công thức
+`OtFormService.CalculateOtHours` với lũy kế thật. "Đơn hợp lệ" = `!IsRemoved && OtForm.Status != Rejected &&
+!OtForm.IsDeleted`:
+
+- **Ngày** = mọi đơn hợp lệ của nhân viên đúng ngày đó (sổ lũy kế không có số theo ngày).
+- **Tháng** = dòng sổ lũy kế (`EmployeeAccumulationHistory`) của tháng đó + các đơn hợp lệ còn `InApproval` trong tháng.
+- **Năm** = TOÀN BỘ dòng sổ lũy kế của năm (kể cả `Month = 0` số dư đầu kỳ) + các đơn hợp lệ còn `InApproval` trong năm.
+- Đơn `Completed` KHÔNG cộng lại vào Tháng/Năm vì giờ của nó đã nằm trong sổ lũy kế (`AccumulateEmployeeHoursAsync`),
+  nơi cũng chứa số import và số sửa tay — nên số bạn nhập/sửa ở lũy kế hiện ngay ở màn Tạo đơn.
+- Công thức này nằm ở 3 chỗ phải giữ đồng bộ: `OtFormService.ComputeAccumulatedHoursBatchAsync`,
+  `EmployeeService.GetByGroupIdAsync`, `ProductionEmployeeService.SearchAsync`.
 
 - **Khác biệt quan trọng với lũy kế thật**: lũy kế thật luôn scope theo **năm/tháng THỰC TẾ hôm nay**;
   Dự kiến scope theo **`targetDate`** truyền vào — CHỖ DUY NHẤT đang dùng Dự kiến (bảng chọn nhân viên

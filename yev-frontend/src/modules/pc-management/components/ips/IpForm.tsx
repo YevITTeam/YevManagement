@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import type { IpAddressDto } from "@/modules/pc-management/types/ip.dto";
-import { ipStatusLabels } from "./ip-status";
+import { ipStatusDotClasses, ipStatusLabels } from "./ip-status";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 // docs/asset-api-fe.md §4.2 (2026-07-11) — PUT /api/IpAddress/{id} chỉ đổi được
 // status + note. IP đang gắn thiết bị (deviceId != null) chỉ đổi được note;
@@ -100,18 +101,17 @@ export default function IpForm({ isOpen, initial, loading = false, onClose, onSu
                     ) : (
                         <label className="block">
                             <span className={fieldLabelClassName}>Trạng thái</span>
-                            <select
+                            <StyledSelect
                                 value={values.status}
-                                onChange={(event) => handleChange("status", event.target.value)}
+                                onChange={(status) => handleChange("status", status)}
                                 disabled={loading}
-                                className={fieldClassName}
-                            >
-                                {statusOptions.map((status) => (
-                                    <option key={status} value={status}>
-                                        {ipStatusLabels[status]}
-                                    </option>
-                                ))}
-                            </select>
+                                triggerClassName={`${fieldClassName} pr-9`}
+                                options={statusOptions.map((status) => ({
+                                    value: String(status),
+                                    label: ipStatusLabels[status],
+                                    dotClassName: ipStatusDotClasses[status],
+                                }))}
+                            />
                         </label>
                     )}
 

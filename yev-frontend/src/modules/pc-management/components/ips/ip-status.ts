@@ -16,4 +16,10 @@ export const ipStatusClasses: Record<number, string> = {
     2: "border border-[#16a34a] bg-[#16a34a] text-white",
 };
 
+export const ipStatusDotClasses: Record<number, string> = {
+    0: "bg-[#94a3b8]",
+    1: "bg-[#6366f1]",
+    2: "bg-[#16a34a]",
+};
+
 export const ipStatusOptions = [0, 1, 2] as const;

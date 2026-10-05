@@ -1,16 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Save, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, Search } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import { PermissionApi } from "@/modules/auth/api/permission.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
-import type { PermissionModuleGroupDto } from "@/modules/auth/types/permission.dto";
+import type { PermissionDto, PermissionModuleGroupDto } from "@/modules/auth/types/permission.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import PermissionTree from "./PermissionTree";
 
 // Override giá trị đang chọn cho 1 permission trên UI (chưa lưu).
 // "inherit": không override, theo Role. "grant": cấp thêm riêng. "deny": thu hồi riêng.
@@ -38,11 +39,6 @@ export default function UserPermissionOverrideManager() {
     const [autoGrantedIds, setAutoGrantedIds] = useState<Set<number>>(new Set());
     // Lựa chọn override đang chỉnh trên UI (chưa lưu) — chỉ gồm override THỦ CÔNG.
     const [choices, setChoices] = useState<Map<number, OverrideChoice>>(new Map());
-
-    // Cây quyền gộp theo Module > Entity, mặc định đóng hết — mirror RolePermissionManager.tsx, tránh
-    // hiển thị phẳng toàn bộ hàng trăm permission gây rối (cùng lý do đã sửa ở màn Phân quyền theo vai trò).
-    const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
-    const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
 
     const [isSaving, setIsSaving] = useState(false);
 
@@ -134,29 +130,16 @@ export default function UserPermissionOverrideManager() {
         safeUserPageIndex * USERS_PAGE_SIZE
     );
 
-    const setChoice = (permissionId: number, choice: OverrideChoice) => {
+    // Tick/bỏ tick = quyền hiệu lực mong muốn. Trùng mức mặc định (Role hoặc Chức vụ tự cấp) thì không
+    // cần override; khác thì ghi override "grant" (cấp thêm) / "deny" (thu hồi).
+    const setPermissionsChecked = (permissions: PermissionDto[], checked: boolean) => {
         setChoices((prev) => {
             const next = new Map(prev);
-            if (choice === "inherit") next.delete(permissionId);
-            else next.set(permissionId, choice);
-            return next;
-        });
-    };
-
-    const toggleModuleExpand = (module: string) => {
-        setExpandedModules((prev) => {
-            const next = new Set(prev);
-            if (next.has(module)) next.delete(module);
-            else next.add(module);
-            return next;
-        });
-    };
-
-    const toggleEntityExpand = (entityKey: string) => {
-        setExpandedEntities((prev) => {
-            const next = new Set(prev);
-            if (next.has(entityKey)) next.delete(entityKey);
-            else next.add(entityKey);
+            for (const permission of permissions) {
+                const defaultAccess = roleBaselineIds.has(permission.id) || autoGrantedIds.has(permission.id);
+                if (checked === defaultAccess) next.delete(permission.id);
+                else next.set(permission.id, checked ? "grant" : "deny");
+            }
             return next;
         });
     };
@@ -209,7 +192,7 @@ export default function UserPermissionOverrideManager() {
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền riêng theo người dùng</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Cấp thêm hoặc thu hồi riêng 1 quyền cho đúng 1 người, khác với quyền mặc định theo vai trò của họ.
+                        Tick để cấp thêm, bỏ tick để thu hồi so với quyền theo vai trò của người này.
                     </p>
                 </div>
             </div>
@@ -307,147 +290,37 @@ export default function UserPermissionOverrideManager() {
                         {isLoadingUserPermissions ? (
                             <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">Đang tải quyền...</div>
                         ) : (
-                            <div className="max-h-[60vh] divide-y divide-[#f1f5f9] overflow-y-auto">
-                                {moduleGroups.map((moduleGroup) => {
-                                    const modulePermissions = moduleGroup.entities.flatMap((e) => e.permissions);
-                                    const moduleGrantedCount = modulePermissions.filter((p) => isPermissionEffectivelyGranted(p.id)).length;
-                                    const isModuleExpanded = expandedModules.has(moduleGroup.module);
-                                    return (
-                                    <div key={moduleGroup.module} className="px-4 py-3">
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleModuleExpand(moduleGroup.module)}
-                                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                aria-label={isModuleExpanded ? "Thu gọn" : "Mở rộng"}
+                            <PermissionTree
+                                moduleGroups={moduleGroups}
+                                isChecked={isPermissionEffectivelyGranted}
+                                onToggle={setPermissionsChecked}
+                                disabled={!canEditSelectedUser}
+                                renderBadge={(permission) => {
+                                    const choice = choices.get(permission.id) ?? "inherit";
+                                    if (choice === "grant")
+                                        return (
+                                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-600">
+                                                Cấp thêm
+                                            </span>
+                                        );
+                                    if (choice === "deny")
+                                        return (
+                                            <span className="rounded-full border border-[#e9bcb6] bg-[#fff4f2] px-2 py-0.5 text-xs font-semibold text-[#930006]">
+                                                Thu hồi
+                                            </span>
+                                        );
+                                    if (autoGrantedIds.has(permission.id))
+                                        return (
+                                            <span
+                                                title="Tự động cấp theo Chức vụ hiện tại (Attendance) — đổi/gỡ Chức vụ sẽ tự thu hồi. Bỏ tick để thu hồi riêng."
+                                                className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700"
                                             >
-                                                {isModuleExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleModuleExpand(moduleGroup.module)}
-                                                className="flex flex-1 cursor-pointer items-center gap-2 text-left text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]"
-                                            >
-                                                {moduleGroup.module}
-                                                <span className="font-normal normal-case tracking-normal text-[#8a8f94]">
-                                                    ({moduleGrantedCount}/{modulePermissions.length})
-                                                </span>
-                                            </button>
-                                        </div>
-                                        {isModuleExpanded && (
-                                        <div className="mt-2 space-y-3 pl-6">
-                                            {moduleGroup.entities.map((entityGroup) => {
-                                                const entityGrantedCount = entityGroup.permissions.filter((p) =>
-                                                    isPermissionEffectivelyGranted(p.id)
-                                                ).length;
-                                                const entityKey = `${moduleGroup.module}::${entityGroup.entity}`;
-                                                const isEntityExpanded = expandedEntities.has(entityKey);
-                                                return (
-                                                <div key={entityGroup.entity}>
-                                                    <div className="mb-1 flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleEntityExpand(entityKey)}
-                                                            className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                            aria-label={isEntityExpanded ? "Thu gọn" : "Mở rộng"}
-                                                        >
-                                                            {isEntityExpanded ? (
-                                                                <ChevronDown className="h-3.5 w-3.5" />
-                                                            ) : (
-                                                                <ChevronRight className="h-3.5 w-3.5" />
-                                                            )}
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleEntityExpand(entityKey)}
-                                                            className="flex flex-1 cursor-pointer items-center gap-2 text-left text-xs font-semibold text-[#191c1e]"
-                                                        >
-                                                            {entityGroup.entity}
-                                                            <span className="font-normal text-[#8a8f94]">
-                                                                ({entityGrantedCount}/{entityGroup.permissions.length})
-                                                            </span>
-                                                        </button>
-                                                    </div>
-                                                    {isEntityExpanded && (
-                                                    <div className="space-y-1.5 pl-6">
-                                                        {entityGroup.permissions.map((permission) => {
-                                                            const choice = choices.get(permission.id) ?? "inherit";
-                                                            const roleHasAccess = roleBaselineIds.has(permission.id);
-                                                            const isAutoGranted = autoGrantedIds.has(permission.id);
-                                                            // Chưa bị override tay thì hiệu lực = Role HOẶC Chức vụ tự cấp — bấm
-                                                            // "Thu hồi"/"Cấp thêm" sẽ tạo override tay, lúc đó "chiếm" hẳn dòng này
-                                                            // (xem PermissionService.UpdateUserPermissionOverridesAsync).
-                                                            const effectiveHasAccess =
-                                                                choice === "grant" ? true : choice === "deny" ? false : roleHasAccess || isAutoGranted;
-
-                                                            return (
-                                                                <div
-                                                                    key={permission.id}
-                                                                    className="flex flex-col gap-1.5 border border-transparent py-1 sm:flex-row sm:items-center sm:justify-between"
-                                                                    title={permission.description}
-                                                                >
-                                                                    <div className="flex items-center gap-2 text-sm">
-                                                                        <span
-                                                                            className={`h-2 w-2 flex-shrink-0 rounded-full ${
-                                                                                effectiveHasAccess ? "bg-emerald-500" : "bg-[#e0e3e5]"
-                                                                            }`}
-                                                                        />
-                                                                        <span className="text-[#191c1e]">{permission.description}</span>
-                                                                        <span className="text-xs text-[#5e3f3a]">
-                                                                            ({roleHasAccess ? "có theo Role" : "không có theo Role"})
-                                                                        </span>
-                                                                        {isAutoGranted && choice === "inherit" && (
-                                                                            <span
-                                                                                title="Đang được tự động cấp theo Chức vụ hiện tại của người này (Attendance) — đổi/gỡ Chức vụ sẽ tự thu hồi. Bấm Thu hồi/Cấp thêm bên phải để ghi đè tay."
-                                                                                className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700"
-                                                                            >
-                                                                                Tự động (Chức vụ)
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex flex-shrink-0 overflow-hidden rounded-full border border-[#e0e3e5] text-xs">
-                                                                        {(
-                                                                            [
-                                                                                ["deny", "Thu hồi"],
-                                                                                ["inherit", "Theo Role"],
-                                                                                ["grant", "Cấp thêm"],
-                                                                            ] as [OverrideChoice, string][]
-                                                                        ).map(([value, label], index) => (
-                                                                            <button
-                                                                                key={value}
-                                                                                type="button"
-                                                                                disabled={!canEditSelectedUser}
-                                                                                onClick={() => setChoice(permission.id, value)}
-                                                                                className={`cursor-pointer px-2.5 py-1 font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                                                                                    index > 0 ? "border-l border-[#e0e3e5]" : ""
-                                                                                } ${
-                                                                                    choice === value
-                                                                                        ? value === "deny"
-                                                                                            ? "bg-[#fff4f2] text-[#930006]"
-                                                                                            : value === "grant"
-                                                                                              ? "bg-emerald-50 text-emerald-600"
-                                                                                              : "bg-[#eceef0] text-[#191c1e]"
-                                                                                        : "bg-white text-[#5e3f3a] hover:bg-[#f8fafc]"
-                                                                                }`}
-                                                                            >
-                                                                                {label}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                    )}
-                                                </div>
-                                                );
-                                            })}
-                                        </div>
-                                        )}
-                                    </div>
-                                    );
-                                })}
-                            </div>
+                                                Theo Chức vụ
+                                            </span>
+                                        );
+                                    return null;
+                                }}
+                            />
                         )}
                     </section>
                 </div>

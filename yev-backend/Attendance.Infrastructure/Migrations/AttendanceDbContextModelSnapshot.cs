@@ -36,6 +36,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<decimal>("DailyOtHourLimit")
                         .HasColumnType("decimal(5, 2)");
 
+                    b.Property<decimal>("DailyOtHourLimitHoliday")
+                        .HasColumnType("decimal(5, 2)");
+
                     b.Property<TimeOnly>("EarlyMealWindowEndTime")
                         .HasColumnType("time");
 
@@ -1352,6 +1355,33 @@ namespace Attendance.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("UserSignatures");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.WorkCalendarDay", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<int>("DayType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_WorkCalendarDays");
+
+                    b.HasIndex(new[] { "Date" }, "IX_WorkCalendarDays_Date")
+                        .IsUnique();
+
+                    b.ToTable("WorkCalendarDays");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.DepartmentApprovalStep", b =>

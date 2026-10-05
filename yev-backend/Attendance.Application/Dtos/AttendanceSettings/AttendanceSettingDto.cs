@@ -27,6 +27,9 @@ namespace Attendance.Application.Dtos.AttendanceSettings
 
         public decimal YearlyOtHourLimit { get; set; }
 
+        // Giới hạn ngày khi ngày đó là ngày nghỉ theo lịch (WorkCalendarDay).
+        public decimal DailyOtHourLimitHoliday { get; set; }
+
         // Giờ hằng ngày OtFormBatchBackgroundService chạy gom "Đơn tổng" gửi Trưởng phòng (giờ VN).
         public TimeOnly BatchAutoSendTime { get; set; }
     }

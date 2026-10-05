@@ -52,6 +52,9 @@ interface EmployeeFormProps {
     // thật sự cho phép tạo/sửa (EmployeeService.EnsureAssignmentInCallerScopeAsync) — tránh chọn xong
     // mới bị 400. `undefined`/`null`/`companyWide` → giữ hành vi cũ (tải toàn bộ công ty).
     scope?: EmployeeScopeDto | null;
+    // Show the per-employee OT limit fields when editing (create mode always shows them). Needs
+    // Attendance.Employee.UpdateOtLimit because the limits are saved through a separate endpoint.
+    canEditOtLimit?: boolean;
 }
 
 const emptyValues: EmployeeFormValues = {
@@ -70,7 +73,7 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit, scope }: EmployeeFormProps) {
+export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit, scope, canEditOtLimit = false }: EmployeeFormProps) {
     const t = useTranslations("Attendance.Employee");
     const tCommon = useTranslations("Common");
     const { setting } = useAttendanceSetting();
@@ -339,10 +342,9 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             </label>
                         )}
 
-                        {/* Giới hạn OT riêng — CHỈ hiện lúc Tạo mới (đã tách khỏi PUT /{id}, sửa sau này đi qua
-                            EmployeeOtLimitDialog.tsx, permission hẹp Attendance.Employee.UpdateOtLimit). "gia hạn"
-                            cao hơn mặc định chung cho từng người, thường dùng cho công nhân dưới chuyền. */}
-                        {mode === "create" && (
+                        {/* Per-employee OT limits (override the shared default). Saved apart from the main PUT:
+                            on create they ride along with POST, on edit EmployeeList calls PUT /{id}/ot-limit. */}
+                        {(mode === "create" || canEditOtLimit) && (
                             <>
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("fieldCustomMonthlyOtHourLimit")}</span>

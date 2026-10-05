@@ -26,6 +26,7 @@ namespace Attendance.Application.Services
         public const decimal DefaultDailyOtHourLimit = 4m;
         public const decimal DefaultMonthlyOtHourLimit = 25m;
         public const decimal DefaultYearlyOtHourLimit = 300m;
+        public const decimal DefaultDailyOtHourLimitHoliday = 12m;
         public static readonly TimeOnly DefaultBatchAutoSendTime = new(15, 0);
 
         public AttendanceSettingService(
@@ -54,6 +55,7 @@ namespace Attendance.Application.Services
             setting.DailyOtHourLimit = request.DailyOtHourLimit;
             setting.MonthlyOtHourLimit = request.MonthlyOtHourLimit;
             setting.YearlyOtHourLimit = request.YearlyOtHourLimit;
+            setting.DailyOtHourLimitHoliday = request.DailyOtHourLimitHoliday;
             setting.BatchAutoSendTime = request.BatchAutoSendTime;
 
             _unitOfWork.AttendanceSettings.Update(setting);
@@ -89,6 +91,7 @@ namespace Attendance.Application.Services
             DailyOtHourLimit = setting.DailyOtHourLimit,
             MonthlyOtHourLimit = setting.MonthlyOtHourLimit,
             YearlyOtHourLimit = setting.YearlyOtHourLimit,
+            DailyOtHourLimitHoliday = setting.DailyOtHourLimitHoliday,
             BatchAutoSendTime = setting.BatchAutoSendTime,
         };
 
@@ -110,6 +113,7 @@ namespace Attendance.Application.Services
                 DailyOtHourLimit = DefaultDailyOtHourLimit,
                 MonthlyOtHourLimit = DefaultMonthlyOtHourLimit,
                 YearlyOtHourLimit = DefaultYearlyOtHourLimit,
+                DailyOtHourLimitHoliday = DefaultDailyOtHourLimitHoliday,
                 BatchAutoSendTime = DefaultBatchAutoSendTime,
             };
             await _unitOfWork.AttendanceSettings.AddAsync(setting);

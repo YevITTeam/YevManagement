@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronRight, Save } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Save } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import { PermissionApi } from "@/modules/auth/api/permission.api";
@@ -9,6 +9,7 @@ import type { RoleDto } from "@/modules/auth/types/auth.dto";
 import type { PermissionDto, PermissionModuleGroupDto } from "@/modules/auth/types/permission.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import PermissionTree from "./PermissionTree";
 
 export default function RolePermissionManager() {
     const [roles, setRoles] = useState<RoleDto[]>([]);
@@ -16,11 +17,8 @@ export default function RolePermissionManager() {
     const [moduleGroups, setModuleGroups] = useState<PermissionModuleGroupDto[]>([]);
     const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
     const [selectedPermissionIds, setSelectedPermissionIds] = useState<Set<number>>(new Set());
-
-    // Cây quyền gộp theo thư mục Module > Entity, mặc định đóng hết — mở ra khi bấm (yêu cầu người
-    // dùng 2026-08-10, tránh hiển thị phẳng toàn bộ hàng trăm permission gây rối như trước).
-    const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
-    const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
+    // Quyền đã lưu của vai trò đang chọn — để biết có thay đổi chưa lưu hay không.
+    const [savedPermissionIds, setSavedPermissionIds] = useState<Set<number>>(new Set());
 
     const [isSaving, setIsSaving] = useState(false);
 
@@ -40,20 +38,15 @@ export default function RolePermissionManager() {
     const { isLoading: isLoadingRolePermissions } = useFetchEffect(
         () => (selectedRoleId === null ? Promise.resolve([]) : PermissionApi.getByRole(selectedRoleId)),
         [selectedRoleId],
-        (rolePermissions) => setSelectedPermissionIds(new Set(rolePermissions.map((p) => p.id))),
+        (rolePermissions) => {
+            const ids = new Set(rolePermissions.map((p) => p.id));
+            setSelectedPermissionIds(ids);
+            setSavedPermissionIds(ids);
+        },
         "Không thể tải quyền của vai trò này.",
         undefined,
         "role-permissions-by-role"
     );
-
-    const togglePermission = (permissionId: number, checked: boolean) => {
-        setSelectedPermissionIds((prev) => {
-            const next = new Set(prev);
-            if (checked) next.add(permissionId);
-            else next.delete(permissionId);
-            return next;
-        });
-    };
 
     const togglePermissionGroup = (permissions: PermissionDto[], checked: boolean) => {
         setSelectedPermissionIds((prev) => {
@@ -66,29 +59,12 @@ export default function RolePermissionManager() {
         });
     };
 
-    const toggleModuleExpand = (module: string) => {
-        setExpandedModules((prev) => {
-            const next = new Set(prev);
-            if (next.has(module)) next.delete(module);
-            else next.add(module);
-            return next;
-        });
-    };
-
-    const toggleEntityExpand = (entityKey: string) => {
-        setExpandedEntities((prev) => {
-            const next = new Set(prev);
-            if (next.has(entityKey)) next.delete(entityKey);
-            else next.add(entityKey);
-            return next;
-        });
-    };
-
     const handleSave = async () => {
         if (selectedRoleId === null) return;
         setIsSaving(true);
         try {
             await PermissionApi.updateRolePermissions(selectedRoleId, Array.from(selectedPermissionIds));
+            setSavedPermissionIds(new Set(selectedPermissionIds));
             toast.success("Cập nhật phân quyền thành công!");
         } catch (err) {
             toast.error(getApiErrorMessage(err, "Cập nhật phân quyền thất bại"));
@@ -98,9 +74,16 @@ export default function RolePermissionManager() {
     };
 
     const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? null;
+    const totalPermissionCount = useMemo(
+        () => moduleGroups.reduce((sum, m) => sum + m.entities.reduce((n, e) => n + e.permissions.length, 0), 0),
+        [moduleGroups]
+    );
+    const isDirty =
+        selectedPermissionIds.size !== savedPermissionIds.size ||
+        Array.from(selectedPermissionIds).some((id) => !savedPermissionIds.has(id));
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền theo vai trò</h1>
@@ -121,16 +104,16 @@ export default function RolePermissionManager() {
             ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
                     <section className="h-fit overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                        <div className="border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            Vai trò
+                        <div className="border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-[#191c1e]">
+                            Vai trò <span className="font-normal text-[#8a8f94]">({roles.length})</span>
                         </div>
-                        <div className="divide-y divide-[#f1f5f9]">
+                        <div className="p-2">
                             {roles.map((role) => (
                                 <button
                                     key={role.id}
                                     type="button"
                                     onClick={() => setSelectedRoleId(role.id)}
-                                    className={`block w-full cursor-pointer px-4 py-3 text-left text-sm transition ${
+                                    className={`block w-full cursor-pointer rounded-lg px-3 py-2.5 text-left text-sm transition ${
                                         role.id === selectedRoleId
                                             ? "bg-[#fff4f2] font-semibold text-[#e3000f]"
                                             : "text-[#191c1e] hover:bg-[#f8fafc]"
@@ -143,15 +126,27 @@ export default function RolePermissionManager() {
                     </section>
 
                     <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                        <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3">
-                            <div className="text-sm font-semibold text-[#191c1e]">
-                                {selectedRole ? `Quyền của "${selectedRole.roleName}"` : "Chọn 1 vai trò"}
+                        <div className="flex items-center justify-between gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3">
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                                <div className="text-sm font-semibold text-[#191c1e]">
+                                    {selectedRole ? `Quyền của "${selectedRole.roleName}"` : "Chọn 1 vai trò"}
+                                </div>
+                                {selectedRole && !isLoadingRolePermissions && (
+                                    <span className="text-xs tabular-nums text-[#5e3f3a]">
+                                        Đã chọn {selectedPermissionIds.size}/{totalPermissionCount} quyền
+                                    </span>
+                                )}
+                                {isDirty && (
+                                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                                        Chưa lưu
+                                    </span>
+                                )}
                             </div>
                             <button
                                 type="button"
                                 onClick={handleSave}
-                                disabled={isSaving || isLoadingRolePermissions || selectedRoleId === null}
-                                className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={isSaving || isLoadingRolePermissions || selectedRoleId === null || !isDirty}
+                                className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <Save className="h-4 w-4" />
                                 {isSaving ? "Đang lưu..." : "Lưu"}
@@ -161,112 +156,11 @@ export default function RolePermissionManager() {
                         {isLoadingRolePermissions ? (
                             <div className="px-4 py-10 text-center text-sm text-[#5e3f3a]">Đang tải quyền...</div>
                         ) : (
-                            <div className="max-h-[60vh] divide-y divide-[#f1f5f9] overflow-y-auto">
-                                {moduleGroups.map((moduleGroup) => {
-                                    const modulePermissions = moduleGroup.entities.flatMap((e) => e.permissions);
-                                    const allChecked = modulePermissions.every((p) => selectedPermissionIds.has(p.id));
-                                    const someChecked = !allChecked && modulePermissions.some((p) => selectedPermissionIds.has(p.id));
-                                    const checkedCount = modulePermissions.filter((p) => selectedPermissionIds.has(p.id)).length;
-                                    const isModuleExpanded = expandedModules.has(moduleGroup.module);
-                                    return (
-                                        <div key={moduleGroup.module} className="px-4 py-3">
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => toggleModuleExpand(moduleGroup.module)}
-                                                    className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                    aria-label={isModuleExpanded ? "Thu gọn" : "Mở rộng"}
-                                                >
-                                                    {isModuleExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                                </button>
-                                                <label className="flex flex-1 cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={allChecked}
-                                                        ref={(el) => {
-                                                            if (el) el.indeterminate = someChecked;
-                                                        }}
-                                                        onChange={(event) => togglePermissionGroup(modulePermissions, event.target.checked)}
-                                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                    />
-                                                    {moduleGroup.module}
-                                                    <span className="font-normal normal-case tracking-normal text-[#8a8f94]">
-                                                        ({checkedCount}/{modulePermissions.length})
-                                                    </span>
-                                                </label>
-                                            </div>
-                                            {isModuleExpanded && (
-                                                <div className="mt-2 space-y-2.5 pl-6">
-                                                    {moduleGroup.entities.map((entityGroup) => {
-                                                        const entityAllChecked = entityGroup.permissions.every((p) => selectedPermissionIds.has(p.id));
-                                                        const entitySomeChecked =
-                                                            !entityAllChecked && entityGroup.permissions.some((p) => selectedPermissionIds.has(p.id));
-                                                        const entityCheckedCount = entityGroup.permissions.filter((p) =>
-                                                            selectedPermissionIds.has(p.id)
-                                                        ).length;
-                                                        const entityKey = `${moduleGroup.module}::${entityGroup.entity}`;
-                                                        const isEntityExpanded = expandedEntities.has(entityKey);
-                                                        return (
-                                                            <div key={entityGroup.entity}>
-                                                                <div className="flex items-center gap-2">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => toggleEntityExpand(entityKey)}
-                                                                        className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                                        aria-label={isEntityExpanded ? "Thu gọn" : "Mở rộng"}
-                                                                    >
-                                                                        {isEntityExpanded ? (
-                                                                            <ChevronDown className="h-3.5 w-3.5" />
-                                                                        ) : (
-                                                                            <ChevronRight className="h-3.5 w-3.5" />
-                                                                        )}
-                                                                    </button>
-                                                                    <label className="flex flex-1 cursor-pointer items-center gap-2 text-xs font-semibold text-[#191c1e]">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={entityAllChecked}
-                                                                            ref={(el) => {
-                                                                                if (el) el.indeterminate = entitySomeChecked;
-                                                                            }}
-                                                                            onChange={(event) => togglePermissionGroup(entityGroup.permissions, event.target.checked)}
-                                                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                                        />
-                                                                        {entityGroup.entity}
-                                                                        <span className="font-normal text-[#8a8f94]">
-                                                                            ({entityCheckedCount}/{entityGroup.permissions.length})
-                                                                        </span>
-                                                                    </label>
-                                                                </div>
-                                                                {isEntityExpanded && (
-                                                                    <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1.5 pl-6 sm:grid-cols-2 lg:grid-cols-3">
-                                                                        {entityGroup.permissions.map((permission) => (
-                                                                            <label
-                                                                                key={permission.id}
-                                                                                className="flex cursor-pointer items-start gap-2 py-0.5 text-sm text-[#191c1e]"
-                                                                                title={permission.description}
-                                                                            >
-                                                                                <input
-                                                                                    type="checkbox"
-                                                                                    checked={selectedPermissionIds.has(permission.id)}
-                                                                                    onChange={(event) => togglePermission(permission.id, event.target.checked)}
-                                                                                    className="mt-0.5 h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                                                />
-                                                                                <span>
-                                                                                    <span className="block text-[#5e3f3a]">{permission.description}</span>
-                                                                                </span>
-                                                                            </label>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                            <PermissionTree
+                                moduleGroups={moduleGroups}
+                                isChecked={(id) => selectedPermissionIds.has(id)}
+                                onToggle={togglePermissionGroup}
+                            />
                         )}
                     </section>
                 </div>

@@ -73,13 +73,12 @@ export default function AssetSettingPanel() {
             </div>
 
             <section className="max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="text-base font-semibold text-[#191c1e]">Tự động xóa thiết bị đã thanh lý</h2>
-                <p className="mt-1 text-sm text-[#5e3f3a]">
-                    Hệ thống định kỳ tự động xóa mềm các thiết bị đang ở trạng thái{" "}
-                    <strong>&quot;Đã thanh lý&quot;</strong> (kèm gỡ IP, ẩn email — giống thao tác xóa thủ công). Job
-                    kiểm tra mỗi ngày lúc 00:30 nhưng chỉ thật sự chạy khi đã đủ{" "}
-                    <strong>số tháng cấu hình bên dưới</strong> kể từ lần chạy gần nhất.
-                </p>
+                <h2
+                    className="text-base font-semibold text-[#191c1e]"
+                    title='Xóa mềm thiết bị "Đã thanh lý" (kèm gỡ IP, ẩn email — giống thao tác xóa thủ công). Job kiểm tra mỗi ngày lúc 00:30 nhưng chỉ chạy khi đã đủ số tháng cấu hình kể từ lần chạy gần nhất.'
+                >
+                    Tự động xóa thiết bị đã thanh lý
+                </h2>
 
                 {isLoading ? (
                     <div className="mt-6 h-9 w-40 animate-pulse rounded-lg bg-[#eceef0]" />
@@ -111,10 +110,11 @@ export default function AssetSettingPanel() {
                                     triggerClassName={`${fieldClassName} w-64`}
                                 />
                             </label>
-                            <p className="mt-1.5 max-w-md text-xs text-[#8a8f94]">
-                                Nút &quot;Kiểm tra network&quot; chỉ ping IP của thiết bị Server/Network/UPS thuộc chi nhánh
-                                này (gồm cả server ảo). Để trống nếu muốn ping mọi chi nhánh. Riêng danh sách thiết bị phải
-                                quét QR mỗi ngày được quyết định bởi ô &quot;Cần kiểm tra hằng ngày (QR)&quot; trên từng thiết bị.
+                            <p
+                                className="mt-1.5 max-w-md text-xs text-[#8a8f94]"
+                                title='Nút "Kiểm tra network" chỉ ping IP của thiết bị Server/Network/UPS thuộc chi nhánh này (gồm cả server ảo). Riêng danh sách thiết bị phải quét QR mỗi ngày được quyết định bởi ô "Cần kiểm tra hằng ngày (QR)" trên từng thiết bị, không theo chi nhánh.'
+                            >
+                                Để trống = ping tất cả chi nhánh.
                             </p>
                         </div>
 

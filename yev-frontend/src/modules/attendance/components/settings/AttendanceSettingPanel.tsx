@@ -1,12 +1,15 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { Mail, Save, Send, Ticket, TrendingUp } from "lucide-react";
+import { CalendarDays, Download, Mail, Save, Send, Ticket, TrendingUp, Upload } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
 import { AttendanceSettingApi } from "@/modules/attendance/api/attendance-setting.api";
 import { OtFormBatchApi } from "@/modules/attendance/api/ot-form-batch.api";
+import { WorkCalendarApi } from "@/modules/attendance/api/work-calendar.api";
+import type { WorkCalendarDayDto } from "@/modules/attendance/types/work-calendar.dto";
+import WorkCalendarDialog from "./WorkCalendarDialog";
 import type { AttendanceSettingDto } from "@/modules/attendance/types/attendance-setting.dto";
 import { invalidateAttendanceSettingCache } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -26,7 +29,7 @@ function fromTimeInputValue(value: string): string {
 const fieldLabelClassName = "mb-1 block whitespace-nowrap text-[11px]! font-semibold! uppercase tracking-[0.06em] text-[#5e3f3a]";
 const secondaryButtonClassName =
     "inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 text-xs! font-semibold! text-[#191c1e] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50";
-type NumberKey = "noMealTicketMaxHours" | "mainMealTicketMinHours" | "mealBreakDeductionHours" | "dailyOtHourLimit" | "monthlyOtHourLimit" | "yearlyOtHourLimit";
+type NumberKey = "noMealTicketMaxHours" | "mainMealTicketMinHours" | "mealBreakDeductionHours" | "dailyOtHourLimit" | "monthlyOtHourLimit" | "yearlyOtHourLimit" | "dailyOtHourLimitHoliday";
 type TimeKey = "earlyMealWindowStartTime" | "earlyMealWindowEndTime" | "batchAutoSendTime";
 // Width is per-field, matched to the data it holds (DESIGN_SYSTEM.md §4.3) — never w-full in an
 // even-split grid, which stretches a 1-digit value across the whole column.
@@ -78,7 +81,8 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
             values.noMealTicketMaxHours >= values.mainMealTicketMinHours ||
             values.dailyOtHourLimit <= 0 ||
             values.monthlyOtHourLimit <= 0 ||
-            values.yearlyOtHourLimit <= 0
+            values.yearlyOtHourLimit <= 0 ||
+            values.dailyOtHourLimitHoliday <= 0
         ) {
             toast.error(t("invalidValueError"));
             return;
@@ -172,6 +176,9 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                         <Field label={t("fieldDailyOtHourLimit")} hint={t("accumulationHint")}>
                             <HourInput step="0.5" min={0.5} max={24} value={values.dailyOtHourLimit} onChange={setNumber("dailyOtHourLimit")} disabled={isSaving} unit={t("unitHour")} />
                         </Field>
+                        <Field label={t("fieldDailyOtHourLimitHoliday")} hint={t("fieldDailyOtHourLimitHolidayHint")}>
+                            <HourInput step="0.5" min={0.5} max={24} value={values.dailyOtHourLimitHoliday} onChange={setNumber("dailyOtHourLimitHoliday")} disabled={isSaving} unit={t("unitHour")} />
+                        </Field>
                         <Field label={t("fieldMonthlyOtHourLimit")} hint={t("accumulationHint")}>
                             <HourInput step="1" min={1} value={values.monthlyOtHourLimit} onChange={setNumber("monthlyOtHourLimit")} disabled={isSaving} unit={t("unitHour")} />
                         </Field>
@@ -180,6 +187,8 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                         </Field>
                     </div>
                 </SettingCard>
+
+                <WorkCalendarCard />
 
                 <SettingCard icon={<Send size={15} />} title={t("batchSectionTitle")} desc={t("batchSectionDesc")}>
                     <div className="flex flex-wrap items-end gap-3">
@@ -220,6 +229,90 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
         </form>
     );
 });
+
+// Company non-working-day calendar: pick a year, download its Excel template, re-import to replace the
+// whole year. Days in the calendar use the holiday daily limit and make the OT case TH2.
+function WorkCalendarCard() {
+    const t = useTranslations("Attendance.AttendanceSetting");
+    const [year, setYear] = useState(() => new Date().getFullYear());
+    const [days, setDays] = useState<WorkCalendarDayDto[]>([]);
+    const [isBusy, setIsBusy] = useState(false);
+    const [isViewOpen, setIsViewOpen] = useState(false);
+
+    const { refetch } = useFetchEffect(
+        () => WorkCalendarApi.getByYear(year),
+        [year],
+        setDays,
+        t("calendarLoadError"),
+        (message) => toast.error(message)
+    );
+
+    const handleDownload = async () => {
+        setIsBusy(true);
+        try {
+            const { blob, fileName } = await WorkCalendarApi.downloadTemplate(year);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName ?? `LichNghi_${year}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, t("calendarTemplateError")));
+        } finally {
+            setIsBusy(false);
+        }
+    };
+
+    const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        if (!window.confirm(t("calendarImportConfirm", { year }))) return;
+        setIsBusy(true);
+        try {
+            const result = await WorkCalendarApi.importYear(year, file);
+            toast.success(t("calendarImportSuccess", { count: result.importedCount, year: result.year }));
+            refetch();
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, t("calendarImportError")));
+        } finally {
+            setIsBusy(false);
+        }
+    };
+
+    return (
+        <SettingCard icon={<CalendarDays size={15} />} title={t("calendarSectionTitle")} desc={t("calendarSectionDesc")}>
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
+                <Field label={t("calendarYear")}>
+                    <input
+                        type="number"
+                        min={2000}
+                        max={2100}
+                        value={year}
+                        onChange={(event) => setYear(Number(event.target.value) || year)}
+                        disabled={isBusy}
+                        className={`${fieldClassName} w-24`}
+                    />
+                </Field>
+                <button type="button" onClick={() => setIsViewOpen(true)} className={secondaryButtonClassName}>
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {t("calendarView")}
+                </button>
+                <button type="button" onClick={handleDownload} disabled={isBusy} className={secondaryButtonClassName}>
+                    <Download className="h-3.5 w-3.5" />
+                    {t("calendarDownloadTemplate")}
+                </button>
+                <label className={`${secondaryButtonClassName} ${isBusy ? "pointer-events-none opacity-50" : ""}`}>
+                    <Upload className="h-3.5 w-3.5" />
+                    {t("calendarImport")}
+                    <input type="file" accept=".xlsx" className="hidden" onChange={handleImport} disabled={isBusy} />
+                </label>
+            </div>
+            {isViewOpen && <WorkCalendarDialog year={year} days={days} onClose={() => setIsViewOpen(false)} />}
+        </SettingCard>
+    );
+}
 
 // `desc` explains the whole section; it rides the title as a tooltip instead of a permanent paragraph
 // (DESIGN_SYSTEM.md §4.10). The dotted underline is the affordance telling the user to hover.
