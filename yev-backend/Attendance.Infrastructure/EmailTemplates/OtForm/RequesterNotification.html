@@ -46,13 +46,14 @@ Yev<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, seri
 </td>
 </tr>
 
-<!-- Status -->
+<!-- Status banner: solid accent-colored block so the outcome is clear at a glance -->
 <tr>
 <td style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:28px 40px 0 40px;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; border:1px solid #8a2432; padding:5px 14px;">
-<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; font-size:11px; font-weight:bold; color:#8a2432; letter-spacing:0.5px; mso-line-height-rule:exactly; line-height:16px;">{{StatusLabelVn}}&nbsp;&nbsp;·&nbsp;&nbsp;{{StatusLabelJp}}</span>
+<td bgcolor="{{AccentColor}}" style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; background-color:{{AccentColor}}; padding:16px 20px;">
+<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:18px; font-weight:bold; color:#ffffff; letter-spacing:0.5px; mso-line-height-rule:exactly; line-height:24px;">{{StatusLabelVn}}</span>
+<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:13px; color:#ffffff; margin-top:2px; mso-line-height-rule:exactly; line-height:18px;">{{StatusLabelJp}}</span>
 </td>
 </tr>
 </table>
@@ -108,11 +109,26 @@ Kính gửi {{RequesterFullName}} 様,
 </td>
 </tr>
 
+<!-- CTA: opens the form detail page (login required) -->
 <tr>
-<td style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:22px 40px 32px 40px;">
-<p style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; margin:0; font-size:14px; line-height:23px; color:#4a5266; mso-line-height-rule:exactly;">
-Vui lòng đăng nhập YevManagement để xem chi tiết và liên hệ người xử lý nếu cần.<br>
-<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#8b93a3;">詳細はYevManagementにログインしてご確認ください。ご不明な点は処理者にお問い合わせください。</span>
+<td align="center" style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:28px 40px 8px 40px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td align="center" bgcolor="#16233d" style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; background-color:#16233d; border-radius:24px;">
+<a href="{{DetailLink}}" target="_blank" style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; padding:14px 36px; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; letter-spacing:0.3px; border-radius:24px; mso-line-height-rule:exactly; line-height:18px;">Xem chi tiết đơn / 申請の詳細を見る</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:16px 40px 32px 40px;">
+<p style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; margin:0; font-size:13px; line-height:21px; color:#4a5266; text-align:center; mso-line-height-rule:exactly;">
+Bạn cần đăng nhập YevManagement để xem. Liên hệ người xử lý nếu cần.<br>
+<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#8b93a3;">ご確認にはYevManagementへのログインが必要です。ご不明な点は処理者にお問い合わせください。</span>
+</p>
+<p style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; margin:12px 0 0 0; font-size:12px; line-height:19px; color:#8b93a3; text-align:center; mso-line-height-rule:exactly; word-break:break-all;">
+Link: <a href="{{DetailLink}}" target="_blank" style="color:#5c6478;">{{DetailLink}}</a>
 </p>
 </td>
 </tr>

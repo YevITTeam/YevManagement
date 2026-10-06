@@ -418,7 +418,7 @@ chạy trong scope DI riêng và gọi `IOtFormService.SendStepApprovalNotificat
 `EmailService.SendAsync` best-effort: nuốt lỗi SMTP, trả `false`, không retry; `QueuedHostedService` chỉ log khi work item ném lỗi. Thiếu file template (`FileNotFoundException`) cũng bị nuốt để không làm hỏng nghiệp vụ.
 (`NotifyBatchApproversAsync` không qua hàng đợi vì đã chạy trong `OtFormBatchBackgroundService`; chỉ `run-now` thủ công là chạy đồng bộ.)
 
-**Mail báo người lập đơn** (`OtForm/RequesterNotification.html`, song ngữ Vn/Jp, không có nút CTA, gửi nền): khi **Từ chối** (`RejectAsync` → `QueueRejectedNotification` → `SendRejectedNotificationAsync`, lấy lý do/người từ
+**Mail báo người lập đơn** (`OtForm/RequesterNotification.html`, song ngữ Vn/Jp, gửi nền; banner trạng thái nền đặc theo `{{AccentColor}}` — đỏ cho từ chối, cam cho loại nhân viên; subject từ chối có tiền tố `[TỪ CHỐI]`; nút "Xem chi tiết đơn" + link trần dùng `{{DetailLink}}` = `{FrontendBaseUrl}/ot/forms?id={otFormId}`, cần đăng nhập SPA): khi **Từ chối** (`RejectAsync` → `QueueRejectedNotification` → `SendRejectedNotificationAsync`, lấy lý do/người từ
 `OtFormApprovalHistory` Rejected mới nhất; phủ cả kênh email, từ chối hàng loạt và đơn tổng) và khi **loại nhân viên** (`QueueEmployeesRemovedNotification(otFormId, employeeIds)` ở `UpdateAsync`, `RemoveEmployeeAsync`,
 `RemoveEmployeeByEmailTokenAsync`, `ProcessBatchAsync` — 1 mail/đơn cho mọi người bị loại trong lượt). Bỏ qua khi người thực hiện chính là người lập đơn hoặc người lập không có email. Giá trị động được `WebUtility.HtmlEncode`
 vì `EmailTemplateService` không tự encode.

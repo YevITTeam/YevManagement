@@ -206,16 +206,17 @@ namespace Attendance.Application.Services
             if (rejection == null || rejection.ApproverUserName == otForm.CreatedByUserName) return;
 
             var detailBlock = BuildRequesterDetailRow("LÝ DO TỪ CHỐI", "却下理由",
-                string.IsNullOrWhiteSpace(rejection.Comment) ? "-" : WebUtility.HtmlEncode(rejection.Comment));
+                string.IsNullOrWhiteSpace(rejection.Comment) ? "-" : WebUtility.HtmlEncode(rejection.Comment),
+                RejectedAccentColor);
 
             await SendRequesterNotificationAsync(
                 otForm,
                 actorFullName: rejection.ApproverFullName ?? rejection.ApproverUserName,
-                subject: $"Đơn tăng ca #{otForm.Id} đã bị từ chối - YevManagement",
-                statusLabelVn: "ĐÃ BỊ TỪ CHỐI", statusLabelJp: "却下されました",
+                subject: $"[TỪ CHỐI] Đơn tăng ca #{otForm.Id} đã bị từ chối - YevManagement",
+                statusLabelVn: "ĐƠN TĂNG CA ĐÃ BỊ TỪ CHỐI", statusLabelJp: "残業申請が却下されました",
                 introVn: "Đơn tăng ca bạn đã lập đã bị từ chối. Vui lòng xem lý do bên dưới và lập đơn mới nếu cần.",
                 introJp: "作成された残業申請が却下されました。下記の理由をご確認のうえ、必要に応じて再度申請してください。",
-                detailBlock);
+                detailBlock, RejectedAccentColor);
         }
 
         public async Task SendEmployeesRemovedNotificationAsync(int otFormId, List<int> employeeIds)
@@ -235,7 +236,7 @@ namespace Attendance.Application.Services
                 if (!string.IsNullOrWhiteSpace(x.RemoveReason)) line += $" ({x.RemoveReason})";
                 return WebUtility.HtmlEncode(line);
             }));
-            var detailBlock = BuildRequesterDetailRow("NHÂN VIÊN BỊ LOẠI KHỎI ĐƠN", "除外された従業員", employeeLinesHtml);
+            var detailBlock = BuildRequesterDetailRow("NHÂN VIÊN BỊ LOẠI KHỎI ĐƠN", "除外された従業員", employeeLinesHtml, EmployeesRemovedAccentColor);
 
             var first = removedRows[0];
             await SendRequesterNotificationAsync(
@@ -245,12 +246,12 @@ namespace Attendance.Application.Services
                 statusLabelVn: "NHÂN VIÊN BỊ LOẠI", statusLabelJp: "従業員が除外されました",
                 introVn: "Người duyệt đã loại nhân viên khỏi đơn tăng ca bạn lập. Đơn vẫn được xử lý tiếp với các nhân viên còn lại.",
                 introJp: "作成された残業申請から従業員が除外されました。申請は残りの従業員で引き続き処理されます。",
-                detailBlock);
+                detailBlock, EmployeesRemovedAccentColor);
         }
 
         private async Task SendRequesterNotificationAsync(
             OtForm otForm, string actorFullName, string subject,
-            string statusLabelVn, string statusLabelJp, string introVn, string introJp, string detailBlock)
+            string statusLabelVn, string statusLabelJp, string introVn, string introJp, string detailBlock, string accentColor)
         {
             var (email, requesterFullName) = await _userDirectoryService.GetContactInfoAsync(otForm.CreatedByUserName, EmailModules.Attendance);
             if (string.IsNullOrWhiteSpace(email)) return;
@@ -273,7 +274,9 @@ namespace Attendance.Application.Services
                     ["StatusLabelJp"] = statusLabelJp,
                     ["IntroVn"] = introVn,
                     ["IntroJp"] = introJp,
-                    ["DetailBlock"] = detailBlock
+                    ["DetailBlock"] = detailBlock,
+                    ["AccentColor"] = accentColor,
+                    ["DetailLink"] = $"{_configuration["AppSettings:FrontendBaseUrl"]}/ot/forms?id={otForm.Id}"
                 });
 
                 await _emailService.SendAsync(email, subject, html);
@@ -284,12 +287,16 @@ namespace Attendance.Application.Services
             }
         }
 
-        // 1 full-width definition row of the outcome-specific block; valueHtml must already be HTML-encoded.
-        private static string BuildRequesterDetailRow(string labelVn, string labelJp, string valueHtml) =>
-            "<tr><td colspan=\"2\" style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:14px 0; border-bottom:1px solid #e7e9ee;\">" +
+        private const string RejectedAccentColor = "#c0182b";
+        private const string EmployeesRemovedAccentColor = "#b45309";
+
+        // 1 full-width highlighted row (accent left border) of the outcome-specific block;
+        // valueHtml must already be HTML-encoded.
+        private static string BuildRequesterDetailRow(string labelVn, string labelJp, string valueHtml, string accentColor) =>
+            $"<tr><td colspan=\"2\" style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:14px 16px; background-color:#fbf3f4; border-left:4px solid {accentColor}; border-bottom:1px solid #e7e9ee;\">" +
             "<span style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:11px; letter-spacing:0.5px; color:#9aa2b1; mso-line-height-rule:exactly; line-height:16px;\">" +
             $"{labelVn}&nbsp;/&nbsp;{labelJp}</span>" +
-            "<span style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:15px; color:#8a2432; margin-top:4px; mso-line-height-rule:exactly; line-height:22px;\">" +
+            $"<span style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:15px; font-weight:bold; color:{accentColor}; margin-top:4px; mso-line-height-rule:exactly; line-height:22px;\">" +
             $"{valueHtml}</span></td></tr>";
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
