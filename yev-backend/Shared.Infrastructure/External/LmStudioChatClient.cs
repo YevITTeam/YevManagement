@@ -10,7 +10,7 @@ using Shared.Core.Exceptions;
 
 namespace Shared.Infrastructure.External
 {
-    // Talks to LM Studio's OpenAI-compatible /v1/chat/completions (docs/ai-chat-be-huong-dan.md §3).
+    // Talks to LM Studio's OpenAI-compatible /v1/chat/completions (docs/docs-be/asset-module.md §1.18).
     // HttpClient is a typed client registered via AddHttpClient<ILlmChatClient, LmStudioChatClient>()
     // in CompanySystem.HostApi/Configurations/DependencyInjection.cs (BaseAddress/Timeout configured
     // there from appsettings AiChatSettings) — this class only knows the request/response shape.

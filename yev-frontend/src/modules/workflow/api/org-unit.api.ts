@@ -1,5 +1,5 @@
 import { api } from "@/lib/client";
-import type { OrgUnitDto, OrgUnitTreeDto, CreateUpdateOrgUnitDto } from "@/modules/workflow/types/org-unit.dto";
+import type { OrgUnitDto, OrgUnitTreeDto, CreateUpdateOrgUnitDto, ReorderOrgUnitItemDto } from "@/modules/workflow/types/org-unit.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
@@ -9,6 +9,7 @@ const ENDPOINTS = {
         createOrgUnit: "/Workflow/OrgUnit",
         updateOrgUnit: (id: number) => `/Workflow/OrgUnit/${id}`,
         deleteOrgUnit: (id: number) => `/Workflow/OrgUnit/${id}`,
+        reorderOrgUnits: "/Workflow/OrgUnit/reorder",
     },
 } as const;
 
@@ -35,6 +36,11 @@ export const OrgUnitApi = {
 
     deleteOrgUnit: async (id: number) => {
         const response = await api.delete<ApiResponse<boolean>>(ENDPOINTS.ORG_UNIT.deleteOrgUnit(id));
+        return response.data;
+    },
+
+    reorderOrgUnits: async (items: ReorderOrgUnitItemDto[]) => {
+        const response = await api.put<ApiResponse<boolean>>(ENDPOINTS.ORG_UNIT.reorderOrgUnits, { items });
         return response.data;
     },
 };

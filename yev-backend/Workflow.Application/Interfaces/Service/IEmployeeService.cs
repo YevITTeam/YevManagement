@@ -14,5 +14,8 @@ namespace Workflow.Application.Interfaces.Service
 
         Task<List<EmployeeOrgUnitDto>> GetOrgUnitsAsync(int employeeId);
         Task<List<EmployeeOrgUnitDto>> ReplaceOrgUnitsAsync(int employeeId, ReplaceEmployeeOrgUnitsDto request);
+        Task<List<EmployeeOrgUnitDto>> AddOrgUnitAsync(int employeeId, ReplaceEmployeeOrgUnitItemDto request);
+        Task<List<EmployeeOrgUnitDto>> UpdateOrgUnitAsync(int assignmentId, ReplaceEmployeeOrgUnitItemDto request);
+        Task RemoveOrgUnitAsync(int assignmentId);
     }
 }

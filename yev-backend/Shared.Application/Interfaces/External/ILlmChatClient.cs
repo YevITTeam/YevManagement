@@ -4,7 +4,7 @@ using Shared.Application.Dtos.AiChat;
 namespace Shared.Application.Interfaces.External
 {
     // Abstraction over the LLM server's OpenAI-compatible /v1/chat/completions endpoint (docs/
-    // ai-chat-be-huong-dan.md §3) — host/model/timeout are an implementation detail of the
+    // docs/docs-be/asset-module.md §1.18) — host/model/timeout are an implementation detail of the
     // Infrastructure-layer client (read from appsettings there), the orchestrator only deals with
     // messages in/chunks out.
     //

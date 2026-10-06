@@ -10,7 +10,7 @@ namespace Asset.Api.Controllers
     // Streaming NDJSON endpoint — deliberately does NOT use Success()/Fail() (ApiResponse<T> wrapper)
     // like every other Asset controller: the response body is a sequence of independent JSON lines
     // written incrementally as Ollama answers, not a single envelope available only at the end (see
-    // docs/ai-chat-be-huong-dan.md §7). Still inherits BaseController purely for the shared
+    // docs/docs-be/asset-module.md §1.18). Still inherits BaseController purely for the shared
     // [ApiController]/[Route("api/[controller]")] routing convention.
     public class AiChatController : BaseController
     {

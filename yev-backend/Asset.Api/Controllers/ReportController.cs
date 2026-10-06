@@ -24,6 +24,15 @@ namespace Asset.Api.Controllers
             return Success(result, "Lấy danh sách báo cáo thiết bị thành công.");
         }
 
+        // Returns an .xlsx file, not ApiResponse<T> (same reason as ServerCheckController.ExportReport).
+        [RequirePermission("Asset.Report.View")]
+        [HttpGet("device-list/export")]
+        public async Task<IActionResult> ExportDeviceList([FromQuery] DeviceReportFilterRequest request, [FromQuery] string? title)
+        {
+            var (content, fileName) = await _deviceService.ExportReportListAsync(request, title);
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
         // Thống kê cho màn "Báo cáo thiết bị" (KPI + phân bổ trạng thái/chi nhánh/loại + sắp hết hạn) —
         // tách riêng khỏi device-list vì đây là số liệu tổng hợp, không phải danh sách chi tiết để xuất Excel.
         [RequirePermission("Asset.Report.View")]

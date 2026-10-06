@@ -51,7 +51,7 @@ const res = await fetch("http://10.45.1.155:8081/api/Auth/windows-login", {
 
 Request sau: `headers: { Authorization: 'Bearer ${token}' }`.
 
-## 2b. Lấy lại phiên & gia hạn token — `GET /api/Auth/me` *(2026-08-01)*
+## 2b. Lấy lại phiên & gia hạn token — `GET /api/Auth/me`
 Chỉ cần `Authorization: Bearer <token>` (không cần permission). Trả về **đúng shape `data` của `windows-login`**
 (`{ user, token }`) trong đó `token` là **JWT mới đã gia hạn thêm 120 phút**.
 
@@ -78,7 +78,7 @@ buộc xác thực lại Windows. Quyền vẫn luôn theo DB (khoá quyền có
 AD bị vô hiệu hoá thì phiên đang mở vẫn sống tới khi user đóng app quá 120 phút. Chấp nhận được với app nội bộ;
 muốn chặt hơn thì phải thêm mốc buộc `windows-login` lại (chưa làm).
 
-## 2c. Đăng nhập bằng form tự viết — `POST /api/Auth/login` *(2026-08-07)*
+## 2c. Đăng nhập bằng form tự viết — `POST /api/Auth/login`
 Dùng cho trang `/login` tự viết ở FE — thay thế popup gốc "Windows Security" mà `windows-login`
 (Negotiate) tự bật, không custom UI/thông báo lỗi được. **Vẫn xác thực bằng Windows Authentication
 thật sự**: BE tự bind username/password vào AD, không tự chế hệ mật khẩu riêng, không lưu password.

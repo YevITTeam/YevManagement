@@ -19,7 +19,7 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 
 const PAGE_SIZE = 10;
 
-export default function JobTitleList() {
+export default function JobTitleList({ embedded = false }: { embedded?: boolean }) {
     const t = useTranslations("Workflow.JobTitle");
     const tCommon = useTranslations("Common");
     const { user } = useAuth();
@@ -122,8 +122,8 @@ export default function JobTitleList() {
         <div className="space-y-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
+                    {!embedded && <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>}
+                    <p className={`text-[15px] text-[#5e3f3a] ${embedded ? "" : "mt-1"}`}>{t("description")}</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">

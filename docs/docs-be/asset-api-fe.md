@@ -206,13 +206,17 @@ Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ 
 Controller riêng `/api/Report`. Không phân trang, `data` mảng thẳng. Filter optional, kết hợp AND: `DeviceTypeIds` lặp key (`?DeviceTypeIds=1&DeviceTypeIds=3`, khớp bất kỳ loại nào trong danh sách; bỏ trống = không lọc loại), `BranchId`, `DepartmentId`, `GroupId` (Nhóm đã thuộc 1 Bộ phận nên FE chọn Bộ phận trước rồi mới chọn Nhóm), `Status` (`0` Chưa sử dụng / `1` Đang sử dụng; bỏ trống = cả hai), `Keyword` Contains `deviceCode`/`deviceName` (dialog xuất PDF không còn ô này, chỉ AI Chat dùng). Chỉ trả thiết bị **"Chờ sử dụng"/"Đang sử dụng"** (`PendingUse`/`InUse`) — thiết bị chờ thanh lý/đã thanh lý không xuất hiện trong báo cáo.
 ```jsonc
 // data[] — sort deviceCode A-Z, stt đánh lại
-{ "stt":1, "deviceCode":"...", "deviceName":"...", "ipAddress":null,  // nhiều IP nối ", "
+{ "stt":1, "deviceCode":"...", "deviceName":"...", "deviceTypeName":"...", "serialNumber":null,
+  "ipAddress":null,  // nhiều IP nối ", "
+  "email":null,      // nhiều email nối ", "
+  "manager":"...", "branchName":"...", "departmentName":null, "groupName":null, "supplierName":"...",
   "purchaseDate":"...", "expirationDate":"...", "isExpired":false,  // FE map O/X
-  "financialPeriod":86, "note":"..." }
+  "financialPeriod":86 }
 ```
+**Xuất Excel** — `GET /api/Report/device-list/export?<cùng filter>&title=` (`Asset.Report.View`): trả file `.xlsx` (không bọc `ApiResponse`, FE đọc bằng `getForBlob`), cùng cột/dữ liệu với `device-list`; `title` ghi vào tiêu đề sheet (tuỳ chọn). Tên file BE gợi ý: `DanhSachThietBi_yyyyMMdd.xlsx`.
 **`financialPeriod`** ("Kỳ T/C"): từ `expirationDate`, năm tài chính Yazaki 1/7→30/6, đánh số từ 1941. `expirationDate=2026-10-01` → tháng≥7 → `2026−1940=86`. `null` nếu `expirationDate` null.
 
-### 5.8b Thống kê báo cáo — `GET /api/Report/device-summary` (2026-07-30)
+### 5.8b Thống kê báo cáo — `GET /api/Report/device-summary`
 Cho màn dashboard "Báo cáo thiết bị" (`yev-frontend` `DeviceReport.tsx`) — KPI + phân bổ trạng thái/chi nhánh/loại + danh sách sắp/đã hết hạn, tính sẵn bằng `COUNT`/`GROUP BY` ở SQL. Không tham số. Cùng phạm vi thiết bị với 5.8 (`PendingUse`/`InUse`).
 Thay cho cách cũ FE tự tải toàn bộ `Device/grid-list` (nhiều trang `pageSize=1000`) rồi cộng dồn trong bộ nhớ — quá chậm khi DB có hàng nghìn thiết bị.
 ```jsonc
@@ -353,7 +357,7 @@ Mã không khớp Device → lỗi preview. Trùng mã trong file → lỗi cả
 
 **Báo cáo đối chiếu** `POST /missing-devices-report` (2026-07-27, `multipart/form-data` field `file` — cùng file Tanium, **không** cần đã gọi `/preview` trước; kèm field `prefixes` = chuỗi tiền tố mã máy phân cách dấu phẩy, FE cho người dùng tự nhập, mặc định gợi ý `"YDC,YDF,YLC"`, rỗng = không lọc). So Device đang **`Status = InUse`** + `DeviceCode` khớp 1 trong `prefixes` trong hệ thống với danh sách máy khớp được trong file (Tanium chỉ quét máy đang bật nên chỉ so trên `InUse`, `PendingUse`/`PendingLiquidation`/`Liquidated` không tính). Response **không phải `ApiResponse<T>`** — trả thẳng file `.xlsx` (`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`), FE đọc `response.blob()`. Đếm số thiết bị thiếu qua header **`X-Missing-Device-Count`** (đọc bằng `response.headers.get("x-missing-device-count")` — phải đọc từ **response gốc của `fetch`**, không phải qua wrapper đã parse JSON như các API khác) và tên file gợi ý qua `Content-Disposition` (`response.headers.get("content-disposition")`, parse `filename="..."`). Lỗi trước khi ghi file (thiếu file upload) vẫn trả JSON `ApiResponse<object>` bình thường như mọi lỗi khác. Permission chung `Asset.DeviceConfiguration.Update`.
 
-### 6.4 Import thanh lý hàng loạt — `/api/DeviceLiquidationImport` (preview/confirm, 2026-07-23)
+### 6.4 Import thanh lý hàng loạt — `/api/DeviceLiquidationImport` (preview/confirm)
 Upload file **1 cột `Mã máy`** (dòng 1 header, `.xlsx`/`.csv`) để chuyển hàng loạt thiết bị sang **"Đã thanh lý"**.
 > **Chỉ thanh lý được máy đang "Chờ thanh lý" (status 2)**. Máy đã thanh lý → lỗi "đã được thanh lý trước đó"; trạng thái khác → lỗi kèm tên trạng thái hiện tại; không tìm thấy mã / trùng mã trong file → lỗi dòng.
 > Thanh lý xong máy **bị gỡ hết IP** (IP về "Chưa sử dụng") và **ẩn email** — nhưng máy **vẫn còn** để tra cứu (chỉ đổi status, không xóa).
@@ -398,7 +402,7 @@ Ai sửa/xóa gì, lúc nào — ghi tự động ở BE mỗi lần Create/Upda
 - `changedBy` = username đăng nhập lúc thao tác; nền hệ thống tự chạy (vd `DeviceLiquidationBackgroundService`) → `"System"`.
 - Permission `Asset.AuditTrail.View` — **cần Admin gán** cho role muốn xem (chưa role nào có sẵn ngoài `Admin`).
 
-## 7c. AI Chat — `POST /api/AiChat/stream` (2026-07-24, thay thế hoàn toàn cách gọi thẳng Ollama ở FE)
+## 7c. AI Chat — `POST /api/AiChat/stream`
 Chuyển từ "FE tự gọi Ollama + tự thực thi tool" sang "FE chỉ gọi 1 endpoint BE, đọc stream, hiển thị" — kiến trúc/code ở [asset-module.md §1.18](asset-module.md). Mục này là **hợp đồng cuối cùng đã lên production** (2 bổ sung backward-compatible ngày 2026-07-27 ghi ở dưới: field request `think` và dòng response `"type":"device"`).
 
 **Request:**
@@ -438,7 +442,7 @@ Content-Type: application/json
 - BE tự quyết định gọi tool nào (danh sách tool ở spec §5) — FE không cần biết tool là gì, không cấu hình gì thêm. **Từ 2026-07-30 catalogue rút còn 7 tool**, tập trung 2 nhóm việc: tra cứu thiết bị (đủ mọi field như màn hình danh sách) và tra cứu IP (IP trống / IP này ai đang dùng / tình trạng cả dải) — danh sách tool ở `asset-module.md §1.18`. Gợi ý câu hỏi trên FE phải khớp đúng 2 nhóm này; lọc theo chi nhánh/nhóm/bộ phận truyền THẲNG TÊN nên không cần đổi tên sang id.
 - Permission `Asset.AiChat.Use` — **đã gán sẵn cho role `Admin`**, role khác cần Admin gán thêm nếu muốn dùng chat AI. Nút "Xem chi tiết" từ dòng `"device"` là UX-only, ẩn ở FE nếu user không có `Asset.Device.View` — BE vẫn enforce permission đó khi FE thật sự điều hướng sang trang chi tiết thiết bị.
 
-## 7d. ServerCheck — `/api/ServerCheck` (2026-09-16, kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR)
+## 7d. ServerCheck — `/api/ServerCheck`
 `ServerCheckItemDto` có thêm `requiresScan: boolean` (false = không quét, BE tự ping khi `POST /{id}/end`; `totalCount`/`scannedCount` của phiên chỉ đếm máy `requiresScan=true`). Thay checksheet giấy bằng quét QR trên máy TC21/TC22 — chi tiết nghiệp vụ: [asset-module.md §1.19](asset-module.md). Server/Máy lạnh/UPS/Network đều là `Device` bình thường (không entity riêng), QR dán lên vẫn dùng `POST /api/Device/qr-labels` (§5.4b) — điều kiện để vào phạm vi kiểm tra hằng ngày là `DeviceType` của nó có `serverCheckCategory` khác `null` (Admin tự cấu hình ở màn `DeviceType`, §2).
 
 > ⚠️ **Từ 2026-09-21 phiên quét theo xưởng** (xem 7d.10 + asset-module.md §1.21): `ServerCheckSessionDto`/`ServerCheckReportRowDto` có thêm `branchId?/branchName?`; `POST /start` tự lấy xưởng của user (không nhận xưởng từ client, chưa phân công → 400); `scan`/`end` chỉ trên phiên xưởng mình; `GET /today`, `/grid-list`, `/report`, `/report/export` nhận thêm `branchId` (optional, chỉ có tác dụng với quyền `View` — người chỉ có `Scan` bị ép về xưởng mình).
@@ -532,7 +536,7 @@ FE: `allReachable=true` → tự gán `status=1`(OK) cho **cả 2** mục `usesN
 
 Điều kiện để 1 người quét được: có role **"Kiểm tra Server"** (chứa `Asset.ServerCheck.Scan`) **và** được phân công xưởng. Thiếu role → 403; thiếu phân công → 400 ở `POST /start` (và `data:null` ở `/me`).
 
-## 7e. Inventory — `/api/Inventory` (2026-09-23, kiểm kê thiết bị theo xưởng qua quét mã)
+## 7e. Inventory — `/api/Inventory`
 Đối chiếu thực tế với dữ liệu hệ thống — chi tiết nghiệp vụ: [asset-module.md §1.22](asset-module.md). Khác `ServerCheck` (§7d): quét **toàn bộ Device** của 1 xưởng (không riêng nhóm thiết bị nào), theo **đợt** chứ không phải hằng ngày (không unique theo ngày, chỉ ràng buộc 1 xưởng không quá 1 phiên `InProgress` cùng lúc), và **nhiều user cùng xưởng thao tác chung 1 phiên**.
 
 - **`GET /current`** (permission `Asset.Inventory.Scan`, không tham số) → `InventorySessionDto | null` — phiên `InProgress` của xưởng **chính người gọi** được phân công (không nhận `branchId`). Dùng cho màn quét kiosk; gọi lại sau mỗi lần quét để đồng bộ tiến độ (có thể do đồng nghiệp khác vừa quét).
@@ -565,7 +569,7 @@ Item `Pending` không được liệt kê → server tự chuyển `Missing`, no
 
 Role **"Kiểm kê thiết bị"** chứa `Asset.Inventory.Scan`. Xuất PDF (màn báo cáo web) dựng ở FE bằng `jspdf`, không qua BE.
 
-## 7f. AppRelease — `/api/AppRelease` (2026-09-23, quản lý bản cập nhật app Flutter "YEV Scan")
+## 7f. AppRelease — `/api/AppRelease`
 Quản trị metadata bản phát hành app mobile nội bộ — chi tiết nghiệp vụ: [asset-module.md §1.23](asset-module.md). `apkUrl` chỉ là **string** — có thể là link ngoài dán tay (Drive...) hoặc link nội bộ do `POST /upload` sinh ra, FE/BE không phân biệt 2 loại. App mobile "YEV Scan" chỉ dùng `GET /latest` + tải file qua `apkUrl` trả về, không cần biết endpoint quản trị bên dưới.
 
 - **`GET /latest`** — **`[AllowAnonymous]`, không cần token** (app gọi để kiểm tra cập nhật trước khi đăng nhập). → `AppReleaseDto | null` (`null` = chưa có bản nào). "Mới nhất" = `!isDeleted`, `versionCode` lớn nhất.

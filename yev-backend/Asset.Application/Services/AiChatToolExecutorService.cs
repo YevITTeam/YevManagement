@@ -11,7 +11,7 @@ using Shared.Application.Wrapper;
 
 namespace Asset.Application.Services
 {
-    // Implements the 17 read-only tools from docs/ai-chat-be-huong-dan.md §5 by calling straight into
+    // Implements the 17 read-only tools from docs/docs-be/asset-module.md §1.18 by calling straight into
     // the existing Asset Application services — no repository access of its own, no duplicated
     // business rules (soft-delete filtering, status text, etc. all come from those services as-is).
     // Every tool caps results at MaxResults so a chatty tool doesn't flood the model's context.
@@ -397,7 +397,7 @@ namespace Asset.Application.Services
         // Every real DeviceCode in this system is "letters-digits" (e.g. "ydc-9875") — but users typing
         // into chat (and the model itself) routinely drop/mangle the dash: "ydc 9875", "ydc_9875",
         // "ydc9875". The system prompt already tells the model to normalize this itself, but that is
-        // not reliable with a small local model (docs ai-chat-be-huong-dan.md §11) — this is the
+        // not reliable with a small local model (docs/docs-be/asset-module.md §1.18) — this is the
         // deterministic fix, applied to every tool argument that resolves a device by code (2026-07-27).
         // Anchored end-to-end (^...$) on purpose: only a plain "letters then digits, nothing else"
         // string gets rewritten, so a code that doesn't fit that 2-part shape is left untouched rather

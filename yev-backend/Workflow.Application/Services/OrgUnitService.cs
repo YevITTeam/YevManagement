@@ -76,6 +76,7 @@ namespace Workflow.Application.Services
                         .ThenBy(x => x.Employee.FullName)
                         .Select(x => new OrgUnitTreeMemberDto
                         {
+                            AssignmentId = x.Id,
                             EmployeeId = x.EmployeeId,
                             EmployeeFullName = x.Employee.FullName,
                             EmployeeCode = x.Employee.EmployeeCode,

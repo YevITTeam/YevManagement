@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using ClosedXML.Excel;
 using Asset.Application.Dtos.Devices;
 using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
@@ -341,20 +342,34 @@ namespace Asset.Application.Services
                 {
                     d.DeviceCode,
                     d.DeviceName,
+                    DeviceTypeName = d.DeviceType.TypeName,
+                    d.SerialNumber,
                     IpAddresses = d.IpAddresses.Where(ip => !ip.IsDeleted).Select(ip => ip.IpAddress1).ToList(),
+                    Emails = d.DeviceEmails.Where(e => !e.IsDeleted).Select(e => e.Email).ToList(),
+                    d.Manager,
+                    BranchName = d.Branch.BranchName,
+                    DepartmentName = d.DeviceDepartment != null ? d.DeviceDepartment.DepartmentName : null,
+                    GroupName = d.DeviceGroup != null ? d.DeviceGroup.GroupName : null,
+                    SupplierName = d.Supplier.SupplierName,
                     d.PurchaseDate,
-                    d.ExpirationDate,
-                    d.Note
+                    d.ExpirationDate
                 });
 
             var items = rawItems.Select(d => new DeviceReportItemDto
             {
                 DeviceCode = d.DeviceCode,
                 DeviceName = d.DeviceName,
+                DeviceTypeName = d.DeviceTypeName,
+                SerialNumber = d.SerialNumber,
                 IpAddress = d.IpAddresses.Count > 0 ? string.Join(", ", d.IpAddresses) : null,
+                Email = d.Emails.Count > 0 ? string.Join(", ", d.Emails) : null,
+                Manager = d.Manager,
+                BranchName = d.BranchName,
+                DepartmentName = d.DepartmentName,
+                GroupName = d.GroupName,
+                SupplierName = d.SupplierName,
                 PurchaseDate = d.PurchaseDate,
                 ExpirationDate = d.ExpirationDate,
-                Note = d.Note,
                 IsExpired = d.ExpirationDate.HasValue && d.ExpirationDate.Value < today,
                 // Yazaki financial period: fiscal year runs 7/1 - 6/30, numbered consecutively from
                 // the year Yazaki Corporation was founded (1941) -> period = FY start year - 1940.
@@ -369,6 +384,78 @@ namespace Asset.Application.Services
             }
 
             return items;
+        }
+
+        public async Task<(byte[] Content, string FileName)> ExportReportListAsync(DeviceReportFilterRequest request, string? title)
+        {
+            var items = await GetReportListAsync(request);
+            var heading = string.IsNullOrWhiteSpace(title) ? "DANH SÁCH THIẾT BỊ" : title.Trim();
+            string[] headers =
+            {
+                "STT", "Mã thiết bị", "Tên thiết bị", "Loại thiết bị", "Số serial", "Địa chỉ IP", "Email", "Người quản lý",
+                "Chi nhánh", "Bộ phận", "Nhóm", "Nhà cung cấp", "Ngày mua", "Hạn sử dụng", "Hết hạn", "Kỳ T/C"
+            };
+            const int purchaseDateCol = 13, expirationDateCol = 14, expiredCol = 15, periodCol = 16;
+
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("Danh sách thiết bị");
+
+            sheet.Cell(1, 1).Value = heading;
+            sheet.Range(1, 1, 1, headers.Length).Merge().Style
+                .Font.SetBold().Font.SetFontSize(14)
+                .Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            sheet.Cell(2, 1).Value = $"Ngày xuất: {TimeHelper.GetCurrentUtcTime():dd/MM/yyyy} — Tổng số: {items.Count} thiết bị";
+            sheet.Range(2, 1, 2, headers.Length).Merge().Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+            const int headerRow = 4;
+            for (var c = 0; c < headers.Length; c++)
+                sheet.Cell(headerRow, c + 1).Value = headers[c];
+            var headerRange = sheet.Range(headerRow, 1, headerRow, headers.Length);
+            headerRange.Style.Font.SetBold();
+            headerRange.Style.Fill.SetBackgroundColor(XLColor.FromHtml("#E2E8F0"));
+            headerRange.Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+
+            for (var i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                var row = headerRow + 1 + i;
+                sheet.Cell(row, 1).Value = item.Stt;
+                sheet.Cell(row, 2).Value = item.DeviceCode;
+                sheet.Cell(row, 3).Value = item.DeviceName;
+                sheet.Cell(row, 4).Value = item.DeviceTypeName;
+                sheet.Cell(row, 5).Value = item.SerialNumber ?? "-";
+                sheet.Cell(row, 6).Value = item.IpAddress ?? "-";
+                sheet.Cell(row, 7).Value = item.Email ?? "-";
+                sheet.Cell(row, 8).Value = item.Manager;
+                sheet.Cell(row, 9).Value = item.BranchName;
+                sheet.Cell(row, 10).Value = item.DepartmentName ?? "-";
+                sheet.Cell(row, 11).Value = item.GroupName ?? "-";
+                sheet.Cell(row, 12).Value = item.SupplierName;
+                sheet.Cell(row, purchaseDateCol).Value = item.PurchaseDate;
+                if (item.ExpirationDate.HasValue) sheet.Cell(row, expirationDateCol).Value = item.ExpirationDate.Value;
+                else sheet.Cell(row, expirationDateCol).Value = "-";
+                sheet.Cell(row, expiredCol).Value = item.IsExpired ? "X" : "O";
+                if (item.FinancialPeriod.HasValue) sheet.Cell(row, periodCol).Value = item.FinancialPeriod.Value;
+                else sheet.Cell(row, periodCol).Value = "-";
+            }
+
+            if (items.Count > 0)
+            {
+                var lastRow = headerRow + items.Count;
+                sheet.Range(headerRow + 1, purchaseDateCol, lastRow, expirationDateCol).Style.DateFormat.SetFormat("dd/MM/yyyy");
+                sheet.Range(headerRow + 1, 1, lastRow, 1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+                sheet.Range(headerRow + 1, purchaseDateCol, lastRow, periodCol).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            }
+
+            var table = sheet.Range(headerRow, 1, headerRow + items.Count, headers.Length);
+            table.Style.Border.SetInsideBorder(XLBorderStyleValues.Thin).Border.SetOutsideBorder(XLBorderStyleValues.Thin);
+            sheet.SheetView.FreezeRows(headerRow);
+            sheet.Columns().AdjustToContents();
+            sheet.Column(1).Width = 6;
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return (stream.ToArray(), $"DanhSachThietBi_{TimeHelper.GetCurrentUtcTime():yyyyMMdd}.xlsx");
         }
 
         // Số ngày cảnh báo trước khi hết hạn cho màn "Báo cáo thiết bị" (yev-frontend DeviceReport.tsx

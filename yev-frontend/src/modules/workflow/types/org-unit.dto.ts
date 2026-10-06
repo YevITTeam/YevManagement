@@ -14,6 +14,8 @@ export interface OrgUnitDto {
 
 // 1 dòng "ai đang giữ chức gì" kèm theo mỗi node cây (chỉ nhân sự còn hoạt động).
 export interface OrgUnitTreeMemberDto {
+    // EmployeeOrgUnits.Id — dùng cho cập nhật/gỡ từng dòng gán.
+    assignmentId: number;
     employeeId: number;
     employeeFullName: string;
     employeeCode: string;
@@ -34,6 +36,12 @@ export interface OrgUnitTreeDto {
     sortOrder: number;
     members: OrgUnitTreeMemberDto[];
     children: OrgUnitTreeDto[];
+}
+
+export interface ReorderOrgUnitItemDto {
+    id: number;
+    parentId: number | null;
+    sortOrder: number;
 }
 
 export interface CreateUpdateOrgUnitDto {

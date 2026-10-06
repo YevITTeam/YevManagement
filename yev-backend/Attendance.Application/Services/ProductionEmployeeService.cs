@@ -234,7 +234,7 @@ namespace Attendance.Application.Services
         // sửa nhanh 1-2 người giữa 2 đợt import. LUÔN ghi lại cả cặp Id+Code từ đúng entity đang chọn
         // (không nhận Code tay từ FE) để BlockCode/TeamCode/ShiftTeamCode không bao giờ lệch khỏi FK —
         // IsLeader ảnh hưởng trực tiếp candidate duyệt "theo chuyền" của Line này
-        // (JobTitleApprovalChainService, xem docs §Cây duyệt Chuyền), ghi thẳng không cần đồng bộ gì
+        // (JobTitleApprovalChainService, xem docs §Cây chức vụ & Cây duyệt), ghi thẳng không cần đồng bộ gì
         // thêm (đọc SỐNG lúc resolve chuỗi duyệt, không cache ở đâu khác).
         public async Task UpdateAsync(int id, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin)
         {

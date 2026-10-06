@@ -363,7 +363,7 @@ namespace Attendance.Application.Services
             // đơn (KHÔNG có 1 ProductionLineId cố định trên OtForm); Group Leader/Team Leader dùng
             // chung CẢ Bộ phận Chế tạo (2026-08-28, theo yêu cầu người dùng — "GL/TL dưới chuyền là
             // người duyệt tổng luôn", KHÔNG scoped theo từng Nhóm sản xuất như bản trước — xem
-            // attendance-module.md §Giai đoạn 13). CHỈ áp dụng cho đơn "theo chuyền"; đơn "theo Nhóm"
+            // attendance-module.md §Cây chức vụ & Cây duyệt). CHỈ áp dụng cho đơn "theo chuyền"; đơn "theo Nhóm"
             // (GroupApprovalStep, ResolveChainCoreAsync ở trên) vẫn giữ nguyên scoping theo Nhóm.
             //
             // Line Leader KHÔNG gán qua Employee.JobTitleId (2026-08-27, sửa lại theo yêu cầu người

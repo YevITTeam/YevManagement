@@ -10,6 +10,7 @@ namespace Asset.Application.Interfaces.Service
         Task<DeviceReplacementSuggestionDto?> GetReplacementSuggestionAsync(int oldDeviceId);
         Task SetSuggestedNewDeviceAsync(int oldDeviceId, int newDeviceId);
         Task<List<DeviceReportItemDto>> GetReportListAsync(DeviceReportFilterRequest request);
+        Task<(byte[] Content, string FileName)> ExportReportListAsync(DeviceReportFilterRequest request, string? title);
         Task<DeviceReportSummaryDto> GetReportSummaryAsync();
         Task<DeviceDto> GetByIdAsync(int id);
         Task<DeviceDetailDto> GetDetailAsync(int id);

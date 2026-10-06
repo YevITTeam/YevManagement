@@ -3,7 +3,7 @@ using Asset.Application.Dtos.AiChat;
 
 namespace Asset.Application.Interfaces.Service
 {
-    // Dispatches 1 tool call chosen by the model to the matching internal Asset service (docs/ai-chat-be-huong-dan.md
+    // Dispatches 1 tool call chosen by the model to the matching internal Asset service (docs/docs-be/asset-module.md §1.18
     // §5) and returns the JSON string to place in the "tool" role message. Read-only: no tool here is
     // allowed to create/update/delete anything.
     public interface IAiChatToolExecutorService

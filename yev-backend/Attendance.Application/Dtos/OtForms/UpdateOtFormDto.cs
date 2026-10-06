@@ -6,8 +6,8 @@ namespace Attendance.Application.Dtos.OtForms
     // kết thúc/DidEat/Note, chốt 2026-07-31) hoặc NGƯỜI MỚI (thêm vào đơn) — OtFormService.UpdateAsync
     // tự suy diff so với danh sách active hiện có. Loại người ra khỏi đơn đi qua RemovedEmployees (bắt
     // buộc khai lý do), không còn qua 2 action riêng AddOtFormEmployeeDto/RemoveOtFormEmployeeDto như
-    // trước 2026-09-04 (đã gộp hết vào PUT này — xem docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa
-    // đơn). Mọi field khác (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart)
+    // trước 2026-09-04 (đã gộp hết vào PUT này — xem docs/attendance-module.md §Cây chức vụ & Cây duyệt
+    // (mục Sửa đơn). Mọi field khác (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart)
     // vẫn cố định sau khi tạo.
     public class UpdateOtFormDto
     {

@@ -68,7 +68,7 @@ namespace CompanySystem.HostApi.Configurations
             services.AddMemoryCache();
             services.AddScoped<IClaimsTransformation, MyClaimsTransformation>();
 
-            // AI Chat -> LM Studio typed HttpClient (docs/ai-chat-be-huong-dan.md). Not picked up by the
+            // AI Chat -> LM Studio typed HttpClient (docs/docs-be/asset-module.md §1.18). Not picked up by the
             // Scrutor scan above (class name ends in "Client", not Repository/UnitOfWork/Service) —
             // needs BaseAddress/Timeout, so it's registered explicitly instead.
             // ONE registration serves every module that runs a tool-calling chat (Asset AI Chat +

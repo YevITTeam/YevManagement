@@ -81,7 +81,7 @@ namespace Attendance.Application.Services
 
         // Matches an assistant reply that promises to act ("tôi sẽ tạo đơn ngay bây giờ", "để tôi kiểm
         // tra", "xin chờ trong giây lát"...) without actually calling a tool — ported from Asset's
-        // AiChatService (docs/ai-chat-be-huong-dan.md §14), "tạo" added to the verb list since the
+        // AiChatService (docs/docs-be/asset-module.md §1.18), "tạo" added to the verb list since the
         // write tool here can be promised-but-not-called the same way a lookup can.
         private static readonly Regex UnfulfilledPromisePattern = new(
             @"(sẽ\s+(thực hiện|tra cứu|kiểm tra|gọi|tạo)|ngay bây giờ|trong giây lát|xin chờ|để tôi\s+(kiểm tra|tra cứu))",
@@ -264,7 +264,7 @@ namespace Attendance.Application.Services
                     // Structural confirmation gate (docs §B3) — the ONLY write tool is blocked unless
                     // the user's OWN current-turn message (never the model's own text) carries an
                     // unambiguous affirmative. This defeats the exact proven failure mode from
-                    // ai-chat-be-huong-dan.md §14: a small model confidently acting on its own
+                    // docs/docs-be/asset-module.md §1.18: a small model confidently acting on its own
                     // hallucinated belief that it received confirmation. The model can emit
                     // `tool_calls` for create_ot_form_draft all it wants — it still won't execute
                     // unless the human actually said so this turn.

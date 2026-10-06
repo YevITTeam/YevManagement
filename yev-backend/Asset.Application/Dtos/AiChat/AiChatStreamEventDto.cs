@@ -1,6 +1,6 @@
 namespace Asset.Application.Dtos.AiChat
 {
-    // 1 line of the NDJSON stream sent back to the FE (docs/ai-chat-be-huong-dan.md §7) — a rewritten,
+    // 1 line of the NDJSON stream sent back to the FE (docs/docs-be/asset-module.md §1.18) — a rewritten,
     // simplified view that hides Ollama's raw chunk format and all tool-calling internals from the
     // client. Only the field relevant to `Type` is populated; the controller serializes with
     // JsonIgnoreCondition.WhenWritingNull so the others are dropped from the JSON line, not sent as null.

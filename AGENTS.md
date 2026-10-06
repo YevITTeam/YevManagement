@@ -55,7 +55,7 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form b
 | Module Asset (BE) | [docs/docs-be/asset-module.md](docs/docs-be/asset-module.md) |
 | Module Identity (BE) | [docs/docs-be/identity-module.md](docs/docs-be/identity-module.md) |
 | Module Attendance (BE) | [docs/docs-be/attendance-module.md](docs/docs-be/attendance-module.md) |
-| **Module Workflow (BE + FE)** — form builder động + duyệt nhiều cấp | [docs/docs-be/workflow-module.md](docs/docs-be/workflow-module.md) (§2 có bản đồ 25 bảng; file `workflow-erd.drawio` đã xoá 2026-09) |
+| **Module Workflow (BE + FE)** — form builder động + duyệt nhiều cấp | [docs/docs-be/workflow-module.md](docs/docs-be/workflow-module.md) (§2 có bản đồ 27 bảng; file `workflow-erd.drawio` đã xoá 2026-09) |
 | **Gọi API từ FE** (Asset / Identity / Attendance) | hợp đồng API tương ứng: [asset-api-fe.md](docs/docs-be/asset-api-fe.md) · [identity-api-fe.md](docs/docs-be/identity-api-fe.md) · [attendance-api-fe.md](docs/docs-be/attendance-api-fe.md) |
 | **Gọi API Workflow từ FE** | **không có** `workflow-api-fe.md` — hợp đồng nằm ngay trong [workflow-module.md](docs/docs-be/workflow-module.md) (§6 endpoint, §10 phần bổ sung cho FE) |
 | Viết file `*.api.ts` / `*.dto.ts` mới | [docs/docs-fe/huong-dan-viet-api-fe.md](docs/docs-fe/huong-dan-viet-api-fe.md) |
@@ -92,12 +92,12 @@ Attendance (giấy đề nghị làm ngoài giờ — OT Form), Workflow (form b
 
    | Doc | Nặng | Đọc kiểu gì |
    |---|---|---|
-   | `attendance-module.md` | ~409 KB | **Bắt buộc** cắt lát |
-   | `attendance-api-fe.md` | ~168 KB | **Bắt buộc** cắt lát |
+   | `attendance-module.md` | ~148 KB | **Bắt buộc** cắt lát |
+   | `attendance-api-fe.md` | ~124 KB | **Bắt buộc** cắt lát |
    | `workflow-module.md` | ~140 KB | **Bắt buộc** cắt lát |
    | `asset-module.md` | ~123 KB | **Bắt buộc** cắt lát |
    | `asset-api-fe.md` | ~68 KB | Nên cắt lát |
-   | còn lại (`identity-*.md`, `architecture-core.md`, `docs-fe/*`) | < 30 KB | Đọc cả file được |
+   | còn lại (`identity-*.md`, `architecture-core.md`, `docs-fe/*`) | < 35 KB | Đọc cả file được |
 
    *(Con số chỉ để biết độ nặng tương đối — doc còn phình tiếp, đừng tin tuyệt đối.)*
 
@@ -267,8 +267,9 @@ src/
 ├─ navigation.ts            # Link / useRouter / usePathname của next-intl — DÙNG CÁI NÀY, không dùng next/link
 ├─ proxy.ts                 # middleware next-intl (chỉ có tác dụng khi dev)
 ├─ i18n/{routing,request}.ts
-├─ components/              # UI dùng chung: ui/(Button, Card, Input, Table, SearchableSelect, TimePicker24h),
-│  #                          common/ConfirmDialog, LanguageSwitcher
+├─ components/              # UI dùng chung: ui/(SearchableSelect, StyledSelect, MultiSelect, TimePicker24h, Badge, Tabs,
+│  #                          Pagination, …), common/(ConfirmDialog, EmptyState, FormDialog…), LanguageSwitcher — danh sách
+│  #                          đầy đủ ở DESIGN_SYSTEM.md §10 (ui/Button|Card|Input|Table là code chết, đừng dùng)
 ├─ lib/
 │  ├─ client.ts             # fetch wrapper api.get/post/put/delete + Bearer token + auto re-login khi 401
 │  │                        # + postStream() (NDJSON cho AI Chat) + getForBlob()/postFormForBlob()
@@ -355,7 +356,7 @@ Cấu hình: `src/i18n/routing.ts` (`defineRouting`) · `src/i18n/request.ts` (`
 
 ### 4.7 Style & icon
 
-Tailwind CSS v4, font Inter. Đọc [DESIGN_SYSTEM.md](docs/docs-fe/DESIGN_SYSTEM.md) trước khi dựng UI.
+Tailwind CSS v4, font Inter. Màu viết bằng **hex trực tiếp** (`bg-[#e3000f]`): `tailwind.config.ts` không được nạp ở v4 nên class token (`bg-brand-red`…) không hoạt động. Đọc [DESIGN_SYSTEM.md](docs/docs-fe/DESIGN_SYSTEM.md) trước khi dựng UI.
 Bảng màu thương hiệu (giữ nguyên khi thêm màn mới): đỏ nhấn `#e3000f` / hover `#b40009`;
 chữ đậm `#191c1e`; chữ phụ `#5e3f3a`; muted `#8a8f94`; viền `#e0e3e5`; nền phụ `#f8fafc`; lỗi `#930006`.
 

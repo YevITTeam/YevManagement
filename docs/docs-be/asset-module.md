@@ -22,7 +22,7 @@
 | **Import**: Device (Excel/CSV) · Cấu hình Tanium · Thanh lý hàng loạt | §1.9, §1.10, §1.10b |
 | Cấu hình thiết bị + lịch sử sửa chữa/thay thế | §1.12, §1.13 |
 | Nhóm / Bộ phận thiết bị | §1.14 |
-| In mã QR | §1.16 (mục QR) |
+| In mã QR | §1.16b |
 | `AuditTrail` | §1.17 |
 | **AI Chat** (tool-calling) — kiến trúc, 7 tool, blocker LM Studio | §1.18 |
 | **ServerCheck** — kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR | §1.19 |
@@ -79,7 +79,7 @@ Server tự derive: gán→`2`+DeviceId; gỡ→`0`+null. `IpAddressService.Upda
 - **Create Prefix tự sinh 254 IpAddress con** (`n=1..254`, `Available`) trong `IpPrefixService.CreateAsync` (không có `generate-range`); **không sinh `.0`** (network) và **`.255`** (broadcast) — 2 địa chỉ này không được dùng cho thiết bị.
 - **Không Create/Delete thủ công từng IpAddress**: controller còn `grid-list`/`available`/`{id}`/`PUT{id}`(Status+Note)/`PUT bulk-status`/`assign`/`unassign`. `CreateAsync/DeleteAsync` không tồn tại.
 
-### 1.2b. `PUT /api/IpAddress/bulk-status` — đổi trạng thái nhiều IP (2026-07-23)
+### 1.2b. `PUT /api/IpAddress/bulk-status` — đổi trạng thái nhiều IP
 `BulkUpdateStatusAsync(BulkUpdateIpAddressStatusRequestDto{Ids, Status, UpdateNote, Note?})` — tick nhiều IP trên grid rồi đổi trạng thái 1 lần. Permission dùng lại `Asset.IpAddress.Update` (không thêm permission mới).
 - **Giữ nguyên bất biến §1.1**: chỉ nhận `Status` = `0`/`1`; gửi `2` → `DomainException` (Assigned do hệ thống tự đặt qua assign/unassign).
 - **Skip-and-report** (giống `Device bulk-delete`, không fail cả lô): Id không tồn tại/đã soft-delete → skip; IP đang gắn thiết bị (`DeviceId != null`) → skip kèm mã máy. Kết quả `BulkUpdateIpAddressStatusResultDto{UpdatedCount, Status, StatusText, SkippedIpAddresses:[{Id, IpAddress?, Reason}]}`.
@@ -97,7 +97,7 @@ Server tự derive: gán→`2`+DeviceId; gỡ→`0`+null. `IpAddressService.Upda
 ### 1.4. `Device.Status` — enum `DeviceStatus`
 `0=PendingUse`, `1=InUse`, `2=PendingLiquidation`, `3=Liquidated`.
 
-### 1.4b. Đổi trạng thái Device tự động gỡ Ip/Software (2026-08-25, quyết định người dùng)
+### 1.4b. Đổi trạng thái Device tự động gỡ Ip/Software
 Một Device chỉ được coi là "đang giữ" Ip/Software khi thật sự `InUse`. `DeviceService.UpdateAsync` so `Status` cũ/mới để tự gỡ, **bỏ qua** `IpAddressIds` gửi kèm trong các trường hợp này:
 - **`Status` mới = `PendingLiquidation`/`Liquidated`** (`IsLiquidationStatus`) → `ReleaseAllIpsAsync` (Ip về `Available`, `DeviceId=null`, đã có từ trước) **+ `ReleaseAllSoftwareAsync`** (xóa cứng toàn bộ `DeviceSoftware` của Device — mới thêm).
 - **`Status` cũ = `InUse` và `Status` mới = `PendingUse`** (máy ngừng dùng, chưa gán lại) → chỉ `ReleaseAllIpsAsync`, **giữ nguyên Software** (còn dùng lại khi máy `InUse` trở lại).
@@ -118,7 +118,8 @@ Server luôn set `= PurchaseDate.AddMonths(DepreciationMonths)` trong Create/Upd
 - **Hệ luỵ**: `TransferHistory` chuyển toàn bộ IP máy cũ→mới; import Tanium chỉ "cướp" IP đó, không đụng IP khác của Device.
 
 ### 1.7. Báo cáo "DANH SÁCH DESKTOP" — `GET /api/Report/device-list?DeviceTypeIds=&BranchId=&DepartmentId=&GroupId=&Status=&Keyword=`
-Controller riêng `ReportController` (gom báo cáo tương lai). Trả thẳng `List<DeviceReportItemDto>` (**không phân trang**): `Stt`(đánh lại theo `OrderBy(DeviceCode)`), `DeviceCode`, `DeviceName`, `IpAddress`(toàn bộ IP nối `", "`), `PurchaseDate`, `ExpirationDate`, `IsExpired`(`ExpirationDate < hôm nay UTC`), `FinancialPeriod`, `Note`. Filter optional, kết hợp AND: `DeviceTypeIds` (danh sách, khớp bất kỳ loại nào; FE dialog cho chọn nhiều loại), `BranchId`, `DepartmentId`, `GroupId` (`Device.DepartmentId`/`Device.GroupId`), `Status` (0/1, null = cả hai), `Keyword` (Contains mã/tên; chỉ AI Chat dùng, dialog xuất PDF đã bỏ). Dùng chung request DTO `DeviceReportFilterRequest` với AI Chat tool `GetDeviceReportAsync` (gửi 1 loại trong list).
+Controller riêng `ReportController` (gom báo cáo tương lai). Trả thẳng `List<DeviceReportItemDto>` (**không phân trang**): `Stt`(đánh lại theo `OrderBy(DeviceCode)`), `DeviceCode`, `DeviceName`, `DeviceTypeName`, `SerialNumber`, `IpAddress`(toàn bộ IP nối `", "`), `Email`(toàn bộ email nối `", "`), `Manager`, `BranchName`, `DepartmentName`, `GroupName`, `SupplierName`, `PurchaseDate`, `ExpirationDate`, `IsExpired`(`ExpirationDate < hôm nay UTC`), `FinancialPeriod`. Không còn cột `Note` (báo cáo thống kê cho quản lý, không cần ghi chú). Filter optional, kết hợp AND: `DeviceTypeIds` (danh sách, khớp bất kỳ loại nào; FE dialog cho chọn nhiều loại), `BranchId`, `DepartmentId`, `GroupId` (`Device.DepartmentId`/`Device.GroupId`), `Status` (0/1, null = cả hai), `Keyword` (Contains mã/tên; chỉ AI Chat dùng, dialog xuất PDF đã bỏ). Dùng chung request DTO `DeviceReportFilterRequest` với AI Chat tool `GetDeviceReportAsync` (gửi 1 loại trong list).
+**Xuất Excel**: `GET /api/Report/device-list/export` (`DeviceService.ExportReportListAsync`, ClosedXML) — gọi lại `GetReportListAsync` rồi dựng 1 sheet: tiêu đề `title`, dòng ngày xuất/tổng số, bảng 16 cột giống PDF (ngày dạng `dd/MM/yyyy`, freeze dòng tiêu đề). Trả file thô, không `ApiResponse`.
 **Chỉ lấy thiết bị `Status == PendingUse || Status == InUse`** (2026-07-29) — báo cáo dùng để thống kê thiết bị chờ sử dụng + đang vận hành, không tính thiết bị chờ thanh lý/đã thanh lý.
 **Kỳ tài chính (`FinancialPeriod`)**: tính từ `ExpirationDate` (không phải PurchaseDate). Năm tài chính Yazaki **1/7→30/6**, đánh số từ 1941:
 ```
@@ -127,7 +128,7 @@ FinancialPeriod = fiscalYearStartYear - 1940
 ```
 (vd `01-Oct-2026`→86). Không lưu DB, tính on-the-fly trong `Expression<Func<>>` (EF dịch SQL). Dùng `ToListAsync(query, selector)` (không phân trang).
 
-### 1.7b. Thống kê dashboard — `GET /api/Report/device-summary` (2026-07-30)
+### 1.7b. Thống kê dashboard — `GET /api/Report/device-summary`
 Cho màn `DeviceReport.tsx` (KPI + biểu đồ tròn trạng thái + top Chi nhánh/Loại thiết bị + bảng sắp/đã hết hạn). Không tham số, cùng phạm vi thiết bị với §1.7 (`PendingUse`/`InUse`).
 `DeviceService.GetReportSummaryAsync()` — tính hoàn toàn bằng `COUNT`/`GROUP BY` qua `CountAsync`/`GroupCountAsync` mới thêm vào `IGenericRepository` (xem `architecture-core.md §1`), **không** tải nguyên bảng `Device` về rồi cộng dồn ở C#:
 - `TotalCount`/`InUseCount`/`PendingUseCount`: `CountAsync(query)` + `CountAsync(query, status==InUse)`.
@@ -184,7 +185,7 @@ Chỉ **cập nhật** `DeviceConfiguration` cho Device **đã tồn tại** (kh
 - **Update config không đè field khác**: Device đã có config → chỉ đè 5 field Tanium (`Cpu/Ram/HardDrive/Maker/Model`, chỉ khi mới không rỗng), field khác copy nguyên (DTO yêu cầu gửi đủ). Chưa có → tạo mới (kèm Initial).
 - Confirm: 1 transaction, validate lại, còn lỗi → **không ghi gì**, `DomainException` `"Dòng {n}: {lý do}"`. Permission chung `Asset.DeviceConfiguration.Update`.
 
-#### 1.10a. Báo cáo đối chiếu Tanium — `POST /api/DeviceConfigurationImport/missing-devices-report` (2026-07-27)
+#### 1.10a. Báo cáo đối chiếu Tanium — `POST /api/DeviceConfigurationImport/missing-devices-report`
 Yêu cầu người dùng: xuất file Excel liệt kê Device đang ghi nhận **`Status = InUse`** trong hệ thống nhưng **không xuất hiện** trong file Tanium vừa quét — để người import phát hiện lệch dữ liệu (máy đã tắt/thanh lý nhưng hệ thống chưa cập nhật, đổi tên máy sai quy ước khiến Tanium/hệ thống không khớp được, máy lỗi mạng không báo về Tanium...).
 - **Chỉ so trên Device `Status = InUse(1)`** — quyết định người dùng: Tanium chỉ quét được máy đang bật/đang dùng thật sự, nên `PendingUse`/`PendingLiquidation`/`Liquidated` không có mặt trong file Tanium là chuyện bình thường, **không** phải sai lệch cần báo cáo.
 - **"Đã được Tanium quét thấy"** = dòng trong file có Computer Name khớp được 1 Device có thật (`ResolvedDeviceId != null`), **bất kể dòng đó có lỗi ở field khác hay không** (VD trùng mã trong file, lỗi `"TSE-Error"` ở 1 cột) — máy vẫn rõ ràng có mặt trong lần quét, không tính là "thiếu". Dòng bị loại thầm lặng vì Computer Name ngoài 5 họ (§1.10) đương nhiên không khớp được Device nào — không ảnh hưởng tới việc tính "thiếu" cho các Device khác.
@@ -231,7 +232,7 @@ Bảng `AssetSettings` (seed 1 dòng `Id=1, LiquidationAfterMonths=2`) — cấu
 
 **Chuyển trạng thái thủ công cũng áp dụng cùng luật** (2026-08-22): `DeviceService.UpdateAsync` — nếu `request.Status` là `PendingLiquidation(2)`/`Liquidated(3)`, **bỏ qua** `IpAddressIds` gửi lên, ép gỡ hết IP hiện gắn (không sync theo danh sách IP người dùng chọn); `CreateAsync` tạo máy thẳng ở 1 trong 2 trạng thái này cũng **không gán** IP dù request có gửi kèm. Trạng thái khác (`PendingUse`/`InUse`) giữ hành vi sync IP như cũ.
 
-### 1.10b. Import thanh lý hàng loạt — `/api/DeviceLiquidationImport` (`preview`/`confirm`, 2026-07-23)
+### 1.10b. Import thanh lý hàng loạt — `/api/DeviceLiquidationImport` (`preview`/`confirm`)
 Import file **1 cột `Mã máy` (MQL)**, dòng 1 header (`.xlsx`/`.csv`, dùng chung `CsvFileHelper`/ClosedXML) để chuyển hàng loạt Device sang `Liquidated(3)`. Service/Controller riêng, 2 bước như các import khác. `DeviceLiquidationImportService : BaseService` (không cần `DeviceService`, thao tác thẳng qua `_unitOfWork`).
 - **Luật trạng thái nguồn** (quyết định người dùng): **CHỈ** máy đang `PendingLiquidation(2)` mới thanh lý được. Máy đã `Liquidated(3)` → lỗi "đã được thanh lý trước đó"; trạng thái khác (`PendingUse`/`InUse`) → lỗi "...đang ở trạng thái 'X', chỉ thanh lý được thiết bị đang 'Chờ thanh lý'." (text từ `DeviceStatusExtensions`). Không tìm thấy mã / đã soft-delete / trùng mã trong file → lỗi dòng.
 - **Kèm dọn dẹp giống `DeviceService.DeleteAsync`**: máy thanh lý coi như không còn dùng → **gỡ hết IP** (`DeviceId=null`, `Status=Available`, đếm `ReleasedIpCount`) + **soft-delete `DeviceEmail`** + **xóa cứng hết `DeviceSoftware`** (đếm `ReleasedSoftwareCount`, §1.4b, 2026-08-25). (Khác `DeleteAsync`: KHÔNG set `IsDeleted` — máy vẫn còn để tra cứu, chỉ đổi `Status`.)
@@ -239,14 +240,14 @@ Import file **1 cột `Mã máy` (MQL)**, dòng 1 header (`.xlsx`/`.csv`, dùng 
 - **Confirm** (`ConfirmDeviceLiquidationImportDto{Rows}` field thô): **validate lại từ đầu**, dòng lỗi **BỎ QUA không chặn batch** (`SkippedRows`), dòng hợp lệ thanh lý trong 1 transaction. Có **re-check trong vòng lặp** (`device.Status != PendingLiquidation` sau khi load lại) phòng đổi trạng thái đồng thời. Kết quả `DeviceLiquidationImportConfirmResultDto{LiquidatedCount, LiquidatedDeviceIds, ReleasedIpCount, ReleasedSoftwareCount, SkippedCount, SkippedRows}`.
 - **Permission**: dùng lại `Asset.Device.Update` (đổi trạng thái, không phải tạo/xóa → không seed permission mới).
 
-### 1.16. In mã QR thiết bị — `POST /api/Device/qr-labels` (2026-07-23)
+### 1.16b. In mã QR thiết bị — `POST /api/Device/qr-labels`
 In tem QR hàng loạt cho các Device tick trên grid. **BE chỉ trả dữ liệu, FE tự vẽ QR + dàn layout in** (không thêm NuGet QR/PDF nào). `DeviceService.GetQrLabelsAsync`.
 - **Request** `DeviceQrLabelRequestDto{Ids:List<int>}` — bulk-only (in 1 máy = gửi list 1 phần tử). Không có biến thể theo bộ lọc (chỉ theo lựa chọn, quyết định người dùng).
 - **Response** `List<DeviceQrLabelDto>`: `DeviceId/DeviceCode/DeviceName/DeviceTypeName?/BranchName?/SupplierName?/Manager?/SerialNumber?/StatusText/PurchaseDate` + `QrPayload`. Trả **đầy đủ field** để user chọn in field nào; giữ **đúng thứ tự Ids** yêu cầu (SQL `IN` không giữ thứ tự → reorder trong bộ nhớ). Id không tồn tại/đã soft-delete → bỏ qua thầm lặng.
 - **`QrPayload`** (nội dung mã hoá QR, do BE dựng sẵn — `BuildQrPayload`): text nhiều dòng, **dòng 1 LUÔN là `DeviceCode` trần** (app quét nội bộ tách dòng 1 để tra cứu; camera điện thoại thường quét ra cả khối đọc được, không cần mạng — hệ nội bộ nên deep-link web không mở được). Các dòng sau: `DeviceName`, `SN: {SerialNumber}`, `Xưởng: {BranchName}` (bỏ dòng nếu field rỗng). FE có thể dựng lại payload theo field user chọn **nhưng phải giữ dòng 1 = DeviceCode**.
 - **Permission**: `Asset.Device.View` (chỉ đọc dữ liệu để in).
 
-### 1.17. `AuditTrail` — ghi log Create/Update/Delete tự động (2026-07-16)
+### 1.17. `AuditTrail` — ghi log Create/Update/Delete tự động
 **Tự động, không cần sửa Service nào.** Chặn tại 1 điểm duy nhất: `AssetDbContext.SaveChangesAsync` override (`Asset.Infrastructure/Context/AssetDbContext.AuditTrail.cs`, partial class riêng — không đụng file scaffold `AssetDbContext.cs`) đọc `ChangeTracker.Entries()` trước/sau khi save để tự sinh `AuditTrail`. Entity mới thêm sau này **tự động được audit**, không cần nhớ gọi gì thêm.
 - **Phạm vi**: toàn bộ entity qua `AssetDbContext` (Device, DeviceGroup, DeviceDepartment, Branch, Supplier, DeviceType, Software, SoftwareGroup, IpAddress, IpPrefix, DeviceConfiguration, DeviceEmail, DeviceSoftware, TransferHistory, AssetSetting...). **Loại trừ** 3 bảng tự thân đã là log/snapshot: `AuditTrail`, `DeviceConfigurationHistory`, `DeviceConfigurationInitial` (audit lồng audit vô nghĩa).
 - **`Action`**: `Create` (`EntityState.Added`), `Update` (`Modified`, field thường đổi), `Delete` (`Modified` với `IsDeleted` false→true, **hoặc** `EntityState.Deleted` với entity hard-delete như `DeviceSoftware`/`TransferHistory`/`DeviceConfiguration`), `Restore` (`IsDeleted` true→false).
@@ -260,7 +261,7 @@ In tem QR hàng loạt cho các Device tick trên grid. **BE chỉ trả dữ li
 - **API xem lại**: `AuditTrailService`/`AuditTrailController` (`Asset.Application/Asset.Api`) — `GET /api/AuditTrail/grid-list` (phân trang, filter `TableName/RecordId/RecordName/Action/ChangedBy/FromDate/ToDate`, sort `ChangedAt` mới nhất trước) + `GET /api/AuditTrail/record?tableName=&recordId=` (lịch sử 1 bản ghi cụ thể, vd xem toàn bộ log của 1 Device). Permission `Asset.AuditTrail.View` (seed migration `AddAssetAuditTrailPermission` bên Identity — **đã apply**, xác nhận lại qua `dotnet ef migrations list` trên DB thật 2026-07-27).
 - **Bảng `AuditTrails` đã tồn tại sẵn trong DB thật** (không qua migration Asset nào — thuộc DB scaffold gốc), nên phần ghi log hoạt động ngay, không cần chờ migration nào bên Asset.
 
-### 1.18. AI Chat (tool-calling) — `POST /api/AiChat/stream` (2026-07-24)
+### 1.18. AI Chat (tool-calling) — `POST /api/AiChat/stream`
 Chuyển tính năng "Chat với AI" từ chạy tạm ở FE (gọi thẳng LLM server từ trình duyệt) sang BE thật. **Mục này là nguồn chân lý duy nhất về kiến trúc/code**; hợp đồng FE ở [asset-api-fe.md §7c](asset-api-fe.md). (File thiết kế gốc `ai-chat-be-huong-dan.md` đã xoá 2026-09-10 — phần lớn đã lỗi thời; tra `git log` nếu cần bối cảnh cũ.)
 
 > **Catalogue hiện hành: 7 tool** (rút từ 17 ngày 2026-07-30 — catalogue được gửi lại MỖI lượt nên schema 17 tool là chi phí prompt-eval chi phối, rút gọn là **fix hiệu năng**: 10.766 → 7.656 ký tự, ~-29%). Giữ: `search_devices` (13 tham số, phủ đủ field như màn danh sách), `get_device_detail`, `search_device_groups`, `search_device_departments`, `search_ip_addresses` (lọc trống/đang dùng), `get_ip_prefix_usage`, `search_ip_prefixes`. Bỏ: `get_device_transfer_history`, `get_device_change_history`, `search_device_types`, `search_software`, `search_software_groups`, `search_branches`, `search_suppliers`, `get_device_report`, `get_asset_settings`, `search_audit_trail`. **Executor vẫn giữ nguyên `case` của 10 tool đã tắt** — bật lại chỉ cần dán block JSON vào `AiChatToolDefinitions.cs`, không phải viết lại code. Từ 2026-07-30 lọc theo chi nhánh/nhóm/bộ phận truyền **thẳng TÊN**, bỏ chuỗi 2 bước name→id. Các con số "17 tool" trong mục này là trạng thái lúc mới làm.
@@ -292,7 +293,7 @@ Chuyển tính năng "Chat với AI" từ chạy tạm ở FE (gọi thẳng LLM
 - **3 bài học chỉnh prompt/guard — đừng gỡ** (nguyên nhân đã xác minh qua transcript thật): (1) chuẩn hoá `deviceCode` bằng **regex ở executor**, không dựa system prompt ("ydc 9875" → "ydc-9875"); (2) rule "KHÔNG HỎI LẠI KHI ĐÃ CÓ MÃ THIẾT BỊ" — model từng hỏi lại thay vì gọi tool dù user gõ đủ; (3) rule "KHÔNG BỊA KẾT QUẢ TRA CỨU" **+ guard cấu trúc** trong `AiChatService`: phát hiện lượt trước chỉ "hứa suông" (không có `tool_calls`) thì tự chèn 1 message `system` nhắc trước khi gọi LLM lại — chỉ chặn ở lượt SAU, không ép gọi tool ngay. Gốc rễ: `AiChatMessageDto` không có role `tool` nên FE không gửi lại tool result, model đọc lại lời hứa của chính nó và tưởng đã tra xong.
 - **System prompt** nằm ở `AiChatService.BuildDefaultSystemPrompt` — **code là nguồn chân lý**, không chép ra doc nữa.
 
-### 1.19. Kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR (2026-09-16)
+### 1.19. Kiểm tra Server/Máy lạnh/UPS/Network hằng ngày qua QR
 
 Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào phòng server ghi tay hằng ngày) bằng quét QR trên máy TC21/TC22. Nghiệp vụ chưa có trong doc trước khi làm → đã hỏi người dùng chốt đủ (AGENTS.md §2 luật 2) trước khi code, quyết định giữ ở các mục con dưới.
 
@@ -319,7 +320,7 @@ Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào ph
 - **Đã smoke-test qua HTTP thật** (2026-09-16, chỉ endpoint đọc): `today`→`null` (chưa có phiên), `manual-items`→đúng 4 dòng seed, `report`→mảng rỗng đúng như kỳ vọng, `DeviceType/all` đã có 2 field mới (`null` vì chưa cấu hình). Permission mới có hiệu lực ngay không cần đăng nhập lại (đúng thiết kế `MyClaimsTransformation`).
 - **DB thật đã có sẵn 3/4 loại thiết bị cần gắn `ServerCheckCategory`**: `SVR`(SERVER)→`Server(0)`, `SWT`(Switch)→`Network(1)`, `UPS`→`Ups(2)`. **Chưa có** DeviceType nào cho máy lạnh/điều hòa — Admin cần **tự tạo mới** (qua `DeviceType` CRUD có sẵn) rồi mới gắn `AirConditioner(3)`. Chưa gán đủ thì `POST /start` snapshot thiếu/rỗng, phiên vẫn tạo được nhưng không có gì để quét cho loại còn thiếu.
 
-### 1.20. Kiểm tra network bằng ping — mục "Network - Factory"/"Network - Server" (2026-09-17)
+### 1.20. Kiểm tra network bằng ping — mục "Network - Factory"/"Network - Server"
 
 2 mục thủ công "Network - Factory"/"Network - Server" (§1.19) trước đó xác nhận hoàn toàn bằng tay. Nghiệp vụ mới, chưa có trong doc → đã hỏi chốt (AGENTS.md §2 luật 2): người dùng xác nhận Factory và Server **dùng chung 1 dải mạng** nên 1 lượt ping áp dụng cho cả 2 mục, chỉ ping IP đang gắn thiết bị Server/UPS/Network (bỏ qua Máy lạnh — không có IP), phạm vi **cấu hình được** theo Branch + loại thiết bị.
 
@@ -336,7 +337,7 @@ Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào ph
 4. **Hỏi lại người dùng thì lọc theo chi nhánh vẫn chưa đủ** (còn ~57 mục vì gồm cả server ảo + switch toàn nhà máy): phòng server thật chỉ có **3 server vật lý Dell iDRAC** (chưa nhập hệ thống, sẽ thêm sau) + UPS + vài thiết bị mạng. Chốt phương án cuối: thêm cờ **`Device.RequiresDailyCheck`** (§1.19) làm tiêu chí quét, bỏ hẳn lọc chi nhánh khỏi `StartSessionAsync`; `ServerCheckBranchId` chỉ còn dùng cho `network-ping` (server ảo vẫn được ping như cũ, chỉ không phải quét QR).
 - **Đã smoke-test qua HTTP thật** (2026-09-17): gán `ServerCheckBranchId`=DĨ AN, gọi `network-ping` → 55 IP (19 Server + 36 Network của DĨ AN), 29 phản hồi/26 không, phản hồi trong 1.1s; xác nhận `GET /today` trả `null` sau khi dọn phiên lỗi.
 
-### 1.21. Phân công user ↔ xưởng cho kiểm tra server (2026-09-21)
+### 1.21. Phân công user ↔ xưởng cho kiểm tra server
 
 **Vấn đề:** trước đây ai có quyền `Asset.ServerCheck.Scan` cũng vào được trang quét và bấm "Bắt đầu" — không biết đang quét cho xưởng nào, và phiên chỉ có 1/ngày cho cả công ty. Yêu cầu: chỉ người được cấp role kiểm tra server mới vào được, và mỗi người **gắn cứng 1 xưởng** do Admin phân công (không cho tự chọn xưởng lúc quét — dễ chọn nhầm).
 
@@ -354,7 +355,7 @@ Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào ph
 - **FE**: `ServerCheckScanPage` gọi `/me` trước — chưa phân công thì chặn + báo liên hệ Admin, đã phân công thì hiện badge "Xưởng phụ trách" (không có ô chọn xưởng); `ServerCheckAssignmentPage` (route `/pc/server-check/assignments`, nút "Phân công xưởng" ở màn báo cáo, chỉ hiện với quyền Assign); `ServerCheckReportPage` thêm dropdown xưởng; sidebar mục "Kiểm tra Server" trỏ thẳng trang quét với user chỉ có `Scan` (không có View thì trang báo cáo sẽ 403).
 - **Phiên cũ** (trước 2026-09-21) có `BranchId = null` nên không hiện khi lọc theo xưởng — muốn xem lại phải gỡ lọc qua DB; chấp nhận vì dữ liệu lúc đó chỉ là thử nghiệm.
 
-### 1.22. Kiểm kê thiết bị bằng quét mã theo xưởng (2026-09-23)
+### 1.22. Kiểm kê thiết bị bằng quét mã theo xưởng
 
 Đối chiếu thực tế vật lý với dữ liệu hệ thống — khác hẳn §1.19 (ServerCheck chỉ kiểm tra "còn hoạt động tốt" cho 1 nhóm thiết bị hẹp mỗi ngày): kiểm kê quét **toàn bộ Device** của 1 xưởng, theo đợt (không phải hằng ngày). Nghiệp vụ chưa có trong doc trước khi làm → đã hỏi người dùng chốt đủ (AGENTS.md §2 luật 2), quyết định giữ ở các mục con dưới. Tái dùng tối đa pattern ServerCheck (phiên/snapshot/quét idempotent/khoá cứng sau khi kết thúc) nhưng **không dùng chung entity/bảng** — 2 tính năng cố ý độc lập.
 
@@ -377,7 +378,7 @@ Thay checksheet giấy `YEV–22–CV–IT-QD-810-FR-Check Sheet KT` (IT vào ph
   - Báo cáo chọn xưởng (hoặc "Tất cả xưởng") rồi chọn 1 phiên trong danh sách (50 phiên mới nhất); mặc định chọn phiên mới nhất.
   - ⚠️ **Bug đã fix cùng ngày**: bản đầu `InventoryScanPage.tsx` refresh sau mỗi lần quét bằng `getById(session.id)` (quyền `View`) — role "Kiểm kê thiết bị" chỉ có `Scan` nên sẽ 403 ngay sau lần quét đầu tiên. Đổi sang gọi `getCurrent()` (quyền `Scan`, đã tự trả đúng phiên `InProgress` của xưởng mình).
 
-### 1.23. Quản lý bản cập nhật app Flutter "YEV Scan" — `AppRelease` (2026-09-23)
+### 1.23. Quản lý bản cập nhật app Flutter "YEV Scan" — `AppRelease`
 
 App mobile nội bộ dùng chung cho các tính năng quét mã (ServerCheck §1.19, Inventory §1.22, và các app
 quét sau này) tự kiểm tra bản mới khi mở app. Entity đơn giản — `ApkUrl` chỉ là **string** (không có cột
@@ -411,7 +412,7 @@ riêng phân biệt link ngoài/link nội bộ): admin có thể dán link ngo�
 - **CRUD còn lại** (`grid-list`, POST, `PUT {id}`, `DELETE {id}`) chỉ 1 permission duy nhất `Asset.AppRelease.Manage` (không tách View/Create/Update/Delete như Branch — quyết định người dùng, đơn giản hoá vì màn quản trị này chỉ dành cho vài người). `grid-list` lọc `keyword` theo `VersionName`. Tạo/sửa trùng `VersionCode` → 400 (`GuardExtensions.ThrowIfDuplicateCode`, không lọc `IsDeleted` trong truy vấn tìm trùng — đúng luật AGENTS.md §3.4).
 - **Permission** (migration Identity `AddAppReleaseManagePermission`): `Asset.AppRelease.Manage`, đã gán `Admin`.
 - **DB thật**: migration Asset `AddAppRelease` + Identity `AddAppReleaseManagePermission` **đã apply** (2026-09-23). Smoke-test qua HTTP thật: `latest`→`null` lúc chưa có dữ liệu, tạo/sửa/xoá/trùng mã đều đúng kỳ vọng, dọn sạch dữ liệu test sau khi kiểm (`latest`→`null` trở lại). Upload/download file test riêng (không đụng DB): upload file `.apk` giả → nhận URL → tải anonymous → nội dung khớp byte-for-byte; path traversal (`..%2f..%2f`) → 404; file không tồn tại → 404; upload thiếu token → 401; sai đuôi file → 400. Dọn file test khỏi đĩa sau khi kiểm.
-- **FE**: `modules/pc-management/components/app-releases/` (`AppReleaseList`/`AppReleaseForm`, khuôn CRUD giống `branches/`, nút Thêm/Sửa/Xoá gate theo `hasPermission(user, "Asset.AppRelease.Manage")`), route `(pc-manager)/pc/app-releases`, `app-release.api.ts`/`app-release.dto.ts`, mục sidebar "Bản cập nhật app". `AppReleaseForm` có nút "Tải file .apk lên" cạnh ô `apkUrl` — upload xong tự điền URL vào ô đó (vẫn sửa tay được, vẫn cho dán link ngoài).
+- **FE**: `modules/pc-management/components/app-releases/` (`AppReleaseList`/`AppReleaseForm`; bản mới nhất lấy từ `GET /latest` hiện thành thẻ riêng đầu trang (tên bản, ngưỡng buộc cập nhật, changelog, link APK), các bản còn lại liệt kê bên dưới có tìm kiếm + phân trang; nút Đăng/Sửa/Xoá gate theo `hasPermission(user, "Asset.AppRelease.Manage")`), route `(pc-manager)/pc/app-releases`, `app-release.api.ts`/`app-release.dto.ts`, mục sidebar "Bản cập nhật app". `AppReleaseForm` đặt khung kéo thả `.apk` (tối đa 300 MB) lên đầu — upload xong tự điền URL vào ô `apkUrl` (vẫn sửa tay được, vẫn cho dán link ngoài).
 - **Mobile**: app "YEV Scan" chỉ cần `GET /latest` + tải file qua `apkUrl` trả về — xem [asset-api-fe.md §7f](asset-api-fe.md).
 
 ## 2. DTOs (`Asset.Application/Dtos/`)
@@ -448,7 +449,7 @@ riêng phân biệt link ngoài/link nội bộ): admin có thể dán link ngo�
 | Branch | `/api/Branch` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.Branch.*` |
 | DeviceGroup | `/api/DeviceGroup` | grid-list?departmentId=, all?departmentId=, {id}, POST, PUT, DELETE | `Asset.DeviceGroup.*` |
 | DeviceDepartment | `/api/DeviceDepartment` | grid-list, all, {id}, POST, PUT, DELETE | `Asset.DeviceDepartment.*` |
-| Device | `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, `qr-labels`(§1.16, POST), POST, PUT, DELETE(mềm), `bulk-delete`(§1.15). **Không** `all` | `Asset.Device.*` |
+| Device | `/api/Device` | grid-list, `available`, {id}, `{id}/detail`, `{id}/replacement-suggestion`, `qr-labels`(§1.16b, POST), POST, PUT, DELETE(mềm), `bulk-delete`(§1.15). **Không** `all` | `Asset.Device.*` |
 | AssetSetting | `/api/AssetSetting` | GET, PUT (1 dòng) | `Asset.Setting.View/.Update` |
 | Report | `/api/Report` | `device-list`, `device-summary`(§1.7b, 2026-07-30) | `Asset.Report.View` |
 | DeviceType | `/api/DeviceType` | CRUD | `Asset.DeviceType.*` |

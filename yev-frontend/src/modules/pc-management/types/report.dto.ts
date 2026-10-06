@@ -2,12 +2,19 @@ export interface DeviceListReportItemDto {
     stt: number;
     deviceCode: string;
     deviceName: string;
+    deviceTypeName: string;
+    serialNumber: string | null;
     ipAddress: string | null;
+    email: string | null;
+    manager: string;
+    branchName: string;
+    departmentName: string | null;
+    groupName: string | null;
+    supplierName: string;
     purchaseDate: string | null;
     expirationDate: string | null;
     isExpired: boolean;
     financialPeriod: number | null;
-    note: string | null;
 }
 
 export interface DeviceReportDistributionItemDto {

@@ -4,6 +4,8 @@ namespace Workflow.Application.Dtos.OrgUnits
     // người dùng phải rời màn cây sang màn Nhân sự chỉ để xem đơn vị này ai đang phụ trách.
     public class OrgUnitTreeMemberDto
     {
+        // EmployeeOrgUnits.Id — identifies the assignment row for per-row update/remove.
+        public int AssignmentId { get; set; }
         public int EmployeeId { get; set; }
         public string EmployeeFullName { get; set; } = null!;
         public string EmployeeCode { get; set; } = null!;

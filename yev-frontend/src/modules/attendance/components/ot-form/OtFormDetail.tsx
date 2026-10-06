@@ -154,7 +154,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
     // Nút "Loại khỏi đơn" ngay trên màn Duyệt (khôi phục 2026-09-30, xem docs/attendance-module.md
-    // §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web)) — permission riêng, KHÔNG dùng chung canEdit
+    // §Loại nhân viên khỏi đơn) — permission riêng, KHÔNG dùng chung canEdit
     // (canEdit đơn theo Nhóm chỉ đúng cho người tạo; loại người ở đây đi qua endpoint riêng dùng luật
     // "candidate bước Pending hiện tại" cho CẢ 2 loại đơn, BE là nguồn chặn thật nếu bấm sai lượt).
     const canRemoveEmployee = hasPermission(user, "Attendance.OTForm.RemoveEmployee");

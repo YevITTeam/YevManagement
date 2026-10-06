@@ -11,7 +11,7 @@ namespace Identity.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             // Asset.AiChat.Use: gọi endpoint POST /api/AiChat/stream (trợ lý AI tra cứu dữ liệu Asset
-            // qua tool-calling nội bộ, xem docs/ai-chat-be-huong-dan.md). Cùng pattern với migration
+            // qua tool-calling nội bộ, xem docs/docs-be/asset-module.md §1.18). Cùng pattern với migration
             // seed permission AddAssetAuditTrailPermission.
             migrationBuilder.Sql(@"
 INSERT INTO Permissions (Code, Module, Description) VALUES

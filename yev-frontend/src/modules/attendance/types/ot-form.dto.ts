@@ -141,7 +141,7 @@ export interface CreateOtFormDto {
 // Item của UpdateOtFormDto.employees — sửa 2026-07-31: chỉ còn EmployeeId + EndTime (bỏ NoteVn/NoteJp).
 // Thêm didEat 2026-08-06 — sửa được cùng lúc với EndTime (xem OtFormEmployeeDto.didEat). noteVn/noteJp
 // trở lại 2026-08-27 (Giai đoạn 5) — Group Leader/Team Leader (đơn "theo chuyền") ghi chú trao đổi qua
-// từng nhân viên thay vì ghi giấy, xem attendance-module.md §Chế tạo.
+// từng nhân viên thay vì ghi giấy, xem attendance-module.md §Cây chức vụ & Cây duyệt.
 export interface UpdateOtFormEmployeeTimeDto {
     employeeId: number;
     // null = giữ nguyên giờ bắt đầu hiện có của người này.
@@ -160,7 +160,7 @@ export interface UpdateOtFormRemovedEmployeeDto {
 
 // Body PUT /api/OtForm/{id} — §4.1b. Sửa lại 2026-09-04 (gộp thêm/xóa nhân viên vào Sửa đơn, thay cho
 // 2 action riêng AddOtFormEmployeeDto/RemoveOtFormEmployeeDto trước đó — xem docs/attendance-module.md
-// §Gộp thêm/xóa NV vào Sửa đơn): mỗi phần tử employees có thể là NGƯỜI CŨ (sửa giờ kết thúc/didEat/
+// §Cây chức vụ & Cây duyệt (mục Sửa đơn)): mỗi phần tử employees có thể là NGƯỜI CŨ (sửa giờ kết thúc/didEat/
 // note) hoặc NGƯỜI MỚI (BE tự suy diff so với danh sách active hiện có) — nhân viên MỚI thêm vào đơn
 // dưới chuyền phải cùng Line/Nhóm ca với người còn lại của đơn (BE tự kiểm, FE chỉ nên tự khoá dropdown
 // tìm kiếm cho gọn UX). removedEmployees: nhân viên bị loại (bắt buộc kèm lý do) — người đang có trong
@@ -363,7 +363,7 @@ export interface RemoveOtFormEmployeeByEmailTokenDto {
 }
 
 // Body POST /api/OtForm/{id}/employees/remove — kênh trong-app (JWT), khôi phục 2026-09-30 ngay trên
-// màn Duyệt (§Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web)) — TÁCH RIÊNG khỏi UpdateOtFormDto
+// màn Duyệt (§Loại nhân viên khỏi đơn) — TÁCH RIÊNG khỏi UpdateOtFormDto
 // (chỉ người tạo mới gọi được cho đơn theo Nhóm): endpoint này dùng đúng luật "candidate bước Pending
 // hiện tại" nên approver không phải người tạo cũng loại được. KHÔNG có secondaryPassword, cùng quyết
 // định 2026-07-31 áp dụng cho kênh email.

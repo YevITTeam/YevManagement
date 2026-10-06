@@ -7,6 +7,8 @@ export interface EmployeeDto {
     position: string | null;
     userId: number | null;
     isActive: boolean;
+    primaryOrgUnitNameVn: string | null;
+    primaryJobTitleNameVn: string | null;
 }
 
 export interface CreateUpdateEmployeeDto {

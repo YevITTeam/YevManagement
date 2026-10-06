@@ -10,7 +10,7 @@ using Shared.Application.Interfaces.External;
 
 namespace Asset.Application.Services
 {
-    // Orchestrates 1 chat turn against the LLM server with tool-calling (docs/ai-chat-be-huong-dan.md
+    // Orchestrates 1 chat turn against the LLM server with tool-calling (docs/docs-be/asset-module.md §1.18
     // §4; server was Ollama until 2026-08-24, now LM Studio — see LmStudioChatClient): stream the
     // model's answer, execute any tool the model asks for by calling straight into internal
     // Application services (AiChatToolExecutorService), feed the result back, repeat up to
@@ -115,7 +115,7 @@ namespace Asset.Application.Services
 
         // Matches an assistant reply that promises to look something up ("tôi sẽ tra cứu ngay bây giờ",
         // "để tôi kiểm tra", "xin chờ trong giây lát"...) without actually calling a tool — see the
-        // unfulfilled-promise guard below and docs/ai-chat-be-huong-dan.md §14.
+        // unfulfilled-promise guard below and docs/docs-be/asset-module.md §1.18.
         private static readonly Regex UnfulfilledPromisePattern = new(
             @"(sẽ\s+(thực hiện|tra cứu|kiểm tra|gọi)|ngay bây giờ|trong giây lát|xin chờ|để tôi\s+(kiểm tra|tra cứu))",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -244,7 +244,7 @@ namespace Asset.Application.Services
                         {
                             contentBuilder.Append(chunk.Message!.Content);
                             // Đẩy ngay từng mẩu chữ ra FE khi vừa nhận được từ Ollama, đúng thiết kế gốc
-                            // (ai-chat-be-huong-dan.md §4: "stream thẳng ra client trong lúc chờ") — TRƯỚC
+                            // (docs/docs-be/asset-module.md §1.18: "stream thẳng ra client trong lúc chờ") — TRƯỚC
                             // đây đoạn code này chỉ Append vào contentBuilder mà không yield, nên FE không
                             // nhận được gì cho tới khi CẢ round sinh xong (có thể vài-chục giây với model
                             // cục bộ), rồi mới nhận 1 cục text dồn hết 1 lần ở dòng bên dưới (đã xoá) — cảm

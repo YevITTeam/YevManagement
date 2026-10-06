@@ -12,6 +12,8 @@ const ENDPOINTS = {
         deleteEmployee: (id: number) => `/Workflow/Employee/${id}`,
         getEmployeeOrgUnits: (id: number) => `/Workflow/Employee/${id}/org-units`,
         replaceEmployeeOrgUnits: (id: number) => `/Workflow/Employee/${id}/org-units`,
+        addEmployeeOrgUnit: (id: number) => `/Workflow/Employee/${id}/org-units`,
+        employeeOrgUnitAssignment: (assignmentId: number) => `/Workflow/Employee/org-unit-assignments/${assignmentId}`,
     },
 } as const;
 
@@ -67,6 +69,25 @@ export const EmployeeApi = {
             ENDPOINTS.EMPLOYEE.replaceEmployeeOrgUnits(id),
             { items }
         );
+        return response.data;
+    },
+
+    // Per-row assignment operations; validFrom/validTo are kept by the server on update.
+    addEmployeeOrgUnit: async (id: number, item: ReplaceEmployeeOrgUnitItemDto) => {
+        const response = await api.post<ApiResponse<EmployeeOrgUnitDto[]>>(ENDPOINTS.EMPLOYEE.addEmployeeOrgUnit(id), item);
+        return response.data;
+    },
+
+    updateEmployeeOrgUnit: async (assignmentId: number, item: ReplaceEmployeeOrgUnitItemDto) => {
+        const response = await api.put<ApiResponse<EmployeeOrgUnitDto[]>>(
+            ENDPOINTS.EMPLOYEE.employeeOrgUnitAssignment(assignmentId),
+            item
+        );
+        return response.data;
+    },
+
+    removeEmployeeOrgUnit: async (assignmentId: number) => {
+        const response = await api.delete<ApiResponse<boolean>>(ENDPOINTS.EMPLOYEE.employeeOrgUnitAssignment(assignmentId));
         return response.data;
     },
 };

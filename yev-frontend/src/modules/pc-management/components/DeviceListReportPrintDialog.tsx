@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, X } from "lucide-react";
+import { Download, FileSpreadsheet, X } from "lucide-react";
 import { toast } from "react-toastify";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -61,21 +61,34 @@ function buildReportPdf(title: string, rows: DeviceListReportItemDto[]) {
 
     autoTable(doc, {
         startY: 26,
-        styles: { font: "Roboto", fontStyle: "normal", fontSize: 8, cellPadding: 1.5 },
+        styles: { font: "Roboto", fontStyle: "normal", fontSize: 6.5, cellPadding: 1 },
         headStyles: { font: "Roboto", fontStyle: "bold", fillColor: [226, 232, 240], textColor: [30, 41, 59], lineWidth: 0.1, lineColor: [148, 163, 184] },
         bodyStyles: { lineWidth: 0.1, lineColor: [203, 213, 225] },
         alternateRowStyles: { fillColor: [248, 250, 252] },
-        head: [["STT", "Mã thiết bị", "Tên thiết bị", "Địa chỉ IP", "Ngày mua", "Hạn sử dụng", "Hết hạn", "Kỳ T/C", "Ghi chú"]],
+        margin: { left: 8, right: 8 },
+        head: [
+            [
+                "STT", "Mã thiết bị", "Tên thiết bị", "Loại thiết bị", "Số serial", "Địa chỉ IP", "Email", "Người quản lý",
+                "Chi nhánh", "Bộ phận", "Nhóm", "Nhà cung cấp", "Ngày mua", "Hạn sử dụng", "Hết hạn", "Kỳ T/C",
+            ],
+        ],
         body: rows.map((row) => [
             row.stt,
             row.deviceCode,
             row.deviceName,
+            row.deviceTypeName,
+            row.serialNumber ?? "-",
             row.ipAddress ?? "-",
+            row.email ?? "-",
+            row.manager,
+            row.branchName,
+            row.departmentName ?? "-",
+            row.groupName ?? "-",
+            row.supplierName,
             formatDate(row.purchaseDate),
             formatDate(row.expirationDate),
             row.isExpired ? "X" : "O",
             row.financialPeriod ?? "-",
-            row.note ?? "-",
         ]),
     });
 
@@ -94,6 +107,7 @@ export default function DeviceListReportPrintDialog({ isOpen, onClose }: DeviceL
     // "" = both statuses, "0" = Chưa sử dụng, "1" = Đang sử dụng.
     const [status, setStatus] = useState<string>("");
     const [isLoading, setIsLoading] = useState(false);
+    const [isExportingExcel, setIsExportingExcel] = useState(false);
     const [rows, setRows] = useState<DeviceListReportItemDto[] | null>(null);
     // Filter key the cached rows were fetched with; rows are shown only while it still matches the form.
     const [rowsFilterKey, setRowsFilterKey] = useState("");
@@ -154,22 +168,47 @@ export default function DeviceListReportPrintDialog({ isOpen, onClose }: DeviceL
 
     if (!isOpen) return null;
 
+    const reportParams = {
+        deviceTypeIds: deviceTypeIds.length > 0 ? deviceTypeIds : undefined,
+        branchId: branchId ? Number(branchId) : undefined,
+        departmentId: departmentId ? Number(departmentId) : undefined,
+        groupId: groupId ? Number(groupId) : undefined,
+        status: status === "" ? undefined : Number(status),
+    };
+
     const fetchReport = async () => {
         setIsLoading(true);
         try {
-            const result = await ReportApi.getDeviceListReport({
-                deviceTypeIds: deviceTypeIds.length > 0 ? deviceTypeIds : undefined,
-                branchId: branchId ? Number(branchId) : undefined,
-                departmentId: departmentId ? Number(departmentId) : undefined,
-                groupId: groupId ? Number(groupId) : undefined,
-                status: status === "" ? undefined : Number(status),
-            });
+            const result = await ReportApi.getDeviceListReport(reportParams);
             setRows(result);
             setRowsFilterKey(filterKey);
         } catch (err) {
             toast.error(getApiErrorMessage(err, "Không thể tải dữ liệu báo cáo."));
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleExportExcel = async () => {
+        if (!visibleRows || visibleRows.length === 0) {
+            toast.error("Không có dữ liệu để xuất báo cáo.");
+            return;
+        }
+
+        setIsExportingExcel(true);
+        try {
+            const { blob, fileName } = await ReportApi.exportDeviceListReport(reportParams, title);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName ?? `${title.replace(/\s+/g, "-")}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+            toast.success(`Xuất Excel thành công ${visibleRows.length} thiết bị.`);
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, "Xuất file Excel thất bại. Vui lòng thử lại."));
+        } finally {
+            setIsExportingExcel(false);
         }
     };
 
@@ -206,7 +245,7 @@ export default function DeviceListReportPrintDialog({ isOpen, onClose }: DeviceL
                         <h3 id="print-report-title" className="text-lg font-semibold text-[#191c1e]">
                             Xuất báo cáo danh sách thiết bị
                         </h3>
-                        <p className="mt-1 text-xs text-[#5e3f3a]">Lọc phạm vi rồi xuất báo cáo ra file PDF.</p>
+                        <p className="mt-1 text-xs text-[#5e3f3a]">Lọc phạm vi rồi xuất báo cáo ra file PDF hoặc Excel.</p>
                     </div>
                     <button
                         type="button"
@@ -301,6 +340,14 @@ export default function DeviceListReportPrintDialog({ isOpen, onClose }: DeviceL
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                     >
                         Đóng
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleExportExcel}
+                        disabled={!visibleRows || visibleRows.length === 0 || isExportingExcel}
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#16a34a] bg-white px-4 py-2 text-sm font-semibold text-[#15803d] transition hover:bg-[#f0fdf4] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <FileSpreadsheet className="h-4 w-4" /> {isExportingExcel ? "Đang xuất..." : "Xuất Excel"}
                     </button>
                     <button
                         type="button"

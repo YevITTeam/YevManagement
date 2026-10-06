@@ -22,7 +22,7 @@ namespace Attendance.Api.Controllers
         // Forms created by the CURRENT user (Team Leader reviewing their own team's forms).
         // fromDate/toDate lọc theo OtForm.Date (bao gồm cả 2 đầu mút), status lọc theo đúng giá trị
         // OtFormStatus (§2) — cả 3 optional, dùng chung cho cả 5 endpoint danh sách bên dưới
-        // (2026-08-06, xem docs/attendance-module.md §Lọc danh sách đơn).
+        // (2026-08-06, xem docs/attendance-module.md §Danh sách đơn).
         [RequirePermission("Attendance.OTForm.View")]
         [HttpGet("my-forms")]
         public async Task<ActionResult<ApiResponse<PagedResponse<OtFormListItemDto>>>> GetMyForms(
@@ -63,7 +63,7 @@ namespace Attendance.Api.Controllers
         }
 
         // Lịch mini ở màn Duyệt hàng loạt — số đơn chưa duyệt theo TỪNG ngày (2026-09-04, xem
-        // docs/attendance-module.md §Nâng cấp màn Duyệt hàng loạt).
+        // docs/attendance-module.md §Danh sách đơn).
         [RequirePermission("Attendance.OTForm.Approve")]
         [HttpGet("pending-approvals/dates")]
         public async Task<ActionResult<ApiResponse<List<PendingApprovalDateCountDto>>>> GetPendingApprovalDates(
@@ -200,7 +200,7 @@ namespace Attendance.Api.Controllers
 
         // Đơn theo Nhóm: chỉ người tạo, chỉ khi Status=InApproval VÀ chưa bước nào Approved. Đơn "theo
         // chuyền": theo TỪNG BƯỚC — ai đang là candidate của bước Pending hiện tại thì sửa được (Giai
-        // đoạn 5, 2026-08-27, xem OtFormService.UpdateAsync + docs/attendance-module.md §Chế tạo).
+        // đoạn 5, 2026-08-27, xem OtFormService.UpdateAsync + docs/attendance-module.md §Cây chức vụ & Cây duyệt).
         //
         // Cùng lý do OR như Create ở trên — Line Leader chỉ có CreateProduction vẫn phải sửa được đơn
         // theo chuyền của chính họ. OtFormService.UpdateAsync tự phân biệt lại quyền theo TỪNG BƯỚC/scope
@@ -220,7 +220,7 @@ namespace Attendance.Api.Controllers
         // đơn theo Nhóm), khiến các cấp đang DUYỆT (không phải người tạo) mất khả năng loại người dù
         // đúng là candidate bước hiện tại. Gọi thẳng RemoveEmployeeCoreAsync (không qua UpdateAsync) —
         // permission có sẵn từ trước, đã seed đúng JobTitlePermissions (xem docs/attendance-module.md
-        // §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web)). KHÔNG cần SecondaryPassword.
+        // §Loại nhân viên khỏi đơn). KHÔNG cần SecondaryPassword.
         [RequirePermission("Attendance.OTForm.RemoveEmployee")]
         [HttpPost("{id}/employees/remove")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> RemoveEmployee(int id, [FromBody] RemoveOtFormEmployeeDto request)
@@ -277,7 +277,7 @@ namespace Attendance.Api.Controllers
         }
 
         // Thêm/loại nhân viên khỏi đơn trong-app đã gộp vào PUT {id} (UpdateAsync) — 2026-09-04, xem
-        // docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn. Route "{id}/employees/remove" (kênh
+        // docs/attendance-module.md §Cây chức vụ & Cây duyệt (mục Sửa đơn). Route "{id}/employees/remove" (kênh
         // email, KHÔNG cần mật khẩu cấp 2) vẫn còn — xem RemoveEmployeeByEmailToken bên dưới.
 
         // The 3 public actions below serve the small confirmation page the FE opens when an approver

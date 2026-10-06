@@ -74,5 +74,29 @@ namespace Workflow.Api.Controllers
             var result = await _employeeService.ReplaceOrgUnitsAsync(id, request);
             return Success(result, "Cập nhật đơn vị/chức danh kiêm nhiệm thành công.");
         }
+
+        [RequirePermission("Workflow.Organization.Manage")]
+        [HttpPost("{id}/org-units")]
+        public async Task<ActionResult<ApiResponse<List<EmployeeOrgUnitDto>>>> AddOrgUnit(int id, [FromBody] ReplaceEmployeeOrgUnitItemDto request)
+        {
+            var result = await _employeeService.AddOrgUnitAsync(id, request);
+            return Success(result, "Gán nhân sự vào đơn vị thành công.");
+        }
+
+        [RequirePermission("Workflow.Organization.Manage")]
+        [HttpPut("org-unit-assignments/{assignmentId}")]
+        public async Task<ActionResult<ApiResponse<List<EmployeeOrgUnitDto>>>> UpdateOrgUnit(int assignmentId, [FromBody] ReplaceEmployeeOrgUnitItemDto request)
+        {
+            var result = await _employeeService.UpdateOrgUnitAsync(assignmentId, request);
+            return Success(result, "Cập nhật gán đơn vị thành công.");
+        }
+
+        [RequirePermission("Workflow.Organization.Manage")]
+        [HttpDelete("org-unit-assignments/{assignmentId}")]
+        public async Task<ActionResult<ApiResponse<bool>>> RemoveOrgUnit(int assignmentId)
+        {
+            await _employeeService.RemoveOrgUnitAsync(assignmentId);
+            return Success(true, "Gỡ nhân sự khỏi đơn vị thành công.");
+        }
     }
 }

@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace Asset.Application.Dtos.AiChat
 {
-    // The tool catalogue sent as Ollama's `tools` field (docs/ai-chat-be-huong-dan.md §5).
+    // The tool catalogue sent as Ollama's `tools` field (docs/docs-be/asset-module.md §1.18).
     //
     // 2026-07-30 — trimmed from 17 tools to 7 and refocused on the 2 things this chat is actually used
     // for: looking a device up by any field the Device grid UI offers, and answering IP questions (which

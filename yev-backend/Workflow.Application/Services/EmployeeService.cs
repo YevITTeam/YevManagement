@@ -21,7 +21,7 @@ namespace Workflow.Application.Services
                 query = query.Where(x => x.EmployeeCode.Contains(keyword) || x.FullName.Contains(keyword));
             }
 
-            return await _unitOfWork.Employees.ToPagedResponseAsync(
+            var page = await _unitOfWork.Employees.ToPagedResponseAsync(
                 query.OrderBy(x => x.FullName),
                 pageIndex,
                 pageSize,
@@ -37,6 +37,25 @@ namespace Workflow.Application.Services
                     IsActive = x.IsActive
                 }
             );
+
+            var employeeIds = page.Data.Select(x => x.Id).ToList();
+            var assignments = await _unitOfWork.EmployeeOrgUnits.FindWithIncludesAsync(
+                x => employeeIds.Contains(x.EmployeeId) && !x.IsDeleted,
+                x => x.OrgUnit,
+                x => x.JobTitle!);
+
+            var primaryByEmployee = assignments
+                .GroupBy(x => x.EmployeeId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.IsPrimary).ThenBy(x => x.Id).First());
+
+            foreach (var dto in page.Data)
+            {
+                if (!primaryByEmployee.TryGetValue(dto.Id, out var primary)) continue;
+                dto.PrimaryOrgUnitNameVn = primary.OrgUnit.NameVn;
+                dto.PrimaryJobTitleNameVn = primary.JobTitle?.NameVn;
+            }
+
+            return page;
         }
 
         public async Task<EmployeeDto> GetByIdAsync(int id)
@@ -137,44 +156,7 @@ namespace Workflow.Application.Services
         {
             (await _unitOfWork.Employees.GetByIdAsync(employeeId)).OrThrowNotFound("Nhân sự", employeeId);
 
-            // workflow-module.md §3.1 EmployeeOrgUnits — validate ở Service (không dùng ràng buộc DB
-            // vì có thời hiệu): tối đa 1 dòng IsPrimary=1 có khoảng hiệu lực chồng nhau tại 1 thời điểm
-            // bất kỳ; 1 cặp (OrgUnitId, JobTitleId) chỉ 1 người có khoảng hiệu lực chồng nhau tại 1
-            // thời điểm bất kỳ — cả hai đều so theo ValidFrom/ValidTo, không chỉ "đang hiệu lực ngay
-            // bây giờ" (tránh chặn nhầm/bỏ sót các khoảng hiệu lực trong quá khứ hoặc tương lai).
-            var primaryItems = request.Items.Where(x => x.IsPrimary).ToList();
-            for (var i = 0; i < primaryItems.Count; i++)
-            {
-                for (var j = i + 1; j < primaryItems.Count; j++)
-                {
-                    if (DateRangesOverlap(primaryItems[i].ValidFrom, primaryItems[i].ValidTo, primaryItems[j].ValidFrom, primaryItems[j].ValidTo))
-                        throw new DomainException("Có 2 đơn vị chính chồng khoảng thời gian hiệu lực — chỉ được 1 đơn vị chính tại 1 thời điểm.");
-                }
-            }
-
-            foreach (var item in request.Items)
-            {
-                if (item.ValidFrom is not null && item.ValidTo is not null && item.ValidTo < item.ValidFrom)
-                    throw new DomainException("Ngày kết thúc hiệu lực phải sau ngày bắt đầu.");
-
-                (await _unitOfWork.OrgUnits.GetByIdAsync(item.OrgUnitId)).OrThrowNotFound("Đơn vị tổ chức", item.OrgUnitId);
-
-                if (item.JobTitleId is not null)
-                {
-                    var jobTitle = (await _unitOfWork.JobTitles.GetByIdAsync(item.JobTitleId.Value)).OrThrowNotFound("Chức danh", item.JobTitleId.Value);
-
-                    // Chỉ enforce "1 người/đơn vị" cho chức danh đánh dấu IsUniquePerOrgUnit — chức
-                    // danh phổ thông (vd "Nhân viên") cho phép nhiều người cùng giữ (workflow-module.md
-                    // §10, chốt 2026-08-26).
-                    if (jobTitle.IsUniquePerOrgUnit)
-                    {
-                        var otherHolders = await _unitOfWork.EmployeeOrgUnits.FindAsync(x =>
-                            x.OrgUnitId == item.OrgUnitId && x.JobTitleId == item.JobTitleId && !x.IsDeleted && x.EmployeeId != employeeId);
-                        if (otherHolders.Any(h => DateRangesOverlap(h.ValidFrom, h.ValidTo, item.ValidFrom, item.ValidTo)))
-                            throw new DomainException("Chức danh này tại đơn vị đã có người khác đang giữ trong cùng khoảng thời gian.");
-                    }
-                }
-            }
+            await ValidateOrgUnitItemsAsync(employeeId, request.Items);
 
             var existing = await _unitOfWork.EmployeeOrgUnits.FindAsync(x => x.EmployeeId == employeeId && !x.IsDeleted);
             foreach (var item in existing)
@@ -199,6 +181,129 @@ namespace Workflow.Application.Services
             await _unitOfWork.SaveChangesAsync();
 
             return await GetOrgUnitsAsync(employeeId);
+        }
+
+        // Adds one assignment. The employee's first assignment becomes primary; marking a new one
+        // primary clears the flag on the others.
+        public async Task<List<EmployeeOrgUnitDto>> AddOrgUnitAsync(int employeeId, ReplaceEmployeeOrgUnitItemDto request)
+        {
+            (await _unitOfWork.Employees.GetByIdAsync(employeeId)).OrThrowNotFound("Nhân sự", employeeId);
+
+            var existing = (await _unitOfWork.EmployeeOrgUnits.FindAsync(x => x.EmployeeId == employeeId && !x.IsDeleted)).ToList();
+            if (existing.Any(x => x.OrgUnitId == request.OrgUnitId && x.JobTitleId == request.JobTitleId))
+                throw new DomainException("Nhân sự đã được gán vào đơn vị này với cùng chức danh.");
+
+            if (existing.Count == 0) request.IsPrimary = true;
+            if (request.IsPrimary) ClearPrimary(existing);
+
+            await ValidateOrgUnitItemsAsync(employeeId, existing.Select(ToItem).Append(request).ToList());
+
+            await _unitOfWork.EmployeeOrgUnits.AddAsync(new EmployeeOrgUnit
+            {
+                EmployeeId = employeeId,
+                OrgUnitId = request.OrgUnitId,
+                JobTitleId = request.JobTitleId,
+                IsPrimary = request.IsPrimary,
+                ValidFrom = request.ValidFrom,
+                ValidTo = request.ValidTo,
+                IsDeleted = false
+            });
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetOrgUnitsAsync(employeeId);
+        }
+
+        // Updates one assignment (move unit, change job title, set primary). The row keeps its own
+        // ValidFrom/ValidTo; the request's date fields are ignored.
+        public async Task<List<EmployeeOrgUnitDto>> UpdateOrgUnitAsync(int assignmentId, ReplaceEmployeeOrgUnitItemDto request)
+        {
+            var row = (await _unitOfWork.EmployeeOrgUnits.GetByIdAsync(assignmentId)).OrThrowNotFound("Dòng gán đơn vị", assignmentId);
+            if (row.IsDeleted) throw new NotFoundException("Dòng gán đơn vị", assignmentId);
+
+            request.ValidFrom = row.ValidFrom;
+            request.ValidTo = row.ValidTo;
+
+            var employeeId = row.EmployeeId;
+            var others = (await _unitOfWork.EmployeeOrgUnits.FindAsync(x => x.EmployeeId == employeeId && !x.IsDeleted && x.Id != assignmentId)).ToList();
+            if (others.Any(x => x.OrgUnitId == request.OrgUnitId && x.JobTitleId == request.JobTitleId))
+                throw new DomainException("Nhân sự đã được gán vào đơn vị này với cùng chức danh.");
+
+            if (request.IsPrimary) ClearPrimary(others);
+
+            await ValidateOrgUnitItemsAsync(employeeId, others.Select(ToItem).Append(request).ToList());
+
+            row.OrgUnitId = request.OrgUnitId;
+            row.JobTitleId = request.JobTitleId;
+            row.IsPrimary = request.IsPrimary;
+            row.ValidFrom = request.ValidFrom;
+            row.ValidTo = request.ValidTo;
+            _unitOfWork.EmployeeOrgUnits.Update(row);
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetOrgUnitsAsync(employeeId);
+        }
+
+        public async Task RemoveOrgUnitAsync(int assignmentId)
+        {
+            var row = (await _unitOfWork.EmployeeOrgUnits.GetByIdAsync(assignmentId)).OrThrowNotFound("Dòng gán đơn vị", assignmentId);
+            if (row.IsDeleted) throw new NotFoundException("Dòng gán đơn vị", assignmentId);
+
+            _unitOfWork.EmployeeOrgUnits.Delete(row);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        private void ClearPrimary(IEnumerable<EmployeeOrgUnit> rows)
+        {
+            foreach (var row in rows.Where(x => x.IsPrimary))
+            {
+                row.IsPrimary = false;
+                _unitOfWork.EmployeeOrgUnits.Update(row);
+            }
+        }
+
+        private static ReplaceEmployeeOrgUnitItemDto ToItem(EmployeeOrgUnit x) => new()
+        {
+            OrgUnitId = x.OrgUnitId,
+            JobTitleId = x.JobTitleId,
+            IsPrimary = x.IsPrimary,
+            ValidFrom = x.ValidFrom,
+            ValidTo = x.ValidTo
+        };
+
+        // workflow-module.md §3.1 EmployeeOrgUnits: at most one overlapping primary row per employee,
+        // and a unique-per-unit job title has at most one holder at any moment. Both compare
+        // ValidFrom/ValidTo ranges, not just "valid right now".
+        private async Task ValidateOrgUnitItemsAsync(int employeeId, IReadOnlyList<ReplaceEmployeeOrgUnitItemDto> items)
+        {
+            var primaryItems = items.Where(x => x.IsPrimary).ToList();
+            for (var i = 0; i < primaryItems.Count; i++)
+            {
+                for (var j = i + 1; j < primaryItems.Count; j++)
+                {
+                    if (DateRangesOverlap(primaryItems[i].ValidFrom, primaryItems[i].ValidTo, primaryItems[j].ValidFrom, primaryItems[j].ValidTo))
+                        throw new DomainException("Có 2 đơn vị chính chồng khoảng thời gian hiệu lực — chỉ được 1 đơn vị chính tại 1 thời điểm.");
+                }
+            }
+
+            foreach (var item in items)
+            {
+                if (item.ValidFrom is not null && item.ValidTo is not null && item.ValidTo < item.ValidFrom)
+                    throw new DomainException("Ngày kết thúc hiệu lực phải sau ngày bắt đầu.");
+
+                (await _unitOfWork.OrgUnits.GetByIdAsync(item.OrgUnitId)).OrThrowNotFound("Đơn vị tổ chức", item.OrgUnitId);
+
+                if (item.JobTitleId is null) continue;
+
+                var jobTitle = (await _unitOfWork.JobTitles.GetByIdAsync(item.JobTitleId.Value)).OrThrowNotFound("Chức danh", item.JobTitleId.Value);
+
+                // Only job titles flagged IsUniquePerOrgUnit are limited to one holder per unit.
+                if (!jobTitle.IsUniquePerOrgUnit) continue;
+
+                var otherHolders = await _unitOfWork.EmployeeOrgUnits.FindAsync(x =>
+                    x.OrgUnitId == item.OrgUnitId && x.JobTitleId == item.JobTitleId && !x.IsDeleted && x.EmployeeId != employeeId);
+                if (otherHolders.Any(h => DateRangesOverlap(h.ValidFrom, h.ValidTo, item.ValidFrom, item.ValidTo)))
+                    throw new DomainException("Chức danh này tại đơn vị đã có người khác đang giữ trong cùng khoảng thời gian.");
+            }
         }
 
         // Null bound means "open-ended" on that side.

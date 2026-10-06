@@ -710,7 +710,7 @@ namespace Attendance.Application.Services
 
         // Đơn "theo chuyền" (OtForm.IsProductionForm = true, 2026-08-24) — chọn nhân viên qua
         // ProductionEmployee thay vì theo Group cố định, xem docs/docs-be/attendance-module.md
-        // §Đơn theo chuyền. Không có Group để check "ai được tạo đơn cho Group này" như Mode A.
+        // §Cây chức vụ & Cây duyệt. Không có Group để check "ai được tạo đơn cho Group này" như Mode A.
         //
         // Ai được tạo đơn theo chuyền do QUYỀN quyết định (Attendance.OTForm.CreateProduction, kiểm ở
         // OtFormController.Create, cấu hình theo Chức vụ/từng user) — không còn ép "phải là Line Leader
@@ -1067,7 +1067,7 @@ namespace Attendance.Application.Services
             // RemovedAtLevel khi loại nhân viên (2026-09-04, xem GetCurrentPendingStepAsync).
             var currentStep = await GetCurrentPendingStepAsync(id);
 
-            // Giai đoạn 5 (2026-08-27, theo yêu cầu người dùng — xem attendance-module.md §Chế tạo):
+            // Giai đoạn 5 (2026-08-27, theo yêu cầu người dùng — xem attendance-module.md §Cây chức vụ & Cây duyệt):
             // quyền sửa đơn "theo chuyền" đi theo TỪNG BƯỚC duyệt — ai đang là candidate của bước
             // Pending hiện tại thì sửa được (giống hệt ai được duyệt bước đó), KHÔNG còn giới hạn "chỉ
             // người tạo, chỉ trước khi có bước nào Approved" như đơn theo Nhóm. Bước trước đã ký thì
@@ -1558,7 +1558,7 @@ namespace Attendance.Application.Services
         }
 
         // Kênh trong-app (JWT) — khôi phục 2026-09-30 ngay trên màn Duyệt, xem docs/attendance-module.md
-        // §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web). Cùng RemoveEmployeeCoreAsync với kênh
+        // §Loại nhân viên khỏi đơn. Cùng RemoveEmployeeCoreAsync với kênh
         // email (authorization đã đúng "candidate bước Pending hiện tại" cho CẢ đơn theo Nhóm lẫn theo
         // chuyền) — KHÔNG cần SecondaryPassword, cùng quyết định 2026-07-31.
         public async Task<OtFormDto> RemoveEmployeeAsync(
@@ -2439,7 +2439,7 @@ namespace Attendance.Application.Services
                     foreach (var employeeId in item.ExcludedEmployeeIds)
                     {
                         // Gọi thẳng phần lõi (2026-09-04, sau khi bỏ wrapper RemoveEmployeeAsync trong-app —
-                        // xem docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn) — mật khẩu cấp 2 đã
+                        // xem docs/attendance-module.md §Cây chức vụ & Cây duyệt (mục Sửa đơn)) — mật khẩu cấp 2 đã
                         // verify 1 lần ở trên (dòng ~1990) cho cả batch nên truyền null để khỏi verify lại.
                         await RemoveEmployeeCoreAsync(
                             item.OtFormId, approverUserName, approverFullName, isAdmin: false,

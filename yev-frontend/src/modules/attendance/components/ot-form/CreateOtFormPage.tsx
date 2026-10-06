@@ -306,7 +306,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [editEmployees, setEditEmployees] = useState<OtFormEmployeeDto[]>([]);
 
     // Thêm/loại nhân viên trong Sửa đơn (2026-09-04, gộp từ OtFormDetail cũ — xem
-    // docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn). Cả 2 đều TẠM — chỉ áp dụng thật khi bấm
+    // docs/attendance-module.md §Cây chức vụ & Cây duyệt (mục Sửa đơn)). Cả 2 đều TẠM — chỉ áp dụng thật khi bấm
     // Lưu (PUT gộp 1 lần), không gọi API riêng ngay khi bấm. selectedEmployeeIds/employeeOverrides ở
     // trên tự phản ánh đúng người còn lại (thêm → toggleEmployee thêm vào, loại → lọc bớt khỏi đó) —
     // employeeAddedMeta chỉ lưu mã/tên để hiển thị (người mới thêm chưa có OtFormEmployeeDto đầy đủ từ
@@ -1446,7 +1446,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     </div>
                     {isEditMode ? (
                         // Sửa đơn (2026-09-04, gộp thêm/xóa nhân viên từ OtFormDetail cũ — xem
-                        // docs/attendance-module.md §Gộp thêm/xóa NV vào Sửa đơn): editEmployees vẫn là
+                        // docs/attendance-module.md §Cây chức vụ & Cây duyệt (mục Sửa đơn)): editEmployees vẫn là
                         // danh sách GỐC lúc tải đơn — thêm/loại ở đây chỉ TẠM (selectedEmployeeIds/
                         // pendingRemovals), áp dụng thật + log lại 1 lần khi bấm "Lưu thay đổi" bên dưới
                         // (1 lần nhập mật khẩu cấp 2 cho toàn bộ thay đổi trong phiên sửa).

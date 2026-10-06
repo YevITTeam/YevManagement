@@ -125,7 +125,7 @@ namespace Asset.Application.Services
             return ipAddresses.OrderBy(x => NetworkHelper.ToSortableKey(x.IpAddress)).ToList();
         }
 
-        // Used by the AI Chat tool get_ip_prefix_usage (docs/ai-chat-be-huong-dan.md §5): exact match
+        // Used by the AI Chat tool get_ip_prefix_usage (docs/docs-be/asset-module.md §1.18): exact match
         // on the 3-octet prefix (not Contains — "10.45.1" is a substring of "10.45.10"/"10.45.11"/...,
         // so a fuzzy match would silently report the wrong subnet). Returns null when the prefix
         // doesn't exist (no generated child IpAddress rows), which the caller turns into a tool error.

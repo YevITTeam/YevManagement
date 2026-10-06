@@ -14,7 +14,7 @@ namespace Attendance.Application.Dtos.AiChat
         // AttendanceAiChatService.DefaultSystemPrompt.
         public string? SystemPrompt { get; set; }
 
-        // Optional "deep reasoning" toggle, same knob as the Asset AI Chat (docs/docs-be/ai-chat-be-huong-dan.md
+        // Optional "deep reasoning" toggle, same knob as the Asset AI Chat (docs/docs-be/asset-module.md §1.18
         // §11) — omitted/null -> false (measured-faster default).
         public bool? Think { get; set; }
     }

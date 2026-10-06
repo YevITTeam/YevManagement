@@ -27,6 +27,8 @@ interface OrgUnitFormProps {
     mode: "create" | "edit";
     initial?: OrgUnitDto | null;
     defaultParentId?: number | null;
+    defaultOrgLevelId?: number | null;
+    defaultSortOrder?: number;
     orgLevels: OrgLevelDto[];
     parentOptions: FlatOrgUnitOption[];
     loading?: boolean;
@@ -43,6 +45,8 @@ export default function OrgUnitForm({
     mode,
     initial,
     defaultParentId = null,
+    defaultOrgLevelId = null,
+    defaultSortOrder = 0,
     orgLevels,
     parentOptions,
     loading = false,
@@ -56,9 +60,9 @@ export default function OrgUnitForm({
         code: "",
         nameVn: "",
         nameJp: "",
-        orgLevelId: orgLevels[0]?.id ?? 0,
+        orgLevelId: defaultOrgLevelId ?? orgLevels[0]?.id ?? 0,
         parentId: defaultParentId,
-        sortOrder: 0,
+        sortOrder: defaultSortOrder,
     };
 
     const [values, setValues] = useState<OrgUnitFormValues>(emptyValues);
@@ -74,7 +78,7 @@ export default function OrgUnitForm({
                       parentId: current.parentId,
                       sortOrder: current.sortOrder,
                   }
-                : { ...emptyValues, parentId: defaultParentId }
+                : emptyValues
         );
     });
 

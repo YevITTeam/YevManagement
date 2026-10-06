@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Shared.Application.Dtos.AiChat
 {
     // Wire format for the OpenAI-compatible /v1/chat/completions API served by LM Studio (docs/
-    // ai-chat-be-huong-dan.md §3) — intentionally separate from each module's own FE-facing chat DTOs
+    // docs/docs-be/asset-module.md §1.18) — intentionally separate from each module's own FE-facing chat DTOs
     // (AiChatMessageDto/AiChatStreamEventDto for Asset, AttendanceAiChat* for Attendance): this shape
     // is the LLM server's own vocabulary (role/content/tool_calls), not something any FE should ever
     // see directly.

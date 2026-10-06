@@ -8,7 +8,7 @@ namespace Attendance.Application.Interfaces.Service
     {
         // fromDate/toDate lọc theo OtForm.Date (bao gồm cả 2 đầu mút), status lọc theo đúng giá trị
         // OtFormStatus — cả 3 đều optional, dùng chung cho mọi tab danh sách (2026-08-06, xem
-        // docs/attendance-module.md §Lọc danh sách đơn).
+        // docs/attendance-module.md §Danh sách đơn).
         // groupId/departmentId lọc đơn văn phòng; productionLineId/productionTeamId/productionShiftTeamId
         // lọc đơn dưới chuyền — cả 5 field đều optional, dùng chung cho mọi tab danh sách (2026-09-04,
         // trước đây chỉ GetPendingApprovalsAsync có 3 field production, riêng office chưa tab nào có).
@@ -28,8 +28,8 @@ namespace Attendance.Application.Interfaces.Service
         Task<int> GetPendingApprovalsCountAsync(string approverUserName);
 
         // Số đơn chưa duyệt (candidate bước hiện tại) theo TỪNG ngày, trong khoảng fromDate..toDate —
-        // phục vụ lịch mini ở màn Duyệt hàng loạt (2026-09-04, xem docs/attendance-module.md §Nâng cấp
-        // màn Duyệt hàng loạt). Cùng scoping GetMyCurrentPendingFormIdsAsync với GetPendingApprovalsAsync.
+        // phục vụ lịch mini ở màn Duyệt hàng loạt (2026-09-04, xem docs/attendance-module.md §Danh sách
+        // đơn). Cùng scoping GetMyCurrentPendingFormIdsAsync với GetPendingApprovalsAsync.
         Task<List<PendingApprovalDateCountDto>> GetPendingApprovalDatesAsync(
             string approverUserName, DateOnly fromDate, DateOnly toDate);
 
@@ -91,7 +91,7 @@ namespace Attendance.Application.Interfaces.Service
         // UpdateAsync (2026-09-04) vốn chỉ cho phép người tạo (đơn theo Nhóm) sửa/loại người, khiến các
         // cấp đang DUYỆT (không phải người tạo) mất khả năng loại người dù đúng là candidate bước hiện
         // tại. Gọi thẳng RemoveEmployeeCoreAsync — luật "candidate bước Pending hiện tại" vốn đã đúng cho
-        // CẢ 2 loại đơn — xem docs/attendance-module.md §Khôi phục "Loại khỏi đơn" ngay trên màn Duyệt (web).
+        // CẢ 2 loại đơn — xem docs/attendance-module.md §Loại nhân viên khỏi đơn.
         Task<OtFormDto> RemoveEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request);
 
         // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate, không resolve lại được) — soft-delete,

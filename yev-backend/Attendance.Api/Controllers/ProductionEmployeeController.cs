@@ -18,7 +18,7 @@ namespace Attendance.Api.Controllers
         }
 
         // Dùng chung quyền tạo đơn OT hiện có — không tạo permission riêng (2026-08-24, theo yêu cầu
-        // người dùng — xem docs/docs-be/attendance-module.md §Đơn theo chuyền). Create/CreateProduction
+        // người dùng — xem docs/docs-be/attendance-module.md §Cây chức vụ & Cây duyệt). Create/CreateProduction
         // là 2 quyền TÁCH RỜI (Giai đoạn 14/17) — 4 endpoint dưới đây CHỈ phục vụ tìm/lọc nhân sự dưới
         // chuyền để tạo đơn "Theo chuyền", nên OR cả CreateProduction vào, không thì Line Leader chỉ có
         // CreateProduction (không có Create) bị 403 ngay từ bước tìm nhân viên — 403 rơi vào .catch() ở

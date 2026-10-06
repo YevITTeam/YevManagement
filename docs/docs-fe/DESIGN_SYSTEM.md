@@ -7,7 +7,7 @@
 > lý do chọn, không phải file cần đọc thêm.
 > **Đây là tài liệu chuẩn duy nhất về UI** — đọc file này trước khi làm màn hình mới.
 >
-> **Stack:** Next.js (App Router) · React · Tailwind CSS · `lucide-react` · font **Inter** · `react-toastify`.
+> **Stack:** Next.js (App Router) · React · Tailwind CSS **v4** · `lucide-react` · font **Inter** · `react-toastify`.
 
 ---
 
@@ -23,35 +23,38 @@
 | **Bảng, filter bar, modal, confirm, toast, pagination** | DESIGN_GUIDE | Giữ nguyên pattern (dashboard không mô tả các phần này). |
 | **Success / giá trị dương** | dashboard | Vì đỏ đã dành cho brand + danger, **giữ `emerald` chỉ cho ý nghĩa "tích cực/online"** (chấm trạng thái, delta dương). |
 
-**Thay đổi cấu hình cần thực hiện khi migrate** (xem mục 8): khôi phục thang `borderRadius` trong `tailwind.config.ts` (hiện đang bị ép về `0px`), và thống nhất font `sans` = Inter.
+**Trạng thái cấu hình thực tế:** `tailwind.config.ts` không còn ép `borderRadius` (thang bo góc mặc định của Tailwind đang có hiệu lực) và `sans` = Inter. **Nhưng token màu trong file đó không có hiệu lực** — xem lưu ý ở mục 1.
 
 ---
 
 ## 1. Bảng màu (Color Palette)
 
-Đỏ YEV cho hành động chính, trung tính ấm cho nền/chữ, đỏ đậm/error cho nguy hiểm, emerald cho tín hiệu tích cực. **Ưu tiên dùng token đã khai báo trong `tailwind.config.ts`; nếu chưa có token thì dùng arbitrary hex** (`bg-[#fff4f2]`).
+Đỏ YEV cho hành động chính, trung tính ấm cho nền/chữ, đỏ đậm/error cho nguy hiểm, emerald cho tín hiệu tích cực.
+
+> ⚠️ **Dùng arbitrary hex (`bg-[#e3000f]`, `text-[#191c1e]`), KHÔNG dùng class token** (`bg-brand-red`, `text-brand-black`, `bg-surface`, `text-muted`…). Dự án chạy **Tailwind v4** (`@import "tailwindcss"` trong `globals.css`) và **không có `@config`**, nên `tailwind.config.ts` không được nạp — các class token đó không sinh ra CSS.
+> Code hiện có cũng dùng hex (hàng trăm chỗ); chỉ `ui/Button|Card|Input|Table.tsx` còn viết bằng token và **không file nào import** chúng (code chết, đừng dùng).
 
 ### 1.1. Màu nền tảng & thương hiệu
 
-| Vai trò | Hex | Token / class |
+| Vai trò | Hex | Class |
 |---|---|---|
-| **Primary / hành động chính** | `#e3000f` | `bg-brand-red` · `bg-[#e3000f]` |
-| Primary hover | `#b40009` | `hover:bg-brand-red-hover` · `hover:bg-[#b40009]` |
-| **App background** (vùng `<main>`) | `#f8fafc` | `bg-background` · `bg-[#f8fafc]` |
-| **Sidebar / surface phụ** | `#f7f9fb` | `bg-surface` · `bg-[#f7f9fb]` |
+| **Primary / hành động chính** | `#e3000f` | `bg-[#e3000f]` |
+| Primary hover | `#b40009` | `hover:bg-[#b40009]` |
+| **App background** (vùng `<main>`) | `#f8fafc` | `bg-[#f8fafc]` |
+| **Sidebar / surface phụ** | `#f7f9fb` | `bg-[#f7f9fb]` |
 | **Card / surface chính** | `#ffffff` | `bg-white` |
-| Nền phụ (thead, toolbar, hover nhẹ) | `#f8fafc` / `#eceef0` | `bg-[#f8fafc]` / `bg-surface-container` |
+| Nền phụ (thead, toolbar, hover nhẹ) | `#f8fafc` / `#eceef0` | `bg-[#f8fafc]` / `bg-[#eceef0]` |
 | Nền hover cho nút/hàng | `#f2f4f6` | `hover:bg-[#f2f4f6]` |
-| **Viền mặc định** | `#e0e3e5` | `border-outline-variant` · `border-[#e0e3e5]` |
+| **Viền mặc định** | `#e0e3e5` | `border-[#e0e3e5]` |
 | Viền hàng bảng (nhạt hơn) | `#f1f5f9` | `border-[#f1f5f9]` |
 
 ### 1.2. Chữ (Text)
 
-| Vai trò | Hex | Token / class |
+| Vai trò | Hex | Class |
 |---|---|---|
-| Heading / số liệu / chữ chính | `#191c1e` | `text-brand-black` · `text-[#191c1e]` |
-| Body / nhãn / mô tả | `#5e3f3a` | `text-on-surface-variant` · `text-[#5e3f3a]` |
-| Muted / placeholder / caption phụ | `#8a8f94` | `text-[#8a8f94]` *(mới — điền khoảng trống "muted" mà DESIGN_GUIDE thiếu)* |
+| Heading / số liệu / chữ chính | `#191c1e` | `text-[#191c1e]` |
+| Body / nhãn / mô tả | `#5e3f3a` | `text-[#5e3f3a]` |
+| Muted / placeholder / caption phụ / đơn vị cạnh ô | `#8a8f94` | `text-[#8a8f94]` |
 
 ### 1.3. Ngữ nghĩa (Semantic)
 
@@ -74,7 +77,7 @@ Badge trạng thái nhiều mức (vd `statusClasses` trong `pc/page.tsx`): gi�
 ## 2. Typography · Spacing · Radius · Shadow
 
 ### 2.1. Font
-**Inter** (nạp qua `next/font/google` trong `src/app/layout.tsx`). Khi migrate, đặt `fontFamily.sans = ["Inter", ...]` trong `tailwind.config.ts` cho khớp.
+**Inter**, nạp qua `next/font/google` và gắn bằng `inter.className` trên `<body>` ở `src/app/[locale]/layout.tsx` — đó là font thực tế. (`globals.css` còn khai `font-family: "Hanken Grotesk"…` cho `body` nhưng font đó không được nạp và bị `inter.className` đè; đừng dựa vào.)
 
 ### 2.2. Type scale
 
@@ -91,7 +94,7 @@ Badge trạng thái nhiều mức (vd `statusClasses` trong `pc/page.tsx`): gi�
 
 | Ngữ cảnh | Class |
 |---|---|
-| Padding `<main>` | `p-6 md:p-8 lg:p-10` |
+| Padding `<main>` | `px-3 pb-4 pt-3 md:px-4 lg:px-5` |
 | Padding card (nội dung) | `p-6` |
 | Padding card (KPI) | `p-5` |
 | Padding toolbar / filter bar | `p-4` |
@@ -110,8 +113,6 @@ Không vuông cứng, không tròn mềm. Thang thống nhất:
 | `rounded-lg` (8px) | Button, input, ô search, nav item, ô nút pagination |
 | `rounded-md` (6px) | Icon button, badge/tag nhỏ, ô icon KPI |
 | `rounded-full` | Pill trạng thái, avatar, status dot, filter chip |
-
-> ⚠️ `tailwind.config.ts` hiện ép `borderRadius` `lg/xl/full` = `0px`. **Phải bỏ override này** (mục 8) để thang trên có hiệu lực.
 
 ### 2.5. Đổ bóng
 `shadow-sm` cho card & section. Modal dùng `shadow-xl`. Không dùng bóng nặng khác.
@@ -137,15 +138,15 @@ Giữ nguyên khung thật của dự án (`(pc-manager)/layout.tsx` + `PcManage
 <div className="min-h-full bg-[#f7f9fb] text-[#191c1e]">
   <Sidebar />                                                   {/* fixed, trái */}
   <div className="min-h-full" style={{ marginLeft: "var(--sidebar-w, 13.75rem)" }}>
-    <div className="min-h-full bg-[#f8fafc] p-6 md:p-8 lg:p-10">
-      <div className="mx-auto max-w-[1280px]">{children}</div>
+    <div className="min-h-full bg-[#f8fafc] px-3 pb-4 pt-3 md:px-4 lg:px-5">
+      <div className="mx-auto max-w-[1600px]">{children}</div>
     </div>
   </div>
 </div>
 ```
 
 - **Sidebar:** `fixed left-0 top-0 z-40 h-screen w-[13.75rem] (220px) flex flex-col border-r border-[#e0e3e5] bg-[#f7f9fb]`. Logo YEV = ô vuông `bg-[#e3000f] text-white`. Khối user đẩy xuống đáy bằng `mt-auto`. (`fixed` → nằm ngoài luồng nên `h-screen` ở đây là ĐÚNG.)
-- **Main:** vùng cuộn duy nhất của toàn app, đặt ở root layout; nội dung giới hạn `max-w-[1280px]` căn giữa.
+- **Main:** vùng cuộn duy nhất của toàn app, đặt ở root layout; nội dung giới hạn `max-w-[1600px]` căn giữa, padding `px-3 md:px-4 lg:px-5` (các layout pc/ot/workflow/admin dùng chung).
 
 > ⚠️ **Bẫy "2 thanh cuộn chồng nhau"** — lỗi thật, người dùng phải báo 3 lần mới truy hết gốc
 > (sửa 2026-07-31). Layout con **TUYỆT ĐỐI KHÔNG** được:
@@ -224,6 +225,8 @@ Chung: `inline-flex items-center gap-2 rounded-lg text-sm font-semibold transiti
 
 Nút ở header trang dùng cỡ nhỏ: `px-3 py-1.5 text-xs`.
 
+> `ui/Button.tsx` không được dùng ở đâu (và viết bằng token không hoạt động) — **tự viết class** theo bảng trên, đừng import nó.
+
 **Nút rộng vừa đủ nội dung — KHÔNG kéo giãn.** Không dùng `w-full` hay đặt nút vào ô `grid` chia đều:
 chữ ngắn sẽ bị kéo dài ra, chừa khoảng trống lớn trông lệch. Nhóm nhiều nút đặt bằng
 `flex flex-wrap gap-2`, nhãn nút để `whitespace-nowrap` (không `truncate` — nút đã tự co theo chữ).
@@ -231,11 +234,12 @@ Ngoại lệ hợp lệ: nút submit chiếm trọn bề ngang form hẹp (modal
 
 ### 4.3. Input & Filter bar
 
-Field chung:
+Field chung (cỡ chuẩn, màn CRUD/form/filter):
 ```
 h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e]
 outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]
 ```
+**Cỡ gọn** (màn cấu hình, hàng nhiều ô, ô trong bảng — đang dùng nhiều hơn `h-10`): `h-9 rounded-md px-2.5`, giữ nguyên phần còn lại (xem `AttendanceSettingPanel.tsx`). Chọn 1 cỡ cho cả màn, không trộn `h-9` với `h-10` trong cùng một hàng.
 
 - **Bề rộng ô nhập bám theo DỮ LIỆU, không bám theo ô lưới.** `w-full` chỉ đúng khi ô thật sự nhận
   chuỗi dài (tên, email, ghi chú, ô tìm kiếm). Ô chứa 1-4 ký tự mà `w-full` trong `grid` chia đều sẽ
@@ -326,6 +330,10 @@ Kết hợp: thead in hoa của DESIGN_GUIDE + hàng mềm `hover` của dashboa
 </div>
 ```
 
+Danh sách mới ưu tiên dùng `<Pagination pageIndex totalPages onPageChange summary compactSummary />` (`src/components/ui/Pagination.tsx`): số đếm bên trái ("1 tới 10 trong 42 đơn"), `‹ 1 2 3 … ›` bên phải (cửa sổ cố định 7 ô, dưới `sm` còn `‹ 2 / 9 ›`), tự ẩn nav khi chỉ có 1 trang. Mẫu: `WorkflowRequestList`, `AppReleaseList`.
+
+**Danh sách đọc nhiều (không có cột thao tác):** tab + bộ lọc đặt chung 1 hàng ở đầu card (`px-4 py-2.5`, không tách thanh tab riêng), ô bảng `px-4 py-2.5` một dòng, ẩn cột chỉ lặp một giá trị (vd "Người nộp" ở tab "Đơn của tôi"), dưới `md` đổi bảng thành danh sách thẻ 3 dòng (mã + badge / tên / phụ).
+
 Nếu dùng nút số trang: trang hiện tại `bg-[#191c1e] text-white rounded-lg h-8 min-w-[32px]`, trang khác `text-[#5e3f3a] hover:bg-[#f2f4f6]`. Luôn dùng dữ liệu phân trang server-side.
 
 ### 4.6. Badge / Status pill
@@ -355,7 +363,7 @@ Một component dùng chung cho cả `create` và `edit` (props `mode` + `initia
   <div role="dialog" aria-modal="true" className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
     <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
       <h3 className="text-lg font-semibold text-[#191c1e]">{mode === "create" ? "Thêm ..." : "Cập nhật ..."}</h3>
-      <button onClick={onClose} className="cursor-pointer text-[#5e3f3a] hover:text-[#191c1e]">✕</button>
+      <button onClick={onClose} className="cursor-pointer text-[#5e3f3a] hover:text-[#191c1e]"><X className="h-5 w-5" /></button> {/* X từ lucide-react */}
     </div>
     <form className="space-y-4">
       <label className="block">
@@ -410,6 +418,24 @@ Màn cấu hình/filter dễ phình vì mỗi ô được "giải thích" bằng
 - Placeholder không lặp lại nhãn: nhãn "Email người nhận" + placeholder `vd: ten@yev.vn` là đúng;
   placeholder "Nhập email người nhận" là thừa.
 
+### 4.11. Cây phân cấp (đơn vị + nhân sự)
+
+Mẫu: `workflow/components/org-units/OrgUnitList.tsx`.
+
+- **Cây phẳng, không lồng khung.** Thẻ lồng thẻ + nền xám + chip màu làm cây rối; chỉ dùng đường dẫn mảnh
+  (`ml-5 border-l pl-3`) nối mỗi cấp với cấp cha.
+- **Đơn vị** = hàng chữ đậm + icon vuông theo cấp; **người** = hàng nhẹ hơn + avatar tròn xám, chức danh chữ phụ
+  cùng dòng. Phân biệt bằng độ đậm và hình icon, không bằng hộp. Avatar căn thẳng với icon đơn vị cha.
+- Hàng đơn vị: chevron · icon · tên · mã (chữ phụ) · số nhân sự ngay cạnh tên. Tên cấp nằm ở `title` của icon.
+  Cụm thao tác neo mép phải, luôn chiếm chỗ (chỉ đổi `opacity`) nên rê chuột không làm hàng nhảy.
+- Icon theo cấp tổ chức (sắp theo `levelNumber`), cấp cao nhất tô đỏ nhạt, các cấp còn lại xám.
+- **Hai dạng xem** chuyển bằng `<Tabs>` ở thanh tóm tắt: "Cây danh sách" (mặc định) và "Sơ đồ khối"
+  (`OrgUnitChart.tsx`). Hai dạng dùng chung dữ liệu đã lọc, trạng thái thu gọn và các thao tác.
+- **Sơ đồ khối:** mỗi đơn vị là thẻ rộng cố định `w-56` (tên tối đa 2 dòng, mã, người đứng đầu theo thứ bậc, số
+  nhân sự; danh sách đầy đủ ở `title`), nối bằng đường bus `bg-[#c9cdd1]`; nút tròn ở đáy thẻ vừa là số đơn vị con vừa
+  là nút thu/mở nhánh. Canvas `overflow-x-auto`, rộng hơn khung thì cuộn ngang.
+- Có sẵn ô tìm (không dấu, theo tên/mã/chức danh/nhân sự) — đang tìm thì ép mở hết nhánh và khoá nút Thu gọn/Mở hết.
+
 ---
 
 ## 5. Blueprint trang danh sách (CRUD)
@@ -447,18 +473,17 @@ Toàn bộ text tiếng Việt, câu ngắn gọn nhất quán: "Hiển thị X 
 
 ---
 
-## 8. Migration notes (khi áp dụng hệ mới lên code cũ)
+## 8. Việc còn lại khi chuẩn hoá code cũ
 
-1. **`tailwind.config.ts`** — bỏ block ép `borderRadius` về `0px` (khôi phục thang mặc định của Tailwind) để `rounded-lg/xl/full` hoạt động; đổi `fontFamily.sans` sang `["Inter", "Arial", "sans-serif"]`.
-2. **Bỏ indigo** ở mọi nơi (dashboard cũ) → thay bằng đỏ nhạt `#fff4f2` / `#e3000f`.
-3. **Thêm bo góc + `shadow-sm`** cho `<section>`/card đang vuông (các trang `pc-management` hiện tại: Branch, DeviceType, Device… ) theo thang mục 2.4.
-4. Chuẩn hoá **primary = `#e3000f`**, **danger = `#930006`** (đừng để cả hai trùng đỏ `#e3000f`).
-5. Cân nhắc rút các mảnh lặp (button, input, card, table row) thành component dùng chung sau khi thống nhất style.
+1. **Bỏ indigo** ở mọi nơi còn sót (dashboard cũ) → thay bằng đỏ nhạt `#fff4f2` / `#e3000f`.
+2. **Thêm bo góc + `shadow-sm`** cho `<section>`/card đang vuông (một số trang `pc-management` cũ) theo thang mục 2.4.
+3. Chuẩn hoá **primary = `#e3000f`**, **danger = `#930006`** (đừng để cả hai trùng đỏ `#e3000f`).
+4. Cân nhắc rút các mảnh lặp (button, input, card, table row) thành component dùng chung — nếu làm thì viết bằng hex, và xoá `ui/Button|Card|Input|Table.tsx` đang chết.
 
 ---
 
 ## 9. Checklist khi làm màn hình mới
-- [ ] Khung: sidebar `w-[13.75rem]` + `<main>` cuộn `max-w-[1280px] mx-auto`.
+- [ ] Khung: sidebar `w-[13.75rem]` + `<main>` cuộn `max-w-[1600px] mx-auto`.
 - [ ] Màu: primary `#e3000f`, nền `#f8fafc`, chữ `#191c1e`/`#5e3f3a`, viền `#e0e3e5`, danger `#930006`. **Không indigo.**
 - [ ] Card/section: `rounded-xl border border-[#e0e3e5] bg-white shadow-sm`.
 - [ ] Button đúng 4 biến thể (mục 4.2); input field chuẩn (mục 4.3).
@@ -473,3 +498,25 @@ Toàn bộ text tiếng Việt, câu ngắn gọn nhất quán: "Hiển thị X 
 - [ ] **Comment trong code bằng TIẾNG ANH, ngắn gọn, mô tả hành vi hiện tại** (AGENTS.md đầu file) —
       text hiển thị cho người dùng mới là tiếng Việt. Comment cũ còn tiếng Việt trong đoạn đang sửa
       thì chuyển luôn.
+
+---
+
+## 10. Component dùng chung có sẵn (tìm trước khi tự dựng)
+
+| Cần | Dùng | Ghi chú |
+|---|---|---|
+| Dropdown nhiều mục có ô tìm | `ui/SearchableSelect.tsx` | §4.3; value `number` hoặc `""` |
+| Dropdown ít mục cố định (enum, có/không, trạng thái) | `ui/StyledSelect.tsx` | không có ô tìm, value `string` hoặc `number`, chấm màu tuỳ chọn |
+| Chọn nhiều | `ui/MultiSelect.tsx` | có ô tìm |
+| Nhập giờ 24h | `ui/TimePicker24h.tsx` | §4.3 |
+| Dấu `*` cho field bắt buộc | `ui/RequiredMark.tsx` | màu `#930006` |
+| Chú thích dài thay cho dòng mô tả cố định | `ui/InfoTooltip.tsx` | icon `i`, hover hiện chữ (§4.10) |
+| Tab dạng viên | `ui/Tabs.tsx` | §4.9 |
+| Phân trang | `ui/Pagination.tsx` | §4.5 |
+| Badge trạng thái | `ui/Badge.tsx` | §4.6 |
+| Skeleton | `ui/Skeleton.tsx`, `common/TableSkeletonRows.tsx` | §4.4 |
+| Menu thao tác (dropdown "Excel"…) | `ui/ActionMenu.tsx` | |
+| Chồng avatar | `ui/AvatarStack.tsx` | |
+| Trạng thái rỗng | `common/EmptyState.tsx` | §4.4 |
+| Xác nhận xoá / hành động nguy hiểm | `common/ConfirmDialog.tsx` | §4.8 |
+| Modal nhỏ "chọn vài field rồi xác nhận" | `common/FormDialog.tsx` | cùng khung `ConfirmDialog`, body tuỳ ý |

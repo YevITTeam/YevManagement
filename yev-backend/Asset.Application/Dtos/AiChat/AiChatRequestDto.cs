@@ -10,7 +10,7 @@ namespace Asset.Application.Dtos.AiChat
         // Whole prior conversation, resent every turn by the FE (stateless BE — no conversation table).
         public List<AiChatMessageDto> History { get; set; } = new();
 
-        // Optional — user-editable system prompt from the FE UI (see docs/ai-chat-be-huong-dan.md §9).
+        // Optional — user-editable system prompt from the FE UI (see docs/docs-be/asset-module.md §1.18).
         // Empty/omitted -> BE falls back to AiChatService.DefaultSystemPrompt.
         public string? SystemPrompt { get; set; }
 

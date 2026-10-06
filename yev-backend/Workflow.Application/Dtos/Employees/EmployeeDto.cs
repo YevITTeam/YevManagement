@@ -10,5 +10,8 @@ namespace Workflow.Application.Dtos.Employees
         public string? Position { get; set; }
         public int? UserId { get; set; }
         public bool IsActive { get; set; }
+        // Primary assignment (or the first one when none is primary); filled by the paged list only.
+        public string? PrimaryOrgUnitNameVn { get; set; }
+        public string? PrimaryJobTitleNameVn { get; set; }
     }
 }

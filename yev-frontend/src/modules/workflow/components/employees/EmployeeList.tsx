@@ -200,16 +200,17 @@ export default function EmployeeList() {
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
                                 <th className="px-6 py-3">{t("colEmployeeCode")}</th>
                                 <th className="px-6 py-3">{t("colFullName")}</th>
+                                <th className="px-6 py-3">{t("colOrgUnit")}</th>
                                 <th className="px-6 py-3">{t("colPosition")}</th>
                                 <th className="px-6 py-3">{t("colIsActive")}</th>
                                 <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {isLoading && <TableSkeletonRows rows={5} columns={5} />}
+                            {isLoading && <TableSkeletonRows rows={5} columns={6} />}
                             {!isLoading && employees.length === 0 && (
                                 <tr>
-                                    <td colSpan={5}>
+                                    <td colSpan={6}>
                                         <EmptyState icon={Users} title={t("noData")} />
                                     </td>
                                 </tr>
@@ -218,6 +219,16 @@ export default function EmployeeList() {
                                 <tr key={item.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
                                     <td className="px-6 py-4 text-sm text-[#191c1e]">{item.fullName}</td>
+                                    <td className="px-6 py-4 text-sm text-[#191c1e]">
+                                        {item.primaryOrgUnitNameVn ? (
+                                            <>
+                                                {item.primaryOrgUnitNameVn}
+                                                {item.primaryJobTitleNameVn && <span className="text-[#5e3f3a]"> · {item.primaryJobTitleNameVn}</span>}
+                                            </>
+                                        ) : (
+                                            <span className="text-[#8a8f94]">{t("noAssignment")}</span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.position || "—"}</td>
                                     <td className="px-6 py-4 text-sm">
                                         <Badge variant={item.isActive ? "success" : "neutral"} withDot>

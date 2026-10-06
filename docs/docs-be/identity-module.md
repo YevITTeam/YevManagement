@@ -60,7 +60,7 @@ Fluent (`IdentityDbContext.OnModelCreating`):
 > ⚠️ **`BuildSession()` + `GenerateJwtToken` chỉ tin identity `DbRoles`** cho `Role`/`Permission`, bỏ bản cũ nằm trong JWT gửi lên (2026-08-01). Bắt buộc từ khi có `/Auth/me` gia hạn token: nếu gộp cả 2, mỗi lần gia hạn lại cộng dồn snapshot cũ → quyền đã thu hồi không bao giờ mất và token phình dần. Lưu ý claim **trong token đang lưu ở FE vẫn có thể cũ** trong tối đa 120 phút — `PermissionAuthorizationHandler` xét trên toàn principal (union JWT cũ + `DbRoles` mới), nên **thu hồi quyền chỉ có hiệu lực đầy đủ sau lần gia hạn/login kế tiếp**; cấp thêm quyền thì hiệu lực ngay.
 > ⚠️ AD (`System.DirectoryServices.AccountManagement`) chỉ chạy trên Windows domain-joined (warning CA1416). `TransformAsync` có ghi DB → windows-login **không** read-only.
 
-### 5.3. `GET /api/Auth/me` — lấy lại phiên & gia hạn token *(2026-08-01)*
+### 5.3. `GET /api/Auth/me` — lấy lại phiên & gia hạn token
 `[Authorize]` (JWT Bearer, không cần permission). Trả `LoginResponseDto` y hệt `windows-login`, `Token` là JWT
 mới hạn thêm `ExpiryMinutes` → **sliding session**, không cần handshake Negotiate.
 
@@ -69,7 +69,7 @@ gặp 401. Mỗi lời gọi = 1 handshake Negotiate/NTLM; máy chưa bật SSO 
 `AuthServerAllowlist`) sẽ bị trình duyệt **hỏi lại tài khoản domain mỗi lần** → người dùng báo "đã đăng nhập
 đúng rồi vẫn bị bắt đăng nhập lại". Hợp đồng FE + cách dùng: [identity-api-fe.md §2b](identity-api-fe.md).
 
-### 5.4. `POST /api/Auth/login` — form username/password tự viết (vẫn xác thực AD) *(2026-08-07)*
+### 5.4. `POST /api/Auth/login` — form username/password tự viết (vẫn xác thực AD)
 `[AllowAnonymous]`. Body `LoginRequestDto { userName, password }` (`userName` là sAMAccountName thuần,
 KHÔNG kèm domain). Dùng cho trang `/login` tự viết ở FE, thay cho popup gốc "Windows Security" của
 Negotiate (JS không custom được popup đó, không hiện được thông báo sai mật khẩu).
@@ -110,10 +110,10 @@ Admin tạo trước User cho người **chưa từng đăng nhập Windows**. L
 ### 5.2. Xóa User (xóa CỨNG)
 `DELETE /api/Auth/delete-user/{userId}` (`Identity.User.Delete`, seed migration `AddUserDeleteAndAssetSettingPermissions`). `User` không có `IsDeleted` → xóa cứng, cascade DB tự dọn `UserRoles`/`LoginUserIPs`/`UserPermissions`. Đánh đổi: `UserName` login lại sau xóa → tạo mới với `"Basic"`, mất override cũ (có chủ đích).
 
-### 5.5. Sửa tên hiển thị User *(2026-08-21)*
+### 5.5. Sửa tên hiển thị User
 `PUT /api/Auth/update-user-fullname` (`Identity.User.UpdateFullName`, seed migration `AddIdentityUserUpdateFullNamePermission`) — body `UpdateUserFullNameDto { UserId, FullName[Required] }`. `UserService.UpdateUserFullNameAsync` chỉ ghi đè `FullName`; **`UserName` (định danh đăng nhập Windows) và `DeviceName` không sửa được qua endpoint này** — có chủ đích, vì `UserName` là khóa khớp duy nhất lúc login (§5). 404 nếu `UserId` sai.
 
-### 5.6. Đăng nhập TEST (bypass AD, chỉ Development) *(2026-08-28)*
+### 5.6. Đăng nhập TEST (bypass AD, chỉ Development)
 Phục vụ test nhanh các luồng cần nhiều vai trò (VD Cây duyệt Chuyền Attendance) khi nhân viên thật
 chưa có tài khoản AD — theo yêu cầu người dùng. Entity mới `TestLoginAccount`
 (`Identity.Domain/Entities/TestLoginAccount.cs`, bảng `TestLoginAccounts`, migration
@@ -142,7 +142,7 @@ permission" độc lập.
 
 6 tài khoản TEST đã seed sẵn (migration `AddTestLoginAccounts`, mật khẩu dùng chung
 **`Test@2026`**) — phủ đủ Cây duyệt Chuyền của Line SHIDO/Team HC (Bộ phận Chế tạo, xem
-`attendance-module.md §Cây duyệt Chuyền` để biết vì sao dữ liệu thật ở đây trống hoàn toàn, không ai
+`attendance-module.md §Cây chức vụ & Cây duyệt` để biết vì sao dữ liệu thật ở đây trống hoàn toàn, không ai
 có UserName): `TEST\ll_shido` (Line Leader), `TEST\gl_shido` (Group Leader), `TEST\tl_shido` (Team
 Leader), `TEST\mgr_ct` (Manager), `TEST\fm_01` (Factory Manager), `TEST\dir_01` (Director) — đã gán
 đủ 12 permission Attendance tương ứng Chức vụ của từng người (qua `UserPermissions`,
@@ -201,7 +201,7 @@ Admin in QR cho từng user; app quét QR → nhận JWT như đăng nhập thư
 - Chưa làm: giới hạn số lần quét sai theo IP (mã 256-bit nên brute-force không khả thi, nhưng mỗi lần quét sai
   vẫn ghi 1 dòng log).
 
-### 5.7. `EnsureUserExistsAsync` — tạo User idempotent cho import cross-module *(2026-09-03)*
+### 5.7. `EnsureUserExistsAsync` — tạo User idempotent cho import cross-module
 Thêm method mới vào `IUserDirectoryService` (`Shared.Application/Interfaces/`, contract dùng chung để
 module khác gọi vào Identity mà không cần ProjectReference trực tiếp):
 `Task<bool> EnsureUserExistsAsync(string userName, string? fullName, string? roleName)`. Khác
