@@ -32,6 +32,10 @@ public partial class IdentityDbContext : DbContext
 
     public virtual DbSet<LoginQrLog> LoginQrLogs { get; set; }
 
+    public virtual DbSet<UserEmail> UserEmails { get; set; }
+
+    public virtual DbSet<UserEmailModule> UserEmailModules { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Role>(entity =>
@@ -117,6 +121,27 @@ public partial class IdentityDbContext : DbContext
             entity.Property(e => e.UserAgent).HasMaxLength(300);
             entity.Property(e => e.Note).HasMaxLength(300);
             entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+        });
+
+        modelBuilder.Entity<UserEmail>(entity =>
+        {
+            entity.Property(e => e.Email).HasMaxLength(255);
+            entity.Property(e => e.Note).HasMaxLength(255);
+            entity.HasIndex(e => new { e.UserId, e.Email }).IsUnique();
+
+            entity.HasOne(e => e.User).WithMany(u => u.UserEmails)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserEmailModule>(entity =>
+        {
+            entity.Property(e => e.ModuleCode).HasMaxLength(50);
+            entity.HasIndex(e => new { e.UserId, e.ModuleCode }).IsUnique();
+
+            entity.HasOne(e => e.UserEmail).WithMany(x => x.Modules)
+                .HasForeignKey(e => e.UserEmailId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         OnModelCreatingPartial(modelBuilder);

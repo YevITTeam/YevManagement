@@ -425,7 +425,7 @@ vì `EmailTemplateService` không tự encode.
 
 **Hạ tầng**
 - Cross-module không qua HTTP: `IUserDirectoryService`/`IEmailService`/`IEmailTemplateRenderer` là contract ở `Shared.Application`, implementation do Scrutor nối lúc runtime, nên `Attendance.Application` không tham chiếu `Identity.Application`
-  dù cần Email/FullName của User (DB khác). `Identity.User.Email` tự lấy từ thuộc tính AD `mail` (`MyClaimsTransformation.GetActualEmail`), chỉ set khi đang trống.
+  dù cần Email/FullName của User (DB khác). Người nhận lấy qua `GetContactInfoAsync(userName, EmailModules.Attendance)`: email Admin gán cho module Attendance, không có thì email chính của user (`identity-module.md §5.9`).
 - SMTP: `EmailSettings` trong `appsettings.json` trỏ `VNMAIL04.yev.vn:587` (STARTTLS). Chứng chỉ server là **self-signed** (`CN=VNMAIL04`) nên **máy chạy app phải import cert vào `LocalMachine\Root`** (`Import-Certificate -FilePath vnmail04.cer -CertStoreLocation Cert:\LocalMachine\Root`, cần quyền Admin; `CurrentUser\Root` không dùng được khi chạy dưới AppPool IIS). Mỗi server deploy phải lặp lại, hoặc nhờ IT đẩy qua GPO của domain. Dùng `SmtpHost = mail.yev.vn` sẽ lỗi hostname mismatch.
 - `AppSettings:FrontendBaseUrl` là domain FE dùng build link trong mail (`{FrontendBaseUrl}/xac-nhan-don?token=...`); phải đặt đúng ở môi trường thật (mặc định dev `http://localhost:3000`).
 - **Template** là file `.html` trong project của module sở hữu (`Attendance.Infrastructure/EmailTemplates/{TínhNăng}/{Tên}.html`: `OtForm/ApprovalNotification`, `OtForm/BatchApprovalNotification`, `OtForm/RequesterNotification`,

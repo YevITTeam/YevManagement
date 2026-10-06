@@ -262,6 +262,72 @@ namespace Identity.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Identity.Domain.Entities.UserEmail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Email")
+                        .IsUnique();
+
+                    b.ToTable("UserEmails");
+                });
+
+            modelBuilder.Entity("Identity.Domain.Entities.UserEmailModule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ModuleCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("UserEmailId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserEmailId");
+
+                    b.HasIndex("UserId", "ModuleCode")
+                        .IsUnique();
+
+                    b.ToTable("UserEmailModules");
+                });
+
             modelBuilder.Entity("Identity.Domain.Entities.UserPermission", b =>
                 {
                     b.Property<int>("UserId")
@@ -337,6 +403,28 @@ namespace Identity.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Identity.Domain.Entities.UserEmail", b =>
+                {
+                    b.HasOne("Identity.Domain.Entities.User", "User")
+                        .WithMany("UserEmails")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Identity.Domain.Entities.UserEmailModule", b =>
+                {
+                    b.HasOne("Identity.Domain.Entities.UserEmail", "UserEmail")
+                        .WithMany("Modules")
+                        .HasForeignKey("UserEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("UserEmail");
+                });
+
             modelBuilder.Entity("Identity.Domain.Entities.UserPermission", b =>
                 {
                     b.HasOne("Identity.Domain.Entities.Permission", "Permission")
@@ -390,7 +478,14 @@ namespace Identity.Infrastructure.Migrations
                 {
                     b.Navigation("LoginUserIPs");
 
+                    b.Navigation("UserEmails");
+
                     b.Navigation("UserPermissions");
+                });
+
+            modelBuilder.Entity("Identity.Domain.Entities.UserEmail", b =>
+                {
+                    b.Navigation("Modules");
                 });
 #pragma warning restore 612, 618
         }

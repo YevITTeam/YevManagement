@@ -8,16 +8,20 @@ using Shared.Core.Exceptions;
 namespace Identity.Application.Services
 {
     // Implements IUserDirectoryService (Shared.Application) — a bridge that lets the Attendance module look up
-    // a User's Email/FullName/effective permission without needing a direct ProjectReference to Identity.Application.
+    // a User's mail recipient/FullName/effective permission without a direct ProjectReference to Identity.Application.
     // Scrutor auto-registers this class against the interface at host startup (see docs/architecture-core.md §DI).
     public class UserDirectoryService : BaseService<IIdentityUnitOfWork>, IUserDirectoryService
     {
         public UserDirectoryService(IIdentityUnitOfWork unitOfWork) : base(unitOfWork) { }
 
-        public async Task<(string? Email, string? FullName)> GetContactInfoAsync(string userName)
+        public async Task<(string? Email, string? FullName)> GetContactInfoAsync(string userName, string moduleCode)
         {
             var user = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == userName);
-            return (user?.Email, user?.FullName);
+            if (user == null) return (null, null);
+
+            var routed = await _unitOfWork.UserEmailModules.FirstOrDefaultAsync(
+                x => x.UserId == user.Id && x.ModuleCode == moduleCode, x => x.UserEmail);
+            return (routed?.UserEmail.Email ?? user.Email, user.FullName);
         }
 
         // Effective permission = Role-based permissions, plus individually granted permissions

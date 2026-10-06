@@ -5,7 +5,7 @@
 - **Base URL (Dev)**: `http://10.45.1.155:8081` (theo `CompanySystem.HostApi/Properties/launchSettings.json` — đây là nguồn chuẩn; các giá trị cũ `http://localhost:5000` và `http://10.45.1.181:8080` đã không còn dùng, port đổi từ `8080` ngày 2026-08-26) · Scalar UI `/scalar/v1`.
 - **CORS**: whitelist ở policy `AllowNextJs` (`CompanySystem.HostApi/Program.cs`, `AllowCredentials`): `localhost:3000`, `localhost:8000`, `10.45.1.155:3000`, `10.45.1.181:3000`, `10.45.1.49` (`:8000`/`:80`/không port), `http://intra.yev.vn`. Origin khác → báo BE thêm whitelist.
 - Envelope `ApiResponse<T>` + cách đọc `data`/`errors` giống Asset — xem [asset-api-fe.md §1](asset-api-fe.md).
-- **Cập nhật 2026-07-16**: `UserDto` thêm `email` (nullable, tự resolve từ AD, không tự nhập/sửa được) — trả về ở `windows-login` (mục 2) và `get-all-users-with-roles` (mục 4.1). Phục vụ tính năng gửi email xác nhận cập nhật chữ ký/duyệt đơn ở module Attendance.
+- `UserDto.email` = **email chính** của user (null khi chưa có email nào) — trả về ở `windows-login` (mục 2) và `get-all-users-with-roles` (mục 4.1). Admin quản lý danh sách email + email nhận theo module ở §4.11.
 
 - **Cập nhật 2026-08-01**: thêm `GET /api/Auth/me` (mục 2b) — lấy lại hồ sơ + **gia hạn JWT bằng chính token đang có**, không cần handshake Negotiate. FE chỉ gọi `windows-login` khi **chưa có** token.
 - **Cập nhật 2026-08-21**: thêm `PUT /api/Auth/update-user-fullname` (mục 4.2b) — Admin sửa **CHỈ** tên hiển thị của 1 user đã tồn tại (`userName`/`deviceName` vẫn không sửa được qua API nào).
@@ -43,8 +43,8 @@ const res = await fetch("http://10.45.1.155:8081/api/Auth/windows-login", {
 }
 ```
 - **Định danh = `UserName` suông.** `DeviceName` chỉ hiển thị (reverse-DNS không ổn định) — FE **đừng** dùng để định danh.
-- **`email`** (2026-07-16, mới) — tự resolve từ thuộc tính AD `mail` ngay lần đăng nhập đầu tiên (giống `fullName`), **không** phải do user tự nhập. Nullable — có thể `null` nếu tài khoản AD chưa cấu hình mail, hoặc user đã tồn tại từ trước tính năng này và chưa đăng nhập lại lần nào kể từ đó (BE tự "chữa lành" — chỉ set nếu đang trống, ở lần đăng nhập kế tiếp). Đây **không phải field để FE sửa** — không có endpoint nào cho phép update `email` trực tiếp; muốn đổi phải sửa trong AD rồi chờ user đăng nhập lại (hoặc Admin không có cách set tay). Dùng bởi module Attendance để gửi email xác nhận cập nhật chữ ký/duyệt đơn — xem [attendance-api-fe.md §6b/§4.6](attendance-api-fe.md).
-- `windows-login` có **side-effect ghi DB** (IP + DeviceName + Email nếu đang trống) nhưng idempotent.
+- **`email`** — email chính của user, nullable. User chưa có email nào thì lần đăng nhập kế tiếp BE tự lấy thuộc tính AD `mail` làm email chính; từ khi đã có email, chỉ Admin đổi được qua §4.11 (đăng nhập không ghi đè). Người dùng **không** tự sửa được.
+- `windows-login` có **side-effect ghi DB** (IP + DeviceName + email AD nếu user chưa có email nào) nhưng idempotent.
 - `token` hết hạn **120 phút** → 401. Gia hạn bằng `GET /api/Auth/me` (mục 2b), chỉ khi không còn token hợp lệ mới phải gọi lại `windows-login`.
 - **Permission tự refresh mỗi request** — Admin đổi permission Role có hiệu lực ngay request sau, không cần login lại. `user.permissions` lúc login chỉ là snapshot.
 - **JWT cũng có claim `Email`** (nếu có giá trị, cùng cách claim `FullName` đã có) — nhưng FE không cần tự decode JWT, dùng thẳng `data.user.email` ở trên là đủ.
@@ -117,7 +117,7 @@ Dùng **`user.permissions`** (mảng `Module.Entity.Action`) để bật/tắt t
 ## 4. Quản trị User & Role
 Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, thiếu permission→403).
 
-- **4.1 `GET /api/Auth/get-all-users-with-roles?roleId=`** (`Identity.User.View`) → `[{id, userName, fullName, deviceName, email, roles:[]}]` (`email` mới 2026-07-16, xem mục 2 — hữu ích để Admin kiểm tra AD có resolve đúng mail cho user hay chưa trước khi họ báo "không nhận được email xác nhận"). `roleId` optional (mới 2026-07-16) — lọc user thuộc Role đó; không truyền → trả toàn bộ. Không phân trang. Lưu ý danh sách này **không trả `permissions`** (khác `windows-login`) — luôn là mảng rỗng nếu FE cố đọc.
+- **4.1 `GET /api/Auth/get-all-users-with-roles?roleId=`** (`Identity.User.View`) → `[{id, userName, fullName, deviceName, email, roles:[]}]` (`email` = email chính, xem mục 2). `roleId` optional (mới 2026-07-16) — lọc user thuộc Role đó; không truyền → trả toàn bộ. Không phân trang. Lưu ý danh sách này **không trả `permissions`** (khác `windows-login`) — luôn là mảng rỗng nếu FE cố đọc.
 - **4.2 `POST /api/Auth/update-user-roles`** (`Identity.User.UpdateRoles`) — body `{userId, roleIds:[1,2]}`. `roleIds` = **toàn bộ** danh sách cuối (gửi thiếu = gỡ role đó).
 - **4.2b `PUT /api/Auth/update-user-fullname`** (`Identity.User.UpdateFullName`, mới 2026-08-21) — body `{userId, fullName}`. Sửa **CHỈ** tên hiển thị (`fullName`) của 1 user đã tồn tại — **không** có cách sửa `userName` (định danh đăng nhập Windows) hay `deviceName` qua API nào cả, có chủ đích (khớp login chỉ theo `userName` suông, xem mục 2). 400 nếu `fullName` rỗng, 404 nếu `userId` sai. Response `data` = `UserDto` đã cập nhật.
 - **4.3 `GET /api/Auth/get-all-roles`** (`Identity.Role.View`) → `[{id, roleName, description}]`.
@@ -144,6 +144,22 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
     userAgent, note, createdAt}]`, `action` ∈ `Created|Revoked|LoginSuccess|LoginFailed`, mới nhất trước.
   - FE: nút "QR" trên mỗi dòng `UserRoleModal` → `LoginQrDialog.tsx`.
 
+- **4.11 Email người dùng** (`/api/UserEmail`, **1 permission `Identity.UserEmail.Manage`** — chỉ Admin). Mọi endpoint ghi
+  trả lại toàn bộ `UserEmailOverviewDto` mới:
+  `{userId, userName, fullName, emails:[{id, email, source, isPrimary, note, createdAt}], modules:[{moduleCode, moduleName, isApplied, userEmailId}]}`.
+  `source`: `0`=AD (`mail`), `1`=Alias AD (`proxyAddresses`), `2`=Tanium, `3`=Nhập tay. `modules[].userEmailId = null` →
+  module gửi về email chính. `isApplied=false` → module chưa đọc cấu hình này (hiện: Workflow), lưu được nhưng chưa có tác dụng.
+  - `GET /user/{userId}` → overview.
+  - `GET /user/{userId}/suggestions` → `[{email, source, note, alreadyAdded}]` — mail + alias tìm thấy trên AD (nguồn Tanium bổ sung sau).
+  - `POST /user/{userId}` — body `{email[Required, EmailAddress, ≤255], source (mặc định 3), note?, isPrimary}`. Email đầu tiên
+    luôn thành email chính. 400 nếu trùng.
+  - `DELETE /user/{userId}/{userEmailId}` — 400 nếu xoá email chính khi còn email khác (phải đổi email chính trước).
+    Xoá email đang được gán cho module → module quay về email chính.
+  - `PUT /user/{userId}/{userEmailId}/primary` — đặt email chính (đồng thời cập nhật `UserDto.email`).
+  - `PUT /user/{userId}/modules` — body `{items:[{moduleCode, userEmailId|null}]}` = **toàn bộ** cấu hình cuối. 400 nếu module
+    không hỗ trợ, trùng module, hoặc email không thuộc user.
+  - FE: nút "Email" trên mỗi dòng `UserRoleModal` → `UserEmailDialog.tsx` (biểu tượng màu cam khi user chưa có email).
+
 ## 5. Tổng hợp endpoint
 | Method | Route | Permission |
 |---|---|---|
@@ -160,6 +176,7 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
 | PUT | `/api/Auth/update-role/{roleId}` | `Identity.Role.Update` |
 | DELETE | `/api/Auth/delete-role/{roleId}` | `Identity.Role.Delete` |
 | GET/POST/DELETE | `/api/LoginQr[/{userId}[/logs]]` | `Identity.LoginQr.Manage` (§4.10) |
+| GET/POST/PUT/DELETE | `/api/UserEmail/user/{userId}[...]` | `Identity.UserEmail.Manage` (§4.11) |
 | GET | `/api/Permission/all` | `Identity.Permission.View` |
 | GET/PUT | `/api/Permission/role/{roleId}` | View / `Identity.Role.Update` |
 | GET | `/api/Permission/user/{userId}[/effective]` | `Identity.Permission.View` |

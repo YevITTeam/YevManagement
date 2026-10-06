@@ -1,4 +1,5 @@
 using Identity.Application.Interfaces.Service;
+using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 
 namespace Identity.Infrastructure.Authentication
@@ -20,6 +21,39 @@ namespace Identity.Infrastructure.Authentication
             // mật khẩu, dù chính sAMAccountName đó đăng nhập Negotiate bình thường).
             using var principalContext = new PrincipalContext(ContextType.Domain, domain);
             return principalContext.ValidateCredentials($"{domain}\\{userName}", password, ContextOptions.SimpleBind);
+        }
+
+        public AdEmailAddresses GetEmailAddresses(string windowsUserName)
+        {
+            var parts = windowsUserName.Split('\\');
+            if (parts.Length != 2 || parts[0].Equals("AzureAD", StringComparison.OrdinalIgnoreCase)
+                || parts[0].Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase))
+                return AdEmailAddresses.Empty;
+
+            try
+            {
+                using var principalContext = new PrincipalContext(ContextType.Domain, parts[0]);
+                using var userPrincipal = UserPrincipal.FindByIdentity(principalContext, IdentityType.SamAccountName, parts[1]);
+                if (userPrincipal == null) return AdEmailAddresses.Empty;
+
+                var aliases = new List<string>();
+                if (userPrincipal.GetUnderlyingObject() is DirectoryEntry entry)
+                {
+                    foreach (var value in entry.Properties["proxyAddresses"])
+                    {
+                        // "SMTP:" is the primary address, "smtp:" an alias; other types (x500, sip...) are skipped.
+                        if (value is string address && address.StartsWith("smtp:", StringComparison.OrdinalIgnoreCase))
+                            aliases.Add(address[5..].Trim());
+                    }
+                }
+
+                var mail = string.IsNullOrWhiteSpace(userPrincipal.EmailAddress) ? null : userPrincipal.EmailAddress.Trim();
+                return new AdEmailAddresses(mail, aliases.Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList());
+            }
+            catch
+            {
+                return AdEmailAddresses.Empty;
+            }
         }
     }
 }

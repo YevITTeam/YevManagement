@@ -8,7 +8,9 @@
 ## 1. Domain Models
 | Entity | Thuộc tính chính | Quan hệ | Soft-del |
 |---|---|---|---|
-| `User` | `Id`, `UserName`(≤100), `FullName?`, `CreatedAt`, `DeviceName?` | N-N Roles, 1-N LoginUserIPs, 1-N UserPermissions | Không |
+| `User` | `Id`, `UserName`(≤100), `FullName?`, `CreatedAt`, `DeviceName?`, `Email?`(= email chính, §5.9) | N-N Roles, 1-N LoginUserIPs, 1-N UserPermissions, 1-N UserEmails | Không |
+| `UserEmail` | `Id`, `UserId`, `Email`(≤255, unique theo `(UserId, Email)`), `Source`(`UserEmailSource`), `IsPrimary`, `Note?`, `CreatedAt` | N-1 User (cascade) | Không (xoá cứng) |
+| `UserEmailModule` | `Id`, `UserId`(không FK, chỉ để unique `(UserId, ModuleCode)`), `ModuleCode`(≤50), `UserEmailId` | N-1 UserEmail (cascade) | Không |
 | `Role` | `Id`, `RoleName`(≤50), `Description?`, `IsDeleted` | N-N Users, N-N Permissions | **Có** |
 | `LoginUserIP` | `Id`, `UserId`, `IPAddress`, `FirstLoginAt`, `LastLoginAt` | N-1 User | Không |
 | `LoginQrCode` | `Id`, `UserId`, `CodeHash`(SHA-256 hex, unique), `CreatedByUserId?`, `CreatedAt`, `RevokedAt?`, `RevokedByUserId?`, `LastUsedAt?`, `UseCount` | N-1 User (cascade) | Không (thu hồi = set `RevokedAt`) |
@@ -37,7 +39,7 @@ Fluent (`IdentityDbContext.OnModelCreating`):
 | `UpdateUserPermissionOverridesDto` | `GrantPermissionIds/DenyPermissionIds:List<int>` — body `PUT /api/Permission/user/{userId}`. |
 
 ## 3. Repositories & UnitOfWork
-`IUserReposiory` (+`GetUserWithRolesAsync(userName)`), `IRoleRepository`/`ILoginUserIPRepository`/`IPermissionRepository`/`IUserPermissionRepository` (generic rỗng). `IIdentityUnitOfWork` phơi bày `Users/Roles/LoginUserIPs/Permissions/UserPermissions`. Impl `IdentityUnitOfWork : BaseUnitOfWork<IdentityDbContext>`.
+`IUserReposiory` (+`GetUserWithRolesAsync(userName)`), `IRoleRepository`/`ILoginUserIPRepository`/`IPermissionRepository`/`IUserPermissionRepository` (generic rỗng). `IIdentityUnitOfWork` phơi bày `Users/Roles/LoginUserIPs/Permissions/UserPermissions/TestLoginAccounts/LoginQrCodes/LoginQrLogs/UserEmails/UserEmailModules`. Impl `IdentityUnitOfWork : BaseUnitOfWork<IdentityDbContext>`.
 
 ## 4. Services
 | Service | Method |
@@ -53,6 +55,7 @@ Fluent (`IdentityDbContext.OnModelCreating`):
    - Resolve `deviceName` (reverse-DNS từ IP) **chỉ để hiển thị/log**, KHÔNG dùng khớp User. ⚠️ Reverse-DNS không ổn định (NAT/nhiều PTR) → **khớp User CHỈ theo `UserName` suông** (từng dùng cặp `(UserName,DeviceName)` gây tạo User trùng — đã bỏ; data debt trùng cũ cần rà tay).
    - Chưa có claim `RolesLoaded` → tra `Users` (`.Include(Roles).ThenInclude(Permissions)` + `.Include(UserPermissions).ThenInclude(Permission)`) theo `UserName`.
    - `UserName` chưa có → tạo User MỚI, role `"Basic"`, `FullName` từ AD (`UserPrincipal.FindByIdentity`, chỉ Windows). Đã có → dùng lại, chỉ refresh `DeviceName` nếu resolve ra giá trị khác (bỏ qua nếu null).
+   - User **chưa có `UserEmail` nào** → lấy AD `mail` thêm 1 `UserEmail` (Source=AD, chính) + ghi `User.Email`. Đã có email thì không đụng (Admin quản lý, §5.9).
    - Ghi/update `LoginUserIP`. Bơm claims vào **một `ClaimsIdentity` riêng** `AuthenticationType = "DbRoles"`: `Role` (mỗi role), `Permission` (mỗi mã hiệu lực §9.1), `FullName`, `Email`, `IpAddress`, `DeviceName`, `RolesLoaded=true`. Tên các claim/identity này là hằng dùng chung ở `Identity.Application/Authentication/IdentityClaimTypes.cs` (Infrastructure tạo → Application đóng vào JWT → Api đọc ra `UserDto`, cả 3 phải khớp chính xác).
 3. **`AuthController.WindowsLogin`** (`[Authorize(AuthenticationSchemes="Negotiate")]`) và **`AuthController.Me`** (`[Authorize]`, Bearer) cùng gọi private `BuildSession()`: đọc claims → `UserDto` + `TokenService.GenerateJwtToken` → `LoginResponseDto`. Client dùng `Authorization: Bearer <token>` cho request sau.
 
@@ -201,6 +204,22 @@ Admin in QR cho từng user; app quét QR → nhận JWT như đăng nhập thư
 - Chưa làm: giới hạn số lần quét sai theo IP (mã 256-bit nên brute-force không khả thi, nhưng mỗi lần quét sai
   vẫn ghi 1 dòng log).
 
+### 5.9. Email người dùng & email nhận theo module
+Một người có thể có nhiều email; email AD có thể sai; mỗi module có thể cần gửi về email khác. Identity là **nguồn chân lý**
+cho email (email/user domain bên Asset lấy từ Tanium chỉ để tham khảo).
+- **Bất biến** (`UserEmailService`): user có ≥1 `UserEmail` thì có đúng 1 `IsPrimary`, và `User.Email` = email chính (null khi không có
+  email). `User.Email` giữ lại để claim `Email` trong JWT và code cũ không đổi.
+- **Chỉ Admin quản lý** (`Identity.UserEmail.Manage`, migration `AddUserEmails`) — không có trang người dùng tự sửa nên không có bước
+  xác nhận qua mail. API ở [identity-api-fe.md §4.11](identity-api-fe.md).
+- **Đề xuất đồng bộ** (`GET .../suggestions`): `IActiveDirectoryAuthService.GetEmailAddresses` đọc AD `mail` + mọi `smtp:` trong
+  `proxyAddresses`; Admin tự chọn thêm. Nguồn Tanium (mail của máy có "Last Logged In User" = tài khoản này) **chưa làm** — chờ
+  file Tanium mới có cột email.
+- **Danh mục module**: `Shared.Application/Helper/EmailModules.cs` (`Attendance` đã áp dụng; `Workflow` lưu được nhưng
+  `IsApplied=false` — Workflow vẫn gửi theo `Employees.Email` riêng của nó).
+- **Gửi mail**: `IUserDirectoryService.GetContactInfoAsync(userName, moduleCode)` trả email Admin gán cho module đó, không có thì email
+  chính. Attendance gọi với `EmailModules.Attendance` ở mọi chỗ gửi (duyệt đơn, báo người tạo, chữ ký, mật khẩu cấp 2).
+- Migration backfill: mỗi `Users.Email` có sẵn thành 1 `UserEmail` chính (Source=AD).
+
 ### 5.7. `EnsureUserExistsAsync` — tạo User idempotent cho import cross-module
 Thêm method mới vào `IUserDirectoryService` (`Shared.Application/Interfaces/`, contract dùng chung để
 module khác gọi vào Identity mà không cần ProjectReference trực tiếp):
@@ -241,6 +260,16 @@ Seed role: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiêt bị
 | POST | `{userId}` | Tạo mã mới (thu hồi mã cũ), trả `qrPayload` 1 lần |
 | DELETE | `{userId}` | Thu hồi mã |
 | GET | `{userId}/logs` | 50 log gần nhất |
+
+### `UserEmailController` — `/api/UserEmail` (`Identity.UserEmail.Manage`, §5.9)
+| Method | Route | Mô tả |
+|---|---|---|
+| GET | `user/{userId}` | Danh sách email + email theo module |
+| GET | `user/{userId}/suggestions` | Đề xuất từ AD (mail + alias) |
+| POST | `user/{userId}` | Thêm email |
+| DELETE | `user/{userId}/{userEmailId}` | Xoá (không xoá được email chính khi còn email khác) |
+| PUT | `user/{userId}/{userEmailId}/primary` | Đặt email chính |
+| PUT | `user/{userId}/modules` | Gán lại toàn bộ email theo module |
 
 ### `PermissionController` — `/api/Permission`
 | Method | Route | Permission | Mô tả |
@@ -290,6 +319,7 @@ Mỗi action ↔ 1 mã `Module.Entity.Action`. Role sở hữu tập Permission 
 | `Identity.Role` | View, Create, Update, Delete |
 | `Identity.Permission` | View |
 | `Identity.LoginQr` | **Manage** (mới 2026-10-02, migration `AddLoginQr` — chỉ gán Admin, §5.8) |
+| `Identity.UserEmail` | **Manage** (migration `AddUserEmails` — chỉ gán Admin, §5.9) |
 
 **Seed & deploy**: migration INSERT toàn bộ `Permissions` + gán full cho `Admin` (tra `WHERE RoleName=N'Admin'`, không hardcode Id) qua `migrationBuilder.Sql(...)` — tránh Admin mất quyền khi chuyển role-check → permission-check. Role khác **không** gán mặc định, Admin tự cấu hình qua `PUT /api/Permission/role/{roleId}`.
 

@@ -23,5 +23,9 @@ namespace Identity.Application.Interfaces.Service
         ILoginQrCodeRepository LoginQrCodes { get; }
 
         ILoginQrLogRepository LoginQrLogs { get; }
+
+        IUserEmailRepository UserEmails { get; }
+
+        IUserEmailModuleRepository UserEmailModules { get; }
     }
 }

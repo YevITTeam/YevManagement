@@ -59,7 +59,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.PendingSignatureConfirmations.AddAsync(pending);
             await _unitOfWork.SaveChangesAsync();
 
-            var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(userName);
+            var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(userName, EmailModules.Attendance);
             if (string.IsNullOrWhiteSpace(email)) return;
 
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];

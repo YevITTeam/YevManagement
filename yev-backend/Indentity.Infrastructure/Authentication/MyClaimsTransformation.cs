@@ -1,5 +1,6 @@
 ﻿using Identity.Application.Authentication;
 using Identity.Domain.Entities;
+using Identity.Domain.Enums;
 using Identity.Infrastructure.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -104,17 +105,22 @@ namespace Identity.Infrastructure.Authentication
                     isUpdated = true;
                 }
 
-                // Email: only auto-resolved when it's CURRENTLY EMPTY (unlike DeviceName, which refreshes
-                // on every change) — Email is used to send signature/form-approval confirmation emails
-                // (Attendance module), so it shouldn't silently change if already set; but it still
-                // "self-heals" for old users without an Email (created before this feature existed) on
-                // their next login, without needing an Admin to set it manually.
-                if (string.IsNullOrEmpty(user.Email))
+                // A user without any email gets the AD "mail" as primary UserEmail (and its User.Email mirror).
+                // Once an address exists, admins own the list (UserEmailService) and login never changes it.
+                if (string.IsNullOrEmpty(user.Email)
+                    && (user.Id == 0 || !await dbContext.UserEmails.AnyAsync(x => x.UserId == user.Id)))
                 {
                     var resolvedEmail = GetActualEmail(windowsUsername);
                     if (!string.IsNullOrEmpty(resolvedEmail))
                     {
                         user.Email = resolvedEmail;
+                        user.UserEmails.Add(new UserEmail
+                        {
+                            Email = resolvedEmail,
+                            Source = (int)UserEmailSource.Ad,
+                            IsPrimary = true,
+                            CreatedAt = TimeHelper.GetCurrentUtcTime()
+                        });
                         isUpdated = true;
                     }
                 }

@@ -252,7 +252,7 @@ namespace Attendance.Application.Services
             OtForm otForm, string actorFullName, string subject,
             string statusLabelVn, string statusLabelJp, string introVn, string introJp, string detailBlock)
         {
-            var (email, requesterFullName) = await _userDirectoryService.GetContactInfoAsync(otForm.CreatedByUserName);
+            var (email, requesterFullName) = await _userDirectoryService.GetContactInfoAsync(otForm.CreatedByUserName, EmailModules.Attendance);
             if (string.IsNullOrWhiteSpace(email)) return;
 
             var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == otForm.GroupId);
@@ -1720,7 +1720,7 @@ namespace Attendance.Application.Services
 
             foreach (var candidate in step.Candidates)
             {
-                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(candidate.UserName);
+                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(candidate.UserName, EmailModules.Attendance);
                 if (string.IsNullOrWhiteSpace(email)) continue;
 
                 var emailToken = new OtFormApprovalEmailToken
@@ -2530,7 +2530,7 @@ namespace Attendance.Application.Services
 
             foreach (var candidate in candidates)
             {
-                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(candidate.UserName);
+                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(candidate.UserName, EmailModules.Attendance);
                 if (string.IsNullOrWhiteSpace(email)) continue;
 
                 var emailToken = new OtFormBatchEmailToken

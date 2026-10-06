@@ -5,6 +5,8 @@ export interface UserDto {
   userName: string;
   fullName: string;
   deviceName: string | null;
+  // Email chính (bản sao của UserEmail đang IsPrimary), null khi user chưa có email nào.
+  email: string | null;
   roles: string[];
   // Mã permission suy ra từ roles (vd "Asset.Device.View") — dùng để ẩn/hiện UI, xem docs/identity-api-fe.md §3.
   // BE luôn tự enforce lại ở tầng API, permissions ở đây chỉ phục vụ hiển thị.

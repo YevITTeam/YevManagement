@@ -5,9 +5,10 @@ namespace Shared.Application.Interfaces
     // Identity.Application (nơi có quyền truy cập IIdentityUnitOfWork), Scrutor tự nối dây lúc DI.
     public interface IUserDirectoryService
     {
-        // Trả (null, null) nếu không tìm thấy UserName — không throw, để caller tự quyết định bỏ qua
-        // (VD không gửi được email thì vẫn không nên chặn nghiệp vụ chính).
-        Task<(string? Email, string? FullName)> GetContactInfoAsync(string userName);
+        // Recipient address for mail sent by moduleCode (EmailModules): the address the admin routed that
+        // module to, else the user's primary email. Returns (null, null) for an unknown UserName instead of
+        // throwing, so a missing address never blocks the calling business flow.
+        Task<(string? Email, string? FullName)> GetContactInfoAsync(string userName, string moduleCode);
 
         // 1 UserName cụ thể có đang có (effective) permission này không — tính CẢ UserPermissionOverride
         // (grant/deny riêng từng người), không chỉ permission suy ra từ Role, cùng công thức với JWT claim

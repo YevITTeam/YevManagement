@@ -69,8 +69,8 @@ namespace Asset.Application.Services
 
                     if (row.ResolvedIpAddressId.HasValue)
                     {
-                        var reassigned = await ReassignDeviceIpAsync(deviceId, row.ResolvedIpAddressId.Value);
-                        if (reassigned) result.IpReassignedCount++;
+                        var assigned = await AssignAvailableIpAsync(deviceId, row.ResolvedIpAddressId.Value);
+                        if (assigned) result.IpReassignedCount++;
                     }
 
                     if (!string.IsNullOrWhiteSpace(row.ResolvedSerialNumber))
@@ -264,14 +264,12 @@ namespace Asset.Application.Services
             return stream.ToArray();
         }
 
-        // Gán IP Tanium báo cáo được cho device này — Device giờ hỗ trợ nhiều IP cùng lúc nên
-        // KHÔNG còn gỡ các IP khác đang gắn sẵn của device (khác hành vi cũ khi chỉ có 1 "IP
-        // chính"). Vẫn "cướp" IP này khỏi bất kỳ device khác đang giữ nó, theo đúng quyết định
-        // người dùng (2026-07-10). Trả về true nếu có thay đổi thực sự (để đếm IpReassignedCount).
-        private async Task<bool> ReassignDeviceIpAsync(int deviceId, int newIpAddressId)
+        // Adds the Tanium IP to the device (other IPs of the device are kept). Re-checks that the IP
+        // is still Available at write time and skips it otherwise. Returns true when it was assigned.
+        private async Task<bool> AssignAvailableIpAsync(int deviceId, int newIpAddressId)
         {
             var ip = await _unitOfWork.IpAddresses.GetByIdAsync(newIpAddressId);
-            if (ip == null || ip.DeviceId == deviceId) return false;
+            if (ip == null || ip.DeviceId.HasValue || ip.Status != (int)IpAddressStatus.Available) return false;
 
             ip.DeviceId = deviceId;
             ip.Status = (int)IpAddressStatus.Assigned;
@@ -337,6 +335,19 @@ namespace Asset.Application.Services
             var ipsByAddress = (await _unitOfWork.IpAddresses.FindAsync(x => candidateIps.Contains(x.IpAddress1) && !x.IsDeleted))
                 .GroupBy(x => x.IpAddress1, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            var duplicatedIpsInFile = rawRows
+                .Select(r => r.TaniumIpAddress?.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .GroupBy(s => s!, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var ipOwnerIds = ipsByAddress.Values
+                .Where(x => x.DeviceId.HasValue)
+                .Select(x => x.DeviceId!.Value)
+                .ToHashSet();
+            var ipOwnerCodesById = (await _unitOfWork.Devices.FindAsync(x => ipOwnerIds.Contains(x.Id)))
+                .ToDictionary(x => x.Id, x => x.DeviceCode);
 
             var candidateSerials = rawRows
                 .Select(r => r.SerialNumber?.Trim())
@@ -376,13 +387,9 @@ namespace Asset.Application.Services
                 if (device == null) errors.Add($"Không tìm thấy thiết bị có mã '{parsedCode}'.");
                 else resolvedDeviceId = device.Id;
 
-                // Quy tắc IP (2026-07-10, quyết định người dùng): IP Tanium báo cáo LUÔN
-                // được cập nhật vào Device này, kể cả khi IP đó hiện đang gán cho 1 device
-                // khác trong DB (tự động "chiếm lại" — ReassignDeviceIpAsync sẽ gỡ IP khỏi
-                // device cũ và gán cho device này, không cần phân biệt Available/Reserved/
-                // Disabled). Trường hợp DUY NHẤT không cập nhật IP: IP đó không tồn tại
-                // trong DB — khi đó chỉ bỏ qua việc cập nhật IP và báo Warning (không chặn
-                // dòng, các field cấu hình khác vẫn được tạo/cập nhật bình thường).
+                // Tanium IP is only assigned when it is still Available. An IP in use (another
+                // device, or an external device) is never taken over; those cases and unknown or
+                // duplicated IPs are warnings that skip the IP but keep the row.
                 int? resolvedIpAddressId = null;
                 var warnings = new List<string>();
                 var taniumIp = row.TaniumIpAddress?.Trim();
@@ -392,6 +399,23 @@ namespace Asset.Application.Services
                     if (ipAddress == null)
                     {
                         warnings.Add($"Không tìm thấy địa chỉ IP '{taniumIp}' trong hệ thống — sẽ không cập nhật IP cho thiết bị này.");
+                    }
+                    else if (ipAddress.DeviceId.HasValue && ipAddress.DeviceId == resolvedDeviceId)
+                    {
+                        // Already attached to this device, nothing to do.
+                    }
+                    else if (duplicatedIpsInFile.Contains(taniumIp))
+                    {
+                        warnings.Add($"Địa chỉ IP '{taniumIp}' bị lặp lại nhiều dòng trong file — sẽ không cập nhật IP cho thiết bị này.");
+                    }
+                    else if (ipAddress.DeviceId.HasValue)
+                    {
+                        var ownerCode = ipOwnerCodesById.GetValueOrDefault(ipAddress.DeviceId.Value) ?? $"#{ipAddress.DeviceId}";
+                        warnings.Add($"Địa chỉ IP '{taniumIp}' đang được thiết bị '{ownerCode}' sử dụng — sẽ không cập nhật IP cho thiết bị này.");
+                    }
+                    else if (ipAddress.Status != (int)IpAddressStatus.Available)
+                    {
+                        warnings.Add($"Địa chỉ IP '{taniumIp}' đang được thiết bị ngoài hệ thống sử dụng — sẽ không cập nhật IP cho thiết bị này.");
                     }
                     else
                     {

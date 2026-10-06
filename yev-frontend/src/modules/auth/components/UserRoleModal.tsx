@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Plus, QrCode, Search, SquarePen, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mail, Pencil, Plus, QrCode, Search, SquarePen, Trash2 } from "lucide-react";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import { LoginQrApi } from "@/modules/auth/api/login-qr.api";
 import type { UserDto, RoleDto, LoginQrStatusDto } from "@/modules/auth/types/auth.dto";
@@ -10,6 +10,7 @@ import RoleSelectModal from "./RoleSelectModal";
 import CreateUserDialog from "./CreateUserDialog";
 import EditUserDialog from "./EditUserDialog";
 import LoginQrDialog from "./LoginQrDialog";
+import UserEmailDialog from "./UserEmailDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -41,9 +42,12 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [isDeletingUser, setIsDeletingUser] = useState(false);
     const [qrStatusByUser, setQrStatusByUser] = useState<Record<number, LoginQrStatusDto>>({});
     const [qrUser, setQrUser] = useState<UserDto | null>(null);
+    const [emailUser, setEmailUser] = useState<UserDto | null>(null);
 
     // /api/LoginQr (tạo/thu hồi/xem nhật ký mã QR đăng nhập app YEV Scan) — 1 permission cho cả nhóm.
     const canManageLoginQr = hasPermission(currentUser, "Identity.LoginQr.Manage");
+    // /api/UserEmail — danh sách email + email nhận theo từng module của 1 user.
+    const canManageUserEmail = hasPermission(currentUser, "Identity.UserEmail.Manage");
 
     const fetchQrStatuses = useCallback(async () => {
         if (!canManageLoginQr) return;
@@ -252,7 +256,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
 
                     <div>
                         {/* Table Header */}
-                        <div className="hidden border-b border-[#e0e3e5] bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#8a8f94] md:grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)_9rem]">
+                        <div className="hidden border-b border-[#e0e3e5] bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#8a8f94] md:grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)_11rem]">
                             <div>Người dùng</div>
                             <div>Vai trò</div>
                             <div className="text-right">Thao tác</div>
@@ -273,7 +277,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                 return (
                                     <div
                                         key={user.id}
-                                        className={`grid items-center gap-3 px-4 py-3 transition hover:bg-[#f8fafc] md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)_9rem] ${
+                                        className={`grid items-center gap-3 px-4 py-3 transition hover:bg-[#f8fafc] md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)_11rem] ${
                                             isSelf ? "bg-[#fff4f2]/40" : "bg-white"
                                         }`}
                                     >
@@ -296,7 +300,10 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <p className="truncate text-xs text-[#8a8f94]">{user.userName}</p>
+                                                <p className="truncate text-xs text-[#8a8f94]" title={user.email ?? "Chưa có email"}>
+                                                    {user.userName}
+                                                    {user.email ? ` · ${user.email}` : ""}
+                                                </p>
                                             </div>
                                         </div>
 
@@ -335,6 +342,18 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                         </button>
 
                                         <div className="flex items-center justify-end gap-1">
+                                            {canManageUserEmail && (
+                                                <button
+                                                    onClick={() => setEmailUser(user)}
+                                                    title={user.email ? "Quản lý email" : "Quản lý email (chưa có email)"}
+                                                    aria-label="Quản lý email"
+                                                    className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition hover:bg-[#f2f4f6] ${
+                                                        user.email ? "text-[#5e3f3a] hover:text-[#191c1e]" : "text-[#b45309]"
+                                                    }`}
+                                                >
+                                                    <Mail className="h-4 w-4" />
+                                                </button>
+                                            )}
                                             {canManageLoginQr && (
                                                 <button
                                                     onClick={() => setQrUser(user)}
@@ -442,6 +461,13 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                 status={qrUser ? (qrStatusByUser[qrUser.id] ?? null) : null}
                 onClose={() => setQrUser(null)}
                 onChanged={() => void fetchQrStatuses()}
+            />
+
+            <UserEmailDialog
+                isOpen={emailUser !== null}
+                user={emailUser}
+                onClose={() => setEmailUser(null)}
+                onChanged={() => void fetchData()}
             />
 
             <ConfirmDialog

@@ -211,7 +211,7 @@ export default function ImportDeviceConfigurationDialog({
             toast.success(
                 `Đồng bộ thành công — tạo mới ${confirmResult.createdConfigCount} cấu hình, ` +
                     `cập nhật ${confirmResult.updatedConfigCount} cấu hình, ghi Serial cho ${confirmResult.serialUpdatedCount} thiết bị` +
-                    (confirmResult.ipReassignedCount > 0 ? `, gán lại IP cho ${confirmResult.ipReassignedCount} thiết bị.` : ".")
+                    (confirmResult.ipReassignedCount > 0 ? `, gán IP cho ${confirmResult.ipReassignedCount} thiết bị.` : ".")
             );
         } catch (err) {
             toast.error(getApiErrorMessage(err, "Xác nhận đồng bộ thất bại."));
@@ -269,7 +269,7 @@ export default function ImportDeviceConfigurationDialog({
                         <div className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm">
                             <span className="font-semibold text-[#16a34a]">Tạo mới {result.createdConfigCount} cấu hình</span>
                             <span className="text-[#5e3f3a]">Cập nhật: {result.updatedConfigCount}</span>
-                            <span className="text-[#5e3f3a]">Gán lại IP: {result.ipReassignedCount}</span>
+                            <span className="text-[#5e3f3a]">Gán IP: {result.ipReassignedCount}</span>
                             <span className="text-[#5e3f3a]">Ghi Serial: {result.serialUpdatedCount}</span>
                             <span className={localSkippedRows.length > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 Bỏ qua (lỗi): {localSkippedRows.length}
