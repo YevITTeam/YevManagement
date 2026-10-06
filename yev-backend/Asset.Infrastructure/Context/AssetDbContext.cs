@@ -86,6 +86,7 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.DeviceCode).HasMaxLength(50);
             entity.Property(e => e.DeviceName).HasMaxLength(255);
             entity.Property(e => e.Manager).HasMaxLength(150);
+            entity.Property(e => e.ManagerDomainAccount).HasMaxLength(150);
             entity.Property(e => e.Note).HasMaxLength(500);
             entity.Property(e => e.SerialNumber).HasMaxLength(100);
             entity.Property(e => e.IsUseUsb).HasDefaultValue(false);

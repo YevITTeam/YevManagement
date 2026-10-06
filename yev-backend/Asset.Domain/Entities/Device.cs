@@ -19,6 +19,10 @@ public partial class Device
 
     public string Manager { get; set; } = null!;
 
+    // Domain account (DOMAIN\user) of the last logged-in user, written only by the Tanium import. Reference
+    // data only; Identity is the source of truth for accounts and emails.
+    public string? ManagerDomainAccount { get; set; }
+
     public DateTime PurchaseDate { get; set; }
 
     public DateTime? ExpirationDate { get; set; }

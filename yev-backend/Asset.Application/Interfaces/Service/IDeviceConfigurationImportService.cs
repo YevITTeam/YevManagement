@@ -13,6 +13,9 @@ namespace Asset.Application.Interfaces.Service
         // deviceCodePrefixes: danh sách tiền tố mã máy do người dùng nhập (VD "YDC","YDF","YLC") —
         // chỉ Device có DeviceCode bắt đầu bằng 1 trong các tiền tố này mới được đối chiếu; rỗng/null
         // = không lọc theo tiền tố (giữ hành vi cũ, lấy toàn bộ Device InUse).
+        // Same reconciliation as the Excel report, returned as rows for the on-screen report.
+        Task<List<DeviceMissingInTaniumDto>> GetMissingDevicesAsync(Stream excelFileStream, string? fileName = null, IEnumerable<string>? deviceCodePrefixes = null);
+
         Task<DeviceMissingInTaniumReportDto> BuildMissingDevicesReportAsync(Stream excelFileStream, string? fileName = null, IEnumerable<string>? deviceCodePrefixes = null);
     }
 }

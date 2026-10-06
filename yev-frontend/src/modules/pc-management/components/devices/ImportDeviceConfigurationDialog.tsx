@@ -10,6 +10,7 @@ import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dt
 import type {
     DeviceConfigurationImportConfirmResultDto,
     DeviceConfigurationImportPreviewRowDto,
+    DeviceMissingInTaniumDto,
 } from "@/modules/pc-management/types/device-configuration-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -36,7 +37,11 @@ export default function ImportDeviceConfigurationDialog({
     const [file, setFile] = useState<File | null>(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
     const [isConfirming, setIsConfirming] = useState(false);
+    const [isCheckingMissing, setIsCheckingMissing] = useState(false);
     const [isExportingReport, setIsExportingReport] = useState(false);
+    // Báo cáo đối chiếu đang hiện trên màn hình (thay bảng "Xem trước" cho tới khi đóng / xem trước lại).
+    const [missingDevices, setMissingDevices] = useState<DeviceMissingInTaniumDto[] | null>(null);
+    const [missingPrefixes, setMissingPrefixes] = useState<string[]>([]);
     const [rows, setRows] = useState<DeviceConfigurationImportPreviewRowDto[]>([]);
     const [summary, setSummary] = useState<{
         totalRows: number;
@@ -91,7 +96,7 @@ export default function ImportDeviceConfigurationDialog({
         setPrefixesInput(next.join(", "));
     };
 
-    const isBusy = isPreviewing || isConfirming || isExportingReport;
+    const isBusy = isPreviewing || isConfirming || isCheckingMissing || isExportingReport;
 
     const resetState = () => {
         setFile(null);
@@ -99,6 +104,7 @@ export default function ImportDeviceConfigurationDialog({
         setSummary(null);
         setResult(null);
         setLocalSkippedRows([]);
+        setMissingDevices(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
@@ -115,6 +121,7 @@ export default function ImportDeviceConfigurationDialog({
         setFile(selected);
         setRows([]);
         setSummary(null);
+        setMissingDevices(null);
     };
 
     const handlePreview = async () => {
@@ -123,6 +130,7 @@ export default function ImportDeviceConfigurationDialog({
             return;
         }
         setIsPreviewing(true);
+        setMissingDevices(null);
         try {
             const previewResult = await DeviceConfigurationImportApi.previewImport(file);
             setRows(previewResult.rows);
@@ -146,21 +154,29 @@ export default function ImportDeviceConfigurationDialog({
 
     // Đối chiếu độc lập với "Xem trước" — BE tự đọc lại đúng file này, không cần đã bấm Xem trước.
     // Chỉ so Device đang "Đang sử dụng" (Tanium chỉ quét được máy đang bật/đang dùng thật sự).
-    const handleExportMissingDevicesReport = async () => {
+    const handleCheckMissingDevices = async () => {
         if (!file) {
             toast.error("Vui lòng chọn file Tanium trước.");
             return;
         }
-        const deviceCodePrefixes = prefixesInput
-            .split(",")
-            .map((p) => p.trim())
-            .filter((p) => p.length > 0);
+        setIsCheckingMissing(true);
+        try {
+            const items = await DeviceConfigurationImportApi.getMissingDevices(file, currentPrefixes);
+            setMissingDevices(items);
+            setMissingPrefixes(currentPrefixes);
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, "Xuất báo cáo đối chiếu thất bại."));
+        } finally {
+            setIsCheckingMissing(false);
+        }
+    };
+
+    // Tải đúng báo cáo đang hiện dưới dạng Excel (dùng lại file + tiền tố đã đối chiếu).
+    const handleDownloadMissingDevicesReport = async () => {
+        if (!file) return;
         setIsExportingReport(true);
         try {
-            const { blob, fileName, missingCount } = await DeviceConfigurationImportApi.exportMissingDevicesReport(
-                file,
-                deviceCodePrefixes
-            );
+            const { blob, fileName } = await DeviceConfigurationImportApi.exportMissingDevicesReport(file, missingPrefixes);
 
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -168,16 +184,8 @@ export default function ImportDeviceConfigurationDialog({
             link.download = fileName;
             link.click();
             URL.revokeObjectURL(url);
-
-            if (missingCount > 0) {
-                toast.warn(
-                    `Có ${missingCount} thiết bị đang "Đang sử dụng" trong hệ thống nhưng không có trong file Tanium — xem file vừa tải.`
-                );
-            } else {
-                toast.success('Không có thiết bị nào bị thiếu — mọi thiết bị "Đang sử dụng" đều có trong file Tanium.');
-            }
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Xuất báo cáo đối chiếu thất bại."));
+            toast.error(getApiErrorMessage(err, "Tải báo cáo Excel thất bại."));
         } finally {
             setIsExportingReport(false);
         }
@@ -194,6 +202,8 @@ export default function ImportDeviceConfigurationDialog({
             const rawRows = validRows.map((row) => ({
                 computerName: row.computerName,
                 taniumIpAddress: row.taniumIpAddress,
+                lastLoggedInUser: row.lastLoggedInUser,
+                userEmail: row.userEmail,
                 manufacturer: row.manufacturer,
                 model: row.model,
                 serialNumber: row.serialNumber,
@@ -210,7 +220,8 @@ export default function ImportDeviceConfigurationDialog({
             );
             toast.success(
                 `Đồng bộ thành công — tạo mới ${confirmResult.createdConfigCount} cấu hình, ` +
-                    `cập nhật ${confirmResult.updatedConfigCount} cấu hình, ghi Serial cho ${confirmResult.serialUpdatedCount} thiết bị` +
+                    `cập nhật ${confirmResult.updatedConfigCount} cấu hình, ghi Serial cho ${confirmResult.serialUpdatedCount} thiết bị, ` +
+                    `cập nhật tài khoản domain cho ${confirmResult.managerAccountUpdatedCount} thiết bị, thêm ${confirmResult.emailAddedCount} email` +
                     (confirmResult.ipReassignedCount > 0 ? `, gán IP cho ${confirmResult.ipReassignedCount} thiết bị.` : ".")
             );
         } catch (err) {
@@ -237,21 +248,6 @@ export default function ImportDeviceConfigurationDialog({
                         <h3 id="import-device-configuration-title" className="text-lg font-semibold text-[#191c1e]">
                             Đồng bộ cấu hình từ Tanium
                         </h3>
-                        <p className="mt-1 text-xs text-[#5e3f3a]">
-                            Chọn file kiểm kê xuất từ Tanium — chỉ cập nhật cấu hình phần cứng cho thiết bị đã có sẵn
-                            trong hệ thống (mã YDC/YLC/YDF/AC/TYC), không tạo thiết bị mới.
-                        </p>
-                        <p className="mt-1 text-xs text-[#5e3f3a]">
-                            Nút &quot;Xuất báo cáo đối chiếu&quot; xuất file Excel liệt kê thiết bị đang &quot;Đang sử
-                            dụng&quot; trong hệ thống nhưng không có trong file Tanium vừa chọn (chỉ so trên thiết bị
-                            &quot;Đang sử dụng&quot; vì Tanium chỉ quét được máy đang bật), giới hạn theo tiền tố mã
-                            máy nhập ở ô bên cạnh — dùng để nhắc cài Tanium, không cần bấm &quot;Xem trước&quot;
-                            trước.
-                        </p>
-                        <p className="mt-1 text-xs font-semibold text-[#b45309]">
-                            Lưu ý: dùng file mẫu xuất theo format mới 9 cột (có thêm cột &quot;Computer Serial
-                            Number&quot;) — file xuất theo format cũ 8 cột sẽ đọc lệch cột.
-                        </p>
                     </div>
                     <button
                         type="button"
@@ -271,6 +267,8 @@ export default function ImportDeviceConfigurationDialog({
                             <span className="text-[#5e3f3a]">Cập nhật: {result.updatedConfigCount}</span>
                             <span className="text-[#5e3f3a]">Gán IP: {result.ipReassignedCount}</span>
                             <span className="text-[#5e3f3a]">Ghi Serial: {result.serialUpdatedCount}</span>
+                            <span className="text-[#5e3f3a]">Tài khoản domain: {result.managerAccountUpdatedCount}</span>
+                            <span className="text-[#5e3f3a]">Email thêm mới: {result.emailAddedCount}</span>
                             <span className={localSkippedRows.length > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 Bỏ qua (lỗi): {localSkippedRows.length}
                             </span>
@@ -383,16 +381,96 @@ export default function ImportDeviceConfigurationDialog({
                             </div>
                             <button
                                 type="button"
-                                onClick={handleExportMissingDevicesReport}
+                                onClick={handleCheckMissingDevices}
                                 disabled={!file || isBusy}
-                                title='Xuất file Excel liệt kê thiết bị đang "Đang sử dụng" trong hệ thống nhưng không có trong file Tanium — không cần bấm "Xem trước" trước'
+                                title='Liệt kê thiết bị đang "Đang sử dụng" trong hệ thống nhưng không có trong file Tanium (giới hạn theo tiền tố mã máy), có thể tải Excel — không cần bấm "Xem trước" trước'
                                 className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <FileSpreadsheet className="h-3.5 w-3.5" />
-                                {isExportingReport ? "Đang xuất báo cáo..." : "Xuất báo cáo đối chiếu"}
+                                {isCheckingMissing ? "Đang đối chiếu..." : "Xuất báo cáo đối chiếu"}
                             </button>
                         </div>
 
+                        {missingDevices !== null ? (
+                            <>
+                                <div className="flex flex-wrap items-center gap-4 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold">
+                                    <span className={missingDevices.length > 0 ? "text-[#b45309]" : "text-[#16a34a]"}>
+                                        Thiếu trong Tanium: {missingDevices.length} thiết bị
+                                    </span>
+                                    <span className="text-[#5e3f3a]">
+                                        Thiết bị &quot;Đang sử dụng&quot; không có trong file
+                                        {missingPrefixes.length > 0 ? ` — mã bắt đầu bằng ${missingPrefixes.join(", ")}` : ""}
+                                    </span>
+                                    <div className="ml-auto flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleDownloadMissingDevicesReport}
+                                            disabled={isBusy || missingDevices.length === 0}
+                                            title="Tải báo cáo này dưới dạng file Excel"
+                                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <FileSpreadsheet className="h-3.5 w-3.5" />
+                                            {isExportingReport ? "Đang tải..." : "Tải Excel"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setMissingDevices(null)}
+                                            disabled={isBusy}
+                                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                            Đóng báo cáo
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 overflow-auto p-2">
+                                    {missingDevices.length === 0 ? (
+                                        <div className="px-4 py-12 text-center text-sm text-[#16a34a]">
+                                            Không có thiết bị nào bị thiếu — mọi thiết bị &quot;Đang sử dụng&quot; đều có trong file Tanium.
+                                        </div>
+                                    ) : (
+                                        <table className="min-w-full border-collapse text-left text-xs">
+                                            <thead>
+                                                <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                                    <th className="whitespace-nowrap px-3 py-2">STT</th>
+                                                    <th className="whitespace-nowrap px-3 py-2">Mã máy</th>
+                                                    <th className="whitespace-nowrap px-3 py-2">Tên máy</th>
+                                                    <th className="whitespace-nowrap px-3 py-2">Số seri</th>
+                                                    <th className="whitespace-nowrap px-3 py-2">Chi nhánh</th>
+                                                    <th className="whitespace-nowrap px-3 py-2">Loại thiết bị</th>
+                                                    <th className="whitespace-nowrap px-3 py-2">Nhóm / Bộ phận</th>
+                                                    <th className="whitespace-nowrap px-3 py-2">Người quản lý</th>
+                                                    <th className="whitespace-nowrap px-3 py-2">Địa chỉ IP</th>
+                                                    <th className="min-w-[160px] px-3 py-2">Ghi chú</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {missingDevices.map((device, index) => (
+                                                    <tr key={device.deviceCode} className="border-b border-[#f1f5f9]">
+                                                        <td className="whitespace-nowrap px-3 py-2 font-semibold text-[#191c1e]">{index + 1}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 font-semibold text-[#191c1e]">{device.deviceCode}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{device.deviceName}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{device.serialNumber ?? "-"}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{device.branchName}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{device.deviceTypeName}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
+                                                            {[device.groupName, device.departmentName].filter(Boolean).join(" / ") || "-"}
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{device.manager || "-"}</td>
+                                                        <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{device.ipAddress ?? "-"}</td>
+                                                        <td className="max-w-[240px] truncate px-3 py-2 text-[#5e3f3a]" title={device.note ?? undefined}>
+                                                            {device.note ?? "-"}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            </>
+                        ) : (
+                            <>
                         {summary && (
                             <div className="flex flex-wrap items-center gap-4 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold">
                                 <span className="text-[#191c1e]">Tổng: {summary.totalRows} dòng</span>
@@ -428,6 +506,7 @@ export default function ImportDeviceConfigurationDialog({
                                             <th className="whitespace-nowrap px-3 py-2">RAM</th>
                                             <th className="whitespace-nowrap px-3 py-2">Ổ cứng</th>
                                             <th className="whitespace-nowrap px-3 py-2">IP Tanium</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Tài khoản / Email</th>
                                             <th className="min-w-[200px] px-3 py-2">Lỗi / Cảnh báo</th>
                                         </tr>
                                     </thead>
@@ -466,6 +545,24 @@ export default function ImportDeviceConfigurationDialog({
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.ram ?? "-"}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.size ?? "-"}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.taniumIpAddress ?? "-"}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
+                                                    {row.resolvedManagerDomainAccount ? (
+                                                        <div>{row.resolvedManagerDomainAccount}</div>
+                                                    ) : row.lastLoggedInUser ? (
+                                                        <div className="text-[#8a8f94]" title="Tài khoản Local — không lưu">
+                                                            {row.lastLoggedInUser}
+                                                        </div>
+                                                    ) : null}
+                                                    {row.resolvedEmails.length > 0 ? (
+                                                        row.resolvedEmails.map((email) => (
+                                                            <div key={email} className="text-xs">
+                                                                {email}
+                                                            </div>
+                                                        ))
+                                                    ) : !row.lastLoggedInUser ? (
+                                                        "-"
+                                                    ) : null}
+                                                </td>
                                                 <td className="px-3 py-2">
                                                     {!row.isValid && (
                                                         <div className="text-[#930006]">{row.errors.join("; ")}</div>
@@ -481,6 +578,8 @@ export default function ImportDeviceConfigurationDialog({
                                 </table>
                             )}
                         </div>
+                            </>
+                        )}
                     </>
                 )}
 

@@ -67,11 +67,10 @@ Quy tắc dùng ở FE (đã implement trong `AuthApi.getCurrentUser`):
 - Tab mở lâu: `AuthProvider` tự gọi `/Auth/me` mỗi **30 phút** để token không bao giờ kịp hết hạn giữa giờ làm.
 - Nút "Làm mới quyền" cũng đi qua `/Auth/me` (không cần đăng nhập lại) — xem gạch đầu dòng kế.
 
-**Dữ liệu trả về luôn là bản mới nhất, không phải snapshot trong token cũ.** `MyClaimsTransformation` đọc lại
-Role/Permission từ DB ở **mọi** request đã xác thực (kể cả Bearer) và gắn vào một `ClaimsIdentity` riêng
-(`AuthenticationType = "DbRoles"`). `/Auth/me` (và `windows-login`) dựng `user` + JWT mới **chỉ từ identity đó**,
-bỏ bản Role/Permission cũ nằm trong JWT gửi lên. Nhờ vậy quyền vừa **bị thu hồi** cũng biến mất khỏi token
-sau lần gia hạn kế tiếp, và token không phình to dần qua mỗi lần gia hạn.
+**Dữ liệu trả về luôn là bản mới nhất.** JWT **không chứa permission** — FE/mobile lấy danh sách quyền từ
+`data.user.permissions` của `windows-login` / `login` / `qr-login` / `/Auth/me`, đừng giải mã JWT để đọc quyền.
+BE tự xác định permission của mỗi request từ DB (có cache 60s, tự xoá khi Admin đổi quyền), nên quyền vừa
+**bị thu hồi** có hiệu lực ngay ở BE; FE chỉ cần gọi `/Auth/me` ("Làm mới quyền") để cập nhật UI.
 
 **Lưu ý bảo mật:** đây là *sliding session* — người dùng còn mở app thì token cứ được gia hạn, không có mốc
 buộc xác thực lại Windows. Quyền vẫn luôn theo DB (khoá quyền có hiệu lực gần như tức thì), nhưng tài khoản
@@ -150,7 +149,7 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
   `source`: `0`=AD (`mail`), `1`=Alias AD (`proxyAddresses`), `2`=Tanium, `3`=Nhập tay. `modules[].userEmailId = null` →
   module gửi về email chính. `isApplied=false` → module chưa đọc cấu hình này (hiện: Workflow), lưu được nhưng chưa có tác dụng.
   - `GET /user/{userId}` → overview.
-  - `GET /user/{userId}/suggestions` → `[{email, source, note, alreadyAdded}]` — mail + alias tìm thấy trên AD (nguồn Tanium bổ sung sau).
+  - `GET /user/{userId}/suggestions` → `[{email, source, note, alreadyAdded}]` — mail + alias trên AD (`source` 0/1) và email của các máy mà Tanium báo user này đăng nhập gần nhất (`source` 2, `note` ghi mã máy).
   - `POST /user/{userId}` — body `{email[Required, EmailAddress, ≤255], source (mặc định 3), note?, isPrimary}`. Email đầu tiên
     luôn thành email chính. 400 nếu trùng.
   - `DELETE /user/{userId}/{userEmailId}` — 400 nếu xoá email chính khi còn email khác (phải đổi email chính trước).

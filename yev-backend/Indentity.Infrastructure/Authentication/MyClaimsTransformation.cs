@@ -20,13 +20,16 @@ namespace Identity.Infrastructure.Authentication
         private readonly IServiceProvider _serviceProvider;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IMemoryCache _memoryCache;
+        private readonly IAuthSnapshotCache _authSnapshotCache;
 
         public MyClaimsTransformation(
-            IServiceProvider serviceProvider, IHttpContextAccessor httpContextAccessor, IMemoryCache memoryCache)
+            IServiceProvider serviceProvider, IHttpContextAccessor httpContextAccessor, IMemoryCache memoryCache,
+            IAuthSnapshotCache authSnapshotCache)
         {
             _serviceProvider = serviceProvider;
             _httpContextAccessor = httpContextAccessor;
             _memoryCache = memoryCache;
+            _authSnapshotCache = authSnapshotCache;
         }
 
         public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
@@ -39,6 +42,26 @@ namespace Identity.Infrastructure.Authentication
 
             var clone = principal.Clone();
             var dbIdentity = new ClaimsIdentity(IdentityClaimTypes.DbRolesAuthenticationType, ClaimTypes.Name, ClaimTypes.Role);
+
+            // Role/Permission carried by an incoming JWT are never trusted: the DB-sourced identity below
+            // is the only source, so a revoked permission takes effect on the next request.
+            foreach (var identity in clone.Identities)
+            {
+                foreach (var stale in identity.FindAll(c => c.Type == ClaimTypes.Role || c.Type == IdentityClaimTypes.Permission).ToList())
+                {
+                    identity.RemoveClaim(stale);
+                }
+            }
+
+            // Cache hit: serve roles/permissions/profile from the snapshot. The login endpoints (/api/Auth/*)
+            // always take the full path below so IP/DeviceName tracking and the issued token are fresh.
+            if (!IsAuthEndpoint() && _authSnapshotCache.TryGet(windowsUsername, out var cachedSnapshot))
+            {
+                AddSnapshotClaims(dbIdentity, cachedSnapshot);
+                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.RolesLoaded, "true"));
+                clone.AddIdentity(dbIdentity);
+                return clone;
+            }
 
             string? ipAddress = GetClientIp();
             // DeviceName is now only for reference/display purposes (2026-07-11, changed back —
@@ -153,33 +176,16 @@ namespace Identity.Infrastructure.Authentication
                     await dbContext.SaveChangesAsync();
                 }
 
+                var roleNames = (user.Roles ?? new List<Role>())
+                    .Where(r => !string.IsNullOrEmpty(r.RoleName))
+                    .Select(r => r.RoleName)
+                    .ToList();
                 if (user.Roles == null || !user.Roles.Any())
                 {
-                    dbIdentity.AddClaim(new Claim(ClaimTypes.Role, "Basic"));
-                }
-                else
-                {
-                    foreach (var role in user.Roles)
-                    {
-                        if (!string.IsNullOrEmpty(role.RoleName))
-                        {
-                            dbIdentity.AddClaim(new Claim(ClaimTypes.Role, role.RoleName));
-                        }
-                    }
+                    roleNames.Add("Basic");
                 }
 
-                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.UserId, user.Id.ToString()));
-
-                if (!string.IsNullOrEmpty(user.FullName))
-                {
-                    dbIdentity.AddClaim(new Claim(IdentityClaimTypes.FullName, user.FullName));
-                }
-
-                if (!string.IsNullOrEmpty(user.Email))
-                {
-                    dbIdentity.AddClaim(new Claim(IdentityClaimTypes.Email, user.Email));
-                }
-
+                var permissionCodes = new List<string>();
                 if (user.Roles != null)
                 {
                     // Effective permission = Role-based permissions, plus individually granted
@@ -191,13 +197,18 @@ namespace Identity.Infrastructure.Authentication
                     var grantedCodes = userPermissions.Where(up => up.IsGranted).Select(up => up.Permission.Code);
                     var deniedCodes = userPermissions.Where(up => !up.IsGranted).Select(up => up.Permission.Code).ToHashSet();
 
-                    var effectiveCodes = basePermissionCodes.Union(grantedCodes).Except(deniedCodes).Distinct();
-
-                    foreach (var code in effectiveCodes)
-                    {
-                        dbIdentity.AddClaim(new Claim(IdentityClaimTypes.Permission, code));
-                    }
+                    permissionCodes.AddRange(basePermissionCodes.Union(grantedCodes).Except(deniedCodes).Distinct());
                 }
+
+                var snapshot = new AuthSnapshot(
+                    user.Id,
+                    string.IsNullOrEmpty(user.FullName) ? null : user.FullName,
+                    string.IsNullOrEmpty(user.Email) ? null : user.Email,
+                    roleNames,
+                    permissionCodes);
+
+                AddSnapshotClaims(dbIdentity, snapshot);
+                _authSnapshotCache.Set(windowsUsername, snapshot);
             }
 
             dbIdentity.AddClaim(new Claim(IdentityClaimTypes.RolesLoaded, "true"));
@@ -213,6 +224,37 @@ namespace Identity.Infrastructure.Authentication
         }
 
         #region Helpers
+
+        private static void AddSnapshotClaims(ClaimsIdentity dbIdentity, AuthSnapshot snapshot)
+        {
+            foreach (var role in snapshot.Roles)
+            {
+                dbIdentity.AddClaim(new Claim(ClaimTypes.Role, role));
+            }
+
+            dbIdentity.AddClaim(new Claim(IdentityClaimTypes.UserId, snapshot.UserId.ToString()));
+
+            if (snapshot.FullName != null)
+            {
+                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.FullName, snapshot.FullName));
+            }
+
+            if (snapshot.Email != null)
+            {
+                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.Email, snapshot.Email));
+            }
+
+            foreach (var code in snapshot.Permissions)
+            {
+                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.Permission, code));
+            }
+        }
+
+        private bool IsAuthEndpoint()
+        {
+            var path = _httpContextAccessor.HttpContext?.Request.Path ?? default;
+            return path.StartsWithSegments("/api/Auth", StringComparison.OrdinalIgnoreCase);
+        }
 
         private string GetActualFullName(ClaimsPrincipal principal, string windowsUsername)
         {

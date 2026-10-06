@@ -480,14 +480,24 @@ namespace Workflow.Application.Services
             (await _unitOfWork.FormDefinitions.GetByIdAsync(formDefinitionId)).OrThrowNotFound("Form", formDefinitionId);
 
             foreach (var item in request.Items)
-            {
                 GuardExactlyOneTarget(item.TargetType, item.RoleId, item.OrgUnitId, item.EmployeeId);
 
-                if (item.OrgUnitId is not null)
-                    (await _unitOfWork.OrgUnits.GetByIdAsync(item.OrgUnitId.Value)).OrThrowNotFound("Đơn vị tổ chức", item.OrgUnitId.Value);
+            var orgUnitIds = request.Items.Where(x => x.OrgUnitId is not null).Select(x => x.OrgUnitId!.Value).Distinct().ToList();
+            if (orgUnitIds.Count > 0)
+            {
+                var existingOrgUnitIds = (await _unitOfWork.OrgUnits.SelectAsync(x => orgUnitIds.Contains(x.Id), x => x.Id)).ToHashSet();
+                var missingOrgUnitIds = orgUnitIds.Where(id => !existingOrgUnitIds.Contains(id)).ToList();
+                if (missingOrgUnitIds.Count > 0)
+                    throw new NotFoundException("Đơn vị tổ chức", missingOrgUnitIds[0]);
+            }
 
-                if (item.EmployeeId is not null)
-                    (await _unitOfWork.Employees.GetByIdAsync(item.EmployeeId.Value)).OrThrowNotFound("Nhân sự", item.EmployeeId.Value);
+            var employeeIds = request.Items.Where(x => x.EmployeeId is not null).Select(x => x.EmployeeId!.Value).Distinct().ToList();
+            if (employeeIds.Count > 0)
+            {
+                var existingEmployeeIds = (await _unitOfWork.Employees.SelectAsync(x => employeeIds.Contains(x.Id), x => x.Id)).ToHashSet();
+                var missingEmployeeIds = employeeIds.Where(id => !existingEmployeeIds.Contains(id)).ToList();
+                if (missingEmployeeIds.Count > 0)
+                    throw new NotFoundException("Nhân sự", missingEmployeeIds[0]);
             }
 
             var existing = await _unitOfWork.FormAccesses.FindAsync(x => x.FormDefinitionId == formDefinitionId && !x.IsDeleted);
@@ -1088,6 +1098,19 @@ namespace Workflow.Application.Services
             // actually be published and routed, not just look complete.
             var sourceRoutes = (await _unitOfWork.FormRoutes.FindAsync(x => x.FormDefinitionId == formDefinitionId && !x.IsDeleted))
                 .OrderBy(x => x.SortOrder).ToList();
+
+            var sourceRouteIds = sourceRoutes.Select(x => x.Id).ToList();
+            var sourceStepsByRouteId = (await _unitOfWork.FormApprovalSteps.FindAsync(
+                    s => !s.IsDeleted && sourceRouteIds.Contains(s.FormRouteId)))
+                .ToLookup(s => s.FormRouteId);
+
+            var sourceStepIds = sourceStepsByRouteId.SelectMany(g => g).Select(s => s.Id).ToList();
+            var sourceParticipantsByStepId = (await _unitOfWork.FormApprovalStepParticipants.FindAsync(
+                    p => !p.IsDeleted && sourceStepIds.Contains(p.FormApprovalStepId)))
+                .ToLookup(p => p.FormApprovalStepId);
+
+            // Children are linked through navigation properties so EF resolves the new keys itself and
+            // the whole route/step/participant tree is written by the single SaveChangesAsync below.
             foreach (var route in sourceRoutes)
             {
                 var newRoute = new FormRoute
@@ -1103,15 +1126,12 @@ namespace Workflow.Application.Services
                     IsDeleted = false
                 };
                 await _unitOfWork.FormRoutes.AddAsync(newRoute);
-                await _unitOfWork.SaveChangesAsync(); // need newRoute.Id before creating its steps
 
-                var sourceSteps = (await _unitOfWork.FormApprovalSteps.FindAsync(s => s.FormRouteId == route.Id))
-                    .OrderBy(s => s.StepOrder).ToList();
-                foreach (var step in sourceSteps)
+                foreach (var step in sourceStepsByRouteId[route.Id].OrderBy(s => s.StepOrder))
                 {
                     var newStep = new FormApprovalStep
                     {
-                        FormRouteId = newRoute.Id,
+                        FormRoute = newRoute,
                         StepOrder = step.StepOrder,
                         NameVn = step.NameVn,
                         NameJp = step.NameJp,
@@ -1125,14 +1145,12 @@ namespace Workflow.Application.Services
                         IsDeleted = false
                     };
                     await _unitOfWork.FormApprovalSteps.AddAsync(newStep);
-                    await _unitOfWork.SaveChangesAsync(); // need newStep.Id before creating its participants
 
-                    var sourceParticipants = await _unitOfWork.FormApprovalStepParticipants.FindAsync(p => p.FormApprovalStepId == step.Id);
-                    foreach (var participant in sourceParticipants)
+                    foreach (var participant in sourceParticipantsByStepId[step.Id])
                     {
                         await _unitOfWork.FormApprovalStepParticipants.AddAsync(new FormApprovalStepParticipant
                         {
-                            FormApprovalStepId = newStep.Id,
+                            FormApprovalStep = newStep,
                             ParticipantSource = participant.ParticipantSource,
                             EmployeeId = participant.EmployeeId,
                             JobTitleId = participant.JobTitleId,

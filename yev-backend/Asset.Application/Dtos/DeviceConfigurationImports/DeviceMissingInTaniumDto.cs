@@ -2,8 +2,8 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
 {
     // 1 row of the "missing from Tanium" reconciliation report — a Device the system has marked
     // InUse but that did not appear (by resolved DeviceCode) in the Tanium file just uploaded.
-    // Not returned as JSON; only used internally to build the downloadable .xlsx (see
-    // DeviceConfigurationImportService.BuildMissingDevicesReportAsync).
+    // Returned as JSON for the on-screen report (GetMissingDevicesAsync) and used to build the
+    // downloadable .xlsx (BuildMissingDevicesReportAsync).
     public class DeviceMissingInTaniumDto
     {
         public string DeviceCode { get; set; } = string.Empty;

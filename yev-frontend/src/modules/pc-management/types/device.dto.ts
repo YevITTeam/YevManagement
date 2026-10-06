@@ -34,6 +34,8 @@ export interface DeviceDto {
     ipAddresses: string[];
     purchaseDate: string | null;
     manager: string;
+    // DOMAIN\user từ Tanium (chỉ tham khảo, không sửa tay); null khi chưa đồng bộ.
+    managerDomainAccount: string | null;
     expirationDate: string | null;
     note: string | null;
     emails: string[];
@@ -88,6 +90,8 @@ export interface DeviceGetDto {
     departmentId: number | null;
     departmentName: string | null;
     manager: string;
+    // DOMAIN\user từ Tanium (chỉ tham khảo, không sửa tay); null khi chưa đồng bộ.
+    managerDomainAccount: string | null;
     emails: DeviceEmailDto[];
     purchaseDate: string;
     depreciationMonths: number;

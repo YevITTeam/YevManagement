@@ -212,18 +212,24 @@ namespace Workflow.Application.Services
 
         public async Task ReorderAsync(ReorderOrgUnitDto request)
         {
+            // The tree is small, so it is loaded once; tracked entities keep earlier items' ParentId
+            // changes visible to the cycle check of later items.
+            var unitsById = (await _unitOfWork.OrgUnits.GetAllAsync()).ToDictionary(x => x.Id);
+
             foreach (var item in request.Items)
             {
-                var entity = (await _unitOfWork.OrgUnits.GetByIdAsync(item.Id)).OrThrowNotFound("Đơn vị tổ chức", item.Id);
+                if (!unitsById.TryGetValue(item.Id, out var entity))
+                    throw new NotFoundException("Đơn vị tổ chức", item.Id);
 
                 if (item.ParentId is not null)
                 {
                     if (item.ParentId == item.Id)
                         throw new DomainException("Đơn vị không thể là cha của chính nó.");
 
-                    (await _unitOfWork.OrgUnits.GetByIdAsync(item.ParentId.Value)).OrThrowNotFound("Đơn vị cha", item.ParentId.Value);
+                    if (!unitsById.ContainsKey(item.ParentId.Value))
+                        throw new NotFoundException("Đơn vị cha", item.ParentId.Value);
 
-                    await GuardAgainstCycleAsync(item.Id, item.ParentId.Value);
+                    GuardAgainstCycle(unitsById, item.Id, item.ParentId.Value);
                 }
 
                 entity.ParentId = item.ParentId;
@@ -236,6 +242,20 @@ namespace Workflow.Application.Services
         }
 
         // Chặn việc kéo-thả biến 1 đơn vị con thành cha của chính tổ tiên nó (vòng lặp trong cây).
+        private static void GuardAgainstCycle(IReadOnlyDictionary<int, OrgUnit> unitsById, int movingId, int newParentId)
+        {
+            var cursor = newParentId;
+            var guard = 0;
+            while (guard++ < 1000)
+            {
+                if (cursor == movingId)
+                    throw new DomainException("Không thể chuyển đơn vị vào chính đơn vị con/cháu của nó.");
+
+                if (!unitsById.TryGetValue(cursor, out var parent) || parent.ParentId is null) return;
+                cursor = parent.ParentId.Value;
+            }
+        }
+
         private async Task GuardAgainstCycleAsync(int movingId, int newParentId)
         {
             var cursor = newParentId;

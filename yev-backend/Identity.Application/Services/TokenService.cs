@@ -21,6 +21,7 @@ namespace Identity.Application.Services
         private static readonly HashSet<string> IgnoredClaimTypes = new(StringComparer.Ordinal)
         {
             IdentityClaimTypes.RolesLoaded,
+            IdentityClaimTypes.Permission,
             JwtRegisteredClaimNames.Exp,
             JwtRegisteredClaimNames.Nbf,
             JwtRegisteredClaimNames.Iat,
@@ -29,14 +30,12 @@ namespace Identity.Application.Services
             JwtRegisteredClaimNames.Jti,
         };
 
-        // Role/Permission are always re-read from the "DbRoles" identity that MyClaimsTransformation
-        // just built from the DB. Merging in the copies carried by the incoming JWT would make every
-        // renewal accumulate the previous snapshot: a revoked permission would never disappear and the
-        // token would grow on each renewal.
+        // Role is always re-read from the "DbRoles" identity that MyClaimsTransformation just built from
+        // the DB, so a renewal never carries over a role copied from the incoming JWT. Permission is not
+        // put in the token at all: it is resolved server-side per request (see AuthSnapshotCache).
         private static readonly HashSet<string> DbSourcedClaimTypes = new(StringComparer.Ordinal)
         {
             ClaimTypes.Role,
-            IdentityClaimTypes.Permission,
         };
 
         private readonly IConfiguration _configuration;

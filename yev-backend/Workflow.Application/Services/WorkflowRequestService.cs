@@ -376,9 +376,13 @@ namespace Workflow.Application.Services
                 var minConfigStepOrder = routeSteps.Min(s => s.StepOrder);
 
                 // 8. Tạo WorkflowRequestSteps + Participants
+                var stepOrgUnitIds = stepBuilds.Select(b => b.NodeOrgUnitId).Distinct().ToList();
+                var orgUnitsById = (await _unitOfWork.OrgUnits.FindAsync(x => stepOrgUnitIds.Contains(x.Id)))
+                    .ToDictionary(x => x.Id);
+
                 foreach (var build in stepBuilds)
                 {
-                    var orgUnit = await _unitOfWork.OrgUnits.GetByIdAsync(build.NodeOrgUnitId);
+                    orgUnitsById.TryGetValue(build.NodeOrgUnitId, out var orgUnit);
                     // Offset +1: xem comment trong WorkflowRequestStep.cs.
                     var snapshotStepOrder = build.Config.StepOrder + 1;
                     var wfStep = new WorkflowRequestStep
@@ -1048,10 +1052,14 @@ namespace Workflow.Application.Services
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
             var now = TimeHelper.GetCurrentUtcTime();
 
+            var participantEmployeeIds = participants.Select(p => p.EmployeeId).Distinct().ToList();
+            var employeesById = (await _unitOfWork.Employees.FindAsync(x => participantEmployeeIds.Contains(x.Id)))
+                .ToDictionary(x => x.Id);
+
+            var recipients = new List<(Employee Employee, WorkflowRequestEmailToken Token)>();
             foreach (var participant in participants)
             {
-                var employee = await _unitOfWork.Employees.GetByIdAsync(participant.EmployeeId);
-                if (employee is null || string.IsNullOrWhiteSpace(employee.Email)) continue;
+                if (!employeesById.TryGetValue(participant.EmployeeId, out var employee) || string.IsNullOrWhiteSpace(employee.Email)) continue;
 
                 var emailToken = new WorkflowRequestEmailToken
                 {
@@ -1063,8 +1071,14 @@ namespace Workflow.Application.Services
                     CreatedAt = now
                 };
                 await _unitOfWork.WorkflowRequestEmailTokens.AddAsync(emailToken);
-                await _unitOfWork.SaveChangesAsync();
+                recipients.Add((employee, emailToken));
+            }
 
+            if (recipients.Count == 0) return;
+            await _unitOfWork.SaveChangesAsync();
+
+            foreach (var (employee, emailToken) in recipients)
+            {
                 try
                 {
                     var link = $"{baseUrl}/xac-nhan-don-quy-trinh?token={emailToken.Token}";

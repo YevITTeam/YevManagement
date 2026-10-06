@@ -1,5 +1,6 @@
 ﻿using Asset.Infrastructure.Context;
 using Attendance.Infrastructure.Context;
+using Identity.Application.Authentication;
 using Identity.Infrastructure.Authentication;
 using Identity.Infrastructure.Context;
 using Microsoft.AspNetCore.Authentication;
@@ -66,6 +67,7 @@ namespace CompanySystem.HostApi.Configurations
             services.AddHttpContextAccessor();
             // MyClaimsTransformation caches its per-request reverse-DNS lookup here (see the class for why).
             services.AddMemoryCache();
+            services.AddSingleton<IAuthSnapshotCache, AuthSnapshotCache>();
             services.AddScoped<IClaimsTransformation, MyClaimsTransformation>();
 
             // AI Chat -> LM Studio typed HttpClient (docs/docs-be/asset-module.md §1.18). Not picked up by the

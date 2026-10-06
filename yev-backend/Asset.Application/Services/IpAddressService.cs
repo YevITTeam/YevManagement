@@ -19,10 +19,7 @@ namespace Asset.Application.Services
 
         public async Task<PagedResponse<IpAddressDto>> GetPagedAsync(IpAddressFilterRequest request)
         {
-            // `Device` is an optional navigation, so the include selector needs `!` to satisfy the
-            // repository's Expression<Func<T, object>> signature. EF only reads the expression tree
-            // here — nothing is dereferenced, so this cannot throw.
-            var query = _unitOfWork.IpAddresses.GetQueryable(false, x => x.Device!, x => x.IpPrefix).Where(x => !x.IsDeleted);
+            var query = _unitOfWork.IpAddresses.GetQueryable(false).Where(x => !x.IsDeleted);
 
             if (!string.IsNullOrWhiteSpace(request.Keyword))
             {
@@ -49,10 +46,25 @@ namespace Asset.Application.Services
                 query = query.Where(x => x.DeviceId == request.DeviceId.Value);
             }
 
-            // Materialize projected DTOs then sort by numeric IP value + page in memory: ordering
-            // by the IpAddress string in SQL is lexicographic ("10.45.1.10" before "10.45.1.2").
-            var all = await _unitOfWork.IpAddresses.ToListAsync(
-                query,
+            // IPv4 strings do not sort numerically in SQL ("10.45.1.10" before "10.45.1.2"), so only the
+            // (Id, IP) pairs are loaded and sorted in memory; the full row is loaded for the requested page.
+            var keys = await _unitOfWork.IpAddresses.ToListAsync(query, x => new { x.Id, x.IpAddress1 });
+
+            var sortedIds = keys
+                .OrderBy(x => NetworkHelper.ToSortableKey(x.IpAddress1))
+                .Select(x => x.Id)
+                .ToList();
+
+            var pageIds = sortedIds
+                .Skip((request.PageIndex - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .ToList();
+
+            var pageQuery = _unitOfWork.IpAddresses.GetQueryable(false, x => x.Device!, x => x.IpPrefix)
+                .Where(x => pageIds.Contains(x.Id));
+
+            var items = await _unitOfWork.IpAddresses.ToListAsync(
+                pageQuery,
                 x => new IpAddressDto
                 {
                     Id = x.Id,
@@ -76,19 +88,15 @@ namespace Asset.Application.Services
                 }
             );
 
-            foreach (var item in all)
+            foreach (var item in items)
             {
                 item.StatusText = item.Status.GetIpAddressStatusText();
             }
 
-            var ordered = all.OrderBy(x => NetworkHelper.ToSortableKey(x.IpAddress)).ToList();
+            var position = pageIds.Select((id, index) => (id, index)).ToDictionary(x => x.id, x => x.index);
+            items = items.OrderBy(i => position[i.Id]).ToList();
 
-            var items = ordered
-                .Skip((request.PageIndex - 1) * request.PageSize)
-                .Take(request.PageSize)
-                .ToList();
-
-            return new PagedResponse<IpAddressDto>(items, ordered.Count, request.PageIndex, request.PageSize);
+            return new PagedResponse<IpAddressDto>(items, sortedIds.Count, request.PageIndex, request.PageSize);
         }
 
         public async Task<List<IpAddressDto>> GetAvailableAsync(string? keyword)

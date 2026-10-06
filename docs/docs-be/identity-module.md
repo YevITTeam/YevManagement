@@ -46,7 +46,7 @@ Fluent (`IdentityDbContext.OnModelCreating`):
 |---|---|
 | `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync(roleId?)` (lọc theo Role qua `Roles.Any(r => r.Id == roleId)` khi có, 2026-07-16), `UpdateUserRolesAsync`, `CreateUserAsync` (§5.1), `UpdateUserFullNameAsync` (§5.5), `DeleteUserAsync` (§5.2, **xóa cứng**) |
 | `RoleService` | CRUD role (`Create` ném `DomainException` nếu trùng tên; xóa = soft-delete). ⚠️ `GetRoleByIdAsync` **không check null** → NRE nếu id sai (nên `.OrThrowNotFound`) |
-| `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` — JWT HS256, hạn `JwtSettings:ExpiryMinutes`. Loại `RolesLoaded` + claim do JWT tự sinh (`exp/nbf/iat/iss/aud/jti`, nếu không token gia hạn sẽ có `aud`/`exp` trùng → không validate được); `Role`/`Permission` **chỉ lấy từ identity `DbRoles`** rồi `DistinctBy` — xem §5 |
+| `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` — JWT HS256, hạn `JwtSettings:ExpiryMinutes`. Loại `RolesLoaded`, **`Permission`** + claim do JWT tự sinh (`exp/nbf/iat/iss/aud/jti`, nếu không token gia hạn sẽ có `aud`/`exp` trùng → không validate được); `Role` **chỉ lấy từ identity `DbRoles`** rồi `DistinctBy`. Token KHÔNG chứa permission (nhẹ, ~vài trăm byte) — xem §5 |
 | `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync`, `UpdateRolePermissionsAsync` (clear+add lại), `GetUserPermissionOverridesAsync`, `GetEffectivePermissionsForUserAsync`, `UpdateUserPermissionOverridesAsync` (§9.1) |
 
 ## 5. Xác thực: Windows Negotiate → ClaimsTransformation → JWT
@@ -59,8 +59,9 @@ Fluent (`IdentityDbContext.OnModelCreating`):
    - Ghi/update `LoginUserIP`. Bơm claims vào **một `ClaimsIdentity` riêng** `AuthenticationType = "DbRoles"`: `Role` (mỗi role), `Permission` (mỗi mã hiệu lực §9.1), `FullName`, `Email`, `IpAddress`, `DeviceName`, `RolesLoaded=true`. Tên các claim/identity này là hằng dùng chung ở `Identity.Application/Authentication/IdentityClaimTypes.cs` (Infrastructure tạo → Application đóng vào JWT → Api đọc ra `UserDto`, cả 3 phải khớp chính xác).
 3. **`AuthController.WindowsLogin`** (`[Authorize(AuthenticationSchemes="Negotiate")]`) và **`AuthController.Me`** (`[Authorize]`, Bearer) cùng gọi private `BuildSession()`: đọc claims → `UserDto` + `TokenService.GenerateJwtToken` → `LoginResponseDto`. Client dùng `Authorization: Bearer <token>` cho request sau.
 
-> ⚠️ **`RolesLoaded` bị loại khỏi JWT** → mỗi request Bearer chạy lại `MyClaimsTransformation` → **Role/Permission luôn refresh theo DB hiện tại mỗi request**, không cần login lại sau khi Admin đổi quyền. Đánh đổi: +1 query DB/request.
-> ⚠️ **`BuildSession()` + `GenerateJwtToken` chỉ tin identity `DbRoles`** cho `Role`/`Permission`, bỏ bản cũ nằm trong JWT gửi lên (2026-08-01). Bắt buộc từ khi có `/Auth/me` gia hạn token: nếu gộp cả 2, mỗi lần gia hạn lại cộng dồn snapshot cũ → quyền đã thu hồi không bao giờ mất và token phình dần. Lưu ý claim **trong token đang lưu ở FE vẫn có thể cũ** trong tối đa 120 phút — `PermissionAuthorizationHandler` xét trên toàn principal (union JWT cũ + `DbRoles` mới), nên **thu hồi quyền chỉ có hiệu lực đầy đủ sau lần gia hạn/login kế tiếp**; cấp thêm quyền thì hiệu lực ngay.
+> ⚠️ **JWT chỉ mang định danh + `Role` + `UserId/FullName/Email`, KHÔNG mang `Permission`.** Permission, role, profile được lấy từ DB và **cache trong `IAuthSnapshotCache`** (`AuthSnapshotCache`, `IMemoryCache`, TTL 60s, đăng ký Singleton ở `HostApi/Configurations/DependencyInjection.cs`). `MyClaimsTransformation` chạy mỗi request nhưng chỉ tải DB khi cache miss; mọi request `/api/Auth/*` (login, `me`) luôn đi đường đầy đủ và nạp lại cache.
+> ⚠️ **Xoá cache:** `IdentityUnitOfWork.SaveChangesAsync` gọi `InvalidateAll()` sau mỗi lần lưu có thay đổi entity Identity (trừ `LoginUserIP/LoginQrCode/LoginQrLog`) → đổi role/permission/email/tên có hiệu lực ngay. Sửa DB trực tiếp (SQL/migration) chỉ có hiệu lực sau tối đa 60s. Cache nằm trong tiến trình → nếu chạy nhiều instance API thì phải thay bằng cache phân tán (Redis).
+> ⚠️ **Mọi claim `Role`/`Permission` mang sẵn trong JWT bị gỡ khỏi principal** ngay đầu `TransformAsync`, chỉ identity `DbRoles` được tin → thu hồi quyền có hiệu lực ngay, kể cả với token cũ phát trước khi đổi cơ chế. `BuildSession()` + `GenerateJwtToken` cũng chỉ tin `DbRoles` cho `Role`, tránh cộng dồn khi gia hạn (`/Auth/me`).
 > ⚠️ AD (`System.DirectoryServices.AccountManagement`) chỉ chạy trên Windows domain-joined (warning CA1416). `TransformAsync` có ghi DB → windows-login **không** read-only.
 
 ### 5.3. `GET /api/Auth/me` — lấy lại phiên & gia hạn token
@@ -212,8 +213,8 @@ cho email (email/user domain bên Asset lấy từ Tanium chỉ để tham khả
 - **Chỉ Admin quản lý** (`Identity.UserEmail.Manage`, migration `AddUserEmails`) — không có trang người dùng tự sửa nên không có bước
   xác nhận qua mail. API ở [identity-api-fe.md §4.11](identity-api-fe.md).
 - **Đề xuất đồng bộ** (`GET .../suggestions`): `IActiveDirectoryAuthService.GetEmailAddresses` đọc AD `mail` + mọi `smtp:` trong
-  `proxyAddresses`; Admin tự chọn thêm. Nguồn Tanium (mail của máy có "Last Logged In User" = tài khoản này) **chưa làm** — chờ
-  file Tanium mới có cột email.
+  `proxyAddresses`; Admin tự chọn thêm. Thêm nguồn **Tanium**: `IDeviceContactDirectoryService.GetEmailsByDomainAccountAsync(UserName)` (Asset) trả email của mọi máy có
+  `Device.ManagerDomainAccount` = `UserName`; ghi chú của đề xuất liệt kê mã máy. Đề xuất AD ưu tiên hơn khi trùng email.
 - **Danh mục module**: `Shared.Application/Helper/EmailModules.cs` (`Attendance` đã áp dụng; `Workflow` lưu được nhưng
   `IsApplied=false` — Workflow vẫn gửi theo `Employees.Email` riêng của nó).
 - **Gửi mail**: `IUserDirectoryService.GetContactInfoAsync(userName, moduleCode)` trả email Admin gán cho module đó, không có thì email

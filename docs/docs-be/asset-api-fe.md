@@ -133,7 +133,7 @@ Query: `pageIndex/pageSize`, `deviceCode/manager/supplierName`(Contains), `purch
 // data.data[]
 { "id":16925, "deviceCode":"YDF-216", "deviceName":"DA", "branchName":"...", "supplierName":"...",
   "deviceTypeName":"Desktop", "groupName":null, "departmentName":null, "ipAddresses":[],
-  "purchaseDate":"...", "manager":"...", "expirationDate":"...", "note":"...", "emails":["..."],
+  "purchaseDate":"...", "manager":"...", "managerDomainAccount":"YEV\\user", "expirationDate":"...", "note":"...", "emails":["..."],
   "status":0, "statusText":"Chờ sử dụng", "isOutsourced":false, "serialNumber":null, "isUseUsb":false,
   "requiresDailyCheck":false }  // 2026-09-17: máy nằm trong phòng server, có dán QR → vào phiên quét ngày (7d.2)
 ```
@@ -169,7 +169,7 @@ Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ 
 { "ids":[17982, 17983, 17984] }
 // data — GIỮ ĐÚNG thứ tự ids gửi lên; máy không tồn tại/đã xóa bị bỏ qua
 [ { "deviceId":17982, "deviceCode":"YDC-1877", "deviceName":"Máy kế toán",
-    "deviceTypeName":"PC", "branchName":"TAM", "supplierName":"...", "manager":"...",
+    "deviceTypeName":"PC", "branchName":"TAM", "supplierName":"...", "manager":"...", "managerDomainAccount":null,  // Tanium: DOMAIN\user cuối cùng đăng nhập (chỉ tham khảo, không sửa tay)
     "serialNumber":"5CD5354PGJ", "statusText":"Đang sử dụng", "purchaseDate":"...",
     "qrPayload":"YDC-1877\nMáy kế toán\nSN: 5CD5354PGJ\nXưởng: TAM" } ]
 ```
@@ -317,14 +317,15 @@ FE hiện "Đã tạo N, cập nhật K, bỏ qua M dòng lỗi". Response 400 c
 |---|---|---|
 | A | Computer Name | tách ra mã/tên máy |
 | B | Tanium Client IP Address | gán IP |
-| C | Last Logged In User | **bỏ qua** |
-| D | Manufacturer | `maker` |
-| E | Model | `model` |
-| F | **Computer Serial Number** | **`Device.SerialNumber`** (mới) |
-| G | CPU | `cpu` |
-| H | **Total Memory** (tên cũ "RAM") | `ram` |
-| I | Size | `hardDrive` |
-> ⚠️ File xuất theo **format cũ 8 cột** (không có Computer Serial Number) sẽ đọc **lệch cột** — phải xuất lại theo format mới.
+| C | **Last Logged In User** | **`Device.managerDomainAccount`** (chỉ `DOMAIN\user`; `Local\user` bỏ qua) |
+| D | **Custom Registry UserEmail** | thêm vào email của máy (nhiều email trong 1 ô, `[NOT_FOUND]` = không có) |
+| E | Manufacturer | `maker` |
+| F | Model | `model` |
+| G | **Computer Serial Number** | **`Device.SerialNumber`** |
+| H | CPU | `cpu` |
+| I | **Total Memory** (tên cũ "RAM") | `ram` |
+| J | Size | `hardDrive` |
+> ⚠️ File theo **format cũ (9 cột trở xuống)** sẽ đọc **lệch cột** — phải xuất lại theo format 10 cột.
 > **Chỉ import 5 họ**: `YDC`/`YLC`/`YDF`/`AC`/`TYC`. Không khớp (gồm **họ `DA`**, `DESKTOP-*`, `ACLF/ACELF/ALF`...) → **loại thầm lặng** (`outOfScopeSkippedCount`).
 
 **Tách Computer Name → Mã/Tên** (server tự): (1) bỏ hậu tố `.yev.vn`, tách `-`. (2) `YDC/YLC/YDF/TYC`+số → Mã chèn `-` (`YDC1877`→`YDC-1877`), Tên=phần còn lại. (3) `AC`+số+≤1 chữ (`AC90B`) → Mã=nối 2 đoạn (`AC90B-2446`), Tên=Mã, phần còn lại bỏ. (4) còn lại (gồm `DA-*`) → loại.
@@ -336,9 +337,11 @@ Mã không khớp Device → lỗi preview. Trùng mã trong file → lỗi cả
 // data
 { "rows":[
     { "rowNumber":2, "computerName":"YDC9999-TESTCFG.yev.vn", "taniumIpAddress":"1.1.1.168",
+      "lastLoggedInUser":"YEV\\t.nham6737", "userEmail":"a@yev.vn\nb@yev.vn",
       "manufacturer":"Dell", "model":"...", "serialNumber":"5CD5354PGJ", "cpu":"...", "ram":"16384 MB", "size":"477 GB",
       "parsedDeviceCode":"YDC-9999", "parsedDeviceName":"TESTCFG",  // hiển thị để user kiểm tra tách đúng
       "resolvedDeviceId":18001, "resolvedIpAddressId":7053, "resolvedSerialNumber":"5CD5354PGJ",  // null = sẽ KHÔNG ghi serial
+      "resolvedManagerDomainAccount":"YEV\\t.nham6737", "resolvedEmails":["a@yev.vn","b@yev.vn"],  // null / [] = không ghi
       "isValid":true, "errors":[], "warnings":[] },
     { "rowNumber":4, ..., "resolvedIpAddressId":null, "isValid":true, "errors":[],
       "warnings":["Không tìm thấy địa chỉ IP '...' — sẽ không cập nhật IP..."] }
@@ -349,13 +352,15 @@ Mã không khớp Device → lỗi preview. Trùng mã trong file → lỗi cả
 **Confirm** `POST /confirm` (gửi lại `rows` field thô). **Atomic — còn lỗi thì không ghi gì**, 400 `"Dòng {n}: {lý do}"`:
 ```jsonc
 // data
-{ "createdConfigCount":1, "updatedConfigCount":0, "ipReassignedCount":1, "serialUpdatedCount":1,
+{ "createdConfigCount":1, "updatedConfigCount":0, "ipReassignedCount":1, "serialUpdatedCount":1, "managerAccountUpdatedCount":1, "emailAddedCount":2,
   "updatedDeviceIds":[18001] }
 ```
 **Luật gán IP** (`taniumIpAddress`): trống→bỏ qua; chỉ gán khi IP còn `Available` (`ipReassignedCount` = số IP đã gán); IP đang được Device khác / thiết bị ngoài dùng, lặp trong file, hoặc không khớp→**không chặn**, +`warnings`, bỏ IP. IP khác của Device đang import **không** bị gỡ.
 **Luật ghi Serial** (`serialNumber`, 2026-07-23): trống→bỏ qua; serial đang thuộc **Device khác** hoặc **lặp nhiều dòng trong file** → **không chặn dòng**, chỉ +`warnings` và bỏ ghi serial (`resolvedSerialNumber=null`); còn lại → ghi đè `Device.SerialNumber` (Tanium đọc thẳng từ máy nên tin hơn giá trị nhập tay). Cột serial chứa `"TSE-Error"` cũng làm hỏng dòng như các cột khác. **Update không đè field khác**: Device có config → chỉ đè 5 field Tanium (chỉ khi ô không rỗng), field khác giữ nguyên; chưa có → tạo mới (kèm Initial 6.1). Permission chung `Asset.DeviceConfiguration.Update`.
 
-**Báo cáo đối chiếu** `POST /missing-devices-report` (2026-07-27, `multipart/form-data` field `file` — cùng file Tanium, **không** cần đã gọi `/preview` trước; kèm field `prefixes` = chuỗi tiền tố mã máy phân cách dấu phẩy, FE cho người dùng tự nhập, mặc định gợi ý `"YDC,YDF,YLC"`, rỗng = không lọc). So Device đang **`Status = InUse`** + `DeviceCode` khớp 1 trong `prefixes` trong hệ thống với danh sách máy khớp được trong file (Tanium chỉ quét máy đang bật nên chỉ so trên `InUse`, `PendingUse`/`PendingLiquidation`/`Liquidated` không tính). Response **không phải `ApiResponse<T>`** — trả thẳng file `.xlsx` (`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`), FE đọc `response.blob()`. Đếm số thiết bị thiếu qua header **`X-Missing-Device-Count`** (đọc bằng `response.headers.get("x-missing-device-count")` — phải đọc từ **response gốc của `fetch`**, không phải qua wrapper đã parse JSON như các API khác) và tên file gợi ý qua `Content-Disposition` (`response.headers.get("content-disposition")`, parse `filename="..."`). Lỗi trước khi ghi file (thiếu file upload) vẫn trả JSON `ApiResponse<object>` bình thường như mọi lỗi khác. Permission chung `Asset.DeviceConfiguration.Update`.
+**Báo cáo đối chiếu hiện trên màn hình** `POST /missing-devices` (`multipart/form-data`: `file` + `prefixes`, cùng quy tắc với bản Excel bên dưới) → `ApiResponse<DeviceMissingInTaniumDto[]>`: `[{deviceCode, deviceName, serialNumber, branchName, deviceTypeName, groupName, departmentName, manager, ipAddress, note}]`. FE hiện bảng trong dialog (thay bảng Xem trước tới khi "Đóng báo cáo") kèm nút "Tải Excel" gọi endpoint bên dưới.
+
+**Tải Excel** `POST /missing-devices-report` (2026-07-27, `multipart/form-data` field `file` — cùng file Tanium, **không** cần đã gọi `/preview` trước; kèm field `prefixes` = chuỗi tiền tố mã máy phân cách dấu phẩy, FE cho người dùng tự nhập, mặc định gợi ý `"YDC,YDF,YLC"`, rỗng = không lọc). So Device đang **`Status = InUse`** + `DeviceCode` khớp 1 trong `prefixes` trong hệ thống với danh sách máy khớp được trong file (Tanium chỉ quét máy đang bật nên chỉ so trên `InUse`, `PendingUse`/`PendingLiquidation`/`Liquidated` không tính). Response **không phải `ApiResponse<T>`** — trả thẳng file `.xlsx` (`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`), FE đọc `response.blob()`. Đếm số thiết bị thiếu qua header **`X-Missing-Device-Count`** (đọc bằng `response.headers.get("x-missing-device-count")` — phải đọc từ **response gốc của `fetch`**, không phải qua wrapper đã parse JSON như các API khác) và tên file gợi ý qua `Content-Disposition` (`response.headers.get("content-disposition")`, parse `filename="..."`). Lỗi trước khi ghi file (thiếu file upload) vẫn trả JSON `ApiResponse<object>` bình thường như mọi lỗi khác. Permission chung `Asset.DeviceConfiguration.Update`.
 
 ### 6.4 Import thanh lý hàng loạt — `/api/DeviceLiquidationImport` (preview/confirm)
 Upload file **1 cột `Mã máy`** (dòng 1 header, `.xlsx`/`.csv`) để chuyển hàng loạt thiết bị sang **"Đã thanh lý"**.
@@ -599,7 +604,7 @@ App tự so `versionCode` hiện tại của mình với response: `< minVersion
 | `/api/DeviceImport` | `preview`/`confirm` (Excel/CSV) |
 | `/api/DeviceLiquidationImport` | `preview`/`confirm` — import 1 cột mã máy để thanh lý hàng loạt (6.4) |
 | `/api/DeviceConfiguration` | `by-device/{deviceId}`, POST, PUT{id}, DELETE{id}, `{configId}/initial`, `initial/{id}`, `{configId}/history` |
-| `/api/DeviceConfigurationImport` | `preview`/`confirm` (Tanium, chỉ update), `missing-devices-report` (trả file .xlsx, không phải `ApiResponse<T>`) |
+| `/api/DeviceConfigurationImport` | `preview`/`confirm` (Tanium, chỉ update), `missing-devices` (JSON) + `missing-devices-report` (trả file .xlsx, không phải `ApiResponse<T>`) |
 | `/api/DeviceSoftware` | `device/{deviceId}`, POST, PUT, DELETE `device/{deviceId}/software/{softwareId}`, `picker/{deviceId}`, `sync` |
 | `/api/AuditTrail` | `grid-list` (filter+phân trang), `record?tableName=&recordId=`. Chỉ đọc, ghi tự động ở BE |
 | `/api/AiChat` | `stream`(POST, NDJSON, 7c) — trợ lý AI tra cứu, thay thế hoàn toàn cách gọi thẳng Ollama cũ ở FE |

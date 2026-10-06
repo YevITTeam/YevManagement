@@ -129,10 +129,10 @@ namespace Workflow.Application.Services
 
             var distinctJobTitleIds = request.JobTitleIds.Distinct().ToList();
 
-            foreach (var jobTitleId in distinctJobTitleIds)
-            {
-                (await _unitOfWork.JobTitles.GetByIdAsync(jobTitleId)).OrThrowNotFound("Chức danh", jobTitleId);
-            }
+            var existingJobTitleIds = (await _unitOfWork.JobTitles.SelectAsync(x => distinctJobTitleIds.Contains(x.Id), x => x.Id)).ToHashSet();
+            var missingJobTitleIds = distinctJobTitleIds.Where(id => !existingJobTitleIds.Contains(id)).ToList();
+            if (missingJobTitleIds.Count > 0)
+                throw new NotFoundException("Chức danh", missingJobTitleIds[0]);
 
             var existing = await _unitOfWork.OrgLevelJobTitleSuggestions.FindAsync(x => x.OrgLevelId == orgLevelId && !x.IsDeleted);
             foreach (var item in existing)

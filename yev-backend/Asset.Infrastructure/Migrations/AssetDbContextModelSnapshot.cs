@@ -168,6 +168,10 @@ namespace Asset.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<string>("ManagerDomainAccount")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");

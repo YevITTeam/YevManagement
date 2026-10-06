@@ -13,6 +13,7 @@
         public List<string> IpAddresses { get; set; } = new();
         public DateTime PurchaseDate { get; set; }
         public string Manager { get; set; } = null!;
+        public string? ManagerDomainAccount { get; set; }
         public DateTime? ExpirationDate { get; set; }
         public string? Note { get; set; }
         public List<string> Emails { get; set; } = new();

@@ -3,6 +3,7 @@ using Identity.Application.Interfaces.Service;
 using Identity.Domain.Entities;
 using Identity.Domain.Enums;
 using Shared.Application.Helper;
+using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 
@@ -13,10 +14,15 @@ namespace Identity.Application.Services
     public class UserEmailService : BaseService<IIdentityUnitOfWork>, IUserEmailService
     {
         private readonly IActiveDirectoryAuthService _activeDirectoryService;
+        private readonly IDeviceContactDirectoryService _deviceContactDirectoryService;
 
-        public UserEmailService(IIdentityUnitOfWork unitOfWork, IActiveDirectoryAuthService activeDirectoryService) : base(unitOfWork)
+        public UserEmailService(
+            IIdentityUnitOfWork unitOfWork,
+            IActiveDirectoryAuthService activeDirectoryService,
+            IDeviceContactDirectoryService deviceContactDirectoryService) : base(unitOfWork)
         {
             _activeDirectoryService = activeDirectoryService;
+            _deviceContactDirectoryService = deviceContactDirectoryService;
         }
 
         public async Task<UserEmailOverviewDto> GetOverviewAsync(int userId)
@@ -168,6 +174,16 @@ namespace Identity.Application.Services
             {
                 if (suggestions.Any(x => x.Email.Equals(alias, StringComparison.OrdinalIgnoreCase))) continue;
                 suggestions.Add(BuildSuggestion(alias, UserEmailSource.AdAlias, "Alias (proxyAddresses) trên AD", known));
+            }
+
+            // Emails of the devices Tanium last saw this account on (Asset). A device may be shared, so these are
+            // only candidates for the admin to pick from.
+            var deviceEmails = await _deviceContactDirectoryService.GetEmailsByDomainAccountAsync(user.UserName);
+            foreach (var deviceEmail in deviceEmails)
+            {
+                if (suggestions.Any(x => x.Email.Equals(deviceEmail.Email, StringComparison.OrdinalIgnoreCase))) continue;
+                suggestions.Add(BuildSuggestion(deviceEmail.Email, UserEmailSource.Tanium,
+                    $"Email của máy {string.Join(", ", deviceEmail.DeviceCodes)} (đồng bộ từ Tanium)", known));
             }
 
             return suggestions;

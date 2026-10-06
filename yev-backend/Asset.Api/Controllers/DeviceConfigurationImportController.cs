@@ -38,6 +38,19 @@ namespace Asset.Api.Controllers
             return Success(result, $"Import cấu hình thành công {result.UpdatedDeviceIds.Count} thiết bị.");
         }
 
+        // The same reconciliation as rows for the on-screen report (the FE then offers the Excel download).
+        [RequirePermission("Asset.DeviceConfiguration.Update")]
+        [HttpPost("missing-devices")]
+        public async Task<ActionResult<ApiResponse<List<DeviceMissingInTaniumDto>>>> GetMissingDevices(IFormFile file, [FromForm] string? prefixes)
+        {
+            if (file == null || file.Length == 0)
+                return Fail<List<DeviceMissingInTaniumDto>>("Vui lòng chọn file Excel/CSV để đối chiếu.");
+
+            await using var stream = file.OpenReadStream();
+            var missing = await _deviceConfigurationImportService.GetMissingDevicesAsync(stream, file.FileName, ParsePrefixes(prefixes));
+            return Success(missing, $"Có {missing.Count} thiết bị đang sử dụng nhưng không có trong file Tanium.");
+        }
+
         // Đối chiếu Device Status=InUse trong hệ thống với danh sách máy có mặt trong chính file
         // Tanium vừa chọn — trả về file .xlsx để tải xuống, KHÔNG phải ApiResponse<T> như 2 action
         // trên (giống lý do AiChatController.Stream không dùng Success()/Fail(): body ở đây là 1
@@ -50,13 +63,8 @@ namespace Asset.Api.Controllers
             if (file == null || file.Length == 0)
                 return BadRequest(ApiResponse<object>.Failure("Vui lòng chọn file Excel/CSV để đối chiếu."));
 
-            // "prefixes" gửi dạng chuỗi phân cách bằng dấu phẩy (VD "YDC,YDF,YLC") — người dùng
-            // nhập trực tiếp ở FE, rỗng = không lọc theo tiền tố.
-            var deviceCodePrefixes = (prefixes ?? string.Empty)
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
             await using var stream = file.OpenReadStream();
-            var report = await _deviceConfigurationImportService.BuildMissingDevicesReportAsync(stream, file.FileName, deviceCodePrefixes);
+            var report = await _deviceConfigurationImportService.BuildMissingDevicesReportAsync(stream, file.FileName, ParsePrefixes(prefixes));
 
             // Header riêng cho số lượng — FE đọc để hiện toast tóm tắt mà không phải mở file ra đếm.
             // Phải khai báo trong CORS "AllowNextJs".WithExposedHeaders(...) (Program.cs) thì trình
@@ -68,5 +76,9 @@ namespace Asset.Api.Controllers
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 report.FileName);
         }
+
+        // "prefixes" is a comma separated string (e.g. "YDC,YDF,YLC") typed by the user; empty = no prefix filter.
+        private static string[] ParsePrefixes(string? prefixes) =>
+            (prefixes ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 }

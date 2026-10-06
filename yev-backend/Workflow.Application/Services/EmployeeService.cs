@@ -285,23 +285,39 @@ namespace Workflow.Application.Services
                 }
             }
 
+            var orgUnitIds = items.Select(x => x.OrgUnitId).Distinct().ToList();
+            var existingOrgUnitIds = (await _unitOfWork.OrgUnits.SelectAsync(x => orgUnitIds.Contains(x.Id), x => x.Id)).ToHashSet();
+
+            var jobTitleIds = items.Where(x => x.JobTitleId is not null).Select(x => x.JobTitleId!.Value).Distinct().ToList();
+            var jobTitlesById = jobTitleIds.Count == 0
+                ? new Dictionary<int, JobTitle>()
+                : (await _unitOfWork.JobTitles.FindAsync(x => jobTitleIds.Contains(x.Id))).ToDictionary(x => x.Id);
+
+            // Only job titles flagged IsUniquePerOrgUnit are limited to one holder per unit.
+            var uniqueJobTitleIds = jobTitlesById.Values.Where(x => x.IsUniquePerOrgUnit).Select(x => x.Id).ToList();
+            var otherHolders = uniqueJobTitleIds.Count == 0
+                ? new List<EmployeeOrgUnit>()
+                : (await _unitOfWork.EmployeeOrgUnits.FindAsync(x =>
+                    orgUnitIds.Contains(x.OrgUnitId) && x.JobTitleId != null && uniqueJobTitleIds.Contains(x.JobTitleId.Value)
+                    && !x.IsDeleted && x.EmployeeId != employeeId)).ToList();
+
             foreach (var item in items)
             {
                 if (item.ValidFrom is not null && item.ValidTo is not null && item.ValidTo < item.ValidFrom)
                     throw new DomainException("Ngày kết thúc hiệu lực phải sau ngày bắt đầu.");
 
-                (await _unitOfWork.OrgUnits.GetByIdAsync(item.OrgUnitId)).OrThrowNotFound("Đơn vị tổ chức", item.OrgUnitId);
+                if (!existingOrgUnitIds.Contains(item.OrgUnitId))
+                    throw new NotFoundException("Đơn vị tổ chức", item.OrgUnitId);
 
                 if (item.JobTitleId is null) continue;
 
-                var jobTitle = (await _unitOfWork.JobTitles.GetByIdAsync(item.JobTitleId.Value)).OrThrowNotFound("Chức danh", item.JobTitleId.Value);
+                if (!jobTitlesById.TryGetValue(item.JobTitleId.Value, out var jobTitle))
+                    throw new NotFoundException("Chức danh", item.JobTitleId.Value);
 
-                // Only job titles flagged IsUniquePerOrgUnit are limited to one holder per unit.
                 if (!jobTitle.IsUniquePerOrgUnit) continue;
 
-                var otherHolders = await _unitOfWork.EmployeeOrgUnits.FindAsync(x =>
-                    x.OrgUnitId == item.OrgUnitId && x.JobTitleId == item.JobTitleId && !x.IsDeleted && x.EmployeeId != employeeId);
-                if (otherHolders.Any(h => DateRangesOverlap(h.ValidFrom, h.ValidTo, item.ValidFrom, item.ValidTo)))
+                if (otherHolders.Any(h => h.OrgUnitId == item.OrgUnitId && h.JobTitleId == item.JobTitleId
+                        && DateRangesOverlap(h.ValidFrom, h.ValidTo, item.ValidFrom, item.ValidTo)))
                     throw new DomainException("Chức danh này tại đơn vị đã có người khác đang giữ trong cùng khoảng thời gian.");
             }
         }

@@ -1,7 +1,9 @@
-﻿using Identity.Application.Interfaces.Repository;
+﻿using Identity.Application.Authentication;
+using Identity.Application.Interfaces.Repository;
 using Identity.Application.Interfaces.Service;
 using Identity.Domain.Entities;
 using Identity.Infrastructure.Context;
+using Microsoft.EntityFrameworkCore;
 using Shared.Infrastructure.Data;
 using System;
 using System.Collections.Generic;
@@ -11,8 +13,19 @@ namespace Identity.Infrastructure.Repositories
 {
     public class IdentityUnitOfWork : BaseUnitOfWork<IdentityDbContext>, IIdentityUnitOfWork
     {
+        // Entities whose writes never change roles/permissions/profile claims, so they keep the auth cache.
+        private static readonly HashSet<Type> AuthNeutralEntityTypes = new()
+        {
+            typeof(LoginUserIP),
+            typeof(LoginQrCode),
+            typeof(LoginQrLog),
+        };
+
+        private readonly IAuthSnapshotCache _authSnapshotCache;
+
         public IdentityUnitOfWork(
             IdentityDbContext dbContext,
+            IAuthSnapshotCache authSnapshotCache,
             IUserReposiory users,
             IRoleRepository roles,
             ILoginUserIPRepository loginUserIPs,
@@ -24,6 +37,7 @@ namespace Identity.Infrastructure.Repositories
             IUserEmailRepository userEmails,
             IUserEmailModuleRepository userEmailModules) : base(dbContext)
         {
+            _authSnapshotCache = authSnapshotCache;
             Users = users;
             Roles = roles;
             LoginUserIPs = loginUserIPs;
@@ -34,6 +48,17 @@ namespace Identity.Infrastructure.Repositories
             LoginQrLogs = loginQrLogs;
             UserEmails = userEmails;
             UserEmailModules = userEmailModules;
+        }
+
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            var affectsAuth = _dbContext.ChangeTracker.Entries().Any(e =>
+                e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted
+                && !AuthNeutralEntityTypes.Contains(e.Entity.GetType()));
+
+            var saved = await base.SaveChangesAsync(cancellationToken);
+            if (affectsAuth) _authSnapshotCache.InvalidateAll();
+            return saved;
         }
 
         public IUserReposiory Users { get; }

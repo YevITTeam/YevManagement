@@ -20,6 +20,7 @@ namespace Asset.Application.Dtos.Devices
         public int? DepartmentId { get; set; }
         public string? DepartmentName { get; set; }
         public string Manager { get; set; } = null!;
+        public string? ManagerDomainAccount { get; set; }
         public DateTime PurchaseDate { get; set; }
         public int DepreciationMonths { get; set; }
         public DateTime? ExpirationDate { get; set; }

@@ -321,8 +321,16 @@ namespace Attendance.Application.Services
         // xem OtFormApprovalStep). 2026-08-07, Giai đoạn 3.1 — thay thế hoàn toàn UserApprovalScope cũ.
         private async Task<List<int>> GetMyCurrentPendingFormIdsAsync(string approverUserName)
         {
+            var myCandidates = await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
+                predicate: c => c.UserName == approverUserName,
+                selector: c => new { c.OtFormApprovalStepId, c.OtFormApprovalStep.OtFormId });
+
+            if (myCandidates.Count == 0) return new List<int>();
+
+            var myFormIds = myCandidates.Select(c => c.OtFormId).Distinct().ToList();
+
             var pendingSteps = await _unitOfWork.OtFormApprovalSteps.SelectAsync(
-                predicate: s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Pending,
+                predicate: s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Pending && myFormIds.Contains(s.OtFormId),
                 selector: s => new { s.Id, s.OtFormId, s.StepOrder });
 
             var currentStepIds = pendingSteps
@@ -330,9 +338,7 @@ namespace Attendance.Application.Services
                 .Select(g => g.OrderBy(s => s.StepOrder).First().Id)
                 .ToHashSet();
 
-            return (await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
-                predicate: c => c.UserName == approverUserName,
-                selector: c => new { c.OtFormApprovalStepId, c.OtFormApprovalStep.OtFormId }))
+            return myCandidates
                 .Where(c => currentStepIds.Contains(c.OtFormApprovalStepId))
                 .Select(c => c.OtFormId)
                 .Distinct()

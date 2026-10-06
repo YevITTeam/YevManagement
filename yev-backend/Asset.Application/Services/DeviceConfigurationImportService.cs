@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Asset.Application.Dtos.DeviceConfigurationImports;
 using Asset.Application.Dtos.DeviceConfigurations;
 using Asset.Application.Interfaces.Service;
+using Asset.Domain.Entities;
 using Asset.Domain.Enums;
 using ClosedXML.Excel;
 using Shared.Application.Abstractions;
@@ -12,8 +13,8 @@ using Shared.Core.Exceptions;
 namespace Asset.Application.Services
 {
     // Import cấu hình phần cứng hàng loạt từ file kiểm kê Tanium (Computer Name/Tanium
-    // Client IP Address/Last Logged In User/Manufacturer/Model/Computer Serial Number/CPU/
-    // Total Memory/Size — format 9 cột từ 2026-07-23). Khác với
+    // Client IP Address/Last Logged In User/Custom Registry UserEmail/Manufacturer/Model/
+    // Computer Serial Number/CPU/Total Memory/Size — format 10 cột). Khác với
     // DeviceImportService (tạo Device mới) — service này CHỈ cập nhật Device đã có sẵn,
     // không tự tạo Device mới (2026-07-10, theo quyết định người dùng: file Tanium không
     // có Xưởng/Loại thiết bị/Nhà cung cấp/Ngày mua nên không đủ dữ liệu để tạo Device hợp lệ).
@@ -27,6 +28,11 @@ namespace Asset.Application.Services
         // 1 chữ cuối (VD AC81, AC90B) — KHÔNG khớp ACLF/ACELF/ALF (khác họ, chữ ngay sau "AC").
         private static readonly string[] StandardFamilyPrefixes = { "YDC", "YLC", "YDF", "TYC" };
         private static readonly Regex AcFamilyPattern = new(@"^AC\d+[A-Za-z]?$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static readonly Regex EmailPattern = new(@"^[^\s@]+@[^\s@]+\.[^\s@]+$", RegexOptions.Compiled);
+        private const string TaniumEmailNote = "Tanium";
+        private const int MaxDomainAccountLength = 150;
+        private const int MaxEmailLength = 255;
 
         private readonly IDeviceConfigurationService _deviceConfigurationService;
 
@@ -73,11 +79,15 @@ namespace Asset.Application.Services
                         if (assigned) result.IpReassignedCount++;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(row.ResolvedSerialNumber))
+                    if (!string.IsNullOrWhiteSpace(row.ResolvedSerialNumber) || !string.IsNullOrWhiteSpace(row.ResolvedManagerDomainAccount))
                     {
-                        var serialUpdated = await UpdateDeviceSerialNumberAsync(deviceId, row.ResolvedSerialNumber!);
+                        var (serialUpdated, accountUpdated) = await UpdateDeviceFromTaniumAsync(deviceId, row.ResolvedSerialNumber, row.ResolvedManagerDomainAccount);
                         if (serialUpdated) result.SerialUpdatedCount++;
+                        if (accountUpdated) result.ManagerAccountUpdatedCount++;
                     }
+
+                    if (row.ResolvedEmails.Count > 0)
+                        result.EmailAddedCount += await AddMissingDeviceEmailsAsync(deviceId, row.ResolvedEmails);
 
                     var existingConfig = await _deviceConfigurationService.GetByDeviceIdAsync(deviceId);
                     if (existingConfig == null)
@@ -151,7 +161,7 @@ namespace Asset.Application.Services
         // deviceCodePrefixes (2026-07-27, yêu cầu người dùng): người dùng tự nhập tiền tố mã máy
         // cần đối chiếu (mặc định gợi ý ở FE là YDC/YDF/YLC) — Device ngoài các tiền tố này không
         // thuộc phạm vi Tanium quét nên không được tính là "thiếu", tránh báo sai.
-        public async Task<DeviceMissingInTaniumReportDto> BuildMissingDevicesReportAsync(Stream excelFileStream, string? fileName = null, IEnumerable<string>? deviceCodePrefixes = null)
+        private async Task<List<DeviceMissingInTaniumDto>> FindMissingDevicesAsync(Stream excelFileStream, string? fileName, IEnumerable<string>? deviceCodePrefixes)
         {
             var rawRows = CsvFileHelper.HasCsvExtension(fileName) ? ParseCsv(excelFileStream) : ParseXlsx(excelFileStream);
             var (validatedRows, _) = await ValidateAndResolveRowsAsync(rawRows);
@@ -210,6 +220,16 @@ namespace Asset.Application.Services
                 IpAddress = d.IpAddresses.Count > 0 ? string.Join(", ", d.IpAddresses) : null,
                 Note = d.Note
             }).ToList();
+
+            return missingDevices;
+        }
+
+        public Task<List<DeviceMissingInTaniumDto>> GetMissingDevicesAsync(Stream excelFileStream, string? fileName = null, IEnumerable<string>? deviceCodePrefixes = null)
+            => FindMissingDevicesAsync(excelFileStream, fileName, deviceCodePrefixes);
+
+        public async Task<DeviceMissingInTaniumReportDto> BuildMissingDevicesReportAsync(Stream excelFileStream, string? fileName = null, IEnumerable<string>? deviceCodePrefixes = null)
+        {
+            var missingDevices = await FindMissingDevicesAsync(excelFileStream, fileName, deviceCodePrefixes);
 
             return new DeviceMissingInTaniumReportDto
             {
@@ -278,18 +298,48 @@ namespace Asset.Application.Services
             return true;
         }
 
-        // Ghi số serial Tanium báo cáo được vào Device (2026-07-23). Đã kiểm tra ở bước validate là
-        // serial này chưa thuộc device khác, nên ở đây chỉ ghi đè giá trị cũ (Tanium đọc trực tiếp
-        // từ máy nên coi là nguồn đáng tin hơn giá trị nhập tay). Trả về true khi có thay đổi thật.
-        private async Task<bool> UpdateDeviceSerialNumberAsync(int deviceId, string serialNumber)
+        // Writes the serial and the domain account Tanium reported into the Device. The serial was checked
+        // at validate time to belong to no other device, so it simply overwrites the old value (Tanium reads
+        // it straight from the machine). Returns which of the two actually changed.
+        private async Task<(bool SerialUpdated, bool AccountUpdated)> UpdateDeviceFromTaniumAsync(int deviceId, string? serialNumber, string? domainAccount)
         {
             var device = await _unitOfWork.Devices.GetByIdAsync(deviceId);
-            if (device == null || device.SerialNumber == serialNumber) return false;
+            if (device == null) return (false, false);
 
-            device.SerialNumber = serialNumber;
+            var serialUpdated = !string.IsNullOrWhiteSpace(serialNumber) && device.SerialNumber != serialNumber;
+            var accountUpdated = !string.IsNullOrWhiteSpace(domainAccount) && device.ManagerDomainAccount != domainAccount;
+            if (!serialUpdated && !accountUpdated) return (false, false);
+
+            if (serialUpdated) device.SerialNumber = serialNumber;
+            if (accountUpdated) device.ManagerDomainAccount = domainAccount;
             _unitOfWork.Devices.Update(device);
 
-            return true;
+            return (serialUpdated, accountUpdated);
+        }
+
+        // Adds the addresses the device does not have yet (case-insensitive). Never removes or edits
+        // existing emails, since Tanium may miss addresses that were typed by hand.
+        private async Task<int> AddMissingDeviceEmailsAsync(int deviceId, IEnumerable<string> emails)
+        {
+            var existing = (await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted))
+                .Select(x => x.Email)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var added = 0;
+            foreach (var email in emails)
+            {
+                if (!existing.Add(email)) continue;
+                await _unitOfWork.DeviceEmails.AddAsync(new DeviceEmail
+                {
+                    DeviceId = deviceId,
+                    Email = email,
+                    Note = TaniumEmailNote,
+                    IsDeleted = false
+                });
+                added++;
+            }
+
+            return added;
         }
 
         private async Task<(List<DeviceConfigurationImportRowDto> Rows, int OutOfScopeSkippedCount)> ValidateAndResolveRowsAsync(List<DeviceConfigurationImportRowDto> rawRows)
@@ -446,11 +496,31 @@ namespace Asset.Application.Services
                     }
                 }
 
+                // Last logged-in user and email cell: both optional, never block the row.
+                string? resolvedManagerDomainAccount = null;
+                var resolvedEmails = new List<string>();
+                if (!errors.Any(e => e.StartsWith("Dòng bị lỗi Tanium")))
+                {
+                    resolvedManagerDomainAccount = ResolveDomainAccount(row.LastLoggedInUser, row.ComputerName);
+                    if (resolvedManagerDomainAccount != null && resolvedManagerDomainAccount.Length > MaxDomainAccountLength)
+                    {
+                        warnings.Add($"Tài khoản '{resolvedManagerDomainAccount}' quá dài — sẽ không cập nhật tài khoản domain cho thiết bị này.");
+                        resolvedManagerDomainAccount = null;
+                    }
+
+                    var (validEmails, invalidEmails) = ParseEmails(row.UserEmail);
+                    resolvedEmails = validEmails;
+                    foreach (var invalid in invalidEmails)
+                        warnings.Add($"Email '{invalid}' không hợp lệ — sẽ bỏ qua.");
+                }
+
                 result.Add(new DeviceConfigurationImportRowDto
                 {
                     RowNumber = row.RowNumber,
                     ComputerName = row.ComputerName,
                     TaniumIpAddress = taniumIp,
+                    LastLoggedInUser = row.LastLoggedInUser,
+                    UserEmail = row.UserEmail,
                     Manufacturer = row.Manufacturer,
                     Model = row.Model,
                     SerialNumber = serialNumber,
@@ -462,6 +532,8 @@ namespace Asset.Application.Services
                     ResolvedDeviceId = resolvedDeviceId,
                     ResolvedIpAddressId = resolvedIpAddressId,
                     ResolvedSerialNumber = resolvedSerialNumber,
+                    ResolvedManagerDomainAccount = resolvedManagerDomainAccount,
+                    ResolvedEmails = resolvedEmails,
                     IsValid = errors.Count == 0,
                     Errors = errors,
                     Warnings = warnings
@@ -475,7 +547,48 @@ namespace Asset.Application.Services
         {
             return HasTaniumErrorPrefix(row.TaniumIpAddress) || HasTaniumErrorPrefix(row.Manufacturer) ||
                 HasTaniumErrorPrefix(row.Model) || HasTaniumErrorPrefix(row.SerialNumber) ||
-                HasTaniumErrorPrefix(row.Cpu) || HasTaniumErrorPrefix(row.Ram) || HasTaniumErrorPrefix(row.Size);
+                HasTaniumErrorPrefix(row.Cpu) || HasTaniumErrorPrefix(row.Ram) || HasTaniumErrorPrefix(row.Size) ||
+                HasTaniumErrorPrefix(row.LastLoggedInUser) || HasTaniumErrorPrefix(row.UserEmail);
+        }
+
+        // A domain account is DOMAIN\user. Local accounts (Local\user, or the machine's own name as the
+        // domain part) are not accounts Identity can match, so they are not stored.
+        private static string? ResolveDomainAccount(string? lastLoggedInUser, string? computerName)
+        {
+            var value = lastLoggedInUser?.Trim();
+            if (string.IsNullOrEmpty(value)) return null;
+
+            var slash = value.IndexOf('\\');
+            if (slash <= 0 || slash == value.Length - 1) return null;
+
+            var prefix = value[..slash];
+            if (prefix.Equals("Local", StringComparison.OrdinalIgnoreCase)) return null;
+
+            var host = computerName?.Trim().Split('.')[0];
+            if (!string.IsNullOrEmpty(host) && prefix.Equals(host, StringComparison.OrdinalIgnoreCase)) return null;
+
+            return value;
+        }
+
+        // The cell holds zero or more addresses separated by line breaks, ';', ',' or spaces; [NOT_FOUND] means none.
+        private static (List<string> Valid, List<string> Invalid) ParseEmails(string? raw)
+        {
+            var valid = new List<string>();
+            var invalid = new List<string>();
+            if (string.IsNullOrWhiteSpace(raw)) return (valid, invalid);
+
+            var tokens = raw.Split(new[] { '\r', '\n', ';', ',', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var token in tokens)
+            {
+                if (token.Equals("[NOT_FOUND]", StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (token.Length > MaxEmailLength || !EmailPattern.IsMatch(token))
+                    invalid.Add(token);
+                else if (!valid.Contains(token, StringComparer.OrdinalIgnoreCase))
+                    valid.Add(token);
+            }
+
+            return (valid, invalid);
         }
 
         private static bool HasTaniumErrorPrefix(string? value) =>
@@ -540,12 +653,10 @@ namespace Asset.Application.Services
             return (null, null);
         }
 
-        // Cột cố định theo đúng thứ tự file kiểm kê Tanium — format mới 2026-07-23 (9 cột):
-        // A=Computer Name, B=Tanium Client IP Address, C=Last Logged In User (bỏ qua),
-        // D=Manufacturer, E=Model, F=Computer Serial Number, G=CPU, H=Total Memory (trước
-        // đây tên cột là "RAM", vẫn map vào Ram), I=Size. Dòng 1 là header.
-        // Format cũ 8 cột (không có Computer Serial Number, F=CPU/G=RAM/H=Size) KHÔNG còn
-        // đọc được — file cũ sẽ lệch cột, phải xuất lại theo format mới.
+        // Fixed columns in the order of the Tanium inventory file (10 columns, row 1 is the header):
+        // A=Computer Name, B=Tanium Client IP Address, C=Last Logged In User, D=Custom Registry
+        // UserEmail, E=Manufacturer, F=Model, G=Computer Serial Number, H=CPU, I=Total Memory
+        // (maps to Ram), J=Size. Files in an older layout shift the columns and must be re-exported.
         private static List<DeviceConfigurationImportRowDto> ParseXlsx(Stream stream)
         {
             XLWorkbook workbook;
@@ -575,14 +686,17 @@ namespace Asset.Application.Services
             {
                 var computerName = xlRow.Cell(1).GetString().Trim();
                 var taniumIp = xlRow.Cell(2).GetString().Trim();
-                var manufacturer = xlRow.Cell(4).GetString().Trim();
-                var model = xlRow.Cell(5).GetString().Trim();
-                var serialNumber = xlRow.Cell(6).GetString().Trim();
-                var cpu = xlRow.Cell(7).GetString().Trim();
-                var ram = xlRow.Cell(8).GetString().Trim();
-                var size = xlRow.Cell(9).GetString().Trim();
+                var lastLoggedInUser = xlRow.Cell(3).GetString().Trim();
+                var userEmail = xlRow.Cell(4).GetString().Trim();
+                var manufacturer = xlRow.Cell(5).GetString().Trim();
+                var model = xlRow.Cell(6).GetString().Trim();
+                var serialNumber = xlRow.Cell(7).GetString().Trim();
+                var cpu = xlRow.Cell(8).GetString().Trim();
+                var ram = xlRow.Cell(9).GetString().Trim();
+                var size = xlRow.Cell(10).GetString().Trim();
 
                 var isRowEmpty = string.IsNullOrWhiteSpace(computerName) && string.IsNullOrWhiteSpace(taniumIp) &&
+                    string.IsNullOrWhiteSpace(lastLoggedInUser) && string.IsNullOrWhiteSpace(userEmail) &&
                     string.IsNullOrWhiteSpace(manufacturer) && string.IsNullOrWhiteSpace(model) &&
                     string.IsNullOrWhiteSpace(serialNumber) &&
                     string.IsNullOrWhiteSpace(cpu) && string.IsNullOrWhiteSpace(ram) && string.IsNullOrWhiteSpace(size);
@@ -593,6 +707,8 @@ namespace Asset.Application.Services
                     RowNumber = xlRow.RowNumber(),
                     ComputerName = string.IsNullOrWhiteSpace(computerName) ? null : computerName,
                     TaniumIpAddress = string.IsNullOrWhiteSpace(taniumIp) ? null : taniumIp,
+                    LastLoggedInUser = string.IsNullOrWhiteSpace(lastLoggedInUser) ? null : lastLoggedInUser,
+                    UserEmail = string.IsNullOrWhiteSpace(userEmail) ? null : userEmail,
                     Manufacturer = string.IsNullOrWhiteSpace(manufacturer) ? null : manufacturer,
                     Model = string.IsNullOrWhiteSpace(model) ? null : model,
                     SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
@@ -618,14 +734,17 @@ namespace Asset.Application.Services
                 var cells = csvRows[i];
                 var computerName = GetCsvCell(cells, 0);
                 var taniumIp = GetCsvCell(cells, 1);
-                var manufacturer = GetCsvCell(cells, 3);
-                var model = GetCsvCell(cells, 4);
-                var serialNumber = GetCsvCell(cells, 5);
-                var cpu = GetCsvCell(cells, 6);
-                var ram = GetCsvCell(cells, 7);
-                var size = GetCsvCell(cells, 8);
+                var lastLoggedInUser = GetCsvCell(cells, 2);
+                var userEmail = GetCsvCell(cells, 3);
+                var manufacturer = GetCsvCell(cells, 4);
+                var model = GetCsvCell(cells, 5);
+                var serialNumber = GetCsvCell(cells, 6);
+                var cpu = GetCsvCell(cells, 7);
+                var ram = GetCsvCell(cells, 8);
+                var size = GetCsvCell(cells, 9);
 
                 var isRowEmpty = string.IsNullOrWhiteSpace(computerName) && string.IsNullOrWhiteSpace(taniumIp) &&
+                    string.IsNullOrWhiteSpace(lastLoggedInUser) && string.IsNullOrWhiteSpace(userEmail) &&
                     string.IsNullOrWhiteSpace(manufacturer) && string.IsNullOrWhiteSpace(model) &&
                     string.IsNullOrWhiteSpace(serialNumber) &&
                     string.IsNullOrWhiteSpace(cpu) && string.IsNullOrWhiteSpace(ram) && string.IsNullOrWhiteSpace(size);
@@ -636,6 +755,8 @@ namespace Asset.Application.Services
                     RowNumber = i + 1,
                     ComputerName = string.IsNullOrWhiteSpace(computerName) ? null : computerName,
                     TaniumIpAddress = string.IsNullOrWhiteSpace(taniumIp) ? null : taniumIp,
+                    LastLoggedInUser = string.IsNullOrWhiteSpace(lastLoggedInUser) ? null : lastLoggedInUser,
+                    UserEmail = string.IsNullOrWhiteSpace(userEmail) ? null : userEmail,
                     Manufacturer = string.IsNullOrWhiteSpace(manufacturer) ? null : manufacturer,
                     Model = string.IsNullOrWhiteSpace(model) ? null : model,
                     SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,

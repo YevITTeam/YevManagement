@@ -149,10 +149,10 @@ namespace Workflow.Application.Services
 
             var distinctEmployeeIds = request.EmployeeIds.Distinct().ToList();
 
-            foreach (var employeeId in distinctEmployeeIds)
-            {
-                (await _unitOfWork.Employees.GetByIdAsync(employeeId)).OrThrowNotFound("Nhân sự", employeeId);
-            }
+            var existingEmployeeIds = (await _unitOfWork.Employees.SelectAsync(x => distinctEmployeeIds.Contains(x.Id), x => x.Id)).ToHashSet();
+            var missingEmployeeIds = distinctEmployeeIds.Where(id => !existingEmployeeIds.Contains(id)).ToList();
+            if (missingEmployeeIds.Count > 0)
+                throw new NotFoundException("Nhân sự", missingEmployeeIds[0]);
 
             var existing = await _unitOfWork.FormCategoryCoordinators.FindAsync(x => x.FormCategoryId == formCategoryId && !x.IsDeleted);
             foreach (var item in existing)

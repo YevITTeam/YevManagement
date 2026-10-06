@@ -1022,8 +1022,10 @@ chỉ tăng khi publish LẠI** (form đã `IsPublished=true` từ trước) —
 roadmap.
 `POST .../clone`: tạo 1 `FormDefinition` mới (Code/NameVn/NameJp do người gọi truyền vào, còn lại kế
 thừa nguyên từ form gốc), sao chép toàn bộ `FormFields` (Id mới) + `FormFieldConditions` (remap qua
-`FieldKey`) + **`FormRoutes`/`FormApprovalSteps`/`FormApprovalStepParticipants`** (bổ sung 2026-09-29 —
-trước đó bị bỏ sót, form nhân bản trông đầy đủ nhưng publish xong không đơn nào duyệt được, xem §10),
+`FieldKey`) + **`FormRoutes`/`FormApprovalSteps`/`FormApprovalStepParticipants`** (bỏ qua bản ghi đã xoá mềm;
+tải Step/Participant nguồn bằng 2 truy vấn rồi dựng cả cây bằng navigation property, ghi trong 1 lần
+`SaveChangesAsync` — không còn 1 lần lưu cho mỗi Route/Step; thiếu 3 bảng này thì form nhân bản không
+route được, xem §10),
 **KHÔNG sao chép `FormAccesses`** — ai tạo đơn được là quyết định riêng cho từng form, phải cấu hình
 tay lại (cùng nguyên tắc "chỉ định tay, không suy ra" của `FormCategoryCoordinators`).
 Form mới luôn `IsPublished=false`, `Version=1`.

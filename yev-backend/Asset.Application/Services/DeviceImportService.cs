@@ -279,6 +279,28 @@ namespace Asset.Application.Services
                 .GroupBy(x => x.DeviceCode, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
+            var candidateSerials = rawRows
+                .Select(r => string.IsNullOrWhiteSpace(r.SerialNumber) ? null : r.SerialNumber.Trim())
+                .Where(s => s != null)
+                .Select(s => s!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var deviceIdsBySerial = (await _unitOfWork.Devices.SelectAsync(
+                    x => candidateSerials.Contains(x.SerialNumber!),
+                    x => new { x.Id, x.SerialNumber }))
+                .GroupBy(x => x.SerialNumber!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList(), StringComparer.OrdinalIgnoreCase);
+
+            var candidateOldCodes = rawRows
+                .Select(r => r.OldDeviceCode?.Trim())
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var oldDeviceIdsByCode = (await _unitOfWork.Devices.SelectAsync(
+                    x => !x.IsDeleted && candidateOldCodes.Contains(x.DeviceCode),
+                    x => new { x.Id, x.DeviceCode }))
+                .GroupBy(x => x.DeviceCode, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+
             var result = new List<DeviceImportRowDto>();
 
             foreach (var row in rawRows)
@@ -369,8 +391,8 @@ namespace Asset.Application.Services
 
                     // On an update row the device may already own this serial — only a DIFFERENT
                     // device holding it is a conflict.
-                    var existingSerial = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.SerialNumber == serialNumber);
-                    if (existingSerial != null && existingSerial.Id != existingDeviceId)
+                    if (deviceIdsBySerial.TryGetValue(serialNumber, out var serialOwnerIds)
+                        && serialOwnerIds.Any(id => id != existingDeviceId))
                         errors.Add($"Số Serial '{serialNumber}' đã tồn tại trong hệ thống.");
                 }
 
@@ -388,9 +410,8 @@ namespace Asset.Application.Services
                     }
                     else
                     {
-                        var oldDevice = await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.DeviceCode == oldDeviceCode && !x.IsDeleted);
-                        if (oldDevice == null) errors.Add($"Không tìm thấy thiết bị cũ có mã '{oldDeviceCode}'.");
-                        else oldDeviceId = oldDevice.Id;
+                        if (oldDeviceIdsByCode.TryGetValue(oldDeviceCode, out var foundOldDeviceId)) oldDeviceId = foundOldDeviceId;
+                        else errors.Add($"Không tìm thấy thiết bị cũ có mã '{oldDeviceCode}'.");
                     }
                 }
 
