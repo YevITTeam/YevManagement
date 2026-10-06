@@ -15,14 +15,17 @@ namespace Identity.Application.Services
     {
         private readonly IActiveDirectoryAuthService _activeDirectoryService;
         private readonly IDeviceContactDirectoryService _deviceContactDirectoryService;
+        private readonly IUserDirectoryService _userDirectoryService;
 
         public UserEmailService(
             IIdentityUnitOfWork unitOfWork,
             IActiveDirectoryAuthService activeDirectoryService,
-            IDeviceContactDirectoryService deviceContactDirectoryService) : base(unitOfWork)
+            IDeviceContactDirectoryService deviceContactDirectoryService,
+            IUserDirectoryService userDirectoryService) : base(unitOfWork)
         {
             _activeDirectoryService = activeDirectoryService;
             _deviceContactDirectoryService = deviceContactDirectoryService;
+            _userDirectoryService = userDirectoryService;
         }
 
         public async Task<UserEmailOverviewDto> GetOverviewAsync(int userId)
@@ -72,22 +75,55 @@ namespace Identity.Application.Services
             if (duplicate != null)
                 throw new DomainException($"Người dùng đã có email '{email}'.");
 
-            var existing = await _unitOfWork.UserEmails.FindAsync(x => x.UserId == userId);
-            var entity = new UserEmail
-            {
-                UserId = userId,
-                Email = email,
-                Source = request.Source,
-                Note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim(),
-                CreatedAt = TimeHelper.GetCurrentUtcTime()
-            };
-            await _unitOfWork.UserEmails.AddAsync(entity);
-
-            if (request.IsPrimary || existing.Count == 0)
-                SetPrimary(user, existing, entity);
+            var existing = (await _unitOfWork.UserEmails.FindAsync(x => x.UserId == userId)).ToList();
+            await AddEmailAsync(user, existing, email, request.Source, request.Note, request.IsPrimary);
 
             await _unitOfWork.SaveChangesAsync();
             return await GetOverviewAsync(userId);
+        }
+
+        public async Task<DomainAccountEmailStatusDto> GetByDomainAccountAsync(string domainAccount)
+        {
+            var account = domainAccount.Trim();
+            var user = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == account);
+            if (user == null)
+                return new DomainAccountEmailStatusDto { DomainAccount = account };
+
+            var emails = await _unitOfWork.UserEmails.FindAsync(x => x.UserId == user.Id);
+            return new DomainAccountEmailStatusDto
+            {
+                DomainAccount = account,
+                UserExists = true,
+                UserId = user.Id,
+                FullName = user.FullName,
+                Emails = emails.OrderByDescending(x => x.IsPrimary).ThenBy(x => x.Email).Select(x => x.Email).ToList()
+            };
+        }
+
+        public async Task<LinkDomainAccountEmailsResultDto> LinkDomainAccountEmailsAsync(LinkDomainAccountEmailsDto request)
+        {
+            var account = request.DomainAccount.Trim();
+            var fullName = string.IsNullOrWhiteSpace(request.FullName) ? null : request.FullName.Trim();
+            var userCreated = await _userDirectoryService.EnsureUserExistsAsync(account, fullName, null);
+
+            var user = (await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == account)).OrThrowNotFound("Người dùng", account);
+            var existing = (await _unitOfWork.UserEmails.FindAsync(x => x.UserId == user.Id)).ToList();
+
+            var result = new LinkDomainAccountEmailsResultDto { UserId = user.Id, UserName = user.UserName, UserCreated = userCreated };
+            foreach (var item in request.Emails)
+            {
+                var email = item.Email.Trim();
+                if (result.AddedEmails.Concat(result.SkippedEmails).Contains(email, StringComparer.OrdinalIgnoreCase))
+                    continue;
+
+                if (await AddEmailAsync(user, existing, email, (int)UserEmailSource.Manual, item.Note, isPrimary: false))
+                    result.AddedEmails.Add(email);
+                else
+                    result.SkippedEmails.Add(email);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+            return result;
         }
 
         public async Task<UserEmailOverviewDto> DeleteAsync(int userId, int userEmailId)
@@ -196,6 +232,30 @@ namespace Identity.Application.Services
             Note = note,
             AlreadyAdded = known.Contains(email)
         };
+
+        // Tracks a new UserEmail (no save); returns false when the user already holds the address.
+        // `existing` is the user's current list and is extended with the new row.
+        private async Task<bool> AddEmailAsync(User user, List<UserEmail> existing, string email, int source, string? note, bool isPrimary)
+        {
+            if (existing.Any(x => x.Email.Equals(email, StringComparison.OrdinalIgnoreCase)))
+                return false;
+
+            var entity = new UserEmail
+            {
+                UserId = user.Id,
+                Email = email,
+                Source = source,
+                Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+                CreatedAt = TimeHelper.GetCurrentUtcTime()
+            };
+            await _unitOfWork.UserEmails.AddAsync(entity);
+
+            var isFirst = existing.Count == 0;
+            existing.Add(entity);
+            if (isPrimary || isFirst)
+                SetPrimary(user, existing, entity);
+            return true;
+        }
 
         private void SetPrimary(User user, IEnumerable<UserEmail> emails, UserEmail primary)
         {

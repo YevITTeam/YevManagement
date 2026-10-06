@@ -50,6 +50,31 @@ export interface UpdateUserEmailModulesDto {
   items: { moduleCode: string; userEmailId: number | null }[];
 }
 
+// GET /UserEmail/domain-account — Identity đang có gì cho 1 tài khoản domain (DOMAIN\user).
+export interface DomainAccountEmailStatusDto {
+  domainAccount: string;
+  userExists: boolean;
+  userId: number | null;
+  fullName: string | null;
+  emails: string[];
+}
+
+export interface LinkDomainAccountEmailsDto {
+  domainAccount: string;
+  // Họ tên cho User được tạo mới; bỏ qua nếu User đã tồn tại.
+  fullName: string | null;
+  emails: { email: string; note: string | null }[];
+}
+
+export interface LinkDomainAccountEmailsResultDto {
+  userId: number;
+  userName: string;
+  userCreated: boolean;
+  addedEmails: string[];
+  // Email User đã có sẵn trên Identity.
+  skippedEmails: string[];
+}
+
 export interface UserEmailSuggestionDto {
   email: string;
   source: number;

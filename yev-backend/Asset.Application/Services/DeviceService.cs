@@ -645,6 +645,7 @@ namespace Asset.Application.Services
                 GroupId = request.GroupId,
                 DepartmentId = request.DepartmentId,
                 Manager = request.Manager,
+                ManagerDomainAccount = NormalizeDomainAccount(request.ManagerDomainAccount),
                 PurchaseDate = request.PurchaseDate,
                 DepreciationMonths = request.DepreciationMonths,
                 ExpirationDate = request.PurchaseDate.AddMonths(request.DepreciationMonths),
@@ -702,6 +703,8 @@ namespace Asset.Application.Services
             return MapToDto(newDevice, ipAddresses, emails);
         }
 
+        private static string? NormalizeDomainAccount(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
         public async Task UpdateAsync(UpdateDeviceDto request)
         {
             var device = (await _unitOfWork.Devices.GetByIdAsync(request.Id)).OrThrowNotFound("Thiết bị", request.Id);
@@ -754,6 +757,7 @@ namespace Asset.Application.Services
             device.GroupId = request.GroupId;
             device.DepartmentId = request.DepartmentId;
             device.Manager = request.Manager;
+            device.ManagerDomainAccount = NormalizeDomainAccount(request.ManagerDomainAccount);
             device.PurchaseDate = request.PurchaseDate;
             device.DepreciationMonths = request.DepreciationMonths;
             device.ExpirationDate = request.PurchaseDate.AddMonths(request.DepreciationMonths);

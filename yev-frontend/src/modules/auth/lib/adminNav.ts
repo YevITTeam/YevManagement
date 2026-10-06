@@ -1,7 +1,7 @@
-import { Key, Shield, ShieldCheck, Users, type LucideIcon } from "lucide-react";
+import { Shield, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 
 export interface AdminNavItem {
-  key: "adminUsers" | "adminRoles" | "adminRolePermissions" | "adminUserPermissions";
+  key: "adminUsers" | "adminRolePermissions" | "adminUserPermissions";
   href: string;
   icon: LucideIcon;
   permission: string;
@@ -11,7 +11,6 @@ export interface AdminNavItem {
 // BE vẫn enforce lại 403, FE chỉ ẩn/hiện UI.
 export const adminNavItems: AdminNavItem[] = [
   { key: "adminUsers", href: "/admin/user-roles", icon: Users, permission: "Identity.User.View" },
-  { key: "adminRoles", href: "/admin/roles", icon: Key, permission: "Identity.Role.View" },
   { key: "adminRolePermissions", href: "/admin/permissions", icon: Shield, permission: "Identity.Permission.View" },
   { key: "adminUserPermissions", href: "/admin/user-permissions", icon: ShieldCheck, permission: "Identity.Permission.View" },
 ];

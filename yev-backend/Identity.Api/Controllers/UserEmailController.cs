@@ -31,6 +31,20 @@ namespace Identity.Api.Controllers
             return Success(data, "Lấy đề xuất email thành công!");
         }
 
+        [HttpGet("domain-account")]
+        public async Task<ActionResult<ApiResponse<DomainAccountEmailStatusDto>>> GetByDomainAccount([FromQuery] string domainAccount)
+        {
+            var data = await _service.GetByDomainAccountAsync(domainAccount);
+            return Success(data, "Lấy thông tin tài khoản thành công!");
+        }
+
+        [HttpPost("link-domain-account")]
+        public async Task<ActionResult<ApiResponse<LinkDomainAccountEmailsResultDto>>> LinkDomainAccount([FromBody] LinkDomainAccountEmailsDto request)
+        {
+            var data = await _service.LinkDomainAccountEmailsAsync(request);
+            return Success(data, "Đã đồng bộ email lên Identity!");
+        }
+
         [HttpPost("user/{userId:int}")]
         public async Task<ActionResult<ApiResponse<UserEmailOverviewDto>>> Add(int userId, [FromBody] CreateUserEmailDto request)
         {

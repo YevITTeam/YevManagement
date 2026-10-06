@@ -17,5 +17,12 @@ namespace Identity.Application.Interfaces.Service
 
         // Addresses found for the account outside UserEmails (AD mail and aliases).
         Task<List<UserEmailSuggestionDto>> GetSuggestionsAsync(int userId);
+
+        // Whether a User exists for the domain account and which addresses it already holds.
+        Task<DomainAccountEmailStatusDto> GetByDomainAccountAsync(string domainAccount);
+
+        // Adds the addresses to the User of the domain account, creating the User (Basic role) when missing.
+        // Never changes an existing primary address; the first address of a new/empty User becomes primary.
+        Task<LinkDomainAccountEmailsResultDto> LinkDomainAccountEmailsAsync(LinkDomainAccountEmailsDto request);
     }
 }

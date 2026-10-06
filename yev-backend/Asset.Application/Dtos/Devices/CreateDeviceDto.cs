@@ -31,6 +31,11 @@ namespace Asset.Application.Dtos.Devices
         // user, only Note is mandatory to explain its status (2026-08-01 business decision).
         public string Manager { get; set; } = string.Empty;
 
+        // DOMAIN\user of the person using the device; Identity matches users on it.
+        [StringLength(150, ErrorMessage = "Tài khoản domain không được vượt quá 150 ký tự")]
+        [RegularExpression(@"^[^\\\s]+\\[^\\\s]+$", ErrorMessage = "Tài khoản domain phải có dạng DOMAIN\\username")]
+        public string? ManagerDomainAccount { get; set; }
+
         public List<DeviceEmailInputDto> Emails { get; set; } = new();
 
         [Required(ErrorMessage = "Ngày mua không được để trống")]

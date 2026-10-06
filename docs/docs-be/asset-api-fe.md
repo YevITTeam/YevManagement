@@ -169,7 +169,7 @@ Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ 
 { "ids":[17982, 17983, 17984] }
 // data — GIỮ ĐÚNG thứ tự ids gửi lên; máy không tồn tại/đã xóa bị bỏ qua
 [ { "deviceId":17982, "deviceCode":"YDC-1877", "deviceName":"Máy kế toán",
-    "deviceTypeName":"PC", "branchName":"TAM", "supplierName":"...", "manager":"...", "managerDomainAccount":null,  // Tanium: DOMAIN\user cuối cùng đăng nhập (chỉ tham khảo, không sửa tay)
+    "deviceTypeName":"PC", "branchName":"TAM", "supplierName":"...", "manager":"...", "managerDomainAccount":null,  // DOMAIN\user của người dùng máy: Tanium đồng bộ hoặc nhập tay ở form thiết bị (§5.5)
     "serialNumber":"5CD5354PGJ", "statusText":"Đang sử dụng", "purchaseDate":"...",
     "qrPayload":"YDC-1877\nMáy kế toán\nSN: 5CD5354PGJ\nXưởng: TAM" } ]
 ```
@@ -183,6 +183,7 @@ Tick nhiều máy trên grid → in tem QR một lượt. **BE chỉ trả dữ 
   "supplierId":2[Required], "branchId":9[Required],
   "groupId":null, "departmentId":null,   // optional, gán Nhóm bắt buộc kèm departmentId cha (2.1)
   "manager":"",  // tuỳ chọn (2026-08-01) — máy chưa dùng thì chưa biết ai quản lý, mặc định ""
+  "managerDomainAccount":null,  // tuỳ chọn, dạng DOMAIN\user (≤150, 400 nếu sai dạng); rỗng → null. PUT là giá trị cuối: không gửi = xoá
   "emails":[{ "email":"[EmailAddress]", "note":null }],  // tuỳ chọn (2026-08-01), cho phép mảng rỗng []
   "purchaseDate":"...[Required]", "depreciationMonths":36,  // [Required][Range(1,600)]
   "isOutsourced":false, "status":0,  // [Range(0,3)], default 0

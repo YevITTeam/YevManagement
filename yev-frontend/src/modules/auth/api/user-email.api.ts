@@ -1,6 +1,9 @@
 import { api } from "@/lib/client";
 import type {
   CreateUserEmailDto,
+  DomainAccountEmailStatusDto,
+  LinkDomainAccountEmailsDto,
+  LinkDomainAccountEmailsResultDto,
   UpdateUserEmailModulesDto,
   UserEmailOverviewDto,
   UserEmailSuggestionDto,
@@ -14,6 +17,8 @@ const ENDPOINTS = {
     item: (userId: number, userEmailId: number) => `/UserEmail/user/${userId}/${userEmailId}`,
     primary: (userId: number, userEmailId: number) => `/UserEmail/user/${userId}/${userEmailId}/primary`,
     modules: (userId: number) => `/UserEmail/user/${userId}/modules`,
+    domainAccount: "/UserEmail/domain-account",
+    linkDomainAccount: "/UserEmail/link-domain-account",
   },
 } as const;
 
@@ -42,6 +47,20 @@ export const UserEmailApi = {
 
   setPrimary: async (userId: number, userEmailId: number) => {
     const response = await api.put<ApiResponse<UserEmailOverviewDto>>(ENDPOINTS.USER_EMAIL.primary(userId, userEmailId));
+    return response.data;
+  },
+
+  // Identity đã có User/email nào cho tài khoản domain này (userExists=false: chưa có User).
+  getByDomainAccount: async (domainAccount: string) => {
+    const response = await api.get<ApiResponse<DomainAccountEmailStatusDto>>(
+      `${ENDPOINTS.USER_EMAIL.domainAccount}?domainAccount=${encodeURIComponent(domainAccount)}`
+    );
+    return response.data;
+  },
+
+  // Thêm email vào User của tài khoản domain, tự tạo User (role Basic) nếu chưa có.
+  linkDomainAccount: async (data: LinkDomainAccountEmailsDto) => {
+    const response = await api.post<ApiResponse<LinkDomainAccountEmailsResultDto>>(ENDPOINTS.USER_EMAIL.linkDomainAccount, data);
     return response.data;
   },
 

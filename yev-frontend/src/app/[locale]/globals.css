@@ -17,10 +17,13 @@ body {
   box-sizing: border-box;
 }
 
-button,
-input,
-select {
-  font: inherit;
+/* Kept in the base layer so text-* / font-* utilities on controls still win. */
+@layer base {
+  button,
+  input,
+  select {
+    font: inherit;
+  }
 }
 
 /* Render HTML từ docx-preview (Workflow — "Nhập từ Word", workflow-module.md §1.5), dùng chung cho

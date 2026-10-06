@@ -325,6 +325,7 @@ export default function DeviceList() {
         ...detail,
         deviceCode: incrementDeviceCode(detail.deviceCode),
         manager: "",
+        managerDomainAccount: null,
         serialNumber: "",
         emails: [],
         ipAddresses: [],
@@ -649,7 +650,7 @@ export default function DeviceList() {
                   <td className="whitespace-nowrap px-3 py-1.5 align-top">
                     <div className="text-sm text-[#191c1e]">{device.manager || "-"}</div>
                     {device.managerDomainAccount && (
-                      <div className="max-w-[160px] truncate text-xs text-[#8a8f94]" title={`${device.managerDomainAccount} (đồng bộ từ Tanium, chỉ tham khảo)`}>
+                      <div className="max-w-[160px] truncate text-xs text-[#8a8f94]" title={`Tài khoản domain: ${device.managerDomainAccount}`}>
                         {device.managerDomainAccount}
                       </div>
                     )}

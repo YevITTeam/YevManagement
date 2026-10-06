@@ -62,6 +62,53 @@ namespace Identity.Application.Dtos.UserEmailDto
         public int? UserEmailId { get; set; }
     }
 
+    // What Identity holds for a domain account (DOMAIN\user); UserExists=false means no User row yet.
+    public class DomainAccountEmailStatusDto
+    {
+        public string DomainAccount { get; set; } = null!;
+        public bool UserExists { get; set; }
+        public int? UserId { get; set; }
+        public string? FullName { get; set; }
+        public List<string> Emails { get; set; } = new();
+    }
+
+    public class LinkDomainAccountEmailsDto
+    {
+        [Required(ErrorMessage = "Tài khoản domain là bắt buộc.")]
+        [StringLength(100, ErrorMessage = "Tài khoản domain tối đa 100 ký tự.")]
+        [RegularExpression(@"^[^\\\s]+\\[^\\\s]+$", ErrorMessage = "Tài khoản domain phải có dạng DOMAIN\\username.")]
+        public string DomainAccount { get; set; } = null!;
+
+        // Display name for a User created by this call; ignored when the User already exists.
+        [StringLength(100, ErrorMessage = "Họ tên tối đa 100 ký tự.")]
+        public string? FullName { get; set; }
+
+        [Required(ErrorMessage = "Cần ít nhất 1 email.")]
+        [MinLength(1, ErrorMessage = "Cần ít nhất 1 email.")]
+        public List<LinkDomainAccountEmailItemDto> Emails { get; set; } = new();
+    }
+
+    public class LinkDomainAccountEmailItemDto
+    {
+        [Required(ErrorMessage = "Email là bắt buộc.")]
+        [EmailAddress(ErrorMessage = "Email không hợp lệ.")]
+        [StringLength(255, ErrorMessage = "Email tối đa 255 ký tự.")]
+        public string Email { get; set; } = null!;
+
+        [StringLength(255, ErrorMessage = "Ghi chú tối đa 255 ký tự.")]
+        public string? Note { get; set; }
+    }
+
+    public class LinkDomainAccountEmailsResultDto
+    {
+        public int UserId { get; set; }
+        public string UserName { get; set; } = null!;
+        public bool UserCreated { get; set; }
+        public List<string> AddedEmails { get; set; } = new();
+        // Addresses the User already held.
+        public List<string> SkippedEmails { get; set; } = new();
+    }
+
     public class UserEmailSuggestionDto
     {
         public string Email { get; set; } = null!;

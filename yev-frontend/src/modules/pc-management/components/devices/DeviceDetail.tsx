@@ -151,7 +151,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                         <div className={infoLabelClassName}>Người quản lý</div>
                         <div className="mt-1 text-sm text-[#191c1e]">{device.manager || "-"}</div>
                         {device.managerDomainAccount && (
-                            <div className="text-xs text-[#8a8f94]" title="Đồng bộ từ Tanium, chỉ tham khảo">
+                            <div className="text-xs text-[#8a8f94]" title="Tài khoản domain của người dùng máy">
                                 {device.managerDomainAccount}
                             </div>
                         )}

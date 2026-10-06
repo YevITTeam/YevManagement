@@ -10,10 +10,8 @@ interface Props {
     onSubmit: (data: { roleName: string; description?: string }, id?: number) => Promise<void> | void;
 }
 
-// Component này không có prop isOpen — RoleList mount/gỡ nó bằng render có điều kiện
-// ({showCreate && <RoleForm/>} / {editing && <RoleForm/>}), nên khởi tạo state ngay từ
-// `initial` lúc mount (lazy initializer) để đúng dữ liệu ngay lần render đầu; useDialogReset
-// chỉ còn lo trường hợp `initial` đổi trong khi component vẫn đang mounted (đổi bản ghi đang sửa).
+// No isOpen prop: RolePermissionManager mounts it only while its dialog is open, so state is seeded from
+// `initial` on mount (lazy initializer); useDialogReset only covers `initial` changing while mounted.
 export default function RoleForm({ initial, onCancel, onSubmit }: Props) {
     const [roleName, setRoleName] = useState(() => initial?.roleName || "");
     const [description, setDescription] = useState(() => initial?.description || "");
@@ -39,7 +37,7 @@ export default function RoleForm({ initial, onCancel, onSubmit }: Props) {
         <form onSubmit={handleSubmit} className="space-y-4">
             <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                    Tên quyền<RequiredMark />
+                    Tên vai trò<RequiredMark />
                 </label>
                 <input
                     value={roleName}
@@ -75,7 +73,7 @@ export default function RoleForm({ initial, onCancel, onSubmit }: Props) {
                     disabled={submitting}
                     className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    {initial ? (submitting ? "Lưu..." : "Lưu thay đổi") : submitting ? "Tạo..." : "Tạo quyền"}
+                    {initial ? (submitting ? "Lưu..." : "Lưu thay đổi") : submitting ? "Tạo..." : "Tạo vai trò"}
                 </button>
             </div>
         </form>

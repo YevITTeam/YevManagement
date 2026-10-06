@@ -157,6 +157,10 @@ Cần `Authorization: Bearer` + permission tương ứng (thiếu token→401, t
   - `PUT /user/{userId}/{userEmailId}/primary` — đặt email chính (đồng thời cập nhật `UserDto.email`).
   - `PUT /user/{userId}/modules` — body `{items:[{moduleCode, userEmailId|null}]}` = **toàn bộ** cấu hình cuối. 400 nếu module
     không hỗ trợ, trùng module, hoặc email không thuộc user.
+  - `GET /domain-account?domainAccount=DOMAIN\user` → `{domainAccount, userExists, userId, fullName, emails:[string]}` — Identity đã có User/email nào cho tài khoản domain (`userExists=false` → chưa có User).
+  - `POST /link-domain-account` — body `{domainAccount[Required, ≤100, dạng DOMAIN\user], fullName? (≤100, chỉ dùng khi tạo User mới), emails:[{email, note?}] (≥1)}` →
+    `{userId, userName, userCreated, addedEmails:[], skippedEmails:[]}`. Chưa có User thì tạo (role `Basic`); email thêm với `source=3`, **không bao giờ đổi email chính**
+    sẵn có (User chưa có email nào thì email đầu tiên thành chính); email User đã có (không phân biệt hoa/thường) vào `skippedEmails`. Dùng bởi form thiết bị (Asset).
   - FE: nút "Email" trên mỗi dòng `UserRoleModal` → `UserEmailDialog.tsx` (biểu tượng màu cam khi user chưa có email).
 
 ## 5. Tổng hợp endpoint

@@ -34,7 +34,7 @@ export interface DeviceDto {
     ipAddresses: string[];
     purchaseDate: string | null;
     manager: string;
-    // DOMAIN\user từ Tanium (chỉ tham khảo, không sửa tay); null khi chưa đồng bộ.
+    // DOMAIN\user của người dùng máy (đồng bộ từ Tanium hoặc nhập tay); null khi chưa có.
     managerDomainAccount: string | null;
     expirationDate: string | null;
     note: string | null;
@@ -60,6 +60,8 @@ export interface CreateUpdateDeviceDto {
     // Máy chưa đưa vào dùng thì chưa biết ai sẽ dùng — không bắt buộc (2026-08-01), Ghi chú mới
     // là field bắt buộc để giải thích tình trạng máy.
     manager: string;
+    // DOMAIN\user (vd YEV\nam.nguyen); null = chưa có. Dùng để liên kết email lên Identity.
+    managerDomainAccount: string | null;
     emails: DeviceEmailInputDto[];
     purchaseDate: string;
     depreciationMonths: number;
@@ -90,7 +92,7 @@ export interface DeviceGetDto {
     departmentId: number | null;
     departmentName: string | null;
     manager: string;
-    // DOMAIN\user từ Tanium (chỉ tham khảo, không sửa tay); null khi chưa đồng bộ.
+    // DOMAIN\user của người dùng máy (đồng bộ từ Tanium hoặc nhập tay); null khi chưa có.
     managerDomainAccount: string | null;
     emails: DeviceEmailDto[];
     purchaseDate: string;

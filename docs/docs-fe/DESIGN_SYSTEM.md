@@ -90,6 +90,10 @@ Badge trạng thái nhiều mức (vd `statusClasses` trong `pc/page.tsx`): gi�
 | Caption / phụ đề | `text-xs text-[#5e3f3a]` |
 | Overline (nhãn nhóm, thead) | `text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]` |
 
+> ⚠️ CSS viết tay trong `globals.css` phải nằm trong `@layer base` nếu nhắm vào thẻ (`button`, `input`…).
+> CSS không thuộc layer luôn thắng utility của Tailwind v4 — rule `button, input, select { font: inherit; }` để
+> ngoài layer từng khiến mọi `text-xs`/`text-sm`/`font-semibold` trên nút và ô nhập bị bỏ qua (chữ to 16px).
+
 ### 2.3. Spacing chuẩn
 
 | Ngữ cảnh | Class |
@@ -378,6 +382,17 @@ Một component dùng chung cho cả `create` và `edit` (props `mode` + `initia
   </div>
 </div>
 ```
+
+**Form dài trong modal (≥ 10 trường)** — mẫu `pc-management/components/devices/DeviceForm.tsx`:
+
+- Modal `flex flex-col max-h-full`: header và footer cố định (`border-b` / `border-t`), chỉ thân `overflow-y-auto`.
+- Chia nhóm theo nghiệp vụ (`FormSection`): tiêu đề nhóm cột trái `8rem`, ô nhập lưới 4 cột bên phải, các nhóm
+  ngăn bằng `divide-y divide-[#f1f5f9]`. Không xếp 15 ô thành một lưới phẳng.
+- Nhãn trong form này dùng chữ thường `text-xs font-medium text-[#5e3f3a]` (không in hoa giãn chữ), ô cao `h-9`
+  đồng đều; đơn vị đặt cạnh ô (`[60] tháng`). Placeholder chỉ để gợi ý định dạng (`YEV\username`), không lặp nhãn.
+- Danh sách con sửa tại chỗ (email…): khung `rounded-lg border divide-y`, ô nhập "ghost" (viền hiện khi hover/focus),
+  hành động là icon; trạng thái phụ là chip/pill nhỏ, giải thích dài nằm trong `title`.
+- Chọn nhiều giá trị ngắn (IP): ô gắn thẻ — chip nằm trong khung ô, dropdown bám dưới ô.
 
 ### 4.8. ConfirmDialog (dùng chung) & Toast
 

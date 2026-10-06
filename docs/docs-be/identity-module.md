@@ -215,6 +215,9 @@ cho email (email/user domain bên Asset lấy từ Tanium chỉ để tham khả
 - **Đề xuất đồng bộ** (`GET .../suggestions`): `IActiveDirectoryAuthService.GetEmailAddresses` đọc AD `mail` + mọi `smtp:` trong
   `proxyAddresses`; Admin tự chọn thêm. Thêm nguồn **Tanium**: `IDeviceContactDirectoryService.GetEmailsByDomainAccountAsync(UserName)` (Asset) trả email của mọi máy có
   `Device.ManagerDomainAccount` = `UserName`; ghi chú của đề xuất liệt kê mã máy. Đề xuất AD ưu tiên hơn khi trùng email.
+- **Đồng bộ từ form thiết bị** (Asset → Identity): `UserEmailService.LinkDomainAccountEmailsAsync` nhận `DOMAIN\user` + danh sách email; chưa có User thì
+  `IUserDirectoryService.EnsureUserExistsAsync` tạo (role `Basic`, họ tên = `Device.Manager` nếu có), rồi thêm email `Source=Manual` — không đổi email chính,
+  không tự gán module. Gán module làm ngay ở form thiết bị: mỗi email đã có trên Identity có checkbox từng module, gọi lại `PUT user/{userId}/modules` (cùng luật: 1 module chỉ gửi về 1 email, bỏ tick = về email chính; dialog Email của Identity vẫn dùng được). Form cũng kéo ngược email từ Identity xuống (nút thêm email Identity đang có mà thiết bị chưa liệt kê — chỉ thêm vào form, lưu cùng thiết bị) và đặt email chính qua `PUT user/{userId}/{userEmailId}/primary`; xoá email khỏi Identity (nút riêng, có xác nhận) qua `DELETE user/{userId}/{userEmailId}` — không xoá email trên thiết bị, và vẫn bị chặn khi xoá email chính lúc User còn email khác. Endpoint `GET domain-account` cho form biết User/email đã có để hiện badge. Cùng permission `Identity.UserEmail.Manage`.
 - **Danh mục module**: `Shared.Application/Helper/EmailModules.cs` (`Attendance` đã áp dụng; `Workflow` lưu được nhưng
   `IsApplied=false` — Workflow vẫn gửi theo `Employees.Email` riêng của nó).
 - **Gửi mail**: `IUserDirectoryService.GetContactInfoAsync(userName, moduleCode)` trả email Admin gán cho module đó, không có thì email
