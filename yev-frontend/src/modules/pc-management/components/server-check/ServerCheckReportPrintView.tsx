@@ -31,7 +31,7 @@ const td = "border border-black px-1 py-0.5 text-center align-top";
 
 // Bản in khớp layout tờ giấy gốc "YEV–22–CV–IT-QD-810-FR-Check Sheet KT" (xem file mẫu
 // docs/Check sheet kiem tra hang ngay IT.xlsx, cũng là file BE dùng để xuất Excel — 7d.9
-// asset-api-fe.md) — KHÔNG dùng lại bảng tương tác trên màn hình (cột "Ngày" sticky, nút "Xem chi
+// asset-module.md §4) — KHÔNG dùng lại bảng tương tác trên màn hình (cột "Ngày" sticky, nút "Xem chi
 // tiết"...) vì đó là bảng để THAO TÁC, còn đây là bản để IN, cần đúng cấu trúc 2 nhóm cột merge
 // (Phòng Server / Các kiểm tra khác) như tờ giấy. `hidden print:block` — chỉ hiện khi in, màn hình
 // vẫn dùng bảng tương tác cũ (đã có `print:hidden` ở section bọc ngoài).

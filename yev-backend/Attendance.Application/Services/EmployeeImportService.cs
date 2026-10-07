@@ -424,7 +424,7 @@ namespace Attendance.Application.Services
             return rows;
         }
 
-        // Mục 5 (2026-08-27, xem docs/Note_OT.txt "Import lại số giờ giới hạn tăng ca của nhân viên").
+        // Mục 5 (2026-08-27, xem attendance-module.md §Lũy kế & giới hạn giờ OT).
         // File Excel riêng, khác EmployeeImportRowDto ở trên: cột A bỏ trống (theo đúng quy ước các file
         // import khác trong module — vd Import_Nhan_Su_Che_Tao.xlsx), B=MNV, C=Giới hạn Tháng, D=Giới
         // hạn Năm. Chỉ UPDATE nhân viên ĐÃ TỒN TẠI (không tạo mới, không có Department/Group phụ thuộc

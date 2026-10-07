@@ -1,7 +1,7 @@
 namespace Attendance.Application.Dtos.EmployeeImports
 {
     // Import hàng loạt giới hạn giờ OT/tháng/năm riêng từng nhân viên (mục 5, 2026-08-27 — xem
-    // docs/Note_OT.txt "Import lại số giờ giới hạn tăng ca của nhân viên"). KHÔNG dùng cơ chế
+    // attendance-module.md §Lũy kế & giới hạn giờ OT). KHÔNG dùng cơ chế
     // Preview/Confirm 2 bước như EmployeeImportService.PreviewAsync/ConfirmAsync — chỉ update 2 field
     // số nullable trên nhân viên ĐÃ TỒN TẠI (không tạo mới, không có Department/Group phụ thuộc để rà
     // trước như import Employee đầy đủ), nên áp dụng thẳng và trả lại kết quả từng dòng để xem lại.

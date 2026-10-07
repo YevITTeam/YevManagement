@@ -795,7 +795,7 @@
       "calendarImportError": "休日カレンダーのインポートに失敗しました。",
       "calendarTemplateError": "テンプレートをダウンロードできません。",
       "calendarLoadError": "休日カレンダーを読み込めません。",
-      "calendarEmpty": "{year}年の休日カレンダーは未登録です — 全ての日が勤務日として扱われます。",
+      "calendarEmpty": "{year}年の休日カレンダーは未登録です — 日曜日のみ休日として扱われます。祝日はカレンダーを登録してください。",
       "calendarTypeSunday": "日曜日",
       "calendarTypePublicHoliday": "祝日",
       "calendarTypeSpecialHoliday": "特別休日",

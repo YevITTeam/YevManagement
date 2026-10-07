@@ -102,7 +102,7 @@ function ApprovalSummaryCell({
     );
 }
 
-// docs/attendance-api-fe.md §4.2 — my-forms (đơn do chính mình tạo) và pending-approvals (đơn chờ chính
+// docs/attendance-module.md §API — my-forms (đơn do chính mình tạo) và pending-approvals (đơn chờ chính
 // mình duyệt, BE tự lọc theo cấp/scope) dùng chung shape OtFormListItemDto + phân trang.
 export default function OtFormListPage({ mode, hideHeading = false }: OtFormListPageProps) {
     const t = useTranslations("Attendance.OtFormList");
@@ -196,7 +196,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     };
 
     // ── Chọn Phòng ban → Nhóm đang chọn (nếu có) có thể không còn thuộc Phòng ban mới, reset —
-    // snapshot render (AGENTS.md §4.5), cùng pattern Team→Line bên dưới. ──
+    // snapshot render (frontend-conventions.md §3), cùng pattern Team→Line bên dưới. ──
     const [departmentOptions, setDepartmentOptions] = useState<DepartmentDto[]>([]);
     const [groupOptions, setGroupOptions] = useState<GroupDto[]>([]);
 
@@ -216,7 +216,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     );
 
     // ── Chọn Team → Line đang chọn (nếu có) có thể không còn thuộc Team mới, reset — snapshot render
-    // (AGENTS.md §4.5), cùng pattern CreateOtFormPage.tsx. ──
+    // (frontend-conventions.md §3), cùng pattern CreateOtFormPage.tsx. ──
     const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
     const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
     const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
@@ -367,7 +367,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     };
 
     // Xoá lựa chọn khi danh sách đổi (đổi trang/lọc/mode, hoặc sau khi xử lý xong) — so sánh snapshot
-    // ngay trong render thay vì effect (AGENTS.md §4.5).
+    // ngay trong render thay vì effect (frontend-conventions.md §3).
     const formsKey = forms.map((form) => form.id).join(",");
     const [prevFormsKey, setPrevFormsKey] = useState(formsKey);
     if (prevFormsKey !== formsKey) {

@@ -1,4 +1,4 @@
-// Khớp asset-api-fe.md §7f. "Bản mới nhất" = !isDeleted, versionCode lớn nhất (tính phía BE).
+// Khớp asset-module.md §4 "Bản mới nhất" = !isDeleted, versionCode lớn nhất (tính phía BE).
 export interface AppReleaseDto {
     id: number;
     versionCode: number;

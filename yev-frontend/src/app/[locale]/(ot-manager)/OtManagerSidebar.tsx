@@ -18,7 +18,7 @@ interface OtNavItem {
     permissions?: string[];
 }
 
-// Permission theo từng mục — bảng Vai trò → Menu (docs/attendance-api-fe.md §1.1).
+// Permission theo từng mục — bảng Vai trò → Menu (docs/attendance-module.md §API).
 const navItems: OtNavItem[] = [
     // Create/CreateProduction tách rời — Line Leader chỉ có CreateProduction vẫn cần thấy mục này
     // (2026-09-28, đồng bộ với otRoutePermissions.ts).

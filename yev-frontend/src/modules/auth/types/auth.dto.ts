@@ -8,7 +8,7 @@ export interface UserDto {
   // Email chính (bản sao của UserEmail đang IsPrimary), null khi user chưa có email nào.
   email: string | null;
   roles: string[];
-  // Mã permission suy ra từ roles (vd "Asset.Device.View") — dùng để ẩn/hiện UI, xem docs/identity-api-fe.md §3.
+  // Mã permission suy ra từ roles (vd "Asset.Device.View") — dùng để ẩn/hiện UI, xem docs/identity-module.md §6
   // BE luôn tự enforce lại ở tầng API, permissions ở đây chỉ phục vụ hiển thị.
   permissions: string[];
 }
@@ -32,7 +32,7 @@ export interface CreateRoleDto {
 }
 
 // Body cho POST /api/Auth/create-user — Admin chuẩn bị trước 1 user cho UserName cụ thể,
-// trước khi người đó đăng nhập Windows lần đầu (xem docs/identity-api-fe.md §4.9).
+// trước khi người đó đăng nhập Windows lần đầu (xem docs/identity-module.md §6).
 // deviceName (2026-07-11): chỉ để tham khảo/hiển thị, KHÔNG còn dùng để khớp login
 // (chỉ khớp theo userName) — để trống vẫn tạo user bình thường.
 export interface CreateUserDto {
@@ -49,21 +49,21 @@ export interface UpdateUserFullNameDto {
   fullName: string;
 }
 
-// Response gốc của POST /api/Auth/windows-login (docs/identity-api-fe.md §2.2)
+// Response gốc của POST /api/Auth/windows-login (docs/identity-module.md §6)
 export interface WindowsLoginResponseDto {
   user: UserDto;
   token: string;
 }
 
 // Body cho POST /api/Auth/login — trang /login tự viết, BE tự xác thực bằng cách bind username/password
-// vào AD (không phải Negotiate) — xem docs/identity-api-fe.md §2c. userName KHÔNG kèm domain.
+// vào AD (không phải Negotiate) — xem docs/identity-module.md §6 userName KHÔNG kèm domain.
 export interface LoginRequestDto {
   userName: string;
   password: string;
 }
 
 // Response của POST /api/LoginQr/{userId} — `qrPayload` là chuỗi duy nhất cần mã hoá thành ảnh QR; BE
-// chỉ lưu bản băm nên mã này chỉ lấy được đúng 1 lần ngay sau khi tạo (docs/identity-api-fe.md §4.10).
+// chỉ lưu bản băm nên mã này chỉ lấy được đúng 1 lần ngay sau khi tạo (docs/identity-module.md §6).
 export interface LoginQrGeneratedDto {
   userId: number;
   userName: string;

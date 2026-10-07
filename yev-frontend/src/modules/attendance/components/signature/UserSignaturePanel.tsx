@@ -11,7 +11,7 @@ import SignatureUpload from "./SignatureUpload";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
-// docs/attendance-api-fe.md §6/§6b — mỗi user tự đăng ký 1 chữ ký, BE tự lấy chữ ký này khi tạo/duyệt
+// docs/attendance-module.md §API/§6b — mỗi user tự đăng ký 1 chữ ký, BE tự lấy chữ ký này khi tạo/duyệt
 // đơn. ⚠️ 2026-07-16: PUT /me KHÔNG còn áp dụng ngay — chỉ gửi email xác nhận, chữ ký cũ vẫn có hiệu
 // lực cho tới khi user tự bấm xác nhận qua link email (trang public /xac-nhan-chu-ky).
 export default function UserSignaturePanel() {

@@ -38,6 +38,9 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
         // LastLoggedInUser when it is a domain account that will be written to Device.ManagerDomainAccount.
         public string? ResolvedManagerDomainAccount { get; set; }
 
+        // DomainAccountState of ResolvedManagerDomainAccount, filled by Preview only (null when there is no account).
+        public int? AccountState { get; set; }
+
         // Valid addresses parsed from UserEmail; the ones the device does not have yet are added on Confirm.
         public List<string> ResolvedEmails { get; set; } = new();
 

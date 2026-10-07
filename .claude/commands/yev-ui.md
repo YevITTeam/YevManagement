@@ -12,13 +12,13 @@ Lệnh này chỉ ép đi đúng thứ tự — **không chép lại luật** (m
 
 ## Trước khi viết dòng code nào
 
-1. **Đọc `docs/docs-fe/DESIGN_SYSTEM.md` cả file** (~33 KB, đọc trọn được — AGENTS.md §2 luật 7).
+1. **Đọc `docs/docs-fe/DESIGN_SYSTEM.md` cả file** (đọc trọn được).
 2. **Màu = arbitrary hex theo `DESIGN_SYSTEM.md` §1** (`bg-[#e3000f]`, `text-[#191c1e]`…). `tailwind.config.ts` có khai token (`brand-red`, `surface`…) nhưng dự án chạy **Tailwind v4 không có `@config`**, nên
    các class token đó **không sinh CSS** — đừng dùng chúng, đừng "khôi phục" chúng. Không đổi bảng màu, không thêm token/font/thang spacing mới.
 3. **Tìm component có sẵn trước khi dựng mới**: `yev-frontend/src/components/ui/`,
    `yev-frontend/src/components/common/`. Đã có thì dùng, chỉ tạo mới khi thật sự chưa có.
 4. Màn danh sách CRUD → **theo blueprint `§5`**, đừng vẽ bố cục mới. Khuôn mẫu code:
-   `yev-frontend/src/modules/pc-management/components/branches/` (AGENTS.md §4.5).
+   `yev-frontend/src/modules/pc-management/components/branches/` (`docs/docs-fe/frontend-conventions.md §3`).
 
 Báo một dòng kết quả audit trước khi đi tiếp, ví dụ:
 > Audit: màu hex theo DESIGN_SYSTEM §1 (token tailwind.config không hoạt động ở Tailwind v4); đã có `SearchableSelect`, `TimePicker24h`; màn CRUD → blueprint §5.
@@ -49,20 +49,20 @@ Ràng buộc của dự án — ưu tiên hơn mọi mặc định của skill:
   border-[#e0e3e5]… — bảng ở DESIGN_SYSTEM.md §1); KHÔNG dùng class token như bg-brand-red/text-muted vì Tailwind v4
   ở đây không nạp tailwind.config.ts. Font Inter. Không thêm token, font, thang spacing mới.
 - Dùng component có sẵn ở yev-frontend/src/components/ui và common: <liệt kê cái liên quan đã tìm thấy>.
-- Text hiển thị tiếng Việt; comment code tiếng Anh, ngắn, mô tả hành vi hiện tại.
-- Chỉ lo giao diện, không viết logic gọi API (AGENTS.md §4.3).
-<nếu là màn danh sách CRUD đã có blueprint §5: thêm dòng "dựng luôn, không cần wireframe">
-```
+- Ưu tiên tối giản: bỏ mô tả/nhãn/khung thừa, tối ưu diện tích cho nội dung chính (DESIGN_SYSTEM §0, §4.10).
+- Text hiển thị tiếng Việt; comment code tiếng Anh, 1 dòng (tối đa 2), chỉ nói vì sao.
+- Chỉ lo giao diện, không viết logic gọi API (`frontend-conventions.md §1`).
+<nếu là màn danh sách CRUD đã có blueprint §5, hoặc việc nhỏ hơn một màn (sửa dialog/form/tab/component): thêm dòng "dựng luôn, không wireframe, không hỏi lại">```
 
 - Đề kiểu "xem giúp / review" → để skill chạy nhánh soi UI: chỉ trả bảng trước/sau, **chưa sửa** tới khi người dùng chọn dòng.
 - Skill không có trong danh sách (máy khác chưa cài plugin evon) → bỏ bước này, tự làm theo `DESIGN_SYSTEM.md`.
 - Skill đề xuất hoặc dựng xong thì đối chiếu lại với `DESIGN_SYSTEM.md` §9; chỗ lệch **sửa theo doc**.
-- Ý hay từ skill mà doc chưa có → thêm vào `DESIGN_SYSTEM.md` (AGENTS.md §2 luật 4), đừng chỉ áp dụng một lần rồi để mất.
+- Ý hay từ skill mà doc chưa có → thêm vào `DESIGN_SYSTEM.md` (AGENTS.md §2 luật 4: cập nhật doc sau khi code), đừng chỉ áp dụng một lần rồi để mất.
 
 ## Khi xong
 
 - Chạy tại `yev-frontend/`: `npx tsc --noEmit` sạch; `pnpm lint` không thêm cảnh báo mới.
-- Text mới → thêm key vào **cả** `messages/vi.json` và `messages/ja.json`, cấu trúc giống hệt (AGENTS.md §4.6).
-- Comment trong code: **tiếng Anh, ngắn, mô tả hành vi hiện tại** — không nhật ký, không ngày tháng.
+- Text mới → thêm key vào **cả** `messages/vi.json` và `messages/ja.json`, cấu trúc giống hệt (`frontend-conventions.md §4`).
+- Comment trong code: **tiếng Anh, 1 dòng (tối đa 2), chỉ nói vì sao** — không nhật ký, không ngày tháng (AGENTS.md §Ngôn ngữ).
 - Đụng tới màn nào thì sửa luôn lỗi ô/nút rộng quá nội dung và chữ mô tả thừa ở màn đó; không đi quét sửa hàng loạt.
 - Phần UI vừa làm có luật mới → cập nhật `DESIGN_SYSTEM.md`, đừng để luật chỉ nằm trong đầu phiên.

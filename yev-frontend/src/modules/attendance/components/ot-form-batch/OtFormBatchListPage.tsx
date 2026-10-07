@@ -28,7 +28,7 @@ function formatDateTime(value: string) {
     return new Date(value).toLocaleString("vi-VN");
 }
 
-// Màn "Đơn tổng" trong app (dự phòng khi người duyệt mất/quên link email) — docs/attendance-api-fe.md
+// Màn "Đơn tổng" trong app (dự phòng khi người duyệt mất/quên link email) — docs/attendance-module.md §API
 // §Đơn tổng. Danh sách gồm cả batch đang chờ (Pending) lẫn đã xử lý (Processed), của cả 3 cấp quản lý
 // (DepartmentManager/WorkshopManager/GeneralDirector) — BE tự lọc theo candidate hợp lệ của người gọi
 // (Admin thấy tất cả).

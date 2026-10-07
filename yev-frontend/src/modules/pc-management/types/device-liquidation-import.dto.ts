@@ -1,4 +1,4 @@
-// Xem docs/asset-api-fe.md §6.4 — import thanh lý hàng loạt từ file 1 cột "Mã máy".
+// Xem docs/asset-module.md §4 — import thanh lý hàng loạt từ file 1 cột "Mã máy".
 // Chỉ đổi status máy đang "Chờ thanh lý" (2) sang "Đã thanh lý" (3), không tạo/xoá thiết bị.
 
 // Dữ liệu thô 1 dòng file — dùng chung cho response preview và request confirm.

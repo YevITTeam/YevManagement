@@ -1,5 +1,5 @@
 // Cấu hình dùng chung của module Attendance — 1 dòng duy nhất trong DB, xem
-// docs/docs-be/attendance-api-fe.md §6d (mới 2026-08-01).
+// docs/docs-be/attendance-module.md §API (mới 2026-08-01).
 // Redesign 3 bậc phiếu ăn (2026-08-26, chốt với người dùng — xem docs/attendance-module.md §Phiếu ăn):
 // thực tích < noMealTicketMaxHours -> không phiếu; noMealTicketMaxHours..mainMealTicketMinHours ->
 // Phụ; >= mainMealTicketMinHours -> Chính. Ngoại lệ: ca khớp ĐÚNG khung [earlyMealWindowStartTime,

@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import OtFormPrintView from "@/modules/attendance/components/ot-form/OtFormPrintView";
 
-// Route "In đơn" (docs/attendance-api-fe.md §8) — nằm trong nhóm (ot-manager) để có Sidebar khi xem
+// Route "In đơn" (docs/attendance-module.md §API) — nằm trong nhóm (ot-manager) để có Sidebar khi xem
 // trên trình duyệt (điều hướng thuận tiện); Sidebar + Header đều `print:hidden` nên không lộ ra khi
 // in thật. Quyền xem vẫn do BE tự enforce qua permission Attendance.OTForm.View như mọi API khác.
 //

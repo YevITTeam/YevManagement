@@ -7,6 +7,7 @@ using Asset.Domain.Enums;
 using ClosedXML.Excel;
 using Shared.Application.Abstractions;
 using Shared.Application.Helper;
+using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 
@@ -35,19 +36,52 @@ namespace Asset.Application.Services
         private const int MaxEmailLength = 255;
 
         private readonly IDeviceConfigurationService _deviceConfigurationService;
+        private readonly IUserDirectoryService _userDirectoryService;
 
         public DeviceConfigurationImportService(
             IAssetUnitOfWork unitOfWork,
-            IDeviceConfigurationService deviceConfigurationService) : base(unitOfWork)
+            IDeviceConfigurationService deviceConfigurationService,
+            IUserDirectoryService userDirectoryService) : base(unitOfWork)
         {
             _deviceConfigurationService = deviceConfigurationService;
+            _userDirectoryService = userDirectoryService;
         }
 
         public async Task<DeviceConfigurationImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string? fileName = null)
         {
             var rawRows = CsvFileHelper.HasCsvExtension(fileName) ? ParseCsv(excelFileStream) : ParseXlsx(excelFileStream);
             var (validatedRows, outOfScopeSkippedCount) = await ValidateAndResolveRowsAsync(rawRows);
+            await FillAccountStatesAsync(validatedRows);
             return BuildPreviewResult(validatedRows, outOfScopeSkippedCount);
+        }
+
+        // Marks each row with what Identity/the directory say about its domain account (read-only).
+        private async Task FillAccountStatesAsync(List<DeviceConfigurationImportRowDto> rows)
+        {
+            var accounts = rows.Where(r => r.ResolvedManagerDomainAccount != null).Select(r => r.ResolvedManagerDomainAccount!);
+            var stateByAccount = (await _userDirectoryService.ResolveDomainAccountsAsync(accounts))
+                .ToDictionary(x => x.Account, x => x.State, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var row in rows.Where(r => r.ResolvedManagerDomainAccount != null))
+                row.AccountState = (int)stateByAccount[row.ResolvedManagerDomainAccount!.Trim()];
+        }
+
+        // Runs after the Asset transaction has committed (Identity is another database), so a failure here
+        // never undoes the import; the call is idempotent and can simply be repeated.
+        private async Task CreateMissingUsersAsync(List<DeviceConfigurationImportRowDto> rows, DeviceConfigurationImportConfirmResultDto result)
+        {
+            var accounts = rows.Where(r => r.ResolvedManagerDomainAccount != null).Select(r => r.ResolvedManagerDomainAccount!);
+            foreach (var info in await _userDirectoryService.EnsureDomainUsersAsync(accounts))
+            {
+                switch (info.State)
+                {
+                    case DomainAccountState.Created: result.UsersCreatedCount++; break;
+                    case DomainAccountState.Disabled:
+                    case DomainAccountState.NotInDirectory: result.UsersSkippedCount++; break;
+                    case DomainAccountState.DirectoryUnavailable: result.UsersUnavailableCount++; break;
+                    case DomainAccountState.Failed: result.UsersFailedCount++; break;
+                }
+            }
         }
 
         public async Task<DeviceConfigurationImportConfirmResultDto> ConfirmAsync(ConfirmDeviceConfigurationImportDto request)
@@ -145,6 +179,9 @@ namespace Asset.Application.Services
                 await _unitOfWork.RollbackTransactionAsync();
                 throw;
             }
+
+            if (request.CreateMissingUsers)
+                await CreateMissingUsersAsync(validatedRows, result);
 
             return result;
         }

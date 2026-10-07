@@ -30,7 +30,7 @@ namespace Attendance.Application.Services
         }
 
         // Loại phiếu ăn 1 người nhận cho 1 lần OT. Tính trên giờ đã trừ nghỉ ăn VÔ ĐIỀU KIỆN (theo
-        // Note_OT.txt, không phụ thuộc DidEat) để cùng 1 ca luôn ra cùng loại phiếu dù nút "Ăn uống" bật/tắt;
+        // attendance-module.md §Phiếu ăn, không phụ thuộc DidEat) để cùng 1 ca luôn ra cùng loại phiếu dù nút "Ăn uống" bật/tắt;
         // riêng lũy kế/giờ hiển thị vẫn chỉ trừ người có ăn (CalculateOtHours).
         public static MealTicketType CalculateMealTicketType(TimeOnly startTime, TimeOnly endTime, bool didEat, AttendanceSettingDto settings)
         {

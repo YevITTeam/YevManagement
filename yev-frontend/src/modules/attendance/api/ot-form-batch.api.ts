@@ -6,7 +6,7 @@ import type {
 } from "@/modules/attendance/types/ot-form-batch.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Route /OtFormBatch — docs/attendance-api-fe.md §Đơn tổng.
+// Route /OtFormBatch — docs/attendance-module.md §API §Đơn tổng.
 const ENDPOINTS = {
     OT_FORM_BATCH: {
         gridList: "/OtFormBatch/grid-list",

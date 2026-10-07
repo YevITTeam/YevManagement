@@ -19,7 +19,7 @@ const ENDPOINTS = {
 } as const;
 
 export const PermissionApi = {
-    // Nhóm 2 cấp Module > Entity (docs/identity-api-fe.md §4.7, đổi 2026-07-11) — dùng để dựng UI dạng cây.
+    // Nhóm 2 cấp Module > Entity (docs/identity-module.md §6, đổi 2026-07-11) — dùng để dựng UI dạng cây.
     getAll: async () => {
         const response = await api.get<ApiResponse<PermissionModuleGroupDto[]>>(ENDPOINTS.PERMISSION.getAll);
         return response.data;
@@ -34,7 +34,7 @@ export const PermissionApi = {
         return response.data;
     },
 
-    // Override (grant/deny) riêng đang áp dụng cho 1 user, đè lên permission suy ra từ Role — docs/identity-api-fe.md §4.8.
+    // Override (grant/deny) riêng đang áp dụng cho 1 user, đè lên permission suy ra từ Role — docs/identity-module.md §6
     getUserOverrides: async (userId: number) => {
         const response = await api.get<ApiResponse<UserPermissionOverrideDto[]>>(ENDPOINTS.PERMISSION.getUserOverrides(userId));
         return response.data;

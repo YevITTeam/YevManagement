@@ -1,6 +1,6 @@
 export interface UserSignatureDto {
     userName: string;
-    // Base64 (không kèm prefix data:image/...;base64,) — docs/attendance-api-fe.md đầu file.
+    // Base64 (không kèm prefix data:image/...;base64,) — docs/attendance-module.md §API đầu file.
     signatureImage: string;
     updatedAt: string;
 }

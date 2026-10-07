@@ -18,7 +18,7 @@ export interface GetDeviceGroupPageNationParams {
     pageIndex?: number;
     pageSize?: number;
     keyword?: string;
-    // Lọc theo Bộ phận cha (docs/asset-api-fe.md §2.1) — bỏ trống trả toàn bộ Nhóm.
+    // Lọc theo Bộ phận cha (docs/asset-module.md §4) — bỏ trống trả toàn bộ Nhóm.
     departmentId?: number;
 }
 
@@ -35,7 +35,7 @@ export const DeviceGroupApi = {
         const response = await api.get<ApiResponseWithPageNation<DeviceGroupDto>>(url);
         return response.data;
     },
-    // Dùng cho dropdown "Nhóm" cascading theo "Bộ phận" đã chọn (docs/asset-api-fe.md §2.1) —
+    // Dùng cho dropdown "Nhóm" cascading theo "Bộ phận" đã chọn (docs/asset-module.md §4) —
     // bỏ departmentId để lấy toàn bộ Nhóm (màn quản lý danh mục Nhóm).
     getAllDeviceGroups: async (departmentId?: number) => {
         const query = new URLSearchParams();

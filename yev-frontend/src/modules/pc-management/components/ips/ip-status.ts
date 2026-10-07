@@ -1,4 +1,4 @@
-// Trạng thái địa chỉ IP (docs/asset-api-fe.md §4.2). statusText luôn được ưu tiên
+// Trạng thái địa chỉ IP (docs/asset-module.md §4). statusText luôn được ưu tiên
 // hiển thị từ server (đã thống nhất "Chưa sử dụng"/"Đã sử dụng (khác)"/"Đã sử dụng"
 // ở mọi endpoint); bảng nhãn/màu dưới đây dùng cho dropdown trong form và tô màu
 // badge theo status, giữ đồng bộ chữ với statusText.

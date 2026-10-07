@@ -43,7 +43,7 @@ function buildInitialDecisions(batch: OtFormBatchDto): Record<number, FormDecisi
 type OtFormBatchDetailProps = { variant: "app"; id: number } | { variant: "email"; token: string };
 
 // Màn duyệt "Đơn tổng" — dùng chung cho cả 2 kênh (trong app qua JWT + trang public qua link email),
-// docs/attendance-api-fe.md §Đơn tổng. Mặc định mọi nhân viên/đơn nhỏ đều được Duyệt — Trưởng phòng bỏ
+// docs/attendance-module.md §API §Đơn tổng. Mặc định mọi nhân viên/đơn nhỏ đều được Duyệt — Trưởng phòng bỏ
 // chọn từng nhân viên không muốn cho OT, hoặc bấm "Từ chối" cả 1 đơn nhỏ, rồi duyệt 1 lần cho phần còn
 // lại (mỗi đơn nhỏ tiếp tục đúng luồng duyệt hiện có, không đổi gì ở đó).
 // Ô ngắn gọn cho 1 mục "Yêu cầu hỗ trợ khác" — bản rút gọn của ProcessPartTile ở OtFormDetail.tsx, chỉ

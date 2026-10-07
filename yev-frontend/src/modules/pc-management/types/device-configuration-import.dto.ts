@@ -1,4 +1,4 @@
-// Xem docs/asset-api-fe.md §6.3 — import cấu hình phần cứng hàng loạt từ file kiểm kê Tanium.
+// Xem docs/asset-module.md §4 — import cấu hình phần cứng hàng loạt từ file kiểm kê Tanium.
 // Khác device-import: CHỈ cập nhật Device đã có sẵn, không tự tạo Device mới.
 
 // Dữ liệu thô đọc được từ 1 dòng file Tanium — dùng chung cho response preview và request confirm.
@@ -19,6 +19,17 @@ export interface DeviceConfigurationImportRowDto {
     size: string | null;
 }
 
+// Trạng thái tài khoản domain của 1 dòng preview (khớp DomainAccountState bên BE).
+export const DomainAccountState = {
+    ExistsInIdentity: 0,
+    WillCreate: 1,
+    Created: 2,
+    Disabled: 3,
+    NotInDirectory: 4,
+    DirectoryUnavailable: 5,
+    Failed: 6,
+} as const;
+
 // Item trả về từ bước preview — thêm mã/tên tách được, các Id đã tra sẵn + kết quả validate.
 export interface DeviceConfigurationImportPreviewRowDto extends DeviceConfigurationImportRowDto {
     rowNumber: number;
@@ -30,6 +41,8 @@ export interface DeviceConfigurationImportPreviewRowDto extends DeviceConfigurat
     resolvedSerialNumber: string | null;
     // null = không ghi (trống hoặc là tài khoản Local).
     resolvedManagerDomainAccount: string | null;
+    // DomainAccountState của resolvedManagerDomainAccount; null = dòng không có tài khoản domain.
+    accountState: number | null;
     // Email hợp lệ tách được từ ô email; email máy chưa có sẽ được thêm khi xác nhận.
     resolvedEmails: string[];
     isValid: boolean;
@@ -47,7 +60,7 @@ export interface DeviceConfigurationImportPreviewResultDto {
 }
 
 // Response của BE KHÔNG có skippedRows/skippedCount (khác Device Import) — endpoint
-// này vẫn re-validate + atomic theo request gửi lên (xem docs/asset-api-fe.md §6.3).
+// này vẫn re-validate + atomic theo request gửi lên (xem docs/asset-module.md §4).
 // Để cho phép Confirm dù còn dòng lỗi mà không rủi ro bị BE từ chối cả batch, FE tự
 // lọc bỏ các dòng isValid=false trước khi gửi (xem ImportDeviceConfigurationDialog).
 export interface DeviceConfigurationImportConfirmResultDto {
@@ -57,6 +70,12 @@ export interface DeviceConfigurationImportConfirmResultDto {
     serialUpdatedCount: number;
     managerAccountUpdatedCount: number;
     emailAddedCount: number;
+    // Chỉ có số khi gửi createMissingUsers = true: user Identity vừa tạo / bỏ qua (bị vô hiệu hoá hoặc không có trong AD)
+    // / không hỏi được AD / tạo lỗi.
+    usersCreatedCount: number;
+    usersSkippedCount: number;
+    usersUnavailableCount: number;
+    usersFailedCount: number;
     updatedDeviceIds: number[];
 }
 

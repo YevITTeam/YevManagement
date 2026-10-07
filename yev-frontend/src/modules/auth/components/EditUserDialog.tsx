@@ -28,7 +28,7 @@ export default function EditUserDialog({ isOpen, user, onClose, onUpdated }: Pro
     const [isSaving, setIsSaving] = useState(false);
 
     // Chỉ cho sửa Họ tên (FullName) — Tên đăng nhập Windows & Tên máy là read-only, khớp giới hạn
-    // của PUT /api/Auth/update-user-fullname (docs/identity-api-fe.md §4).
+    // của PUT /api/Auth/update-user-fullname (docs/identity-module.md §6).
     useDialogReset(isOpen, user, (current) => {
         setFullName(current?.fullName ?? "");
     });

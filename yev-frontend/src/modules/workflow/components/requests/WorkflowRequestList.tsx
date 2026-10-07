@@ -70,7 +70,7 @@ export default function WorkflowRequestList() {
         (message) => toast.error(message)
     );
 
-    // Reset page when the tab or filter changes by comparing a snapshot during render (AGENTS.md §4.5).
+    // Reset page when the tab or filter changes by comparing a snapshot during render (frontend-conventions.md §3).
     const filterKey = `${tab}:${statusFilter}`;
     const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
     if (prevFilterKey !== filterKey) {

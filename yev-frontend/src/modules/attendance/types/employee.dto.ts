@@ -6,7 +6,7 @@ export interface EmployeeDto {
     // Tài khoản AD của chính nhân viên (nullable) — dùng để liên kết người tạo đơn OT với đúng Employee
     // (docs §3.5).
     userName: string | null;
-    // Giờ OT lũy kế THẬT (docs/attendance-api-fe.md §3.5) — BE tính trực tiếp từ ledger theo đúng
+    // Giờ OT lũy kế THẬT (docs/attendance-module.md §API) — BE tính trực tiếp từ ledger theo đúng
     // tháng/năm THỰC TẾ hôm nay mỗi lần đọc, không lưu cache nữa (2026-08-19). Dùng cảnh báo vượt
     // 25h/tháng hoặc 300h/năm.
     monthToDate: number;
@@ -19,13 +19,13 @@ export interface EmployeeDto {
     projectedYearToDate: number;
     // Nullable (2026-08-08): Trưởng phòng dùng departmentId thay vì groupId (không thuộc Bộ phận cụ
     // thể nào); Trưởng Xưởng/Giám đốc cả 2 đều null (dùng chung toàn công ty) — xem
-    // docs/attendance-api-fe.md §Cây chức vụ.
+    // docs/attendance-module.md §API §Cây chức vụ.
     groupId: number | null;
     groupNameVn: string | null;
     departmentId: number | null;
     departmentNameVn: string | null;
 
-    // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán (xem docs/attendance-api-fe.md §Cây chức vụ).
+    // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán (xem docs/attendance-module.md §API §Cây chức vụ).
     jobTitleId: number | null;
     jobTitleName: string | null;
 

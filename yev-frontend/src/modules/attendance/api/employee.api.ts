@@ -55,7 +55,7 @@ export interface GetEmployeeInMyScopeParams {
 }
 
 // groupId/departmentId (2026-08-08): bắt buộc/cấm tuỳ theo TerminalLevel của jobTitleId — chỉ đúng 1
-// trong 2 field được điền (xem EmployeeForm.tsx + docs/attendance-api-fe.md §Cây chức vụ).
+// trong 2 field được điền (xem EmployeeForm.tsx + docs/attendance-module.md §API §Cây chức vụ).
 export interface CreateUpdateEmployeeDto {
     code: string;
     firstName: string;
@@ -72,7 +72,7 @@ export interface CreateUpdateEmployeeDto {
 
 // Sửa RIÊNG giới hạn OT (2026-08-29) — permission hẹp Attendance.Employee.UpdateOtLimit, KHÁC
 // updateEmployee (PUT /{id}, Attendance.Employee.Update — không còn nhận 2 field này nữa). Dùng cho
-// Người phụ trách Bộ phận (không có quyền sửa nhân viên nói chung) — xem docs/attendance-api-fe.md
+// Người phụ trách Bộ phận (không có quyền sửa nhân viên nói chung) — xem docs/attendance-module.md §API
 // §Phân quyền theo Phòng ban.
 export interface UpdateEmployeeOtLimitDto {
     customMonthlyOtHourLimit: number | null;
@@ -101,7 +101,7 @@ export const EmployeeApi = {
         const response = await api.get<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.getEmployeeById(id));
         return response.data;
     },
-    // Chọn nhân viên hàng loạt khi lập đơn OT (docs/attendance-api-fe.md §3.5). date = ngày trên đơn
+    // Chọn nhân viên hàng loạt khi lập đơn OT (docs/attendance-module.md §API). date = ngày trên đơn
     // đang tạo (YYYY-MM-DD) — để lũy kế Dự kiến (projectedMonthToDate/YearToDate) scope đúng tháng/năm
     // của đơn đó thay vì hôm nay thực tế (2026-08-19, xem docs §Lũy kế Dự kiến). Bỏ trống = hôm nay.
     getEmployeesByGroup: async (groupId: number, date?: string) => {

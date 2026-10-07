@@ -1,4 +1,4 @@
-// docs/asset-api-fe.md §5.4b — POST /api/Device/qr-labels: in tem QR hàng loạt.
+// docs/asset-module.md §4 — POST /api/Device/qr-labels: in tem QR hàng loạt.
 // BE chỉ trả dữ liệu (đủ field + qrPayload dựng sẵn), FE tự vẽ QR và tự dàn layout in.
 export interface DeviceQrLabelDto {
     deviceId: number;

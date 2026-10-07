@@ -1,4 +1,4 @@
-// Hợp đồng với BE: docs/docs-be/asset-api-fe.md §7c (POST /api/AiChat/stream).
+// Hợp đồng với BE: docs/docs-be/asset-module.md §4 (POST /api/AiChat/stream).
 // BE KHÔNG lưu hội thoại — FE tự giữ `history` và gửi lại toàn bộ mỗi lượt.
 
 export type AiChatRole = "user" | "assistant";

@@ -6,6 +6,7 @@ using Asset.Domain.Entities;
 using Asset.Domain.Enums;
 using Shared.Application.Abstractions;
 using Shared.Application.Helper;
+using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
@@ -16,14 +17,17 @@ namespace Asset.Application.Services
     {
         private readonly IDeviceConfigurationService _deviceConfigurationService;
         private readonly IDeviceSoftwareService _deviceSoftwareService;
+        private readonly IUserDirectoryService _userDirectoryService;
 
         public DeviceService(
             IAssetUnitOfWork unitOfWork,
             IDeviceConfigurationService deviceConfigurationService,
-            IDeviceSoftwareService deviceSoftwareService) : base(unitOfWork)
+            IDeviceSoftwareService deviceSoftwareService,
+            IUserDirectoryService userDirectoryService) : base(unitOfWork)
         {
             _deviceConfigurationService = deviceConfigurationService;
             _deviceSoftwareService = deviceSoftwareService;
+            _userDirectoryService = userDirectoryService;
         }
 
         public async Task<PagedResponse<DeviceGridDto>> GetDevicesForGridAsync(DeviceFilterRequest request)
@@ -693,6 +697,7 @@ namespace Asset.Application.Services
             }
 
             await _unitOfWork.SaveChangesAsync();
+            await EnsureIdentityUserAsync(newDevice.ManagerDomainAccount);
 
             newDevice.Branch = branch;
             newDevice.DeviceType = deviceType;
@@ -704,6 +709,14 @@ namespace Asset.Application.Services
         }
 
         private static string? NormalizeDomainAccount(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        // Best effort after the device is saved: an account active in the directory but unknown to Identity
+        // gets a role-Basic user. Ineligible or unreachable accounts are left alone and never fail the save.
+        private async Task EnsureIdentityUserAsync(string? domainAccount)
+        {
+            if (domainAccount == null) return;
+            await _userDirectoryService.EnsureDomainUsersAsync(new[] { domainAccount });
+        }
 
         public async Task UpdateAsync(UpdateDeviceDto request)
         {
@@ -771,6 +784,7 @@ namespace Asset.Application.Services
 
             _unitOfWork.Devices.Update(device);
             await _unitOfWork.SaveChangesAsync();
+            await EnsureIdentityUserAsync(device.ManagerDomainAccount);
         }
 
         public async Task<DeviceReplacementSuggestionDto?> GetReplacementSuggestionAsync(int oldDeviceId)

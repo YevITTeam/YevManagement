@@ -17,14 +17,14 @@ interface ImportDeviceDialogProps {
     isOpen: boolean;
     onClose: () => void;
     onImported: () => void;
-    // docs/asset-api-fe.md §5.10 — sau khi Confirm, nếu có pendingTransfers (gợi ý
+    // docs/asset-module.md §4 — sau khi Confirm, nếu có pendingTransfers (gợi ý
     // từ cột "MQL Cũ"), FE điều hướng/điền sẵn sang màn "Chuyển máy".
     onRequestTransfer?: (transfer: { oldDeviceId: number; oldDeviceCode: string; newDeviceId: number }) => void;
 }
 
 function formatDate(value: string | null) {
     if (!value) return "-";
-    // BE trả purchaseDate dạng "dd/MM/yyyy" (docs/asset-api-fe.md §5.10) — parse thủ công vì
+    // BE trả purchaseDate dạng "dd/MM/yyyy" (docs/asset-module.md §4) — parse thủ công vì
     // new Date("dd/MM/yyyy") bị JS hiểu nhầm thành MM/dd/yyyy (kiểu Mỹ), làm lệch ngày/tháng.
     const slashMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (slashMatch) {
@@ -44,7 +44,7 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
     const [summary, setSummary] = useState<{ totalRows: number; validRows: number; invalidRows: number } | null>(null);
     const [result, setResult] = useState<DeviceImportConfirmResultDto | null>(null);
     const [showPrintPrompt, setShowPrintPrompt] = useState(false);
-    // In tem QR cho thiết bị vừa import (docs/asset-api-fe.md §5.4b) — null = đóng dialog.
+    // In tem QR cho thiết bị vừa import (docs/asset-module.md §4) — null = đóng dialog.
     const [qrPrintDeviceIds, setQrPrintDeviceIds] = useState<number[] | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -143,7 +143,7 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
         : [];
     const createdRows = processedRows.filter((row) => !row.isUpdate);
     const updatedRows = processedRows.filter((row) => row.isUpdate);
-    // BE không trả kèm deviceId ngay trong preview row — giả định `createdDeviceIds` (docs/asset-api-fe.md
+    // BE không trả kèm deviceId ngay trong preview row — giả định `createdDeviceIds` (docs/asset-module.md §4
     // §5.10) được trả ĐÚNG THỨ TỰ các dòng "tạo mới" đã xử lý, khớp vị trí với `createdRows` để in tem QR
     // cho từng dòng cụ thể; in "tất cả"/prompt sau import thì dùng thẳng result.createdDeviceIds, không cần map.
     const createdRowDeviceIds = result ? createdRows.map((_, index) => result.createdDeviceIds[index]) : [];

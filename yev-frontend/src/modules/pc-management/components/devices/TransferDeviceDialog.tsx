@@ -18,7 +18,7 @@ interface TransferableDevice {
 interface TransferDeviceDialogProps {
     isOpen: boolean;
     oldDevice: TransferableDevice | null;
-    // docs/asset-api-fe.md §5.10 — gợi ý "MQL Cũ" từ import Excel (pendingTransfers):
+    // docs/asset-module.md §4 — gợi ý "MQL Cũ" từ import Excel (pendingTransfers):
     // điền sẵn máy mới nhưng vẫn cho người dùng sửa lại trước khi bấm "Chuyển".
     initialNewDeviceId?: number | null;
     onClose: () => void;
@@ -32,7 +32,7 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
     const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
     const [note, setNote] = useState("");
     const [isSaving, setIsSaving] = useState(false);
-    // Gợi ý máy mới suy ra từ cột "MQL Cũ" lúc import Excel (docs/asset-api-fe.md §5.9) — chỉ tự tra khi
+    // Gợi ý máy mới suy ra từ cột "MQL Cũ" lúc import Excel (docs/asset-module.md §4) — chỉ tự tra khi
     // dialog KHÔNG được mở sẵn với 1 gợi ý cụ thể từ màn "Import Excel" (initialNewDeviceId).
     const [suggestion, setSuggestion] = useState<DeviceReplacementSuggestionDto | null>(null);
     // Thông tin máy đang được chọn nhưng chưa/không nằm trong danh sách candidates hiện tại (vd máy được
@@ -53,7 +53,7 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
         }
     }
 
-    // Tự tra gợi ý máy mới (docs/asset-api-fe.md §5.9) — chỉ khi KHÔNG có initialNewDeviceId đã điền sẵn.
+    // Tự tra gợi ý máy mới (docs/asset-module.md §4) — chỉ khi KHÔNG có initialNewDeviceId đã điền sẵn.
     useEffect(() => {
         if (!isOpen || !oldDevice || initialNewDeviceId != null) return;
         let isCancelled = false;

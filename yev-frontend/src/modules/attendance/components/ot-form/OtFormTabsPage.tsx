@@ -10,7 +10,7 @@ import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingA
 
 type OtFormTabKey = "my-forms" | "pending-approvals" | "my-actions" | "my-participations" | "all-forms";
 
-// docs/attendance-api-fe.md §1.1/§1.3.B (gộp 2026-07-17) — gộp các màn danh sách cũ ("Đơn của tôi"/
+// docs/attendance-module.md §API/§1.3.B (gộp 2026-07-17) — gộp các màn danh sách cũ ("Đơn của tôi"/
 // "Chờ tôi duyệt"/"Đơn đã xử lý") + 1 tab "Đơn tôi tham gia" thành 1 màn "Đơn tăng ca" duy nhất. Chỉ
 // gộp ở tầng UI — BE vẫn giữ nguyên các API riêng biệt, mỗi tab gọi đúng 1 API (OtFormListPage đã tự
 // làm việc này qua prop `mode`). Tab "Chờ tôi ký duyệt" (Draft/Submitter cũ) đã dọn hẳn ở Giai đoạn

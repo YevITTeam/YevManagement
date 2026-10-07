@@ -9,7 +9,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { createBilingualTranslator } from "@/modules/attendance/lib/bilingual";
 
-// Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-api-fe.md §6b.
+// Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-module.md §API
 // Mở qua link email "Xác nhận cập nhật chữ ký". Bilingual (VN / JP) cố định bất kể route đang là
 // /vi hay /ja (2026-07-29, user request) — xem createBilingualTranslator trong lib/bilingual.ts,
 // đồng bộ với OtFormEmailConfirmPage.tsx.

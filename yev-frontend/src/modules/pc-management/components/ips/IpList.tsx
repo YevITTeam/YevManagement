@@ -20,7 +20,7 @@ export default function IpList() {
     const addressRef = useRef<ListHandle>(null);
     const prefixRef = useRef<ListHandle>(null);
     const activeRef = activeTab === "addresses" ? addressRef : prefixRef;
-    // IpAddress không còn tạo thủ công (docs/asset-api-fe.md §4.2) — chỉ sinh
+    // IpAddress không còn tạo thủ công (docs/asset-module.md §4) — chỉ sinh
     // hàng loạt khi tạo dải mạng, nên tab "Địa chỉ IP" không có nút "Thêm".
     const addLabel = activeTab === "prefixes" ? "+ Thêm dải mạng" : null;
 

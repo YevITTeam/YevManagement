@@ -19,7 +19,7 @@ import type {
 } from "@/modules/attendance/types/ot-form.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Route /OtForm — docs/attendance-api-fe.md §4 (đã cập nhật 2026-07-16: thêm PUT sửa đơn + email-confirm public).
+// Route /OtForm — docs/attendance-module.md §API (đã cập nhật 2026-07-16: thêm PUT sửa đơn + email-confirm public).
 const ENDPOINTS = {
     OT_FORM: {
         getMyCreateScopes: "/OtForm/my-create-scopes",
@@ -70,7 +70,7 @@ function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListPa
     if (params?.pageSize) query.set("PageSize", String(params.pageSize));
     if (params?.fromDate) query.set("FromDate", params.fromDate);
     if (params?.toDate) query.set("ToDate", params.toDate);
-    // status=0 (Pending) là giá trị hợp lệ — không được dùng truthy check kẻo rớt mất (AGENTS.md §4.4).
+    // status=0 (Pending) là giá trị hợp lệ — không được dùng truthy check kẻo rớt mất (frontend-conventions.md §2).
     if (params?.status !== undefined) query.set("Status", String(params.status));
     if (params?.groupId !== undefined) query.set("GroupId", String(params.groupId));
     if (params?.departmentId !== undefined) query.set("DepartmentId", String(params.departmentId));
@@ -216,9 +216,7 @@ export const OtFormApi = {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.emailConfirmReject(token), data);
         return response.data;
     },
-    // Loại nhân viên khỏi đơn qua link email — KHÔNG có secondaryPassword (token là thông tin xác
-    // thực duy nhất, khác approve/reject qua email vẫn giữ mật khẩu cấp 2, docs §4.5a). Trả OtFormDto
-    // đầy đủ đã cập nhật, không cần gọi lại getOtFormByEmailToken.
+    // Returns the updated OtFormDto, so the page does not need to reload the form.
     removeOtFormEmployeeByEmailToken: async (token: string, data: RemoveOtFormEmployeeByEmailTokenDto) => {
         const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.emailConfirmRemoveEmployee(token), data);
         return response.data;

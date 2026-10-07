@@ -1,4 +1,4 @@
-// Schema theo docs/attendance-api-fe.md §4 (đã cập nhật 2026-07-16, đợt 1-3). date: DateOnly
+// Schema theo docs/attendance-module.md §API (đã cập nhật 2026-07-16, đợt 1-3). date: DateOnly
 // "yyyy-MM-dd" — startTime/endTime: TimeOnly "HH:mm:ss".
 
 export interface CheckOtFormOverlapEmployeeDto {
@@ -355,18 +355,17 @@ export interface DeleteOtFormDto {
     reason: string;
 }
 
-// Body POST /api/OtForm/email-confirm/{token}/employees/remove — §4.5a. Kênh email KHÔNG cần mật khẩu
-// cấp 2 (token tự nó là thông tin xác thực).
+// Body POST /api/OtForm/email-confirm/{token}/employees/remove — §4.5a. The email channel re-verifies the secondary password.
 export interface RemoveOtFormEmployeeByEmailTokenDto {
     employeeId: number;
     reason: string;
+    secondaryPassword: string;
 }
 
 // Body POST /api/OtForm/{id}/employees/remove — kênh trong-app (JWT), khôi phục 2026-09-30 ngay trên
 // màn Duyệt (§Loại nhân viên khỏi đơn) — TÁCH RIÊNG khỏi UpdateOtFormDto
 // (chỉ người tạo mới gọi được cho đơn theo Nhóm): endpoint này dùng đúng luật "candidate bước Pending
-// hiện tại" nên approver không phải người tạo cũng loại được. KHÔNG có secondaryPassword, cùng quyết
-// định 2026-07-31 áp dụng cho kênh email.
+// hiện tại" nên approver không phải người tạo cũng loại được. KHÔNG có secondaryPassword (phiên JWT đã xác thực).
 export interface RemoveOtFormEmployeeDto {
     employeeId: number;
     reason: string;

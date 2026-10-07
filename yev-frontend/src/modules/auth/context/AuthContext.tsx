@@ -10,9 +10,9 @@ interface AuthContextValue {
     isLoading: boolean;
     // Lấy lại JWT + user/permissions mới nhất — dùng khi Admin vừa đổi permission của Role mình.
     // Đi qua `/Auth/me` (Bearer) nên KHÔNG kéo theo handshake Negotiate: BE dựng lại Role/Permission từ DB
-    // ở mọi request nên dữ liệu trả về vẫn là bản mới nhất (docs/identity-api-fe.md §2b).
+    // ở mọi request nên dữ liệu trả về vẫn là bản mới nhất (docs/identity-module.md §6).
     refreshUser: () => Promise<void>;
-    // Đăng nhập bằng form username/password ở trang /login (docs/identity-api-fe.md §2c) — set user
+    // Đăng nhập bằng form username/password ở trang /login (docs/identity-module.md §6) — set user
     // trực tiếp từ response, không cần gọi thêm `/Auth/me`. Ném lỗi lên cho form tự bắt + hiện toast.
     loginWithPassword: (credentials: LoginRequestDto) => Promise<void>;
     // Đăng nhập bằng tài khoản Windows hiện tại (Negotiate) — nút phụ trên trang /login cho máy đã có SSO.
@@ -36,7 +36,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 // trên trang có thể đọc được và tồn tại vô thời hạn qua nhiều phiên. Reload trang (F5) sẽ mất state này
 // và tự nạp lại qua `/Auth/me` (âm thầm, Bearer) NẾU còn token hợp lệ; hết token thì set `user = null`
 // và guard (`AuthGuard`) tự chuyển hướng sang `/login` — không tự bật Negotiate nữa (xem
-// docs/identity-api-fe.md §2c, §5.4).
+// docs/identity-module.md §6, §5.4).
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<UserDto | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // nhiều lần". Giờ trang /login là nơi DUY NHẤT chủ động gọi loginWithWindows()/loginWithPassword().
         // Nhánh "chưa có token" cũng phải đi qua Promise.resolve() rồi setState trong `.then()` — không
         // được setState thẳng trong thân effect — vì rule `react-hooks/set-state-in-effect` của React
-        // Compiler chỉ cho phép setState trong `.then()/.catch()/.finally()` (AGENTS.md §4.5).
+        // Compiler chỉ cho phép setState trong `.then()/.catch()/.finally()` (frontend-conventions.md §3).
         const load = getAuthToken() ? AuthApi.me() : Promise.resolve(null);
 
         load

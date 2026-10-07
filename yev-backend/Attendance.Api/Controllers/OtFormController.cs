@@ -276,10 +276,6 @@ namespace Attendance.Api.Controllers
             return Success(true, "Đã xoá đơn.");
         }
 
-        // Thêm/loại nhân viên khỏi đơn trong-app đã gộp vào PUT {id} (UpdateAsync) — 2026-09-04, xem
-        // docs/attendance-module.md §Cây chức vụ & Cây duyệt (mục Sửa đơn). Route "{id}/employees/remove" (kênh
-        // email, KHÔNG cần mật khẩu cấp 2) vẫn còn — xem RemoveEmployeeByEmailToken bên dưới.
-
         // The 3 public actions below serve the small confirmation page the FE opens when an approver
         // (Department Manager/Workshop Manager/General Director) clicks the Approve/Reject link in the
         // email — a SUPPLEMENTARY CHANNEL to the 2 Approve/Reject buttons in the app above, not a
@@ -309,11 +305,8 @@ namespace Attendance.Api.Controllers
             return Success(true, "Từ chối đơn thành công.");
         }
 
-        // Same "loại nhân viên khỏi đơn" action as {id}/employees/remove above, reachable from the
-        // email-confirm page — token is the sole credential, deliberately NO secondary password (khác
-        // 2 action Approve/Reject qua email ở trên vẫn giữ, chốt qua AskUserQuestion 2026-07-31, xem
-        // docs/attendance-module.md). Does NOT consume the token, since the approver may still need it
-        // to Approve/Reject right after.
+        // Remove-employee from the email-confirm page; requires the secondary password like Approve/Reject.
+        // Does NOT consume the token, since the approver may still need it to Approve/Reject right after.
         [AllowAnonymous]
         [HttpPost("email-confirm/{token}/employees/remove")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> RemoveEmployeeByEmailToken(string token, [FromBody] RemoveOtFormEmployeeByEmailTokenDto request)

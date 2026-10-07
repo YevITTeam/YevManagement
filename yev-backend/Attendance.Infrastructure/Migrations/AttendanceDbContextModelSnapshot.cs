@@ -684,6 +684,7 @@ namespace Attendance.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<int>("Status")
+                        .IsConcurrencyToken()
                         .HasColumnType("int");
 
                     b.Property<int>("StepOrder")

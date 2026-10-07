@@ -25,7 +25,7 @@ interface OtCaseFormProps {
     onSubmit: (values: OtCaseFormValues) => void | Promise<void>;
 }
 
-// Chỉ 1/2/3 — 0=Submitter không dùng làm cấp cuối (docs/attendance-api-fe.md §3.4).
+// Chỉ 1/2/3 — 0=Submitter không dùng làm cấp cuối (docs/attendance-module.md §API).
 const approvalLevelOptions = [1, 2, 3];
 
 const emptyValues: OtCaseFormValues = { code: "", description: null, requireSignature: false, requiredApprovalLevel: 1 };

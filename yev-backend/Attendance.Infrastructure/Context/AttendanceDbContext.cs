@@ -388,6 +388,8 @@ public partial class AttendanceDbContext : DbContext
             entity.HasIndex(e => e.JobTitleId, "IX_OtFormApprovalSteps_JobTitleId");
             entity.Property(e => e.JobTitleCodeSnapshot).HasMaxLength(50);
             entity.Property(e => e.JobTitleNameSnapshot).HasMaxLength(150);
+            // Two approvers acting on the same step at once: the loser's UPDATE matches no row and fails.
+            entity.Property(e => e.Status).IsConcurrencyToken();
 
             entity.HasOne(d => d.OtForm).WithMany(p => p.ApprovalSteps)
                 .HasForeignKey(d => d.OtFormId)

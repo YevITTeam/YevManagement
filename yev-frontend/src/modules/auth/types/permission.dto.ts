@@ -1,5 +1,5 @@
 // Danh sách 53 mã permission là cố định (seed qua migration BE) — FE chỉ đọc, không tạo/sửa/xoá Permission.
-// Xem docs/identity-api-fe.md §4.7.
+// Xem docs/identity-module.md §6
 export interface PermissionDto {
     id: number;
     code: string;
@@ -21,7 +21,7 @@ export interface PermissionModuleGroupDto {
 
 // Override permission riêng theo User — đè lên permission suy ra từ Role của họ.
 // isGranted=false: đang bị THU HỒI riêng dù Role có cấp. isGranted=true: đang được CẤP THÊM riêng dù Role không cấp.
-// Xem docs/identity-api-fe.md §4.8.
+// Xem docs/identity-module.md §6
 export interface UserPermissionOverrideDto {
     permissionId: number;
     code: string;

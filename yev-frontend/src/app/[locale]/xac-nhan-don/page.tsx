@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import OtFormEmailConfirmPage from "@/modules/attendance/components/public-confirm/OtFormEmailConfirmPage";
 
-// Route public — mở qua link email "Duyệt/Từ chối đơn tăng ca" (docs/attendance-api-fe.md §4.6).
+// Route public — mở qua link email "Duyệt/Từ chối đơn tăng ca" (docs/attendance-module.md §API).
 // Không nằm trong sơ đồ menu, không cần đăng nhập SPA.
 export default function Page() {
     return (

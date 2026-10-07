@@ -18,7 +18,7 @@ function formatDateTime(value: string) {
 }
 
 // Tab "Lịch sử" trong màn chi tiết Device — GET /AuditTrail/record?tableName=Device&recordId=
-// (docs/asset-api-fe.md §7b.2), không phân trang, mới nhất trước.
+// (docs/asset-module.md §4), không phân trang, mới nhất trước.
 export default function DeviceAuditHistoryPanel({ deviceId }: DeviceAuditHistoryPanelProps) {
     const [rows, setRows] = useState<AuditTrailDto[]>([]);
 

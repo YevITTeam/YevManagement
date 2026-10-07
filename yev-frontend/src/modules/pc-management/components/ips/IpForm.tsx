@@ -7,7 +7,7 @@ import { ipStatusDotClasses, ipStatusLabels } from "./ip-status";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 
-// docs/asset-api-fe.md §4.2 (2026-07-11) — PUT /api/IpAddress/{id} chỉ đổi được
+// docs/asset-module.md §4 (2026-07-11) — PUT /api/IpAddress/{id} chỉ đổi được
 // status + note. IP đang gắn thiết bị (deviceId != null) chỉ đổi được note;
 // IP chưa gắn chỉ được đặt status 0 (Chưa gán) hoặc 1 (Đã gán khác).
 export interface IpFormValues {

@@ -50,7 +50,7 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
 
     // Tính vị trí panel theo toạ độ thật của trigger trên viewport (dùng cho position: fixed) — gọi
     // trong `open()` lúc click, KHÔNG trong effect (setState đồng bộ trong effect bị React Compiler
-    // cấm, xem AGENTS.md §4.5). Tự tính chiều cao còn lại theo viewport và lật lên trên nếu khoảng
+    // cấm, xem frontend-conventions.md §3). Tự tính chiều cao còn lại theo viewport và lật lên trên nếu khoảng
     // trống phía dưới quá hẹp, giống combobox chuẩn.
     function computePosition(): PanelPosition | null {
         const trigger = containerRef.current;

@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 
 interface SignatureUploadProps {
     // Base64 thuần (không kèm prefix data:image/...;base64,) của chữ ký đang có hiệu lực, để hiện preview
-    // sẵn khi mở màn — docs/attendance-api-fe.md §1.3.D chỉ yêu cầu preview, không bắt buộc phải sửa lại.
+    // sẵn khi mở màn — docs/attendance-module.md §API chỉ yêu cầu preview, không bắt buộc phải sửa lại.
     initialImage?: string | null;
     onChange: (base64: string | null) => void;
     disabled?: boolean;
@@ -17,7 +17,7 @@ function stripDataUrlPrefix(dataUrl: string) {
 }
 
 // Upload file ảnh chữ ký tay thật (PNG/JPG chụp/scan) — KHÔNG phải canvas vẽ bằng chuột/tay
-// (docs/attendance-api-fe.md đầu file + §1.3.D + §6: "Upload file ảnh, KHÔNG phải canvas ký bằng
+// (docs/attendance-module.md §API đầu file + §1.3.D + §6: "Upload file ảnh, KHÔNG phải canvas ký bằng
 // chuột/tay ... FE chỉ cần <input type="file" accept="image/*"> rồi convert sang base64").
 export default function SignatureUpload({ initialImage, onChange, disabled = false }: SignatureUploadProps) {
     const t = useTranslations("Attendance.SignatureUpload");

@@ -15,6 +15,7 @@ using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
 using static Attendance.Application.Services.MealTicketCalculator;
+using AccumulatedByEmployee = System.Collections.Generic.Dictionary<int, (decimal Day, decimal Month, decimal Year)>;
 
 namespace Attendance.Application.Services
 {
@@ -666,7 +667,7 @@ namespace Attendance.Application.Services
 
             var validatedEmployees = await ValidateEmployeesAsync(groupId, request.StartTime, request.EndTime, request.Employees);
 
-            await EnsureOtCaseMatchesRulesAsync(request, isProductionForm: false, otCase!);
+            var accumulated = await EnsureOtCaseMatchesRulesAsync(request, isProductionForm: false, otCase!);
 
             // Kiểm tra trùng giờ tăng ca — 1 nhân viên không được xuất hiện trong 2 đơn tăng ca có
             // giờ chồng chéo trong cùng 1 ngày. Chỉ xét các đơn chưa bị xóa và chưa bị từ chối.
@@ -718,7 +719,7 @@ namespace Attendance.Application.Services
                 IsDeleted = false
             };
 
-            return await FinalizeCreateAsync(newOtForm, request, chainResult, productionEmployeesByEmployeeId: null);
+            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId: null);
         }
 
         // Đơn "theo chuyền" (OtForm.IsProductionForm = true, 2026-08-24) — chọn nhân viên qua
@@ -785,7 +786,7 @@ namespace Attendance.Application.Services
 
             var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
 
-            await EnsureOtCaseMatchesRulesAsync(request, isProductionForm: true, otCase!);
+            var accumulated = await EnsureOtCaseMatchesRulesAsync(request, isProductionForm: true, otCase!);
 
             var employeeTimes = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => (x.StartTime ?? request.StartTime, x.EndTime));
@@ -827,7 +828,7 @@ namespace Attendance.Application.Services
                 x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted))
                 .ToDictionary(x => x.EmployeeId!.Value);
 
-            return await FinalizeCreateAsync(newOtForm, request, chainResult, productionEmployeesByEmployeeId);
+            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId);
         }
 
         // Người tạo đã ở cấp cao hơn/bằng MỌI Chức vụ trung gian "Bắt buộc ký" — không còn ai khác để
@@ -858,7 +859,7 @@ namespace Attendance.Application.Services
         // nếu Completed hoặc báo email cho bước đầu tiên nếu còn InApproval.
         private async Task<OtFormDto> FinalizeCreateAsync(
             OtForm newOtForm, CreateOtFormDto request, ResolveApprovalChainResultDto chainResult,
-            Dictionary<int, ProductionEmployee>? productionEmployeesByEmployeeId)
+            AccumulatedByEmployee accumulated, Dictionary<int, ProductionEmployee>? productionEmployeesByEmployeeId)
         {
             await _unitOfWork.OtForms.AddAsync(newOtForm);
 
@@ -871,14 +872,12 @@ namespace Attendance.Application.Services
             // thì từ chối tạo cả đơn (2026-08-26, xem ValidateOtHourLimitsAsync).
             var newHoursByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
-            await ValidateOtHourLimitsAsync(request.Date, newHoursByEmployeeId, mealSettings, excludeFormId: null);
+            await ValidateOtHourLimitsAsync(request.Date, newHoursByEmployeeId, mealSettings, accumulated);
 
-            // Chụp lại Dự kiến "trước khi thêm đơn này" — query CHƯA thấy đơn đang tạo (chưa
-            // AddAsync/SaveChanges), nên tự nhiên đúng nghĩa "trước" (2026-08-19). Fetch 1 lượt cho CẢ
-            // đơn (batch) thay vì từng người, tránh N+1 khi đơn có nhiều nhân viên.
-            var projectedByEmployee = await ComputeAccumulatedHoursBatchAsync(
-                request.Employees.Select(x => x.EmployeeId), request.Date, mealSettings);
+            // `accumulated` was read before this form was added, so it is the "before" snapshot stored on each row.
+            var projectedByEmployee = accumulated;
 
+            var createdRows = new List<OtFormEmployee>();
             foreach (var item in request.Employees)
             {
                 var (_, projectedMonthBefore, projectedYearBefore) =
@@ -886,7 +885,7 @@ namespace Attendance.Application.Services
                 ProductionEmployee? pe = null;
                 productionEmployeesByEmployeeId?.TryGetValue(item.EmployeeId, out pe);
 
-                await _unitOfWork.OtFormEmployees.AddAsync(new OtFormEmployee
+                var createdRow = new OtFormEmployee
                 {
                     OtForm = newOtForm,
                     EmployeeId = item.EmployeeId,
@@ -902,7 +901,9 @@ namespace Attendance.Application.Services
                     BlockCodeSnapshot = pe?.BlockCode,
                     TeamCodeSnapshot = pe?.TeamCode,
                     ShiftTeamCodeSnapshot = pe?.ShiftTeamCode
-                });
+                };
+                createdRows.Add(createdRow);
+                await _unitOfWork.OtFormEmployees.AddAsync(createdRow);
             }
 
             // ProcessPart giờ LUÔN được tạo, bất kể request.ProcessPart có gửi lên hay không — "Ăn uống"
@@ -955,14 +956,13 @@ namespace Attendance.Application.Services
                 }
             }
 
+            // One save: the form, its rows and (when it completes at creation) the ledger land together.
+            if (newOtForm.Status == (int)OtFormStatus.Completed)
+                await AccumulateEmployeeHoursAsync(newOtForm, createdRows);
+
             await _unitOfWork.SaveChangesAsync();
 
-            if (newOtForm.Status == (int)OtFormStatus.Completed)
-            {
-                await AccumulateEmployeeHoursAsync(newOtForm);
-                await _unitOfWork.SaveChangesAsync();
-            }
-            else if (firstCreatedStep != null)
+            if (newOtForm.Status != (int)OtFormStatus.Completed && firstCreatedStep != null)
             {
                 var firstStepWithCandidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                     x => x.Id == firstCreatedStep.Id, x => x.Candidates)).FirstOrDefault();
@@ -1220,26 +1220,26 @@ namespace Attendance.Application.Services
             // NV giữ nguyên lẫn NV mới thêm.
             var newHoursByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => CalculateOtHours(startTimeByEmployeeId[x.EmployeeId], x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
-            await ValidateOtHourLimitsAsync(otForm.Date, newHoursByEmployeeId, mealSettings, excludeFormId: otForm.Id);
+            // One read serves the daily check, the month/year check and the "before" snapshot of added employees.
+            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, otForm.Date, mealSettings, excludeFormId: otForm.Id);
+            await ValidateOtHourLimitsAsync(otForm.Date, newHoursByEmployeeId, mealSettings, accumulated);
 
             // The OT case is fixed after creation, so edited hours may not push a non-TH3 form past the month/year limit.
             var currentOtCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otForm.OtCaseId);
             if (currentOtCase?.Code != "TH3"
-                && await ExceedsMonthYearLimitAsync(otForm.Date, newHoursByEmployeeId, mealSettings, excludeFormId: otForm.Id))
+                && await ExceedsMonthYearLimitAsync(newHoursByEmployeeId, mealSettings, accumulated))
                 throw new DomainException("Giờ sửa khiến có nhân viên vượt giới hạn OT tháng/năm, đơn này phải là TH3. Vui lòng giảm giờ hoặc tạo đơn TH3 mới.");
 
             // NV mới cần thêm 2 check chỉ áp dụng lúc THÊM (không áp dụng cho NV giữ nguyên — ngày/giờ
             // của họ không đổi nên đã được validate từ lúc tạo/lần thêm trước): trùng giờ với đơn khác,
             // và snapshot lũy kế trước đó (MonthToDate/YearToDate).
-            var projectedByEmployee = new Dictionary<int, (decimal Day, decimal Month, decimal Year)>();
+            var projectedByEmployee = accumulated;
             if (toAddIds.Count > 0)
             {
                 var toAddEmployees = toAddIds.Select(eid => employeesById[eid]).ToList();
                 var toAddTimes = request.Employees.Where(x => toAddIds.Contains(x.EmployeeId))
                     .ToDictionary(x => x.EmployeeId, x => (startTimeByEmployeeId[x.EmployeeId], x.EndTime));
                 await EnsureNoOverlappingOtFormsAsync(toAddEmployees, otForm.Date, toAddTimes, excludeFormId: otForm.Id);
-
-                projectedByEmployee = await ComputeAccumulatedHoursBatchAsync(toAddIds, otForm.Date, mealSettings, excludeFormId: otForm.Id);
             }
 
             // === Áp dụng: xóa trước, thêm sau, rồi sửa NV giữ nguyên — thứ tự không quan trọng vì mỗi
@@ -1454,7 +1454,8 @@ namespace Attendance.Application.Services
             {
                 otForm.Status = (int)OtFormStatus.Completed;
                 _unitOfWork.OtForms.Update(otForm);
-                await AccumulateEmployeeHoursAsync(otForm);
+                var activeRows = await _unitOfWork.OtFormEmployees.FindAsync(x => x.OtFormId == otForm.Id && !x.IsRemoved);
+                await AccumulateEmployeeHoursAsync(otForm, activeRows);
             }
 
             await _unitOfWork.SaveChangesAsync();
@@ -1555,16 +1556,13 @@ namespace Attendance.Application.Services
             return results;
         }
 
-        // Kênh email — token tự nó là thông tin xác thực, dùng RemoveEmployeeCoreAsync trực tiếp.
         public async Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request)
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: false);
 
-            // secondaryPassword: null — kênh email KHÔNG cần mật khẩu cấp 2 (quyết định riêng, không đổi
-            // theo yêu cầu 2026-08-28, xem RemoveOtFormEmployeeByEmailTokenDto).
             var result = await RemoveEmployeeCoreAsync(
                 emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName,
-                isAdmin: false, request.EmployeeId, request.Reason, secondaryPassword: null);
+                isAdmin: false, request.EmployeeId, request.Reason, request.SecondaryPassword);
 
             QueueEmployeesRemovedNotification(emailToken.OtFormId, new List<int> { request.EmployeeId });
             return result;
@@ -1629,8 +1627,7 @@ namespace Attendance.Application.Services
                     throw new DomainException("Bạn không được phân quyền ở bước mà đơn này đang chờ, nên không thể loại nhân viên khỏi đơn.");
             }
 
-            // secondaryPassword null = kênh email (RemoveEmployeeByEmailTokenAsync), không cần verify —
-            // xem RemoveOtFormEmployeeDto (2026-08-28).
+            // null = in-app channel, already authenticated by JWT.
             if (secondaryPassword != null)
                 await _secondaryPasswordService.VerifyAsync(userName, secondaryPassword);
 
@@ -1953,17 +1950,12 @@ namespace Attendance.Application.Services
         // tính MonthToDate/YearToDate lúc đọc bằng cách sum ledger theo đúng tháng/năm THỰC TẾ hiện tại
         // — nên 1 đơn dán ngày tương lai chỉ "hiện" ra khi tới đúng tháng đó, không cộng sớm dù
         // Completed từ trước (xem docs/docs-be/attendance-module.md §Lũy kế).
-        private async Task AccumulateEmployeeHoursAsync(OtForm otForm)
+        // Takes the rows explicitly so a form that completes at creation can accumulate in the same save as its insert.
+        private async Task AccumulateEmployeeHoursAsync(OtForm otForm, IReadOnlyCollection<OtFormEmployee> otFormEmployees)
         {
             var mealSettings = await _attendanceSettingService.GetAsync();
 
-            var otFormEmployees = await _unitOfWork.OtFormEmployees.FindAsync(x => x.OtFormId == otForm.Id && !x.IsRemoved);
-
-            // Batch-fetch dòng ledger đã có sẵn TRƯỚC vòng lặp để tránh N+1. Chỉ cần khoá theo EmployeeId
-            // (không cần thêm Year/Month vào key tra cứu) vì INVARIANT: trong 1 lần gọi hàm này, MỌI
-            // nhân viên xử lý đều thuộc CHUNG đúng 1 OtForm nên dùng chung đúng 1 otForm.Date — cả 2 call
-            // site (CreateAsync khi đơn Hoàn tất ngay lúc tạo, ApproveAsync khi hết bước Pending) đều
-            // truyền vào đúng 1 OtForm duy nhất.
+            // Keyed by EmployeeId only: every row belongs to the same form, hence the same Year/Month.
             var employeeIds = otFormEmployees.Select(x => x.EmployeeId).ToList();
             var existingLedgerRows = (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
                 x => employeeIds.Contains(x.EmployeeId) && x.Year == otForm.Date.Year && x.Month == otForm.Date.Month))
@@ -2042,11 +2034,10 @@ namespace Attendance.Application.Services
         // MonthlyOtHourLimit/YearlyOtHourLimit (or the employee's own custom limit) forces the form to TH3 instead,
         // see EnsureOtCaseMatchesRulesAsync. Message wording is mirrored in CreateOtFormPage.tsx.
         private async Task ValidateOtHourLimitsAsync(
-            DateOnly date, Dictionary<int, decimal> newHoursByEmployeeId, AttendanceSettingDto settings, int? excludeFormId)
+            DateOnly date, Dictionary<int, decimal> newHoursByEmployeeId, AttendanceSettingDto settings, AccumulatedByEmployee accumulated)
         {
             if (newHoursByEmployeeId.Count == 0) return;
 
-            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, date, settings, excludeFormId);
             var employeesById = (await _unitOfWork.Employees.FindAsync(x => newHoursByEmployeeId.Keys.Contains(x.Id)))
                 .ToDictionary(x => x.Id);
 
@@ -2068,17 +2059,26 @@ namespace Attendance.Application.Services
                 throw new DomainException(string.Join("; ", violations) + ". Vui lòng loại khỏi đơn hoặc giảm giờ OT rồi thử lại.");
         }
 
-        private async Task<bool> IsNonWorkingDayAsync(DateOnly date) =>
-            (await _unitOfWork.WorkCalendarDays.FindAsync(x => x.Date == date)).Count > 0;
+        // A year with no calendar rows yet falls back to Sundays only, mirroring WorkCalendarService.GetByYearAsync.
+        private async Task<bool> IsNonWorkingDayAsync(DateOnly date)
+        {
+            if ((await _unitOfWork.WorkCalendarDays.FindAsync(x => x.Date == date)).Count > 0) return true;
+            if (date.DayOfWeek != DayOfWeek.Sunday) return false;
+
+            var yearStart = new DateOnly(date.Year, 1, 1);
+            var nextYearStart = yearStart.AddYears(1);
+            var calendarImported = (await _unitOfWork.WorkCalendarDays.SelectAsync(
+                x => x.Date >= yearStart && x.Date < nextYearStart, x => x.Id)).Count > 0;
+            return !calendarImported;
+        }
 
         // True when any employee's month or year accumulation, including this form's hours, passes
         // MonthlyOtHourLimit/YearlyOtHourLimit (the employee's custom limit wins when set). Such a form must be TH3.
         private async Task<bool> ExceedsMonthYearLimitAsync(
-            DateOnly date, Dictionary<int, decimal> newHoursByEmployeeId, AttendanceSettingDto settings, int? excludeFormId)
+            Dictionary<int, decimal> newHoursByEmployeeId, AttendanceSettingDto settings, AccumulatedByEmployee accumulated)
         {
             if (newHoursByEmployeeId.Count == 0) return false;
 
-            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, date, settings, excludeFormId);
             var employeesById = (await _unitOfWork.Employees.FindAsync(x => newHoursByEmployeeId.Keys.Contains(x.Id)))
                 .ToDictionary(x => x.Id);
 
@@ -2094,15 +2094,16 @@ namespace Attendance.Application.Services
 
         // The OT case is derived, not chosen: TH3 when ExceedsMonthYearLimitAsync, otherwise TH2 on a non-working
         // day and TH1 on a working day. The daily total never forces TH3. Rejects a request whose OtCaseId differs
-        // from the derived case.
-        private async Task EnsureOtCaseMatchesRulesAsync(CreateOtFormDto request, bool isProductionForm, OtCase requestedCase)
+        // from the derived case. Returns the accumulation it computed so the create flow reuses it.
+        private async Task<AccumulatedByEmployee> EnsureOtCaseMatchesRulesAsync(CreateOtFormDto request, bool isProductionForm, OtCase requestedCase)
         {
             var settings = await _attendanceSettingService.GetAsync();
 
             var newHoursByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId,
                 x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, ResolveDidEat(isProductionForm, x.DidEat), settings));
-            var exceedsTh3 = await ExceedsMonthYearLimitAsync(request.Date, newHoursByEmployeeId, settings, excludeFormId: null);
+            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, request.Date, settings);
+            var exceedsTh3 = await ExceedsMonthYearLimitAsync(newHoursByEmployeeId, settings, accumulated);
 
             var expectedCode = exceedsTh3 ? "TH3" : (await IsNonWorkingDayAsync(request.Date) ? "TH2" : "TH1");
             if (!string.Equals(requestedCase.Code, expectedCode, StringComparison.OrdinalIgnoreCase))
@@ -2112,6 +2113,8 @@ namespace Attendance.Application.Services
                     : $"ngày {request.Date:dd/MM/yyyy} là {(expectedCode == "TH2" ? "ngày nghỉ" : "ngày làm việc")}";
                 throw new DomainException($"Trường hợp OT phải là {expectedCode} vì {reason}.");
             }
+
+            return accumulated;
         }
 
         // === "Đơn tổng" — REDESIGN theo Cây chức vụ (2026-08-07, Giai đoạn 3.2) ===

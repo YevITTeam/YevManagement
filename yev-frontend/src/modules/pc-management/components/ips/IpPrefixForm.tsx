@@ -49,7 +49,7 @@ const isValidIPv4 = (value: string): boolean => {
     return parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
 };
 
-// Đúng 3 octet, không có octet thứ 4 — docs/asset-api-fe.md §4.1.
+// Đúng 3 octet, không có octet thứ 4 — docs/asset-module.md §4
 const isValidPrefix = (value: string): boolean => {
     const parts = value.split(".");
     if (parts.length !== 3) return false;
@@ -63,7 +63,7 @@ const isSameSubnet = (baseIp: string, otherIp: string, subnetMask: string): bool
     return base.every((octet, index) => (octet & mask[index]) === (other[index] & mask[index]));
 };
 
-// Đối chiếu docs/asset-api-fe.md §4.1: field nào có nhập phải là IPv4 hợp lệ; gateway phải
+// Đối chiếu docs/asset-module.md §4: field nào có nhập phải là IPv4 hợp lệ; gateway phải
 // cùng dải 3-octet với prefix, cùng subnet theo subnetMask, và không trùng .0/.255.
 function validateIpPrefixForm(values: IpPrefixFormValues): string | null {
     const prefix = values.prefix.trim();
@@ -116,7 +116,7 @@ function validateIpPrefixForm(values: IpPrefixFormValues): string | null {
     return null;
 }
 
-// docs/asset-api-fe.md §4.1 (2026-07-13) — cho sửa Chi nhánh + cấu hình mạng qua PUT, riêng
+// docs/asset-module.md §4 (2026-07-13) — cho sửa Chi nhánh + cấu hình mạng qua PUT, riêng
 // `prefix` bất biến (đổi prefix vẫn phải xoá + tạo lại dải mới) nên bị disable ở chế độ sửa.
 export default function IpPrefixForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: IpPrefixFormProps) {
     const [values, setValues] = useState<IpPrefixFormValues>(emptyValues);

@@ -37,5 +37,14 @@ namespace Shared.Application.Interfaces
         // vi JIT-provision hiện tại khi 1 tài khoản Windows đăng nhập lần đầu chưa có sẵn User row).
         // Trả về true nếu vừa tạo User mới.
         Task<bool> EnsureUserExistsAsync(string userName, string? fullName, string? roleName);
+
+        // Read-only check of DOMAIN\user accounts: already in Identity, or active in the directory (WillCreate),
+        // or not eligible. Duplicates are collapsed (case-insensitive); the directory is queried only for
+        // accounts Identity does not know.
+        Task<IReadOnlyList<DomainAccountInfo>> ResolveDomainAccountsAsync(IEnumerable<string> accounts);
+
+        // Resolve, then create a role-Basic User (FullName from the directory) for every WillCreate account.
+        // Never throws for one bad account: it comes back as Failed. Creates no emails.
+        Task<IReadOnlyList<DomainAccountInfo>> EnsureDomainUsersAsync(IEnumerable<string> accounts);
     }
 }

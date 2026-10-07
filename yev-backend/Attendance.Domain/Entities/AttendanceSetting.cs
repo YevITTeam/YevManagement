@@ -41,7 +41,7 @@ public partial class AttendanceSetting
     // Passing this (or the employee's own custom limit) forces the form to TH3 instead of blocking it. Default 25.
     public decimal MonthlyOtHourLimit { get; set; }
 
-    // Default 300 (khớp "Năm: 300h giới hạn" — docs/Note_OT.txt).
+    // Default 300 (khớp "Năm: 300h giới hạn" — attendance-module.md §Lũy kế & giới hạn giờ OT).
     public decimal YearlyOtHourLimit { get; set; }
 
     // Daily limit used on non-working days (Sunday/holiday/special holiday, see WorkCalendarDay). Default 12.

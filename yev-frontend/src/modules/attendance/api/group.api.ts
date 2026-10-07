@@ -7,7 +7,7 @@ const ENDPOINTS = {
         getGroupPageNation: "/Group/grid-list",
         getAllGroups: "/Group/all",
         getGroupById: (id: number) => `/Group/${id}`,
-        // Route riêng, KHÁC cách DeviceGroup dùng query-param ?departmentId= trên /all (docs/attendance-api-fe.md §3.2).
+        // Route riêng, KHÁC cách DeviceGroup dùng query-param ?departmentId= trên /all (docs/attendance-module.md §API).
         getGroupsByDepartment: (departmentId: number) => `/Group/by-department/${departmentId}`,
         createGroup: "/Group",
         updateGroup: (id: number) => `/Group/${id}`,
@@ -48,7 +48,7 @@ export const GroupApi = {
         const response = await api.get<ApiResponse<GroupDto>>(ENDPOINTS.GROUP.getGroupById(id));
         return response.data;
     },
-    // Cascading dropdown Bộ phận theo Phòng ban đã chọn (docs/attendance-api-fe.md §3.2).
+    // Cascading dropdown Bộ phận theo Phòng ban đã chọn (docs/attendance-module.md §API).
     getGroupsByDepartment: async (departmentId: number) => {
         const response = await api.get<ApiResponse<GroupDto[]>>(ENDPOINTS.GROUP.getGroupsByDepartment(departmentId));
         return response.data;

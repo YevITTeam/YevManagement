@@ -1,4 +1,4 @@
-// Enum dùng chung module Attendance (docs/attendance-api-fe.md §2) — gửi/nhận là số, FE tự map label.
+// Enum dùng chung module Attendance (docs/attendance-module.md §API) — gửi/nhận là số, FE tự map label.
 
 // Nhãn hiển thị requiredApprovalLevel/JobTitleTerminalLevel (chỉ dùng giá trị 1/2/3, xem
 // ot-case.dto.ts) — index 0/4 giữ lại vì cùng bảng số với ApprovalLevel cũ (Submitter/GroupHead, đã
@@ -13,7 +13,7 @@ export const approvalLevelLabels: Record<number, string> = {
     4: "Trưởng Bộ phận",
 };
 
-// OtFormStatus (docs/attendance-api-fe.md §2, redesign 2026-08-07 Giai đoạn 3.1) — rút gọn còn 3 giá
+// OtFormStatus (docs/attendance-module.md §API, redesign 2026-08-07 Giai đoạn 3.1) — rút gọn còn 3 giá
 // trị, chi tiết "đang chờ ai" nằm ở OtFormDto.approvalSteps (bước Pending có StepOrder nhỏ nhất),
 // không còn suy được trực tiếp từ status như enum cũ.
 export const otFormStatusLabels: Record<number, string> = {
@@ -40,7 +40,7 @@ export const approvalActionLabels: Record<number, string> = {
     2: "Không phê duyệt",
 };
 
-// JobTitleTerminalLevel (docs/attendance-api-fe.md §Cây chức vụ) — None nếu chỉ là cấp trung gian,
+// JobTitleTerminalLevel (docs/attendance-module.md §API §Cây chức vụ) — None nếu chỉ là cấp trung gian,
 // 3 giá trị còn lại tương ứng đúng 3 cấp duyệt cuối cố định (Trưởng phòng/Trưởng Xưởng/TGĐ).
 export const jobTitleTerminalLevelLabels: Record<number, string> = {
     0: "Không (cấp trung gian)",

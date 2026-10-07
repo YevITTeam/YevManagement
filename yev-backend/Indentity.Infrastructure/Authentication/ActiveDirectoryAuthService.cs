@@ -1,4 +1,5 @@
 using Identity.Application.Interfaces.Service;
+using Microsoft.Extensions.Configuration;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 
@@ -6,6 +7,35 @@ namespace Identity.Infrastructure.Authentication
 {
     public class ActiveDirectoryAuthService : IActiveDirectoryAuthService
     {
+        private readonly string _domain;
+
+        public ActiveDirectoryAuthService(IConfiguration configuration)
+        {
+            _domain = configuration["ActiveDirectory:Domain"] ?? "YEV";
+        }
+
+        public AdAccountLookup FindAccount(string windowsUserName)
+        {
+            var parts = windowsUserName.Split('\\');
+            if (parts.Length != 2 || parts[1].Length == 0 || !parts[0].Equals(_domain, StringComparison.OrdinalIgnoreCase))
+                return new AdAccountLookup(AdAccountStatus.NotFound, null);
+
+            try
+            {
+                using var principalContext = new PrincipalContext(ContextType.Domain, _domain);
+                using var userPrincipal = UserPrincipal.FindByIdentity(principalContext, IdentityType.SamAccountName, parts[1]);
+                if (userPrincipal == null) return new AdAccountLookup(AdAccountStatus.NotFound, null);
+
+                var displayName = string.IsNullOrWhiteSpace(userPrincipal.DisplayName) ? null : userPrincipal.DisplayName.Trim();
+                var status = userPrincipal.Enabled == false ? AdAccountStatus.Disabled : AdAccountStatus.Found;
+                return new AdAccountLookup(status, displayName);
+            }
+            catch
+            {
+                return new AdAccountLookup(AdAccountStatus.Unavailable, null);
+            }
+        }
+
         public bool ValidateCredentials(string domain, string userName, string password)
         {
             // BẮT BUỘC dùng ContextOptions.SimpleBind tường minh — KHÔNG được gọi overload 2 tham số

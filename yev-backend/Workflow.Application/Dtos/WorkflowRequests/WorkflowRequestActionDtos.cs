@@ -7,7 +7,7 @@ namespace Workflow.Application.Dtos.WorkflowRequests
         [MaxLength(1000)]
         public string? Comment { get; set; }
 
-        // byte[] <-> base64 trong JSON (AGENTS.md §4.4) — chụp tại thời điểm duyệt, KHÔNG trỏ về
+        // byte[] <-> base64 trong JSON (frontend-conventions.md §2) — chụp tại thời điểm duyệt, KHÔNG trỏ về
         // EmployeeSignatures (workflow-module.md §3.3 WorkflowRequestHistories.SignatureImage).
         public string? SignatureImageBase64 { get; set; }
 

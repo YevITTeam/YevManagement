@@ -33,7 +33,7 @@ import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions"
 // Mỗi mục khai báo permission "View" của chính màn hình nó mở ra, và CHỈ hiện khi user có ít nhất 1
 // trong số đó. `PcAccessGuard` chỉ chặn ở mức module (`Asset.*`) nên nếu không lọc ở đây, user chỉ
 // có quyền xem Thiết bị vẫn thấy đủ menu rồi bấm vào là ăn 403 — đúng nguyên tắc "FE dựa
-// user.permissions ẩn/hiện" trong docs/docs-be/asset-api-fe.md.
+// user.permissions ẩn/hiện" trong docs/docs-be/asset-module.md §4.
 // Màn hình gộp 2 loại dữ liệu (IP + dải IP, Phần mềm + nhóm phần mềm) chỉ cần 1 trong 2 quyền.
 const navItems = [
   { key: "devices", href: "/pc", icon: Computer, group: "assets", permissions: ["Asset.Device.View"] },
@@ -45,7 +45,7 @@ const navItems = [
   { key: "deviceDepartments", href: "/pc/device-departments", icon: Users, group: "catalog", permissions: ["Asset.DeviceDepartment.View"] },
   { key: "softwares", href: "/pc/softwares", icon: ShieldCheck, group: "assets", permissions: ["Asset.Software.View", "Asset.SoftwareGroup.View"] },
   { key: "suppliers", href: "/pc/suppliers", icon: Package, group: "catalog", permissions: ["Asset.Supplier.View"] },
-  // Asset.AuditTrail.View và Asset.AiChat.Use chỉ được seed sẵn cho Admin (docs/docs-be/asset-api-fe.md
+  // Asset.AuditTrail.View và Asset.AiChat.Use chỉ được seed sẵn cho Admin (docs/docs-be/asset-module.md §4
   // §7b, §7c) — role khác phải được Admin gán tay.
   { key: "auditTrail", href: "/pc/audit-trail", icon: History, group: "system", permissions: ["Asset.AuditTrail.View"] },
   { key: "serverCheck", href: "/pc/server-check", icon: QrCode, group: "checks", permissions: ["Asset.ServerCheck.View", "Asset.ServerCheck.Scan"] },

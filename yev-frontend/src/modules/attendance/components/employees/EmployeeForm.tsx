@@ -18,7 +18,7 @@ import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 
-// JobTitleTerminalLevel (docs/attendance-api-fe.md) — 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
+// JobTitleTerminalLevel (docs/attendance-module.md §API) — 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
 const TERMINAL_LEVEL_NONE = 0;
 const TERMINAL_LEVEL_DEPARTMENT_MANAGER = 1;
 
@@ -89,7 +89,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
 
     // Bị giới hạn theo Coordinator (2026-09-28) — dùng THẲNG danh sách BE đã trả sẵn trong `scope` (khớp
     // đúng phạm vi BE thật sự cho phép, xem EmployeeList.tsx) thay vì gọi API "toàn công ty" + set lại
-    // qua state riêng (tránh setState đồng bộ trong effect, AGENTS.md §4.5).
+    // qua state riêng (tránh setState đồng bộ trong effect, frontend-conventions.md §3).
     const isScopeRestricted = Boolean(scope && !scope.companyWide);
     const effectiveGroups = isScopeRestricted ? scope!.groups : groups;
     const effectiveDepartments = isScopeRestricted ? scope!.departments : departments;

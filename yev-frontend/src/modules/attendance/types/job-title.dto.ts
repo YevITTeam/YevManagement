@@ -3,7 +3,7 @@ export interface JobTitleDto {
     code: string;
     name: string;
     rankOrder: number;
-    // JobTitleTerminalLevel (docs/attendance-api-fe.md) — 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
+    // JobTitleTerminalLevel (docs/attendance-module.md §API) — 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
     terminalLevel: number;
     // true CHỈ cho "Line Leader" — ai giữ lấy thẳng từ ProductionEmployee.IsLeader khi import, không
     // gán tay được nữa (2026-08-27). Optional: chỉ BE trả về (đọc), không phải field user tự sửa được

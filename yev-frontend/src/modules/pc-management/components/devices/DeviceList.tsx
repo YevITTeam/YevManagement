@@ -123,11 +123,11 @@ export default function DeviceList() {
   // Sắp xếp theo IP (số học); chỉ một trong hai kiểu sort được bật tại một thời điểm.
   const [sortIpAddressAscending, setSortIpAddressAscending] = useState<boolean | undefined>(undefined);
   const [transferringDevice, setTransferringDevice] = useState<{ id: number; deviceCode: string; deviceName: string } | null>(null);
-  // docs/asset-api-fe.md §5.10 — điền sẵn máy mới khi mở "Chuyển máy" từ gợi ý pendingTransfers của Import Excel.
+  // docs/asset-module.md §4 — điền sẵn máy mới khi mở "Chuyển máy" từ gợi ý pendingTransfers của Import Excel.
   const [transferPresetNewDeviceId, setTransferPresetNewDeviceId] = useState<number | null>(null);
   // Hỏi in nhãn ngay sau khi tạo thiết bị thủ công thành công, giống luồng "Nhập từ Excel".
   const [printPromptDevice, setPrintPromptDevice] = useState<{ id: number; deviceCode: string } | null>(null);
-  // In tem QR (docs/asset-api-fe.md §5.4b) — dùng chung cho cả in hàng loạt (chọn trên grid) lẫn in
+  // In tem QR (docs/asset-module.md §4) — dùng chung cho cả in hàng loạt (chọn trên grid) lẫn in
   // ngay sau khi tạo 1 thiết bị thủ công; null = đóng dialog.
   const [qrPrintDeviceIds, setQrPrintDeviceIds] = useState<number[] | null>(null);
 
@@ -195,7 +195,7 @@ export default function DeviceList() {
     setPageIndex(1);
   }
 
-  // Tất cả field lọc đều có query param tương ứng ở BE (Device/grid-list, docs/asset-api-fe.md §5.2)
+  // Tất cả field lọc đều có query param tương ứng ở BE (Device/grid-list, docs/asset-module.md §4)
   // nên FE chỉ cần truyền thẳng — không còn nhánh tải nguyên bảng rồi tự lọc/tự phân trang ở client.
   const { isLoading, error, refetch: refetchDevices } = useFetchEffect(
     () =>

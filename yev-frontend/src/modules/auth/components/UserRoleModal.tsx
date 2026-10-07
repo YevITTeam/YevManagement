@@ -94,9 +94,9 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
         return () => window.clearTimeout(timer);
     }, [fetchData, isOpen]);
 
-    // POST /api/Auth/update-user-roles yêu cầu permission Identity.User.UpdateRoles (docs/identity-api-fe.md §4.2).
+    // POST /api/Auth/update-user-roles yêu cầu permission Identity.User.UpdateRoles (docs/identity-module.md §6).
     const canUpdateUserRoles = hasPermission(currentUser, "Identity.User.UpdateRoles");
-    // POST /api/Auth/create-user yêu cầu permission Identity.User.Create (docs/identity-api-fe.md §4.9).
+    // POST /api/Auth/create-user yêu cầu permission Identity.User.Create (docs/identity-module.md §6).
     const canCreateUser = hasPermission(currentUser, "Identity.User.Create");
     // DELETE /api/Auth/delete-user/{userId} — cùng quy ước đặt tên permission với delete-role (Identity.Role.Delete).
     const canDeleteUser = hasPermission(currentUser, "Identity.User.Delete");
@@ -115,7 +115,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     }, [users, searchTerm]);
 
     const [pageIndex, setPageIndex] = useState(1);
-    // Search/filter đổi → về trang 1 (snapshot so sánh ngay trong render, không dùng effect — AGENTS.md §4.5.3).
+    // Search/filter đổi → về trang 1 (snapshot so sánh ngay trong render, không dùng effect — frontend-conventions.md §3).
     const filtersKey = `${searchTerm}|${roleFilter}`;
     const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
     if (prevFiltersKey !== filtersKey) {

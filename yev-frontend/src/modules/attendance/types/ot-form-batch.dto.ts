@@ -3,7 +3,7 @@
 // duyệt 1 lần (2026-08-07, Giai đoạn 3.2 — redesign theo Cây chức vụ; mở rộng sang cả 3 cấp 2026-09-05).
 // Cấp DepartmentManager gom theo từng Phòng ban; WorkshopManager/GeneralDirector gom company-wide (1
 // batch/cấp/ngày). Đơn còn kẹt ở bước trung gian trước đó (SUP/CHIEF...) KHÔNG được gom, vẫn duyệt lẻ
-// tới khi tự nó tới lượt 1 trong 3 cấp trên. Schema theo docs/attendance-api-fe.md §Đơn tổng.
+// tới khi tự nó tới lượt 1 trong 3 cấp trên. Schema theo docs/attendance-module.md §API §Đơn tổng.
 
 import type { OtFormEmployeeDto, ProcessPartDto } from "@/modules/attendance/types/ot-form.dto";
 

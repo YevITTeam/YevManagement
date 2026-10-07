@@ -10,7 +10,15 @@ namespace Identity.Application.Interfaces.Service
         // AD "mail" plus every smtp entry of "proxyAddresses" for a DOMAIN\user account. Empty when the
         // account is not a domain account or AD cannot be reached.
         AdEmailAddresses GetEmailAddresses(string windowsUserName);
+
+        // Looks a DOMAIN\user account up in the configured domain. Unavailable means the directory could not
+        // be queried (distinct from NotFound, so callers never act on a failed lookup).
+        AdAccountLookup FindAccount(string windowsUserName);
     }
+
+    public enum AdAccountStatus { Found, Disabled, NotFound, Unavailable }
+
+    public record AdAccountLookup(AdAccountStatus Status, string? DisplayName);
 
     public record AdEmailAddresses(string? Mail, IReadOnlyList<string> Aliases)
     {

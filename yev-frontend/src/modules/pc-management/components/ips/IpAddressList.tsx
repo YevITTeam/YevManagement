@@ -20,7 +20,7 @@ const PAGE_SIZE = 254;
 const VISIBLE_ROWS = 10;
 const ROW_HEIGHT_PX = 53;
 
-// docs/asset-api-fe.md §4.2 (2026-07-11) — IpAddress không còn tạo/xoá thủ công,
+// docs/asset-module.md §4 (2026-07-11) — IpAddress không còn tạo/xoá thủ công,
 // chỉ sinh hàng loạt qua IpPrefix (POST) và dọn qua IpPrefix (DELETE cascade).
 // Danh sách này chỉ hỗ trợ xem + sửa status/note của từng IP.
 const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddressList({ onLoadingChange }, ref) {
@@ -76,7 +76,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
         openCreate: () => {},
     }));
 
-    // Đổi trạng thái hàng loạt chỉ nhận status 0/1 (docs/asset-api-fe.md §4.2) — IP "Đã sử dụng"
+    // Đổi trạng thái hàng loạt chỉ nhận status 0/1 (docs/asset-module.md §4) — IP "Đã sử dụng"
     // (status=2, đang gắn thiết bị) sẽ luôn bị server bỏ qua, nên chỉ cho chọn khi filter đang
     // khoanh đúng 1 trạng thái 0 hoặc 1 (không cho chọn khi "Tất cả trạng thái" hoặc "Đã sử dụng").
     const canBulkSelect = statusFilter === "0" || statusFilter === "1";

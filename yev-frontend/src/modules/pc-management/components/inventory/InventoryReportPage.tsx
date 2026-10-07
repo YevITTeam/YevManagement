@@ -47,7 +47,7 @@ const formatDateTime = (value: string | null) =>
 const location = (item: InventorySessionItemDto) => [item.groupName, item.departmentName].filter(Boolean).join(" / ");
 
 // Font mặc định của jsPDF (Helvetica) không có dấu tiếng Việt — nhúng font Roboto qua VFS, dùng chung
-// file với ProductionOtReportPanel.tsx/DeviceListReportPrintDialog.tsx (AGENTS.md §4.8: PDF mới phải
+// file với ProductionOtReportPanel.tsx/DeviceListReportPrintDialog.tsx (frontend-conventions.md §5: PDF mới phải
 // vẽ thẳng bằng jspdf, không chụp DOM).
 function registerVietnameseFont(doc: jsPDF) {
     doc.addFileToVFS("Roboto-Regular.ttf", ROBOTO_REGULAR_BASE64);

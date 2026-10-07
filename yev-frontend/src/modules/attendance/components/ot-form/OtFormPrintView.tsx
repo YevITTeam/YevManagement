@@ -783,7 +783,7 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                 console.error(err);
                 setError(getApiErrorMessage(err, t("loadError")));
             });
-    }, [id]);
+    }, [id, t]);
 
     // Người đã bị loại khỏi đơn (docs §4.5a) KHÔNG được in — họ không còn nằm trong đơn được duyệt.
     // form.employees vẫn trả về cả 2 loại (để màn chi tiết trong app giữ được dấu vết), nên bản in

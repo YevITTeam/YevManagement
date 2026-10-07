@@ -44,7 +44,7 @@ namespace Workflow.Application.Dtos.WorkflowRequests
         public RequestAction Action { get; set; }
         public int? SentBackToStepOrder { get; set; }
         public string? Comment { get; set; }
-        // byte[] <-> base64 (AGENTS.md §4.4) — Pha 3B-2: cần cho khối chữ ký ở bản in (workflow-module.md
+        // byte[] <-> base64 (frontend-conventions.md §2) — Pha 3B-2: cần cho khối chữ ký ở bản in (workflow-module.md
         // §5.7 "Khối chữ ký: dựng từ WorkflowRequestSteps + WorkflowRequestHistories.SignatureImage").
         public string? SignatureImageBase64 { get; set; }
         public DateTime ActionAt { get; set; }

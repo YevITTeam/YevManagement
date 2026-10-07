@@ -82,6 +82,12 @@ namespace CompanySystem.HostApi.Middlewares
                     message = exception.Message;
                     break;
 
+                // Raised by concurrency tokens, e.g. two approvers acting on the same step at once.
+                case DbUpdateConcurrencyException:
+                    statusCode = (int)HttpStatusCode.Conflict;
+                    message = "Dữ liệu vừa được thay đổi ở một phiên khác, vui lòng tải lại trang rồi thử lại.";
+                    break;
+
                 // Reaching this case usually means a service skipped its own duplicate/FK check —
                 // see GuardExtensions.ThrowIfDuplicateCode for the soft-delete trap that used to
                 // land here as a bare 500.

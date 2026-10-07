@@ -34,7 +34,7 @@ interface PrintDeviceQrLabelsDialogProps {
 // để tick bình thường (đợt trước lỡ bỏ ra rồi thêm lại đúng ý người dùng).
 type QrEncodedFieldKey = "deviceName" | "deviceTypeName" | "branchName" | "supplierName" | "manager" | "statusText" | "purchaseDate";
 
-// Thứ tự đúng như hợp đồng BE mô tả (docs/asset-api-fe.md §5.4b): tên/loại/xưởng/NCC/người dùng/trạng thái/ngày mua.
+// Thứ tự đúng như hợp đồng BE mô tả (docs/asset-module.md §4): tên/loại/xưởng/NCC/người dùng/trạng thái/ngày mua.
 const FIELD_DEFS: { key: QrEncodedFieldKey; label: string }[] = [
     { key: "deviceName", label: "Tên thiết bị" },
     { key: "deviceTypeName", label: "Loại thiết bị" },

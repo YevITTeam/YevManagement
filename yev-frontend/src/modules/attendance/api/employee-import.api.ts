@@ -21,7 +21,7 @@ const ENDPOINTS = {
 } as const;
 
 export const EmployeeImportApi = {
-    // multipart/form-data — field "file". Chỉ đọc, không ghi DB (docs/attendance-api-fe.md §3.7).
+    // multipart/form-data — field "file". Chỉ đọc, không ghi DB (docs/attendance-module.md §API).
     previewImport: async (file: File) => {
         const formData = new FormData();
         formData.append("file", file);

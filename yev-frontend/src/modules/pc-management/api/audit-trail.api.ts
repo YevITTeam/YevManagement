@@ -2,7 +2,7 @@ import { api } from "@/lib/client";
 import type { AuditTrailDto } from "@/modules/pc-management/types/audit-trail.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Route /AuditTrail — docs/asset-api-fe.md §7b. Chỉ đọc, ghi tự động ở BE mỗi lần Create/Update/
+// Route /AuditTrail — docs/asset-module.md §4 Chỉ đọc, ghi tự động ở BE mỗi lần Create/Update/
 // Delete/Restore bất kỳ entity Asset nào. Permission Asset.AuditTrail.View (Admin gán riêng).
 const ENDPOINTS = {
     AUDIT_TRAIL: {

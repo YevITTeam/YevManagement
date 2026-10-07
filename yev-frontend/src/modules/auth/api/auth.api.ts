@@ -32,7 +32,7 @@ export const AuthApi = {
   },
 
   // Đăng nhập bằng form username/password tự viết (trang /login) — BE tự xác thực qua AD, không phải
-  // Negotiate (docs/identity-api-fe.md §2c). Không đi qua ENDPOINTS.AUTH.login/api.post vì cần tự lưu
+  // Negotiate (docs/identity-module.md §6). Không đi qua ENDPOINTS.AUTH.login/api.post vì cần tự lưu
   // token giống windowsLogin (client.ts đã làm sẵn trong requestPasswordLogin).
   login: async ({ userName, password }: LoginRequestDto): Promise<UserDto> => {
     const payload = (await requestPasswordLogin(userName, password)) as ApiResponse<WindowsLoginResponseDto> | null;
@@ -43,7 +43,7 @@ export const AuthApi = {
   },
 
   // Lấy hồ sơ + quyền hiện hành bằng JWT đang có (Bearer) và gia hạn luôn token đó — KHÔNG cần
-  // handshake Negotiate (docs/identity-api-fe.md §2b). `client.ts` tự lưu token mới trong payload.
+  // handshake Negotiate (docs/identity-module.md §6). `client.ts` tự lưu token mới trong payload.
   me: async (): Promise<UserDto> => {
     const payload = await api.get<ApiResponse<WindowsLoginResponseDto>>(ENDPOINTS.AUTH.me);
     if (!payload?.data?.user) {
@@ -65,14 +65,14 @@ export const AuthApi = {
   },
 
   // Chuẩn bị trước 1 user cho UserName cụ thể — dùng khi nhân viên mới chưa từng đăng nhập Windows
-  // lần nào (docs/identity-api-fe.md §4.9). deviceName (2026-07-11) chỉ để tham khảo/hiển thị,
+  // lần nào (docs/identity-module.md §6). deviceName (2026-07-11) chỉ để tham khảo/hiển thị,
   // KHÔNG còn dùng để khớp login (chỉ khớp theo userName).
   createUser: async (data: CreateUserDto) => {
     const response = await api.post<ApiResponse<UserDto>>(ENDPOINTS.AUTH.createUser, data);
     return response.data;
   },
 
-  // roleId optional (docs/identity-api-fe.md §4.1) — lọc user thuộc Role đó; không truyền → trả toàn bộ.
+  // roleId optional (docs/identity-module.md §6) — lọc user thuộc Role đó; không truyền → trả toàn bộ.
   getAllUsersWithRoles: async (roleId?: number) => {
     const query = roleId !== undefined ? `?roleId=${roleId}` : "";
     const response = await api.get<ApiResponse<UserDto[]>>(`${ENDPOINTS.AUTH.getAllUsersWithRoles}${query}`);
@@ -83,7 +83,7 @@ export const AuthApi = {
     return response.data;
   },
 
-  // Sửa CHỈ tên hiển thị (FullName) — không sửa được userName/deviceName (docs/identity-api-fe.md §4).
+  // Sửa CHỈ tên hiển thị (FullName) — không sửa được userName/deviceName (docs/identity-module.md §6).
   updateUserFullName: async ({ userId, fullName }: UpdateUserFullNameDto) => {
     const response = await api.put<ApiResponse<UserDto>>(ENDPOINTS.AUTH.updateUserFullName, { userId, fullName });
     return response.data;

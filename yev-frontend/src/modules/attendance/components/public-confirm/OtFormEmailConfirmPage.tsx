@@ -94,7 +94,7 @@ function ProcessPartTile({ icon, label, active, activeLabel, inactiveLabel }: {
     );
 }
 
-// Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-api-fe.md §4.6.
+// Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-module.md §API
 // Mở qua link email "Duyệt/Từ chối đơn tăng ca" gửi cho Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc.
 export default function OtFormEmailConfirmPage() {
     // Bilingual (VN / JP) regardless of the /vi or /ja locale segment the approver opened the link
@@ -125,11 +125,10 @@ export default function OtFormEmailConfirmPage() {
     // lỗi "chưa thiết lập"/"sai mật khẩu" hiện ra qua actionError trả về từ BE.
     const [rejectSecondaryPassword, setRejectSecondaryPassword] = useState("");
 
-    // Loại 1 nhân viên khỏi đơn ngay trên trang email — KHÔNG có ô mật khẩu cấp 2 (khác Duyệt/Từ chối
-    // ở trên), token trong URL tự nó là thông tin xác thực (chốt qua AskUserQuestion 2026-07-31, xem
-    // docs/attendance-module.md — Loại nhân viên khỏi đơn).
+    // Removing an employee here asks for the secondary password like Approve/Reject: the link is the only other credential.
     const [removeTarget, setRemoveTarget] = useState<OtFormEmployeeDto | null>(null);
     const [removeReason, setRemoveReason] = useState("");
+    const [removeSecondaryPassword, setRemoveSecondaryPassword] = useState("");
     const [isRemovingEmployee, setIsRemovingEmployee] = useState(false);
 
     // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
@@ -217,6 +216,7 @@ export default function OtFormEmailConfirmPage() {
 
     const openRemove = (employee: OtFormEmployeeDto) => {
         setRemoveReason("");
+        setRemoveSecondaryPassword("");
         setActionError(null);
         setRemoveTarget(employee);
     };
@@ -232,12 +232,17 @@ export default function OtFormEmailConfirmPage() {
             setActionError(tConfirm("removeReasonRequiredError"));
             return;
         }
+        if (!removeSecondaryPassword) {
+            setActionError(tConfirm("secondaryPasswordRequiredError"));
+            return;
+        }
         setIsRemovingEmployee(true);
         setActionError(null);
         try {
             const updated = await OtFormApi.removeOtFormEmployeeByEmailToken(token, {
                 employeeId: removeTarget.employeeId,
                 reason: removeReason.trim(),
+                secondaryPassword: removeSecondaryPassword,
             });
             setForm(updated);
             setRemoveTarget(null);
@@ -830,6 +835,20 @@ export default function OtFormEmailConfirmPage() {
                                     disabled={isRemovingEmployee}
                                     rows={3}
                                     required
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                                />
+                            </label>
+
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    {tConfirm("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                                </span>
+                                <input
+                                    type="password"
+                                    value={removeSecondaryPassword}
+                                    onChange={(event) => setRemoveSecondaryPassword(event.target.value)}
+                                    disabled={isRemovingEmployee}
+                                    autoComplete="off"
                                     className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                 />
                             </label>

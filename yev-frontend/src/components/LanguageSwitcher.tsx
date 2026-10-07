@@ -13,7 +13,7 @@ const LOCALES = [
 // KHÔNG hard-reload nên state form/app hiện có không bị mất.
 // next-intl usePathname() (giống next/navigation) KHÔNG bao giờ chứa query string — nhiều màn của
 // module Attendance dùng query string làm "route" (vd /ot/forms?id=123 — static export, xem
-// docs/docs-fe/huong-dan-viet-api-fe.md), nên phải tự lấy lại query string và truyền kèm qua
+// docs/docs-fe/frontend-conventions.md), nên phải tự lấy lại query string và truyền kèm qua
 // router.replace, nếu không sẽ mất ?id=... khi đổi ngôn ngữ → màn hiện Not Found.
 //
 // Đọc query từ window.location.search NGAY TRONG handler, KHÔNG dùng hook useSearchParams():

@@ -6,8 +6,7 @@ using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
 {
-    // 2 báo cáo theo ngày cho đơn "dưới chuyền" đã Hoàn tất — xem docs/Note_OT.txt mục 1 dòng 10 và
-    // mục 2, chốt thiết kế với người dùng 2026-08-28.
+    // 2 báo cáo theo ngày cho đơn "dưới chuyền" đã Hoàn tất — xem docs/docs-be/attendance-module.md §Báo cáo & export dưới chuyền theo ngày.
     public class ProductionOtReportController : BaseController
     {
         private readonly IProductionOtReportService _productionOtReportService;

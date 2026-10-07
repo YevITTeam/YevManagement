@@ -1,4 +1,4 @@
-// docs/attendance-api-fe.md §Import nhân sự dưới chuyền — pattern Preview → Confirm, giống EmployeeImport
+// docs/attendance-module.md §API §Import nhân sự dưới chuyền — pattern Preview → Confirm, giống EmployeeImport
 // nhưng cho phép tự tạo Employee thiếu, và tách riêng bước "Áp dụng lũy kế" (ảnh hưởng lương).
 
 export interface ProductionEmployeeImportRowDto {

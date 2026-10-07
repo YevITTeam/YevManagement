@@ -105,7 +105,7 @@ export default function AiChatBox() {
         }
 
         // `history` gửi lên là toàn bộ hội thoại TRƯỚC câu này (BE không lưu gì) — không kèm dòng
-        // "tool" vì BE không hiểu nếu FE gửi ngược lại (xem asset-api-fe.md §7c).
+        // "tool" vì BE không hiểu nếu FE gửi ngược lại (xem asset-module.md §4).
         const history: AiChatMessageDto[] = messages.map(({ role, content }) => ({ role, content }));
         const userBubble: ChatBubble = { id: nextIdRef.current++, role: "user", content: trimmed, timestamp: now() };
 

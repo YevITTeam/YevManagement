@@ -1,4 +1,4 @@
-// docs/attendance-api-fe.md §3.7 — import Excel nhân sự hàng loạt (Admin), pattern Preview → Confirm.
+// docs/attendance-module.md §API — import Excel nhân sự hàng loạt (Admin), pattern Preview → Confirm.
 
 export interface EmployeeImportPreviewRowDto {
     rowNumber: number;

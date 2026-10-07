@@ -96,7 +96,7 @@ const LOGIN_ENDPOINT = "/Auth/login";
 
 // Đăng nhập bằng form username/password tự viết (trang /login) — khác windowsLogin ở chỗ đây là
 // request JSON thường (không "credentials: include", không phải handshake Negotiate), BE tự xác
-// thực bằng cách bind vào AD (docs/identity-api-fe.md §2c). Mirror lại đúng cách đọc payload/lưu
+// thực bằng cách bind vào AD (docs/identity-module.md §6). Mirror lại đúng cách đọc payload/lưu
 // token của requestWindowsLogin ở trên để 2 luồng đăng nhập cho ra cùng 1 shape kết quả.
 const requestPasswordLogin = async (userName: string, password: string): Promise<unknown> => {
   const response = await fetch(`${BASE_URL}${LOGIN_ENDPOINT}`, {
@@ -203,7 +203,7 @@ const fetchClient = async <T>(
   }
 
   // Bắt các lỗi còn lại. 401 = token hết hạn/không hợp lệ ngay cả sau khi re-login → xoá token, buộc đăng nhập lại.
-  // 403 = token còn hợp lệ nhưng Role của user thiếu permission cho hành động này (docs/identity-api-fe.md §6) —
+  // 403 = token còn hợp lệ nhưng Role của user thiếu permission cho hành động này (docs/identity-module.md §6) —
   // KHÔNG xoá token, vì đăng nhập lại (cùng user Windows) sẽ vẫn ra permission y hệt, chỉ gây mất session vô ích.
   if (!response.ok) {
     if (response.status === 401) {

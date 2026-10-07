@@ -1,340 +1,120 @@
 # identity-module.md — Module Identity
 
-> **ĐÃ CÓ CODE, production.** User/Role + xác thực Windows Negotiate (AD) → JWT. Đọc [architecture-core.md](architecture-core.md) trước. Doc FE: [identity-api-fe.md](identity-api-fe.md).
+> Production. User/Role/Permission + xác thực Windows Negotiate (AD) / form AD / QR → JWT. Đọc [architecture-core.md](architecture-core.md) trước.
+> DB `YevIdentityManagement` (conn `IdentityManagementConnection`), `IdentityDbContext`. Thư mục Infrastructure là `Indentity.Infrastructure/` (typo giữ nguyên, assembly `Identity.Infrastructure`).
+> Mục lục: §1 Domain · §2 Services · §3 Xác thực · §4 Tính năng phụ (tạo/xoá user, TEST, QR, email) · **§6 API (hợp đồng FE↔BE)** · §7 Còn nợ · §8 Checklist · §9 Phân quyền.
 
-- **DB**: `YevIdentityManagement` (conn `IdentityManagementConnection`). **DbContext**: `IdentityDbContext`.
-- ⚠️ Thư mục Infrastructure là `Indentity.Infrastructure/` (typo "Inden") nhưng **assembly = `Identity.Infrastructure`**. Typo khác giữ nguyên: `IUserReposiory`.
+## 1. Domain
+Entity ở `Identity.Domain/Entities/` (tất cả `partial class`); cấu hình Fluent trong `IdentityDbContext.OnModelCreating`.
+- `User` (không `IsDeleted`, xoá **cứng**; `Email` = email chính), `Role` (soft-delete), `Permission` (mã `Module.Entity.Action` unique, cố định — seed qua migration), `LoginUserIP`, `LoginQrCode`/`LoginQrLog`, `UserEmail`/`UserEmailModule`, `UserPermission` (khoá kép `(UserId, PermissionId)` + `IsGranted`; tường minh vì có cột `IsGranted`/`IsAutoGranted`), `TestLoginAccount`.
+- `User↔Role` (`UserRoles`) và `Role↔Permission` (`RolePermissions`) là N-N qua `UsingEntity`, không có repo riêng.
+- Bất biến: **1 `UserName` = đúng 1 dòng `User`**. `UserEmail` unique theo `(UserId, Email)`; `UserEmailModule` unique `(UserId, ModuleCode)`.
 
-## 1. Domain Models
-| Entity | Thuộc tính chính | Quan hệ | Soft-del |
+## 2. Services (`Identity.Application/Services/`)
+- `UserService`: `SyncWindowsUserAsync`, `GetAllUsersAsync(roleId?)`, `UpdateUserRolesAsync`, `CreateUserAsync`, `UpdateUserFullNameAsync`, `DeleteUserAsync`. `RoleService`: CRUD (xoá mềm, trùng tên → `DomainException`). ⚠️ `RoleService.GetRoleByIdAsync` không check null.
+- `TokenService.GenerateJwtToken` — JWT HS256 hạn `JwtSettings:ExpiryMinutes` (120). **Không** chứa `Permission` (xem §3); `Role` chỉ lấy từ identity `DbRoles` rồi `DistinctBy`, loại claim JWT tự sinh (`exp/nbf/iat/iss/aud/jti`) để token gia hạn không trùng `aud`/`exp`.
+- `PermissionService`: `GetAll`, `GetRolePermissions`, `UpdateRolePermissions` (clear+add lại), `GetUserPermissionOverrides`, `GetEffectivePermissionsForUser`, `UpdateUserPermissionOverrides` (§9.1).
+- `IIdentityUnitOfWork` phơi repo của mọi entity trên; `IUserReposiory.GetUserWithRolesAsync(userName)`.
+
+## 3. Xác thực: Negotiate → ClaimsTransformation → JWT
+1. Config `HostApi/Configurations/Authentication.cs`: default JwtBearer + `.AddNegotiate()`.
+2. **`MyClaimsTransformation`** (`Indentity.Infrastructure/Authentication/`) chạy mỗi request đã xác thực:
+   - Gỡ **mọi** claim `Role`/`Permission` mang sẵn trong JWT; chỉ tin identity `DbRoles` → thu hồi quyền có hiệu lực ngay, kể cả token cũ.
+   - Khớp User **CHỈ theo `UserName` suông**. `DeviceName` (reverse-DNS) chỉ để hiển thị — từng khớp theo cặp `(UserName, DeviceName)` gây tạo User trùng (đã bỏ; dữ liệu trùng cũ rà tay).
+   - Chưa có User → tạo mới role `Basic`, `FullName` từ AD (`UserPrincipal.FindByIdentity`, chỉ Windows). User chưa có `UserEmail` nào → lấy AD `mail` làm email chính (Source=AD); đã có email thì không đụng.
+   - Ghi `LoginUserIP`; bơm claims vào `ClaimsIdentity` riêng `AuthenticationType = "DbRoles"`: `Role`, `Permission`, `FullName`, `Email`, `IpAddress`, `DeviceName`, `RolesLoaded`. Tên claim là hằng ở `Identity.Application/Authentication/IdentityClaimTypes.cs` (Infrastructure tạo → Application đóng vào JWT → Api đọc ra `UserDto`; phải khớp chính xác).
+3. `AuthController.WindowsLogin` (Negotiate) / `Me` (Bearer) / `Login` / `QrLogin` cùng gọi `BuildSession(principal)` → `UserDto` + token → `LoginResponseDto { user, token }`.
+
+⚠️ **Cache:** permission/role/profile lấy từ DB và cache trong `IAuthSnapshotCache` (`IMemoryCache`, TTL 60s, Singleton). `IdentityUnitOfWork.SaveChangesAsync` gọi `InvalidateAll()` sau mọi lần lưu entity Identity (trừ `LoginUserIP/LoginQrCode/LoginQrLog`) → đổi quyền có hiệu lực ngay; sửa DB trực tiếp chỉ có hiệu lực sau ≤ 60s. Cache nằm trong tiến trình — chạy nhiều instance phải thay bằng Redis. Mọi request `/api/Auth/*` luôn nạp lại cache.
+⚠️ AD (`System.DirectoryServices.AccountManagement`) chỉ chạy trên Windows domain-joined (CA1416). `TransformAsync` ghi DB nên `windows-login` không read-only.
+
+**`POST /api/Auth/login` (form tự viết, vẫn xác thực AD):** `IActiveDirectoryAuthService.ValidateCredentials(domain, userName, password)` bind thẳng AD (domain từ `ActiveDirectory:Domain`, mặc định `YEV`), không lưu password. Sai user/pass trả chung "Tên đăng nhập hoặc mật khẩu không đúng.". Thành công → `ClaimsPrincipal` mồi `Name = "{domain}\{userName}"` → qua đúng `MyClaimsTransformation` → `BuildSession`.
+> ⚠️ **Bắt buộc `ValidateCredentials(userName, password, ContextOptions.SimpleBind)`, KHÔNG dùng overload 2 tham số:** overload mặc định (Negotiate) trả `true` cho BẤT KỲ cặp user/pass nào khi tiến trình BE chạy dưới tài khoản domain có Kerberos ticket (bypass xác thực).
+> ⚠️ `SimpleBind` không tự resolve `sAMAccountName` trần — phải ghép down-level name `"{domain}\{userName}"` (`ActiveDirectoryAuthService` tự ghép; caller chỉ truyền `userName` trần).
+
+## 4. Tính năng phụ
+- **Tạo user thủ công** (`create-user`): pre-provision cho người chưa từng login; login lần đầu khớp theo `UserName` → giữ Role đã gán. Chặn trùng `UserName`, validate `RoleIds`.
+- **Xoá user** (`delete-user`): xoá cứng, cascade dọn `UserRoles/LoginUserIPs/UserPermissions`. Login lại sau xoá → tạo mới `Basic`, mất override cũ (có chủ đích).
+- **Sửa tên hiển thị** (`update-user-fullname`): chỉ ghi đè `FullName`; `UserName` (khoá khớp login) và `DeviceName` không sửa được qua API nào.
+- **`EnsureUserExistsAsync(userName, fullName, roleName)`** (`IUserDirectoryService`, `Shared.Application/Interfaces/`): tạo User idempotent cho import cross-module (đã tồn tại → no-op trả `false`, giữ Role; chưa có → tạo, role mặc định `Basic`). Người gọi: `EmployeeIdentityLinkImportService` (Attendance, permission `Identity.User.BulkImport`).
+- **Tạo User từ tài khoản domain có trong AD** (`IUserDirectoryService.ResolveDomainAccountsAsync` chỉ đọc / `EnsureDomainUsersAsync` tạo; người gọi: import Tanium và lưu thiết bị bên Asset, `asset-module.md §1.10`): bỏ trùng không phân biệt hoa/thường, chỉ tra AD cho tài khoản Identity chưa có (song song tối đa 8) qua `IActiveDirectoryAuthService.FindAccount` (`UserPrincipal.FindByIdentity`; domain phải khớp `ActiveDirectory:Domain`). Trạng thái `DomainAccountState`: `ExistsInIdentity`, `WillCreate`/`Created` (AD đang bật), `Disabled`, `NotInDirectory`, `DirectoryUnavailable` (không hỏi được AD thì **không tạo**; khác `GetEmailAddresses` vốn nuốt lỗi), `Failed`. Tạo User role `Basic` với họ tên = AD `displayName`, không thêm email — giống JIT-provision nên không mở thêm quyền.
+- **Đăng nhập TEST** (bypass AD): `UserName` bắt đầu `TEST\` (bảng `TestLoginAccounts`, `PasswordHash` kiểu `PasswordHasher<object>`) rẽ nhánh trong `POST /login`, **chỉ khi `IsDevelopment()`**, mật khẩu chung `Test@2026`. Có 10 tài khoản seed phủ Cây duyệt Chuyền Attendance: `TEST\ll_shido`, `gl_shido`, `tl_shido`, `mgr_ct`, `fm_01`, `dir_01` và nhóm Công vụ-IT `st_cvit`, `gl_cvit`, `tl_cvit`, `mgr_cv` (migration `AddTestLoginAccounts`, `AddTestAccountsCongVuIT`). Permission theo Chức vụ chỉ sync được khi `Identity.User` đã tồn tại → thứ tự tạo tài khoản TEST mới: `TestLoginAccount` → `create-user` → tạo `Employee` (tự sync) → login 1 lần. Mật khẩu cấp 2/chữ ký là luồng self-service qua email nên tài khoản TEST phải seed tay.
+- **Đăng nhập QR** (app YEV Scan): QR chứa `YEVQR1:<base64url mã ngẫu nhiên 32 byte>`, **không** chứa `UserId`. `LoginQrCode` chỉ lưu SHA-256 → mã gốc lấy được **1 lần** lúc tạo; mỗi user tối đa 1 mã hoạt động (tạo mới thu hồi cũ). Mã dài hạn, dùng nhiều lần, hết hiệu lực khi Admin thu hồi/tạo lại/xoá User — coi như mật khẩu. `LoginQrLog` ghi `Created/Revoked/LoginSuccess/LoginFailed`. Chưa làm: giới hạn quét sai theo IP.
+- **Email người dùng** (Identity là nguồn chân lý email): bất biến user có ≥1 `UserEmail` thì có đúng 1 `IsPrimary` và `User.Email` = email chính (JWT claim `Email` giữ nguyên). Chỉ Admin quản lý. Đề xuất đồng bộ (`suggestions`): AD `mail` + mọi `smtp:` trong `proxyAddresses`, cộng email của máy Tanium (`IDeviceContactDirectoryService.GetEmailsByDomainAccountAsync`, ghi chú = mã máy); AD thắng khi trùng. `LinkDomainAccountEmailsAsync` (form thiết bị Asset → Identity): chưa có User thì tạo (`Basic`, họ tên = `Device.Manager`), thêm email `Source=Manual`, **không bao giờ đổi email chính** (User chưa có email nào thì email đầu thành chính), không tự gán module. Danh mục module: `Shared.Application/Helper/EmailModules.cs` (`Attendance` đã áp dụng; `Workflow` lưu được nhưng `IsApplied=false`). Gửi mail: `IUserDirectoryService.GetContactInfoAsync(userName, moduleCode)` → email Admin gán cho module, không có thì email chính.
+
+## 6. API (hợp đồng FE↔BE)
+Envelope `ApiResponse<T>` (xem `architecture-core.md §3`). Thiếu token → 401, thiếu permission → 403. Tên field đọc ở `Identity.Application/Dtos/` hoặc `yev-frontend/src/modules/auth/types/`. Base URL & CORS: `AGENTS.md` / `Program.cs`.
+
+### 6.1. Đăng nhập & phiên
+| Method | Route | Quyền | Ghi chú |
 |---|---|---|---|
-| `User` | `Id`, `UserName`(≤100), `FullName?`, `CreatedAt`, `DeviceName?`, `Email?`(= email chính, §5.9) | N-N Roles, 1-N LoginUserIPs, 1-N UserPermissions, 1-N UserEmails | Không |
-| `UserEmail` | `Id`, `UserId`, `Email`(≤255, unique theo `(UserId, Email)`), `Source`(`UserEmailSource`), `IsPrimary`, `Note?`, `CreatedAt` | N-1 User (cascade) | Không (xoá cứng) |
-| `UserEmailModule` | `Id`, `UserId`(không FK, chỉ để unique `(UserId, ModuleCode)`), `ModuleCode`(≤50), `UserEmailId` | N-1 UserEmail (cascade) | Không |
-| `Role` | `Id`, `RoleName`(≤50), `Description?`, `IsDeleted` | N-N Users, N-N Permissions | **Có** |
-| `LoginUserIP` | `Id`, `UserId`, `IPAddress`, `FirstLoginAt`, `LastLoginAt` | N-1 User | Không |
-| `LoginQrCode` | `Id`, `UserId`, `CodeHash`(SHA-256 hex, unique), `CreatedByUserId?`, `CreatedAt`, `RevokedAt?`, `RevokedByUserId?`, `LastUsedAt?`, `UseCount` | N-1 User (cascade) | Không (thu hồi = set `RevokedAt`) |
-| `LoginQrLog` | `Id`, `UserId?`, `QrCodeId?`, `Action`, `ActorUserId?`, `IpAddress?`, `UserAgent?`, `Note?`, `CreatedAt` | Không FK (giữ lịch sử khi xoá User) | Không |
-| `Permission` | `Id`, `Code`(≤150, unique, `Module.Entity.Action`), `Module`(≤50), `Description?` | N-N Roles, 1-N UserPermissions | Không (cố định, seed qua migration §9) |
-| `UserPermission` | khoá kép `(UserId, PermissionId)`, `IsGranted:bool` | N-1 User, N-1 Permission | Không (override theo User §9.1) |
+| POST | `/api/Auth/windows-login` | Negotiate | Không body; fetch **`credentials: "include"`** (thiếu → luôn 401); handshake 2–3 request là bình thường. Có side-effect ghi DB, idempotent |
+| POST | `/api/Auth/login` | Public | `{userName, password}`, `userName` KHÔNG kèm domain; password đi JSON qua LAN (chưa HTTPS) |
+| POST | `/api/Auth/qr-login` | Public | `{code}` (có/không tiền tố `YEVQR1:`); sai/đã thu hồi → 400 "Mã QR không hợp lệ hoặc đã bị thu hồi." → app xoá mã đã lưu |
+| GET | `/api/Auth/me` | Bearer | Cùng shape `{user, token}` + token gia hạn thêm 120' (sliding session) |
 
-Fluent (`IdentityDbContext.OnModelCreating`):
-- `User↔Role` (bảng nối `UserRoles`) và `Role↔Permission` (`RolePermissions`): many-to-many qua `UsingEntity<Dictionary<string,object>>`, không repo riêng.
-- `User↔Permission` qua `UserPermission`: entity **tường minh** (`HasKey(e => new {e.UserId, e.PermissionId})`, 2 `HasOne().WithMany()`) vì có cột `IsGranted`. Có `IUserPermissionRepository` riêng.
-- `LoginUserIP` map theo convention. Tất cả là `partial class`.
+- Mọi nhánh trả `data = { user: {id, userName, fullName, deviceName?, email?, roles[], permissions[]}, token }`. `email` = email chính (nullable); `roles` luôn có ≥ `Basic`; **định danh = `userName`**, không dùng `deviceName`.
+- **Chỉ gọi `windows-login` khi chưa có token**; còn token → `GET /me` (mỗi `windows-login` là 1 handshake NTLM, máy chưa bật SSO sẽ bị hỏi lại tài khoản domain). `client.ts` tự re-login 1 lần khi 401 rồi retry; `AuthProvider` gọi `/me` mỗi 30 phút; nút "Làm mới quyền" cũng qua `/me`. Nên giữ nút `windows-login` làm lựa chọn phụ cho máy đã có SSO. Máy chưa SSO: thêm origin BE vào vùng Local Intranet hoặc policy `AuthServerAllowlist`.
+- **JWT không chứa permission** — FE đọc `data.user.permissions` (hiệu lực cuối, đã áp override), không decode JWT. Quyền bị thu hồi có hiệu lực ngay ở BE; FE gọi `/me` để cập nhật UI. Ẩn/hiện UI theo `user.permissions`, không theo `user.roles`.
+- Sliding session: AD bị vô hiệu hoá vẫn sống tới khi đóng app > 120' (chấp nhận được với app nội bộ).
 
-## 2. DTOs (`Identity.Application/Dtos/UserDto/`)
-| DTO | Dùng cho |
-|---|---|
-| `UserDto` | `Id/UserName/FullName/DeviceName?/Roles:List<string>/Permissions:List<string>` (mã từ claim). |
-| `LoginResponseDto` | `User:UserDto, Token:string`. |
-| `RoleDto` | `Id/RoleName/Description?` (dùng cả input+output). `UpdateRoleDto`: `RoleName/Description?`. |
-| `UpdateUserRolesDto` | `UserId, RoleIds:List<int>`. |
-| `UpdateUserFullNameDto` | `UserId, FullName[Required, ≤100]` — sửa CHỈ tên hiển thị (§5.5). |
-| `CreateUserDto` | `UserName[Required], DeviceName?, FullName?, RoleIds:List<int>?` (§5.1). |
-| `PermissionDto` | `Id/Code/Module/Description?` (output-only). |
-| `PermissionModuleGroupDto` / `PermissionEntityGroupDto` | Nhóm 2 cấp Module > Entity (Entity = đoạn giữa của Code) — cho `GET /api/Permission/all`. |
-| `UpdateRolePermissionsDto` | `RoleId, PermissionIds:List<int>` (gán lại toàn bộ). |
-| `UserPermissionDto` | `PermissionId/Code/Module/Description?/IsGranted`. |
-| `UpdateUserPermissionOverridesDto` | `GrantPermissionIds/DenyPermissionIds:List<int>` — body `PUT /api/Permission/user/{userId}`. |
-
-## 3. Repositories & UnitOfWork
-`IUserReposiory` (+`GetUserWithRolesAsync(userName)`), `IRoleRepository`/`ILoginUserIPRepository`/`IPermissionRepository`/`IUserPermissionRepository` (generic rỗng). `IIdentityUnitOfWork` phơi bày `Users/Roles/LoginUserIPs/Permissions/UserPermissions/TestLoginAccounts/LoginQrCodes/LoginQrLogs/UserEmails/UserEmailModules`. Impl `IdentityUnitOfWork : BaseUnitOfWork<IdentityDbContext>`.
-
-## 4. Services
-| Service | Method |
-|---|---|
-| `UserService` | `SyncWindowsUserAsync`, `GetAllUsersAsync(roleId?)` (lọc theo Role qua `Roles.Any(r => r.Id == roleId)` khi có, 2026-07-16), `UpdateUserRolesAsync`, `CreateUserAsync` (§5.1), `UpdateUserFullNameAsync` (§5.5), `DeleteUserAsync` (§5.2, **xóa cứng**) |
-| `RoleService` | CRUD role (`Create` ném `DomainException` nếu trùng tên; xóa = soft-delete). ⚠️ `GetRoleByIdAsync` **không check null** → NRE nếu id sai (nên `.OrThrowNotFound`) |
-| `TokenService` | `GenerateJwtToken(ClaimsPrincipal)` — JWT HS256, hạn `JwtSettings:ExpiryMinutes`. Loại `RolesLoaded`, **`Permission`** + claim do JWT tự sinh (`exp/nbf/iat/iss/aud/jti`, nếu không token gia hạn sẽ có `aud`/`exp` trùng → không validate được); `Role` **chỉ lấy từ identity `DbRoles`** rồi `DistinctBy`. Token KHÔNG chứa permission (nhẹ, ~vài trăm byte) — xem §5 |
-| `PermissionService` | `GetAllPermissionsAsync`, `GetRolePermissionsAsync`, `UpdateRolePermissionsAsync` (clear+add lại), `GetUserPermissionOverridesAsync`, `GetEffectivePermissionsForUserAsync`, `UpdateUserPermissionOverridesAsync` (§9.1) |
-
-## 5. Xác thực: Windows Negotiate → ClaimsTransformation → JWT
-1. **Config** (`HostApi/Configurations/Authentication.cs`): `AddAuthentication` default JwtBearer + `.AddNegotiate()` + `.AddJwtBearer(...)` (validate Issuer/Audience/Lifetime/SigningKey từ `JwtSettings`).
-2. **`MyClaimsTransformation : IClaimsTransformation`** (`Indentity.Infrastructure/Authentication/`) chạy mỗi request đã xác thực (Windows **và** JWer):
-   - Resolve `deviceName` (reverse-DNS từ IP) **chỉ để hiển thị/log**, KHÔNG dùng khớp User. ⚠️ Reverse-DNS không ổn định (NAT/nhiều PTR) → **khớp User CHỈ theo `UserName` suông** (từng dùng cặp `(UserName,DeviceName)` gây tạo User trùng — đã bỏ; data debt trùng cũ cần rà tay).
-   - Chưa có claim `RolesLoaded` → tra `Users` (`.Include(Roles).ThenInclude(Permissions)` + `.Include(UserPermissions).ThenInclude(Permission)`) theo `UserName`.
-   - `UserName` chưa có → tạo User MỚI, role `"Basic"`, `FullName` từ AD (`UserPrincipal.FindByIdentity`, chỉ Windows). Đã có → dùng lại, chỉ refresh `DeviceName` nếu resolve ra giá trị khác (bỏ qua nếu null).
-   - User **chưa có `UserEmail` nào** → lấy AD `mail` thêm 1 `UserEmail` (Source=AD, chính) + ghi `User.Email`. Đã có email thì không đụng (Admin quản lý, §5.9).
-   - Ghi/update `LoginUserIP`. Bơm claims vào **một `ClaimsIdentity` riêng** `AuthenticationType = "DbRoles"`: `Role` (mỗi role), `Permission` (mỗi mã hiệu lực §9.1), `FullName`, `Email`, `IpAddress`, `DeviceName`, `RolesLoaded=true`. Tên các claim/identity này là hằng dùng chung ở `Identity.Application/Authentication/IdentityClaimTypes.cs` (Infrastructure tạo → Application đóng vào JWT → Api đọc ra `UserDto`, cả 3 phải khớp chính xác).
-3. **`AuthController.WindowsLogin`** (`[Authorize(AuthenticationSchemes="Negotiate")]`) và **`AuthController.Me`** (`[Authorize]`, Bearer) cùng gọi private `BuildSession()`: đọc claims → `UserDto` + `TokenService.GenerateJwtToken` → `LoginResponseDto`. Client dùng `Authorization: Bearer <token>` cho request sau.
-
-> ⚠️ **JWT chỉ mang định danh + `Role` + `UserId/FullName/Email`, KHÔNG mang `Permission`.** Permission, role, profile được lấy từ DB và **cache trong `IAuthSnapshotCache`** (`AuthSnapshotCache`, `IMemoryCache`, TTL 60s, đăng ký Singleton ở `HostApi/Configurations/DependencyInjection.cs`). `MyClaimsTransformation` chạy mỗi request nhưng chỉ tải DB khi cache miss; mọi request `/api/Auth/*` (login, `me`) luôn đi đường đầy đủ và nạp lại cache.
-> ⚠️ **Xoá cache:** `IdentityUnitOfWork.SaveChangesAsync` gọi `InvalidateAll()` sau mỗi lần lưu có thay đổi entity Identity (trừ `LoginUserIP/LoginQrCode/LoginQrLog`) → đổi role/permission/email/tên có hiệu lực ngay. Sửa DB trực tiếp (SQL/migration) chỉ có hiệu lực sau tối đa 60s. Cache nằm trong tiến trình → nếu chạy nhiều instance API thì phải thay bằng cache phân tán (Redis).
-> ⚠️ **Mọi claim `Role`/`Permission` mang sẵn trong JWT bị gỡ khỏi principal** ngay đầu `TransformAsync`, chỉ identity `DbRoles` được tin → thu hồi quyền có hiệu lực ngay, kể cả với token cũ phát trước khi đổi cơ chế. `BuildSession()` + `GenerateJwtToken` cũng chỉ tin `DbRoles` cho `Role`, tránh cộng dồn khi gia hạn (`/Auth/me`).
-> ⚠️ AD (`System.DirectoryServices.AccountManagement`) chỉ chạy trên Windows domain-joined (warning CA1416). `TransformAsync` có ghi DB → windows-login **không** read-only.
-
-### 5.3. `GET /api/Auth/me` — lấy lại phiên & gia hạn token
-`[Authorize]` (JWT Bearer, không cần permission). Trả `LoginResponseDto` y hệt `windows-login`, `Token` là JWT
-mới hạn thêm `ExpiryMinutes` → **sliding session**, không cần handshake Negotiate.
-
-**Lý do thêm:** trước đó FE gọi `windows-login` mỗi lần mount `AuthProvider` (mỗi lần F5/mở tab) và mỗi lần
-gặp 401. Mỗi lời gọi = 1 handshake Negotiate/NTLM; máy chưa bật SSO cho origin BE (Local Intranet zone /
-`AuthServerAllowlist`) sẽ bị trình duyệt **hỏi lại tài khoản domain mỗi lần** → người dùng báo "đã đăng nhập
-đúng rồi vẫn bị bắt đăng nhập lại". Hợp đồng FE + cách dùng: [identity-api-fe.md §2b](identity-api-fe.md).
-
-### 5.4. `POST /api/Auth/login` — form username/password tự viết (vẫn xác thực AD)
-`[AllowAnonymous]`. Body `LoginRequestDto { userName, password }` (`userName` là sAMAccountName thuần,
-KHÔNG kèm domain). Dùng cho trang `/login` tự viết ở FE, thay cho popup gốc "Windows Security" của
-Negotiate (JS không custom được popup đó, không hiện được thông báo sai mật khẩu).
-
-Luồng: `IActiveDirectoryAuthService.ValidateCredentials(domain, userName, password)`
-(`Indentity.Infrastructure/Authentication/ActiveDirectoryAuthService.cs`, bọc
-`PrincipalContext.ValidateCredentials` — CA1416, chỉ chạy Windows domain-joined) bind thẳng vào AD,
-domain đọc từ config `ActiveDirectory:Domain` (mặc định `"YEV"`) — **không lưu password ở đâu cả**,
-
-> ⚠️ **Bắt buộc gọi `ValidateCredentials(userName, password, ContextOptions.SimpleBind)` — KHÔNG được
-> dùng overload 2 tham số.** Đã kiểm chứng thực tế: overload mặc định (`ContextOptions.Negotiate`)
-> trả về **`true` cho BẤT KỲ username/password nào** (kể cả user không tồn tại) khi tiến trình BE
-> đang chạy dưới 1 tài khoản domain đã có sẵn Kerberos ticket hợp lệ — Negotiate bind "tự xác thực"
-> bằng danh tính tiến trình thay vì thật sự kiểm tra credential truyền vào. Đây là lỗ hổng bypass xác
-> thực nghiêm trọng nếu quên `SimpleBind`. `SimpleBind` ép LDAP bind thật sự bằng đúng
-> username/password nhận được.
-> ⚠️ **`SimpleBind` không tự resolve `sAMAccountName` trần** như Negotiate/Kerberos — phải truyền
-> theo **down-level logon name `"{domain}\{userName}"`** (đã kiểm chứng: `userName` trần luôn bị AD
-> từ chối dưới `SimpleBind` dù đúng mật khẩu, dù chính tài khoản đó đăng nhập Negotiate bình thường).
-> `ActiveDirectoryAuthService.ValidateCredentials` tự ghép chuỗi này trước khi gọi, caller
-> (`AuthController.Login`) chỉ truyền `userName` trần như nhận từ FE.
-
-`User` entity không có cột password. Sai user hoặc sai password đều trả chung message "Tên đăng nhập
-hoặc mật khẩu không đúng." (không tiết lộ user có tồn tại). Xác thực AD thành công → dựng 1
-`ClaimsPrincipal` "mồi" chỉ có `ClaimTypes.Name = "{domain}\{userName}"`, chạy qua **đúng**
-`IClaimsTransformation` (`MyClaimsTransformation`) mà `windows-login`/`me` đang dùng — tái sử dụng
-nguyên vẹn JIT-provisioning + gộp Role/Permission (§5), rồi gọi `BuildSession(transformedPrincipal)`
-(đã refactor nhận `ClaimsPrincipal` tường minh thay vì đọc thẳng `User` của controller). Response
-shape y hệt `windows-login`/`me`.
-
-FE vẫn giữ nút phụ gọi `windows-login` (Negotiate) cho máy đã cấu hình SSO — `POST /login` không thay
-thế, chỉ thêm lựa chọn. Hợp đồng FE: [identity-api-fe.md §2c](identity-api-fe.md).
-
-### 5.1. Tạo User thủ công (pre-provision)
-Admin tạo trước User cho người **chưa từng đăng nhập Windows**. Login lần đầu khớp theo `UserName` → dùng Role đã gán, không rơi `"Basic"`.
-`POST /api/Auth/create-user` (`Identity.User.Create`, seed migration `AddIdentityUserCreatePermission`) — `CreateUserDto`. `CreateUserAsync` chặn trùng `UserName` + validate `RoleIds` tồn tại `!IsDeleted`. **Bất biến: 1 `UserName` = đúng 1 dòng User.**
-
-### 5.2. Xóa User (xóa CỨNG)
-`DELETE /api/Auth/delete-user/{userId}` (`Identity.User.Delete`, seed migration `AddUserDeleteAndAssetSettingPermissions`). `User` không có `IsDeleted` → xóa cứng, cascade DB tự dọn `UserRoles`/`LoginUserIPs`/`UserPermissions`. Đánh đổi: `UserName` login lại sau xóa → tạo mới với `"Basic"`, mất override cũ (có chủ đích).
-
-### 5.5. Sửa tên hiển thị User
-`PUT /api/Auth/update-user-fullname` (`Identity.User.UpdateFullName`, seed migration `AddIdentityUserUpdateFullNamePermission`) — body `UpdateUserFullNameDto { UserId, FullName[Required] }`. `UserService.UpdateUserFullNameAsync` chỉ ghi đè `FullName`; **`UserName` (định danh đăng nhập Windows) và `DeviceName` không sửa được qua endpoint này** — có chủ đích, vì `UserName` là khóa khớp duy nhất lúc login (§5). 404 nếu `UserId` sai.
-
-### 5.6. Đăng nhập TEST (bypass AD, chỉ Development)
-Phục vụ test nhanh các luồng cần nhiều vai trò (VD Cây duyệt Chuyền Attendance) khi nhân viên thật
-chưa có tài khoản AD — theo yêu cầu người dùng. Entity mới `TestLoginAccount`
-(`Identity.Domain/Entities/TestLoginAccount.cs`, bảng `TestLoginAccounts`, migration
-`AddTestLoginAccounts`): `{ UserName [unique, PHẢI bắt đầu "TEST\\"], FullName, PasswordHash
-[PasswordHasher<object>, cùng cơ chế SecondaryPasswordService], IsDeleted, CreatedAt }`.
-
-`POST /api/Auth/login` (dùng chung endpoint với §5.4) kiểm tra `UserName` bắt đầu bằng `"TEST\"`
-(không phân biệt hoa/thường) → rẽ nhánh xác thực bằng `TestLoginAccount.PasswordHash` qua
-`IUserService.ValidateTestLoginAsync`, **KHÔNG gọi AD**. Nhánh này **chỉ hoạt động khi
-`IWebHostEnvironment.IsDevelopment()`** (`AuthController.Login`) — tự động vô hiệu hoá nếu server chạy
-môi trường khác, tránh trở thành lỗ hổng bypass xác thực nếu sau này có Production thật. Xác thực
-thành công → dựng `ClaimsPrincipal` mồi `Name = UserName` gốc (giữ nguyên `"TEST\..."`, không ghép
-domain như nhánh AD), chạy qua đúng `MyClaimsTransformation` như mọi luồng khác → JIT-provision
-`Identity.User` + Role "Basic" nếu chưa có.
-
-**Quan trọng — permission KHÔNG tự có ngay sau khi tạo `Employee.UserName`/`TestLoginAccount`:**
-`IUserDirectoryService.SyncAutoGrantedPermissionsAsync` (permission theo Chức vụ, xem
-`attendance-module.md §Cây chức vụ`) chỉ ghi được nếu `Identity.User` ứng với `UserName` đó **đã tồn
-tại**. Thứ tự đúng khi tạo 1 tài khoản TEST mới: (1) thêm dòng `TestLoginAccount`; (2) tạo
-`Employee` tương ứng (`UserName` + `GroupId`/`DepartmentId`/`JobTitleId` phù hợp cấp cần test); (3)
-đăng nhập TEST 1 lần (JIT-provision `Identity.User`); (4) trigger sync permission — cách nhanh nhất
-hiện tại là gọi lại `PUT /api/Employee/{id}` (Admin) hoặc
-`PUT /api/Employee/{id}/group-job-title`/`department-job-title` với đúng dữ liệu hiện có (không cần
-đổi gì, chỉ cần Service chạy qua `SyncAutoGrantedPermissionsCoreAsync`); chưa có endpoint "sync lại
-permission" độc lập.
-
-6 tài khoản TEST đã seed sẵn (migration `AddTestLoginAccounts`, mật khẩu dùng chung
-**`Test@2026`**) — phủ đủ Cây duyệt Chuyền của Line SHIDO/Team HC (Bộ phận Chế tạo, xem
-`attendance-module.md §Cây chức vụ & Cây duyệt` để biết vì sao dữ liệu thật ở đây trống hoàn toàn, không ai
-có UserName): `TEST\ll_shido` (Line Leader), `TEST\gl_shido` (Group Leader), `TEST\tl_shido` (Team
-Leader), `TEST\mgr_ct` (Manager), `TEST\fm_01` (Factory Manager), `TEST\dir_01` (Director) — đã gán
-đủ 12 permission Attendance tương ứng Chức vụ của từng người (qua `UserPermissions`,
-`IsAutoGranted=true`, seed tay 1 lần vì lúc tạo dữ liệu chưa gọi được API — sau này sửa Chức vụ của
-các Employee này qua UI bình thường sẽ tự sync lại đúng cơ chế).
-
-**+4 tài khoản TEST cho Nhóm "Công vụ - IT"** (`GroupId=6`, Bộ phận Công vụ `DepartmentId=6`; migration
-`AddTestAccountsCongVuIT`, cùng mật khẩu `Test@2026`, theo yêu cầu người dùng 2026-09-04) — phủ đủ
-Cây duyệt của Nhóm này (đọc từ `GroupApprovalStep`/`DepartmentApprovalStep` sống lúc tạo, KHÔNG suy
-đoán): `TEST\st_cvit` (Staff, stepOrder 1, không cần chữ ký), `TEST\gl_cvit` (Group Leader, stepOrder
-2, cần chữ ký), `TEST\tl_cvit` (Team Leader, stepOrder 3, `IsResponsible=true`, cần chữ ký), `TEST\mgr_cv`
-(Manager — `DepartmentManager`/terminal=1, scope `DepartmentId=6` chứ KHÔNG phải `GroupId`, cần chữ
-ký). Chuỗi duyệt của Công vụ chỉ có 2 cấp cuối (Manager rồi dừng, KHÔNG có Factory Manager/Director —
-`DepartmentApprovalStep` của `DepartmentId=6` chỉ có 2 dòng) nên **không cần** thêm tài khoản Factory
-Manager/Director riêng cho Công vụ — cấp đó dùng chung toàn công ty, TÁI DÙNG thẳng `TEST\fm_01`/
-`TEST\dir_01` có sẵn nếu sau này Công vụ cấu hình thêm cấp đó.
-
-Cách tạo (không qua migration seed tay như 6 tài khoản đầu — lần này dùng đúng luồng API thật, xem
-`EmployeeIdentityLinkImportService`/`5.7` để hiểu vì sao thứ tự tạo User TRƯỚC Employee giúp sync
-permission tự động ngay, không cần bước "gọi lại PUT Employee" thủ công):
-1. Migration `AddTestAccountsCongVuIT` (Identity DB) — 4 dòng `TestLoginAccounts`.
-2. `POST /api/Auth/create-user` (Admin) tạo trước `Identity.User` cho cả 4 (Role `Basic`) — **TRƯỚC**
-   khi tạo Employee, để `EmployeeService.CreateAsync` tự `SyncAutoGrantedPermissionsCoreAsync` thành
-   công ngay lần tạo đầu (không no-op như trường hợp User chưa tồn tại, xem cảnh báo ở đầu mục 5.6).
-3. `POST /api/Employee` (Admin) tạo 4 Employee: `T-ST-CVIT`/`T-GL-CVIT`/`T-TL-CVIT` (`GroupId=6`,
-   `JobTitleId` tương ứng ST=15/GL=16/TL=17), `T-MGR-CV` (`DepartmentId=6`, `JobTitleId=18`).
-4. Mật khẩu cấp 2 + chữ ký (ảnh PNG 1x1 placeholder, chỉ 3 tài khoản `RequiresSignature=true`) — cả 2
-   đều là luồng self-service + xác nhận email (`SecondaryPasswordController`/`UserSignatureController`),
-   không áp dụng được cho tài khoản TEST không có hộp thư thật. Bypass bằng 1 controller Admin TẠM THỜI
-   (`TempSeedCongVuItController`, viết → build → gọi 2 action `secondary-password`/`signature` → xoá
-   file → build lại → xác nhận route trả 404) — cùng kỹ thuật đã dùng để backfill chữ ký
-   `OtFormApprovalHistory` trước đó, KHÔNG để lại code tạm trong repo.
-5. Verify sống: `POST /api/Auth/login` bằng cả 4 `UserName`/`Test@2026` — login OK, `data.user.permissions`
-   đúng theo Chức vụ (`gl_cvit`/`tl_cvit`/`mgr_cv` có `Attendance.OTForm.Approve` +
-   `Attendance.UserSignature.Update` + `Attendance.SecondaryPassword.Update`; `st_cvit` không có
-   `Approve` — khớp đúng cấu hình `JobTitlePermission` hiện có của Chức vụ "Staff", không phải lỗi mới).
-   **Chưa test tay qua UI thật** việc tạo + duyệt hết 1 đơn "theo Nhóm" bằng đủ 4 cấp này.
-
-### 5.8. Đăng nhập bằng mã QR (app Flutter "YEV Scan")
-Admin in QR cho từng user; app quét QR → nhận JWT như đăng nhập thường. **QR KHÔNG chứa `UserId`** (id tuần tự,
-đoán được → ai cũng đăng nhập thay người khác) mà chứa mã ngẫu nhiên 32 byte, dạng `YEVQR1:<base64url>`.
-- **Lưu trữ:** `LoginQrCode` chỉ giữ **SHA-256** của mã → mã gốc chỉ lấy được **1 lần** ngay lúc tạo; muốn in lại
-  phải tạo mã mới. Mỗi user tối đa 1 mã hoạt động (`RevokedAt == null`): tạo mã mới tự thu hồi mã cũ.
-- **Vòng đời (phương án B, theo yêu cầu):** mã dài hạn, dùng nhiều lần, không tự hết hạn; chỉ hết hiệu lực khi
-  Admin thu hồi/tạo lại hoặc xoá User (cascade). Ai chụp được QR là đăng nhập được → coi như mật khẩu.
-- **Quét:** `POST /api/Auth/qr-login` (`[AllowAnonymous]`) body `{ code }` (nhận có/không tiền tố `YEVQR1:`).
-  `LoginQrService.ConsumeAsync` tra theo hash → lấy `User.UserName` → dựng `ClaimsPrincipal` mồi
-  `Name = UserName` → chạy qua đúng `MyClaimsTransformation` rồi `BuildSession` (cùng nhánh `login`), response
-  `{ user, token }` y hệt `login`. Mã sai/đã thu hồi → 400 "Mã QR không hợp lệ hoặc đã bị thu hồi."
-- **Quản trị:** `LoginQrController` (`api/LoginQr`), **1 permission `Identity.LoginQr.Manage`** (migration
-  `AddLoginQr`, chỉ gán `Admin`): `GET /` (user đang có mã), `POST /{userId}` (tạo mới + thu hồi cũ, trả
-  `qrPayload`), `DELETE /{userId}` (thu hồi), `GET /{userId}/logs` (50 mục gần nhất).
-- **Log (`LoginQrLog`):** `Created`/`Revoked` (kèm `ActorUserId` + IP admin), `LoginSuccess`/`LoginFailed` (IP +
-  User-Agent của máy quét; quét mã không tồn tại ghi `UserId = null`). Chưa có UI xem log tổng, chỉ log theo user
-  trong dialog QR.
-- Chưa làm: giới hạn số lần quét sai theo IP (mã 256-bit nên brute-force không khả thi, nhưng mỗi lần quét sai
-  vẫn ghi 1 dòng log).
-
-### 5.9. Email người dùng & email nhận theo module
-Một người có thể có nhiều email; email AD có thể sai; mỗi module có thể cần gửi về email khác. Identity là **nguồn chân lý**
-cho email (email/user domain bên Asset lấy từ Tanium chỉ để tham khảo).
-- **Bất biến** (`UserEmailService`): user có ≥1 `UserEmail` thì có đúng 1 `IsPrimary`, và `User.Email` = email chính (null khi không có
-  email). `User.Email` giữ lại để claim `Email` trong JWT và code cũ không đổi.
-- **Chỉ Admin quản lý** (`Identity.UserEmail.Manage`, migration `AddUserEmails`) — không có trang người dùng tự sửa nên không có bước
-  xác nhận qua mail. API ở [identity-api-fe.md §4.11](identity-api-fe.md).
-- **Đề xuất đồng bộ** (`GET .../suggestions`): `IActiveDirectoryAuthService.GetEmailAddresses` đọc AD `mail` + mọi `smtp:` trong
-  `proxyAddresses`; Admin tự chọn thêm. Thêm nguồn **Tanium**: `IDeviceContactDirectoryService.GetEmailsByDomainAccountAsync(UserName)` (Asset) trả email của mọi máy có
-  `Device.ManagerDomainAccount` = `UserName`; ghi chú của đề xuất liệt kê mã máy. Đề xuất AD ưu tiên hơn khi trùng email.
-- **Đồng bộ từ form thiết bị** (Asset → Identity): `UserEmailService.LinkDomainAccountEmailsAsync` nhận `DOMAIN\user` + danh sách email; chưa có User thì
-  `IUserDirectoryService.EnsureUserExistsAsync` tạo (role `Basic`, họ tên = `Device.Manager` nếu có), rồi thêm email `Source=Manual` — không đổi email chính,
-  không tự gán module. Gán module làm ngay ở form thiết bị: mỗi email đã có trên Identity có checkbox từng module, gọi lại `PUT user/{userId}/modules` (cùng luật: 1 module chỉ gửi về 1 email, bỏ tick = về email chính; dialog Email của Identity vẫn dùng được). Form cũng kéo ngược email từ Identity xuống (nút thêm email Identity đang có mà thiết bị chưa liệt kê — chỉ thêm vào form, lưu cùng thiết bị) và đặt email chính qua `PUT user/{userId}/{userEmailId}/primary`; xoá email khỏi Identity (nút riêng, có xác nhận) qua `DELETE user/{userId}/{userEmailId}` — không xoá email trên thiết bị, và vẫn bị chặn khi xoá email chính lúc User còn email khác. Endpoint `GET domain-account` cho form biết User/email đã có để hiện badge. Cùng permission `Identity.UserEmail.Manage`.
-- **Danh mục module**: `Shared.Application/Helper/EmailModules.cs` (`Attendance` đã áp dụng; `Workflow` lưu được nhưng
-  `IsApplied=false` — Workflow vẫn gửi theo `Employees.Email` riêng của nó).
-- **Gửi mail**: `IUserDirectoryService.GetContactInfoAsync(userName, moduleCode)` trả email Admin gán cho module đó, không có thì email
-  chính. Attendance gọi với `EmailModules.Attendance` ở mọi chỗ gửi (duyệt đơn, báo người tạo, chữ ký, mật khẩu cấp 2).
-- Migration backfill: mỗi `Users.Email` có sẵn thành 1 `UserEmail` chính (Source=AD).
-
-### 5.7. `EnsureUserExistsAsync` — tạo User idempotent cho import cross-module
-Thêm method mới vào `IUserDirectoryService` (`Shared.Application/Interfaces/`, contract dùng chung để
-module khác gọi vào Identity mà không cần ProjectReference trực tiếp):
-`Task<bool> EnsureUserExistsAsync(string userName, string? fullName, string? roleName)`. Khác
-`UserService.CreateUserAsync` (throw nếu `UserName` đã tồn tại, dùng cho form "Tạo user" tay từng
-người, §5.1) — ở đây `UserName` đã tồn tại là chuyện BÌNH THƯỜNG (import hàng loạt có thể trỏ tới
-người đã có tài khoản), nên **no-op** thay vì lỗi (trả `false`, giữ nguyên Role hiện có). Chưa tồn tại
-→ tạo mới với Role theo `roleName` (rỗng/null → mặc định `"Basic"`, khớp đúng hành vi JIT-provision
-hiện có ở `MyClaimsTransformation`), trả `true`. Implement ở
-`Identity.Application/Services/UserDirectoryService.cs`. Người gọi đầu tiên:
-`EmployeeIdentityLinkImportService` bên Attendance (permission mới `Identity.User.BulkImport`, chỉ
-Admin) — xem `docs/docs-be/attendance-module.md §Import Excel liên kết Identity ↔ Attendance`.
-
-## 6. API Endpoints
-### `AuthController` — `/api/Auth`
-| Method | Route | Permission |
-|---|---|---|
-| POST | `windows-login` | Negotiate |
-| GET | `me` | Bearer, không cần permission (§5.3) |
-| POST | `login` | AllowAnonymous — tự bind AD bằng username/password (§5.4) |
-| POST | `qr-login` | AllowAnonymous — đăng nhập bằng mã QR (§5.8) |
-| POST | `create-user` | `Identity.User.Create` |
-| GET | `get-all-users-with-roles` | `Identity.User.View` |
-| POST | `update-user-roles` | `Identity.User.UpdateRoles` |
-| PUT | `update-user-fullname` | `Identity.User.UpdateFullName` |
-| DELETE | `delete-user/{userId}` | `Identity.User.Delete` |
-| GET | `get-all-roles` | `Identity.Role.View` |
-| POST | `create-role` | `Identity.Role.Create` |
-| PUT | `update-role/{roleId}` | `Identity.Role.Update` |
-| DELETE | `delete-role/{roleId}` | `Identity.Role.Delete` |
-
-Seed role: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiêt bị`.
-
-### `LoginQrController` — `/api/LoginQr` (`Identity.LoginQr.Manage`, §5.8)
-| Method | Route | Mô tả |
-|---|---|---|
-| GET | `` | User đang có mã QR hoạt động |
-| POST | `{userId}` | Tạo mã mới (thu hồi mã cũ), trả `qrPayload` 1 lần |
-| DELETE | `{userId}` | Thu hồi mã |
-| GET | `{userId}/logs` | 50 log gần nhất |
-
-### `UserEmailController` — `/api/UserEmail` (`Identity.UserEmail.Manage`, §5.9)
-| Method | Route | Mô tả |
-|---|---|---|
-| GET | `user/{userId}` | Danh sách email + email theo module |
-| GET | `user/{userId}/suggestions` | Đề xuất từ AD (mail + alias) |
-| POST | `user/{userId}` | Thêm email |
-| DELETE | `user/{userId}/{userEmailId}` | Xoá (không xoá được email chính khi còn email khác) |
-| PUT | `user/{userId}/{userEmailId}/primary` | Đặt email chính |
-| PUT | `user/{userId}/modules` | Gán lại toàn bộ email theo module |
-
-### `PermissionController` — `/api/Permission`
-| Method | Route | Permission | Mô tả |
+### 6.2. User, Role, Permission
+| Method | Route | Quyền | Ghi chú |
 |---|---|---|---|
-| GET | `all` | `Identity.Permission.View` | Toàn bộ, nhóm 2 cấp Module>Entity (`PermissionModuleGroupDto`) |
-| GET | `role/{roleId}` | `Identity.Permission.View` | Permission của 1 role (phẳng) |
-| PUT | `role/{roleId}` | `Identity.Role.Update` | Gán lại toàn bộ (body `List<int>`) |
-| GET | `user/{userId}` | `Identity.Permission.View` | Override (grant/deny) của 1 User |
-| GET | `user/{userId}/effective` | `Identity.Permission.View` | Permission hiệu lực cuối (base+override) |
-| PUT | `user/{userId}` | `Identity.User.UpdatePermissions` | Gán lại override (`UpdateUserPermissionOverridesDto`) |
+| GET | `/api/Auth/get-all-users-with-roles?roleId=` | `Identity.User.View` | `roleId` tuỳ chọn; không phân trang; **không trả `permissions`** |
+| POST | `/api/Auth/create-user` | `Identity.User.Create` | `{userName[Required], deviceName?, fullName?, roleIds?}`; 400 nếu trùng/`roleIds` sai |
+| POST | `/api/Auth/update-user-roles` | `Identity.User.UpdateRoles` | `{userId, roleIds}` = **toàn bộ** danh sách cuối (thiếu = gỡ) |
+| PUT | `/api/Auth/update-user-fullname` | `Identity.User.UpdateFullName` | `{userId, fullName}`; 400 nếu rỗng, 404 nếu sai id; trả `UserDto` |
+| DELETE | `/api/Auth/delete-user/{userId}` | `Identity.User.Delete` | xoá cứng |
+| GET/POST/PUT/DELETE | `/api/Auth/get-all-roles` · `create-role` · `update-role/{id}` · `delete-role/{id}` | `Identity.Role.View/Create/Update/Delete` | `{roleName, description}`; 400 nếu trống/trùng; xoá mềm. Seed role: `Basic`, `Admin`, `Quản lý Hợp Đồng`, `Quản lý Thiết bị` |
+| GET | `/api/Permission/all` | `Identity.Permission.View` | Nhóm 2 cấp `[{module, entities:[{entity, permissions[]}]}]`; FE flatten `entities.flatMap(e => e.permissions)` |
+| GET/PUT | `/api/Permission/role/{roleId}` | View / `Identity.Role.Update` | PUT body `[1,2,5]` = **toàn bộ** Id cuối |
+| GET | `/api/Permission/user/{userId}` | `Identity.Permission.View` | Override `[{permissionId, code, isGranted, isAutoGranted}]` |
+| GET | `/api/Permission/user/{userId}/effective` | `Identity.Permission.View` | Hiệu lực cuối (gồm phần tự động cấp) |
+| PUT | `/api/Permission/user/{userId}` | `Identity.User.UpdatePermissions` | `{grantPermissionIds, denyPermissionIds}`; 400 nếu 1 id ở cả hai |
 
-**Không có** API CRUD `Permission` (cố định, seed qua migration). Chỉ CRUD `RolePermission`/`UserPermission`.
+Không có API CRUD `Permission` (cố định). Override `isAutoGranted=true` là dòng Attendance tự cấp theo Chức vụ (không phải Admin): `PUT user/{id}` chỉ xoá/ghi lại phần `isAutoGranted=false`, giữ nguyên phần tự động cấp; id trùng đúng dòng tự động cấp = Admin **chiếm thủ công** (đổi `isGranted`, `isAutoGranted=false`, ngừng đồng bộ theo Chức vụ). FE `UserPermissionOverrideManager.tsx` chỉ đưa override thủ công vào state gửi lên.
 
-## 7. Cần làm tiếp
-- `AuthController` try/catch + `Fail<>()` thủ công (khác chuẩn §6) — nên refactor về ném exception.
-- `RoleService.GetRoleByIdAsync` không check null.
-- Chưa tách `UserController`; chưa có API sửa User (kể cả `DeviceName`).
-- `UserDto` thiếu `[Required]`; `RoleDto` nên tách input/output.
-- Role `Basic`/`Quản lý Hợp Đồng`/`Quản lý Thiết bị` chưa có permission nào (chỉ `Admin` seed full).
+### 6.3. Mã QR đăng nhập — `/api/LoginQr` (`Identity.LoginQr.Manage`, chỉ Admin)
+`GET /` user đang có mã `[{userId, createdAt, lastUsedAt, useCount}]` · `POST /{userId}` tạo mã mới (vô hiệu mã cũ), trả `{userId, userName, fullName, qrPayload, createdAt}` — `qrPayload` **chỉ có trong response này** (FE dùng `qrcode` vẽ ảnh) · `DELETE /{userId}` thu hồi (400 nếu chưa có mã) · `GET /{userId}/logs` 50 log gần nhất, mới trước. FE: `LoginQrDialog.tsx`.
+
+### 6.4. Email người dùng — `/api/UserEmail` (`Identity.UserEmail.Manage`, chỉ Admin)
+Mọi endpoint ghi trả lại toàn bộ `UserEmailOverviewDto { userId, userName, fullName, emails[{id, email, source, isPrimary, note, createdAt}], modules[{moduleCode, moduleName, isApplied, userEmailId}] }`. `source`: `0`=AD, `1`=Alias AD, `2`=Tanium, `3`=Nhập tay. `modules[].userEmailId = null` → module gửi về email chính; `isApplied=false` → lưu được nhưng chưa có tác dụng.
+
+| Method | Route | Ghi chú |
+|---|---|---|
+| GET | `user/{userId}` | Overview |
+| GET | `user/{userId}/suggestions` | `[{email, source, note, alreadyAdded}]` (AD + Tanium) |
+| POST | `user/{userId}` | `{email[Required, EmailAddress, ≤255], source (mặc định 3), note?, isPrimary}`; email đầu tiên luôn thành chính; 400 nếu trùng |
+| DELETE | `user/{userId}/{userEmailId}` | 400 nếu xoá email chính khi còn email khác; xoá email đang gán module → module quay về email chính |
+| PUT | `user/{userId}/{userEmailId}/primary` | Đặt email chính (đồng bộ `UserDto.email`) |
+| PUT | `user/{userId}/modules` | `{items:[{moduleCode, userEmailId\|null}]}` = **toàn bộ** cấu hình cuối; 400 nếu module không hỗ trợ/trùng/email không thuộc user |
+| GET | `domain-account?domainAccount=DOMAIN\user` | `{domainAccount, userExists, userId, fullName, emails[]}` — cho form thiết bị hiện trạng thái |
+| POST | `link-domain-account` | `{domainAccount[Required, DOMAIN\user, ≤100], fullName?, emails:[{email, note?}] (≥1)}` → `{userId, userName, userCreated, addedEmails[], skippedEmails[]}` |
+
+FE: nút "Email" trên mỗi dòng `UserRoleModal` → `UserEmailDialog.tsx`; form thiết bị Asset (`DeviceForm.tsx`) dùng `domain-account`, `link-domain-account`, `modules`, `primary`.
+
+### 6.5. Lỗi thường gặp
+| Hiện tượng | Xử lý |
+|---|---|
+| `windows-login` luôn 401 | Thiếu `credentials:"include"` hoặc máy không trong domain |
+| Trình duyệt hỏi tài khoản domain lặp lại | Đang gọi `windows-login` nhiều lần → dùng `/me`; lần đầu vẫn hỏi = máy chưa bật SSO cho origin BE |
+| 401 dù đã login | Token hết hạn (120') → `/me`, hỏng nữa thì `windows-login` |
+| 403 dù token còn hạn | Role thiếu permission → `PUT /Permission/role/{id}`; có Role đủ quyền vẫn 403 = bị **deny override** → `GET /Permission/user/{id}` rồi gỡ |
+| CORS chặn | Origin ngoài whitelist → thêm vào policy `AllowNextJs` ở `Program.cs` |
+
+## 7. Còn nợ
+`AuthController` còn try/catch + `Fail<>()` thủ công (nên ném exception); `RoleService.GetRoleByIdAsync` không check null; chưa tách `UserController`, chưa có API sửa `DeviceName`; `UserDto` thiếu `[Required]`, `RoleDto` nên tách input/output; Role `Basic`/`Quản lý Hợp Đồng`/`Quản lý Thiết bị` chưa gán permission nào (chỉ `Admin` full).
 
 ## 8. Checklist thêm nghiệp vụ Identity
-Đọc core + file này → entity `partial class` + DbSet + Fluent → `I<Entity>Repository` + impl + property vào `IIdentityUnitOfWork`+`IdentityUnitOfWork` → Service `: BaseService<IIdentityUnitOfWork>` (Scrutor tự DI) → Controller `: BaseController` + `[RequirePermission("Identity.<Entity>.<Action>")]` → permission mới thêm vào migration seed (§9) + gán `Admin` → migration `dotnet ef migrations add <Name> --project Indentity.Infrastructure --startup-project CompanySystem.HostApi --context IdentityDbContext` (bắt buộc `--context`) → cập nhật doc.
+Entity `partial class` + DbSet + Fluent → `I<Entity>Repository` + impl + property vào `IIdentityUnitOfWork`/`IdentityUnitOfWork` → Service `: BaseService<IIdentityUnitOfWork>` → Controller `: BaseController` + `[RequirePermission("Identity.<Entity>.<Action>")]` → permission mới vào migration seed + gán `Admin` → `dotnet ef migrations add <Name> --project Indentity.Infrastructure --startup-project CompanySystem.HostApi --context IdentityDbContext` (**bắt buộc `--context`**) → cập nhật doc.
 
-## 9. Phân quyền chi tiết (RBAC + Permission)
-Mỗi action ↔ 1 mã `Module.Entity.Action`. Role sở hữu tập Permission (N-N). User có Role (+ override riêng §9.1).
+## 9. Phân quyền chi tiết (RBAC + override)
+Mỗi action ↔ 1 mã `Module.Entity.Action`; Role sở hữu tập Permission (N-N); User có Role + override riêng.
+- **Enforce** (`Shared.Application/Authorization/`): `RequirePermissionAttribute : AuthorizeAttribute` → `PermissionPolicyProvider` (policy prefix `"Permission:"` build động) → `PermissionAuthorizationHandler` (`HasClaim("Permission", code)`); claim nạp bởi `MyClaimsTransformation` mỗi request (§3). Đăng ký Singleton ở `Program.cs`.
+- **Danh sách mã đã seed** (~64, rải nhiều migration): `Asset.{Branch|DeviceGroup|DeviceDepartment|Device|DeviceType|Supplier|Software|SoftwareGroup|IpPrefix}` View/Create/Update/Delete · `Asset.IpAddress` +`Assign` · `Asset.DeviceConfiguration`/`DeviceSoftware` CRUD · `Asset.Report` View · `Asset.TransferHistory` View/Create · `Asset.Setting` View/Update · `Asset.AuditTrail` View · `Identity.User` View/UpdateRoles/UpdatePermissions/UpdateFullName/Create/Delete/BulkImport · `Identity.Role` View/Create/Update/Delete · `Identity.Permission` View · `Identity.LoginQr` Manage · `Identity.UserEmail` Manage. Mã đầy đủ: bảng `Permissions` hoặc các migration `Add*Permission*`.
+- **Seed:** migration INSERT toàn bộ `Permissions` + gán full cho `Admin` (tra `WHERE RoleName=N'Admin'`, không hardcode Id, qua `migrationBuilder.Sql`). Role khác không gán mặc định; Admin tự cấu hình.
 
-**Enforce — Custom Policy** (`Shared.Application/Authorization/`, cần `FrameworkReference Microsoft.AspNetCore.App`):
-- `PermissionRequirement(string) : IAuthorizationRequirement`.
-- `PermissionAuthorizationHandler` — check `context.User.HasClaim("Permission", req.Permission)`.
-- `PermissionPolicyProvider` — bọc `DefaultAuthorizationPolicyProvider`; policy prefix `"Permission:"` build động, còn lại delegate mặc định.
-- `RequirePermissionAttribute : AuthorizeAttribute` — `[RequirePermission("Asset.Device.Create")]`.
-- Đăng ký `Program.cs`: `AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>()` + `AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>()`.
-- Claim `Permission` nạp trong `MyClaimsTransformation`, tự refresh mỗi request (§5).
-
-**Danh sách permission đã seed** (~64 mã, seed rải qua nhiều migration):
-| Module.Entity | Action |
-|---|---|
-| `Asset.Branch` / `.DeviceGroup` / `.DeviceDepartment` / `.Device` / `.DeviceType` / `.Supplier` / `.Software` / `.SoftwareGroup` / `.IpPrefix` | View, Create, Update, Delete |
-| `Asset.IpAddress` | View, Create, Update, Delete, **Assign** (chung assign/unassign) |
-| `Asset.DeviceConfiguration` | View, Create, Update, Delete (initial/history dùng lại View/Delete) |
-| `Asset.DeviceSoftware` | View, Create, Update, Delete (picker→View, sync→Update) |
-| `Asset.Report` | View |
-| `Asset.TransferHistory` | View, Create |
-| `Asset.Setting` | View, Update |
-| `Asset.AuditTrail` | View (seed migration `AddAssetAuditTrailPermission`, 2026-07-16 — **CHƯA apply**) |
-| `Identity.User` | View, UpdateRoles, UpdatePermissions, UpdateFullName, Create, Delete, **BulkImport** (mới 2026-09-03, migration `AddIdentityUserBulkImportPermission` — chỉ gán Admin, xem §5.7) |
-| `Identity.Role` | View, Create, Update, Delete |
-| `Identity.Permission` | View |
-| `Identity.LoginQr` | **Manage** (mới 2026-10-02, migration `AddLoginQr` — chỉ gán Admin, §5.8) |
-| `Identity.UserEmail` | **Manage** (migration `AddUserEmails` — chỉ gán Admin, §5.9) |
-
-**Seed & deploy**: migration INSERT toàn bộ `Permissions` + gán full cho `Admin` (tra `WHERE RoleName=N'Admin'`, không hardcode Id) qua `migrationBuilder.Sql(...)` — tránh Admin mất quyền khi chuyển role-check → permission-check. Role khác **không** gán mặc định, Admin tự cấu hình qua `PUT /api/Permission/role/{roleId}`.
-
-### 9.1. Override permission theo User
-Tránh "role rác": giữ Role làm nền, override riêng lẻ theo User cho ngoại lệ.
-`UserPermission(UserId, PermissionId, IsGranted)`: `true`→cấp thêm, `false`→thu hồi (deny).
-
-Công thức hiệu lực (dùng ở `MyClaimsTransformation` + `GetEffectivePermissionsForUserAsync`):
-```
-base   = ∪ Permissions của mọi Role của User
-grants = { IsGranted=true }, denies = { IsGranted=false }
-effective = (base ∪ grants) \ denies      // DENY luôn thắng
-```
-Ràng buộc: `UpdateUserPermissionOverridesAsync` ném `DomainException` nếu cùng 1 `PermissionId` ở cả Grant lẫn Deny. Cập nhật = **thay thế toàn bộ** (xóa hết override cũ rồi insert lại). Đã seed `Identity.User.UpdatePermissions` full cho `Admin`. Chưa có UI FE.
+### 9.1. Override theo User
+Giữ Role làm nền, override cho ngoại lệ: `UserPermission.IsGranted` `true` = cấp thêm, `false` = thu hồi.
+`effective = (∪ Permissions của mọi Role ∪ grants) \ denies` — **DENY luôn thắng** (dùng ở `MyClaimsTransformation` + `GetEffectivePermissionsForUserAsync`). `UpdateUserPermissionOverridesAsync` ném `DomainException` nếu 1 `PermissionId` ở cả Grant lẫn Deny; cập nhật thay thế toàn bộ phần thủ công (xem §6.2 về `isAutoGranted`).

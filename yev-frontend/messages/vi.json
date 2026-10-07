@@ -795,7 +795,7 @@
       "calendarImportError": "Import lịch ngày nghỉ thất bại.",
       "calendarTemplateError": "Không thể tải file mẫu.",
       "calendarLoadError": "Không thể tải lịch ngày nghỉ.",
-      "calendarEmpty": "Năm {year} chưa có lịch ngày nghỉ — mọi ngày được tính là ngày làm việc.",
+      "calendarEmpty": "Năm {year} chưa có lịch ngày nghỉ — chỉ Chủ nhật được tính là ngày nghỉ, hãy import lịch để có ngày lễ.",
       "calendarTypeSunday": "Chủ nhật",
       "calendarTypePublicHoliday": "Ngày lễ",
       "calendarTypeSpecialHoliday": "Nghỉ đặc biệt",

@@ -184,7 +184,7 @@ namespace Asset.Application.Services
         }
 
         // Không có file mẫu công ty cho kiểm kê (khác ServerCheck) — tự dựng workbook mới bằng ClosedXML,
-        // layout riêng (AGENTS.md §4.8 chỉ bắt buộc PDF phải vẽ ở FE, Excel do BE dựng vẫn hợp lệ).
+        // layout riêng (frontend-conventions.md §5 chỉ bắt buộc PDF phải vẽ ở FE, Excel do BE dựng vẫn hợp lệ).
         // 1 dòng = 1 thiết bị của phiên, cùng dữ liệu với màn báo cáo.
         public async Task<(byte[] Content, string FileName)> ExportSessionAsync(int sessionId)
         {

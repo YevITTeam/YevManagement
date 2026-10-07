@@ -23,7 +23,7 @@ const fieldClassName =
 
 // Sửa RIÊNG giới hạn OT/tháng/năm (2026-08-29) — permission hẹp Attendance.Employee.UpdateOtLimit,
 // dùng cho Người phụ trách Bộ phận (không có Attendance.Employee.Update nên không mở được EmployeeForm
-// chung) — xem docs/attendance-api-fe.md §Phân quyền theo Phòng ban.
+// chung) — xem docs/attendance-module.md §API §Phân quyền theo Phòng ban.
 export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: EmployeeOtLimitDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const tCommon = useTranslations("Common");

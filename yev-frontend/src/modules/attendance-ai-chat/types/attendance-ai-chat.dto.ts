@@ -1,4 +1,4 @@
-// Hợp đồng với BE: docs/docs-be/attendance-api-fe.md §10 (POST /api/AttendanceAiChat/stream).
+// Hợp đồng với BE: docs/docs-be/attendance-module.md §API (POST /api/AttendanceAiChat/stream).
 // BE KHÔNG lưu hội thoại — FE tự giữ `history` và gửi lại toàn bộ mỗi lượt. Cùng hình dạng với
 // modules/ai-chat/types/ai-chat.dto.ts (tính năng AI Chat của Asset) nhưng KHÔNG dùng chung file —
 // đây là 1 hợp đồng BE riêng (endpoint riêng, permission riêng), giữ đúng ranh giới module.

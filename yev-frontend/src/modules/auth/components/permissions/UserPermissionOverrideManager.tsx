@@ -22,11 +22,11 @@ const USERS_PAGE_SIZE = 10;
 
 export default function UserPermissionOverrideManager() {
     const { user: currentUser } = useAuth();
-    // PUT /api/Permission/user/{userId} yêu cầu permission Identity.User.UpdatePermissions (docs/identity-api-fe.md §4.8).
+    // PUT /api/Permission/user/{userId} yêu cầu permission Identity.User.UpdatePermissions (docs/identity-module.md §6).
     const canUpdateUserPermissions = hasPermission(currentUser, "Identity.User.UpdatePermissions");
 
     const [users, setUsers] = useState<UserDto[]>([]);
-    // Nhóm 2 cấp Module > Entity trả thẳng từ GET /api/Permission/all (docs/identity-api-fe.md §4.7, 2026-07-11).
+    // Nhóm 2 cấp Module > Entity trả thẳng từ GET /api/Permission/all (docs/identity-module.md §6, 2026-07-11).
     const [moduleGroups, setModuleGroups] = useState<PermissionModuleGroupDto[]>([]);
     const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
     const [userSearchTerm, setUserSearchTerm] = useState("");
@@ -116,7 +116,7 @@ export default function UserPermissionOverrideManager() {
     }, [users, userSearchTerm]);
 
     const [userPageIndex, setUserPageIndex] = useState(1);
-    // Tìm kiếm đổi → về trang 1 (snapshot so sánh ngay trong render, không dùng effect — AGENTS.md §4.5.3).
+    // Tìm kiếm đổi → về trang 1 (snapshot so sánh ngay trong render, không dùng effect — frontend-conventions.md §3).
     const [prevUserSearchTerm, setPrevUserSearchTerm] = useState(userSearchTerm);
     if (prevUserSearchTerm !== userSearchTerm) {
         setPrevUserSearchTerm(userSearchTerm);

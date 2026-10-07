@@ -1,4 +1,4 @@
-// Xem docs/asset-api-fe.md §5.10 — import Device hàng loạt từ Excel, quy trình 2 bước preview/confirm.
+// Xem docs/asset-module.md §4 — import Device hàng loạt từ Excel, quy trình 2 bước preview/confirm.
 
 // Dữ liệu thô đọc được từ 1 dòng Excel — dùng chung cho response preview và request confirm.
 // 2026-07-11: thêm 5 cột cấu hình (Hãng/Model/CPU/RAM/Ổ Cứng) giữa "Số SerialNumber" và "MQL Cũ".

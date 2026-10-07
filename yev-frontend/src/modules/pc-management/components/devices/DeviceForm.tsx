@@ -134,7 +134,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
         DeviceDepartmentApi.getAllDeviceDepartments().then((data) => setDeviceDepartments(data)).catch((err) => console.error(err));
     }, []);
 
-    // Nhóm cascading theo Bộ phận đã chọn (docs/asset-api-fe.md §2.1) — chưa chọn Bộ phận thì
+    // Nhóm cascading theo Bộ phận đã chọn (docs/asset-module.md §4) — chưa chọn Bộ phận thì
     // danh sách Nhóm rỗng và dropdown Nhóm bị disable. Reset "về rỗng" tính ngay trong render
     // (so sánh snapshot) — effect chỉ còn lo phần fetch thật (đã là .then()/.catch() thuần).
     const departmentKey = `${isOpen}|${values.departmentId}`;
@@ -613,7 +613,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                                         if (alreadyAddedToThisDevice) {
                                                             return `IP ${trimmedSearch} đã được thêm vào thiết bị này rồi.`;
                                                         }
-                                                        // `/available` only returns unused IPs (docs/asset-api-fe.md §4.2): a full address with no
+                                                        // `/available` only returns unused IPs (docs/asset-module.md §4): a full address with no
                                                         // match is taken by another device or unknown, not a search failure.
                                                         if (isFullIpFormat) {
                                                             return `IP ${trimmedSearch} không còn trống — đang dùng cho thiết bị khác hoặc không tồn tại.`;

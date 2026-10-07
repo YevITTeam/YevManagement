@@ -33,7 +33,6 @@ import StepCard, { type StepCardLabels } from "./StepCard";
 import StepHolders, { type StepHoldersLabels } from "./StepHolders";
 import CoordinatorsBox, { type CoordinatorsBoxLabels } from "./CoordinatorsBox";
 
-const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const sectionTitleClassName = "text-sm font-semibold text-[#191c1e]";
 // Compact trigger for the selects in this screen (default input trigger is too tall/wide for a tree UI).
 const compactSelectClassName =

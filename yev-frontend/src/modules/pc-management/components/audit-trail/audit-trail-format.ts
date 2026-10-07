@@ -1,5 +1,5 @@
 // Nhãn hiển thị + parse diff dùng chung cho AuditTrailList (grid-list toàn hệ thống) và
-// DeviceAuditHistoryPanel (lịch sử theo 1 bản ghi) — docs/asset-api-fe.md §7b.
+// DeviceAuditHistoryPanel (lịch sử theo 1 bản ghi) — docs/asset-module.md §4
 export const auditActionLabels: Record<string, string> = {
     Create: "Tạo mới",
     Update: "Cập nhật",

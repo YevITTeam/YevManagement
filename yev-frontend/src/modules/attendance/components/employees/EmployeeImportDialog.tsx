@@ -20,7 +20,7 @@ interface EmployeeImportDialogProps {
 
 // Pattern Preview → Confirm giống hệt import Device bên module Asset
 // (src/modules/pc-management/components/devices/ImportDeviceConfigurationDialog.tsx) —
-// docs/attendance-api-fe.md §3.7/§8.
+// docs/attendance-module.md §API/§8.
 export default function EmployeeImportDialog({ isOpen, onClose, onImported }: EmployeeImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const [file, setFile] = useState<File | null>(null);

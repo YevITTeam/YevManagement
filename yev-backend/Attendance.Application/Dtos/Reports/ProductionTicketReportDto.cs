@@ -2,7 +2,7 @@ namespace Attendance.Application.Dtos.Reports
 {
     // Báo cáo "Xuất số lượng phiếu đã sử dụng" theo ngày (chỉ đơn dưới chuyền, IsProductionForm=true,
     // Status=Completed — tức đã qua đủ mọi cấp duyệt bao gồm Trưởng phòng) — xem
-    // docs/Note_OT.txt mục 2, chốt thiết kế với người dùng 2026-08-28. FE tự dựng PDF từ DTO này
+    // docs/docs-be/attendance-module.md §Báo cáo & export dưới chuyền theo ngày. FE tự dựng PDF từ DTO này
     // (jsPDF, cùng pattern DeviceListReportPrintDialog.tsx) — BE chỉ trả JSON, không sinh PDF.
     public class ProductionTicketReportDto
     {

@@ -96,7 +96,7 @@ interface StatusDonutRow {
     color: string;
 }
 
-// Biểu đồ tròn (donut) vẽ tay bằng SVG stroke-dasharray — không thêm thư viện chart (AGENTS.md §4.1:
+// Biểu đồ tròn (donut) vẽ tay bằng SVG stroke-dasharray — không thêm thư viện chart (frontend-conventions.md:
 // hạn chế phụ thuộc mới) vì chỉ có 2 lát (Đang sử dụng/Chưa sử dụng), không cần cả 1 thư viện cho việc này.
 // Chart xếp TRÊN, chú thích xếp DƯỚI dạng hàng full-width (không đặt cạnh nhau) — khung thẻ chỉ rộng
 // ~1/3 màn hình nên nếu chia đôi ngang, nhãn dài ("Đang sử dụng") + số liệu dễ bị wrap xuống dòng lệch.

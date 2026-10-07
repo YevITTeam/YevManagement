@@ -31,7 +31,7 @@ export interface DeviceFilters {
     // "" = tất cả, "true"/"false" — lọc theo cờ "Cần kiểm tra hằng ngày (QR)", dùng để gom nhanh danh
     // sách in QR cho phòng server (asset-module.md §1.19/§1.21).
     requiresDailyCheck: string;
-    // "" = tất cả, ngược lại là Id (dạng string) của Nhóm/Bộ phận — lọc chính xác qua API (docs/asset-api-fe.md §5.2).
+    // "" = tất cả, ngược lại là Id (dạng string) của Nhóm/Bộ phận — lọc chính xác qua API (docs/asset-module.md §4).
     groupId: string;
     departmentId: string;
 }

@@ -1,4 +1,4 @@
-// Khớp asset-api-fe.md §7d. Category: 0=Server, 1=Network, 2=Ups.
+// Khớp asset-module.md §4 Category: 0=Server, 1=Network, 2=Ups.
 // ItemStatus: 0=Pending (chưa quét), 1=Ok, 2=Ng. SessionStatus: 0=InProgress, 1=Completed.
 export interface ServerCheckItemDto {
     id: number;

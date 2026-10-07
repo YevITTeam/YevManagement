@@ -7,9 +7,7 @@ using Shared.Application.Services;
 
 namespace Attendance.Application.Services
 {
-    // 2 báo cáo theo ngày cho đơn "dưới chuyền" đã Hoàn tất (docs/Note_OT.txt mục 1 dòng 10 và mục 2),
-    // chốt thiết kế với người dùng 2026-08-28 — xem lịch sử trao đổi trong docs/attendance-module.md
-    // §Báo cáo dưới chuyền khi cập nhật doc. Chỉ tính đơn IsProductionForm=true, Status=Completed
+    // 2 báo cáo theo ngày cho đơn "dưới chuyền" đã Hoàn tất (docs/docs-be/attendance-module.md §Báo cáo & export dưới chuyền theo ngày). Chỉ tính đơn IsProductionForm=true, Status=Completed
     // (đã qua đủ mọi cấp duyệt, không chỉ riêng Trưởng phòng — người dùng xác nhận "đơn phải trạng
     // thái hoàn tất thì mới được tính vào").
     public class ProductionOtReportService : BaseService<IAttendanceUnitOfWork>, IProductionOtReportService

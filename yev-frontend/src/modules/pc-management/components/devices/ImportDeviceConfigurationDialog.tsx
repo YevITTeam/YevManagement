@@ -7,8 +7,9 @@ import { toast } from "react-toastify";
 import { DeviceConfigurationImportApi } from "@/modules/pc-management/api/device-configuration-import.api";
 import { DeviceTypeApi } from "@/modules/pc-management/api/device-type.api";
 import type { DeviceTypeDto } from "@/modules/pc-management/types/device-type.dto";
-import type {
-    DeviceConfigurationImportConfirmResultDto,
+import {
+    DomainAccountState,
+    type DeviceConfigurationImportConfirmResultDto,
     DeviceConfigurationImportPreviewRowDto,
     DeviceMissingInTaniumDto,
 } from "@/modules/pc-management/types/device-configuration-import.dto";
@@ -51,6 +52,7 @@ export default function ImportDeviceConfigurationDialog({
     } | null>(null);
     const [result, setResult] = useState<DeviceConfigurationImportConfirmResultDto | null>(null);
     const [localSkippedRows, setLocalSkippedRows] = useState<LocalSkippedRow[]>([]);
+    const [createMissingUsers, setCreateMissingUsers] = useState(true);
     // Tiền tố mã máy đối chiếu báo cáo — người dùng có thể sửa tự do, mặc định đủ 4 họ mã chuẩn
     // (YDC/YLC/YDF/TYC, xem StandardFamilyPrefixes bên BE), không giới hạn phải nhập đúng 4 mã này.
     // YDF không có trong bảng LoaiThietBi (nó là 1 họ mã con của YDC/Desktop) nên không xuất hiện
@@ -211,7 +213,7 @@ export default function ImportDeviceConfigurationDialog({
                 ram: row.ram,
                 size: row.size,
             }));
-            const confirmResult = await DeviceConfigurationImportApi.confirmImport(rawRows);
+            const confirmResult = await DeviceConfigurationImportApi.confirmImport(rawRows, createMissingUsers);
             setResult(confirmResult);
             setLocalSkippedRows(
                 rows
@@ -224,10 +226,39 @@ export default function ImportDeviceConfigurationDialog({
                     `cập nhật tài khoản domain cho ${confirmResult.managerAccountUpdatedCount} thiết bị, thêm ${confirmResult.emailAddedCount} email` +
                     (confirmResult.ipReassignedCount > 0 ? `, gán IP cho ${confirmResult.ipReassignedCount} thiết bị.` : ".")
             );
+            if (confirmResult.usersUnavailableCount > 0 || confirmResult.usersFailedCount > 0) {
+                toast.warn(
+                    `Chưa tạo được user cho ${confirmResult.usersUnavailableCount + confirmResult.usersFailedCount} tài khoản ` +
+                        "(không kết nối được AD hoặc tạo lỗi) — đồng bộ lại sau để tạo bù."
+                );
+            }
         } catch (err) {
             toast.error(getApiErrorMessage(err, "Xác nhận đồng bộ thất bại."));
         } finally {
             setIsConfirming(false);
+        }
+    };
+
+    const willCreateCount = new Set(
+        rows
+            .filter((row) => row.isValid && row.accountState === DomainAccountState.WillCreate)
+            .map((row) => row.resolvedManagerDomainAccount?.toLowerCase())
+    ).size;
+
+    const renderAccountBadge = (state: number | null) => {
+        switch (state) {
+            case DomainAccountState.ExistsInIdentity:
+                return <span className="text-[#16a34a]">Đã có trên Identity</span>;
+            case DomainAccountState.WillCreate:
+                return <span className="font-semibold text-[#e3000f]">Sẽ tạo user mới</span>;
+            case DomainAccountState.Disabled:
+                return <span className="text-[#b45309]">Bị vô hiệu hoá trong AD</span>;
+            case DomainAccountState.NotInDirectory:
+                return <span className="text-[#b45309]">Không có trong AD</span>;
+            case DomainAccountState.DirectoryUnavailable:
+                return <span className="text-[#b45309]">Không kiểm tra được AD</span>;
+            default:
+                return null;
         }
     };
 
@@ -269,6 +300,13 @@ export default function ImportDeviceConfigurationDialog({
                             <span className="text-[#5e3f3a]">Ghi Serial: {result.serialUpdatedCount}</span>
                             <span className="text-[#5e3f3a]">Tài khoản domain: {result.managerAccountUpdatedCount}</span>
                             <span className="text-[#5e3f3a]">Email thêm mới: {result.emailAddedCount}</span>
+                            <span className="text-[#5e3f3a]">
+                                User Identity: tạo {result.usersCreatedCount}
+                                {result.usersSkippedCount > 0 ? `, bỏ qua ${result.usersSkippedCount}` : ""}
+                                {result.usersUnavailableCount + result.usersFailedCount > 0
+                                    ? `, chưa tạo được ${result.usersUnavailableCount + result.usersFailedCount}`
+                                    : ""}
+                            </span>
                             <span className={localSkippedRows.length > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 Bỏ qua (lỗi): {localSkippedRows.length}
                             </span>
@@ -485,6 +523,17 @@ export default function ImportDeviceConfigurationDialog({
                                 {summary.invalidRows > 0 && (
                                     <span className="text-[#930006]">— Các dòng lỗi sẽ tự bị bỏ qua khi xác nhận đồng bộ.</span>
                                 )}
+                                <label className="ml-auto flex cursor-pointer items-center gap-2 text-[#191c1e]">
+                                    <input
+                                        type="checkbox"
+                                        checked={createMissingUsers}
+                                        onChange={(e) => setCreateMissingUsers(e.target.checked)}
+                                        disabled={isBusy}
+                                        className="h-3.5 w-3.5 cursor-pointer accent-[#e3000f]"
+                                    />
+                                    Tạo user Identity (role Basic) cho tài khoản có trong AD
+                                    {willCreateCount > 0 ? ` — ${willCreateCount} tài khoản` : ""}
+                                </label>
                             </div>
                         )}
 
@@ -547,7 +596,10 @@ export default function ImportDeviceConfigurationDialog({
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.taniumIpAddress ?? "-"}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
                                                     {row.resolvedManagerDomainAccount ? (
-                                                        <div>{row.resolvedManagerDomainAccount}</div>
+                                                        <div>
+                                                            {row.resolvedManagerDomainAccount}
+                                                            <div className="text-[11px]">{renderAccountBadge(row.accountState)}</div>
+                                                        </div>
                                                     ) : row.lastLoggedInUser ? (
                                                         <div className="text-[#8a8f94]" title="Tài khoản Local — không lưu">
                                                             {row.lastLoggedInUser}

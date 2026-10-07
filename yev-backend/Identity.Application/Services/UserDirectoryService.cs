@@ -12,7 +12,14 @@ namespace Identity.Application.Services
     // Scrutor auto-registers this class against the interface at host startup (see docs/architecture-core.md §DI).
     public class UserDirectoryService : BaseService<IIdentityUnitOfWork>, IUserDirectoryService
     {
-        public UserDirectoryService(IIdentityUnitOfWork unitOfWork) : base(unitOfWork) { }
+        private const int MaxParallelDirectoryLookups = 8;
+
+        private readonly IActiveDirectoryAuthService _activeDirectoryService;
+
+        public UserDirectoryService(IIdentityUnitOfWork unitOfWork, IActiveDirectoryAuthService activeDirectoryService) : base(unitOfWork)
+        {
+            _activeDirectoryService = activeDirectoryService;
+        }
 
         public async Task<(string? Email, string? FullName)> GetContactInfoAsync(string userName, string moduleCode)
         {
@@ -117,6 +124,70 @@ namespace Identity.Application.Services
             await _unitOfWork.Users.AddAsync(newUser);
             await _unitOfWork.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<IReadOnlyList<DomainAccountInfo>> ResolveDomainAccountsAsync(IEnumerable<string> accounts)
+        {
+            var distinct = accounts
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (distinct.Count == 0) return Array.Empty<DomainAccountInfo>();
+
+            var existing = (await _unitOfWork.Users.FindAsync(x => distinct.Contains(x.UserName)))
+                .Select(x => x.UserName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var missing = distinct.Where(x => !existing.Contains(x)).ToList();
+            using var gate = new SemaphoreSlim(MaxParallelDirectoryLookups);
+            var lookups = await Task.WhenAll(missing.Select(async account =>
+            {
+                await gate.WaitAsync();
+                try { return (Account: account, Lookup: await Task.Run(() => _activeDirectoryService.FindAccount(account))); }
+                finally { gate.Release(); }
+            }));
+            var lookupByAccount = lookups.ToDictionary(x => x.Account, x => x.Lookup, StringComparer.OrdinalIgnoreCase);
+
+            return distinct.Select(account =>
+            {
+                if (existing.Contains(account)) return new DomainAccountInfo(account, DomainAccountState.ExistsInIdentity, null);
+
+                var lookup = lookupByAccount[account];
+                return lookup.Status switch
+                {
+                    AdAccountStatus.Found => new DomainAccountInfo(account, DomainAccountState.WillCreate, lookup.DisplayName),
+                    AdAccountStatus.Disabled => new DomainAccountInfo(account, DomainAccountState.Disabled, lookup.DisplayName),
+                    AdAccountStatus.NotFound => new DomainAccountInfo(account, DomainAccountState.NotInDirectory, null),
+                    _ => new DomainAccountInfo(account, DomainAccountState.DirectoryUnavailable, null)
+                };
+            }).ToList();
+        }
+
+        public async Task<IReadOnlyList<DomainAccountInfo>> EnsureDomainUsersAsync(IEnumerable<string> accounts)
+        {
+            var resolved = await ResolveDomainAccountsAsync(accounts);
+            var result = new List<DomainAccountInfo>(resolved.Count);
+            foreach (var info in resolved)
+            {
+                if (info.State != DomainAccountState.WillCreate)
+                {
+                    result.Add(info);
+                    continue;
+                }
+
+                try
+                {
+                    var created = await EnsureUserExistsAsync(info.Account, info.FullName, null);
+                    result.Add(info with { State = created ? DomainAccountState.Created : DomainAccountState.ExistsInIdentity });
+                }
+                catch
+                {
+                    result.Add(info with { State = DomainAccountState.Failed });
+                }
+            }
+
+            return result;
         }
     }
 }
