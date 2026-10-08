@@ -23,6 +23,23 @@
     "hourPlaceholder": "Giờ",
     "minutePlaceholder": "Phút"
   },
+  "Login": {
+    "title": "Đăng nhập",
+    "subtitle": "Dùng tài khoản Windows nội bộ để tiếp tục.",
+    "userName": "Tên đăng nhập",
+    "userNamePlaceholder": "vd. n.truong.da.pcd.it",
+    "password": "Mật khẩu",
+    "hidePassword": "Ẩn mật khẩu",
+    "showPassword": "Hiện mật khẩu",
+    "remember": "Ghi nhớ tài khoản",
+    "submit": "Đăng nhập",
+    "submitting": "Đang đăng nhập...",
+    "or": "hoặc",
+    "windows": "Đăng nhập bằng tài khoản Windows",
+    "ssoNote": "Chỉ dùng được trên máy đã cấu hình đăng nhập một chạm (SSO).",
+    "failed": "Đăng nhập thất bại. Vui lòng thử lại.",
+    "windowsFailed": "Đăng nhập bằng tài khoản Windows thất bại. Vui lòng thử lại."
+  },
   "Navigation": {
     "home": "Trang chủ",
     "admin": "Admin",

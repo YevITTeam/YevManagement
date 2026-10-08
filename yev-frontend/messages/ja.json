@@ -23,6 +23,23 @@
     "hourPlaceholder": "時",
     "minutePlaceholder": "分"
   },
+  "Login": {
+    "title": "ログイン",
+    "subtitle": "続行するには社内のWindowsアカウントを使用してください。",
+    "userName": "ユーザー名",
+    "userNamePlaceholder": "例: n.truong.da.pcd.it",
+    "password": "パスワード",
+    "hidePassword": "パスワードを隠す",
+    "showPassword": "パスワードを表示",
+    "remember": "アカウントを記憶する",
+    "submit": "ログイン",
+    "submitting": "ログイン中...",
+    "or": "または",
+    "windows": "Windowsアカウントでログイン",
+    "ssoNote": "シングルサインオン(SSO)が設定されたPCでのみ使用できます。",
+    "failed": "ログインに失敗しました。もう一度お試しください。",
+    "windowsFailed": "Windowsアカウントでのログインに失敗しました。もう一度お試しください。"
+  },
   "Navigation": {
     "home": "ホーム",
     "admin": "管理者",

@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { TimeRange } from "@/modules/attendance/components/ot-form/TimeRange";
 import { toast } from "react-toastify";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Car, Check, ChevronDown, Clock, History, MessageCircle, Printer, Trash2, User, UserX, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
@@ -16,11 +17,12 @@ import { formatHours } from "@/modules/attendance/lib/time";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
-import { useRouter, getPathname } from "@/navigation";
+import { useRouter } from "@/navigation";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import AccumulationHistoryModal from "@/modules/attendance/components/employees/AccumulationHistoryModal";
 import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
+import OtFormPrintView from "@/modules/attendance/components/ot-form/OtFormPrintView";
 
 interface OtFormDetailProps {
     id: number;
@@ -114,7 +116,6 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const tCommon = useTranslations("Common");
     const { user } = useAuth();
     const router = useRouter();
-    const locale = useLocale();
     const [form, setForm] = useState<OtFormDto | null>(null);
     const [hasMySignature, setHasMySignature] = useState<boolean | null>(null);
     const [hasSecondaryPassword, setHasSecondaryPassword] = useState<boolean | null>(null);
@@ -130,6 +131,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // §Cây chức vụ. BE chặn Completed (đã cộng lũy kế thật); FE ẩn luôn nút cho gọn thay vì để user
     // bấm rồi mới nhận lỗi 400.
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isPrintOpen, setIsPrintOpen] = useState(false);
     const [deleteReason, setDeleteReason] = useState("");
     const [isDeletingForm, setIsDeletingForm] = useState(false);
 
@@ -386,13 +388,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                         </button>
                     )}
                     <button
-                        onClick={() =>
-                            window.open(
-                                getPathname({ href: { pathname: "/ot-print", query: { id: String(form.id) } }, locale }),
-                                "_blank",
-                                "noopener,noreferrer"
-                            )
-                        }
+                        onClick={() => setIsPrintOpen(true)}
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                     >
                         {t("printButton")}
@@ -932,6 +928,18 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     </div>
                 </div>
             )}
+
+            {isPrintOpen &&
+                createPortal(
+                    <div id="ot-print-portal" className="fixed inset-0 z-50 flex justify-center bg-black/40 p-4">
+                        {/* Print only the popup: hide the rest of the page and un-fix the overlay */}
+                        <style>{`@media print{body>*:not(#ot-print-portal){display:none!important}#ot-print-portal,#ot-print-portal>div{position:static!important;display:block!important;overflow:visible!important;max-height:none!important;padding:0!important;background:none!important;box-shadow:none!important}}`}</style>
+                        <div className="max-h-full w-full max-w-5xl overflow-y-auto rounded-xl shadow-xl">
+                            <OtFormPrintView id={form.id} onClose={() => setIsPrintOpen(false)} />
+                        </div>
+                    </div>,
+                    document.body
+                )}
 
             {isDeleteModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
