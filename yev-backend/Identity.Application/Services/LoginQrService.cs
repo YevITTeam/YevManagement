@@ -55,6 +55,20 @@ namespace Identity.Application.Services
             };
         }
 
+        public async Task<List<LoginQrGeneratedDto>> GenerateBatchAsync(IReadOnlyCollection<int> userIds, int? actorUserId, string? ipAddress)
+        {
+            var ids = userIds.Distinct().ToList();
+            var found = (await _unitOfWork.Users.FindAsync(u => ids.Contains(u.Id))).Select(u => u.Id).ToHashSet();
+            var missing = ids.Where(id => !found.Contains(id)).ToList();
+            if (missing.Count > 0)
+                throw new DomainException($"Không tìm thấy người dùng: {string.Join(", ", missing)}.");
+
+            var result = new List<LoginQrGeneratedDto>(ids.Count);
+            foreach (var id in ids)
+                result.Add(await GenerateAsync(id, actorUserId, ipAddress));
+            return result;
+        }
+
         public async Task RevokeAsync(int userId, int? actorUserId, string? ipAddress)
         {
             var now = TimeHelper.GetCurrentUtcTime();

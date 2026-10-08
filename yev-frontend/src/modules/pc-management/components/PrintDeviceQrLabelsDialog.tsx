@@ -8,15 +8,16 @@ import { DeviceApi } from "@/modules/pc-management/api/device.api";
 import type { DeviceQrLabelDto } from "@/modules/pc-management/types/device-qr-label.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
-
-function escapeHtml(value: string) {
-    return value
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
+import {
+    ZEBRA_LABELS_PER_ROW,
+    ZEBRA_LABEL_HEIGHT_CM,
+    ZEBRA_LABEL_WIDTH_CM,
+    ZEBRA_PAGE_HEIGHT_CM,
+    ZEBRA_PAGE_WIDTH_CM,
+    ZEBRA_ROW_GAP_CM,
+    escapeHtml,
+    waitForImagesToLoad,
+} from "@/modules/common/lib/zebraLabel";
 
 interface PrintDeviceQrLabelsDialogProps {
     isOpen: boolean;
@@ -89,19 +90,6 @@ function buildQrPayload(item: DeviceQrLabelDto, encodedFields: QrEncodedFieldKey
 }
 
 type PrintMode = "a4" | "zebra";
-
-// Khổ decal đúng theo cấu hình đã IN THÀNH CÔNG thực tế trên máy IT phòng (ZebraDesigner
-// "test.btw" → Page Setup: Page 10.60 x 3.30cm, 1 hàng x 2 cột, mỗi tem (Item) 5.20 x 3.10cm; driver
-// ZDesigner ZD230 khai Custom stock Width 10cm / Height 3cm, Media type "Continuous labels", Rotation
-// 0° Portrait). Đây là số đo đã verify được trên máy thật — thay cho ước lượng 4x2in ban đầu (SAI, lấy
-// nhầm từ giá trị mặc định của driver chứ chưa phải khổ decal thật). Chốt với người dùng 2026-08-11.
-// Nếu đổi khổ decal, sửa các hằng số cm dưới đây.
-const ZEBRA_LABELS_PER_ROW = 2;
-const ZEBRA_PAGE_WIDTH_CM = 10.6;
-const ZEBRA_PAGE_HEIGHT_CM = 3.3;
-const ZEBRA_LABEL_WIDTH_CM = 5.2;
-const ZEBRA_LABEL_HEIGHT_CM = 3.1;
-const ZEBRA_ROW_GAP_CM = ZEBRA_PAGE_WIDTH_CM - ZEBRA_LABEL_WIDTH_CM * ZEBRA_LABELS_PER_ROW;
 
 function buildA4LabelHtml(item: DeviceQrLabelDto, qrDataUrls: Map<number, string> | null) {
     const qrDataUrl = qrDataUrls?.get(item.deviceId);
@@ -219,27 +207,6 @@ function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, str
   <div class="sheet">${labels}</div>
 </body>
 </html>`;
-}
-
-// Gọi `printWindow.print()` ngay sau `document.write` bị race với việc trình duyệt decode/paint ảnh
-// data URI của mã QR trong cửa sổ MỚI mở → QR in ra trống. Phải đợi mọi <img> load xong (hoặc lỗi) trước.
-function waitForImagesToLoad(doc: Document) {
-    const images = Array.from(doc.images);
-    if (images.length === 0) return Promise.resolve();
-
-    return Promise.all(
-        images.map(
-            (img) =>
-                new Promise<void>((resolve) => {
-                    if (img.complete) {
-                        resolve();
-                        return;
-                    }
-                    img.addEventListener("load", () => resolve(), { once: true });
-                    img.addEventListener("error", () => resolve(), { once: true });
-                })
-        )
-    );
 }
 
 export default function PrintDeviceQrLabelsDialog({ isOpen, deviceIds, onClose, onPrinted }: PrintDeviceQrLabelsDialogProps) {

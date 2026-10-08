@@ -1,4 +1,4 @@
-namespace Identity.Application.Interfaces.Service
+﻿namespace Identity.Application.Interfaces.Service
 {
     public interface IActiveDirectoryAuthService
     {

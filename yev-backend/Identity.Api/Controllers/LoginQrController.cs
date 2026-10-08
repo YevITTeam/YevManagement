@@ -37,6 +37,14 @@ namespace Identity.Api.Controllers
             return Success(data, "Tạo mã QR đăng nhập thành công!");
         }
 
+        // Issues new codes for several users at once (bulk label printing); each user's previous code is revoked.
+        [HttpPost("batch")]
+        public async Task<ActionResult<ApiResponse<List<LoginQrGeneratedDto>>>> GenerateBatch([FromBody] LoginQrBatchRequestDto request)
+        {
+            var data = await _service.GenerateBatchAsync(request.UserIds, GetCurrentUserId(), GetClientIp());
+            return Success(data, "Tạo mã QR đăng nhập hàng loạt thành công!");
+        }
+
         [HttpDelete("{userId:int}")]
         public async Task<ActionResult<ApiResponse<bool>>> Revoke(int userId)
         {

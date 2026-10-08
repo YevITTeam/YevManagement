@@ -5,6 +5,7 @@ import { ApiResponse } from "@/types/api";
 const ENDPOINTS = {
   LOGIN_QR: {
     list: "/LoginQr",
+    batch: "/LoginQr/batch",
     byUser: (userId: number) => `/LoginQr/${userId}`,
     logs: (userId: number) => `/LoginQr/${userId}/logs`,
   },
@@ -20,6 +21,12 @@ export const LoginQrApi = {
   // Tạo mã mới cho user và vô hiệu mã cũ (nếu có). Mã thô chỉ có trong response này.
   generate: async (userId: number) => {
     const response = await api.post<ApiResponse<LoginQrGeneratedDto>>(ENDPOINTS.LOGIN_QR.byUser(userId));
+    return response.data;
+  },
+
+  // Tạo mã mới cho nhiều user cùng lúc (in tem hàng loạt); mã cũ của từng người bị thu hồi.
+  generateBatch: async (userIds: number[]) => {
+    const response = await api.post<ApiResponse<LoginQrGeneratedDto[]>>(ENDPOINTS.LOGIN_QR.batch, { userIds });
     return response.data;
   },
 
