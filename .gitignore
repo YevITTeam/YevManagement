@@ -114,3 +114,5 @@ appsettings.*.json
 Thumbs.db
 ~$*
 *~
+# Local AD export (employee personal data)
+docs/Data/ad-users.csv
