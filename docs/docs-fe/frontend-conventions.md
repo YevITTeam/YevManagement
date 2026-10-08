@@ -30,6 +30,7 @@ Khuôn CRUD: Page → `XxxList.tsx` (state phân trang/search/form/delete) → `
 
 ## 4. Đa ngôn ngữ (next-intl, `vi` mặc định + `ja`)
 - Text mới: `useTranslations("<Namespace>")`, thêm key vào **cả** `messages/vi.json` và `ja.json` cùng cấu trúc.
+- Ngôn ngữ mặc định theo thứ tự: lựa chọn VI/JA thủ công trong phiên tab hiện tại (`sessionStorage` `yev-locale`) → ngôn ngữ trình duyệt/Windows bắt đầu bằng `ja` (`navigator.language` hoặc locale mặc định của `Intl`, vốn theo ngôn ngữ giao diện trình duyệt) hoặc múi giờ máy `Asia/Tokyo` → `vi`. Logic ở `components/LanguageSwitcher.tsx` (mount trong Header, chạy cả ở trang `xac-nhan-*`); không phụ thuộc tài khoản.
 - Chỉ dịch text tĩnh; dữ liệu DB và nội dung biểu mẫu PDF giữ tiếng Việt. Màn cũ còn hardcode thì chỉ chuyển khi đang sửa chính màn đó.
 
 ## 5. Icon & PDF
