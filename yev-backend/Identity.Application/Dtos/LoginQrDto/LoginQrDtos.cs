@@ -14,6 +14,14 @@ namespace Identity.Application.Dtos.LoginQrDto
         public DateTime CreatedAt { get; set; }
     }
 
+    public class LoginQrBatchRequestDto
+    {
+        [Required(ErrorMessage = "Chưa chọn người dùng.")]
+        [MinLength(1, ErrorMessage = "Chưa chọn người dùng.")]
+        [MaxLength(200, ErrorMessage = "Mỗi lần chỉ được tạo mã cho tối đa 200 người.")]
+        public List<int> UserIds { get; set; } = new();
+    }
+
     // One row per user that currently has an active (non-revoked) code.
     public class LoginQrStatusDto
     {

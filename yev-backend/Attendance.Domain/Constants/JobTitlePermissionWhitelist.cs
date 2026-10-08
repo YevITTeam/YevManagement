@@ -17,6 +17,7 @@ public static class JobTitlePermissionWhitelist
         "Attendance.OTForm.Approve",
         "Attendance.OTForm.RemoveEmployee",
         "Attendance.OTForm.AddEmployee",
+        "Attendance.OTForm.Delegate",
         // Tạo đơn tăng ca THEO CHUYỀN (2026-09-26) — trước chỉ Line Leader làm được (kiểm cứng ở
         // OtFormService), nay là quyền cấu hình được theo Chức vụ hoặc từng user.
         "Attendance.OTForm.CreateProduction",

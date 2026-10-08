@@ -22,6 +22,42 @@ namespace Attendance.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Attendance.Domain.Entities.ApprovalDelegation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DelegateEmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DelegatorEmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("FromDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly>("ToDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DelegatorEmployeeId");
+
+                    b.HasIndex(new[] { "DelegateEmployeeId", "FromDate", "ToDate" }, "IX_ApprovalDelegations_DelegateEmployeeId_FromDate_ToDate");
+
+                    b.ToTable("ApprovalDelegations", (string)null);
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.AttendanceSetting", b =>
                 {
                     b.Property<int>("Id")
@@ -63,7 +99,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("PK_AttendanceSettings");
 
-                    b.ToTable("AttendanceSettings");
+                    b.ToTable("AttendanceSettings", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Department", b =>
@@ -96,7 +132,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "DepartmentCode" }, "IX_Departments_DepartmentCode")
                         .IsUnique();
 
-                    b.ToTable("Departments");
+                    b.ToTable("Departments", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.DepartmentApprovalStep", b =>
@@ -128,7 +164,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "JobTitleId" }, "IX_DepartmentApprovalSteps_JobTitleId");
 
-                    b.ToTable("DepartmentApprovalSteps");
+                    b.ToTable("DepartmentApprovalSteps", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.DepartmentApprovalStepCoordinator", b =>
@@ -154,7 +190,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "EmployeeId" }, "IX_DepartmentApprovalStepCoordinators_EmployeeId");
 
-                    b.ToTable("DepartmentApprovalStepCoordinators");
+                    b.ToTable("DepartmentApprovalStepCoordinators", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Employee", b =>
@@ -217,7 +253,7 @@ namespace Attendance.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[UserName] IS NOT NULL");
 
-                    b.ToTable("Employees");
+                    b.ToTable("Employees", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.EmployeeAccumulationHistory", b =>
@@ -250,7 +286,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "EmployeeId", "Year", "Month" }, "IX_EmployeeAccumulationHistories_EmployeeId_Year_Month")
                         .IsUnique();
 
-                    b.ToTable("EmployeeAccumulationHistories");
+                    b.ToTable("EmployeeAccumulationHistories", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Group", b =>
@@ -288,7 +324,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "GroupCode" }, "IX_Groups_GroupCode")
                         .IsUnique();
 
-                    b.ToTable("Groups");
+                    b.ToTable("Groups", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.GroupApprovalStep", b =>
@@ -323,7 +359,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "JobTitleId" }, "IX_GroupApprovalSteps_JobTitleId");
 
-                    b.ToTable("GroupApprovalSteps");
+                    b.ToTable("GroupApprovalSteps", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.GroupApprovalStepCoordinator", b =>
@@ -349,7 +385,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "GroupId" }, "IX_GroupApprovalStepCoordinators_GroupId");
 
-                    b.ToTable("GroupApprovalStepCoordinators");
+                    b.ToTable("GroupApprovalStepCoordinators", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.JobTitle", b =>
@@ -387,7 +423,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "Code" }, "IX_JobTitles_Code")
                         .IsUnique();
 
-                    b.ToTable("JobTitles");
+                    b.ToTable("JobTitles", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.JobTitlePermission", b =>
@@ -413,7 +449,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "JobTitleId" }, "IX_JobTitlePermissions_JobTitleId");
 
-                    b.ToTable("JobTitlePermissions");
+                    b.ToTable("JobTitlePermissions", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtCase", b =>
@@ -447,7 +483,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "Code" }, "IX_OtCases_Code")
                         .IsUnique();
 
-                    b.ToTable("OtCases");
+                    b.ToTable("OtCases", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtForm", b =>
@@ -551,7 +587,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "Status" }, "IX_OtForms_Status");
 
-                    b.ToTable("OtForms");
+                    b.ToTable("OtForms", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalEmailToken", b =>
@@ -600,7 +636,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "Token" }, "IX_OtFormApprovalEmailTokens_Token")
                         .IsUnique();
 
-                    b.ToTable("OtFormApprovalEmailTokens");
+                    b.ToTable("OtFormApprovalEmailTokens", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalHistory", b =>
@@ -630,6 +666,14 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("OnBehalfOfFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("OnBehalfOfUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<int>("OtFormApprovalStepId")
                         .HasColumnType("int");
 
@@ -647,7 +691,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "OtFormId" }, "IX_OtFormApprovalHistories_OtFormId");
 
-                    b.ToTable("OtFormApprovalHistories");
+                    b.ToTable("OtFormApprovalHistories", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalStep", b =>
@@ -699,7 +743,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "OtFormId" }, "IX_OtFormApprovalSteps_OtFormId");
 
-                    b.ToTable("OtFormApprovalSteps");
+                    b.ToTable("OtFormApprovalSteps", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormApprovalStepCandidate", b =>
@@ -732,7 +776,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "OtFormApprovalStepId" }, "IX_OtFormApprovalStepCandidates_OtFormApprovalStepId");
 
-                    b.ToTable("OtFormApprovalStepCandidates");
+                    b.ToTable("OtFormApprovalStepCandidates", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatch", b =>
@@ -778,7 +822,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "TerminalLevel" }, "IX_OtFormBatches_TerminalLevel");
 
-                    b.ToTable("OtFormBatches");
+                    b.ToTable("OtFormBatches", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormBatchEmailToken", b =>
@@ -826,7 +870,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "Token" }, "IX_OtFormBatchEmailTokens_Token")
                         .IsUnique();
 
-                    b.ToTable("OtFormBatchEmailTokens");
+                    b.ToTable("OtFormBatchEmailTokens", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormEditLog", b =>
@@ -878,7 +922,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "OtFormId" }, "IX_OtFormEditLogs_OtFormId");
 
-                    b.ToTable("OtFormEditLogs");
+                    b.ToTable("OtFormEditLogs", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtFormEmployee", b =>
@@ -955,7 +999,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "EmployeeId" }, "IX_OtFormEmployees_EmployeeId");
 
-                    b.ToTable("OtFormEmployees");
+                    b.ToTable("OtFormEmployees", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.PendingSecondaryPasswordConfirmation", b =>
@@ -997,7 +1041,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "UserName" }, "IX_PendingSecondaryPasswordConfirmations_UserName");
 
-                    b.ToTable("PendingSecondaryPasswordConfirmations");
+                    b.ToTable("PendingSecondaryPasswordConfirmations", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.PendingSignatureConfirmation", b =>
@@ -1038,7 +1082,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "UserName" }, "IX_PendingSignatureConfirmations_UserName");
 
-                    b.ToTable("PendingSignatureConfirmations");
+                    b.ToTable("PendingSignatureConfirmations", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProcessPart", b =>
@@ -1083,7 +1127,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "OtFormId" }, "IX_ProcessParts_OtFormId")
                         .IsUnique();
 
-                    b.ToTable("ProcessParts");
+                    b.ToTable("ProcessParts", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionApprovalStep", b =>
@@ -1118,7 +1162,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "JobTitleId" }, "IX_ProductionApprovalSteps_JobTitleId");
 
-                    b.ToTable("ProductionApprovalSteps");
+                    b.ToTable("ProductionApprovalSteps", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionEmployee", b =>
@@ -1193,7 +1237,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex("TeamId");
 
-                    b.ToTable("ProductionEmployees");
+                    b.ToTable("ProductionEmployees", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionLine", b =>
@@ -1223,7 +1267,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasIndex("TeamId");
 
-                    b.ToTable("ProductionLines");
+                    b.ToTable("ProductionLines", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionShiftTeam", b =>
@@ -1248,7 +1292,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ProductionShiftTeams");
+                    b.ToTable("ProductionShiftTeams", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionTeam", b =>
@@ -1273,7 +1317,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ProductionTeams");
+                    b.ToTable("ProductionTeams", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Reason", b =>
@@ -1298,7 +1342,7 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Reasons");
+                    b.ToTable("Reasons", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.SecondaryPassword", b =>
@@ -1327,7 +1371,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "UserName" }, "IX_SecondaryPasswords_UserName")
                         .IsUnique();
 
-                    b.ToTable("SecondaryPasswords");
+                    b.ToTable("SecondaryPasswords", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.UserSignature", b =>
@@ -1355,7 +1399,7 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "UserName" }, "IX_UserSignatures_UserName")
                         .IsUnique();
 
-                    b.ToTable("UserSignatures");
+                    b.ToTable("UserSignatures", (string)null);
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.WorkCalendarDay", b =>
@@ -1382,7 +1426,28 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "Date" }, "IX_WorkCalendarDays_Date")
                         .IsUnique();
 
-                    b.ToTable("WorkCalendarDays");
+                    b.ToTable("WorkCalendarDays", (string)null);
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.ApprovalDelegation", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Employee", "DelegateEmployee")
+                        .WithMany()
+                        .HasForeignKey("DelegateEmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ApprovalDelegations_Employees_DelegateEmployeeId");
+
+                    b.HasOne("Attendance.Domain.Entities.Employee", "DelegatorEmployee")
+                        .WithMany()
+                        .HasForeignKey("DelegatorEmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ApprovalDelegations_Employees_DelegatorEmployeeId");
+
+                    b.Navigation("DelegateEmployee");
+
+                    b.Navigation("DelegatorEmployee");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.DepartmentApprovalStep", b =>

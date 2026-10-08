@@ -7,6 +7,12 @@ namespace Attendance.Application.Dtos.OtForms
         public string FullName { get; set; } = null!;
     }
 
+    public class OtFormApprovalStepDelegateDto
+    {
+        public string DelegatorUserName { get; set; } = null!;
+        public string DelegateFullName { get; set; } = null!;
+    }
+
     // Chuỗi bước duyệt đã snapshot lúc tạo đơn (2026-08-07, Giai đoạn 3.1) — xem OtForm.ApprovalSteps.
     public class OtFormApprovalStepDto
     {
@@ -24,5 +30,8 @@ namespace Attendance.Application.Dtos.OtForms
         public int Status { get; set; }
 
         public List<OtFormApprovalStepCandidateDto> Candidates { get; set; } = new();
+
+        // Pending steps only: who currently covers a candidate by delegation.
+        public List<OtFormApprovalStepDelegateDto> Delegates { get; set; } = new();
     }
 }

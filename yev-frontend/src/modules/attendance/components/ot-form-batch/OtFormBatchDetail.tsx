@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { TimeRange } from "@/modules/attendance/components/ot-form/TimeRange";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
@@ -42,13 +42,8 @@ function buildInitialDecisions(batch: OtFormBatchDto): Record<number, FormDecisi
 
 type OtFormBatchDetailProps = { variant: "app"; id: number } | { variant: "email"; token: string };
 
-// Màn duyệt "Đơn tổng" — dùng chung cho cả 2 kênh (trong app qua JWT + trang public qua link email),
-// docs/attendance-module.md §API §Đơn tổng. Mặc định mọi nhân viên/đơn nhỏ đều được Duyệt — Trưởng phòng bỏ
-// chọn từng nhân viên không muốn cho OT, hoặc bấm "Từ chối" cả 1 đơn nhỏ, rồi duyệt 1 lần cho phần còn
-// lại (mỗi đơn nhỏ tiếp tục đúng luồng duyệt hiện có, không đổi gì ở đó).
-// Ô ngắn gọn cho 1 mục "Yêu cầu hỗ trợ khác" — bản rút gọn của ProcessPartTile ở OtFormDetail.tsx, chỉ
-// khác về kích cỡ (nhiều đơn xếp chồng trong 1 batch nên không dùng khung to bằng màn chi tiết đơn lẻ).
-function CompactProcessPartTile({ icon, label, active, activeLabel, inactiveLabel }: {
+// Compact on/off pill for one "other support" item inside an expanded form row.
+function ProcessChip({ icon, label, active, activeLabel, inactiveLabel }: {
     icon: React.ReactNode;
     label: string;
     active: boolean;
@@ -56,23 +51,19 @@ function CompactProcessPartTile({ icon, label, active, activeLabel, inactiveLabe
     inactiveLabel: string;
 }) {
     return (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs">
-            <span className="flex items-center gap-1.5 text-[#191c1e]">
-                <span className="text-[#5e3f3a]">{icon}</span>
-                {label}
-            </span>
-            <span
-                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold ${
-                    active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-[#e0e3e5] bg-white text-[#8a8f94]"
-                }`}
-            >
-                {active ? <Check size={11} /> : <X size={11} />}
-                {active ? activeLabel : inactiveLabel}
-            </span>
-        </div>
+        <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+                active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-[#e0e3e5] bg-white text-[#8a8f94]"
+            }`}
+        >
+            {icon}
+            {label}: {active ? activeLabel : inactiveLabel}
+        </span>
     );
 }
 
+// Shared by both channels (app via JWT, public via email link). Every form and employee defaults to
+// approve; the approver rejects a form or unticks employees, then submits the whole batch once.
 export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
     const t = useTranslations("Attendance.OtFormBatchDetail");
     const tDetail = useTranslations("Attendance.OtFormDetail");
@@ -199,12 +190,17 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
 
     const isDone = processedResult || batch.status === 1;
 
+    const approveCount = batch.otForms.filter((form) => decisions[form.otFormId]?.decision === 0).length;
+    const rejectCount = batch.otForms.length - approveCount;
+    const totalEmployees = batch.otForms.reduce((sum, form) => sum + form.employees.length, 0);
+    const totalHours = batch.otForms.reduce((sum, form) => sum + form.employees.reduce((acc, e) => acc + e.actualHours, 0), 0);
+
     return (
-        <div className="mx-auto max-w-7xl space-y-6">
+        <div className={`space-y-4 ${props.variant === "email" ? "mx-auto max-w-[1400px] px-4 py-5 md:px-6" : ""}`}>
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-xl font-semibold text-[#191c1e]">{t("titleWithId", { id: batch.id })}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">
+                    <p className="mt-1 text-sm text-[#5e3f3a]">
                         {bilingualText(batch.scopeNameVn, batch.scopeNameJp)} — {t("batchDateLabel", { date: formatDate(batch.batchDate) })}
                     </p>
                 </div>
@@ -223,146 +219,175 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                 <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">{t("noFormsLeft")}</div>
             ) : (
                 <>
-                    <div className="space-y-4">
-                        {batch.otForms.map((form) => {
-                            const state = decisions[form.otFormId];
-                            if (!state) return null;
-                            const isExpanded = expandedFormIds.has(form.otFormId);
-                            const includedCount = form.employees.length - state.excludedEmployeeIds.size;
-                            return (
-                                <section key={form.otFormId} className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                                    <div
-                                        className={`flex flex-wrap items-center justify-between gap-3 bg-[#f8fafc] px-6 py-4 ${
-                                            isExpanded || state.decision === 1 ? "border-b border-[#e0e3e5]" : ""
-                                        }`}
-                                    >
-                                        <div>
-                                            <div className="text-sm font-semibold text-[#191c1e]">
-                                                {t("formTitle", { id: form.otFormId })} — {bilingualText(form.groupNameVn, form.groupNameJp)}
-                                            </div>
-                                            <div className="mt-0.5 text-xs text-[#5e3f3a]">
-                                                {form.otCaseCode} · {bilingualText(form.reasonNameVn, form.reasonNameJp)} · {formatDate(form.date)} ·{" "}
-                                                {formatTime(form.startTime)}–{formatTime(form.endTime)} · {t("createdByLabel")}:{" "}
-                                                {form.createdByFullName ?? form.createdByUserName}
-                                            </div>
-                                            {form.subReason && (
-                                                <div className="mt-0.5 text-xs text-[#5e3f3a]">
-                                                    <span className="font-semibold text-[#191c1e]">{tDetail("subReasonLabel")}:</span> {form.subReason}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleExpanded(form.otFormId)}
-                                                aria-expanded={isExpanded}
-                                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs! font-semibold! text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
-                                            >
-                                                {t("employeeSummary", {
-                                                    count: state.decision === 1 ? form.employees.length : includedCount,
-                                                    total: form.employees.length,
-                                                })}
-                                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setDecision(form.otFormId, 0)}
-                                                title={t("decisionApprove")}
-                                                aria-label={t("decisionApprove")}
-                                                aria-pressed={state.decision === 0}
-                                                className={`inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition ${
-                                                    state.decision === 0
-                                                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                                                        : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
-                                                }`}
-                                            >
-                                                <Check className="h-4 w-4" />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setDecision(form.otFormId, 1)}
-                                                title={t("decisionReject")}
-                                                aria-label={t("decisionReject")}
-                                                aria-pressed={state.decision === 1}
-                                                className={`inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition ${
-                                                    state.decision === 1
-                                                        ? "border-[#930006] bg-[#fff4f2] text-[#930006]"
-                                                        : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:border-[#e9bcb6] hover:bg-[#fff4f2] hover:text-[#930006]"
-                                                }`}
-                                            >
-                                                <X className="h-4 w-4" />
-                                            </button>
-                                        </div>
-                                    </div>
+                    <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                        <div className="flex flex-wrap items-center gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold text-[#5e3f3a]">
+                            <span>{t("summaryForms", { count: batch.otForms.length })}</span>
+                            <span className="text-[#c7ccd1]">·</span>
+                            <span>{t("summaryEmployees", { count: totalEmployees })}</span>
+                            <span className="text-[#c7ccd1]">·</span>
+                            <span>{formatHours(totalHours)}</span>
+                        </div>
 
-                                    {isExpanded && (
-                                    <div className="border-b border-[#e0e3e5] px-6 py-4">
-                                        <div className="mb-2.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                            {tDetail("processPartTitle")}
-                                        </div>
-                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                                            <CompactProcessPartTile
-                                                icon={<Utensils size={14} />}
-                                                label={tDetail("eatFieldLabel")}
-                                                active={Boolean(form.processPart?.isEat)}
-                                                activeLabel={tDetail("yes")}
-                                                inactiveLabel={tDetail("no")}
-                                            />
-                                            <CompactProcessPartTile
-                                                icon={<Car size={14} />}
-                                                label={tDetail("transportationFieldLabel")}
-                                                active={Boolean(form.processPart?.isTransportation)}
-                                                activeLabel={tDetail("yes")}
-                                                inactiveLabel={tDetail("no")}
-                                            />
-                                            <CompactProcessPartTile
-                                                icon={<Printer size={14} />}
-                                                label={tDetail("copyRoomFieldLabel")}
-                                                active={Boolean(form.processPart?.isUseCopyRoom)}
-                                                activeLabel={tDetail("yes")}
-                                                inactiveLabel={tDetail("no")}
-                                            />
-                                        </div>
-                                        {form.processPart?.isEat && (
-                                            <div className="mt-2 flex flex-wrap gap-2">
-                                                <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-1 text-xs font-medium text-[#5e3f3a]">
-                                                    {tDetail("mainTicketLabel", { count: form.processPart.mainTicketCount })}
-                                                </span>
-                                                <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-1 text-xs font-medium text-[#5e3f3a]">
-                                                    {tDetail("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}
-                                                </span>
-                                                <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-1 text-xs font-medium text-[#5e3f3a]">
-                                                    {tDetail("milkLabel", { count: form.processPart.milkCount })}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {form.processPart?.anotherSuggestionVn && (
-                                            <div className="mt-2 flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
-                                                <MessageCircle size={14} className="mt-0.5 shrink-0 text-[#5e3f3a]" />
-                                                <span>
-                                                    <span className="font-semibold text-[#191c1e]">{tDetail("anotherSuggestionFieldLabel")}: </span>
-                                                    {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    )}
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full border-collapse text-left">
+                                <thead>
+                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-[11px] font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                        <th className="w-8 px-2 py-2" />
+                                        <th className="px-3 py-2">{t("colForm")}</th>
+                                        <th className="px-3 py-2">{t("colGroup")}</th>
+                                        <th className="px-3 py-2">{t("colReason")}</th>
+                                        <th className="px-3 py-2">{t("colWhen")}</th>
+                                        <th className="px-3 py-2">{t("createdByLabel")}</th>
+                                        <th className="px-3 py-2 text-center">{t("colEmployees")}</th>
+                                        <th className="px-3 py-2 text-center">{t("colHours")}</th>
+                                        <th className="px-3 py-2 text-center">{t("colDecision")}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {batch.otForms.map((form) => {
+                                        const state = decisions[form.otFormId];
+                                        if (!state) return null;
+                                        const isExpanded = expandedFormIds.has(form.otFormId);
+                                        const isReject = state.decision === 1;
+                                        const included = form.employees.filter((e) => !state.excludedEmployeeIds.has(e.employeeId));
+                                        const includedHours = included.reduce((sum, e) => sum + e.actualHours, 0);
+                                        return (
+                                            <Fragment key={form.otFormId}>
+                                                <tr
+                                                    onClick={() => toggleExpanded(form.otFormId)}
+                                                    className={`cursor-pointer border-b border-[#f1f5f9] transition ${
+                                                        isReject ? "bg-[#fff8f7] hover:bg-[#fff4f2]" : "bg-white hover:bg-[#f8fafc]"
+                                                    }`}
+                                                >
+                                                    <td className="px-2 py-2.5 text-[#8a8f94]">
+                                                        <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-3 py-2.5 text-sm font-semibold text-[#191c1e]">
+                                                        {t("formTitle", { id: form.otFormId })}
+                                                    </td>
+                                                    <td className="px-3 py-2.5 text-sm text-[#191c1e]">{bilingualText(form.groupNameVn, form.groupNameJp)}</td>
+                                                    <td className="px-3 py-2.5 text-sm text-[#191c1e]">
+                                                        <span className="mr-1.5 inline-flex rounded-md border border-[#d5dade] bg-white px-1.5 py-0.5 text-[11px] font-semibold text-[#5e3f3a]">
+                                                            {form.otCaseCode}
+                                                        </span>
+                                                        {bilingualText(form.reasonNameVn, form.reasonNameJp)}
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">
+                                                        {formatDate(form.date)} · {formatTime(form.startTime)}–{formatTime(form.endTime)}
+                                                    </td>
+                                                    <td className="px-3 py-2.5 text-sm text-[#5e3f3a]">{form.createdByFullName ?? form.createdByUserName}</td>
+                                                    <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm text-[#191c1e]">
+                                                        {t("employeeSummary", { count: isReject ? form.employees.length : included.length, total: form.employees.length })}
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm text-[#191c1e]">
+                                                        {formatHours(isReject ? 0 : includedHours)}
+                                                    </td>
+                                                    <td className="px-3 py-2.5 text-center" onClick={(event) => event.stopPropagation()}>
+                                                        <div className="inline-flex overflow-hidden rounded-lg border border-[#e0e3e5]">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setDecision(form.otFormId, 0)}
+                                                                title={t("decisionApprove")}
+                                                                aria-pressed={!isReject}
+                                                                className={`inline-flex cursor-pointer items-center gap-1 px-2.5 py-1 text-xs! font-semibold! transition ${
+                                                                    !isReject ? "bg-emerald-50 text-emerald-700" : "bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
+                                                                }`}
+                                                            >
+                                                                <Check className="h-3.5 w-3.5" />
+                                                                {t("decisionApproveShort")}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setDecision(form.otFormId, 1);
+                                                                    setExpandedFormIds((current) => new Set(current).add(form.otFormId));
+                                                                }}
+                                                                title={t("decisionReject")}
+                                                                aria-pressed={isReject}
+                                                                className={`inline-flex cursor-pointer items-center gap-1 border-l border-[#e0e3e5] px-2.5 py-1 text-xs! font-semibold! transition ${
+                                                                    isReject ? "bg-[#fff4f2] text-[#930006]" : "bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
+                                                                }`}
+                                                            >
+                                                                <X className="h-3.5 w-3.5" />
+                                                                {t("decisionRejectShort")}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
 
-                                    {state.decision === 1 ? (
-                                        <div className="px-6 py-4">
-                                            <label className="block">
-                                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                    {t("rejectReasonLabel")} <span className="text-[#930006]">*</span>
-                                                </span>
-                                                <textarea
-                                                    value={state.rejectReason}
-                                                    onChange={(event) => setRejectReason(form.otFormId, event.target.value)}
-                                                    rows={2}
-                                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                                                />
-                                            </label>
-                                        </div>
-                                    ) : isExpanded ? (
+                                                {(isExpanded || isReject) && (
+                                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd]">
+                                                        <td colSpan={9} className="p-0">
+                                                            <div className="space-y-3 px-4 py-3">
+                                                                {form.subReason && (
+                                                                    <div className="text-xs text-[#5e3f3a]">
+                                                                        <span className="font-semibold text-[#191c1e]">{tDetail("subReasonLabel")}:</span> {form.subReason}
+                                                                    </div>
+                                                                )}
+
+                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                    <ProcessChip
+                                                                        icon={<Utensils size={12} />}
+                                                                        label={tDetail("eatFieldLabel")}
+                                                                        active={Boolean(form.processPart?.isEat)}
+                                                                        activeLabel={tDetail("yes")}
+                                                                        inactiveLabel={tDetail("no")}
+                                                                    />
+                                                                    <ProcessChip
+                                                                        icon={<Car size={12} />}
+                                                                        label={tDetail("transportationFieldLabel")}
+                                                                        active={Boolean(form.processPart?.isTransportation)}
+                                                                        activeLabel={tDetail("yes")}
+                                                                        inactiveLabel={tDetail("no")}
+                                                                    />
+                                                                    <ProcessChip
+                                                                        icon={<Printer size={12} />}
+                                                                        label={tDetail("copyRoomFieldLabel")}
+                                                                        active={Boolean(form.processPart?.isUseCopyRoom)}
+                                                                        activeLabel={tDetail("yes")}
+                                                                        inactiveLabel={tDetail("no")}
+                                                                    />
+                                                                    {form.processPart?.isEat && (
+                                                                        <>
+                                                                            <span className="rounded-full border border-[#e0e3e5] bg-white px-2.5 py-1 text-xs font-medium text-[#5e3f3a]">
+                                                                                {tDetail("mainTicketLabel", { count: form.processPart.mainTicketCount })}
+                                                                            </span>
+                                                                            <span className="rounded-full border border-[#e0e3e5] bg-white px-2.5 py-1 text-xs font-medium text-[#5e3f3a]">
+                                                                                {tDetail("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}
+                                                                            </span>
+                                                                            <span className="rounded-full border border-[#e0e3e5] bg-white px-2.5 py-1 text-xs font-medium text-[#5e3f3a]">
+                                                                                {tDetail("milkLabel", { count: form.processPart.milkCount })}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+
+                                                                {form.processPart?.anotherSuggestionVn && (
+                                                                    <div className="flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-xs text-[#5e3f3a]">
+                                                                        <MessageCircle size={14} className="mt-0.5 shrink-0" />
+                                                                        <span>
+                                                                            <span className="font-semibold text-[#191c1e]">{tDetail("anotherSuggestionFieldLabel")}: </span>
+                                                                            {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+
+                                                                {isReject && (
+                                                                    <label className="block">
+                                                                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                                                            {t("rejectReasonLabel")} <span className="text-[#930006]">*</span>
+                                                                        </span>
+                                                                        <textarea
+                                                                            value={state.rejectReason}
+                                                                            onChange={(event) => setRejectReason(form.otFormId, event.target.value)}
+                                                                            rows={2}
+                                                                            className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                                                        />
+                                                                    </label>
+                                                                )}
+                                                            </div>
+
+                                                            {!isReject && (
                                         <div className="overflow-x-auto">
                                             <table className="min-w-full border-collapse text-left">
                                                 <thead>
@@ -415,23 +440,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                                 </td>
                                                                 <td className="px-3 py-1.5 text-center text-sm">
                                                                     {employee.mealTicketType === MEAL_TICKET_MAIN || employee.mealTicketType === MEAL_TICKET_SECONDARY ? (
-                                                                        <span className="inline-flex items-center gap-1.5">
-                                                                            <MealTicketTypeBadge type={employee.mealTicketType} t={tDetail} />
-                                                                            {/* Đơn Theo chuyền không có khái niệm "ăn sau" (DidEat luôn true) — chỉ hiện
-                                                                                loại phiếu (2026-09-28, theo yêu cầu người dùng). */}
-                                                                            {!form.isProductionForm && (
-                                                                                <span
-                                                                                    title={employee.didEat ? tDetail("didEatYes") : `${tDetail("didEatNo")} — ${tDetail("didEatNoHint")}`}
-                                                                                    className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                                                        employee.didEat
-                                                                                            ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-                                                                                            : "border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]"
-                                                                                    }`}
-                                                                                >
-                                                                                    {employee.didEat ? <Check size={12} /> : <X size={12} />}
-                                                                                </span>
-                                                                            )}
-                                                                        </span>
+                                                                        <MealTicketTypeBadge type={employee.mealTicketType} t={tDetail} />
                                                                     ) : (
                                                                         <span className="text-[#c7ccd1]">–</span>
                                                                     )}
@@ -442,17 +451,23 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                     })}
                                                 </tbody>
                                             </table>
-                                        </div>
-                                    ) : null}
-                                </section>
-                            );
-                        })}
-                    </div>
+                                        </div>                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </Fragment>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
 
-                    <div className="flex justify-end">
+                    <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e0e3e5] bg-white px-4 py-3 shadow-md">
+                        <div className="text-sm text-[#5e3f3a]">{t("footerSummary", { approve: approveCount, reject: rejectCount })}</div>
                         <button
                             onClick={openProcessModal}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-5 py-2.5 text-sm! font-semibold! text-white transition hover:bg-[#b40009]"
+                            className="cursor-pointer rounded-lg bg-[#e3000f] px-5 py-2 text-sm! font-semibold! text-white transition hover:bg-[#b40009]"
                         >
                             {t("processButton")}
                         </button>

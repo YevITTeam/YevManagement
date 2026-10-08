@@ -21,6 +21,11 @@ public partial class OtFormApprovalHistory
     // Admin at create-user time.
     public string? ApproverFullName { get; set; }
 
+    // Set when the approver acted through a delegation: the candidate (delegator) they covered.
+    public string? OnBehalfOfUserName { get; set; }
+
+    public string? OnBehalfOfFullName { get; set; }
+
     // Stores the Attendance.Domain.Enums.ApprovalAction enum as an int.
     public int Action { get; set; }
 

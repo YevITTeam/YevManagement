@@ -14,7 +14,7 @@ table { border-collapse: collapse; }
 </head>
 <body style="margin:0; padding:0; background-color:#eef0f2; font-family:'Times New Roman', 'Liberation Serif', Georgia, serif;">
 <div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#eef0f2;">
-Đơn tăng ca #{{OtFormId}} từ {{RequesterFullName}} đang chờ bạn phê duyệt. / 残業申請 #{{OtFormId}} が承認待ちです。
+{{PreheaderText}}
 </div>
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#eef0f2" style="background-color:#eef0f2;">
@@ -52,7 +52,7 @@ Yev<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, seri
 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
 <tr>
 <td style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; border:1px solid #8a2432; padding:5px 14px;">
-<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; font-size:11px; font-weight:bold; color:#8a2432; letter-spacing:0.5px; mso-line-height-rule:exactly; line-height:16px;">CHỜ PHÊ DUYỆT&nbsp;&nbsp;·&nbsp;&nbsp;承認待ち</span>
+<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; font-size:11px; font-weight:bold; color:#8a2432; letter-spacing:0.5px; mso-line-height-rule:exactly; line-height:16px;">{{StatusLabel}}</span>
 </td>
 </tr>
 </table>
@@ -66,8 +66,8 @@ Yev<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, seri
 Kính gửi {{ApproverFullName}} 様,
 </p>
 <p style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; margin:0 0 22px 0; font-size:14px; line-height:23px; color:#4a5266; mso-line-height-rule:exactly;">
-Hệ thống ghi nhận một đơn yêu cầu tăng ca đang chờ sự phê duyệt của bạn. Vui lòng xem thông tin chi tiết bên dưới.<br>
-<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#8b93a3;">残業申請が届いており、あなたの承認をお待ちしています。詳細は下記よりご確認ください。</span>
+{{IntroVn}}<br>
+<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#8b93a3;">{{IntroJp}}</span>
 </p>
 </td>
 </tr>

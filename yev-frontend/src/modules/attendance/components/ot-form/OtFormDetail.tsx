@@ -532,8 +532,10 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                             {history ? (
                                                 <>
                                                     <div className="text-xs text-[#5e3f3a]">
-                                                        {history.approverFullName ?? history.approverUserName} ·{" "}
-                                                        {approvalActionLabels[history.action]}
+                                                        {history.approverFullName ?? history.approverUserName}
+                                                        {history.onBehalfOfUserName &&
+                                                            ` (${t("onBehalfOf", { name: history.onBehalfOfFullName ?? history.onBehalfOfUserName })})`}{" "}
+                                                        · {approvalActionLabels[history.action]}
                                                     </div>
                                                     {history.comment && (
                                                         <div className="text-xs italic text-[#191c1e]">&quot;{history.comment}&quot;</div>
@@ -595,6 +597,21 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                             +{view.step.candidates.length - 3}
                                                         </span>
                                                     )}
+                                                    {view.step.delegates.map((delegate) => (
+                                                        <span
+                                                            key={`${delegate.delegatorUserName}-${delegate.delegateFullName}`}
+                                                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-[#c9ced3] bg-white px-2 py-0.5 text-[11px] font-medium text-[#5e3f3a]"
+                                                        >
+                                                            <User size={10} />
+                                                            {delegate.delegateFullName} (
+                                                            {t("onBehalfOf", {
+                                                                name:
+                                                                    view.step.candidates.find((c) => c.userName === delegate.delegatorUserName)?.fullName ??
+                                                                    delegate.delegatorUserName,
+                                                            })}
+                                                            )
+                                                        </span>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>

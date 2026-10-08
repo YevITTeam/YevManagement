@@ -121,6 +121,9 @@ namespace Attendance.Application.Interfaces.Service
         // docs/attendance-module.md "Gửi email duyệt chạy nền".
         Task SendStepApprovalNotificationAsync(int otFormId, int otFormApprovalStepId);
 
+        // Mails the delegate of an active delegation for steps already waiting on the delegator.
+        Task SendDelegationBackfillNotificationsAsync(int delegationId);
+
         // Also called by QueuedHostedService — notify the form's creator that an approver rejected the
         // form / removed employees from it (the creator gets no other signal in those cases).
         Task SendRejectedNotificationAsync(int otFormId);

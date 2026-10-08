@@ -7,6 +7,9 @@ namespace Identity.Application.Interfaces.Service
         // Revokes the user's active code (if any) and issues a new one.
         Task<LoginQrGeneratedDto> GenerateAsync(int userId, int? actorUserId, string? ipAddress);
 
+        // Same as GenerateAsync for each distinct user; fails before issuing anything if a user does not exist.
+        Task<List<LoginQrGeneratedDto>> GenerateBatchAsync(IReadOnlyCollection<int> userIds, int? actorUserId, string? ipAddress);
+
         Task RevokeAsync(int userId, int? actorUserId, string? ipAddress);
 
         Task<List<LoginQrStatusDto>> GetActiveAsync();

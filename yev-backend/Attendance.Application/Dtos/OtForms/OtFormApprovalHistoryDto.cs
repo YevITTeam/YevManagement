@@ -7,6 +7,10 @@ namespace Attendance.Application.Dtos.OtForms
         // Snapshot of the full name from JWT at signing time — null if the account has no FullName in Identity (FE falls back to ApproverUserName).
         public string? ApproverFullName { get; set; }
 
+        // Set when the approver acted by delegation: the delegator they covered (falls back to the user name on the FE).
+        public string? OnBehalfOfUserName { get; set; }
+        public string? OnBehalfOfFullName { get; set; }
+
         public int StepOrder { get; set; }
         public string JobTitleNameSnapshot { get; set; } = null!;
 

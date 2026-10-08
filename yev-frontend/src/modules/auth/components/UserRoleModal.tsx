@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Mail, Pencil, Plus, QrCode, Search, SquarePen, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mail, Pencil, Plus, Printer, QrCode, Search, SquarePen, Trash2 } from "lucide-react";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import { LoginQrApi } from "@/modules/auth/api/login-qr.api";
+import { openLabelWindow, printLoginQrLabels } from "@/modules/auth/lib/loginQrLabelPrint";
 import type { UserDto, RoleDto, LoginQrStatusDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
 import RoleSelectModal from "./RoleSelectModal";
@@ -43,6 +44,9 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [qrStatusByUser, setQrStatusByUser] = useState<Record<number, LoginQrStatusDto>>({});
     const [qrUser, setQrUser] = useState<UserDto | null>(null);
     const [emailUser, setEmailUser] = useState<UserDto | null>(null);
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [isPrintConfirmOpen, setIsPrintConfirmOpen] = useState(false);
+    const [isPrintingLabels, setIsPrintingLabels] = useState(false);
 
     // /api/LoginQr (tạo/thu hồi/xem nhật ký mã QR đăng nhập app YEV Scan) — 1 permission cho cả nhóm.
     const canManageLoginQr = hasPermission(currentUser, "Identity.LoginQr.Manage");
@@ -127,6 +131,11 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const safePageIndex = Math.min(pageIndex, totalPages);
     const paginatedUsers = filteredUsers.slice((safePageIndex - 1) * PAGE_SIZE, safePageIndex * PAGE_SIZE);
 
+    const allPageSelected = paginatedUsers.length > 0 && paginatedUsers.every((user) => selectedIds.has(user.id));
+    const selectCols = canManageLoginQr
+        ? "md:grid-cols-[1.5rem_minmax(0,1.2fr)_minmax(0,1.8fr)_11rem]"
+        : "md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)_11rem]";
+
     const handleCheckboxChange = (userId: number, roleId: number, isChecked: boolean) => {
         setSelectedRolesMap((prev) => {
             const currentRoles = prev[userId] || [];
@@ -160,6 +169,45 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
         const success = await handleSave(openRoleModalUserId);
         if (success) {
             setOpenRoleModalUserId(null);
+        }
+    };
+
+    const toggleSelected = (userId: number) => {
+        setSelectedIds((current) => {
+            const next = new Set(current);
+            if (next.has(userId)) next.delete(userId);
+            else next.add(userId);
+            return next;
+        });
+    };
+
+    const togglePageSelected = (checked: boolean) => {
+        setSelectedIds((current) => {
+            const next = new Set(current);
+            paginatedUsers.forEach((user) => (checked ? next.add(user.id) : next.delete(user.id)));
+            return next;
+        });
+    };
+
+    const handlePrintLabels = async () => {
+        const printWindow = openLabelWindow();
+        if (!printWindow) {
+            setIsPrintConfirmOpen(false);
+            return;
+        }
+        setIsPrintingLabels(true);
+        try {
+            const generated = await LoginQrApi.generateBatch(Array.from(selectedIds));
+            await printLoginQrLabels(printWindow, generated);
+            toast.success(`Đã tạo mã mới và in ${generated.length} tem QR đăng nhập.`);
+            setSelectedIds(new Set());
+            void fetchQrStatuses();
+        } catch (err) {
+            printWindow.close();
+            toast.error(getApiErrorMessage(err, "In tem QR đăng nhập thất bại."));
+        } finally {
+            setIsPrintingLabels(false);
+            setIsPrintConfirmOpen(false);
         }
     };
 
@@ -198,6 +246,14 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     <div className="rounded-full border border-[#e0e3e5] bg-white px-3 py-1 text-xs font-semibold text-[#5e3f3a]">
                         <span className="text-[#191c1e]">{roles.length}</span> vai trò
                     </div>
+                    {canManageLoginQr && selectedIds.size > 0 && (
+                        <button
+                            onClick={() => setIsPrintConfirmOpen(true)}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e3000f] bg-white px-4 py-2 text-sm font-semibold text-[#e3000f] transition hover:bg-[#fff4f2]"
+                        >
+                            <Printer className="h-4 w-4" /> In QR ({selectedIds.size})
+                        </button>
+                    )}
                     {canCreateUser && (
                         <button
                             onClick={() => setIsCreateUserOpen(true)}
@@ -256,7 +312,16 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
 
                     <div>
                         {/* Table Header */}
-                        <div className="hidden border-b border-[#e0e3e5] bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#8a8f94] md:grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)_11rem]">
+                        <div className={`hidden border-b border-[#e0e3e5] bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#8a8f94] md:grid ${selectCols}`}>
+                            {canManageLoginQr && (
+                                <input
+                                    type="checkbox"
+                                    checked={allPageSelected}
+                                    onChange={(event) => togglePageSelected(event.target.checked)}
+                                    aria-label="Chọn tất cả trên trang"
+                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                />
+                            )}
                             <div>Người dùng</div>
                             <div>Vai trò</div>
                             <div className="text-right">Thao tác</div>
@@ -277,10 +342,19 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                 return (
                                     <div
                                         key={user.id}
-                                        className={`grid items-center gap-3 px-4 py-3 transition hover:bg-[#f8fafc] md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)_11rem] ${
+                                        className={`grid items-center gap-3 px-4 py-3 transition hover:bg-[#f8fafc] ${selectCols} ${
                                             isSelf ? "bg-[#fff4f2]/40" : "bg-white"
                                         }`}
                                     >
+                                        {canManageLoginQr && (
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.has(user.id)}
+                                                onChange={() => toggleSelected(user.id)}
+                                                aria-label="Chọn để in QR"
+                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                            />
+                                        )}
                                         <div className="flex min-w-0 items-center gap-3">
                                             <div
                                                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
@@ -468,6 +542,23 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                 user={emailUser}
                 onClose={() => setEmailUser(null)}
                 onChanged={() => void fetchData()}
+            />
+
+            <ConfirmDialog
+                isOpen={isPrintConfirmOpen}
+                title="In tem QR đăng nhập"
+                message={
+                    <>
+                        Tạo mã QR mới và in tem cho <strong>{selectedIds.size}</strong> người? Mã QR cũ của họ sẽ bị thu hồi.
+                    </>
+                }
+                approveLabel="In tem"
+                deniedLabel="Huỷ"
+                loading={isPrintingLabels}
+                onApprove={handlePrintLabels}
+                onDenied={() => {
+                    if (!isPrintingLabels) setIsPrintConfirmOpen(false);
+                }}
             />
 
             <ConfirmDialog
