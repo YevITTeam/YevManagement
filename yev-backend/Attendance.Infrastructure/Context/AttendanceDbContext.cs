@@ -47,6 +47,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<ProductionEmployee> ProductionEmployees { get; set; }
     public virtual DbSet<ProductionApprovalStep> ProductionApprovalSteps { get; set; }
     public virtual DbSet<OtFormEditLog> OtFormEditLogs { get; set; }
+    public virtual DbSet<ApprovalDelegation> ApprovalDelegations { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -321,6 +322,8 @@ public partial class AttendanceDbContext : DbContext
 
             entity.Property(e => e.ApproverUserName).HasMaxLength(100);
             entity.Property(e => e.ApproverFullName).HasMaxLength(255);
+            entity.Property(e => e.OnBehalfOfUserName).HasMaxLength(100);
+            entity.Property(e => e.OnBehalfOfFullName).HasMaxLength(255);
             entity.Property(e => e.Comment).HasMaxLength(500);
 
             entity.HasOne(d => d.OtForm).WithMany(p => p.OtFormApprovalHistories)
@@ -411,6 +414,22 @@ public partial class AttendanceDbContext : DbContext
             entity.HasOne(d => d.OtFormApprovalStep).WithMany(p => p.Candidates)
                 .HasForeignKey(d => d.OtFormApprovalStepId)
                 .HasConstraintName("FK_OtFormApprovalStepCandidates_OtFormApprovalSteps_OtFormApprovalStepId");
+        });
+
+        modelBuilder.Entity<ApprovalDelegation>(entity =>
+        {
+            entity.HasIndex(e => new { e.DelegateEmployeeId, e.FromDate, e.ToDate }, "IX_ApprovalDelegations_DelegateEmployeeId_FromDate_ToDate");
+            entity.Property(e => e.Reason).HasMaxLength(500);
+
+            entity.HasOne(d => d.DelegatorEmployee).WithMany()
+                .HasForeignKey(d => d.DelegatorEmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ApprovalDelegations_Employees_DelegatorEmployeeId");
+
+            entity.HasOne(d => d.DelegateEmployee).WithMany()
+                .HasForeignKey(d => d.DelegateEmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ApprovalDelegations_Employees_DelegateEmployeeId");
         });
 
         modelBuilder.Entity<SecondaryPassword>(entity =>

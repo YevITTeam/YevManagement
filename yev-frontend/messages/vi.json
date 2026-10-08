@@ -51,6 +51,7 @@
     "otAiChat": "Trợ lý AI đăng ký tăng ca",
     "otForms": "Đơn tăng ca",
     "otBatches": "Đơn tổng",
+    "otDelegations": "Ủy quyền duyệt",
     "otCategories": "Danh mục",
     "otSignature": "Chữ ký của tôi",
     "otSecondaryPassword": "Mật khẩu cấp 2",
@@ -1039,7 +1040,8 @@
       "editLogFieldNoteJp": "Sửa ghi chú (JP)",
       "colBlockCode": "Line",
       "colTeamCode": "Team",
-      "colShiftTeam": "Nhóm ca"
+      "colShiftTeam": "Nhóm ca",
+      "onBehalfOf": "thay mặt {name}"
     },
     "CreateOtForm": {
       "titleCreate": "Đăng ký tăng ca",
@@ -1091,7 +1093,7 @@
       "didEatLabel": "Có ăn",
       "colAteLater": "Ăn sau",
       "ateLaterLabel": "Ăn sau",
-      "colMealTicketType": "Loại phiếu",
+      "colMealTicketType": "Phiếu ăn",
       "mealTicketTypeMain": "Phiếu chính",
       "mealTicketTypeSecondary": "Phiếu phụ",
       "mealTicketTypeNone": "Không có phiếu",
@@ -1108,7 +1110,7 @@
       "milkLabel": "Sữa",
       "mealTicketRuleHint": "Hệ thống tự tính theo giờ thực tích: dưới {noTicketHours}h không có phiếu, từ {noTicketHours}h nhận phiếu phụ, từ {mainHours}h trở lên nhận phiếu chính. Sữa nhập tay.",
       "mealTicketCountsTitle": "Số phiếu ăn",
-      "mealTicketAutoBadge": "Đang tự tính",
+      "mealTicketAutoBadge": "Tự động tính",
       "mealTicketRecalcButton": "Tính lại",
       "anotherSuggestionVnLabel": "Đề nghị khác (VN)",
       "cancelButton": "Huỷ",
@@ -1238,7 +1240,18 @@
       "processSuccess": "Phê duyệt đơn tổng thành công.",
       "processError": "Phê duyệt đơn tổng thất bại.",
       "backToListButton": "Về danh sách Đơn tổng",
-      "loadError": "Không thể tải đơn tổng — có thể đã hết hạn hoặc đã được xử lý."
+      "loadError": "Không thể tải đơn tổng — có thể đã hết hạn hoặc đã được xử lý.",
+      "decisionApproveShort": "Duyệt",
+      "decisionRejectShort": "Từ chối",
+      "colForm": "Đơn",
+      "colGroup": "Nhóm",
+      "colReason": "Lý do",
+      "colWhen": "Ngày & giờ",
+      "colEmployees": "Nhân viên",
+      "colDecision": "Quyết định",
+      "summaryForms": "{count} đơn",
+      "summaryEmployees": "{count} nhân viên",
+      "footerSummary": "Phê duyệt {approve} đơn · Không phê duyệt {reject} đơn"
     },
     "SignatureConfirm": {
       "title": "Xác nhận cập nhật chữ ký",
@@ -1264,6 +1277,31 @@
       "confirming": "Đang xác nhận...",
       "confirmError": "Xác nhận thiết lập mật khẩu cấp 2 thất bại.",
       "successMessage": "Thiết lập mật khẩu cấp 2 thành công. Bạn có thể quay lại ứng dụng và tiếp tục sử dụng bình thường."
+    },
+    "ApprovalDelegation": {
+      "title": "Ủy quyền duyệt",
+      "add": "Thêm ủy quyền",
+      "edit": "Sửa ủy quyền",
+      "mineTitle": "Tôi ủy quyền cho",
+      "toMeTitle": "Được ủy quyền duyệt thay",
+      "empty": "Chưa có ủy quyền nào.",
+      "active": "Đang hiệu lực",
+      "delegateLabel": "Người duyệt thay",
+      "fromLabel": "Từ ngày",
+      "toLabel": "Đến ngày",
+      "reasonLabel": "Lý do",
+      "selectPlaceholder": "Chọn người duyệt thay",
+      "loadError": "Không tải được danh sách ủy quyền.",
+      "createSuccess": "Đã tạo ủy quyền.",
+      "updateSuccess": "Đã cập nhật ủy quyền.",
+      "saveError": "Không thể lưu ủy quyền.",
+      "deleteSuccess": "Đã xóa ủy quyền.",
+      "deleteError": "Không thể xóa ủy quyền.",
+      "deleteTitle": "Xóa ủy quyền này?",
+      "upcoming": "Sắp tới",
+      "expired": "Đã hết hạn",
+      "daysLeft": "còn {count} ngày",
+      "startsOn": "từ {date}"
     }
   },
   "Home": {

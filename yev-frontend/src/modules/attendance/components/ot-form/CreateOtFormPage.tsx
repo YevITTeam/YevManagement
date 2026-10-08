@@ -1482,7 +1482,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             uống bắt buộc, DidEat luôn true, không còn gì để chọn. Đơn Theo Nhóm
                                             (Văn phòng) đổi nhãn thành "Ăn sau" (đảo ngược ý nghĩa hiển thị). */}
                                         {formMode !== "production" && (
-                                            <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colAteLater")}</th>
+                                            <th rowSpan={2} className="px-1 py-2 text-center align-bottom"><span className="inline-block rotate-180 [writing-mode:vertical-rl]">{t("colAteLater")}</span></th>
                                         )}
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
@@ -2031,7 +2031,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <th colSpan={3} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
-                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colAteLater")}</th>
+                                        <th rowSpan={2} className="px-1 py-2 text-center align-bottom"><span className="inline-block rotate-180 [writing-mode:vertical-rl]">{t("colAteLater")}</span></th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
                                     </tr>

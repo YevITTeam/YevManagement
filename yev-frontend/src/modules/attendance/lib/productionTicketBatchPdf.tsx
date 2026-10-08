@@ -231,13 +231,27 @@ async function drawSignatureCell(doc: jsPDF, box: FieldBox, history: SignatureDi
         }
     }
 
+    const onBehalfName = history.onBehalfOfFullName ?? history.onBehalfOfUserName;
+    const onBehalfText = onBehalfName ? `(thay mặt ${nameOnly ? getGivenName(onBehalfName) : onBehalfName})` : null;
+    const nameLineH = onBehalfText ? nameAreaH * 0.55 : nameAreaH;
+
     const nameText = nameOnly ? getGivenName(displayName) : displayName;
     if (nameText) {
         drawAutoFitText(
             doc,
-            { left: box.left, top: box.top + (imgAreaH / PAGE_PT_HEIGHT) * 100, width: box.width, height: (nameAreaH / PAGE_PT_HEIGHT) * 100 },
+            { left: box.left, top: box.top + (imgAreaH / PAGE_PT_HEIGHT) * 100, width: box.width, height: (nameLineH / PAGE_PT_HEIGHT) * 100 },
             nameText,
             7,
+            { align: "center" }
+        );
+    }
+
+    if (onBehalfText) {
+        drawAutoFitText(
+            doc,
+            { left: box.left, top: box.top + ((imgAreaH + nameLineH) / PAGE_PT_HEIGHT) * 100, width: box.width, height: ((nameAreaH - nameLineH) / PAGE_PT_HEIGHT) * 100 },
+            onBehalfText,
+            5.5,
             { align: "center" }
         );
     }

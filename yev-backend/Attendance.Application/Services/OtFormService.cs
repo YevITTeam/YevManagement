@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
@@ -322,8 +323,9 @@ namespace Attendance.Application.Services
         // xem OtFormApprovalStep). 2026-08-07, Giai đoạn 3.1 — thay thế hoàn toàn UserApprovalScope cũ.
         private async Task<List<int>> GetMyCurrentPendingFormIdsAsync(string approverUserName)
         {
+            var actingUserNames = (await GetActiveDelegatorsAsync(approverUserName)).Keys.Append(approverUserName).ToList();
             var myCandidates = await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
-                predicate: c => c.UserName == approverUserName,
+                predicate: c => actingUserNames.Contains(c.UserName),
                 selector: c => new { c.OtFormApprovalStepId, c.OtFormApprovalStep.OtFormId });
 
             if (myCandidates.Count == 0) return new List<int>();
@@ -502,6 +504,8 @@ namespace Attendance.Application.Services
                 {
                     ApproverUserName = x.ApproverUserName,
                     ApproverFullName = x.ApproverFullName,
+                    OnBehalfOfUserName = x.OnBehalfOfUserName,
+                    OnBehalfOfFullName = x.OnBehalfOfFullName,
                     StepOrder = x.OtFormApprovalStep.StepOrder,
                     JobTitleNameSnapshot = x.OtFormApprovalStep.JobTitleNameSnapshot,
                     Action = x.Action,
@@ -514,6 +518,8 @@ namespace Attendance.Application.Services
             var steps = await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                 x => x.OtFormId == id && !x.IsDeleted, x => x.Candidates);
             var orderedSteps = steps.OrderBy(x => x.StepOrder).ToList();
+            var delegatesByDelegator = await GetActiveDelegatesByDelegatorAsync(
+                orderedSteps.Where(x => x.Status == (int)OtFormApprovalStepStatus.Pending).SelectMany(x => x.Candidates).Select(c => c.UserName));
 
             var editLogs = await _unitOfWork.OtFormEditLogs.SelectAsync(
                 predicate: x => x.OtFormId == id,
@@ -620,12 +626,58 @@ namespace Attendance.Application.Services
                         EmployeeId = c.EmployeeId,
                         UserName = c.UserName,
                         FullName = c.FullName
-                    }).ToList()
+                    }).ToList(),
+                    Delegates = s.Status != (int)OtFormApprovalStepStatus.Pending
+                        ? new List<OtFormApprovalStepDelegateDto>()
+                        : s.Candidates
+                            .SelectMany(c => delegatesByDelegator.GetValueOrDefault(c.UserName) ?? new List<string>(),
+                                (c, delegateName) => new OtFormApprovalStepDelegateDto { DelegatorUserName = c.UserName, DelegateFullName = delegateName })
+                            .ToList()
                 }).ToList()
             };
         }
 
+        // Delegator account -> full names of the people covering them today.
+        private async Task<Dictionary<string, List<string>>> GetActiveDelegatesByDelegatorAsync(IEnumerable<string> delegatorUserNames)
+        {
+            var names = delegatorUserNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (names.Count == 0) return new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
+            var rows = await _unitOfWork.ApprovalDelegations.SelectAsync(
+                predicate: d => !d.IsDeleted && d.FromDate <= today && d.ToDate >= today && names.Contains(d.DelegatorEmployee.UserName!),
+                selector: d => new { Delegator = d.DelegatorEmployee.UserName!, d.DelegateEmployee.LastName, d.DelegateEmployee.FirstName });
+
+            return rows
+                .GroupBy(r => r.Delegator, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Select(r => $"{r.LastName} {r.FirstName}").ToList(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        // ponytail: in-process per-date locks, valid while the API runs as a single instance; use a DB
+        // applock (sp_getapplock) if it is ever scaled out.
+        private static readonly ConcurrentDictionary<DateOnly, SemaphoreSlim> DateLocks = new();
+
+        // Serializes limit/overlap checks with the save for one OT date, so two concurrent forms
+        // cannot both pass the daily limit or the overlap check.
+        private static async Task<IDisposable> AcquireDateLockAsync(DateOnly date)
+        {
+            var gate = DateLocks.GetOrAdd(date, _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync();
+            return new DateLockReleaser(gate);
+        }
+
+        private sealed class DateLockReleaser(SemaphoreSlim gate) : IDisposable
+        {
+            public void Dispose() => gate.Release();
+        }
+
         public async Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
+        {
+            using var dateLock = await AcquireDateLockAsync(request.Date);
+            return await CreateCoreAsync(createdByUserName, createdByFullName, isAdmin, request);
+        }
+
+        private async Task<OtFormDto> CreateCoreAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
         {
             // KHÔNG hỗ trợ ca qua đêm (2026-08-26, theo yêu cầu người dùng) — giờ kết thúc phải SAU giờ
             // bắt đầu trong CÙNG ngày. Chặn ở đây trước khi làm gì khác, vì ValidateEmployeesAsync bên
@@ -1069,6 +1121,13 @@ namespace Attendance.Application.Services
 
         public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request)
         {
+            var dates = await _unitOfWork.OtForms.SelectAsync(x => x.Id == id && !x.IsDeleted, x => x.Date);
+            using var dateLock = dates.Count > 0 ? await AcquireDateLockAsync(dates[0]) : null;
+            return await UpdateCoreAsync(id, currentUserName, currentFullName, isAdmin, request);
+        }
+
+        private async Task<OtFormDto> UpdateCoreAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request)
+        {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted,
                 x => x.OtFormEmployees);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
@@ -1095,7 +1154,7 @@ namespace Attendance.Application.Services
             {
                 if (currentStep == null)
                     throw new DomainException("Đơn không còn bước duyệt nào đang chờ xử lý (dữ liệu không nhất quán, liên hệ Admin).");
-                if (!currentStep.Candidates.Any(c => c.UserName == currentUserName))
+                if (!MatchStepActor(currentStep, currentUserName, await GetActiveDelegatorsAsync(currentUserName)).IsActor)
                     throw new DomainException($"Bạn không phải người được chỉ định xử lý bước hiện tại (Chức vụ '{currentStep.JobTitleNameSnapshot}') của đơn này, không thể sửa.");
             }
             else
@@ -1398,7 +1457,28 @@ namespace Attendance.Application.Services
         // (2026-08-07, Giai đoạn 3.1 — thay LoadFormAndValidateAuthorityAsync cũ). Không có Admin bypass
         // ở đây — giữ đúng hành vi cũ (ApproveAsync/RejectAsync trước đây cũng không cho Admin bypass,
         // chỉ Submitter mới có).
-        private async Task<(OtForm otForm, OtFormApprovalStep currentStep)> LoadFormAndCurrentStepAsync(
+        // Active delegators of userName (account -> full name); the delegate may act wherever a delegator is a candidate.
+        private async Task<Dictionary<string, string>> GetActiveDelegatorsAsync(string userName)
+        {
+            var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
+            var rows = await _unitOfWork.ApprovalDelegations.SelectAsync(
+                predicate: d => !d.IsDeleted && d.DelegateEmployee.UserName == userName
+                    && d.DelegatorEmployee.UserName != null && d.FromDate <= today && d.ToDate >= today,
+                selector: d => new { UserName = d.DelegatorEmployee.UserName!, d.DelegatorEmployee.LastName, d.DelegatorEmployee.FirstName });
+            return rows.GroupBy(r => r.UserName).ToDictionary(g => g.Key, g => $"{g.First().LastName} {g.First().FirstName}");
+        }
+
+        // A direct candidacy wins over delegation; otherwise the covered candidate (delegator) is returned.
+        private static (bool IsActor, string? DelegatorUserName, string? DelegatorFullName) MatchStepActor(
+            OtFormApprovalStep step, string userName, Dictionary<string, string> delegators)
+        {
+            if (step.Candidates.Any(c => c.UserName == userName)) return (true, null, null);
+
+            var covered = step.Candidates.FirstOrDefault(c => delegators.ContainsKey(c.UserName));
+            return covered == null ? (false, null, null) : (true, covered.UserName, covered.FullName);
+        }
+
+        private async Task<(OtForm otForm, OtFormApprovalStep currentStep, string? delegatorUserName, string? delegatorFullName)> LoadFormAndCurrentStepAsync(
             int id, string approverUserName)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
@@ -1411,15 +1491,16 @@ namespace Attendance.Application.Services
             if (currentStep == null)
                 throw new DomainException("Đơn không còn bước duyệt nào đang chờ xử lý (dữ liệu không nhất quán, liên hệ Admin).");
 
-            if (!currentStep.Candidates.Any(c => c.UserName == approverUserName))
+            var match = MatchStepActor(currentStep, approverUserName, await GetActiveDelegatorsAsync(approverUserName));
+            if (!match.IsActor)
                 throw new DomainException($"Bạn không phải người được chỉ định duyệt bước hiện tại (Chức vụ '{currentStep.JobTitleNameSnapshot}') của đơn này.");
 
-            return (otForm, currentStep);
+            return (otForm, currentStep, match.DelegatorUserName, match.DelegatorFullName);
         }
 
         public async Task ApproveAsync(int id, string approverUserName, string? approverFullName, ApproveOtFormDto request)
         {
-            var (otForm, currentStep) = await LoadFormAndCurrentStepAsync(id, approverUserName);
+            var (otForm, currentStep, delegatorUserName, delegatorFullName) = await LoadFormAndCurrentStepAsync(id, approverUserName);
 
             await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
 
@@ -1438,6 +1519,8 @@ namespace Attendance.Application.Services
                 OtFormApprovalStepId = currentStep.Id,
                 ApproverUserName = approverUserName,
                 ApproverFullName = approverFullName,
+                OnBehalfOfUserName = delegatorUserName,
+                OnBehalfOfFullName = delegatorFullName,
                 Action = (int)ApprovalAction.Approved,
                 Comment = request.Comment,
                 SignatureImage = signatureImage,
@@ -1476,7 +1559,7 @@ namespace Attendance.Application.Services
 
         public async Task RejectAsync(int id, string approverUserName, string? approverFullName, RejectOtFormDto request)
         {
-            var (otForm, currentStep) = await LoadFormAndCurrentStepAsync(id, approverUserName);
+            var (otForm, currentStep, delegatorUserName, delegatorFullName) = await LoadFormAndCurrentStepAsync(id, approverUserName);
 
             await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
 
@@ -1486,6 +1569,8 @@ namespace Attendance.Application.Services
                 OtFormApprovalStepId = currentStep.Id,
                 ApproverUserName = approverUserName,
                 ApproverFullName = approverFullName,
+                OnBehalfOfUserName = delegatorUserName,
+                OnBehalfOfFullName = delegatorFullName,
                 Action = (int)ApprovalAction.Rejected,
                 Comment = request.Comment,
                 ActionAt = TimeHelper.GetCurrentUtcTime()
@@ -1623,7 +1708,7 @@ namespace Attendance.Application.Services
             // đã bị xoá, xem docs/attendance-module.md §Cây chức vụ, Giai đoạn 3.1).
             if (!isAdmin)
             {
-                if (currentStep == null || !currentStep.Candidates.Any(c => c.UserName == userName))
+                if (currentStep == null || !MatchStepActor(currentStep, userName, await GetActiveDelegatorsAsync(userName)).IsActor)
                     throw new DomainException("Bạn không được phân quyền ở bước mà đơn này đang chờ, nên không thể loại nhân viên khỏi đơn.");
             }
 
@@ -1717,6 +1802,89 @@ namespace Attendance.Application.Services
         {
             if (step.Candidates.Count == 0) return;
 
+            var recipients = await GetMailRecipientsAsync(step.Candidates.Select(c => c.UserName));
+            if (await SendApprovalMailsAsync(otForm, step, recipients))
+                await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Candidates plus anyone currently covering one of them by delegation (CoveredFullName = the delegator).
+        private async Task<List<(string UserName, string? CoveredFullName)>> GetMailRecipientsAsync(IEnumerable<string> candidateUserNames)
+        {
+            var candidates = candidateUserNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
+            var covering = await _unitOfWork.ApprovalDelegations.SelectAsync(
+                predicate: d => !d.IsDeleted && d.FromDate <= today && d.ToDate >= today
+                    && d.DelegateEmployee.UserName != null && candidates.Contains(d.DelegatorEmployee.UserName!),
+                selector: d => new { Delegate = d.DelegateEmployee.UserName!, d.DelegatorEmployee.LastName, d.DelegatorEmployee.FirstName });
+
+            var recipients = candidates.Select(c => (UserName: c, CoveredFullName: (string?)null)).ToList();
+            foreach (var row in covering)
+            {
+                if (!recipients.Any(r => string.Equals(r.UserName, row.Delegate, StringComparison.OrdinalIgnoreCase)))
+                    recipients.Add((row.Delegate, $"{row.LastName} {row.FirstName}"));
+            }
+            return recipients;
+        }
+
+        // Wording of one notification mail; the renderer substitutes raw text, so names are HTML-encoded here.
+        private sealed record MailWording(string StatusLabel, string Preheader, string IntroVn, string IntroJp, string SubjectTail)
+        {
+            public void AddTo(Dictionary<string, string> placeholders)
+            {
+                placeholders["StatusLabel"] = StatusLabel;
+                placeholders["PreheaderText"] = Preheader;
+                placeholders["IntroVn"] = IntroVn;
+                placeholders["IntroJp"] = IntroJp;
+            }
+        }
+
+        // coveredFullName = the delegator when the recipient is only covering them; null for a direct candidate.
+        private static MailWording BuildApprovalWording(string? coveredFullName, int otFormId, string requesterFullName)
+        {
+            if (coveredFullName == null)
+            {
+                return new MailWording(
+                    "CHỜ PHÊ DUYỆT&nbsp;&nbsp;·&nbsp;&nbsp;承認待ち",
+                    $"Đơn tăng ca #{otFormId} từ {requesterFullName} đang chờ bạn phê duyệt. / 残業申請 #{otFormId} が承認待ちです。",
+                    "Hệ thống ghi nhận một đơn yêu cầu tăng ca đang chờ sự phê duyệt của bạn. Vui lòng xem thông tin chi tiết bên dưới.",
+                    "残業申請が届いており、あなたの承認をお待ちしています。詳細は下記よりご確認ください。",
+                    "đang chờ bạn duyệt");
+            }
+
+            var name = WebUtility.HtmlEncode(coveredFullName);
+            return new MailWording(
+                "CHỜ DUYỆT THAY&nbsp;&nbsp;·&nbsp;&nbsp;代理承認待ち",
+                $"Đơn tăng ca #{otFormId} đang chờ bạn duyệt thay {name}. / 残業申請 #{otFormId} が{name}様の代理承認待ちです。",
+                $"Bạn được <b>{name}</b> ủy quyền duyệt thay. Đơn yêu cầu tăng ca bên dưới đang chờ phê duyệt, bạn có thể duyệt hoặc từ chối thay {name}. Vui lòng xem thông tin chi tiết bên dưới.",
+                $"<b>{name}</b>様より承認の代理を委任されています。下記の残業申請が承認待ちです。{name}様の代理として承認または却下できます。詳細は下記よりご確認ください。",
+                $"đang chờ bạn duyệt thay {coveredFullName}");
+        }
+
+        private static MailWording BuildBatchWording(string? coveredFullName, int batchId, int formCount, string scopeName)
+        {
+            if (coveredFullName == null)
+            {
+                return new MailWording(
+                    "ĐƠN TỔNG&nbsp;&nbsp;·&nbsp;&nbsp;CHỜ PHÊ DUYỆT&nbsp;&nbsp;·&nbsp;&nbsp;一括承認待ち",
+                    $"Đơn tổng #{batchId} gồm {formCount} đơn tăng ca đang chờ bạn phê duyệt. / 一括申請 #{batchId} が承認待ちです。",
+                    $"Hệ thống đã gom {formCount} đơn tăng ca thuộc phạm vi {scopeName} thành 1 đơn tổng, đang chờ bạn phê duyệt 1 lần. Vui lòng xem thông tin chi tiết bên dưới.",
+                    $"{scopeName}の残業申請{formCount}件が一括申請としてまとめられ、あなたの承認をお待ちしています。詳細は下記よりご確認ください。",
+                    "đang chờ bạn duyệt");
+            }
+
+            var name = WebUtility.HtmlEncode(coveredFullName);
+            return new MailWording(
+                "ĐƠN TỔNG&nbsp;&nbsp;·&nbsp;&nbsp;CHỜ DUYỆT THAY&nbsp;&nbsp;·&nbsp;&nbsp;一括代理承認待ち",
+                $"Đơn tổng #{batchId} gồm {formCount} đơn tăng ca đang chờ bạn duyệt thay {name}. / 一括申請 #{batchId} が{name}様の代理承認待ちです。",
+                $"Bạn được <b>{name}</b> ủy quyền duyệt thay. Hệ thống đã gom {formCount} đơn tăng ca thuộc phạm vi {scopeName} thành 1 đơn tổng đang chờ phê duyệt, bạn có thể duyệt thay {name} 1 lần. Vui lòng xem thông tin chi tiết bên dưới.",
+                $"<b>{name}</b>様より承認の代理を委任されています。{scopeName}の残業申請{formCount}件が一括申請としてまとめられ、承認待ちです。{name}様の代理として一括で承認できます。詳細は下記よりご確認ください。",
+                $"đang chờ bạn duyệt thay {coveredFullName}");
+        }
+
+        // True when at least one token was added; the caller owns SaveChanges.
+        private async Task<bool> SendApprovalMailsAsync(
+            OtForm otForm, OtFormApprovalStep step, List<(string UserName, string? CoveredFullName)> recipients)
+        {
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
             var now = TimeHelper.GetCurrentUtcTime();
             var hasNewToken = false;
@@ -1728,15 +1896,15 @@ namespace Attendance.Application.Services
             var groupName = FormatBilingual(group?.GroupNameVn, group?.GroupNameJp);
             var reasonName = FormatBilingual(reason?.ReasonNameVn, reason?.ReasonNameJp);
 
-            foreach (var candidate in step.Candidates)
+            foreach (var recipient in recipients)
             {
-                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(candidate.UserName, EmailModules.Attendance);
+                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(recipient.UserName, EmailModules.Attendance);
                 if (string.IsNullOrWhiteSpace(email)) continue;
 
                 var emailToken = new OtFormApprovalEmailToken
                 {
                     OtFormId = otForm.Id,
-                    ApproverUserName = candidate.UserName,
+                    ApproverUserName = recipient.UserName,
                     ApproverFullName = fullName,
                     OtFormApprovalStepId = step.Id,
                     Token = TokenHelper.GenerateSecureToken(),
@@ -1750,11 +1918,13 @@ namespace Attendance.Application.Services
 
                 try
                 {
-                    var html = _emailTemplateRenderer.Render("OtForm/ApprovalNotification.html", new Dictionary<string, string>
+                    var requesterName = otForm.CreatedByFullName ?? otForm.CreatedByUserName;
+                    var wording = BuildApprovalWording(recipient.CoveredFullName, otForm.Id, requesterName);
+                    var placeholders = new Dictionary<string, string>
                     {
-                        ["ApproverFullName"] = fullName ?? candidate.UserName,
+                        ["ApproverFullName"] = fullName ?? recipient.UserName,
                         ["OtFormId"] = otForm.Id.ToString(),
-                        ["RequesterFullName"] = otForm.CreatedByFullName ?? otForm.CreatedByUserName,
+                        ["RequesterFullName"] = requesterName,
                         ["DepartmentName"] = departmentName,
                         ["GroupName"] = groupName,
                         ["ReasonName"] = reasonName,
@@ -1763,9 +1933,11 @@ namespace Attendance.Application.Services
                         ["TotalHour"] = otForm.TotalHour.ToString("0.##"),
                         ["ConfirmLink"] = link,
                         ["ExpiryDays"] = EmailApprovalTokenExpiryDays.ToString()
-                    });
+                    };
+                    wording.AddTo(placeholders);
+                    var html = _emailTemplateRenderer.Render("OtForm/ApprovalNotification.html", placeholders);
 
-                    await _emailService.SendAsync(email, $"Đơn tăng ca #{otForm.Id} đang chờ bạn duyệt - YevManagement", html);
+                    await _emailService.SendAsync(email, $"Đơn tăng ca #{otForm.Id} {wording.SubjectTail} - YevManagement", html);
                 }
                 catch (FileNotFoundException)
                 {
@@ -1774,8 +1946,7 @@ namespace Attendance.Application.Services
                 }
             }
 
-            if (hasNewToken)
-                await _unitOfWork.SaveChangesAsync();
+            return hasNewToken;
         }
 
         // Vietnamese is always shown; Japanese is appended only when the master data has it filled in.
@@ -2203,8 +2374,9 @@ namespace Attendance.Application.Services
                 // là candidate hợp lệ ở đúng cấp đó (không nhất thiết đơn còn trong batch này): cấp
                 // DepartmentManager so theo đúng DepartmentId; WorkshopManager/GeneralDirector
                 // company-wide nên chỉ cần khớp TerminalLevel, không lọc Department.
+                var actingUserNames = (await GetActiveDelegatorsAsync(userName)).Keys.Append(userName).ToList();
                 var myCandidacies = (await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
-                    predicate: c => c.UserName == userName && c.OtFormApprovalStep.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None,
+                    predicate: c => actingUserNames.Contains(c.UserName) && c.OtFormApprovalStep.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None,
                     selector: c => new { c.OtFormApprovalStep.TerminalLevelSnapshot, c.OtFormApprovalStep.OtForm.DepartmentId }))
                     .Distinct().ToList();
 
@@ -2413,9 +2585,10 @@ namespace Attendance.Application.Services
                 .GroupBy(x => x.OtFormId)
                 .ToDictionary(g => g.Key, g => g.Count());
 
+            var delegators = await GetActiveDelegatorsAsync(approverUserName);
             foreach (var item in request.Forms)
             {
-                if (!currentStepByFormId.TryGetValue(item.OtFormId, out var step) || !step.Candidates.Any(c => c.UserName == approverUserName))
+                if (!currentStepByFormId.TryGetValue(item.OtFormId, out var step) || !MatchStepActor(step, approverUserName, delegators).IsActor)
                     throw new DomainException($"Bạn không được phân quyền duyệt đơn #{item.OtFormId} ở bước hiện tại của đơn này.");
 
                 if (item.Decision == (int)OtFormBatchFormDecision.Reject)
@@ -2525,16 +2698,15 @@ namespace Attendance.Application.Services
             if (activeForms.Count == 0) return;
 
             var formIds = activeForms.Select(x => x.Id).ToHashSet();
-            var candidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
+            var candidateUserNames = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                 x => formIds.Contains(x.OtFormId) && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending
                     && x.TerminalLevelSnapshot == batch.TerminalLevel,
                 x => x.Candidates))
                 .SelectMany(x => x.Candidates)
-                .GroupBy(x => x.UserName)
-                .Select(g => g.First())
-                .ToList();
+                .Select(x => x.UserName);
 
-            if (candidates.Count == 0) return;
+            var recipients = await GetMailRecipientsAsync(candidateUserNames);
+            if (recipients.Count == 0) return;
 
             var (scopeNameVn, scopeNameJp) = await ResolveBatchScopeNameAsync(batch);
             var scopeName = FormatBilingual(scopeNameVn, scopeNameJp);
@@ -2544,15 +2716,15 @@ namespace Attendance.Application.Services
             var totalHour = activeForms.Sum(x => x.TotalHour);
             var hasNewToken = false;
 
-            foreach (var candidate in candidates)
+            foreach (var recipient in recipients)
             {
-                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(candidate.UserName, EmailModules.Attendance);
+                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(recipient.UserName, EmailModules.Attendance);
                 if (string.IsNullOrWhiteSpace(email)) continue;
 
                 var emailToken = new OtFormBatchEmailToken
                 {
                     OtFormBatchId = batch.Id,
-                    ApproverUserName = candidate.UserName,
+                    ApproverUserName = recipient.UserName,
                     ApproverFullName = fullName,
                     IsReminder = isReminder,
                     Token = TokenHelper.GenerateSecureToken(),
@@ -2566,10 +2738,11 @@ namespace Attendance.Application.Services
 
                 try
                 {
-                    var html = _emailTemplateRenderer.Render("OtForm/BatchApprovalNotification.html", new Dictionary<string, string>
+                    var wording = BuildBatchWording(recipient.CoveredFullName, batch.Id, activeForms.Count, scopeName);
+                    var placeholders = new Dictionary<string, string>
                     {
                         ["OtFormBatchId"] = batch.Id.ToString(),
-                        ["ApproverFullName"] = fullName ?? candidate.UserName,
+                        ["ApproverFullName"] = fullName ?? recipient.UserName,
                         ["FormCount"] = activeForms.Count.ToString(),
                         ["ScopeName"] = scopeName,
                         ["BatchDate"] = batch.BatchDate.ToString("dd/MM/yyyy"),
@@ -2577,11 +2750,13 @@ namespace Attendance.Application.Services
                         ["TotalHour"] = totalHour.ToString("0.##"),
                         ["ConfirmLink"] = link,
                         ["ExpiryDays"] = EmailApprovalTokenExpiryDays.ToString()
-                    });
+                    };
+                    wording.AddTo(placeholders);
+                    var html = _emailTemplateRenderer.Render("OtForm/BatchApprovalNotification.html", placeholders);
 
                     var subjectPrefix = isReminder ? "[Nhắc nhở] " : "";
                     await _emailService.SendAsync(
-                        email, $"{subjectPrefix}Đơn tổng #{batch.Id} ({activeForms.Count} đơn) đang chờ bạn duyệt - YevManagement", html);
+                        email, $"{subjectPrefix}Đơn tổng #{batch.Id} ({activeForms.Count} đơn) {wording.SubjectTail} - YevManagement", html);
                 }
                 catch (FileNotFoundException)
                 {
@@ -2672,7 +2847,66 @@ namespace Attendance.Application.Services
                 await NotifyBatchApproversAsync(batch, activeForms, isReminder: true);
             }
 
+            // Delegations that start today were not active when earlier step mails went out.
+            var startingToday = await _unitOfWork.ApprovalDelegations.SelectAsync(
+                predicate: d => !d.IsDeleted && d.FromDate == today, selector: d => d.Id);
+            foreach (var delegationId in startingToday)
+                await SendDelegationBackfillNotificationsAsync(delegationId);
+
             await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Mails the delegate for steps already waiting on the delegator (mails sent before the delegation
+        // existed). Manager-level steps are skipped: the daily batch mail covers them.
+        public async Task SendDelegationBackfillNotificationsAsync(int delegationId)
+        {
+            var delegation = (await _unitOfWork.ApprovalDelegations.FindWithIncludesAsync(
+                x => x.Id == delegationId && !x.IsDeleted, x => x.DelegatorEmployee, x => x.DelegateEmployee)).FirstOrDefault();
+            if (delegation?.DelegatorEmployee.UserName == null || delegation.DelegateEmployee.UserName == null) return;
+
+            var now = TimeHelper.GetCurrentUtcTime();
+            var today = DateOnly.FromDateTime(now);
+            if (delegation.FromDate > today || delegation.ToDate < today) return;
+
+            var delegatorUserName = delegation.DelegatorEmployee.UserName;
+            var delegateUserName = delegation.DelegateEmployee.UserName;
+            var delegatorFullName = $"{delegation.DelegatorEmployee.LastName} {delegation.DelegatorEmployee.FirstName}";
+
+            var delegatorSteps = await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
+                x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending
+                    && x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None
+                    && x.OtForm.Status == (int)OtFormStatus.InApproval && !x.OtForm.IsDeleted
+                    && x.Candidates.Any(c => c.UserName == delegatorUserName),
+                x => x.Candidates);
+            if (delegatorSteps.Count == 0) return;
+
+            // A form's current step is its lowest pending one, which may not be the delegator's step.
+            var formIds = delegatorSteps.Select(x => x.OtFormId).Distinct().ToList();
+            var lowestPendingByForm = (await _unitOfWork.OtFormApprovalSteps.FindAsync(
+                x => formIds.Contains(x.OtFormId) && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending))
+                .GroupBy(x => x.OtFormId)
+                .ToDictionary(g => g.Key, g => g.Min(x => x.StepOrder));
+
+            var hasNewToken = false;
+            foreach (var step in delegatorSteps.Where(x => lowestPendingByForm[x.OtFormId] == x.StepOrder))
+            {
+                if (step.Candidates.Any(c => string.Equals(c.UserName, delegateUserName, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                var alreadyMailed = (await _unitOfWork.OtFormApprovalEmailTokens.FindAsync(
+                    x => x.OtFormApprovalStepId == step.Id && x.ApproverUserName == delegateUserName
+                        && x.UsedAt == null && x.ExpiresAt > now)).Count > 0;
+                if (alreadyMailed) continue;
+
+                var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == step.OtFormId);
+                if (otForm == null) continue;
+
+                var recipients = new List<(string UserName, string? CoveredFullName)> { (delegateUserName, delegatorFullName) };
+                hasNewToken |= await SendApprovalMailsAsync(otForm, step, recipients);
+            }
+
+            if (hasNewToken)
+                await _unitOfWork.SaveChangesAsync();
         }
     }
 }

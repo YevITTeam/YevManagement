@@ -38,5 +38,6 @@ namespace Attendance.Application.Interfaces.Service
         IProductionEmployeeRepository ProductionEmployees { get; }
         IProductionApprovalStepRepository ProductionApprovalSteps { get; }
         IOtFormEditLogRepository OtFormEditLogs { get; }
+        IApprovalDelegationRepository ApprovalDelegations { get; }
     }
 }

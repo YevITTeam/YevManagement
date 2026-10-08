@@ -225,6 +225,9 @@ export interface PendingApprovalDateCountDto {
 export interface OtFormApprovalHistoryDto {
     approverUserName: string;
     approverFullName: string | null;
+    // Set when the approver acted by delegation: the delegator they covered.
+    onBehalfOfUserName: string | null;
+    onBehalfOfFullName: string | null;
     stepOrder: number;
     jobTitleNameSnapshot: string;
     action: number;
@@ -254,6 +257,13 @@ export interface OtFormApprovalStepDto {
     terminalLevelSnapshot: number;
     status: number;
     candidates: OtFormApprovalStepCandidateDto[];
+    // Pending steps only: who currently covers a candidate by delegation.
+    delegates: OtFormApprovalStepDelegateDto[];
+}
+
+export interface OtFormApprovalStepDelegateDto {
+    delegatorUserName: string;
+    delegateFullName: string;
 }
 
 // 1 dòng lịch sử chỉnh sửa đơn (mới 2026-08-28) — actionType: enum OtFormEditActionType

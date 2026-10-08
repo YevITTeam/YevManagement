@@ -463,7 +463,8 @@ function ReasonAutoFit({ box, vnText, jpText }: { box: FieldBox; vnText: string;
 // Chỉ 4 field thật sự cần để vẽ 1 ô chữ ký — tách khỏi OtFormApprovalHistoryDto đầy đủ để SignatureCell
 // dùng chung được cho cả lịch sử duyệt thật (findHistory) LẪN chữ ký tự ký của người tạo đơn (không có
 // OtFormApprovalHistory tương ứng, xem selfSignDisplay bên dưới).
-export type SignatureDisplay = Pick<OtFormApprovalHistoryDto, "approverFullName" | "approverUserName" | "hasSignature" | "signatureImage" | "actionAt">;
+export type SignatureDisplay = Pick<OtFormApprovalHistoryDto, "approverFullName" | "approverUserName" | "hasSignature" | "signatureImage" | "actionAt"> &
+    Partial<Pick<OtFormApprovalHistoryDto, "onBehalfOfFullName" | "onBehalfOfUserName">>;
 
 export function getSignatureDataUrl(signatureImage: string | null | undefined): string | null {
     if (!signatureImage) return null;
@@ -481,6 +482,8 @@ function SignatureCell({ box, history, nameOnly }: { box: FieldBox; history: Sig
     const displayText = nameOnly ? getGivenName(displayName) : displayName;
     const signedAt = formatDateTime(history.actionAt);
     const dataUrl = history.hasSignature ? getSignatureDataUrl(history.signatureImage) : null;
+    const onBehalfName = history.onBehalfOfFullName ?? history.onBehalfOfUserName;
+    const onBehalfText = onBehalfName ? `(thay mặt ${nameOnly ? getGivenName(onBehalfName) : onBehalfName})` : null;
 
     return (
         <div
@@ -514,6 +517,12 @@ function SignatureCell({ box, history, nameOnly }: { box: FieldBox; history: Sig
                     >
                         {displayText}
                     </span>
+                </div>
+            )}
+
+            {onBehalfText && (
+                <div className="w-full shrink-0 truncate text-center text-[5.5pt] text-black leading-tight" title={onBehalfText}>
+                    {onBehalfText}
                 </div>
             )}
 

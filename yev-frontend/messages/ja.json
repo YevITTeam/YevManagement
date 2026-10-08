@@ -51,6 +51,7 @@
     "otAiChat": "AI残業登録アシスタント",
     "otForms": "残業申請",
     "otBatches": "一括申請",
+    "otDelegations": "承認の委任",
     "otCategories": "マスタ管理",
     "otSignature": "自分の署名",
     "otSecondaryPassword": "第2パスワード",
@@ -1039,7 +1040,8 @@
       "editLogFieldNoteJp": "備考(JP)を変更",
       "colBlockCode": "ライン",
       "colTeamCode": "チーム",
-      "colShiftTeam": "シフト班"
+      "colShiftTeam": "シフト班",
+      "onBehalfOf": "{name}の代理"
     },
     "CreateOtForm": {
       "titleCreate": "残業を登録",
@@ -1238,7 +1240,18 @@
       "processSuccess": "一括申請の承認に成功しました。",
       "processError": "一括申請の承認に失敗しました。",
       "backToListButton": "一括申請一覧に戻る",
-      "loadError": "一括申請を読み込めませんでした — リンクの有効期限が切れているか、既に処理された可能性があります。"
+      "loadError": "一括申請を読み込めませんでした — リンクの有効期限が切れているか、既に処理された可能性があります。",
+      "decisionApproveShort": "承認",
+      "decisionRejectShort": "不承認",
+      "colForm": "申請",
+      "colGroup": "グループ",
+      "colReason": "理由",
+      "colWhen": "日付・時間",
+      "colEmployees": "対象者",
+      "colDecision": "判断",
+      "summaryForms": "{count}件",
+      "summaryEmployees": "{count}名",
+      "footerSummary": "承認 {approve}件 · 不承認 {reject}件"
     },
     "SignatureConfirm": {
       "title": "署名更新の確認",
@@ -1264,6 +1277,31 @@
       "confirming": "確認中...",
       "confirmError": "第2パスワード設定の確認に失敗しました。",
       "successMessage": "第2パスワードを設定しました。アプリに戻って通常どおりご利用いただけます。"
+    },
+    "ApprovalDelegation": {
+      "title": "承認の委任",
+      "add": "委任を追加",
+      "edit": "委任を編集",
+      "mineTitle": "私が委任した相手",
+      "toMeTitle": "私に委任された承認",
+      "empty": "委任はまだありません。",
+      "active": "有効中",
+      "delegateLabel": "代理承認者",
+      "fromLabel": "開始日",
+      "toLabel": "終了日",
+      "reasonLabel": "理由",
+      "selectPlaceholder": "代理承認者を選択",
+      "loadError": "委任の一覧を読み込めませんでした。",
+      "createSuccess": "委任を作成しました。",
+      "updateSuccess": "委任を更新しました。",
+      "saveError": "委任を保存できませんでした。",
+      "deleteSuccess": "委任を削除しました。",
+      "deleteError": "委任を削除できませんでした。",
+      "deleteTitle": "この委任を削除しますか？",
+      "upcoming": "開始前",
+      "expired": "期限切れ",
+      "daysLeft": "残り{count}日",
+      "startsOn": "{date}から"
     }
   },
   "Home": {
