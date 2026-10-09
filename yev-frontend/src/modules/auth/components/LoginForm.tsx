@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff, LogIn, Monitor } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -16,6 +17,7 @@ const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 export default function LoginForm() {
+    const t = useTranslations("Login");
     const router = useRouter();
     const searchParams = useSearchParams();
     const { loginWithPassword, loginWithWindows } = useAuth();
@@ -54,7 +56,7 @@ export default function LoginForm() {
 
             redirectAfterLogin();
         } catch (error) {
-            toast.error(getApiErrorMessage(error, "Đăng nhập thất bại. Vui lòng thử lại."));
+            toast.error(getApiErrorMessage(error, t("failed")));
         } finally {
             setIsSubmitting(false);
         }
@@ -66,7 +68,7 @@ export default function LoginForm() {
             await loginWithWindows();
             redirectAfterLogin();
         } catch (error) {
-            toast.error(getApiErrorMessage(error, "Đăng nhập bằng tài khoản Windows thất bại. Vui lòng thử lại."));
+            toast.error(getApiErrorMessage(error, t("windowsFailed")));
         } finally {
             setIsWindowsLoggingIn(false);
         }
@@ -82,16 +84,16 @@ export default function LoginForm() {
                         <BrandLogo className="h-6 w-12" />
                         <span className="text-base font-semibold text-[#191c1e]">YEV Management</span>
                     </div>
-                    <h1 className="text-lg font-semibold text-[#191c1e]">Đăng nhập</h1>
+                    <h1 className="text-lg font-semibold text-[#191c1e]">{t("title")}</h1>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Tên đăng nhập</span>
+                        <span className={fieldLabelClassName}>{t("userName")}</span>
                         <input
                             value={userName}
                             onChange={(event) => setUserName(event.target.value)}
-                            placeholder="vd. n.truong.da.pcd.it"
+                            placeholder={t("userNamePlaceholder")}
                             disabled={isBusy}
                             autoFocus
                             required
@@ -101,7 +103,7 @@ export default function LoginForm() {
                     </label>
 
                     <label className="block">
-                        <span className={fieldLabelClassName}>Mật khẩu</span>
+                        <span className={fieldLabelClassName}>{t("password")}</span>
                         <div className="relative">
                             <input
                                 type={showPassword ? "text" : "password"}
@@ -118,7 +120,7 @@ export default function LoginForm() {
                                 onClick={() => setShowPassword((current) => !current)}
                                 tabIndex={-1}
                                 className="absolute inset-y-0 right-0 flex cursor-pointer items-center px-3 text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                aria-label={showPassword ? t("hidePassword") : t("showPassword")}
                             >
                                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
@@ -133,7 +135,7 @@ export default function LoginForm() {
                             disabled={isBusy}
                             className="h-4 w-4 cursor-pointer rounded border-[#e0e3e5] text-[#e3000f] focus:ring-[#ffe0e3]"
                         />
-                        Ghi nhớ tài khoản
+                        {t("remember")}
                     </label>
 
                     <button
@@ -142,13 +144,13 @@ export default function LoginForm() {
                         className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <LogIn className="h-4 w-4" />
-                        {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
+                        {isSubmitting ? t("submitting") : t("submit")}
                     </button>
                 </form>
 
                 <div className="my-4 flex items-center gap-3 text-xs uppercase tracking-wide text-[#8a8f94]">
                     <div className="h-px flex-1 bg-[#e0e3e5]" />
-                    hoặc
+                    {t("or")}
                     <div className="h-px flex-1 bg-[#e0e3e5]" />
                 </div>
 
@@ -156,11 +158,11 @@ export default function LoginForm() {
                     type="button"
                     onClick={handleWindowsLogin}
                     disabled={isBusy}
-                    title="Chỉ dùng được trên máy đã cấu hình đăng nhập một chạm (SSO)"
+                    title={t("ssoNote")}
                     className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2.5 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <Monitor className="h-4 w-4 text-[#5e3f3a]" />
-                    {isWindowsLoggingIn ? "Đang đăng nhập..." : "Đăng nhập bằng tài khoản Windows"}
+                    {isWindowsLoggingIn ? t("submitting") : t("windows")}
                 </button>
             </div>
         </div>

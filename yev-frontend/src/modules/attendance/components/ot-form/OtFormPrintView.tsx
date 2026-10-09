@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
-import { Printer, RectangleHorizontal, RectangleVertical } from "lucide-react";
+import { Printer, RectangleHorizontal, RectangleVertical, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
@@ -11,6 +11,7 @@ import { DEFAULT_ATTENDANCE_SETTING, useAttendanceSetting } from "@/modules/atte
 import type { AttendanceSettingDto } from "@/modules/attendance/types/attendance-setting.dto";
 
 interface OtFormPrintViewProps {
+    onClose?: () => void;
     id: number;
 }
 
@@ -775,7 +776,7 @@ export function buildEmployeePages(employees: OtFormEmployeeDto[], paperSize: Pa
     return pages;
 }
 
-export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
+export default function OtFormPrintView({ id, onClose }: OtFormPrintViewProps) {
     const t = useTranslations("Attendance.OtFormPrint");
     const [form, setForm] = useState<OtFormDto | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -898,6 +899,15 @@ export default function OtFormPrintView({ id }: OtFormPrintViewProps) {
                         >
                             <Printer className="h-4 w-4" /> {t("printButton")}
                         </button>
+                        {onClose && (
+                            <button
+                                onClick={onClose}
+                                className="cursor-pointer rounded-lg p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                aria-label="Close"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        )}
                     </div>
                 </div>
                 {/* Chú thích sức chứa của khổ đang chọn — tách khỏi label nút để nút gọn, không bị xuống
