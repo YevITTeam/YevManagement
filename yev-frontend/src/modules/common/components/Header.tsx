@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, IDENTITY_ADMIN_PERMISSIONS } from "@/modules/auth/lib/permissions";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import BrandLogo from "@/components/common/BrandLogo";
 import { useHeaderCollapse } from "@/modules/common/hooks/useHeaderCollapse";
 
 export default function Header() {
@@ -70,9 +71,7 @@ export default function Header() {
       <div className="mx-auto flex h-12 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11). */}
         <Link href="/" prefetch={false} className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center bg-[#e3000f] text-base font-bold text-white shadow-sm">
-            Y
-          </div>
+          <BrandLogo className="h-8 w-10" />
           <div className="leading-tight">
             <div className="text-sm font-semibold text-[#191c1e]">{t("productName")}</div>
             <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">

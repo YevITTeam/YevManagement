@@ -29,6 +29,7 @@ npx tsc --noEmit    # chạy sau mỗi thay đổi .ts/.tsx, trước khi báo x
 ## 1b. Định tuyến — CHỈ đọc doc khi task cần, đọc theo lát cắt
 | Task | Đọc |
 |---|---|
+| Cần bức tranh chung (module, DB, luồng request, deploy) | `docs/overview.md` |
 | Bất kỳ việc gì đụng BE | `docs/docs-be/architecture-core.md` |
 | Auth / User / Role / Permission / email người dùng | `docs/docs-be/identity-module.md` |
 | Chấm công / OT Form / phiếu ăn / lũy kế | `docs/docs-be/attendance-module.md` |
@@ -59,7 +60,7 @@ Hợp đồng API (route, quyền, luật đặc biệt) nằm ở mục `§API`
 - Xuất PDF mới vẽ thẳng bằng `jspdf`, không `html2canvas`. Không viết lại hướng dẫn người dùng cuối vào `docs/` nếu không được yêu cầu.
 
 ## 3b. Ponytail
-Ponytail `full` là mặc định khi viết code; kiến trúc lõi (§3, `architecture-core.md`) và luật 2 thắng. Cập nhật doc sau khi code: `/yev-docs-sync`. Mỗi session Claude một worktree/nhánh riêng; không `git add -A`, chỉ stage đúng file của mình.
+Ponytail `full` là mặc định khi viết code; kiến trúc lõi (§3, `architecture-core.md`) và luật 2 thắng. Quy trình một việc: `/yev-task` → code → `/yev-done` (checklist §4 + `/yev-docs-sync` + commit). Mỗi session Claude một worktree/nhánh riêng; không `git add -A`, chỉ stage đúng file của mình.
 
 ## 4. Checklist trước khi báo "xong"
 BE: `dotnet build YevManagement.slnx` sạch · migration + seed permission nếu thêm endpoint. FE: `npx tsc --noEmit` sạch · key i18n đủ `vi.json` + `ja.json` · UI theo `DESIGN_SYSTEM.md` §9. Cả hai: **doc module đã cập nhật**.

@@ -29,6 +29,7 @@ import {
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
+import BrandLogo from "@/components/common/BrandLogo";
 
 // Mỗi mục khai báo permission "View" của chính màn hình nó mở ra, và CHỈ hiện khi user có ít nhất 1
 // trong số đó. `PcAccessGuard` chỉ chặn ở mức module (`Asset.*`) nên nếu không lọc ở đây, user chỉ
@@ -85,16 +86,14 @@ export default function PcManagerSidebar() {
             onClick={toggle}
             title={t("expandSidebar")}
             aria-label={t("expandSidebar")}
-            className="cursor-pointer flex h-8 w-8 shrink-0 items-center justify-center bg-[#e3000f] text-base font-bold text-white transition hover:opacity-90"
+            className="cursor-pointer flex h-8 w-8 shrink-0 items-center justify-center transition hover:opacity-90"
           >
-            Y
+            <BrandLogo />
           </button>
         ) : (
           <>
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-[#e3000f] text-base font-bold text-white">
-                Y
-              </div>
+              <BrandLogo className="h-8 w-10" />
               <div>
                 <div className="text-base font-semibold leading-tight text-[#191c1e]">YEV IT</div>
                 <div className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.12em] text-[#5e3f3a]">{t("pcManagerTagline")}</div>

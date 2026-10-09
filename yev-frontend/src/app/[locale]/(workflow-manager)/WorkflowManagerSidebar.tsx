@@ -6,6 +6,7 @@ import { Network, Layers, Users, FolderCog, Database, FileStack, PanelLeftClose,
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission } from "@/modules/auth/lib/permissions";
+import BrandLogo from "@/components/common/BrandLogo";
 
 // Sidebar groups, ordered by how often each is used: own requests first, then org data, forms, system.
 // An item shows when the user holds any of its permissions; groups with no visible item are hidden.
@@ -67,16 +68,14 @@ export default function WorkflowManagerSidebar() {
             onClick={toggle}
             title={t("expandSidebar")}
             aria-label={t("expandSidebar")}
-            className="cursor-pointer flex h-10 w-10 shrink-0 items-center justify-center bg-[#e3000f] text-lg font-bold text-white transition hover:opacity-90"
+            className="cursor-pointer flex h-10 w-10 shrink-0 items-center justify-center transition hover:opacity-90"
           >
-            Y
+            <BrandLogo className="h-10 w-10" />
           </button>
         ) : (
           <>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-[#e3000f] text-lg font-bold text-white">
-                Y
-              </div>
+              <BrandLogo className="h-10 w-12" />
               <div>
                 <div className="text-lg font-semibold text-[#191c1e]">YEV IT</div>
                 <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">{t("workflowManagerTagline")}</div>

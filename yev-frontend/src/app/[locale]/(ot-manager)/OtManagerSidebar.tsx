@@ -8,6 +8,7 @@ import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions"
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
 import { OT_CATEGORIES_PERMISSIONS } from "@/modules/attendance/lib/otRoutePermissions";
+import BrandLogo from "@/components/common/BrandLogo";
 
 interface OtNavItem {
     key: string;
@@ -88,16 +89,14 @@ export default function OtManagerSidebar() {
                         onClick={toggle}
                         title={t("expandSidebar")}
                         aria-label={t("expandSidebar")}
-                        className="cursor-pointer flex h-8 w-8 shrink-0 items-center justify-center bg-[#e3000f] text-base font-bold text-white transition hover:opacity-90"
+                        className="cursor-pointer flex h-8 w-8 shrink-0 items-center justify-center transition hover:opacity-90"
                     >
-                        Y
+                        <BrandLogo />
                     </button>
                 ) : (
                     <>
                         <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-[#e3000f] text-base font-bold text-white">
-                                Y
-                            </div>
+                            <BrandLogo className="h-8 w-10" />
                             <div>
                                 <div className="text-base font-semibold leading-tight text-[#191c1e]">YEV IT</div>
                                 <div className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.12em] text-[#5e3f3a]">{t("otManagerTagline")}</div>
