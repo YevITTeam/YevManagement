@@ -10,5 +10,8 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
 
         // Create a role-Basic Identity user for each account that is active in the directory but unknown to Identity.
         public bool CreateMissingUsers { get; set; }
+
+        // Replace a device's existing domain account with the one Tanium reports; off keeps hand-typed accounts.
+        public bool OverwriteExistingAccount { get; set; }
     }
 }

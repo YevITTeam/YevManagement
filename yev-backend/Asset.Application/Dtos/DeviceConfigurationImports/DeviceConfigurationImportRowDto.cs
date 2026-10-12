@@ -24,9 +24,11 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
         public string? Ram { get; set; }
         public string? Size { get; set; }
 
-        // Code/Name extracted from ComputerName (see the algorithm in DeviceConfigurationImportService).
+        // Code extracted from ComputerName (see the algorithm in DeviceConfigurationImportService).
         public string? ParsedDeviceCode { get; set; }
-        public string? ParsedDeviceName { get; set; }
+
+        // Computer Name as-is, written to Device.DeviceName on Confirm.
+        public string? ResolvedDeviceName { get; set; }
 
         public int? ResolvedDeviceId { get; set; }
         public int? ResolvedIpAddressId { get; set; }
@@ -35,7 +37,7 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
         // when another device already owns it (that case is a Warning, not a blocking error).
         public string? ResolvedSerialNumber { get; set; }
 
-        // LastLoggedInUser when it is a domain account that will be written to Device.ManagerDomainAccount.
+        // LastLoggedInUser when it is a domain account; written to Device.ManagerDomainAccount when the device has none (or on overwrite).
         public string? ResolvedManagerDomainAccount { get; set; }
 
         // DomainAccountState of ResolvedManagerDomainAccount, filled by Preview only (null when there is no account).

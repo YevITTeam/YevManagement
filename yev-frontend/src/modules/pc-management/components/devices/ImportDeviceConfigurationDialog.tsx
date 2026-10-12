@@ -15,6 +15,7 @@ import {
 } from "@/modules/pc-management/types/device-configuration-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { useDragScroll } from "@/modules/common/hooks/useDragScroll";
 
 interface ImportDeviceConfigurationDialogProps {
     isOpen: boolean;
@@ -53,6 +54,7 @@ export default function ImportDeviceConfigurationDialog({
     const [result, setResult] = useState<DeviceConfigurationImportConfirmResultDto | null>(null);
     const [localSkippedRows, setLocalSkippedRows] = useState<LocalSkippedRow[]>([]);
     const [createMissingUsers, setCreateMissingUsers] = useState(true);
+    const [overwriteExistingAccount, setOverwriteExistingAccount] = useState(false);
     // Tiền tố mã máy đối chiếu báo cáo — người dùng có thể sửa tự do, mặc định đủ 4 họ mã chuẩn
     // (YDC/YLC/YDF/TYC, xem StandardFamilyPrefixes bên BE), không giới hạn phải nhập đúng 4 mã này.
     // YDF không có trong bảng LoaiThietBi (nó là 1 họ mã con của YDC/Desktop) nên không xuất hiện
@@ -62,6 +64,7 @@ export default function ImportDeviceConfigurationDialog({
     const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const typePickerRef = useRef<HTMLDivElement>(null);
+    const [tableRef, onTableMouseDown] = useDragScroll<HTMLDivElement>();
 
     // Danh sách Loại thiết bị chỉ dùng để điền nhanh vào ô tiền tố — nạp 1 lần, không phụ thuộc isOpen.
     useFetchEffect(
@@ -128,7 +131,7 @@ export default function ImportDeviceConfigurationDialog({
 
     const handlePreview = async () => {
         if (!file) {
-            toast.error("Vui lòng chọn file Tanium trước.");
+            toast.error("Chọn file Tanium trước.");
             return;
         }
         setIsPreviewing(true);
@@ -143,9 +146,9 @@ export default function ImportDeviceConfigurationDialog({
                 outOfScopeSkippedCount: previewResult.outOfScopeSkippedCount,
             });
             if (previewResult.invalidRows > 0) {
-                toast.warn(`Có ${previewResult.invalidRows} dòng lỗi — các dòng này sẽ tự bị bỏ qua khi xác nhận đồng bộ.`);
+                toast.warn(`${previewResult.invalidRows} dòng lỗi sẽ bị bỏ qua khi xác nhận.`);
             } else {
-                toast.success(`Đã xem trước ${previewResult.totalRows} dòng, tất cả hợp lệ.`);
+                toast.success(`${previewResult.totalRows} dòng, tất cả hợp lệ.`);
             }
         } catch (err) {
             toast.error(getApiErrorMessage(err, "Xem trước file Tanium thất bại."));
@@ -213,7 +216,7 @@ export default function ImportDeviceConfigurationDialog({
                 ram: row.ram,
                 size: row.size,
             }));
-            const confirmResult = await DeviceConfigurationImportApi.confirmImport(rawRows, createMissingUsers);
+            const confirmResult = await DeviceConfigurationImportApi.confirmImport(rawRows, createMissingUsers, overwriteExistingAccount);
             setResult(confirmResult);
             setLocalSkippedRows(
                 rows
@@ -221,15 +224,14 @@ export default function ImportDeviceConfigurationDialog({
                     .map((row) => ({ rowNumber: row.rowNumber, computerName: row.computerName, errors: row.errors }))
             );
             toast.success(
-                `Đồng bộ thành công — tạo mới ${confirmResult.createdConfigCount} cấu hình, ` +
-                    `cập nhật ${confirmResult.updatedConfigCount} cấu hình, ghi Serial cho ${confirmResult.serialUpdatedCount} thiết bị, ` +
-                    `cập nhật tài khoản domain cho ${confirmResult.managerAccountUpdatedCount} thiết bị, thêm ${confirmResult.emailAddedCount} email` +
-                    (confirmResult.ipReassignedCount > 0 ? `, gán IP cho ${confirmResult.ipReassignedCount} thiết bị.` : ".")
+                `Đã đồng bộ: tạo ${confirmResult.createdConfigCount}, cập nhật ${confirmResult.updatedConfigCount} cấu hình` +
+                    ` · tên ${confirmResult.deviceNameUpdatedCount} · Serial ${confirmResult.serialUpdatedCount} · tài khoản ${confirmResult.managerAccountUpdatedCount}` +
+                    ` · email ${confirmResult.emailAddedCount}` +
+                    (confirmResult.ipReassignedCount > 0 ? ` · IP ${confirmResult.ipReassignedCount}` : "")
             );
             if (confirmResult.usersUnavailableCount > 0 || confirmResult.usersFailedCount > 0) {
                 toast.warn(
-                    `Chưa tạo được user cho ${confirmResult.usersUnavailableCount + confirmResult.usersFailedCount} tài khoản ` +
-                        "(không kết nối được AD hoặc tạo lỗi) — đồng bộ lại sau để tạo bù."
+                    `Chưa tạo được user cho ${confirmResult.usersUnavailableCount + confirmResult.usersFailedCount} tài khoản (lỗi AD) — đồng bộ lại để tạo bù.`
                 );
             }
         } catch (err) {
@@ -297,6 +299,7 @@ export default function ImportDeviceConfigurationDialog({
                             <span className="font-semibold text-[#16a34a]">Tạo mới {result.createdConfigCount} cấu hình</span>
                             <span className="text-[#5e3f3a]">Cập nhật: {result.updatedConfigCount}</span>
                             <span className="text-[#5e3f3a]">Gán IP: {result.ipReassignedCount}</span>
+                            <span className="text-[#5e3f3a]">Đổi tên: {result.deviceNameUpdatedCount}</span>
                             <span className="text-[#5e3f3a]">Ghi Serial: {result.serialUpdatedCount}</span>
                             <span className="text-[#5e3f3a]">Tài khoản domain: {result.managerAccountUpdatedCount}</span>
                             <span className="text-[#5e3f3a]">Email thêm mới: {result.emailAddedCount}</span>
@@ -315,7 +318,7 @@ export default function ImportDeviceConfigurationDialog({
                         {localSkippedRows.length > 0 && (
                             <div>
                                 <h4 className="mb-2 text-sm font-semibold text-[#930006]">
-                                    Dòng bị bỏ qua (chưa gửi lên server — sửa lại file rồi đồng bộ bù sau)
+                                    Dòng bị bỏ qua (sửa file rồi đồng bộ lại)
                                 </h4>
                                 <table className="min-w-full border-collapse text-left text-xs">
                                     <thead>
@@ -372,7 +375,7 @@ export default function ImportDeviceConfigurationDialog({
                                     onChange={(e) => setPrefixesInput(e.target.value)}
                                     disabled={isBusy}
                                     placeholder="VD: YDC, YLC, YDF, TYC"
-                                    title="Chỉ đối chiếu thiết bị có mã bắt đầu bằng 1 trong các tiền tố này (cách nhau bằng dấu phẩy) — để trống nếu muốn đối chiếu tất cả."
+                                    title="Các tiền tố cách nhau bằng dấu phẩy; để trống để đối chiếu tất cả"
                                     className="w-40 rounded-lg border border-[#e0e3e5] px-2 py-1.5 text-xs text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
                                 />
                             </label>
@@ -382,7 +385,7 @@ export default function ImportDeviceConfigurationDialog({
                                     type="button"
                                     onClick={() => setIsTypePickerOpen((current) => !current)}
                                     disabled={isBusy}
-                                    title="Chọn nhanh tiền tố theo Loại thiết bị có sẵn trong hệ thống"
+                                    title="Chọn nhanh tiền tố theo loại thiết bị"
                                     className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     Loại thiết bị
@@ -421,7 +424,7 @@ export default function ImportDeviceConfigurationDialog({
                                 type="button"
                                 onClick={handleCheckMissingDevices}
                                 disabled={!file || isBusy}
-                                title='Liệt kê thiết bị đang "Đang sử dụng" trong hệ thống nhưng không có trong file Tanium (giới hạn theo tiền tố mã máy), có thể tải Excel — không cần bấm "Xem trước" trước'
+                                title='Thiết bị "Đang sử dụng" không có trong file Tanium'
                                 className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <FileSpreadsheet className="h-3.5 w-3.5" />
@@ -462,7 +465,7 @@ export default function ImportDeviceConfigurationDialog({
                                     </div>
                                 </div>
 
-                                <div className="flex-1 overflow-auto p-2">
+                                <div ref={tableRef} onMouseDown={onTableMouseDown} className="flex-1 cursor-grab overflow-auto p-2">
                                     {missingDevices.length === 0 ? (
                                         <div className="px-4 py-12 text-center text-sm text-[#16a34a]">
                                             Không có thiết bị nào bị thiếu — mọi thiết bị &quot;Đang sử dụng&quot; đều có trong file Tanium.
@@ -516,14 +519,20 @@ export default function ImportDeviceConfigurationDialog({
                                 <span className={summary.invalidRows > 0 ? "text-[#930006]" : "text-[#5e3f3a]"}>
                                     Lỗi: {summary.invalidRows}
                                 </span>
-                                <span className="text-[#5e3f3a]">
-                                    Đã bỏ qua {summary.outOfScopeSkippedCount} máy ngoài phạm vi (không thuộc mã
-                                    YDC/YLC/YDF/AC/TYC)
+                                <span className="text-[#5e3f3a]" title="Máy không thuộc mã YDC/YLC/YDF/AC/TYC bị bỏ qua">
+                                    Ngoài phạm vi: {summary.outOfScopeSkippedCount}
                                 </span>
-                                {summary.invalidRows > 0 && (
-                                    <span className="text-[#930006]">— Các dòng lỗi sẽ tự bị bỏ qua khi xác nhận đồng bộ.</span>
-                                )}
                                 <label className="ml-auto flex cursor-pointer items-center gap-2 text-[#191c1e]">
+                                    <input
+                                        type="checkbox"
+                                        checked={overwriteExistingAccount}
+                                        onChange={(e) => setOverwriteExistingAccount(e.target.checked)}
+                                        disabled={isBusy}
+                                        className="h-3.5 w-3.5 cursor-pointer accent-[#e3000f]"
+                                    />
+                                    Ghi đè tài khoản có sẵn
+                                </label>
+                                <label className="flex cursor-pointer items-center gap-2 text-[#191c1e]">
                                     <input
                                         type="checkbox"
                                         checked={createMissingUsers}
@@ -531,16 +540,15 @@ export default function ImportDeviceConfigurationDialog({
                                         disabled={isBusy}
                                         className="h-3.5 w-3.5 cursor-pointer accent-[#e3000f]"
                                     />
-                                    Tạo user Identity (role Basic) cho tài khoản có trong AD
-                                    {willCreateCount > 0 ? ` — ${willCreateCount} tài khoản` : ""}
+                                    Tạo user Basic cho tài khoản có trong AD{willCreateCount > 0 ? ` (${willCreateCount})` : ""}
                                 </label>
                             </div>
                         )}
 
-                        <div className="flex-1 overflow-auto p-2">
+                        <div ref={tableRef} onMouseDown={onTableMouseDown} className="flex-1 cursor-grab overflow-auto p-2">
                             {rows.length === 0 ? (
                                 <div className="px-4 py-12 text-center text-sm text-[#5e3f3a]">
-                                    {isPreviewing ? "Đang đọc file..." : "Chưa có dữ liệu xem trước. Chọn file rồi bấm \"Xem trước\"."}
+                                    {isPreviewing ? "Đang đọc file..." : "Chọn file rồi bấm \"Xem trước\"."}
                                 </div>
                             ) : (
                                 <table className="min-w-full border-collapse text-left text-xs">
@@ -548,7 +556,7 @@ export default function ImportDeviceConfigurationDialog({
                                         <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                             <th className="whitespace-nowrap px-3 py-2">Dòng</th>
                                             <th className="whitespace-nowrap px-3 py-2">Computer Name</th>
-                                            <th className="whitespace-nowrap px-3 py-2">Mã / Tên tách được</th>
+                                            <th className="whitespace-nowrap px-3 py-2">Mã máy</th>
                                             <th className="whitespace-nowrap px-3 py-2">Hãng / Model</th>
                                             <th className="whitespace-nowrap px-3 py-2">Serial</th>
                                             <th className="whitespace-nowrap px-3 py-2">CPU</th>
@@ -572,7 +580,7 @@ export default function ImportDeviceConfigurationDialog({
                                                     {row.computerName}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
-                                                    {row.parsedDeviceCode} — {row.parsedDeviceName}
+                                                    {row.parsedDeviceCode}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
                                                     {row.manufacturer ?? "-"} / {row.model ?? "-"}
@@ -601,7 +609,7 @@ export default function ImportDeviceConfigurationDialog({
                                                             <div className="text-[11px]">{renderAccountBadge(row.accountState)}</div>
                                                         </div>
                                                     ) : row.lastLoggedInUser ? (
-                                                        <div className="text-[#8a8f94]" title="Tài khoản Local — không lưu">
+                                                        <div className="text-[#8a8f94]" title="Tài khoản Local, không lưu">
                                                             {row.lastLoggedInUser}
                                                         </div>
                                                     ) : null}

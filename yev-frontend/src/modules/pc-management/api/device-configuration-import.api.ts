@@ -32,10 +32,15 @@ export const DeviceConfigurationImportApi = {
 
   // Gửi lại đúng field thô của "rows" nhận từ preview — server tự resolve lại từ đầu, ghi DB thật.
   // createMissingUsers: tạo user Identity (role Basic) cho tài khoản có trong AD mà Identity chưa có.
-  confirmImport: async (rows: DeviceConfigurationImportRowDto[], createMissingUsers: boolean) => {
+  // overwriteExistingAccount: thay tài khoản domain đã có trên thiết bị bằng tài khoản Tanium báo (mặc định giữ nguyên).
+  confirmImport: async (
+    rows: DeviceConfigurationImportRowDto[],
+    createMissingUsers: boolean,
+    overwriteExistingAccount: boolean
+  ) => {
     const response = await api.post<ApiResponse<DeviceConfigurationImportConfirmResultDto>>(
       ENDPOINTS.DEVICE_CONFIGURATION_IMPORT.confirm,
-      { rows, createMissingUsers }
+      { rows, createMissingUsers, overwriteExistingAccount }
     );
     return response.data;
   },

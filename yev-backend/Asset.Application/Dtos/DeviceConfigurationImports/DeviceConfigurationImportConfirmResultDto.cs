@@ -7,6 +7,8 @@ namespace Asset.Application.Dtos.DeviceConfigurationImports
         public int IpReassignedCount { get; set; }
         // Devices whose SerialNumber was written from the "Computer Serial Number" column (2026-07-23).
         public int SerialUpdatedCount { get; set; }
+        // Devices whose DeviceName was replaced by the Computer Name column.
+        public int DeviceNameUpdatedCount { get; set; }
         // Devices whose ManagerDomainAccount changed, and DeviceEmails rows added, from the Tanium file.
         public int ManagerAccountUpdatedCount { get; set; }
         public int EmailAddedCount { get; set; }

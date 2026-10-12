@@ -70,7 +70,7 @@ namespace Identity.Application.Services
             if (!Enum.IsDefined(typeof(UserEmailSource), request.Source))
                 throw new DomainException("Nguồn email không hợp lệ.");
 
-            var email = request.Email.Trim();
+            var email = request.Email.Trim().ToLowerInvariant();
             var duplicate = await _unitOfWork.UserEmails.FirstOrDefaultAsync(x => x.UserId == userId && x.Email == email);
             if (duplicate != null)
                 throw new DomainException($"Người dùng đã có email '{email}'.");
@@ -112,7 +112,7 @@ namespace Identity.Application.Services
             var result = new LinkDomainAccountEmailsResultDto { UserId = user.Id, UserName = user.UserName, UserCreated = userCreated };
             foreach (var item in request.Emails)
             {
-                var email = item.Email.Trim();
+                var email = item.Email.Trim().ToLowerInvariant();
                 if (result.AddedEmails.Concat(result.SkippedEmails).Contains(email, StringComparer.OrdinalIgnoreCase))
                     continue;
 

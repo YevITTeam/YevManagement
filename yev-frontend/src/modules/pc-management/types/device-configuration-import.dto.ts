@@ -34,7 +34,8 @@ export const DomainAccountState = {
 export interface DeviceConfigurationImportPreviewRowDto extends DeviceConfigurationImportRowDto {
     rowNumber: number;
     parsedDeviceCode: string;
-    parsedDeviceName: string;
+    // Computer Name nguyên văn sẽ ghi vào tên thiết bị; null = không đổi.
+    resolvedDeviceName: string | null;
     resolvedDeviceId: number | null;
     resolvedIpAddressId: number | null;
     // null = serial sẽ KHÔNG được ghi (trống, đang thuộc Device khác, hoặc lặp nhiều dòng trong file).
@@ -68,6 +69,7 @@ export interface DeviceConfigurationImportConfirmResultDto {
     updatedConfigCount: number;
     ipReassignedCount: number;
     serialUpdatedCount: number;
+    deviceNameUpdatedCount: number;
     managerAccountUpdatedCount: number;
     emailAddedCount: number;
     // Chỉ có số khi gửi createMissingUsers = true: user Identity vừa tạo / bỏ qua (bị vô hiệu hoá hoặc không có trong AD)

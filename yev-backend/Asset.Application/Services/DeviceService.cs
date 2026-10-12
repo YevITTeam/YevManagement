@@ -688,7 +688,7 @@ namespace Asset.Application.Services
                 var email = new DeviceEmail
                 {
                     DeviceId = newDevice.Id,
-                    Email = emailInput.Email.Trim(),
+                    Email = emailInput.Email.Trim().ToLowerInvariant(),
                     Note = emailInput.Note,
                     IsDeleted = false
                 };
@@ -715,7 +715,14 @@ namespace Asset.Application.Services
         private async Task EnsureIdentityUserAsync(string? domainAccount)
         {
             if (domainAccount == null) return;
-            await _userDirectoryService.EnsureDomainUsersAsync(new[] { domainAccount });
+            try
+            {
+                await _userDirectoryService.EnsureDomainUsersAsync(new[] { domainAccount });
+            }
+            catch
+            {
+                // The device is already saved; the user can still be created later from the device form.
+            }
         }
 
         public async Task UpdateAsync(UpdateDeviceDto request)
@@ -770,6 +777,7 @@ namespace Asset.Application.Services
             device.GroupId = request.GroupId;
             device.DepartmentId = request.DepartmentId;
             device.Manager = request.Manager;
+            var previousAccount = device.ManagerDomainAccount;
             device.ManagerDomainAccount = NormalizeDomainAccount(request.ManagerDomainAccount);
             device.PurchaseDate = request.PurchaseDate;
             device.DepreciationMonths = request.DepreciationMonths;
@@ -784,7 +792,8 @@ namespace Asset.Application.Services
 
             _unitOfWork.Devices.Update(device);
             await _unitOfWork.SaveChangesAsync();
-            await EnsureIdentityUserAsync(device.ManagerDomainAccount);
+            if (!string.Equals(previousAccount, device.ManagerDomainAccount, StringComparison.OrdinalIgnoreCase))
+                await EnsureIdentityUserAsync(device.ManagerDomainAccount);
         }
 
         public async Task<DeviceReplacementSuggestionDto?> GetReplacementSuggestionAsync(int oldDeviceId)
@@ -1059,13 +1068,13 @@ namespace Asset.Application.Services
 
         // Reconciles a Device's emails with the requested list, matched by trimmed/case-insensitive
         // Email text (input items have no Id): entries missing from the request are soft-deleted,
-        // matching entries keep their Id and only refresh Note if it changed, unmatched entries are added.
+        // matching entries keep their Id and refresh Note/lowercased Email, unmatched entries are added.
         private async Task SyncEmailsAsync(int deviceId, List<DeviceEmailInputDto> requestedEmails)
         {
             var currentEmails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted);
 
             var normalizedRequest = requestedEmails
-                .Select(e => new { Email = e.Email.Trim(), e.Note })
+                .Select(e => new { Email = e.Email.Trim().ToLowerInvariant(), e.Note })
                 .ToList();
             var requestedKeys = normalizedRequest.Select(e => e.Email.ToLowerInvariant()).ToHashSet();
 
@@ -1084,9 +1093,10 @@ namespace Asset.Application.Services
                 var key = item.Email.ToLowerInvariant();
                 if (currentByKey.TryGetValue(key, out var existing))
                 {
-                    if (existing.Note != item.Note)
+                    if (existing.Note != item.Note || existing.Email != item.Email)
                     {
                         existing.Note = item.Note;
+                        existing.Email = item.Email;
                         _unitOfWork.DeviceEmails.Update(existing);
                     }
                 }

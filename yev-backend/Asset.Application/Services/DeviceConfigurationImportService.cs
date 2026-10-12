@@ -34,6 +34,8 @@ namespace Asset.Application.Services
         private const string TaniumEmailNote = "Tanium";
         private const int MaxDomainAccountLength = 150;
         private const int MaxEmailLength = 255;
+        private const int MaxDeviceNameLength = 255;
+        private const string DomainSuffix = ".yev.vn";
 
         private readonly IDeviceConfigurationService _deviceConfigurationService;
         private readonly IUserDirectoryService _userDirectoryService;
@@ -56,22 +58,42 @@ namespace Asset.Application.Services
         }
 
         // Marks each row with what Identity/the directory say about its domain account (read-only).
+        // An Identity failure leaves every account as "directory unavailable" instead of failing the preview.
         private async Task FillAccountStatesAsync(List<DeviceConfigurationImportRowDto> rows)
         {
             var accounts = rows.Where(r => r.ResolvedManagerDomainAccount != null).Select(r => r.ResolvedManagerDomainAccount!);
-            var stateByAccount = (await _userDirectoryService.ResolveDomainAccountsAsync(accounts))
-                .ToDictionary(x => x.Account, x => x.State, StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, DomainAccountState> stateByAccount;
+            try
+            {
+                stateByAccount = (await _userDirectoryService.ResolveDomainAccountsAsync(accounts))
+                    .ToDictionary(x => x.Account, x => x.State, StringComparer.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                stateByAccount = new Dictionary<string, DomainAccountState>(StringComparer.OrdinalIgnoreCase);
+            }
 
             foreach (var row in rows.Where(r => r.ResolvedManagerDomainAccount != null))
-                row.AccountState = (int)stateByAccount[row.ResolvedManagerDomainAccount!.Trim()];
+                row.AccountState = (int)stateByAccount.GetValueOrDefault(row.ResolvedManagerDomainAccount!.Trim(), DomainAccountState.DirectoryUnavailable);
         }
 
         // Runs after the Asset transaction has committed (Identity is another database), so a failure here
         // never undoes the import; the call is idempotent and can simply be repeated.
         private async Task CreateMissingUsersAsync(List<DeviceConfigurationImportRowDto> rows, DeviceConfigurationImportConfirmResultDto result)
         {
-            var accounts = rows.Where(r => r.ResolvedManagerDomainAccount != null).Select(r => r.ResolvedManagerDomainAccount!);
-            foreach (var info in await _userDirectoryService.EnsureDomainUsersAsync(accounts))
+            var accounts = rows.Where(r => r.ResolvedManagerDomainAccount != null).Select(r => r.ResolvedManagerDomainAccount!).ToList();
+            IReadOnlyList<DomainAccountInfo> infos;
+            try
+            {
+                infos = await _userDirectoryService.EnsureDomainUsersAsync(accounts);
+            }
+            catch
+            {
+                result.UsersFailedCount += accounts.Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                return;
+            }
+
+            foreach (var info in infos)
             {
                 switch (info.State)
                 {
@@ -113,9 +135,12 @@ namespace Asset.Application.Services
                         if (assigned) result.IpReassignedCount++;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(row.ResolvedSerialNumber) || !string.IsNullOrWhiteSpace(row.ResolvedManagerDomainAccount))
+                    if (!string.IsNullOrWhiteSpace(row.ResolvedSerialNumber) || !string.IsNullOrWhiteSpace(row.ResolvedManagerDomainAccount)
+                        || !string.IsNullOrWhiteSpace(row.ResolvedDeviceName))
                     {
-                        var (serialUpdated, accountUpdated) = await UpdateDeviceFromTaniumAsync(deviceId, row.ResolvedSerialNumber, row.ResolvedManagerDomainAccount);
+                        var (serialUpdated, accountUpdated, nameUpdated) = await UpdateDeviceFromTaniumAsync(
+                            deviceId, row.ResolvedSerialNumber, row.ResolvedManagerDomainAccount, row.ResolvedDeviceName, request.OverwriteExistingAccount);
+                        if (nameUpdated) result.DeviceNameUpdatedCount++;
                         if (serialUpdated) result.SerialUpdatedCount++;
                         if (accountUpdated) result.ManagerAccountUpdatedCount++;
                     }
@@ -335,27 +360,30 @@ namespace Asset.Application.Services
             return true;
         }
 
-        // Writes the serial and the domain account Tanium reported into the Device. The serial was checked
-        // at validate time to belong to no other device, so it simply overwrites the old value (Tanium reads
-        // it straight from the machine). Returns which of the two actually changed.
-        private async Task<(bool SerialUpdated, bool AccountUpdated)> UpdateDeviceFromTaniumAsync(int deviceId, string? serialNumber, string? domainAccount)
+        // The serial was checked at validate time to belong to no other device, so it overwrites the old value.
+        // The domain account is filled while the device has none; an existing one is replaced only on overwrite.
+        private async Task<(bool SerialUpdated, bool AccountUpdated, bool NameUpdated)> UpdateDeviceFromTaniumAsync(
+            int deviceId, string? serialNumber, string? domainAccount, string? deviceName, bool overwriteAccount)
         {
             var device = await _unitOfWork.Devices.GetByIdAsync(deviceId);
-            if (device == null) return (false, false);
+            if (device == null) return (false, false, false);
 
+            var nameUpdated = !string.IsNullOrWhiteSpace(deviceName) && device.DeviceName != deviceName;
             var serialUpdated = !string.IsNullOrWhiteSpace(serialNumber) && device.SerialNumber != serialNumber;
-            var accountUpdated = !string.IsNullOrWhiteSpace(domainAccount) && device.ManagerDomainAccount != domainAccount;
-            if (!serialUpdated && !accountUpdated) return (false, false);
+            var accountUpdated = !string.IsNullOrWhiteSpace(domainAccount) && (string.IsNullOrWhiteSpace(device.ManagerDomainAccount)
+                || (overwriteAccount && !device.ManagerDomainAccount.Equals(domainAccount, StringComparison.OrdinalIgnoreCase)));
+            if (!serialUpdated && !accountUpdated && !nameUpdated) return (false, false, false);
 
+            if (nameUpdated) device.DeviceName = deviceName!;
             if (serialUpdated) device.SerialNumber = serialNumber;
             if (accountUpdated) device.ManagerDomainAccount = domainAccount;
             _unitOfWork.Devices.Update(device);
 
-            return (serialUpdated, accountUpdated);
+            return (serialUpdated, accountUpdated, nameUpdated);
         }
 
-        // Adds the addresses the device does not have yet (case-insensitive). Never removes or edits
-        // existing emails, since Tanium may miss addresses that were typed by hand.
+        // Adds the addresses the device does not have yet (case-insensitive), including ones deleted earlier.
+        // Never removes or edits existing emails, since Tanium may miss addresses that were typed by hand.
         private async Task<int> AddMissingDeviceEmailsAsync(int deviceId, IEnumerable<string> emails)
         {
             var existing = (await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted))
@@ -382,7 +410,7 @@ namespace Asset.Application.Services
         private async Task<(List<DeviceConfigurationImportRowDto> Rows, int OutOfScopeSkippedCount)> ValidateAndResolveRowsAsync(List<DeviceConfigurationImportRowDto> rawRows)
         {
             var duplicatedCodesInFile = rawRows
-                .Select(r => ParseComputerName(r.ComputerName ?? string.Empty).Code)
+                .Select(r => ParseComputerName(r.ComputerName ?? string.Empty))
                 .Where(c => c != null)
                 .GroupBy(c => c!, StringComparer.OrdinalIgnoreCase)
                 .Where(g => g.Count() > 1)
@@ -406,7 +434,7 @@ namespace Asset.Application.Services
             // để tra trong bộ nhớ — kết quả nghiệp vụ giữ nguyên (collation SQL vẫn không phân biệt
             // hoa/thường như query cũ, GroupBy...First giữ đúng 1 bản ghi/khoá khi trùng mã ngoài ý muốn).
             var candidateCodes = rawRows
-                .Select(r => ParseComputerName(r.ComputerName ?? string.Empty).Code)
+                .Select(r => ParseComputerName(r.ComputerName ?? string.Empty))
                 .Where(c => c != null)
                 .Select(c => c!)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -450,7 +478,7 @@ namespace Asset.Application.Services
 
             foreach (var row in rawRows)
             {
-                var (parsedCode, parsedName) = ParseComputerName(row.ComputerName ?? string.Empty);
+                var parsedCode = ParseComputerName(row.ComputerName ?? string.Empty);
                 if (parsedCode == null)
                 {
                     // Không khớp 5 họ mã cần import (YDC/YLC/YDF/AC/TYC) — loại thầm
@@ -463,16 +491,17 @@ namespace Asset.Application.Services
 
                 if (IsTaniumErrorRow(row))
                 {
-                    errors.Add("Dòng bị lỗi Tanium (agent không thu thập được dữ liệu cho máy này).");
+                    errors.Add("Dòng bị lỗi Tanium (không thu thập được dữ liệu).");
                 }
 
                 int? resolvedDeviceId = null;
                 if (duplicatedCodesInFile.Contains(parsedCode))
-                    errors.Add($"Mã thiết bị '{parsedCode}' bị lặp lại nhiều dòng trong file.");
+                    errors.Add($"Mã '{parsedCode}' lặp trong file.");
 
                 var device = devicesByCode.GetValueOrDefault(parsedCode);
-                if (device == null) errors.Add($"Không tìm thấy thiết bị có mã '{parsedCode}'.");
+                if (device == null) errors.Add($"Không có thiết bị mã '{parsedCode}'.");
                 else resolvedDeviceId = device.Id;
+                var isLiquidated = device != null && device.Status.IsLiquidationStatus();
 
                 // Tanium IP is only assigned when it is still Available. An IP in use (another
                 // device, or an external device) is never taken over; those cases and unknown or
@@ -483,9 +512,13 @@ namespace Asset.Application.Services
                 if (!string.IsNullOrWhiteSpace(taniumIp) && !errors.Any(e => e.StartsWith("Dòng bị lỗi Tanium")))
                 {
                     var ipAddress = ipsByAddress.GetValueOrDefault(taniumIp);
-                    if (ipAddress == null)
+                    if (isLiquidated)
                     {
-                        warnings.Add($"Không tìm thấy địa chỉ IP '{taniumIp}' trong hệ thống — sẽ không cập nhật IP cho thiết bị này.");
+                        warnings.Add("Máy chờ thanh lý/đã thanh lý — không gán IP.");
+                    }
+                    else if (ipAddress == null)
+                    {
+                        warnings.Add($"IP {taniumIp} chưa có trong hệ thống.");
                     }
                     else if (ipAddress.DeviceId.HasValue && ipAddress.DeviceId == resolvedDeviceId)
                     {
@@ -493,16 +526,16 @@ namespace Asset.Application.Services
                     }
                     else if (duplicatedIpsInFile.Contains(taniumIp))
                     {
-                        warnings.Add($"Địa chỉ IP '{taniumIp}' bị lặp lại nhiều dòng trong file — sẽ không cập nhật IP cho thiết bị này.");
+                        warnings.Add($"IP {taniumIp} lặp trong file.");
                     }
                     else if (ipAddress.DeviceId.HasValue)
                     {
                         var ownerCode = ipOwnerCodesById.GetValueOrDefault(ipAddress.DeviceId.Value) ?? $"#{ipAddress.DeviceId}";
-                        warnings.Add($"Địa chỉ IP '{taniumIp}' đang được thiết bị '{ownerCode}' sử dụng — sẽ không cập nhật IP cho thiết bị này.");
+                        warnings.Add($"IP {taniumIp} đang thuộc máy {ownerCode}.");
                     }
                     else if (ipAddress.Status != (int)IpAddressStatus.Available)
                     {
-                        warnings.Add($"Địa chỉ IP '{taniumIp}' đang được thiết bị ngoài hệ thống sử dụng — sẽ không cập nhật IP cho thiết bị này.");
+                        warnings.Add($"IP {taniumIp} đang do thiết bị ngoài dùng.");
                     }
                     else
                     {
@@ -519,13 +552,17 @@ namespace Asset.Application.Services
                 if (!string.IsNullOrWhiteSpace(serialNumber) && !errors.Any(e => e.StartsWith("Dòng bị lỗi Tanium")))
                 {
                     var deviceOwningSerial = devicesBySerial.GetValueOrDefault(serialNumber);
-                    if (duplicatedSerialsInFile.Contains(serialNumber))
+                    if (IsPlaceholderSerial(serialNumber))
                     {
-                        warnings.Add($"Số Serial '{serialNumber}' bị lặp lại nhiều dòng trong file — sẽ không cập nhật serial cho thiết bị này.");
+                        warnings.Add($"Serial {serialNumber} là giá trị mặc định BIOS.");
+                    }
+                    else if (duplicatedSerialsInFile.Contains(serialNumber))
+                    {
+                        warnings.Add($"Serial {serialNumber} lặp trong file.");
                     }
                     else if (deviceOwningSerial != null && deviceOwningSerial.Id != resolvedDeviceId)
                     {
-                        warnings.Add($"Số Serial '{serialNumber}' đang thuộc thiết bị '{deviceOwningSerial.DeviceCode}' — sẽ không cập nhật serial cho thiết bị này.");
+                        warnings.Add($"Serial {serialNumber} đang thuộc máy {deviceOwningSerial.DeviceCode}.");
                     }
                     else
                     {
@@ -541,14 +578,30 @@ namespace Asset.Application.Services
                     resolvedManagerDomainAccount = ResolveDomainAccount(row.LastLoggedInUser, row.ComputerName);
                     if (resolvedManagerDomainAccount != null && resolvedManagerDomainAccount.Length > MaxDomainAccountLength)
                     {
-                        warnings.Add($"Tài khoản '{resolvedManagerDomainAccount}' quá dài — sẽ không cập nhật tài khoản domain cho thiết bị này.");
+                        warnings.Add($"Tài khoản {resolvedManagerDomainAccount} quá dài.");
                         resolvedManagerDomainAccount = null;
+                    }
+                    else if (resolvedManagerDomainAccount != null && !string.IsNullOrWhiteSpace(device?.ManagerDomainAccount)
+                        && !device.ManagerDomainAccount.Equals(resolvedManagerDomainAccount, StringComparison.OrdinalIgnoreCase))
+                    {
+                        warnings.Add($"Máy đã có tài khoản {device.ManagerDomainAccount} (tích \"Ghi đè\" để đổi).");
                     }
 
                     var (validEmails, invalidEmails) = ParseEmails(row.UserEmail);
                     resolvedEmails = validEmails;
                     foreach (var invalid in invalidEmails)
-                        warnings.Add($"Email '{invalid}' không hợp lệ — sẽ bỏ qua.");
+                        warnings.Add($"Email {invalid} không hợp lệ.");
+                }
+
+                // The device name is the Computer Name column without the ".yev.vn" domain suffix.
+                string? resolvedDeviceName = null;
+                var computerName = row.ComputerName?.Trim();
+                if (computerName != null && computerName.EndsWith(DomainSuffix, StringComparison.OrdinalIgnoreCase))
+                    computerName = computerName[..^DomainSuffix.Length];
+                if (!string.IsNullOrEmpty(computerName) && !errors.Any(e => e.StartsWith("Dòng bị lỗi Tanium")))
+                {
+                    if (computerName.Length > MaxDeviceNameLength) warnings.Add("Computer Name quá dài, không đổi tên máy.");
+                    else resolvedDeviceName = computerName;
                 }
 
                 result.Add(new DeviceConfigurationImportRowDto
@@ -565,7 +618,7 @@ namespace Asset.Application.Services
                     Ram = row.Ram,
                     Size = row.Size,
                     ParsedDeviceCode = parsedCode,
-                    ParsedDeviceName = parsedName,
+                    ResolvedDeviceName = resolvedDeviceName,
                     ResolvedDeviceId = resolvedDeviceId,
                     ResolvedIpAddressId = resolvedIpAddressId,
                     ResolvedSerialNumber = resolvedSerialNumber,
@@ -588,8 +641,21 @@ namespace Asset.Application.Services
                 HasTaniumErrorPrefix(row.LastLoggedInUser) || HasTaniumErrorPrefix(row.UserEmail);
         }
 
-        // A domain account is DOMAIN\user. Local accounts (Local\user, or the machine's own name as the
-        // domain part) are not accounts Identity can match, so they are not stored.
+        private static readonly string[] NonDomainPrefixes = { "Local", "AzureAD", "MicrosoftAccount", "WORKGROUP" };
+
+        // Firmware placeholders that are not real serial numbers.
+        private static readonly string[] PlaceholderSerials =
+        {
+            "to be filled by o.e.m.", "to be filled by oem", "default string", "system serial number", "none", "n/a",
+            "na", "unknown", "not specified", "not applicable", "o.e.m.", "oem", "123456789", "0123456789"
+        };
+        private static readonly Regex RepeatedCharPattern = new(@"^(.)\1*$", RegexOptions.Compiled);
+
+        private static bool IsPlaceholderSerial(string serial) =>
+            serial.Length < 4 || PlaceholderSerials.Contains(serial, StringComparer.OrdinalIgnoreCase) || RepeatedCharPattern.IsMatch(serial);
+
+        // A domain account is DOMAIN\user. Local/system/cloud accounts (Local\user, NT AUTHORITY\SYSTEM, AzureAD\x,
+        // machine$, the machine's own name as the domain part) are not accounts Identity can match, so they are not stored.
         private static string? ResolveDomainAccount(string? lastLoggedInUser, string? computerName)
         {
             var value = lastLoggedInUser?.Trim();
@@ -599,7 +665,8 @@ namespace Asset.Application.Services
             if (slash <= 0 || slash == value.Length - 1) return null;
 
             var prefix = value[..slash];
-            if (prefix.Equals("Local", StringComparison.OrdinalIgnoreCase)) return null;
+            if (prefix.Contains(' ') || NonDomainPrefixes.Contains(prefix, StringComparer.OrdinalIgnoreCase)) return null;
+            if (value.EndsWith('$')) return null;
 
             var host = computerName?.Trim().Split('.')[0];
             if (!string.IsNullOrEmpty(host) && prefix.Equals(host, StringComparison.OrdinalIgnoreCase)) return null;
@@ -622,7 +689,7 @@ namespace Asset.Application.Services
                 if (token.Length > MaxEmailLength || !EmailPattern.IsMatch(token))
                     invalid.Add(token);
                 else if (!valid.Contains(token, StringComparer.OrdinalIgnoreCase))
-                    valid.Add(token);
+                    valid.Add(token.ToLowerInvariant());
             }
 
             return (valid, invalid);
@@ -640,33 +707,18 @@ namespace Asset.Application.Services
             OutOfScopeSkippedCount = outOfScopeSkippedCount
         };
 
-        // Tách "Computer Name" thành (Mã, Tên) — chỉ nhận đúng 5 "họ" mã theo yêu cầu
-        // người dùng (2026-07-10, sau khi rà toàn bộ dữ liệu Tanium thật), mọi Computer
-        // Name khác trả về (null, null) — bị loại thầm lặng ở ValidateAndResolveRowsAsync
-        // (không phải lỗi, chỉ ngoài phạm vi import lần này):
-        // 1. Bỏ hậu tố domain (phần sau dấu "." đầu tiên, VD ".yev.vn").
-        // 2. Tách theo dấu "-".
-        // 3. Đoạn đầu khớp YDC/YLC/YDF/TYC + số (số có thể rỗng, VD "YDC-TVSOC" không có
-        //    số) → Mã = chèn dấu "-" giữa chữ và số (YDC1877 -> YDC-1877), Tên = phần còn
-        //    lại nối bằng "-".
-        // 4. Đoạn đầu khớp "AC" + số + tối đa 1 chữ cuối (AC81, AC90, AC90B...) → mã gốc
-        //    đã có dấu "-" sẵn bên trong: Mã = nối 2 đoạn đầu (AC90B-2446), Tên = giống Mã,
-        //    đoạn còn lại (VD "J19") bị bỏ. Áp dụng thống nhất theo tiền tố "AC" (không theo
-        //    cấu trúc chữ/số của từng đoạn) — tránh bug AC81/AC90/AC95 vô tình khớp "họ
-        //    chuẩn" khác kiểu AC90B/AC90D dẫn tới tách không nhất quán trong cùng 1 họ.
-        // 5. Còn lại (Mayhethong, VNDASOLARWINDS, BTTB-ATO-xx, DESKTOP-xxxx, ACLF/ACELF/
-        //    ALF-xx, yazaki-xx, DA-xxx, DA-ENG-xxx...) → (null, null), ngoài phạm vi 5 họ
-        //    cần import lần này (họ "DA" bị loại bỏ hoàn toàn theo quyết định người dùng
-        //    2026-07-10 — ban đầu chỉ định loại "DA-ENG-<serial>" 3 đoạn, sau đó chốt lại
-        //    là loại bỏ CẢ họ DA, kể cả dạng 2 đoạn "DA-<serial>").
-        private static (string? Code, string? Name) ParseComputerName(string rawComputerName)
+        // Device code from a Computer Name, or null when the name is outside the 5 imported families
+        // (the row is then skipped silently). The domain suffix after the first "." is dropped.
+        // YDC/YLC/YDF/TYC + digits: the code puts "-" between letters and digits (YDC1877 -> YDC-1877).
+        // AC + digits + optional letter: the code is the first two "-" segments (AC90B-2446).
+        private static string? ParseComputerName(string rawComputerName)
         {
             var name = rawComputerName.Trim();
             var dotIndex = name.IndexOf('.');
             if (dotIndex >= 0) name = name[..dotIndex];
 
             var segments = name.Split('-', StringSplitOptions.RemoveEmptyEntries);
-            if (segments.Length == 0) return (null, null);
+            if (segments.Length == 0) return null;
 
             var firstSegment = segments[0];
 
@@ -676,18 +728,15 @@ namespace Asset.Application.Services
             if (standardPrefix != null)
             {
                 var digits = firstSegment[standardPrefix.Length..];
-                var code = digits.Length > 0 ? $"{standardPrefix}-{digits}" : standardPrefix;
-                var deviceName = segments.Length > 1 ? string.Join("-", segments.Skip(1)) : code;
-                return (code, deviceName);
+                return digits.Length > 0 ? $"{standardPrefix}-{digits}" : standardPrefix;
             }
 
             if (AcFamilyPattern.IsMatch(firstSegment))
             {
-                var code = segments.Length > 1 ? $"{segments[0]}-{segments[1]}" : segments[0];
-                return (code, code);
+                return segments.Length > 1 ? $"{segments[0]}-{segments[1]}" : segments[0];
             }
 
-            return (null, null);
+            return null;
         }
 
         // Fixed columns in the order of the Tanium inventory file (10 columns, row 1 is the header):
@@ -719,7 +768,10 @@ namespace Asset.Application.Services
             var rows = new List<DeviceConfigurationImportRowDto>();
             if (usedRange == null) return rows;
 
-            foreach (var xlRow in usedRange.RowsUsed().Skip(1))
+            var dataRows = usedRange.RowsUsed().ToList();
+            EnsureHeaderLayout(Enumerable.Range(1, 10).Select(i => dataRows[0].Cell(i).GetString()).ToArray());
+
+            foreach (var xlRow in dataRows.Skip(1))
             {
                 var computerName = xlRow.Cell(1).GetString().Trim();
                 var taniumIp = xlRow.Cell(2).GetString().Trim();
@@ -751,20 +803,28 @@ namespace Asset.Application.Services
                     SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
                     Cpu = string.IsNullOrWhiteSpace(cpu) ? null : cpu,
                     Ram = string.IsNullOrWhiteSpace(ram) ? null : ram,
-                    Size = string.IsNullOrWhiteSpace(size) ? null : size
+                    Size = NormalizeSize(size)
                 });
             }
 
             return rows;
         }
 
-        // Cùng 9 cột/thứ tự như ParseXlsx nhưng đọc từ file .csv (2026-07-11, thêm sau —
-        // dùng CsvFileHelper chung, tự nhận diện dấu phẩy/chấm phẩy). File kiểm kê Tanium
-        // thực tế thường xuất mặc định ở dạng CSV — đây là lý do chính thêm nhánh này.
+        // Several disks arrive as line breaks or glued units ("238 GB238 GB"); join them with "; ".
+        private static string? NormalizeSize(string size)
+        {
+            var glued = Regex.Replace(size, @"(?<=[KMGT]?B)(?=\d)", "\n", RegexOptions.IgnoreCase);
+            var parts = glued.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return parts.Length == 0 ? null : string.Join("; ", parts);
+        }
+
+        // Same columns as ParseXlsx, read from a .csv (delimiter auto-detected by CsvFileHelper).
         private static List<DeviceConfigurationImportRowDto> ParseCsv(Stream stream)
         {
             var csvRows = CsvFileHelper.ReadRows(stream);
             var rows = new List<DeviceConfigurationImportRowDto>();
+            if (csvRows.Count == 0) return rows;
+            EnsureHeaderLayout(Enumerable.Range(0, 10).Select(i => GetCsvCell(csvRows[0], i)).ToArray());
 
             for (int i = 1; i < csvRows.Count; i++)
             {
@@ -799,11 +859,24 @@ namespace Asset.Application.Services
                     SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
                     Cpu = string.IsNullOrWhiteSpace(cpu) ? null : cpu,
                     Ram = string.IsNullOrWhiteSpace(ram) ? null : ram,
-                    Size = string.IsNullOrWhiteSpace(size) ? null : size
+                    Size = NormalizeSize(size)
                 });
             }
 
             return rows;
+        }
+
+        // Rejects a file whose header does not follow the 10-column layout, so an older 9-column export
+        // cannot shift every value into the wrong field (e.g. the CPU text landing in the serial).
+        private static void EnsureHeaderLayout(string[] header)
+        {
+            bool Is(int index, string keyword) => header[index].Contains(keyword, StringComparison.OrdinalIgnoreCase);
+
+            if (!(Is(0, "computer name") && Is(2, "logged") && Is(3, "email") && Is(6, "serial") && Is(7, "cpu") && Is(8, "memory")))
+                throw new DomainException(
+                    "File không đúng định dạng 10 cột: Computer Name, Tanium Client IP Address, Last Logged In User, " +
+                    "Custom Registry UserEmail, Manufacturer, Model, Computer Serial Number, CPU, Total Memory, Size. " +
+                    "Vui lòng xuất lại file từ Tanium hoặc tải file mẫu.");
         }
 
         private static string GetCsvCell(string[] cells, int index) => index < cells.Length ? cells[index] : string.Empty;
