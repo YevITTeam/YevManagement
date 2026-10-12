@@ -66,9 +66,8 @@ builder.Services.AddCors(options =>
                   "http://localhost:8000",
                   "http://localhost:3000",
                   "http://10.45.1.49:8000",
-                  "http://10.45.1.49:80",
                   "http://10.45.1.49",
-                  "http://intra.yev.vn",
+                  "https://intra.yev.vn",
                   "http://10.45.1.155:3000",
                   "http://10.45.1.181:3000"
               )
@@ -104,11 +103,6 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference().AllowAnonymous();
 }
 
-// KHÔNG UseHttpsRedirection: site này chỉ serve HTTP thuần (không có binding HTTPS thật ở IIS —
-// mọi Base URL trong docs đều là http://). Bật middleware này sẽ trả 307 cho MỌI request kể cả
-// preflight OPTIONS, mà theo spec CORS 1 preflight bị redirect coi như thất bại (Chrome báo nhầm
-// thành "No Access-Control-Allow-Origin header" dù whitelist đã đúng) — vì UseCors không bao giờ
-// chạy tới để gắn header (2026-08-08).
 app.UseCors("AllowNextJs");
 
 // Apply forwarded headers before authentication so client IP and scheme are correct
