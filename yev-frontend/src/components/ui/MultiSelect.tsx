@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { sortByLabel } from "@/lib/sort-options";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, X } from "lucide-react";
 
@@ -86,10 +87,11 @@ export function MultiSelect({ options, values, onChange, placeholder, disabled }
     }, [isOpen]);
 
     const normalizedQuery = query.toLowerCase().trim();
+    const sorted = useMemo(() => sortByLabel(options), [options]);
     const filtered =
         normalizedQuery === ""
-            ? options
-            : options.filter((o) => (o.searchText ?? o.label.toLowerCase()).includes(normalizedQuery));
+            ? sorted
+            : sorted.filter((o) => (o.searchText ?? o.label.toLowerCase()).includes(normalizedQuery));
     const selectedOptions = values
         .map((value) => options.find((o) => o.value === value))
         .filter((o): o is MultiSelectOption => o !== undefined);

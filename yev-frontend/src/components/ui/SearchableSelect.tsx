@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { sortByLabel } from "@/lib/sort-options";
 import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 
@@ -106,10 +107,11 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
 
     const selectedLabel = options.find((o) => o.value === value)?.label ?? "";
 
+    const sorted = useMemo(() => sortByLabel(options), [options]);
     const filtered =
         query.trim() === ""
-            ? options
-            : options.filter((o) => o.searchText.includes(query.toLowerCase().trim()));
+            ? sorted
+            : sorted.filter((o) => o.searchText.includes(query.toLowerCase().trim()));
 
     function open() {
         if (disabled) return;
