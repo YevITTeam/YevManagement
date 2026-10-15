@@ -70,7 +70,7 @@ export default function Home() {
     {
       title: t("contractsTitle"),
       desc: t("contractsDesc"),
-      link: "http://10.45.1.49:9000",
+      link: "https://ycms.yev.vn",
       icon: <FileText className="h-6 w-6" />,
       visible: true,
       isExternal: true,
@@ -80,7 +80,7 @@ export default function Home() {
     {
       title: t("purchaseOrderTitle"),
       desc: t("purchaseOrderDesc"),
-      link: "http://10.45.1.49:9001",
+      link: "https://ypms.yev.vn",
       icon: <ShoppingCart className="h-6 w-6" />,
       visible: true,
       isExternal: true,
@@ -90,7 +90,7 @@ export default function Home() {
     {
       title: t("chatTitle"),
       desc: t("chatDesc"),
-      link: "https://intra.yev.vn/",
+      link: "http://10.45.1.49:8090",
       icon: <MessagesSquare className="h-6 w-6" />,
       visible: true,
       isExternal: true,
