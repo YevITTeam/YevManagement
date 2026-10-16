@@ -6,6 +6,7 @@ interface ServerCheckReportPrintViewProps {
     fromDate: string;
     toDate: string;
     branchName: string | null;
+    isOffDay: (day: string) => boolean;
 }
 
 const formatDate = (value: string) => new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -14,7 +15,7 @@ const cellText = (status: boolean | null) => (status === null ? "" : status ? "O
 
 // Gộp mọi lý do NG trong ngày vào 1 ô "Ghi chú" — cùng logic với ServerCheckService.ExportReportAsync
 // bên BE (asset-module.md §1.19) để bản in web và file Excel xuất ra đọc giống nhau.
-function buildNote(row: ServerCheckReportRowDto): string {
+export function buildNote(row: ServerCheckReportRowDto): string {
     const parts: string[] = [];
     if (row.serverStatus === false) parts.push(`Đèn báo Server: ${row.serverNote}`);
     if (row.networkStatus === false) parts.push(`Đèn báo Network: ${row.networkNote}`);
@@ -26,8 +27,42 @@ function buildNote(row: ServerCheckReportRowDto): string {
     return parts.join("; ");
 }
 
+export interface DayRow {
+    key: string;
+    day: string;
+    row: ServerCheckReportRowDto | null;
+}
+
+// One line per calendar day in the range; days without a session keep row = null so the sheet shows them blank.
+// Off days are dropped only when empty, so a scan done on a day off is never hidden.
+export function buildDayRows(
+    rows: ServerCheckReportRowDto[],
+    fromDate: string,
+    toDate: string,
+    isOffDay?: (day: string) => boolean
+): DayRow[] {
+    const rowsByDay = new Map<string, ServerCheckReportRowDto[]>();
+    rows.forEach((r) => {
+        const day = r.checkDate.slice(0, 10);
+        rowsByDay.set(day, [...(rowsByDay.get(day) ?? []), r]);
+    });
+    const [fy, fm, fd] = fromDate.slice(0, 10).split("-").map(Number);
+    const [ty, tm, td] = toDate.slice(0, 10).split("-").map(Number);
+    const endTime = Date.UTC(ty, tm - 1, td);
+    const result: DayRow[] = [];
+    for (let t = Date.UTC(fy, fm - 1, fd); t <= endTime; t += 86_400_000) {
+        const day = new Date(t).toISOString().slice(0, 10);
+        const dayRows = rowsByDay.get(day) ?? [];
+        if (dayRows.length === 0) {
+            if (!isOffDay?.(day)) result.push({ key: day, day, row: null });
+        }
+        else dayRows.forEach((row) => result.push({ key: `${day}-${row.sessionId}`, day, row }));
+    }
+    return result;
+}
+
 const th = "border border-black px-1 py-1 text-center font-semibold align-middle";
-const td = "border border-black px-1 py-0.5 text-center align-top";
+const td = "border border-black px-1 py-px text-center align-top leading-tight";
 
 // Bản in khớp layout tờ giấy gốc "YEV–22–CV–IT-QD-810-FR-Check Sheet KT" (xem file mẫu
 // docs/Check sheet kiem tra hang ngay IT.xlsx, cũng là file BE dùng để xuất Excel — 7d.9
@@ -35,7 +70,7 @@ const td = "border border-black px-1 py-0.5 text-center align-top";
 // tiết"...) vì đó là bảng để THAO TÁC, còn đây là bản để IN, cần đúng cấu trúc 2 nhóm cột merge
 // (Phòng Server / Các kiểm tra khác) như tờ giấy. `hidden print:block` — chỉ hiện khi in, màn hình
 // vẫn dùng bảng tương tác cũ (đã có `print:hidden` ở section bọc ngoài).
-export default function ServerCheckReportPrintView({ rows, manualColumns, fromDate, toDate, branchName }: ServerCheckReportPrintViewProps) {
+export default function ServerCheckReportPrintView({ rows, manualColumns, fromDate, toDate, branchName, isOffDay }: ServerCheckReportPrintViewProps) {
     // manualColumns[0] = "Tình trạng âm thanh, mùi, nhiệt độ" thuộc nhóm "Phòng Server" trên tờ giấy;
     // các mục còn lại (Network Factory/Server, Gởi nhận Mail, Backup x3) thuộc nhóm "Các kiểm tra
     // khác" — vị trí cố định theo DisplayOrder đã seed (asset-module.md §1.19), không đoán theo tên.
@@ -45,27 +80,11 @@ export default function ServerCheckReportPrintView({ rows, manualColumns, fromDa
     const from = new Date(fromDate);
     const to = new Date(toDate);
     const singleMonth = from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth();
-
-    // One printed line per calendar day in the range; days without a session keep row = null and print blank.
-    const rowsByDay = new Map<string, ServerCheckReportRowDto[]>();
-    rows.forEach((r) => {
-        const day = r.checkDate.slice(0, 10);
-        rowsByDay.set(day, [...(rowsByDay.get(day) ?? []), r]);
-    });
-    const [fy, fm, fd] = fromDate.slice(0, 10).split("-").map(Number);
-    const [ty, tm, td2] = toDate.slice(0, 10).split("-").map(Number);
-    const endTime = Date.UTC(ty, tm - 1, td2);
-    const printRows: { key: string; day: string; row: ServerCheckReportRowDto | null }[] = [];
-    for (let t = Date.UTC(fy, fm - 1, fd); t <= endTime; t += 86_400_000) {
-        const day = new Date(t).toISOString().slice(0, 10);
-        const dayRows = rowsByDay.get(day) ?? [];
-        if (dayRows.length === 0) printRows.push({ key: day, day, row: null });
-        else dayRows.forEach((row) => printRows.push({ key: `${day}-${row.sessionId}`, day, row }));
-    }
+    const printRows = buildDayRows(rows, fromDate, toDate, isOffDay);
 
     return (
         <div className="hidden print:block text-black">
-            <style>{`@page { size: A4 landscape; margin: 10mm; }`}</style>
+            <style>{`@page { size: A4 landscape; margin: 8mm; }`}</style>
 
             <div className="mb-2 flex items-start justify-between">
                 <div className="flex-1 text-center">
@@ -170,23 +189,23 @@ export default function ServerCheckReportPrintView({ rows, manualColumns, fromDa
                 </tbody>
             </table>
 
-            <div className="mt-3 space-y-1 text-[9px]">
+            <div className="mt-2 text-[9px] leading-tight">
                 <p>- Kiểm tra có không tình trạng bất thường về đèn cảnh báo của thiết bị, âm thanh, mùi, nhiệt độ...</p>
                 <p>- Kiểm tra kết nối mạng giữa các xưởng Yev, của các Server,</p>
                 <p>- Khi phát sinh bất thường, không được tự ý xử lý mà phải nhanh chóng báo cáo lên người quản lý</p>
                 <p>- Người thực hiện cần báo cáo đến người quản lý vào cuối tháng</p>
             </div>
 
-            <div className="mt-4 flex gap-8 text-[10px]">
+            <div className="mt-2 flex gap-8 text-[10px]">
                 <div className="flex-1">
-                    <p className="mb-8 font-semibold">PCD Manager</p>
+                    <p className="mb-6 font-semibold">PCD Manager</p>
                 </div>
                 <div className="flex-1">
-                    <p className="mb-8 font-semibold">IT Leader</p>
+                    <p className="mb-6 font-semibold">IT Leader</p>
                 </div>
             </div>
 
-            <p className="mt-2 text-[8px] text-right">YEV–22–CV–IT-QD-012_QĐ-Form</p>
+            <p className="text-[8px] text-right">YEV–22–CV–IT-QD-012_QĐ-Form</p>
         </div>
     );
 }
