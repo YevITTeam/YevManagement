@@ -9,9 +9,12 @@ import { ServerCheckApi } from "@/modules/pc-management/api/server-check.api";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
 import type { ServerCheckManualItemDto, ServerCheckReportRowDto } from "@/modules/pc-management/types/server-check.dto";
+import { WorkCalendarApi } from "@/modules/attendance/api/work-calendar.api";
+import type { WorkCalendarDayDto } from "@/modules/attendance/types/work-calendar.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { useDragScroll } from "@/modules/common/hooks/useDragScroll";
 import ServerCheckSessionDetailDialog from "./ServerCheckSessionDetailDialog";
-import ServerCheckReportPrintView from "./ServerCheckReportPrintView";
+import ServerCheckReportPrintView, { buildDayRows, buildNote } from "./ServerCheckReportPrintView";
 import { Link } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -34,18 +37,20 @@ const selectClassName =
 const formatDate = (value: string) =>
     new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 
+// NG reasons go to the "Ghi chú" column (as in the Excel sheet); the cell only keeps the icon.
 function StatusCell({ status, note }: { status: boolean | null; note: string | null }) {
     if (status === null) return <Minus className="mx-auto h-4 w-4 text-[#c9ced3]" />;
     if (status) return <CheckCircle2 className="mx-auto h-4 w-4 text-[#1a7f37]" />;
-    return (
-        <div className="flex flex-col items-center gap-1" title={note ?? undefined}>
-            <XCircle className="h-4 w-4 shrink-0 text-[#930006]" />
-            {note && (
-                <span className="block max-w-[9rem] truncate text-[11px] leading-tight text-[#930006]">{note}</span>
-            )}
-        </div>
-    );
+    return <XCircle className="mx-auto h-4 w-4 text-[#930006]" aria-label={note ?? undefined} />;
 }
+
+// Marks the warning-light columns (Server/Network/UPS) checked by QR scan; manual items are ticked by hand.
+function QrMark({ label }: { label: string }) {
+    return <QrCode className="mx-auto mt-1 h-3.5 w-3.5 text-[#5e3f3a]" aria-label={label} />;
+}
+
+const cell = "border-b border-[#f1f5f9] px-3 py-2.5 group-hover:bg-[#f8fafc]";
+const headCell ="border-b border-r border-[#e0e3e5] px-3 py-2 align-middle";
 
 export default function ServerCheckReportPage() {
     const t = useTranslations("Asset.ServerCheck");
@@ -62,6 +67,7 @@ export default function ServerCheckReportPage() {
     const [isExporting, setIsExporting] = useState(false);
     const [branches, setBranches] = useState<BranchDto[]>([]);
     const [branchId, setBranchId] = useState<number | null>(null);
+    const [tableScrollRef, onTableScrollMouseDown] = useDragScroll<HTMLDivElement>();
     const { user } = useAuth();
     const canScan = hasPermission(user, "Asset.ServerCheck.Scan");
     const canAssign = hasPermission(user, "Asset.ServerCheck.Assign");
@@ -102,7 +108,22 @@ export default function ServerCheckReportPage() {
         (message) => toast.error(message)
     );
 
-    const totalColumns = 1 /* Ngày */ + 4 /* category */ + manualColumns.length + 1 /* Người kiểm */ + 1 /* Thao tác */;
+    // A year with no calendar rows imported falls back to Sundays only, same rule as the attendance module.
+    const [calendarDays, setCalendarDays] = useState<WorkCalendarDayDto[]>([]);
+    useFetchEffect(
+        () => WorkCalendarApi.getByYear(year),
+        [year],
+        setCalendarDays,
+        t("loadReportError"),
+        (message) => toast.error(message)
+    );
+    const isOffDay = (day: string) =>
+        calendarDays.length > 0 ? calendarDays.some((d) => d.date.slice(0, 10) === day) : new Date(`${day}T00:00:00Z`).getUTCDay() === 0;
+
+    // First manual item (ambient sound/smell/temperature) sits under "Phòng Server", the rest under "Các kiểm tra khác" — same split as the print sheet.
+    const [ambientColumn, ...otherColumns] = manualColumns;
+    const dayRows = rows.length > 0 ? buildDayRows(rows, fromDate, toDate) : [];
+    const totalColumns = 1 /* Ngày */ + 4 /* category */ + manualColumns.length + 3 /* Người kiểm, Ghi chú, Thao tác */;
 
     const handleExportExcel = async () => {
         setIsExporting(true);
@@ -124,31 +145,32 @@ export default function ServerCheckReportPage() {
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 print:hidden md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("reportTitle")}</h1>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <h1 className="whitespace-nowrap text-xl font-semibold text-[#191c1e]">{t("reportTitle")}</h1>
+                {/* Below 2xl the three text buttons collapse to icons so the toolbar stays on one row. */}
+                <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
                     {canScan && (
                         <Link
                             href="/pc/server-check/scan"
-                            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            title={t("startButton")}
+                            className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-2.5 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] 2xl:px-4"
                         >
-                            <QrCode className="h-3.5 w-3.5" /> {t("startButton")}
+                            <QrCode className="h-3.5 w-3.5" /> <span className="hidden 2xl:inline">{t("startButton")}</span>
                         </Link>
                     )}
                     {canAssign && (
                         <Link
                             href="/pc/server-check/assignments"
-                            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            title={t("assignmentsButton")}
+                            className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-2.5 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] 2xl:px-4"
                         >
-                            <Users className="h-3.5 w-3.5" /> {t("assignmentsButton")}
+                            <Users className="h-3.5 w-3.5" /> <span className="hidden 2xl:inline">{t("assignmentsButton")}</span>
                         </Link>
                     )}
                     <SearchableSelect
                         value={branchId ?? ""}
                         onChange={(v) => setBranchId(v === "" ? null : v)}
                         placeholder={t("branchFilterLabel")}
-                        triggerClassName="h-9 w-44 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        triggerClassName="h-9 w-32 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         options={branches.map((branch) => ({ value: branch.id, label: branch.branchName, searchText: branch.branchName.toLowerCase() }))}
                     />
                     <StyledSelect
@@ -177,20 +199,22 @@ export default function ServerCheckReportPage() {
                     <button
                         onClick={handleExportExcel}
                         disabled={isExporting}
-                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        title={t("exportExcelButton")}
+                        className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-2.5 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50 2xl:px-4"
                     >
                         {isExporting ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                             <FileSpreadsheet className="h-3.5 w-3.5" />
                         )}
-                        {t("exportExcelButton")}
+                        <span className="hidden 2xl:inline">{t("exportExcelButton")}</span>
                     </button>
                     <button
                         onClick={() => window.print()}
-                        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                        title={t("printButton")}
+                        className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-2.5 text-sm font-semibold text-white transition hover:bg-[#b40009] 2xl:px-4"
                     >
-                        <Printer className="h-3.5 w-3.5" /> {t("printButton")}
+                        <Printer className="h-3.5 w-3.5" /> <span className="hidden 2xl:inline">{t("printButton")}</span>
                     </button>
                 </div>
             </div>
@@ -201,27 +225,44 @@ export default function ServerCheckReportPage() {
                 khi in dùng hẳn ServerCheckReportPrintView bên dưới, khớp đúng layout tờ giấy gốc thay vì
                 in nguyên bảng này (trước đây thiếu print:hidden nên vừa lộ cả Sidebar vừa in sai layout). */}
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm print:hidden">
-                <div className="overflow-x-auto">
+                <div ref={tableScrollRef} onMouseDown={onTableScrollMouseDown} className="cursor-grab overflow-x-auto">
                     <table className="w-full border-separate border-spacing-0 text-center text-sm">
-                        <thead>
-                            <tr className="bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
-                                <th className="sticky left-0 z-10 min-w-[110px] border-b border-r border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-left">
+                        <thead className="bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                            <tr>
+                                <th rowSpan={3} className={`sticky left-0 z-10 min-w-[110px] bg-[#f8fafc] text-left ${headCell}`}>
                                     {t("colDate")}
                                 </th>
-                                <th className="min-w-[90px] border-b border-[#e0e3e5] px-3 py-3">{t("categoryServer")}</th>
-                                <th className="min-w-[90px] border-b border-[#e0e3e5] px-3 py-3">{t("categoryNetwork")}</th>
-                                <th className="min-w-[90px] border-b border-[#e0e3e5] px-3 py-3">{t("categoryUps")}</th>
-                                <th className="min-w-[90px] border-b border-[#e0e3e5] px-3 py-3">{t("categoryAirConditioner")}</th>
-                                {manualColumns.map((col) => (
-                                    <th
-                                        key={col.id}
-                                        className="min-w-[130px] whitespace-normal border-b border-[#e0e3e5] px-3 py-3 align-bottom leading-snug"
-                                    >
+                                <th colSpan={4 + (ambientColumn ? 1 : 0)} className={headCell}>{t("groupServerRoom")}</th>
+                                {otherColumns.length > 0 && <th colSpan={otherColumns.length} className={headCell}>{t("groupOtherChecks")}</th>}
+                                <th rowSpan={3} className={`min-w-[140px] ${headCell}`}>{t("colCheckedBy")}</th>
+                                <th rowSpan={3} className={`min-w-[200px] ${headCell}`}>{t("colNote")}</th>
+                                <th rowSpan={3} className={`min-w-[70px] border-r-0 ${headCell}`}>{tCommon("actions")}</th>
+                            </tr>
+                            <tr>
+                                <th colSpan={3} className={headCell}>{t("groupWarningLights")}</th>
+                                <th rowSpan={2} className={`min-w-[80px] ${headCell}`}>{t("categoryAirConditioner")}</th>
+                                {ambientColumn && (
+                                    <th rowSpan={2} className={`min-w-[130px] whitespace-normal leading-snug ${headCell}`}>{ambientColumn.name}</th>
+                                )}
+                                {otherColumns.map((col) => (
+                                    <th key={col.id} rowSpan={2} className={`min-w-[110px] whitespace-normal leading-snug ${headCell}`}>
                                         {col.name}
                                     </th>
                                 ))}
-                                <th className="min-w-[150px] border-b border-[#e0e3e5] px-3 py-3">{t("colCheckedBy")}</th>
-                                <th className="min-w-[90px] border-b border-[#e0e3e5] px-3 py-3 print:hidden">{tCommon("actions")}</th>
+                            </tr>
+                            <tr>
+                                <th className={`min-w-[80px] ${headCell}`}>
+                                    {t("categoryServer")}
+                                    <QrMark label={t("scanQrHint")} />
+                                </th>
+                                <th className={`min-w-[80px] ${headCell}`}>
+                                    {t("categoryNetwork")}
+                                    <QrMark label={t("scanQrHint")} />
+                                </th>
+                                <th className={`min-w-[80px] ${headCell}`}>
+                                    {t("categoryUps")}
+                                    <QrMark label={t("scanQrHint")} />
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -239,48 +280,46 @@ export default function ServerCheckReportPage() {
                                     </td>
                                 </tr>
                             )}
-                            {rows.map((row) => (
-                                <tr key={row.sessionId} className="group">
-                                    <td className="sticky left-0 z-10 border-b border-r border-[#f1f5f9] bg-white px-4 py-3 text-left font-semibold text-[#191c1e] group-hover:bg-[#f8fafc]">
-                                        {formatDate(row.checkDate)}
+                            {dayRows.map(({ key, day, row }) => (
+                                <tr key={key} className="group">
+                                    <td className="sticky left-0 z-10 border-b border-r border-[#f1f5f9] bg-white px-4 py-2.5 text-left font-semibold text-[#191c1e] group-hover:bg-[#f8fafc]">
+                                        {formatDate(day)}
                                     </td>
-                                    <td className="border-b border-[#f1f5f9] px-3 py-3 group-hover:bg-[#f8fafc]">
-                                        <StatusCell status={row.serverStatus} note={row.serverNote} />
-                                    </td>
-                                    <td className="border-b border-[#f1f5f9] px-3 py-3 group-hover:bg-[#f8fafc]">
-                                        <StatusCell status={row.networkStatus} note={row.networkNote} />
-                                    </td>
-                                    <td className="border-b border-[#f1f5f9] px-3 py-3 group-hover:bg-[#f8fafc]">
-                                        <StatusCell status={row.upsStatus} note={row.upsNote} />
-                                    </td>
-                                    <td className="border-b border-[#f1f5f9] px-3 py-3 group-hover:bg-[#f8fafc]">
-                                        <StatusCell status={row.airConditionerStatus} note={row.airConditionerNote} />
-                                    </td>
-                                    {manualColumns.map((col) => {
-                                        // Phiên cũ có thể chưa có dòng cho mục này (được seed thêm sau) — coi như
-                                        // "chưa áp dụng lúc đó" (dấu gạch ngang), KHÔNG bỏ ô để tránh lệch cột.
-                                        const match = row.manualResults.find((m) => m.manualItemId === col.id);
-                                        return (
-                                            <td key={col.id} className="border-b border-[#f1f5f9] px-3 py-3 group-hover:bg-[#f8fafc]">
-                                                <StatusCell
-                                                    status={row.sessionStatus === 1 && match ? match.status === 1 : null}
-                                                    note={match?.note ?? null}
-                                                />
-                                            </td>
-                                        );
-                                    })}
-                                    <td className="border-b border-[#f1f5f9] px-3 py-3 text-[#5e3f3a] group-hover:bg-[#f8fafc]">
-                                        {row.checkedBy ?? "—"}
-                                    </td>
-                                    <td className="border-b border-[#f1f5f9] px-3 py-3 group-hover:bg-[#f8fafc] print:hidden">
-                                        <button
-                                            onClick={() => setSelectedSessionId(row.sessionId)}
-                                            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 border-[#e0e3e5] text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                            title={tCommon("viewDetail")}
-                                            aria-label={tCommon("viewDetail")}
-                                        >
-                                            <Eye className="h-3.5 w-3.5" />
-                                        </button>
+                                    {row ? (
+                                        <>
+                                            <td className={cell}><StatusCell status={row.serverStatus} note={row.serverNote} /></td>
+                                            <td className={cell}><StatusCell status={row.networkStatus} note={row.networkNote} /></td>
+                                            <td className={cell}><StatusCell status={row.upsStatus} note={row.upsNote} /></td>
+                                            <td className={cell}><StatusCell status={row.airConditionerStatus} note={row.airConditionerNote} /></td>
+                                            {manualColumns.map((col) => {
+                                                // Old sessions may lack a row for items seeded later; show a dash instead of dropping the cell.
+                                                const match = row.manualResults.find((m) => m.manualItemId === col.id);
+                                                return (
+                                                    <td key={col.id} className={cell}>
+                                                        <StatusCell
+                                                            status={row.sessionStatus === 1 && match ? match.status === 1 : null}
+                                                            note={match?.note ?? null}
+                                                        />
+                                                    </td>
+                                                );
+                                            })}
+                                        </>
+                                    ) : (
+                                        <td colSpan={4 + manualColumns.length} className={cell} />
+                                    )}
+                                    <td className={`${cell} text-[#5e3f3a]`}>{row?.checkedBy ?? ""}</td>
+                                    <td className={`${cell} text-left text-xs text-[#930006]`}>{row ? buildNote(row) : ""}</td>
+                                    <td className={cell}>
+                                        {row && (
+                                            <button
+                                                onClick={() => setSelectedSessionId(row.sessionId)}
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition border-[#e0e3e5] text-[#5e3f3a] hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                title={tCommon("viewDetail")}
+                                                aria-label={tCommon("viewDetail")}
+                                            >
+                                                <Eye className="h-3.5 w-3.5" />
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -295,6 +334,7 @@ export default function ServerCheckReportPage() {
                 fromDate={fromDate}
                 toDate={toDate}
                 branchName={branches.find((b) => b.id === branchId)?.branchName ?? null}
+                isOffDay={isOffDay}
             />
 
             <ServerCheckSessionDetailDialog sessionId={selectedSessionId} onClose={() => setSelectedSessionId(null)} />
