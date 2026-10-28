@@ -37,6 +37,8 @@ export interface OtFormBatchItemDto {
     reasonNameVn: string;
     reasonNameJp: string | null;
     otCaseCode: string;
+    otCaseDescription: string | null;
+    otCaseDescriptionJp: string | null;
     date: string;
     startTime: string;
     endTime: string;

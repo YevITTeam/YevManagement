@@ -7,10 +7,12 @@ namespace Attendance.Application.Dtos.OtForms
     // tự suy diff so với danh sách active hiện có. Loại người ra khỏi đơn đi qua RemovedEmployees (bắt
     // buộc khai lý do), không còn qua 2 action riêng AddOtFormEmployeeDto/RemoveOtFormEmployeeDto như
     // trước 2026-09-04 (đã gộp hết vào PUT này — xem docs/attendance-module.md §Cây chức vụ & Cây duyệt
-    // (mục Sửa đơn). Mọi field khác (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart)
-    // vẫn cố định sau khi tạo.
+    // (mục Sửa đơn). Department/Group luôn cố định; Header (chỉ đơn văn phòng) sửa phần còn lại như lúc tạo.
     public class UpdateOtFormDto
     {
+        // Office forms only: general info as on creation, minus Department/Group. OtCase is re-derived server-side.
+        public UpdateOtFormHeaderDto? Header { get; set; }
+
         [Required(ErrorMessage = "Danh sách nhân viên không được để trống")]
         [MinLength(1, ErrorMessage = "Phải có ít nhất 1 nhân viên")]
         public List<UpdateOtFormEmployeeTimeDto> Employees { get; set; } = new();
@@ -26,5 +28,21 @@ namespace Attendance.Application.Dtos.OtForms
         // chỉnh sửa cũng phải nhập mật khẩu cấp 2), cùng cơ chế với ApproveOtFormDto.SecondaryPassword.
         [Required(ErrorMessage = "Mật khẩu cấp 2 không được để trống")]
         public string SecondaryPassword { get; set; } = null!;
+    }
+
+    public class UpdateOtFormHeaderDto
+    {
+        public DateOnly Date { get; set; }
+
+        public TimeOnly StartTime { get; set; }
+
+        public TimeOnly EndTime { get; set; }
+
+        [Required(ErrorMessage = "Lý do không được để trống")]
+        public int ReasonId { get; set; }
+
+        public string? SubReason { get; set; }
+
+        public ProcessPartDto? ProcessPart { get; set; }
     }
 }

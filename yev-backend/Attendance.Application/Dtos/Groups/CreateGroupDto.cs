@@ -14,5 +14,8 @@ namespace Attendance.Application.Dtos.Groups
 
         [Required(ErrorMessage = "Bộ phận không được để trống")]
         public int DepartmentId { get; set; }
+
+        [Required(ErrorMessage = "Xưởng không được để trống")]
+        public int WorkshopId { get; set; }
     }
 }

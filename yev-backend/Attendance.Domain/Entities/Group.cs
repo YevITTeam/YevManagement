@@ -14,9 +14,13 @@ public partial class Group
 
     public int DepartmentId { get; set; }
 
+    public int WorkshopId { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual Department Department { get; set; } = null!;
+
+    public virtual Workshop Workshop { get; set; } = null!;
 
     public virtual ICollection<OtForm> OtForms { get; set; } = new List<OtForm>();
 

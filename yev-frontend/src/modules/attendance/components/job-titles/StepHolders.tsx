@@ -17,6 +17,7 @@ interface HolderItem {
     lastName: string;
     firstName: string;
     code: string;
+    badge?: string | null;
 }
 
 // "Đang giữ chức vụ X" — chip list + combobox thêm, dùng chung cho khối Nhóm/Bộ phận VÀ nhánh
@@ -30,6 +31,7 @@ export default function StepHolders({
     addOptions,
     addingValue,
     onAddChange,
+    onAddQueryChange,
     labels,
 }: {
     holders: HolderItem[];
@@ -39,6 +41,7 @@ export default function StepHolders({
     addOptions: SelectOption[];
     addingValue: number | "";
     onAddChange: (value: number | "") => void;
+    onAddQueryChange?: (query: string) => void;
     labels: StepHoldersLabels;
 }) {
     return (
@@ -58,6 +61,7 @@ export default function StepHolders({
                                 <User size={12} className="text-[#8a8f94]" />
                                 {holder.lastName} {holder.firstName}
                                 <span className="rounded bg-[#f2f4f6] px-1.5 py-px text-[11px] text-[#5e3f3a]">{holder.code}</span>
+                                {holder.badge && <span className="rounded bg-[#fff4f2] px-1.5 py-px text-[11px] text-[#930006]">{holder.badge}</span>}
                                 <button
                                     type="button"
                                     onClick={() => onRemoveHolder(holder)}
@@ -77,6 +81,7 @@ export default function StepHolders({
                                 options={addOptions}
                                 value={addingValue}
                                 onChange={onAddChange}
+                                onQueryChange={onAddQueryChange}
                                 placeholder={labels.addHolderPlaceholder}
                                 disabled={removingHolderId !== null}
                                 triggerClassName="h-6 rounded-md border border-dashed border-[#e0e3e5] bg-white px-2 pr-6 text-[11px]! text-[#8a8f94] outline-none transition hover:border-[#e3000f] focus:border-[#e3000f]"

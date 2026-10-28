@@ -94,8 +94,13 @@ namespace Shared.Infrastructure.Repositories
             return query;
         }
 
+        // Callers pass client-supplied paging values, so cap them: an unbounded pageSize defeats paging.
+        private const int MaxPageSize = 1000;
+
         public async Task<IReadOnlyList<T>> GetPagedAsync(IQueryable<T> query, int pageIndex, int pageSize)
         {
+            pageIndex = Math.Max(pageIndex, 1);
+            pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
             return await query.Skip((pageIndex - 1) * pageSize)
                               .Take(pageSize)
                               .ToListAsync();
@@ -107,6 +112,8 @@ namespace Shared.Infrastructure.Repositories
             int pageSize,
             Expression<Func<T, TResult>> selector)
         {
+            pageIndex = Math.Max(pageIndex, 1);
+            pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
             var totalCount = await query.CountAsync();
 
             var items = await query

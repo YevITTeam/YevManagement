@@ -16,6 +16,10 @@ public partial class AttendanceDbContext : DbContext
 
     public virtual DbSet<Department> Departments { get; set; }
     public virtual DbSet<Group> Groups { get; set; }
+
+    public virtual DbSet<Workshop> Workshops { get; set; }
+
+    public virtual DbSet<EmployeeApprovalScope> EmployeeApprovalScopes { get; set; }
     public virtual DbSet<Reason> Reasons { get; set; }
     public virtual DbSet<OtCase> OtCases { get; set; }
     public virtual DbSet<Employee> Employees { get; set; }
@@ -40,6 +44,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<JobTitlePermission> JobTitlePermissions { get; set; }
     public virtual DbSet<DepartmentApprovalStepCoordinator> DepartmentApprovalStepCoordinators { get; set; }
     public virtual DbSet<GroupApprovalStepCoordinator> GroupApprovalStepCoordinators { get; set; }
+    public virtual DbSet<GroupBorrowedApprover> GroupBorrowedApprovers { get; set; }
     public virtual DbSet<EmployeeAccumulationHistory> EmployeeAccumulationHistories { get; set; }
     public virtual DbSet<ProductionLine> ProductionLines { get; set; }
     public virtual DbSet<ProductionShiftTeam> ProductionShiftTeams { get; set; }
@@ -84,6 +89,7 @@ public partial class AttendanceDbContext : DbContext
         {
             entity.HasIndex(e => e.GroupCode, "IX_Groups_GroupCode").IsUnique();
             entity.HasIndex(e => e.DepartmentId, "IX_Groups_DepartmentId");
+            entity.HasIndex(e => e.WorkshopId, "IX_Groups_WorkshopId");
             entity.Property(e => e.GroupCode).HasMaxLength(50);
             entity.Property(e => e.GroupNameVn).HasMaxLength(255);
             entity.Property(e => e.GroupNameJp).HasMaxLength(255);
@@ -92,6 +98,19 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_Groups_Departments_DepartmentId");
+
+            entity.HasOne(d => d.Workshop).WithMany(p => p.Groups)
+                .HasForeignKey(d => d.WorkshopId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_Groups_Workshops_WorkshopId");
+        });
+
+        modelBuilder.Entity<Workshop>(entity =>
+        {
+            entity.HasIndex(e => e.WorkshopCode, "IX_Workshops_WorkshopCode").IsUnique();
+            entity.Property(e => e.WorkshopCode).HasMaxLength(50);
+            entity.Property(e => e.WorkshopNameVn).HasMaxLength(255);
+            entity.Property(e => e.WorkshopNameJp).HasMaxLength(255);
         });
 
         modelBuilder.Entity<Reason>(entity =>
@@ -105,6 +124,7 @@ public partial class AttendanceDbContext : DbContext
             entity.HasIndex(e => e.Code, "IX_OtCases_Code").IsUnique();
             entity.Property(e => e.Code).HasMaxLength(50);
             entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.DescriptionJp).HasMaxLength(500);
         });
 
         modelBuilder.Entity<Employee>(entity =>
@@ -225,9 +245,26 @@ public partial class AttendanceDbContext : DbContext
                 .HasConstraintName("FK_GroupApprovalStepCoordinators_Employees_EmployeeId");
         });
 
+        modelBuilder.Entity<GroupBorrowedApprover>(entity =>
+        {
+            entity.HasIndex(e => new { e.GroupId, e.EmployeeId }, "IX_GroupBorrowedApprovers_GroupId_EmployeeId").IsUnique();
+            entity.HasIndex(e => e.EmployeeId, "IX_GroupBorrowedApprovers_EmployeeId");
+
+            entity.HasOne(d => d.Group).WithMany()
+                .HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_GroupBorrowedApprovers_Groups_GroupId");
+
+            entity.HasOne(d => d.Employee).WithMany()
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_GroupBorrowedApprovers_Employees_EmployeeId");
+        });
+
         modelBuilder.Entity<EmployeeAccumulationHistory>(entity =>
         {
             entity.HasIndex(e => new { e.EmployeeId, e.Year, e.Month }, "IX_EmployeeAccumulationHistories_EmployeeId_Year_Month").IsUnique();
+            entity.HasIndex(e => new { e.Year, e.Month }, "IX_EmployeeAccumulationHistories_Year_Month");
 
             entity.Property(e => e.TotalHours).HasPrecision(10, 2);
             entity.Property(e => e.Note).HasMaxLength(1000);
@@ -242,10 +279,12 @@ public partial class AttendanceDbContext : DbContext
         {
             entity.HasIndex(e => e.GroupId, "IX_OtForms_GroupId");
             entity.HasIndex(e => e.DepartmentId, "IX_OtForms_DepartmentId");
+            entity.HasIndex(e => e.WorkshopId, "IX_OtForms_WorkshopId");
             entity.HasIndex(e => e.ReasonId, "IX_OtForms_ReasonId");
             entity.HasIndex(e => e.OtCaseId, "IX_OtForms_OtCaseId");
             entity.HasIndex(e => e.CreatedByUserName, "IX_OtForms_CreatedByUserName");
             entity.HasIndex(e => e.Status, "IX_OtForms_Status");
+            entity.HasIndex(e => e.Date, "IX_OtForms_Date");
 
             entity.Property(e => e.CreatedByUserName).HasMaxLength(100);
             entity.Property(e => e.CreatedByFullName).HasMaxLength(255);
@@ -264,6 +303,11 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_OtForms_Departments_DepartmentId");
+
+            entity.HasOne(d => d.Workshop).WithMany()
+                .HasForeignKey(d => d.WorkshopId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OtForms_Workshops_WorkshopId");
 
             entity.HasOne(d => d.Reason).WithMany(p => p.OtForms)
                 .HasForeignKey(d => d.ReasonId)
@@ -408,6 +452,7 @@ public partial class AttendanceDbContext : DbContext
         {
             entity.HasIndex(e => e.OtFormApprovalStepId, "IX_OtFormApprovalStepCandidates_OtFormApprovalStepId");
             entity.HasIndex(e => e.EmployeeId, "IX_OtFormApprovalStepCandidates_EmployeeId");
+            entity.HasIndex(e => e.UserName, "IX_OtFormApprovalStepCandidates_UserName");
             entity.Property(e => e.UserName).HasMaxLength(100);
             entity.Property(e => e.FullName).HasMaxLength(255);
 
@@ -452,6 +497,7 @@ public partial class AttendanceDbContext : DbContext
         {
             entity.HasKey(e => e.Id).HasName("PK_OtFormBatches");
             entity.HasIndex(e => e.DepartmentId, "IX_OtFormBatches_DepartmentId");
+            entity.HasIndex(e => e.WorkshopId, "IX_OtFormBatches_WorkshopId");
             entity.HasIndex(e => e.Status, "IX_OtFormBatches_Status");
             entity.HasIndex(e => e.TerminalLevel, "IX_OtFormBatches_TerminalLevel");
 
@@ -462,6 +508,32 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_OtFormBatches_Departments_DepartmentId");
+
+            entity.HasOne(d => d.Workshop).WithMany()
+                .HasForeignKey(d => d.WorkshopId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_OtFormBatches_Workshops_WorkshopId");
+        });
+
+        modelBuilder.Entity<EmployeeApprovalScope>(entity =>
+        {
+            entity.HasIndex(e => new { e.EmployeeId, e.WorkshopId, e.DepartmentId }, "IX_EmployeeApprovalScopes_Employee_Workshop_Department").IsUnique();
+            entity.HasIndex(e => new { e.WorkshopId, e.DepartmentId }, "IX_EmployeeApprovalScopes_Workshop_Department");
+
+            entity.HasOne(d => d.Employee).WithMany(p => p.ApprovalScopes)
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_EmployeeApprovalScopes_Employees_EmployeeId");
+
+            entity.HasOne(d => d.Workshop).WithMany(p => p.ApprovalScopes)
+                .HasForeignKey(d => d.WorkshopId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_EmployeeApprovalScopes_Workshops_WorkshopId");
+
+            entity.HasOne(d => d.Department).WithMany()
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_EmployeeApprovalScopes_Departments_DepartmentId");
         });
 
         modelBuilder.Entity<OtFormBatchEmailToken>(entity =>

@@ -7,6 +7,8 @@ namespace Attendance.Application.Interfaces.Service
     {
         IDepartmentRepository Departments { get; }
         IGroupRepository Groups { get; }
+        IWorkshopRepository Workshops { get; }
+        IEmployeeApprovalScopeRepository EmployeeApprovalScopes { get; }
         IReasonRepository Reasons { get; }
         IOtCaseRepository OtCases { get; }
         IEmployeeRepository Employees { get; }
@@ -28,6 +30,7 @@ namespace Attendance.Application.Interfaces.Service
         IGroupApprovalStepRepository GroupApprovalSteps { get; }
         IDepartmentApprovalStepCoordinatorRepository DepartmentApprovalStepCoordinators { get; }
         IGroupApprovalStepCoordinatorRepository GroupApprovalStepCoordinators { get; }
+        IGroupBorrowedApproverRepository GroupBorrowedApprovers { get; }
         IOtFormApprovalStepRepository OtFormApprovalSteps { get; }
         IOtFormApprovalStepCandidateRepository OtFormApprovalStepCandidates { get; }
         IJobTitlePermissionRepository JobTitlePermissions { get; }

@@ -8,9 +8,7 @@ namespace Attendance.Application.Dtos.OtForms
         [Required(ErrorMessage = "Nhân viên cần loại không được để trống")]
         public int EmployeeId { get; set; }
 
-        // Mandatory — same principle as the old RemoveOtFormEmployeeDto.Reason: any action that takes
-        // something away from the form must record why, since the form is a legal document.
-        [Required(ErrorMessage = "Lý do loại nhân viên khỏi đơn không được để trống")]
-        public string Reason { get; set; } = null!;
+        // Required unless the remover is the form's own creator (checked in OtFormService.UpdateAsync).
+        public string? Reason { get; set; }
     }
 }

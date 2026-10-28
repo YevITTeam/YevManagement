@@ -7,7 +7,7 @@ import { GripVertical, Inbox, Search, Pencil, Trash2 } from "lucide-react";
 
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
-import { jobTitleTerminalLevelLabels } from "@/modules/attendance/types/enums";
+import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import JobTitleForm, { type JobTitleFormValues } from "./JobTitleForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -20,6 +20,7 @@ const PAGE_SIZE = 20;
 const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleList({ onLoadingChange }, ref) {
     const t = useTranslations("Attendance.JobTitle");
     const tCommon = useTranslations("Common");
+    const enumLabels = useEnumLabels();
     const [jobTitles, setJobTitles] = useState<JobTitleDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -250,7 +251,7 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                                     <td className="px-4 py-3 text-sm text-[#5e3f3a]">{index + 1}</td>
                                     <td className="px-4 py-3 text-sm">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
-                                            {jobTitleTerminalLevelLabels[jobTitle.terminalLevel] ?? jobTitle.terminalLevel}
+                                            {enumLabels.terminalLevel[jobTitle.terminalLevel] ?? jobTitle.terminalLevel}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-right text-sm">

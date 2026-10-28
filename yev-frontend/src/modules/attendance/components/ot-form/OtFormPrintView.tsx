@@ -926,8 +926,7 @@ export default function OtFormPrintView({ id, onClose }: OtFormPrintViewProps) {
 
                 {rejectHistory && (
                     <p className="mt-3 text-sm text-[#930006]">
-                        Đơn bị từ chối bởi {rejectHistory.approverFullName ?? rejectHistory.approverUserName}: &quot;{rejectHistory.comment}
-                        &quot;
+                        {t("rejectedBy", { name: rejectHistory.approverFullName ?? rejectHistory.approverUserName, comment: rejectHistory.comment ?? "" })}
                     </p>
                 )}
             </div>

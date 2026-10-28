@@ -51,6 +51,8 @@ public partial class Employee
 
     public virtual JobTitle? JobTitle { get; set; }
 
+    public virtual ICollection<EmployeeApprovalScope> ApprovalScopes { get; set; } = new List<EmployeeApprovalScope>();
+
     public virtual ICollection<OtFormEmployee> OtFormEmployees { get; set; } = new List<OtFormEmployee>();
 
     public virtual ICollection<EmployeeAccumulationHistory> EmployeeAccumulationHistories { get; set; } = new List<EmployeeAccumulationHistory>();

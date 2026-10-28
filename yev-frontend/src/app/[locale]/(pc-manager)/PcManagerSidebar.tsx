@@ -25,6 +25,7 @@ import {
   LayoutGrid,
   ScanLine,
   SlidersHorizontal,
+  Usb,
 } from "lucide-react";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -39,6 +40,7 @@ import BrandLogo from "@/components/common/BrandLogo";
 const navItems = [
   { key: "devices", href: "/pc", icon: Computer, group: "assets", permissions: ["Asset.Device.View"] },
   { key: "reports", href: "/pc/reports", icon: Flag, group: "assets", permissions: ["Asset.Report.View"] },
+  { key: "usbLog", href: "/pc/usb-log", icon: Usb, group: "assets", permissions: ["Asset.UsbLog.View"] },
   { key: "ips", href: "/pc/ips", icon: Monitor, group: "assets", permissions: ["Asset.IpAddress.View", "Asset.IpPrefix.View"] },
   { key: "deviceTypes", href: "/pc/device-types", icon: HardDrive, group: "catalog", permissions: ["Asset.DeviceType.View"] },
   { key: "branches", href: "/pc/branches", icon: Building2, group: "catalog", permissions: ["Asset.Branch.View"] },

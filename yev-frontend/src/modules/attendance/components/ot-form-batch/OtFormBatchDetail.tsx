@@ -15,6 +15,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { useRouter } from "@/navigation";
 import { MEAL_TICKET_MAIN, MEAL_TICKET_SECONDARY } from "@/modules/attendance/lib/mealTicket";
+import OtCaseBadge from "@/modules/attendance/components/OtCaseBadge";
 import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
 
 function formatDate(value: string) {
@@ -268,7 +269,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                                                     <td className="px-3 py-2.5 text-sm text-[#191c1e]">{bilingualText(form.groupNameVn, form.groupNameJp)}</td>
                                                     <td className="px-3 py-2.5 text-sm text-[#191c1e]">
                                                         <span className="mr-1.5 inline-flex rounded-md border border-[#d5dade] bg-white px-1.5 py-0.5 text-[11px] font-semibold text-[#5e3f3a]">
-                                                            {form.otCaseCode}
+                                                            <OtCaseBadge code={form.otCaseCode} description={form.otCaseDescription} descriptionJp={form.otCaseDescriptionJp} />
                                                         </span>
                                                         {bilingualText(form.reasonNameVn, form.reasonNameJp)}
                                                     </td>

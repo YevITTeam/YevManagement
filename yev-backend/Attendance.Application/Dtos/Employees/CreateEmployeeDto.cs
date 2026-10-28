@@ -23,6 +23,9 @@ namespace Attendance.Application.Dtos.Employees
 
         public int? DepartmentId { get; set; }
 
+        // Required for Department Managers: the (Workshop, Department) pairs they approve for.
+        public List<EmployeeApprovalScopeInputDto>? ApprovalScopes { get; set; }
+
         public int? JobTitleId { get; set; }
 
         // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — nullable, để trống = dùng mặc định chung

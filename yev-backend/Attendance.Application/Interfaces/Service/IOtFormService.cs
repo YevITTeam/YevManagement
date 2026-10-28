@@ -15,13 +15,13 @@ namespace Attendance.Application.Interfaces.Service
         Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null);
 
         Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
             string approverUserName, int pageIndex, int pageSize,
             DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null);
 
         // Đếm nhanh cho badge sidebar FE — cùng logic lọc "bước hiện tại" với GetPendingApprovalsAsync
         // nhưng không phân trang/không map DTO (2026-08-19).
@@ -38,21 +38,21 @@ namespace Attendance.Application.Interfaces.Service
         Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null);
 
         // Đơn tôi CÓ TÊN trong danh sách nhân viên tăng ca (OtFormEmployee) — không nhất thiết là người
         // tạo/ký/duyệt. Dành cho mọi user (kể cả Role "Nhân viên"), gate bằng Attendance.OTForm.View.
         Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null);
 
         // "Tất cả đơn" — Admin xem/quản lý toàn bộ đơn, không lọc theo user gọi API. Gate bằng
         // Attendance.OTForm.ViewAll (Admin-only, 2026-09-04, xem migration AddOtFormViewAllPermission).
         Task<PagedResponse<OtFormListItemDto>> GetAllFormsAsync(
             int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null);
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null);
 
         Task<OtFormDto> GetByIdAsync(int id);
 
@@ -126,6 +126,7 @@ namespace Attendance.Application.Interfaces.Service
 
         // Also called by QueuedHostedService — notify the form's creator that an approver rejected the
         // form / removed employees from it (the creator gets no other signal in those cases).
+        Task SendApprovedNotificationAsync(int otFormId);
         Task SendRejectedNotificationAsync(int otFormId);
         Task SendEmployeesRemovedNotificationAsync(int otFormId, List<int> employeeIds);
     }

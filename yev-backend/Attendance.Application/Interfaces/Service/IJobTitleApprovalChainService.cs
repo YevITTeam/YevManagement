@@ -16,7 +16,7 @@ namespace Attendance.Application.Interfaces.Service
         // departmentId truyền trực tiếp (không suy ra qua Employee.Group) vì OtFormService đã có sẵn
         // và đã validate đúng Group/Department của đơn (2026-08-08: thêm groupId — cấp trung gian giờ
         // đọc từ GroupApprovalStep theo đúng Nhóm thay vì cả Bộ phận).
-        Task<ResolveApprovalChainResultDto> ResolveChainForCreationAsync(int? creatorEmployeeId, int groupId, int departmentId, int otCaseId);
+        Task<ResolveApprovalChainResultDto> ResolveChainForCreationAsync(int? creatorEmployeeId, int groupId, int departmentId, int workshopId, int otCaseId);
 
         // Bản dùng cho đơn "theo chuyền" (OtForm.IsProductionForm = true, 2026-08-24) — đọc
         // ProductionApprovalStep (1 danh sách duy nhất theo departmentId, KHÔNG tách Group/Department)
@@ -25,6 +25,6 @@ namespace Attendance.Application.Interfaces.Service
         // vào đơn (phải cùng 1 Group/1 Line thì mới suy được, khác Group/Line thì bước đó không tìm ra
         // ứng viên — xem JobTitle.IsLineScoped).
         Task<ResolveApprovalChainResultDto> ResolveChainForProductionCreationAsync(
-            int? creatorEmployeeId, int departmentId, List<int> employeeIds, int otCaseId);
+            int? creatorEmployeeId, int departmentId, int workshopId, List<int> employeeIds, int otCaseId);
     }
 }

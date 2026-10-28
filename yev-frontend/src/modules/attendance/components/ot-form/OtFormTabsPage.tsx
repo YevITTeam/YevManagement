@@ -7,6 +7,7 @@ import OtFormListPage from "./OtFormListPage";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
+import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 
 type OtFormTabKey = "my-forms" | "pending-approvals" | "my-actions" | "my-participations" | "all-forms";
 
@@ -41,16 +42,12 @@ export default function OtFormTabsPage() {
         return true; // "my-actions"/"my-participations" luôn hiện — chỉ cần OTForm.View để vào được cả màn
     });
 
-    const [activeTab, setActiveTab] = useState<OtFormTabKey | null>(null);
+    const [activeTab, setActiveTab] = usePersistedTab<OtFormTabKey>(
+        "ot-forms-tab",
+        visibleTabs.map((tab) => tab.key),
+        visibleTabs[0]?.key ?? "my-actions"
+    );
     const [visitedTabs, setVisitedTabs] = useState<Set<OtFormTabKey>>(new Set());
-
-    // Chọn tab đầu tiên user thấy được làm mặc định — so sánh snapshot ngay trong render (không dùng
-    // effect để setState, xem AGENTS.md), chỉ chạy đúng 1 lần cho tới khi activeTab được set.
-    const defaultTab = visibleTabs[0]?.key ?? null;
-    if (activeTab === null && defaultTab !== null) {
-        setActiveTab(defaultTab);
-        setVisitedTabs((current) => new Set(current).add(defaultTab));
-    }
 
     const selectTab = (key: OtFormTabKey) => {
         setActiveTab(key);
@@ -98,7 +95,7 @@ export default function OtFormTabsPage() {
                 tức thì trong phiên này, không tải lại.
             */}
             {visibleTabs.map((tab) =>
-                visitedTabs.has(tab.key) ? (
+                visitedTabs.has(tab.key) || activeTab === tab.key ? (
                     <div key={tab.key} className={activeTab === tab.key ? "" : "hidden"}>
                         <OtFormListPage mode={tab.key} hideHeading />
                     </div>

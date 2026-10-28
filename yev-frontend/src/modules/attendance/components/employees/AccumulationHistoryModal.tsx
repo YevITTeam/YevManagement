@@ -12,6 +12,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import AccumulationHistoryTable from "./AccumulationHistoryTable";
 import AccumulationHistoryEditor from "./AccumulationHistoryEditor";
+import AccumulationDaysView from "./AccumulationDaysView";
 
 interface AccumulationHistoryModalProps {
     employeeId: number;
@@ -34,6 +35,7 @@ export default function AccumulationHistoryModal({ employeeId, employeeLabel, ca
     const [year, setYear] = useState(CURRENT_YEAR);
     const [data, setData] = useState<EmployeeAccumulationHistoryYearDto | null>(null);
     const [isEditing, setIsEditing] = useState(false);
+    const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
 
     const { isLoading, error } = useFetchEffect(
         () => (canEdit ? EmployeeApi.getAccumulationHistoryForManage(employeeId, year) : EmployeeApi.getAccumulationHistory(employeeId, year)),
@@ -66,6 +68,7 @@ export default function AccumulationHistoryModal({ employeeId, employeeLabel, ca
                             onChange={(v) => {
                                 setYear(v);
                                 setIsEditing(false);
+                                setSelectedMonth(null);
                             }}
                             ariaLabel={t("fieldYear")}
                             triggerClassName="h-9 rounded-lg border border-[#e0e3e5] bg-white px-2 pr-7 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
@@ -98,9 +101,18 @@ export default function AccumulationHistoryModal({ employeeId, employeeLabel, ca
                             }}
                             onCancel={() => setIsEditing(false)}
                         />
+                    ) : selectedMonth !== null ? (
+                        <AccumulationDaysView
+                            employeeId={employeeId}
+                            year={data.year}
+                            month={selectedMonth}
+                            monthTotalHours={data.months.find((m) => m.month === selectedMonth)?.totalHours ?? 0}
+                            canEdit={canEdit}
+                            onBack={() => setSelectedMonth(null)}
+                        />
                     ) : (
                         <>
-                            <AccumulationHistoryTable data={data} setting={setting} />
+                            <AccumulationHistoryTable data={data} setting={setting} onSelectMonth={setSelectedMonth} />
                             {canEdit && (
                                 <div className="mt-3 flex justify-end">
                                     <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, Car, Check, Printer, RefreshCw, Undo2, UserMinus, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
@@ -240,6 +240,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         canCreateProductionForm && !canUseGroupMode ? "production" : "group"
     );
 
+    // Office (group) forms can edit everything but Department/Group; production forms only their employees.
+    const isOfficeEdit = isEditMode && formMode === "group";
+    const isHeaderLocked = isEditMode && formMode === "production";
+
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [reasons, setReasons] = useState<ReasonDto[]>([]);
@@ -317,12 +321,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // employeeAddedMeta chỉ lưu mã/tên để hiển thị (người mới thêm chưa có OtFormEmployeeDto đầy đủ từ
     // BE, không có lũy kế tháng/năm cho tới khi Lưu thật).
     const [employeeAddedMeta, setEmployeeAddedMeta] = useState<Record<number, { employeeCode: string; fullName: string }>>({});
-    const [addSearchKeyword, setAddSearchKeyword] = useState("");
+    const [addSearchQuery, setAddSearchQuery] = useState("");
+    const addSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [addSearchResults, setAddSearchResults] = useState<{ employeeId: number; employeeCode: string; fullName: string }[]>([]);
-    const [isSearchingAddEmployee, setIsSearchingAddEmployee] = useState(false);
     const [pendingRemovals, setPendingRemovals] = useState<Record<number, string>>({});
     const [removeTarget, setRemoveTarget] = useState<{ employeeId: number; employeeCode: string; fullName: string } | null>(null);
     const [removeReasonInput, setRemoveReasonInput] = useState("");
+    // The creator removes people from their own form without giving a reason.
+    const [isFormCreator, setIsFormCreator] = useState(false);
 
     const [processPart, setProcessPart] = useState<ProcessPartDto>(emptyProcessPart);
     // true = số phiếu chính/phụ đang do HỆ THỐNG tự tính; chuyển false vĩnh viễn ngay khi người dùng
@@ -424,7 +430,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         () => ProductionEmployeeApi.getLineOptions(productionTeamId === "" ? undefined : productionTeamId),
         [productionTeamId],
         setLineOptions,
-        "Không thể tải danh sách Line."
+        t("lineOptionsLoadError")
     );
 
     // Nhóm ca KHÔNG phải con của Line/Team (1 Line có thể thuộc nhiều Nhóm ca — xem BE
@@ -450,7 +456,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             ),
         [productionLineId, productionTeamId],
         setShiftTeamOptions,
-        "Không thể tải danh sách Nhóm ca."
+        t("shiftTeamOptionsLoadError")
     );
 
     // Tìm kiếm ProductionEmployee theo bộ lọc — chỉ chạy khi đang ở chế độ "Theo chuyền" lúc Tạo mới VÀ
@@ -553,7 +559,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [isScopeRestricted, createScopes, departments, departmentId]);
 
     const visibleGroups = useMemo(() => {
-        if (!isScopeRestricted) return groups.map((g) => ({ id: g.id, label: g.groupNameVn }));
+        if (!isScopeRestricted) {
+            const multipleWorkshops = new Set(groups.map((g) => g.workshopId)).size > 1;
+            return groups.map((g) => ({ id: g.id, label: multipleWorkshops ? `${g.groupNameVn} · ${g.workshopNameVn}` : g.groupNameVn }));
+        }
         const options = createScopes!
             .filter((s) => !departmentId || s.departmentId === departmentId)
             .map((s) => ({ id: s.groupId, label: s.groupNameVn }));
@@ -632,6 +641,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 setGroupId(data.groupId);
                 setReasonId(data.reasonId);
                 setLoadedOtCaseId(data.otCaseId);
+                setIsFormCreator(data.createdByUserName === user?.userName);
                 setDate(data.date);
                 setStartTime(data.startTime.slice(0, 5));
                 setEndTime(data.endTime.slice(0, 5));
@@ -646,7 +656,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     Object.fromEntries(
                         activeEmployees.map((e) => [
                             e.employeeId,
-                            { startTime: e.startTime.slice(0, 5), endTime: e.endTime.slice(0, 5), didEat: e.didEat, noteVn: e.noteVn ?? "", noteJp: e.noteJp ?? "" },
+                            {
+                                // "" = follows the form's own time, so changing the form time moves these rows too.
+                                startTime: e.startTime === data.startTime ? "" : e.startTime.slice(0, 5),
+                                endTime: e.endTime === data.endTime ? "" : e.endTime.slice(0, 5),
+                                didEat: e.didEat,
+                                noteVn: e.noteVn ?? "",
+                                noteJp: e.noteJp ?? "",
+                            },
                         ])
                     )
                 );
@@ -794,7 +811,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         setEmployeeOverrides((current) =>
             current[employeeId]
                 ? current
-                : { ...current, [employeeId]: { startTime: "", endTime, didEat: defaultDidEatForNewEmployee, noteVn: "", noteJp: "" } }
+                : { ...current, [employeeId]: { startTime: "", endTime: isEditMode ? "" : endTime, didEat: defaultDidEatForNewEmployee, noteVn: "", noteJp: "" } }
         );
     };
 
@@ -849,44 +866,30 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }));
     };
 
-    // Tìm nhân viên để thêm vào đơn đang sửa (2026-09-04) — chỉ theo từ khoá, KHÔNG lọc theo Line/Nhóm
-    // ca ở FE (khác bảng chọn lúc Tạo mới): BE (UpdateAsync) mới là nơi chặn thật nhân viên khác Line/
-    // Nhóm ca của đơn, ở đây giữ đơn giản như search cũ của OtFormDetail — chọn sai sẽ bị BE báo lỗi rõ
-    // ràng khi Lưu.
-    const handleSearchAddEmployee = async () => {
-        setIsSearchingAddEmployee(true);
-        try {
-            const activeIds = new Set(selectedEmployeeIds);
-            const keyword = addSearchKeyword.trim();
-            if (formMode === "production") {
-                const results = await ProductionEmployeeApi.search({ keyword: keyword || undefined, date: date || undefined });
-                setAddSearchResults(
-                    results
-                        .filter((item) => !activeIds.has(item.employeeId))
-                        .map((item) => ({ employeeId: item.employeeId, employeeCode: item.employeeCode, fullName: item.fullName }))
-                );
-            } else if (groupId) {
-                const results = await EmployeeApi.getEmployeesByGroup(groupId, date || undefined);
-                const lowerKeyword = keyword.toLowerCase();
-                setAddSearchResults(
-                    results
-                        .filter((item) => !activeIds.has(item.id))
-                        .filter(
-                            (item) =>
-                                !lowerKeyword ||
-                                item.code.toLowerCase().includes(lowerKeyword) ||
-                                `${item.lastName} ${item.firstName}`.toLowerCase().includes(lowerKeyword)
-                        )
-                        .map((item) => ({ employeeId: item.id, employeeCode: item.code, fullName: `${item.lastName} ${item.firstName}` }))
-                );
-            }
-        } catch (err) {
-            console.error(err);
-            toast.error(getApiErrorMessage(err, t("productionSearchError")));
-        } finally {
-            setIsSearchingAddEmployee(false);
-        }
+    // Candidates for "add employee" while editing. Group forms: the whole Group (small), filtered by the
+    // dropdown itself. Production forms: searched on the server by the typed keyword (empty = nothing).
+    // The server (UpdateAsync) is what rejects a wrong Line/shift team on save.
+    const handleAddQueryChange = (query: string) => {
+        if (addSearchTimer.current) clearTimeout(addSearchTimer.current);
+        addSearchTimer.current = setTimeout(() => setAddSearchQuery(query.trim()), 300);
     };
+
+    useFetchEffect(
+        async () => {
+            if (!isEditMode) return [];
+            if (formMode === "production") {
+                if (!addSearchQuery) return [];
+                const results = await ProductionEmployeeApi.search({ keyword: addSearchQuery, date: date || undefined });
+                return results.map((item) => ({ employeeId: item.employeeId, employeeCode: item.employeeCode, fullName: item.fullName }));
+            }
+            if (!groupId) return [];
+            const results = await EmployeeApi.getEmployeesByGroup(groupId, date || undefined);
+            return results.map((item) => ({ employeeId: item.id, employeeCode: item.code, fullName: `${item.lastName} ${item.firstName}` }));
+        },
+        [isEditMode, formMode, groupId, date, formMode === "production" ? addSearchQuery : ""],
+        setAddSearchResults,
+        t("productionSearchError")
+    );
 
     const handlePickAddEmployee = (item: { employeeId: number; employeeCode: string; fullName: string }) => {
         toggleEmployee(item.employeeId);
@@ -907,6 +910,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // Loại 1 người ĐÃ CÓ SẴN trong đơn — bắt buộc lý do (đơn là chứng từ), chỉ áp dụng TẠM cho tới khi
     // Lưu (xem UpdateOtFormDto.removedEmployees).
     const openRemoveEmployee = (employee: OtFormEmployeeDto) => {
+        if (isFormCreator) {
+            setPendingRemovals((current) => ({ ...current, [employee.employeeId]: "" }));
+            setSelectedEmployeeIds((current) => current.filter((id) => id !== employee.employeeId));
+            return;
+        }
         setRemoveReasonInput("");
         setRemoveTarget({ employeeId: employee.employeeId, employeeCode: employee.employeeCode, fullName: employee.fullName });
     };
@@ -960,7 +968,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         // ít nhất 1 người. Tạo mới: vẫn cần đủ các field bắt buộc như cũ — groupId CHỈ bắt buộc ở chế
         // độ "Theo Nhóm" (2026-08-24, "Theo chuyền" không có Group cố định).
         if (
-            !isEditMode &&
+            (!isEditMode || isOfficeEdit) &&
             ((formMode === "group" && !groupId) || !departmentId || !reasonId || !otCaseId || !date || !startTime || !endTime)
         ) {
             toast.error(t("requiredFieldsError"));
@@ -970,7 +978,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             toast.error(t("requiredFieldsError"));
             return;
         }
-        if (!isEditMode && isTimeRangeInvalid) {
+        if ((!isEditMode || isOfficeEdit) && isTimeRangeInvalid) {
             toast.error(t("endTimeBeforeStartError"));
             return;
         }
@@ -1031,7 +1039,21 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     employeeId: Number(employeeId),
                     reason,
                 }));
-                result = await OtFormApi.updateOtForm(otFormId, { employees, removedEmployees, secondaryPassword });
+                result = await OtFormApi.updateOtForm(otFormId, {
+                    header: isOfficeEdit
+                        ? {
+                              date,
+                              startTime: `${startTime}:00`,
+                              endTime: `${endTime}:00`,
+                              reasonId: reasonId!,
+                              subReason: subReason.trim() || null,
+                              processPart: { ...processPart, isEat: true },
+                          }
+                        : null,
+                    employees,
+                    removedEmployees,
+                    secondaryPassword,
+                });
             } else {
                 const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
                     employeeId,
@@ -1235,7 +1257,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 type="date"
                                 value={date}
                                 onChange={(event) => setDate(event.target.value)}
-                                disabled={isSubmitting || isEditMode}
+                                disabled={isSubmitting || isHeaderLocked}
                                 required
                                 min={isEditMode ? undefined : getTodayStr()}
                                 className={fieldClassName}
@@ -1264,11 +1286,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <div className="grid grid-cols-2 gap-3">
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("fieldStartTime")}<RequiredMark /></span>
-                                    <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting || isEditMode} />
+                                    <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting || isHeaderLocked} />
                                 </label>
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("fieldEndTime")}<RequiredMark /></span>
-                                    <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting || isEditMode} />
+                                    <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting || isHeaderLocked} />
                                 </label>
                             </div>
                             {isTimeRangeInvalid && (
@@ -1286,7 +1308,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 value={reasonId ?? ""}
                                 onChange={(v) => setReasonId(v === "" ? null : v)}
                                 placeholder={t("fieldReasonPlaceholder")}
-                                disabled={isSubmitting || isEditMode}
+                                disabled={isSubmitting || isHeaderLocked}
                             />
                         </label>
 
@@ -1308,6 +1330,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     {t(exceedsTh3 ? "otCaseAutoHintTh3" : isNonWorkingDay ? "otCaseAutoHintNonWorking" : "otCaseAutoHintWorking")}
                                 </p>
                             )}
+                            {isOfficeEdit && <p className="mt-1 text-xs text-[#8a8f94]">{t("otCaseAutoHintEdit")}</p>}
                         </label>
 
                         
@@ -1318,7 +1341,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <textarea
                             value={subReason}
                             onChange={(event) => setSubReason(event.target.value)}
-                            disabled={isSubmitting || isEditMode}
+                            disabled={isSubmitting || isHeaderLocked}
                             rows={2}
                             className="w-full resize-none rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                         />
@@ -1339,14 +1362,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 label={t("transportationLabel")}
                                 checked={processPart.isTransportation}
                                 onChange={(value) => setProcessPart((current) => ({ ...current, isTransportation: value }))}
-                                disabled={isSubmitting || isEditMode}
+                                disabled={isSubmitting || isHeaderLocked}
                             />
                             <ToggleOptionCard
                                 icon={<Printer size={13} />}
                                 label={t("copyRoomLabel")}
                                 checked={processPart.isUseCopyRoom}
                                 onChange={(value) => setProcessPart((current) => ({ ...current, isUseCopyRoom: value }))}
-                                disabled={isSubmitting || isEditMode}
+                                disabled={isSubmitting || isHeaderLocked}
                             />
                         </div>
 
@@ -1419,7 +1442,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     onChange={(event) =>
                                         setProcessPart((current) => ({ ...current, milkCount: Number(event.target.value) }))
                                     }
-                                    disabled={isSubmitting || isEditMode}
+                                    disabled={isSubmitting || isHeaderLocked}
                                     className={`${compactFieldClassName} text-center`}
                                 />
                             </label>
@@ -1433,7 +1456,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 onChange={(event) =>
                                     setProcessPart((current) => ({ ...current, anotherSuggestionVn: event.target.value }))
                                 }
-                                disabled={isSubmitting || isEditMode}
+                                disabled={isSubmitting || isHeaderLocked}
                                 className={compactFieldClassName}
                             />
                         </label>
@@ -1446,10 +1469,34 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                             {t("employeeListTitle")}
                         </h2>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
-                            <Users className="h-3.5 w-3.5" />
-                            {t("selectedCount", { count: selectedEmployeeIds.length })}
-                        </span>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                            {isEditMode && (
+                                <div className="w-64">
+                                    <SearchableSelect
+                                        options={addSearchResults
+                                            .filter((item) => !selectedEmployeeIds.includes(item.employeeId))
+                                            .map((item) => ({
+                                                value: item.employeeId,
+                                                label: `${item.fullName} (${item.employeeCode})`,
+                                                searchText: `${item.employeeCode} ${item.fullName}`.toLowerCase(),
+                                            }))}
+                                        value=""
+                                        onChange={(employeeId) => {
+                                            const item = addSearchResults.find((r) => r.employeeId === employeeId);
+                                            if (item) handlePickAddEmployee(item);
+                                        }}
+                                        onQueryChange={handleAddQueryChange}
+                                        placeholder={t("addEmployeeSectionTitle")}
+                                        disabled={isSubmitting}
+                                        triggerClassName="h-8 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-xs! text-[#191c1e] outline-none transition focus:border-[#e3000f]"
+                                    />
+                                </div>
+                            )}
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                                <Users className="h-3.5 w-3.5" />
+                                {t("selectedCount", { count: selectedEmployeeIds.length })}
+                            </span>
+                        </div>
                     </div>
                     {isEditMode ? (
                         // Sửa đơn (2026-09-04, gộp thêm/xóa nhân viên từ OtFormDetail cũ — xem
@@ -1496,7 +1543,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <tbody>
                                     {editEmployees.map((employee) => {
                                         const removalReason = pendingRemovals[employee.employeeId];
-                                        if (removalReason) {
+                                        if (removalReason !== undefined) {
                                             return (
                                                 <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#fff4f2] opacity-70">
                                                     <td className="whitespace-nowrap px-3 py-2 align-top text-sm font-semibold text-[#191c1e] line-through">
@@ -1507,7 +1554,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         colSpan={formMode === "production" ? 9 : 7}
                                                     >
                                                         <span className="line-through">{employee.fullName}</span> —{" "}
-                                                        {t("willBeRemovedNote", { reason: removalReason })}
+                                                        {removalReason ? t("willBeRemovedNote", { reason: removalReason }) : t("willBeRemovedNoteNoReason")}
                                                     </td>
                                                     <td className={stickyActionCellClassName}>
                                                         <button
@@ -1527,7 +1574,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         // THẬT, không phải Dự kiến theo ngày) — chỉ cảnh báo tháng/năm, ưu tiên
                                         // mốc riêng của nhân viên nếu đã gán (2026-08-26).
                                         const currentStartTime = employeeOverrides[employee.employeeId]?.startTime || startTime;
-                                        const currentEndTime = employeeOverrides[employee.employeeId]?.endTime ?? endTime;
+                                        const currentEndTime = employeeOverrides[employee.employeeId]?.endTime || endTime;
                                         const currentDidEat = employeeOverrides[employee.employeeId]?.didEat ?? defaultDidEatForNewEmployee;
                                         const currentAteLater = !currentDidEat;
                                         const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);
@@ -1620,7 +1667,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             const meta = employeeAddedMeta[employeeId];
                                             if (!meta) return null;
                                             const currentStartTime = employeeOverrides[employeeId]?.startTime || startTime;
-                                            const currentEndTime = employeeOverrides[employeeId]?.endTime ?? endTime;
+                                            const currentEndTime = employeeOverrides[employeeId]?.endTime || endTime;
                                             const currentDidEat = employeeOverrides[employeeId]?.didEat ?? defaultDidEatForNewEmployee;
                                             const currentAteLater = !currentDidEat;
                                             const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);
@@ -1700,45 +1747,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         })}
                                 </tbody>
                             </table>
-                        </div>
-
-                        <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-4">
-                            <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                {t("addEmployeeSectionTitle")}
-                            </h3>
-                            <div className="flex gap-2">
-                                <input
-                                    value={addSearchKeyword}
-                                    onChange={(event) => setAddSearchKeyword(event.target.value)}
-                                    onKeyDown={(event) => event.key === "Enter" && handleSearchAddEmployee()}
-                                    placeholder={t("addSearchPlaceholder")}
-                                    disabled={isSubmitting}
-                                    className={`${fieldClassName} flex-1`}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleSearchAddEmployee}
-                                    disabled={isSubmitting || isSearchingAddEmployee}
-                                    className="h-9 shrink-0 cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {isSearchingAddEmployee ? tCommon("loading") : tCommon("search")}
-                                </button>
-                            </div>
-                            {addSearchResults.length > 0 && (
-                                <div className="mt-3 max-h-56 space-y-1 overflow-y-auto">
-                                    {addSearchResults.map((item) => (
-                                        <button
-                                            key={item.employeeId}
-                                            type="button"
-                                            onClick={() => handlePickAddEmployee(item)}
-                                            className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-left text-sm transition hover:border-[#e3000f] hover:bg-[#fff4f2]"
-                                        >
-                                            <span className="font-medium text-[#191c1e]">{item.fullName}</span>
-                                            <span className="font-mono text-xs text-[#5e3f3a]">{item.employeeCode}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
                         </div>
 
                         {removeTarget && (
@@ -1906,7 +1914,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 // hơn mặc định, thường dùng cho công nhân dưới chuyền (2026-08-26). BE
                                                 // luôn là nguồn chặn thật (ValidateOtHourLimitsAsync).
                                                 const currentStartTime = employeeOverrides[item.employeeId]?.startTime || startTime;
-                                                const currentEndTime = employeeOverrides[item.employeeId]?.endTime ?? endTime;
+                                                const currentEndTime = employeeOverrides[item.employeeId]?.endTime || endTime;
                                                 // Ăn uống bắt buộc (2026-09-28) — đơn Theo chuyền không còn cho chọn
                                                 // "Có ăn" nữa, loại phiếu luôn tính như có ăn.
                                                 const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, true, setting);
@@ -2051,7 +2059,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         // (ValidateOtHourLimitsAsync, cộng thêm giờ của chính đơn đang tạo). Ưu tiên
                                         // mốc riêng của nhân viên nếu đã gán (2026-08-26).
                                         const currentStartTime = employeeOverrides[employee.id]?.startTime || startTime;
-                                        const currentEndTime = employeeOverrides[employee.id]?.endTime ?? endTime;
+                                        const currentEndTime = employeeOverrides[employee.id]?.endTime || endTime;
                                         // Field BE thật (true = ăn TRONG ca, bị trừ giờ) — UI hiện dưới nhãn "Ăn
                                         // sau" ĐẢO NGƯỢC (2026-09-28): tích "Ăn sau" = didEat false = không trừ giờ.
                                         const currentDidEat = employeeOverrides[employee.id]?.didEat ?? defaultDidEatForNewEmployee;
@@ -2151,7 +2159,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 </section>
                 </div>
 
-                                <div className="flex justify-end gap-3">
+                                <div className="sticky bottom-0 z-20 flex justify-end gap-3 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
                     <button
                         type="button"
                         onClick={() => router.back()}

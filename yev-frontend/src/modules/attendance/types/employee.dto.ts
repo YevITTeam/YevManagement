@@ -1,3 +1,11 @@
+// One (workshop, department) pair a Department Manager approves for.
+export interface EmployeeApprovalScopeDto {
+    workshopId: number;
+    workshopNameVn: string;
+    departmentId: number;
+    departmentNameVn: string;
+}
+
 export interface EmployeeDto {
     id: number;
     code: string;
@@ -24,6 +32,10 @@ export interface EmployeeDto {
     groupNameVn: string | null;
     departmentId: number | null;
     departmentNameVn: string | null;
+    // Workshop of the employee's group; null for managers, who carry approvalScopes instead.
+    workshopId: number | null;
+    workshopNameVn: string | null;
+    approvalScopes: EmployeeApprovalScopeDto[];
 
     // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán (xem docs/attendance-module.md §API §Cây chức vụ).
     jobTitleId: number | null;

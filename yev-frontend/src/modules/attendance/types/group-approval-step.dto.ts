@@ -18,6 +18,38 @@ export interface GroupApprovalStepDto {
     terminalLevel: number;
 }
 
+// A Team Leader of another Group (same Department) who approves this Group's Team Leader step.
+export interface GroupBorrowedApproverDto {
+    employeeId: number;
+    employeeCode: string;
+    lastName: string;
+    firstName: string;
+    groupNameVn: string | null;
+    groupNameJp: string | null;
+}
+
+// approvers = already borrowed; candidates = Team Leaders of the other Groups in the same Department.
+export interface GroupBorrowedApproversDto {
+    approvers: GroupBorrowedApproverDto[];
+    candidates: GroupBorrowedApproverDto[];
+}
+
+// A Team Leader of another Group (same Department) who approves this Group's Team Leader step.
+export interface GroupBorrowedApproverDto {
+    employeeId: number;
+    employeeCode: string;
+    lastName: string;
+    firstName: string;
+    groupNameVn: string | null;
+    groupNameJp: string | null;
+}
+
+// approvers = already borrowed; candidates = Team Leaders of the other Groups in the same Department.
+export interface GroupBorrowedApproversDto {
+    approvers: GroupBorrowedApproverDto[];
+    candidates: GroupBorrowedApproverDto[];
+}
+
 // Payload PUT /by-group/{groupId} — thứ tự phần tử trong mảng chính là StepOrder.
 export interface ReplaceGroupApprovalStepItem {
     jobTitleId: number;

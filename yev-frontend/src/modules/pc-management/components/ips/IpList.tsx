@@ -5,6 +5,7 @@ import { RefreshCw } from "lucide-react";
 import IpAddressList from "./IpAddressList";
 import IpPrefixList from "./IpPrefixList";
 import type { ListHandle } from "../list-toolbar";
+import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 
 type IpTab = "addresses" | "prefixes";
 
@@ -14,7 +15,7 @@ const tabs: { key: IpTab; label: string }[] = [
 ];
 
 export default function IpList() {
-    const [activeTab, setActiveTab] = useState<IpTab>("addresses");
+    const [activeTab, setActiveTab] = usePersistedTab<IpTab>("pc-ip-tab", ["addresses", "prefixes"], "addresses");
     const [loading, setLoading] = useState(false);
 
     const addressRef = useRef<ListHandle>(null);

@@ -32,5 +32,22 @@ namespace Attendance.Api.Controllers
             var result = await _groupApprovalStepService.ReplaceAsync(CurrentUserName, User.IsInRole(AdminRole), groupId, request);
             return Success(result, "Cập nhật cây duyệt thành công.");
         }
+
+        [RequirePermission("Attendance.GroupApprovalStep.View")]
+        [HttpGet("by-group/{groupId}/borrowed-approvers")]
+        public async Task<ActionResult<ApiResponse<GroupBorrowedApproversDto>>> GetBorrowedApprovers(int groupId)
+        {
+            var result = await _groupApprovalStepService.GetBorrowedApproversAsync(CurrentUserName, User.IsInRole(AdminRole), groupId);
+            return Success(result);
+        }
+
+        [RequirePermission("Attendance.GroupApprovalStep.Update")]
+        [HttpPut("by-group/{groupId}/borrowed-approvers")]
+        public async Task<ActionResult<ApiResponse<GroupBorrowedApproversDto>>> ReplaceBorrowedApprovers(
+            int groupId, [FromBody] ReplaceGroupBorrowedApproversDto request)
+        {
+            var result = await _groupApprovalStepService.ReplaceBorrowedApproversAsync(CurrentUserName, User.IsInRole(AdminRole), groupId, request);
+            return Success(result, "Cập nhật người duyệt thành công.");
+        }
     }
 }

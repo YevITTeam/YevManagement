@@ -8,5 +8,6 @@ public enum OtFormEditActionType
     TimeChanged = 0,
     NoteChanged = 1,
     EmployeeAdded = 2,
-    EmployeeRemoved = 3
+    EmployeeRemoved = 3,
+    FormInfoChanged = 4
 }

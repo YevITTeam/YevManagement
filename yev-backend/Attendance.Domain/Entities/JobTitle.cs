@@ -6,6 +6,8 @@ namespace Attendance.Domain.Entities;
 // công) — xem plan "Cây Chức vụ" trong docs/docs-be/attendance-module.md.
 public partial class JobTitle
 {
+    public const string TeamLeaderCode = "TL";
+
     public int Id { get; set; }
 
     public string Code { get; set; } = null!;

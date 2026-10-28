@@ -1,11 +1,12 @@
 import { api } from "@/lib/client";
-import type { GroupApprovalStepDto, ReplaceGroupApprovalStepItem } from "@/modules/attendance/types/group-approval-step.dto";
+import type { GroupApprovalStepDto, GroupBorrowedApproversDto, ReplaceGroupApprovalStepItem } from "@/modules/attendance/types/group-approval-step.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
     GROUP_APPROVAL_STEP: {
         getByGroup: (groupId: number) => `/GroupApprovalStep/by-group/${groupId}`,
         replaceByGroup: (groupId: number) => `/GroupApprovalStep/by-group/${groupId}`,
+        borrowedApprovers: (groupId: number) => `/GroupApprovalStep/by-group/${groupId}/borrowed-approvers`,
     },
 } as const;
 
@@ -22,6 +23,15 @@ export const GroupApprovalStepApi = {
             ENDPOINTS.GROUP_APPROVAL_STEP.replaceByGroup(groupId),
             { steps }
         );
+        return response.data;
+    },
+    getBorrowedApprovers: async (groupId: number) => {
+        const response = await api.get<ApiResponse<GroupBorrowedApproversDto>>(ENDPOINTS.GROUP_APPROVAL_STEP.borrowedApprovers(groupId));
+        return response.data;
+    },
+    // employeeIds = the FULL list of borrowed Team Leaders after the change.
+    replaceBorrowedApprovers: async (groupId: number, employeeIds: number[]) => {
+        const response = await api.put<ApiResponse<GroupBorrowedApproversDto>>(ENDPOINTS.GROUP_APPROVAL_STEP.borrowedApprovers(groupId), { employeeIds });
         return response.data;
     },
 };

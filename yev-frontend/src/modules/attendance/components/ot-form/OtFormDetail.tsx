@@ -11,7 +11,9 @@ import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalStepDto, OtFormDto, OtFormEditLogDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
-import { approvalActionLabels, otFormStatusClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
+import { otFormStatusClasses } from "@/modules/attendance/types/enums";
+import OtCaseBadge from "@/modules/attendance/components/OtCaseBadge";
+import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { formatHours } from "@/modules/attendance/lib/time";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -114,6 +116,7 @@ function InfoField({ label, children, wide = false }: { label: string; children:
 export default function OtFormDetail({ id }: OtFormDetailProps) {
     const t = useTranslations("Attendance.OtFormDetail");
     const tCommon = useTranslations("Common");
+    const enumLabels = useEnumLabels();
     const { user } = useAuth();
     const router = useRouter();
     const [form, setForm] = useState<OtFormDto | null>(null);
@@ -306,16 +309,29 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
         }
     };
 
-    // Nhãn hiển thị 1 dòng Lịch sử chỉnh sửa (mới 2026-08-28) — actionType: 0=TimeChanged,
-    // 1=NoteChanged, 2=EmployeeAdded, 3=EmployeeRemoved (enum OtFormEditActionType).
+    // Label of one edit-log row; actionType follows enum OtFormEditActionType.
+    const editLogFieldLabels: Record<string, string> = {
+        StartTime: t("editLogFieldStartTime"),
+        EndTime: t("editLogFieldEndTime"),
+        DidEat: t("editLogFieldDidEat"),
+        NoteVn: t("editLogFieldNoteVn"),
+        NoteJp: t("editLogFieldNoteJp"),
+        Date: t("editLogFieldDate"),
+        FormStartTime: t("editLogFieldFormStartTime"),
+        FormEndTime: t("editLogFieldFormEndTime"),
+        Reason: t("editLogFieldReason"),
+        SubReason: t("editLogFieldSubReason"),
+        OtCase: t("editLogFieldOtCase"),
+        MilkCount: t("editLogFieldMilkCount"),
+        IsTransportation: t("editLogFieldTransportation"),
+        IsUseCopyRoom: t("editLogFieldCopyRoom"),
+        AnotherSuggestionVn: t("editLogFieldAnotherSuggestionVn"),
+        AnotherSuggestionJp: t("editLogFieldAnotherSuggestionJp"),
+    };
     const editLogActionLabel = (log: OtFormEditLogDto) => {
         if (log.actionType === 2) return t("editLogEmployeeAdded");
         if (log.actionType === 3) return t("editLogEmployeeRemoved");
-        if (log.fieldName === "EndTime") return t("editLogFieldEndTime");
-        if (log.fieldName === "DidEat") return t("editLogFieldDidEat");
-        if (log.fieldName === "NoteVn") return t("editLogFieldNoteVn");
-        if (log.fieldName === "NoteJp") return t("editLogFieldNoteJp");
-        return log.fieldName ?? "";
+        return (log.fieldName && editLogFieldLabels[log.fieldName]) || log.fieldName || "";
     };
 
     const openDeleteModal = () => {
@@ -377,7 +393,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                     <span
                         className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
                     >
-                        {otFormStatusLabels[form.status] ?? t("unknownStatus")}
+                        {enumLabels.otFormStatus[form.status] ?? t("unknownStatus")}
                     </span>
                     {canEdit && (
                         <button
@@ -410,7 +426,9 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                 <div className="space-y-4">
                     <section className="space-y-3.5 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                         <div className="grid grid-cols-2 gap-x-3 gap-y-3">
-                            <InfoField label={t("otCaseLabel")}>{form.otCaseCode}</InfoField>
+                            <InfoField label={t("otCaseLabel")}>
+                                <OtCaseBadge code={form.otCaseCode} description={form.otCaseDescription} descriptionJp={form.otCaseDescriptionJp} />
+                            </InfoField>
                             <InfoField label={t("dateLabel")}>{formatDate(form.date)}</InfoField>
                             <InfoField label={t("reasonLabel")} wide>
                                 {bilingualText(form.reasonNameVn, form.reasonNameJp)}
@@ -535,7 +553,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                         {history.approverFullName ?? history.approverUserName}
                                                         {history.onBehalfOfUserName &&
                                                             ` (${t("onBehalfOf", { name: history.onBehalfOfFullName ?? history.onBehalfOfUserName })})`}{" "}
-                                                        · {approvalActionLabels[history.action]}
+                                                        · {enumLabels.approvalAction[history.action]}
                                                     </div>
                                                     {history.comment && (
                                                         <div className="text-xs italic text-[#191c1e]">&quot;{history.comment}&quot;</div>
@@ -679,7 +697,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                     </td>
                                                     <td className="whitespace-nowrap px-3 py-2.5 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
                                                     <td colSpan={removedColSpan} className="px-3 py-2.5 text-xs text-[#930006]">
-                                                        {t("removedInlineNote", {
+                                                        {t(employee.removeReason ? "removedInlineNote" : "removedInlineNoteNoReason", {
                                                             name: employee.removedByFullName ?? employee.removedByUserName ?? "",
                                                             level: stepNameByOrder(form, employee.removedAtLevel),
                                                             reason: employee.removeReason ?? "",
@@ -829,7 +847,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
 
 
 {showApprovalActions && (
-                <div className="flex justify-end gap-3">
+                <div className="sticky bottom-0 z-20 flex justify-end gap-3 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
                     <button
                         onClick={() => openAction("reject")}
                         className="cursor-pointer rounded-lg border border-[#930006] bg-white px-4 py-2 text-sm font-semibold text-[#930006] transition hover:bg-[#fff4f2]"

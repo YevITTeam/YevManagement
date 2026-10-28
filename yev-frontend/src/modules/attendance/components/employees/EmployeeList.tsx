@@ -21,6 +21,8 @@ import {
 
 import { EmployeeApi, type EmployeeScopeDto } from "@/modules/attendance/api/employee.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
+import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
+import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
@@ -73,6 +75,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [departmentId, setDepartmentId] = useState<number | "">("");
+    const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
+    const [workshopId, setWorkshopId] = useState<number | "">("");
     const [groupId, setGroupId] = useState<number | "">("");
 
     // Phạm vi xem của người gọi (2026-09-03, xem EmployeeService.GetMyScopeAsync) — non-Admin không
@@ -133,9 +137,11 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         if (scope.companyWide) {
             DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
             GroupApi.getAllGroups().then(setGroups).catch((err) => console.error(err));
+            WorkshopApi.getAllWorkshops().then(setWorkshops).catch((err) => console.error(err));
         } else {
             setDepartments(scope.departments);
             setGroups(scope.groups);
+            setWorkshops(scope.workshops);
         }
     }, [scope]);
 
@@ -160,6 +166,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         }
     };
 
+    const handleSelectWorkshop = (nextId: number | "") => {
+        setWorkshopId(nextId);
+        setGroupId("");
+        setPageIndex(1);
+    };
+
     const handleSelectGroup = (nextId: number | "") => {
         setGroupId(nextId);
         setPageIndex(1);
@@ -170,7 +182,14 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         label: d.departmentNameVn,
         searchText: d.departmentNameVn.toLowerCase(),
     }));
-    const groupOptions: SelectOption[] = groups.map((g) => ({
+    const workshopOptions: SelectOption[] = workshops.map((w) => ({
+        value: w.id,
+        label: w.workshopNameVn,
+        searchText: w.workshopNameVn.toLowerCase(),
+    }));
+    const groupOptions: SelectOption[] = groups
+        .filter((g) => workshopId === "" || g.workshopId === workshopId)
+        .map((g) => ({
         value: g.id,
         label: g.groupNameVn,
         searchText: g.groupNameVn.toLowerCase(),
@@ -184,8 +203,9 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 keyword: appliedKeyword || undefined,
                 departmentId: departmentId || undefined,
                 groupId: groupId || undefined,
+                workshopId: workshopId || undefined,
             }),
-        [pageIndex, appliedKeyword, departmentId, groupId],
+        [pageIndex, appliedKeyword, departmentId, groupId, workshopId],
         (result) => {
             setEmployees(result.data);
             setTotalCount(result.totalCount);
@@ -418,6 +438,13 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         >
                             <Search className="h-4 w-4" />
                         </button>
+                        <SearchableSelect
+                            options={workshopOptions}
+                            value={workshopId}
+                            onChange={handleSelectWorkshop}
+                            placeholder={t("filterWorkshopPlaceholder")}
+                            triggerClassName="h-9 w-36 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
                         {showDepartmentFilter && (
                             <SearchableSelect
                                 options={departmentOptions}
@@ -452,6 +479,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                 <th className="px-3 py-2">{t("colCode")}</th>
                                 <th className="px-3 py-2">{t("colFullName")}</th>
                                 <th className="px-3 py-2">{t("colUserName")}</th>
+                                <th className="px-3 py-2">{t("colWorkshop")}</th>
                                 <th className="px-3 py-2">{t("colGroup")}</th>
                                 <th className="px-3 py-2">{t("colJobTitle")}</th>
                                 <th className="px-3 py-2">{t("colMonthToDate")}</th>
@@ -462,7 +490,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         <tbody>
                             {!isLoading && employees.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-12">
+                                    <td colSpan={9} className="px-4 py-12">
                                         <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                             <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                             {t("noData")}
@@ -487,7 +515,16 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     </td>
                                     <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
                                     <td className="px-3 py-2 text-sm text-[#5e3f3a]">
-                                        {employee.groupNameVn ?? employee.departmentNameVn ?? (
+                                        {employee.workshopNameVn ??
+                                            (employee.approvalScopes.length > 0
+                                                ? [...new Set(employee.approvalScopes.map((s) => s.workshopNameVn))].join(", ")
+                                                : "-")}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                        {employee.groupNameVn ??
+                                            (employee.approvalScopes.length > 0
+                                                ? employee.approvalScopes.map((s) => `${s.departmentNameVn} (${s.workshopNameVn})`).join(", ")
+                                                : employee.departmentNameVn) ?? (
                                             <span className="text-xs italic text-[#8a8f94]">{t("orgUnitCompanyWide")}</span>
                                         )}
                                     </td>

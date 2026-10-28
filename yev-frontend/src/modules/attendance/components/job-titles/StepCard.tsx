@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, GripVertical, PenLine, Star, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 // Thẻ 1 bước duyệt — tách dùng chung cho cả 3 khối (Nhóm/Bộ phận/Chuyền) của ApprovalStepManager.tsx
 // (2026-09-05, đợt polish giao diện). Trước đó 3 khối copy gần y hệt ~110 dòng JSX mỗi nơi — khác nhau
@@ -62,6 +63,9 @@ export default function StepCard({
     labels,
     footer,
 }: StepCardProps) {
+    const tJobTitle = useTranslations("Attendance.JobTitle");
+    const codeWithRank = tJobTitle("codeWithRank", { code: jobTitleCode, rank: rankOrder });
+
     return (
         <li
             ref={registerNodeRef}
@@ -86,10 +90,10 @@ export default function StepCard({
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-[11px] font-bold text-white">
                         {displayNumber}
                     </span>
-                    <div className="flex min-w-0 items-center gap-2" title={`${jobTitleName} (${jobTitleCode}, cấp ${rankOrder})`}>
+                    <div className="flex min-w-0 items-center gap-2" title={`${jobTitleName} (${codeWithRank})`}>
                         <span className="min-w-0 truncate text-sm font-semibold text-[#191c1e]">{jobTitleName}</span>
                         <span className="shrink-0 whitespace-nowrap rounded-full bg-[#f2f4f6] px-2 py-0.5 text-[11px] font-medium text-[#5e3f3a]">
-                            {jobTitleCode}, cấp {rankOrder}
+                            {codeWithRank}
                         </span>
                     </div>
                     <button

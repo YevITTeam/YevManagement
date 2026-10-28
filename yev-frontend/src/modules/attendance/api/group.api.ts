@@ -8,7 +8,8 @@ const ENDPOINTS = {
         getAllGroups: "/Group/all",
         getGroupById: (id: number) => `/Group/${id}`,
         // Route riêng, KHÁC cách DeviceGroup dùng query-param ?departmentId= trên /all (docs/attendance-module.md §API).
-        getGroupsByDepartment: (departmentId: number) => `/Group/by-department/${departmentId}`,
+        getGroupsByDepartment: (departmentId: number, workshopId?: number) =>
+            `/Group/by-department/${departmentId}${workshopId ? `?workshopId=${workshopId}` : ""}`,
         createGroup: "/Group",
         updateGroup: (id: number) => `/Group/${id}`,
         deleteGroup: (id: number) => `/Group/${id}`,
@@ -19,6 +20,7 @@ export interface GetGroupPageNationParams {
     pageIndex?: number;
     pageSize?: number;
     keyword?: string;
+    workshopId?: number;
 }
 
 export interface CreateUpdateGroupDto {
@@ -26,6 +28,7 @@ export interface CreateUpdateGroupDto {
     groupNameVn: string;
     groupNameJp: string | null;
     departmentId: number;
+    workshopId: number;
 }
 
 export const GroupApi = {
@@ -34,6 +37,7 @@ export const GroupApi = {
         if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
         if (params?.pageSize) query.set("PageSize", String(params.pageSize));
         if (params?.keyword) query.set("Keyword", params.keyword);
+        if (params?.workshopId) query.set("WorkshopId", String(params.workshopId));
 
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.GROUP.getGroupPageNation}?${queryString}` : ENDPOINTS.GROUP.getGroupPageNation;
@@ -49,8 +53,8 @@ export const GroupApi = {
         return response.data;
     },
     // Cascading dropdown Bộ phận theo Phòng ban đã chọn (docs/attendance-module.md §API).
-    getGroupsByDepartment: async (departmentId: number) => {
-        const response = await api.get<ApiResponse<GroupDto[]>>(ENDPOINTS.GROUP.getGroupsByDepartment(departmentId));
+    getGroupsByDepartment: async (departmentId: number, workshopId?: number) => {
+        const response = await api.get<ApiResponse<GroupDto[]>>(ENDPOINTS.GROUP.getGroupsByDepartment(departmentId, workshopId));
         return response.data;
     },
     createGroup: async (data: CreateUpdateGroupDto) => {

@@ -10,6 +10,7 @@ namespace Attendance.Application.Dtos.OtCases
         public string Code { get; set; } = null!;
 
         public string? Description { get; set; }
+        public string? DescriptionJp { get; set; }
 
         public bool RequireSignature { get; set; }
 

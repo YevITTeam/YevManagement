@@ -5,6 +5,7 @@ namespace Attendance.Application.Dtos.OtCases
         public int Id { get; set; }
         public string Code { get; set; } = null!;
         public string? Description { get; set; }
+        public string? DescriptionJp { get; set; }
         public bool RequireSignature { get; set; }
 
         // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — the FINAL level an OtForm using this OtCase

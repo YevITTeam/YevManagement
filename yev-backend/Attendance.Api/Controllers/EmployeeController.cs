@@ -21,19 +21,9 @@ namespace Attendance.Api.Controllers
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<EmployeeDto>>>> GetPaged(
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null,
-            [FromQuery] int? departmentId = null, [FromQuery] int? groupId = null)
+            [FromQuery] int? departmentId = null, [FromQuery] int? groupId = null, [FromQuery] int? workshopId = null)
         {
-            var result = await _employeeService.GetPagedAsync(CurrentUserName, User.IsInRole(AdminRole), pageIndex, pageSize, keyword, departmentId, groupId);
-            return Success(result);
-        }
-
-        // Toàn bộ nhân viên active (mọi Group) — dùng cho dropdown/công cụ cần chọn 1 nhân viên bất kỳ
-        // (vd JobTitle "Thử chuỗi duyệt", xem docs/docs-be/attendance-module.md §Cây chức vụ).
-        [RequirePermission("Attendance.Employee.View")]
-        [HttpGet("all")]
-        public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetAllActive()
-        {
-            var result = await _employeeService.GetAllActiveAsync(CurrentUserName, User.IsInRole(AdminRole));
+            var result = await _employeeService.GetPagedAsync(CurrentUserName, User.IsInRole(AdminRole), pageIndex, pageSize, keyword, departmentId, groupId, workshopId);
             return Success(result);
         }
 
@@ -52,9 +42,10 @@ namespace Attendance.Api.Controllers
         // Dùng cho màn "Cây duyệt Phòng ban" — xem ai đang giữ Chức vụ nào trong Phòng ban để gán nhanh.
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("by-department/{departmentId}")]
-        public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByDepartment(int departmentId)
+        public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByDepartment(
+            int departmentId, [FromQuery] int? workshopId = null, [FromQuery] string? keyword = null, [FromQuery] bool jobTitled = false, [FromQuery] int? take = null)
         {
-            var result = await _employeeService.GetByDepartmentIdAsync(departmentId);
+            var result = await _employeeService.GetByDepartmentIdAsync(departmentId, workshopId, keyword, jobTitled, take);
             return Success(result);
         }
 
@@ -104,6 +95,22 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<EmployeeAccumulationHistoryYearDto>>> GetAccumulationHistoryForManage(int id, [FromQuery] int year)
         {
             var result = await _employeeService.GetAccumulationHistoryForManageAsync(CurrentUserName, User.IsInRole(AdminRole), id, year);
+            return Success(result);
+        }
+
+        [RequirePermission("Attendance.OTForm.Approve")]
+        [HttpGet("{id}/accumulation-history/days")]
+        public async Task<ActionResult<ApiResponse<List<EmployeeAccumulationDayDto>>>> GetAccumulationDays(int id, [FromQuery] int year, [FromQuery] int month)
+        {
+            var result = await _employeeService.GetAccumulationDaysAsync(CurrentUserName, User.IsInRole(AdminRole), id, year, month);
+            return Success(result);
+        }
+
+        [RequirePermission("Attendance.EmployeeAccumulation.Update")]
+        [HttpGet("{id}/accumulation-history/days/manage")]
+        public async Task<ActionResult<ApiResponse<List<EmployeeAccumulationDayDto>>>> GetAccumulationDaysForManage(int id, [FromQuery] int year, [FromQuery] int month)
+        {
+            var result = await _employeeService.GetAccumulationDaysForManageAsync(CurrentUserName, User.IsInRole(AdminRole), id, year, month);
             return Success(result);
         }
 
@@ -163,7 +170,7 @@ namespace Attendance.Api.Controllers
         public async Task<ActionResult<ApiResponse<EmployeeDto>>> AssignDepartmentJobTitle(
             int id, [FromQuery] int departmentId, [FromBody] AssignEmployeeJobTitleDto request)
         {
-            var result = await _employeeService.AssignDepartmentJobTitleAsync(CurrentUserName, User.IsInRole(AdminRole), id, departmentId, request.JobTitleId);
+            var result = await _employeeService.AssignDepartmentJobTitleAsync(CurrentUserName, User.IsInRole(AdminRole), id, departmentId, request.JobTitleId, request.WorkshopId);
             return Success(result, "Cập nhật chức vụ thành công.");
         }
 

@@ -34,11 +34,12 @@ namespace Attendance.Application.Services
             _attendanceSettingService = attendanceSettingService;
         }
 
-        public async Task<ProductionTicketReportDto> GetTicketReportAsync(DateOnly date, int? departmentId)
+        public async Task<ProductionTicketReportDto> GetTicketReportAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var forms = await _unitOfWork.OtForms.SelectAsync(
                 x => x.IsProductionForm && !x.IsDeleted && x.Status == (int)OtFormStatus.Completed && x.Date == date
-                     && (departmentId == null || x.DepartmentId == departmentId),
+                     && (departmentId == null || x.DepartmentId == departmentId)
+                     && (workshopId == null || x.WorkshopId == workshopId),
                 x => new
                 {
                     x.StartTime,
@@ -87,14 +88,15 @@ namespace Attendance.Application.Services
             };
         }
 
-        public async Task<(byte[] Content, string FileName)> ExportHoursReportAsync(DateOnly date, int? departmentId)
+        public async Task<(byte[] Content, string FileName)> ExportHoursReportAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var settings = await _attendanceSettingService.GetAsync();
 
             var entries = await _unitOfWork.OtFormEmployees.SelectAsync(
                 x => x.OtForm.IsProductionForm && !x.OtForm.IsDeleted
                      && x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date == date && !x.IsRemoved
-                     && (departmentId == null || x.OtForm.DepartmentId == departmentId),
+                     && (departmentId == null || x.OtForm.DepartmentId == departmentId)
+                     && (workshopId == null || x.OtForm.WorkshopId == workshopId),
                 x => new
                 {
                     x.OtFormId,
@@ -265,14 +267,15 @@ namespace Attendance.Application.Services
             return (stream.ToArray(), fileName);
         }
 
-        public async Task<(byte[] Content, string FileName)> ExportTimesReportAsync(DateOnly date, int? departmentId)
+        public async Task<(byte[] Content, string FileName)> ExportTimesReportAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var settings = await _attendanceSettingService.GetAsync();
 
             var entries = await _unitOfWork.OtFormEmployees.SelectAsync(
                 x => x.OtForm.IsProductionForm && !x.OtForm.IsDeleted
                      && x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date == date && !x.IsRemoved
-                     && (departmentId == null || x.OtForm.DepartmentId == departmentId),
+                     && (departmentId == null || x.OtForm.DepartmentId == departmentId)
+                     && (workshopId == null || x.OtForm.WorkshopId == workshopId),
                 x => new
                 {
                     x.OtFormId,
@@ -387,10 +390,10 @@ namespace Attendance.Application.Services
         // dù cùng kiểu gộp/người/ngày). Thứ tự cột đúng nguyên văn file thật:
         // MNV/BOPHAN/HO/TEN/Ngay_TC/Gio_BD/Gio_KT/Lydo/Lydo_phu/An/BLOCK/NHOM/NOTE/Gio_Thuc_Te/BP/
         // QUAN_LY_TC_SX/MNV_TP.
-        public async Task<(byte[] Content, string FileName)> ExportQryExportExcelAsync(DateOnly date, int? departmentId)
+        public async Task<(byte[] Content, string FileName)> ExportQryExportExcelAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var settings = await _attendanceSettingService.GetAsync();
-            var grouped = await BuildGroupedDailyRowsAsync(date, departmentId, settings);
+            var grouped = await BuildGroupedDailyRowsAsync(date, departmentId, workshopId, settings);
             var otFormIds = grouped.SelectMany(x => x.OtFormIds).Distinct().ToList();
 
             // QUAN_LY_TC_SX — mã nhân viên đã DUYỆT (Approved) ở bước Chức vụ "TL" (Team Leader,
@@ -450,10 +453,10 @@ namespace Attendance.Application.Services
 
         // "SUM_EXPORT_DATA" (2026-09-03c) — 7 cột, bản tóm tắt riêng biệt (KHÔNG phải rút gọn của
         // Qry_EXPORT_EXCEL — người dùng xác nhận 2 báo cáo phục vụ 2 mục đích khác nhau).
-        public async Task<(byte[] Content, string FileName)> ExportSumExportDataAsync(DateOnly date, int? departmentId)
+        public async Task<(byte[] Content, string FileName)> ExportSumExportDataAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var settings = await _attendanceSettingService.GetAsync();
-            var grouped = await BuildGroupedDailyRowsAsync(date, departmentId, settings);
+            var grouped = await BuildGroupedDailyRowsAsync(date, departmentId, workshopId, settings);
 
             using var workbook = new XLWorkbook();
             var sheet = workbook.Worksheets.Add("SUM_EXPORT_DATA");
@@ -508,12 +511,13 @@ namespace Attendance.Application.Services
         // ExportSumExportDataAsync) — KHÔNG dùng lại cho ExportHoursReportAsync (23 cột, đã chốt trước
         // đó, có thêm lũy kế Tháng/Năm + MNV_LC/MNV_SC không cần ở đây) để tránh đụng logic đang chạy
         // ổn định — chấp nhận trùng 1 phần logic gộp giữa 2 nơi.
-        private async Task<List<GroupedDailyRow>> BuildGroupedDailyRowsAsync(DateOnly date, int? departmentId, Dtos.AttendanceSettings.AttendanceSettingDto settings)
+        private async Task<List<GroupedDailyRow>> BuildGroupedDailyRowsAsync(DateOnly date, int? departmentId, int? workshopId, Dtos.AttendanceSettings.AttendanceSettingDto settings)
         {
             var entries = await _unitOfWork.OtFormEmployees.SelectAsync(
                 x => x.OtForm.IsProductionForm && !x.OtForm.IsDeleted
                      && x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date == date && !x.IsRemoved
-                     && (departmentId == null || x.OtForm.DepartmentId == departmentId),
+                     && (departmentId == null || x.OtForm.DepartmentId == departmentId)
+                     && (workshopId == null || x.OtForm.WorkshopId == workshopId),
                 x => new
                 {
                     x.OtFormId,
@@ -632,12 +636,13 @@ namespace Attendance.Application.Services
             return $"{queryName}_{datePart}{suffix}.xlsx";
         }
 
-        public async Task<List<ProductionTicketBatchGroupDto>> GetTicketBatchAsync(DateOnly date, int? departmentId)
+        public async Task<List<ProductionTicketBatchGroupDto>> GetTicketBatchAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var entries = await _unitOfWork.OtFormEmployees.SelectAsync(
                 x => x.OtForm.IsProductionForm && !x.OtForm.IsDeleted
                      && x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date == date && !x.IsRemoved
-                     && (departmentId == null || x.OtForm.DepartmentId == departmentId),
+                     && (departmentId == null || x.OtForm.DepartmentId == departmentId)
+                     && (workshopId == null || x.OtForm.WorkshopId == workshopId),
                 x => new
                 {
                     x.OtFormId,

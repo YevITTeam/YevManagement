@@ -18,7 +18,7 @@ Phụ thuộc: **Domain không phụ thuộc gì · Application không biết In
 
 ## 3. Controller & Response
 - Controller kế thừa `BaseController` riêng của module (`[ApiController]`, `[Route("api/[controller]")]`): `Success()` 200, `Fail<T>()` 400, `CreatedSuccess()` 201, `NoContentSuccess()` 204. Tên controller → URL.
-- Luôn trả `ApiResponse<T>` (`{ isSuccess, message, data, errors, timestamp }`); phân trang `PagedResponse<T>` (`Data, PageIndex` **bắt đầu từ 1**, `PageSize, TotalCount, TotalPages, HasNextPage, HasPreviousPage`). Không trả entity/DTO trần.
+- Luôn trả `ApiResponse<T>` (`{ isSuccess, message, data, errors, timestamp }`); phân trang `PagedResponse<T>` (server tự ép `pageIndex ≥ 1`, `pageSize` 1–1000 ở `GenericRepository`; `Data, PageIndex` **bắt đầu từ 1**, `PageSize, TotalCount, TotalPages, HasNextPage, HasPreviousPage`). Không trả entity/DTO trần.
 - Validation bằng DataAnnotations trên DTO `Create*`/`Update*` (`[Required(ErrorMessage="…")]`, message tiếng Việt).
 
 ## 4. Lỗi & Guard (`Shared.Core`)

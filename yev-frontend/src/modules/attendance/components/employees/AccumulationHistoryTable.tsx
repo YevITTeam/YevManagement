@@ -9,6 +9,7 @@ import type { AttendanceSettingDto } from "@/modules/attendance/types/attendance
 interface AccumulationHistoryTableProps {
     data: EmployeeAccumulationHistoryYearDto;
     setting: AttendanceSettingDto;
+    onSelectMonth: (month: number) => void;
 }
 
 const badgeClass = (overLimit: boolean) =>
@@ -19,7 +20,7 @@ const badgeClass = (overLimit: boolean) =>
 // Lũy kế THẬT của 1 năm, dạng lưới 12 ô (4 cột × 3 hàng) cho gọn — dùng trong AccumulationHistoryModal.
 // Ngưỡng cảnh báo tái dùng đúng AttendanceSetting.monthlyOtHourLimit/yearlyOtHourLimit (2026-08-11d, xem
 // docs/docs-be/attendance-module.md §Lịch sử lũy kế).
-export default function AccumulationHistoryTable({ data, setting }: AccumulationHistoryTableProps) {
+export default function AccumulationHistoryTable({ data, setting, onSelectMonth }: AccumulationHistoryTableProps) {
     const t = useTranslations("Attendance.AccumulationHistory");
     const isYearOverLimit = data.yearTotalHours > setting.yearlyOtHourLimit;
     const hasInitialBalance = data.initialBalanceHours !== undefined && data.initialBalanceHours !== 0;
@@ -46,9 +47,11 @@ export default function AccumulationHistoryTable({ data, setting }: Accumulation
                 {data.months.map((month) => {
                     const isOverLimit = month.totalHours > setting.monthlyOtHourLimit;
                     return (
-                        <div
+                        <button
+                            type="button"
                             key={month.month}
-                            className={`rounded-lg border px-2 py-1.5 text-center ${
+                            onClick={() => onSelectMonth(month.month)}
+                            className={`cursor-pointer rounded-lg border px-2 py-1.5 text-center transition hover:border-[#e3000f] ${
                                 isOverLimit ? "border-[#e9bcb6] bg-[#fff4f2]" : "border-[#e0e3e5] bg-white"
                             }`}
                         >
@@ -63,7 +66,7 @@ export default function AccumulationHistoryTable({ data, setting }: Accumulation
                                 {isOverLimit && <AlertTriangle className="h-3 w-3" />}
                                 {month.totalHours}h
                             </div>
-                        </div>
+                        </button>
                     );
                 })}
             </div>

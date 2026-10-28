@@ -23,6 +23,7 @@ import {
     removedReasonLabelBilingual,
 } from "@/modules/attendance/lib/bilingual";
 import { formatHours } from "@/modules/attendance/lib/time";
+import OtCaseBadge from "@/modules/attendance/components/OtCaseBadge";
 import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
 
 function formatDate(value: string) {
@@ -374,7 +375,9 @@ export default function OtFormEmailConfirmPage() {
             <section className="grid gap-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm md:grid-cols-2 lg:grid-cols-3">
                 <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("otCaseLabel")}</div>
-                    <div className="mt-1 text-sm text-[#191c1e]">{form.otCaseCode}</div>
+                    <div className="mt-1 text-sm text-[#191c1e]">
+                        <OtCaseBadge code={form.otCaseCode} description={form.otCaseDescription} descriptionJp={form.otCaseDescriptionJp} showAll={false} />
+                    </div>
                 </div>
                 <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("reasonLabel")}</div>
@@ -508,8 +511,12 @@ export default function OtFormEmailConfirmPage() {
                                             >
                                                 {removedByLabelBilingual}: {employee.removedByFullName ?? employee.removedByUserName}
                                                 {employee.removedAtLevel !== null && <> ({stepNameByOrder(form, employee.removedAtLevel)})</>}
-                                                {" — "}
-                                                {removedReasonLabelBilingual}: {employee.removeReason}
+                                                {employee.removeReason && (
+                                                    <>
+                                                        {" — "}
+                                                        {removedReasonLabelBilingual}: {employee.removeReason}
+                                                    </>
+                                                )}
                                                 {employee.removedAt && <span className="ml-2 text-[#9aa0a6]">({formatDateTime(employee.removedAt)})</span>}
                                             </td>
                                         </tr>

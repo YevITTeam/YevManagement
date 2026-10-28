@@ -16,37 +16,43 @@ const ENDPOINTS = {
 // date theo định dạng yyyy-MM-dd (khớp DateOnly model binding từ query string ở BE). departmentId
 // undefined = mọi Phòng ban (không lọc) — 2026-08-29, theo yêu cầu "chọn chuyền ở phòng ban nào".
 export const ProductionOtReportApi = {
-    getTicketReport: async (date: string, departmentId?: number) => {
+    getTicketReport: async (date: string, departmentId?: number, workshopId?: number) => {
         const params = new URLSearchParams({ date });
         if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        if (workshopId !== undefined) params.set("workshopId", String(workshopId));
         const response = await api.get<ApiResponse<ProductionTicketReportDto>>(
             `${ENDPOINTS.PRODUCTION_OT_REPORT.ticketReport}?${params.toString()}`
         );
         return response.data;
     },
-    exportHoursReportExcel: async (date: string, departmentId?: number): Promise<BlobDownloadResult> => {
+    exportHoursReportExcel: async (date: string, departmentId?: number, workshopId?: number): Promise<BlobDownloadResult> => {
         const params = new URLSearchParams({ date });
         if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        if (workshopId !== undefined) params.set("workshopId", String(workshopId));
         return getForBlob(`${ENDPOINTS.PRODUCTION_OT_REPORT.hoursReportExcel}?${params.toString()}`);
     },
-    exportTimesReportExcel: async (date: string, departmentId?: number): Promise<BlobDownloadResult> => {
+    exportTimesReportExcel: async (date: string, departmentId?: number, workshopId?: number): Promise<BlobDownloadResult> => {
         const params = new URLSearchParams({ date });
         if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        if (workshopId !== undefined) params.set("workshopId", String(workshopId));
         return getForBlob(`${ENDPOINTS.PRODUCTION_OT_REPORT.timesReportExcel}?${params.toString()}`);
     },
-    exportQryExportExcel: async (date: string, departmentId?: number): Promise<BlobDownloadResult> => {
+    exportQryExportExcel: async (date: string, departmentId?: number, workshopId?: number): Promise<BlobDownloadResult> => {
         const params = new URLSearchParams({ date });
         if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        if (workshopId !== undefined) params.set("workshopId", String(workshopId));
         return getForBlob(`${ENDPOINTS.PRODUCTION_OT_REPORT.qryExportExcel}?${params.toString()}`);
     },
-    exportSumExportData: async (date: string, departmentId?: number): Promise<BlobDownloadResult> => {
+    exportSumExportData: async (date: string, departmentId?: number, workshopId?: number): Promise<BlobDownloadResult> => {
         const params = new URLSearchParams({ date });
         if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        if (workshopId !== undefined) params.set("workshopId", String(workshopId));
         return getForBlob(`${ENDPOINTS.PRODUCTION_OT_REPORT.sumExportData}?${params.toString()}`);
     },
-    getTicketBatch: async (date: string, departmentId?: number) => {
+    getTicketBatch: async (date: string, departmentId?: number, workshopId?: number) => {
         const params = new URLSearchParams({ date });
         if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        if (workshopId !== undefined) params.set("workshopId", String(workshopId));
         const response = await api.get<ApiResponse<ProductionTicketBatchGroupDto[]>>(
             `${ENDPOINTS.PRODUCTION_OT_REPORT.ticketBatch}?${params.toString()}`
         );

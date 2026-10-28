@@ -158,6 +158,17 @@ export interface UpdateOtFormRemovedEmployeeDto {
     reason: string;
 }
 
+// Office forms only: general info editable after creation (everything but Department/Group). The OT case
+// is re-derived by the server from date + hours.
+export interface UpdateOtFormHeaderDto {
+    date: string;
+    startTime: string;
+    endTime: string;
+    reasonId: number;
+    subReason: string | null;
+    processPart: ProcessPartDto | null;
+}
+
 // Body PUT /api/OtForm/{id} — §4.1b. Sửa lại 2026-09-04 (gộp thêm/xóa nhân viên vào Sửa đơn, thay cho
 // 2 action riêng AddOtFormEmployeeDto/RemoveOtFormEmployeeDto trước đó — xem docs/attendance-module.md
 // §Cây chức vụ & Cây duyệt (mục Sửa đơn)): mỗi phần tử employees có thể là NGƯỜI CŨ (sửa giờ kết thúc/didEat/
@@ -165,9 +176,9 @@ export interface UpdateOtFormRemovedEmployeeDto {
 // dưới chuyền phải cùng Line/Nhóm ca với người còn lại của đơn (BE tự kiểm, FE chỉ nên tự khoá dropdown
 // tìm kiếm cho gọn UX). removedEmployees: nhân viên bị loại (bắt buộc kèm lý do) — người đang có trong
 // đơn mà KHÔNG có mặt ở cả employees LẪN removedEmployees sẽ bị BE báo lỗi (dữ liệu không hợp lệ). Mọi
-// field khác (Group/Department/Reason/OtCase/Date/StartTime/EndTime/SubReason/ProcessPart) vẫn khoá
-// sau khi tạo đơn. secondaryPassword: 1 lần cho TOÀN BỘ thay đổi trong lượt lưu này.
+// field khác của đơn theo chuyền vẫn khoá sau khi tạo đơn; đơn văn phòng sửa qua header. secondaryPassword: 1 lần cho TOÀN BỘ thay đổi trong lượt lưu này.
 export interface UpdateOtFormDto {
+    header: UpdateOtFormHeaderDto | null;
     employees: UpdateOtFormEmployeeTimeDto[];
     removedEmployees: UpdateOtFormRemovedEmployeeDto[];
     secondaryPassword: string;
@@ -195,7 +206,10 @@ export interface OtFormListItemDto {
     isProductionForm: boolean;
     departmentNameVn: string;
     departmentNameJp: string | null;
+    workshopNameVn: string;
     otCaseCode: string;
+    otCaseDescription: string | null;
+    otCaseDescriptionJp: string | null;
     date: string;
     totalHour: number;
     numberOfEmployee: number;
@@ -267,8 +281,8 @@ export interface OtFormApprovalStepDelegateDto {
 }
 
 // 1 dòng lịch sử chỉnh sửa đơn (mới 2026-08-28) — actionType: enum OtFormEditActionType
-// (0=TimeChanged, 1=NoteChanged, 2=EmployeeAdded, 3=EmployeeRemoved). fieldName null khi
-// actionType là EmployeeAdded/EmployeeRemoved (hành động, không phải đổi 1 field cụ thể).
+// (0=TimeChanged, 1=NoteChanged, 2=EmployeeAdded, 3=EmployeeRemoved, 4=FormInfoChanged — employeeId null).
+// fieldName null khi actionType là EmployeeAdded/EmployeeRemoved (hành động, không phải đổi 1 field cụ thể).
 export interface OtFormEditLogDto {
     actionByUserName: string;
     actionByFullName: string | null;
@@ -297,6 +311,8 @@ export interface OtFormDto {
     reasonNameJp: string | null;
     otCaseId: number;
     otCaseCode: string;
+    otCaseDescription: string | null;
+    otCaseDescriptionJp: string | null;
     startTime: string;
     endTime: string;
     subReason: string | null;

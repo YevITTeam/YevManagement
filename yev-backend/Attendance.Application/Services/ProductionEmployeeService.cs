@@ -27,6 +27,8 @@ namespace Attendance.Application.Services
             _departmentAccessGuard = departmentAccessGuard;
         }
 
+        private const int MaxSearchResults = 500;
+
         // targetDate = ngày trên đơn đang tạo (2026-08-26, mirror EmployeeService.GetByGroupIdAsync) —
         // thêm lũy kế DỰ KIẾN để cảnh báo vượt giới hạn ngày/tháng/năm NGAY lúc chọn người ở màn "Theo
         // chuyền" (trước đây bảng này không có cảnh báo gì, khác bảng "Theo Nhóm" đã có từ 2026-08-06).
@@ -35,8 +37,11 @@ namespace Attendance.Application.Services
         {
             var trimmedKeyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim();
 
-            var items = await _unitOfWork.ProductionEmployees.SelectAsync(
-                predicate: x => !x.IsDeleted && x.EmployeeId != null
+            // An unfiltered search would return (and project accumulation for) every production employee.
+            if (productionLineId == null && teamId == null && shiftTeamId == null && congDoan == null && trimmedKeyword == null)
+                throw new DomainException("Vui lòng chọn Team/Line/Nhóm ca hoặc nhập từ khoá để tìm nhân viên.");
+
+            var filtered = _unitOfWork.ProductionEmployees.GetQueryable().Where(x => !x.IsDeleted && x.EmployeeId != null
                     && (productionLineId == null || x.ProductionLineId == productionLineId)
                     && (teamId == null || x.TeamId == teamId)
                     && (shiftTeamId == null || x.ShiftTeamId == shiftTeamId)
@@ -44,7 +49,9 @@ namespace Attendance.Application.Services
                     && (trimmedKeyword == null
                         || x.EmployeeCode.Contains(trimmedKeyword)
                         || x.Employee!.LastName.Contains(trimmedKeyword)
-                        || x.Employee!.FirstName.Contains(trimmedKeyword)),
+                        || x.Employee!.FirstName.Contains(trimmedKeyword)));
+            var items = await _unitOfWork.ProductionEmployees.ToListAsync(
+                filtered.OrderBy(x => x.EmployeeCode.Length).ThenBy(x => x.EmployeeCode).Take(MaxSearchResults),
                 selector: x => new ProductionEmployeeSearchItemDto
                 {
                     EmployeeId = x.EmployeeId!.Value,

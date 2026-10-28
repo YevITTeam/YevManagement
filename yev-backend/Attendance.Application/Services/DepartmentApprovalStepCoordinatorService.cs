@@ -62,7 +62,7 @@ namespace Attendance.Application.Services
                 // EmployeeService.GetPagedAsync.
                 var validEmployees = await _unitOfWork.Employees.FindAsync(x =>
                     employeeIds.Contains(x.Id) && !x.IsDeleted &&
-                    (x.DepartmentId == departmentId || (x.GroupId != null && x.Group!.DepartmentId == departmentId)));
+                    (x.DepartmentId == departmentId || x.ApprovalScopes.Any(s => s.DepartmentId == departmentId) || (x.GroupId != null && x.Group!.DepartmentId == departmentId)));
                 if (validEmployees.Count != employeeIds.Count)
                     throw new DomainException("Chỉ được chọn nhân viên đang thuộc Bộ phận này làm người phụ trách.");
             }
@@ -104,7 +104,7 @@ namespace Attendance.Application.Services
 
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x =>
                 x.Id == employeeId && !x.IsDeleted &&
-                (x.DepartmentId == departmentId || (x.GroupId != null && x.Group!.DepartmentId == departmentId)));
+                (x.DepartmentId == departmentId || x.ApprovalScopes.Any(s => s.DepartmentId == departmentId) || (x.GroupId != null && x.Group!.DepartmentId == departmentId)));
             if (employee == null)
                 throw new DomainException("Chỉ được chọn nhân viên đang thuộc Bộ phận này làm người phụ trách.");
 

@@ -35,7 +35,11 @@ public partial class AssetDbContext
         // DeviceConfigurationHistory above). ServerCheckManualItem (rarely-edited master data) stays audited.
         typeof(ServerCheckSession),
         typeof(ServerCheckItem),
-        typeof(ServerCheckManualResult)
+        typeof(ServerCheckManualResult),
+        // USB logs are append-only and high volume; the IsUseUsb flip they cause is audited on Device.
+        typeof(UsbDevice),
+        typeof(UsbSession),
+        typeof(UsbFileEvent)
     };
 
     // A grouped row keeps at most this many record names in NewValues — enough to know what was

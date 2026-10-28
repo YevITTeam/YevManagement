@@ -1256,6 +1256,144 @@ namespace Asset.Infrastructure.Migrations
                     b.ToTable("TransferHistories");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.UsbDevice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<long?>("CapacityBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FriendlyName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ProductId")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
+                    b.Property<string>("SerialNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("VendorId")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_UsbDevices");
+
+                    b.HasIndex(new[] { "VendorId", "ProductId", "SerialNumber" }, "IX_UsbDevices_Vid_Pid_Serial")
+                        .IsUnique();
+
+                    b.ToTable("UsbDevices");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.UsbFileEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Action")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("OldFilePath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id")
+                        .HasName("PK_UsbFileEvents");
+
+                    b.HasIndex(new[] { "EventId" }, "IX_UsbFileEvents_EventId")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "SessionId" }, "IX_UsbFileEvents_SessionId");
+
+                    b.ToTable("UsbFileEvents");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.UsbSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("ConnectedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DisconnectedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DriveLetter")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("MachineName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("UsbDeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("VolumeLabel")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool?>("WasPermitted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("WindowsUser")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_UsbSessions");
+
+                    b.HasIndex("UsbDeviceId");
+
+                    b.HasIndex(new[] { "ConnectedAt" }, "IX_UsbSessions_ConnectedAt");
+
+                    b.HasIndex(new[] { "DeviceId" }, "IX_UsbSessions_DeviceId");
+
+                    b.ToTable("UsbSessions");
+                });
+
             modelBuilder.Entity("Asset.Domain.Models.AuditTrail", b =>
                 {
                     b.Property<long>("Id")
@@ -1622,6 +1760,38 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("OldDevice");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.UsbFileEvent", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.UsbSession", "Session")
+                        .WithMany("FileEvents")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_UsbFileEvents_UsbSessions_SessionId");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.UsbSession", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_UsbSessions_ThietBis_DeviceId");
+
+                    b.HasOne("Asset.Domain.Entities.UsbDevice", "UsbDevice")
+                        .WithMany()
+                        .HasForeignKey("UsbDeviceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_UsbSessions_UsbDevices_UsbDeviceId");
+
+                    b.Navigation("Device");
+
+                    b.Navigation("UsbDevice");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.Branch", b =>
                 {
                     b.Navigation("Devices");
@@ -1696,6 +1866,11 @@ namespace Asset.Infrastructure.Migrations
             modelBuilder.Entity("Asset.Domain.Entities.Supplier", b =>
                 {
                     b.Navigation("Devices");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.UsbSession", b =>
+                {
+                    b.Navigation("FileEvents");
                 });
 #pragma warning restore 612, 618
         }

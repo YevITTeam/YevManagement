@@ -10,7 +10,7 @@ Web nội bộ YEV, đăng nhập bằng tài khoản domain (AD). Trang chủ h
 |---|---|---|---|
 | **Identity** | User / Role / Permission, đăng nhập SSO Windows · form AD · QR, kho email người dùng | Production | [identity-module.md](docs-be/identity-module.md) |
 | **Attendance** | Giấy tăng ca (OT Form): duyệt nhiều cấp theo Cây chức vụ, đơn theo chuyền, Đơn tổng, phiếu ăn, lũy kế/giới hạn giờ OT, chữ ký + mật khẩu cấp 2, duyệt qua email, báo cáo Excel/PDF, AI Chat lập đơn | Production | [attendance-module.md](docs-be/attendance-module.md) |
-| **Asset** | Quản lý PC/thiết bị: IP, phần mềm, chuyển máy, thanh lý, import Tanium, kiểm kê, ServerCheck, AppRelease, AI Chat | Đang phát triển | [asset-module.md](docs-be/asset-module.md) |
+| **Asset** | Quản lý PC/thiết bị: IP, phần mềm, chuyển máy, thanh lý, import Tanium, kiểm kê, ServerCheck, AppRelease, nhật ký USB, AI Chat | Đang phát triển | [asset-module.md](docs-be/asset-module.md) |
 | **Workflow** | Form builder kéo-thả + luồng duyệt tự cấu hình (theo mô hình POWER EGG); phòng ban tự thêm loại đơn không cần lập trình | Pha 1–4 xong | [workflow-module.md](docs-be/workflow-module.md) |
 
 ## 2. Kiến trúc

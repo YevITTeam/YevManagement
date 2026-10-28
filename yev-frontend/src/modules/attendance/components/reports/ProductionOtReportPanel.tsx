@@ -11,6 +11,8 @@ import { ROBOTO_REGULAR_BASE64, ROBOTO_BOLD_BASE64 } from "@/modules/pc-manageme
 import { buildProductionTicketZip } from "@/modules/attendance/lib/productionTicketBatchPdf";
 import { ProductionOtReportApi } from "@/modules/attendance/api/production-ot-report.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
+import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
+import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import type { ProductionTicketReportDto, ProductionTicketReportRowDto } from "@/modules/attendance/types/production-ot-report.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -281,6 +283,8 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
     const [date, setDate] = useState(todayIso());
     const [departmentId, setDepartmentId] = useState<number | "">("");
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+    const [workshopId, setWorkshopId] = useState<number | "">("");
+    const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isExportingExcel, setIsExportingExcel] = useState(false);
     const [isExportingTimes, setIsExportingTimes] = useState(false);
@@ -302,11 +306,17 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         (result) => setDepartments(result),
         t("loadDepartmentsError")
     );
+    useFetchEffect(
+        () => WorkshopApi.getAllWorkshops(),
+        [],
+        (result) => setWorkshops(result),
+        t("loadDepartmentsError")
+    );
 
     const handleSearch = async () => {
         setIsLoading(true);
         try {
-            const result = await ProductionOtReportApi.getTicketReport(date, departmentId === "" ? undefined : departmentId);
+            const result = await ProductionOtReportApi.getTicketReport(date, departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId);
             setReport(result);
         } catch (err) {
             toast.error(getApiErrorMessage(err, t("loadReportError")));
@@ -341,7 +351,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         try {
             const { blob, fileName } = await ProductionOtReportApi.exportHoursReportExcel(
                 date,
-                departmentId === "" ? undefined : departmentId
+                departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId
             );
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -361,7 +371,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         try {
             const { blob, fileName } = await ProductionOtReportApi.exportTimesReportExcel(
                 date,
-                departmentId === "" ? undefined : departmentId
+                departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId
             );
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -383,7 +393,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         try {
             const { blob, fileName } = await ProductionOtReportApi.exportQryExportExcel(
                 date,
-                departmentId === "" ? undefined : departmentId
+                departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId
             );
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -403,7 +413,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         try {
             const { blob, fileName } = await ProductionOtReportApi.exportSumExportData(
                 date,
-                departmentId === "" ? undefined : departmentId
+                departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId
             );
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -425,7 +435,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         setIsExportingTickets(true);
         setTicketExportProgress(null);
         try {
-            const groups = await ProductionOtReportApi.getTicketBatch(date, departmentId === "" ? undefined : departmentId);
+            const groups = await ProductionOtReportApi.getTicketBatch(date, departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId);
             if (groups.length === 0) {
                 toast.error(t("exportTicketZipNoDataError"));
                 return;
@@ -465,6 +475,17 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
                             className="h-9 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
+                    </label>
+                    <label className="block w-44">
+                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            {t("fieldWorkshopLabel")}
+                        </span>
+                        <SearchableSelect
+                            options={workshops.map((w) => ({ value: w.id, label: w.workshopNameVn, searchText: w.workshopNameVn.toLowerCase() }))}
+                            value={workshopId}
+                            onChange={setWorkshopId}
+                            placeholder={t("filterAllWorkshop")}
                         />
                     </label>
                     <label className="block w-56">

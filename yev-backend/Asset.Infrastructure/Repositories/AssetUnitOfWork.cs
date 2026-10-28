@@ -35,7 +35,10 @@ namespace Asset.Infrastructure.Repositories
             IInventorySessionRepository inventorySessions,
             IInventorySessionItemRepository inventorySessionItems,
             IInventoryAssignmentRepository inventoryAssignments,
-            IAppReleaseRepository appReleases) : base(dbContext)
+            IAppReleaseRepository appReleases,
+            IUsbDeviceRepository usbDevices,
+            IUsbSessionRepository usbSessions,
+            IUsbFileEventRepository usbFileEvents) : base(dbContext)
         {
             Devices = devices;
             Branches = branches;
@@ -64,6 +67,9 @@ namespace Asset.Infrastructure.Repositories
             InventorySessionItems = inventorySessionItems;
             InventoryAssignments = inventoryAssignments;
             AppReleases = appReleases;
+            UsbDevices = usbDevices;
+            UsbSessions = usbSessions;
+            UsbFileEvents = usbFileEvents;
         }
 
         public IDeviceRepository Devices { get; }
@@ -93,5 +99,8 @@ namespace Asset.Infrastructure.Repositories
         public IInventorySessionItemRepository InventorySessionItems { get; }
         public IInventoryAssignmentRepository InventoryAssignments { get; }
         public IAppReleaseRepository AppReleases { get; }
+        public IUsbDeviceRepository UsbDevices { get; }
+        public IUsbSessionRepository UsbSessions { get; }
+        public IUsbFileEventRepository UsbFileEvents { get; }
     }
 }

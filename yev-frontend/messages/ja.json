@@ -58,12 +58,14 @@
     "softwares": "ソフトウェア管理",
     "suppliers": "仕入先管理",
     "auditTrail": "操作履歴",
+    "usbLog": "USB管理",
     "serverCheck": "サーバー点検",
     "inventory": "備品棚卸",
     "appReleases": "アプリ更新管理",
     "aiChat": "AIアシスタント",
     "settings": "システム設定",
     "otManagerTagline": "残業管理",
+    "otOverview": "概要",
     "otCreate": "残業登録",
     "otAiChat": "AI残業登録アシスタント",
     "otForms": "残業申請",
@@ -169,7 +171,11 @@
       "updateError": "グループの更新に失敗しました",
       "deleteSuccess": "グループを削除しました",
       "deleteError": "グループの削除に失敗しました",
-      "loadError": "グループ一覧を読み込めませんでした。"
+      "loadError": "グループ一覧を読み込めませんでした。",
+      "colWorkshop": "工場",
+      "fieldWorkshop": "工場",
+      "fieldWorkshopPlaceholder": "工場を選択してください...",
+      "allWorkshops": "すべての工場"
     },
     "Reason": {
       "searchPlaceholder": "理由で検索...",
@@ -223,7 +229,9 @@
       "updateError": "残業ケースの更新に失敗しました",
       "deleteSuccess": "残業ケースを削除しました",
       "deleteError": "残業ケースの削除に失敗しました",
-      "loadError": "残業ケース一覧を読み込めませんでした。"
+      "loadError": "残業ケース一覧を読み込めませんでした。",
+      "fieldDescriptionJp": "説明（日本語）",
+      "fieldDescriptionJpPlaceholder": "日本語の説明を入力（任意）..."
     },
     "JobTitle": {
       "searchPlaceholder": "役職コードまたは名称で検索...",
@@ -257,7 +265,8 @@
       "saveOrderButton": "並び順を保存",
       "savingOrder": "並び順を保存中...",
       "reorderSuccess": "階級の並び順を更新しました",
-      "reorderError": "階級の並び順の更新に失敗しました"
+      "reorderError": "階級の並び順の更新に失敗しました",
+      "codeWithRank": "{code}、レベル {rank}"
     },
     "JobTitlePermission": {
       "selectedCount": "{count}/{total} 選択中",
@@ -320,7 +329,9 @@
       "coordinatorNotLinkedHint": "この社員はまだログインアカウントが連携されていません(社員画面でUserName未設定) — Adminがアカウントを連携すると、承認チェーン操作権限は自動的に有効になります。",
       "discardChangesTitle": "未保存の変更を破棄しますか?",
       "discardChangesMessage": "現在の承認チェーンに未保存の変更があります。部署/グループを変更するとこの変更は破棄されます。",
-      "discardChangesConfirm": "変更を破棄"
+      "discardChangesConfirm": "変更を破棄",
+      "fieldWorkshop": "工場",
+      "fieldWorkshopPlaceholder": "工場を選択してください..."
     },
     "ProductionApprovalStep": {
       "sectionTitle": "ライン承認チェーン",
@@ -395,7 +406,9 @@
       "colStartTime": "開始時刻",
       "colEndTime": "終了時刻",
       "noData": "この日に完了した製造ライン申請はありません。",
-      "emptyStateHint": "日付を選択して「チケットレポートを表示」を押すとデータが表示されます。"
+      "emptyStateHint": "日付を選択して「チケットレポートを表示」を押すとデータが表示されます。",
+      "fieldWorkshopLabel": "工場",
+      "filterAllWorkshop": "すべての工場"
     },
     "GroupApprovalStep": {
       "sectionTitle": "中間ステップ（グループ単位）",
@@ -615,7 +628,14 @@
       "otLimitEditAction": "OT上限",
       "otLimitDialogTitle": "OT上限を編集",
       "otLimitSaveSuccess": "OT上限を更新しました",
-      "otLimitSaveError": "OT上限の更新に失敗しました"
+      "otLimitSaveError": "OT上限の更新に失敗しました",
+      "colWorkshop": "工場",
+      "filterWorkshopPlaceholder": "すべての工場",
+      "fieldWorkshop": "工場",
+      "fieldWorkshopPlaceholder": "工場を選択してください...",
+      "fieldApprovalScopes": "管轄する工場・部署",
+      "addApprovalScope": "工場・部署を追加",
+      "removeApprovalScope": "この行を削除"
     },
     "ProductionEmployeeImport": {
       "title": "ライン人員インポート",
@@ -738,7 +758,13 @@
       "invalidYear": "年間合計は各月の合計より小さくできません。",
       "invalidNumber": "時間の値が正しくありません。",
       "saved": "累計を更新しました。",
-      "saveError": "累計を更新できませんでした。"
+      "saveError": "累計を更新できませんでした。",
+      "daysError": "日別の残業時間を読み込めませんでした。",
+      "daysTitle": "{year}年{month}月",
+      "daysBack": "戻る",
+      "daysTotal": "月合計",
+      "daysOther": "手入力・調整分（日付なし）",
+      "weekdays": "月|火|水|木|金|土|日"
     },
     "CategoryManagement": {
       "title": "残業マスタ管理",
@@ -757,7 +783,9 @@
       "addReasons": "＋ 理由を追加",
       "addOtCases": "＋ 残業ケースを追加",
       "addJobTitles": "＋ 役職を追加",
-      "addEmployees": "＋ 社員を追加"
+      "addEmployees": "＋ 社員を追加",
+      "tabWorkshops": "工場",
+      "addWorkshops": "＋ 工場を追加"
     },
     "AttendanceSetting": {
       "loading": "設定を読み込んでいます...",
@@ -784,7 +812,7 @@
       "fieldMonthlyOtHourLimit": "1ヶ月",
       "fieldYearlyOtHourLimit": "1年",
       "accumulationHint": "ここでの変更は以降に作成・修正する申請に即反映されます — 既に作成済みの申請には影響しません。",
-      "batchSectionTitle": "一括申請（Đơn tổng）",
+      "batchSectionTitle": "一括申請",
       "batchSectionDesc": "部長の承認待ちの申請を自動的に「一括申請」にまとめてメール送信する時刻。",
       "fieldBatchAutoSendTime": "自動送信時刻",
       "batchSectionHint": "時刻の変更は次回の集約から適用されます — 本日中にすぐ反映させたい場合は「今すぐ送信」ボタンを使ってください。",
@@ -933,7 +961,13 @@
       "calendarNextMonth": "次の月",
       "calendarMonthLabel": "{year}年{month}月",
       "calendarEmpty": "今月は未承認の申請がありません。",
-      "calendarLoadError": "未承認カレンダーを読み込めませんでした。"
+      "calendarLoadError": "未承認カレンダーを読み込めませんでした。",
+      "filterWorkshopLabel": "工場",
+      "filterAllWorkshop": "すべての工場",
+      "filterTypeLabel": "申請の種類",
+      "filterAllType": "すべての種類",
+      "typeOffice": "オフィス（グループ別）",
+      "typeProduction": "生産ライン（ライン別）"
     },
     "OtFormDetail": {
       "titleWithId": "残業申請 #{id}",
@@ -1022,13 +1056,14 @@
       "removeSuccess": "{name}を不承認にしました。",
       "removeError": "社員の不承認に失敗しました",
       "deleteModalTitle": "申請 #{id} を削除",
-      "deleteModalDesc": "承認フローで永久に止まってしまった申請（Cây chức vụを再設定しても誰も処理できない）にのみ使用してください。削除すると一覧から完全に消え、UIから元に戻せません。完了済みの申請には使用できません。",
+      "deleteModalDesc": "承認フローで永久に止まってしまった申請（承認ツリーを再設定しても誰も処理できない）にのみ使用してください。削除すると一覧から完全に消え、UIから元に戻せません。完了済みの申請には使用できません。",
       "deleteReasonLabel": "削除理由",
       "deleteReasonRequiredError": "削除理由を入力してください。",
       "confirmDelete": "削除を確定",
       "deleteSuccess": "申請を削除しました。",
       "deleteError": "申請の削除に失敗しました",
       "removedInlineNote": "{name}（{level}）により除外されました — 理由：{reason}",
+      "removedInlineNoteNoReason": "{name}（{level}）により除外されました",
       "addEmployeeButton": "社員を追加",
       "addEmployeeModalTitle": "申請に社員を追加",
       "addSearchPlaceholder": "社員コードまたは氏名で検索",
@@ -1055,6 +1090,18 @@
       "editLogFieldDidEat": "「食事あり」を変更",
       "editLogFieldNoteVn": "備考(VN)を変更",
       "editLogFieldNoteJp": "備考(JP)を変更",
+      "editLogFieldStartTime": "開始時刻を変更",
+      "editLogFieldDate": "残業日を変更",
+      "editLogFieldFormStartTime": "申請の開始時刻を変更",
+      "editLogFieldFormEndTime": "申請の終了時刻を変更",
+      "editLogFieldReason": "理由を変更",
+      "editLogFieldSubReason": "詳細理由を変更",
+      "editLogFieldOtCase": "残業ケース（自動再判定）",
+      "editLogFieldMilkCount": "牛乳の数を変更",
+      "editLogFieldTransportation": "送迎バスを変更",
+      "editLogFieldCopyRoom": "コピー室を変更",
+      "editLogFieldAnotherSuggestionVn": "その他の要望(VN)を変更",
+      "editLogFieldAnotherSuggestionJp": "その他の要望(JP)を変更",
       "colBlockCode": "ライン",
       "colTeamCode": "チーム",
       "colShiftTeam": "シフト班",
@@ -1065,7 +1112,7 @@
       "titleEdit": "残業申請を編集 #{id}",
       "descCreate": "申請情報を入力し、残業する社員を選択してください。申請は下書き状態で作成され、承認フローに入るには別途チームリーダーによる署名（「署名待ち」）が必要です。",
       "descEdit": "実際の終了時刻の編集、社員の追加・除外ができます。その他の申請情報はロックされており、下書き状態または部長の承認待ちの申請のみ編集可能です。",
-      "notEditableError": "この申請は既に1つ以上の承認レベルを通過しているため、編集できません。",
+      "notEditableError": "この申請は編集できません（処理済み、またはマネージャー以上が承認済み）。",
       "loadEditError": "編集する残業申請を読み込めませんでした。",
       "blockedNoScopeMessage": "このアカウントはどの部署についても申請作成権限が付与されていません — 管理者に「承認権限設定」の付与、または対応する社員情報の紐付けを依頼してください。",
       "scopeRestrictedMessage": "このアカウントは次のグループでのみ申請作成が可能です：{groupNames}。",
@@ -1167,6 +1214,7 @@
       "colTeamCode": "Team",
       "removeEmployeeButton": "社員を不承認",
       "willBeRemovedNote": "保存すると申請から除外されます(理由: {reason})",
+      "willBeRemovedNoteNoReason": "保存すると申請から除外されます",
       "undoRemoveButton": "元に戻す",
       "newlyAddedBadge": "新規追加",
       "cancelAddButton": "選択解除",
@@ -1179,12 +1227,15 @@
       "confirmRemove": "不承認を確定",
       "workCalendarLoadError": "休日カレンダーを読み込めません。",
       "otCaseAutoHintWorking": "日付から自動設定：勤務日 → TH1。",
+      "otCaseAutoHintEdit": "保存時に日付と残業時間から自動で再判定されます。",
       "otCaseAutoHintNonWorking": "日付から自動設定：カレンダー上の休日 → TH2。",
       "otCaseAutoHintTh3": "自動設定：月/年の残業上限を超える従業員がいるためTH3が必須です。",
       "badgeOverDaily": "1日上限超過",
       "badgeOverDailyTooltip": "1日の残業時間が上限を超えています — 申請を作成できません。選択を外すか時間を減らしてください。",
       "badgeTh3Tooltip": "月/年の累計が上限を超えています — TH3が必須です。",
-      "employeeTimeOutOfRange": "申請時間外({start}–{end})"
+      "employeeTimeOutOfRange": "申請時間外({start}–{end})",
+      "lineOptionsLoadError": "ラインの一覧を読み込めませんでした。",
+      "shiftTeamOptionsLoadError": "シフトグループの一覧を読み込めませんでした。"
     },
     "OtFormPrint": {
       "loadError": "印刷する残業申請を読み込めませんでした。",
@@ -1194,7 +1245,8 @@
       "paperSizeA5Short": "A5横",
       "paperSizeA4": "A4（1ページ目最大10名、以降のページ最大30名）",
       "paperSizeA5": "A5横（両面 — 裏面最大12名）",
-      "printButton": "印刷"
+      "printButton": "印刷",
+      "rejectedBy": "{name} により申請が不承認となりました：「{comment}」"
     },
     "OtFormEmailConfirm": {
       "missingTokenError": "リンクにトークンがありません。",
@@ -1319,6 +1371,87 @@
       "expired": "期限切れ",
       "daysLeft": "残り{count}日",
       "startsOn": "{date}から"
+    },
+    "Workshop": {
+      "searchPlaceholder": "工場コードまたは名称で検索...",
+      "clearSearch": "検索をクリア",
+      "colCode": "工場コード",
+      "colNameVn": "名称（VN）",
+      "colNameJp": "名称（JP）",
+      "noData": "工場データがありません。",
+      "createTitle": "工場を追加",
+      "editTitle": "工場を更新",
+      "fieldCode": "工場コード",
+      "fieldCodePlaceholder": "工場コードを入力してください...",
+      "fieldNameVn": "工場名（VN）",
+      "fieldNameVnPlaceholder": "工場名を入力してください...",
+      "fieldNameJp": "工場名（JP）",
+      "fieldNameJpPlaceholder": "日本語名を入力してください（任意）...",
+      "saving": "保存中...",
+      "createSubmit": "作成",
+      "updateSubmit": "変更を保存",
+      "deleteTitle": "工場を削除",
+      "deleteMessage": "工場「<b>{name}</b>」を削除してもよろしいですか？この操作は取り消せません。",
+      "createSuccess": "工場を作成しました",
+      "updateSuccess": "工場を更新しました",
+      "createError": "工場の作成に失敗しました",
+      "updateError": "工場の更新に失敗しました",
+      "deleteSuccess": "工場を削除しました",
+      "deleteError": "工場の削除に失敗しました",
+      "loadError": "工場一覧を読み込めませんでした。"
+    },
+    "Enums": {
+      "levelGroupLeader": "グループリーダー",
+      "levelDepartmentManager": "部長",
+      "levelWorkshopManager": "工場長",
+      "levelGeneralDirector": "総支配人",
+      "levelDepartmentHead": "部門長",
+      "levelNone": "なし（中間レベル）",
+      "statusPending": "承認待ち",
+      "statusCompleted": "完了",
+      "statusRejected": "不承認",
+      "actionSubmitted": "申請済み（署名）",
+      "actionApproved": "承認済み",
+      "actionRejected": "不承認"
+    },
+    "OtHome": {
+      "title": "残業管理",
+      "subtitle": "時間外労働申請書の作成と承認を行います。",
+      "createTitle": "残業の登録",
+      "createDesc": "担当社員の時間外労働申請書を作成します。",
+      "listTitle": "残業申請",
+      "listDesc": "自分の申請、署名待ち、承認待ち、処理済み、参加している申請をタブで確認できます。",
+      "aiChatTitle": "AI残業登録アシスタント",
+      "aiChatDesc": "AIとチャットして、残業（下書き）を自動で登録します。",
+      "noAccess": "この項目へのアクセス権限がありません。"
+    },
+    "OtOverview": {
+      "pageTitle": "残業の概要",
+      "loadError": "概要データを読み込めませんでした。",
+      "filterMonth": "月",
+      "allWorkshops": "すべての工場",
+      "kpiEmployees": "管轄社員数",
+      "kpiMonthHours": "当月の残業時間",
+      "kpiVsPrevious": "前月比 {delta}",
+      "kpiForms": "当月の申請",
+      "kpiOverLimit": "累計上限の超過",
+      "kpiOverLimitSub": "月 {monthly}名 · 年 {yearly}名 · 上限間近（80%以上）{near}名",
+      "chartDaily": "日別の残業時間",
+      "chartDailyHint": "完了した申請のみ",
+      "chartTrend": "{year}年 月別累計（12か月）",
+      "chartTrendHint": "手入力・調整分を含む",
+      "chartStatus": "申請の状況",
+      "chartOtCase": "OTケース別の申請",
+      "chartDepartment": "部署別の残業時間",
+      "chartWorkshop": "工場別の残業時間",
+      "overBadge": "{count}名超過",
+      "riskTitle": "累計上限に近い／超過した社員",
+      "colCode": "社員コード",
+      "colName": "氏名",
+      "colDepartment": "部署",
+      "colMonth": "月",
+      "colYear": "年",
+      "empty": "データがありません"
     }
   },
   "Home": {

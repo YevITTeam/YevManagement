@@ -32,5 +32,8 @@ namespace Asset.Application.Interfaces.Service
         IInventorySessionItemRepository InventorySessionItems { get; }
         IInventoryAssignmentRepository InventoryAssignments { get; }
         IAppReleaseRepository AppReleases { get; }
+        IUsbDeviceRepository UsbDevices { get; }
+        IUsbSessionRepository UsbSessions { get; }
+        IUsbFileEventRepository UsbFileEvents { get; }
     }
 }

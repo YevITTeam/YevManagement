@@ -42,6 +42,9 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<InventorySessionItem> InventorySessionItems { get; set; }
     public virtual DbSet<InventoryAssignment> InventoryAssignments { get; set; }
     public virtual DbSet<AppRelease> AppReleases { get; set; }
+    public virtual DbSet<UsbDevice> UsbDevices { get; set; }
+    public virtual DbSet<UsbSession> UsbSessions { get; set; }
+    public virtual DbSet<UsbFileEvent> UsbFileEvents { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -374,6 +377,50 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.VersionName).HasMaxLength(50);
             entity.Property(e => e.ApkUrl).HasMaxLength(500);
             entity.Property(e => e.Changelog).HasColumnType("nvarchar(max)");
+        });
+
+        modelBuilder.Entity<UsbDevice>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_UsbDevices");
+            entity.HasIndex(e => new { e.VendorId, e.ProductId, e.SerialNumber }, "IX_UsbDevices_Vid_Pid_Serial").IsUnique();
+            entity.Property(e => e.VendorId).HasMaxLength(8);
+            entity.Property(e => e.ProductId).HasMaxLength(8);
+            entity.Property(e => e.SerialNumber).HasMaxLength(100);
+            entity.Property(e => e.FriendlyName).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<UsbSession>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_UsbSessions");
+            entity.HasIndex(e => e.ConnectedAt, "IX_UsbSessions_ConnectedAt");
+            entity.HasIndex(e => e.DeviceId, "IX_UsbSessions_DeviceId");
+            entity.Property(e => e.MachineName).HasMaxLength(100);
+            entity.Property(e => e.WindowsUser).HasMaxLength(150);
+            entity.Property(e => e.DriveLetter).HasMaxLength(10);
+            entity.Property(e => e.VolumeLabel).HasMaxLength(100);
+
+            entity.HasOne(d => d.Device).WithMany()
+                .HasForeignKey(d => d.DeviceId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_UsbSessions_ThietBis_DeviceId");
+
+            entity.HasOne(d => d.UsbDevice).WithMany()
+                .HasForeignKey(d => d.UsbDeviceId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_UsbSessions_UsbDevices_UsbDeviceId");
+        });
+
+        modelBuilder.Entity<UsbFileEvent>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_UsbFileEvents");
+            entity.HasIndex(e => e.EventId, "IX_UsbFileEvents_EventId").IsUnique();
+            entity.HasIndex(e => e.SessionId, "IX_UsbFileEvents_SessionId");
+            entity.Property(e => e.FilePath).HasMaxLength(1000);
+            entity.Property(e => e.OldFilePath).HasMaxLength(1000);
+
+            entity.HasOne(d => d.Session).WithMany(p => p.FileEvents)
+                .HasForeignKey(d => d.SessionId)
+                .HasConstraintName("FK_UsbFileEvents_UsbSessions_SessionId");
         });
 
         modelBuilder.Entity<ServerCheckItem>(entity =>

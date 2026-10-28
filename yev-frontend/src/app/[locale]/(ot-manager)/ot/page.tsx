@@ -1,44 +1,28 @@
 "use client";
 
 import { Bot, FilePlus2, ClipboardList } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Link } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 
-const tiles = [
-    {
-        title: "Đăng ký tăng ca",
-        desc: "Lập đơn đề nghị làm ngoài giờ cho nhân viên của bạn.",
-        link: "/ot/create",
-        icon: <FilePlus2 className="h-8 w-8" />,
-    },
-    {
-        title: "Đơn tăng ca",
-        desc: "Đơn của tôi, chờ ký duyệt, chờ duyệt, đã xử lý và đơn bạn tham gia — theo tab.",
-        link: "/ot/list",
-        icon: <ClipboardList className="h-8 w-8" />,
-    },
-];
-
-// Riêng biệt khỏi mảng tiles cố định ở trên vì mục này gate bằng permission (rollout ban đầu chỉ
-// Admin, xem migration AddAttendanceAiChatPermission) — 2 tile kia không cần gate vì permission của
-// chúng đã được cấp rộng cho mọi Role nghiệp vụ từ trước.
-const aiChatTile = {
-    title: "Trợ lý AI đăng ký tăng ca",
-    desc: "Trò chuyện để AI tự đăng ký tăng ca (nháp) cho bạn.",
-    link: "/ot/ai-chat",
-    icon: <Bot className="h-8 w-8" />,
-};
-
 export default function OtHomePage() {
+    const t = useTranslations("Attendance.OtHome");
     const { user } = useAuth();
+
+    const tiles = [
+        { title: t("createTitle"), desc: t("createDesc"), link: "/ot/create", icon: <FilePlus2 className="h-8 w-8" /> },
+        { title: t("listTitle"), desc: t("listDesc"), link: "/ot/list", icon: <ClipboardList className="h-8 w-8" /> },
+    ];
+    // Gated by permission (initially Admin only); the two tiles above are open to every business role.
+    const aiChatTile = { title: t("aiChatTitle"), desc: t("aiChatDesc"), link: "/ot/ai-chat", icon: <Bot className="h-8 w-8" /> };
     const visibleTiles = hasPermission(user, "Attendance.AiChat.Use") ? [...tiles, aiChatTile] : tiles;
 
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">Quản lý tăng ca</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">Lập và duyệt Giấy đề nghị làm ngoài giờ.</p>
+                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("subtitle")}</p>
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -46,7 +30,7 @@ export default function OtHomePage() {
                     <Link
                         key={tile.link}
                         href={tile.link}
-                        // KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11).
+                        // Do not enable prefetch — see PcManagerSidebar.tsx.
                         prefetch={false}
                         className="group rounded-2xl border border-[#e0e3e5] bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#e3000f] hover:shadow-md"
                     >

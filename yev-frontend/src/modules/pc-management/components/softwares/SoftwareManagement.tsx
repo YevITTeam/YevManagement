@@ -6,6 +6,8 @@ import SoftwareList from "./SoftwareList";
 import SoftwareGroupList from "../software-groups/SoftwareGroupList";
 import type { ListHandle } from "../list-toolbar";
 
+import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
+
 type SoftwareTab = "softwares" | "groups";
 
 const tabs: { key: SoftwareTab; label: string }[] = [
@@ -14,7 +16,7 @@ const tabs: { key: SoftwareTab; label: string }[] = [
 ];
 
 export default function SoftwareManagement() {
-    const [activeTab, setActiveTab] = useState<SoftwareTab>("softwares");
+    const [activeTab, setActiveTab] = usePersistedTab<SoftwareTab>("pc-software-tab", ["softwares", "groups"], "softwares");
     const [loading, setLoading] = useState(false);
 
     const softwareRef = useRef<ListHandle>(null);

@@ -7,7 +7,7 @@ import { Check, Inbox, X, Search, Pencil, Trash2 } from "lucide-react";
 
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
-import { approvalLevelLabels } from "@/modules/attendance/types/enums";
+import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import OtCaseForm, { type OtCaseFormValues } from "./OtCaseForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -19,6 +19,7 @@ const PAGE_SIZE = 10;
 const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList({ onLoadingChange }, ref) {
     const t = useTranslations("Attendance.OtCase");
     const tCommon = useTranslations("Common");
+    const enumLabels = useEnumLabels();
     const [otCases, setOtCases] = useState<OtCaseDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -178,10 +179,13 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                             {otCases.map((otCase) => (
                                 <tr key={otCase.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{otCase.code}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{otCase.description || "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                        {otCase.description || "-"}
+                                        {otCase.descriptionJp && <div className="text-xs text-[#8a8f94]">{otCase.descriptionJp}</div>}
+                                    </td>
                                     <td className="px-3 py-2 text-sm">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
-                                            {approvalLevelLabels[otCase.requiredApprovalLevel] ?? otCase.requiredApprovalLevel}
+                                            {enumLabels.approvalLevel[otCase.requiredApprovalLevel] ?? otCase.requiredApprovalLevel}
                                         </span>
                                     </td>
                                     <td className="px-3 py-2 text-sm">

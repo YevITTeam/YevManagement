@@ -29,11 +29,11 @@ namespace Attendance.Api.Controllers
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
             [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
             [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
-            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null, [FromQuery] int? workshopId = null, [FromQuery] bool? isProductionForm = null)
         {
             var result = await _otFormService.GetMyFormsAsync(
                 CurrentUserName, pageIndex, pageSize, fromDate, toDate, status,
-                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId, workshopId, isProductionForm);
             return Success(result);
         }
 
@@ -45,11 +45,11 @@ namespace Attendance.Api.Controllers
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
             [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
             [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
-            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null, [FromQuery] int? workshopId = null, [FromQuery] bool? isProductionForm = null)
         {
             var result = await _otFormService.GetPendingApprovalsAsync(
                 CurrentUserName, pageIndex, pageSize, fromDate, toDate, status,
-                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId, workshopId, isProductionForm);
             return Success(result);
         }
 
@@ -83,11 +83,11 @@ namespace Attendance.Api.Controllers
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
             [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
             [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
-            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null, [FromQuery] int? workshopId = null, [FromQuery] bool? isProductionForm = null)
         {
             var result = await _otFormService.GetMyActionsAsync(
                 CurrentUserName, pageIndex, pageSize, fromDate, toDate, status,
-                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId, workshopId, isProductionForm);
             return Success(result);
         }
 
@@ -100,11 +100,11 @@ namespace Attendance.Api.Controllers
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
             [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
             [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
-            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null, [FromQuery] int? workshopId = null, [FromQuery] bool? isProductionForm = null)
         {
             var result = await _otFormService.GetMyParticipationsAsync(
                 CurrentUserName, pageIndex, pageSize, fromDate, toDate, status,
-                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId, workshopId, isProductionForm);
             return Success(result);
         }
 
@@ -117,11 +117,11 @@ namespace Attendance.Api.Controllers
             [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50,
             [FromQuery] DateOnly? fromDate = null, [FromQuery] DateOnly? toDate = null, [FromQuery] int? status = null,
             [FromQuery] int? groupId = null, [FromQuery] int? departmentId = null,
-            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null)
+            [FromQuery] int? productionLineId = null, [FromQuery] int? productionTeamId = null, [FromQuery] int? productionShiftTeamId = null, [FromQuery] int? workshopId = null, [FromQuery] bool? isProductionForm = null)
         {
             var result = await _otFormService.GetAllFormsAsync(
                 pageIndex, pageSize, fromDate, toDate, status,
-                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId);
+                groupId, departmentId, productionLineId, productionTeamId, productionShiftTeamId, workshopId, isProductionForm);
             return Success(result);
         }
 

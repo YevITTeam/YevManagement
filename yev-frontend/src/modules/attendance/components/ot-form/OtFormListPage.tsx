@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, Check, ChevronLeft, ChevronRight, FilterX, Inbox, Pencil, RefreshCw, Search, SlidersHorizontal, Users, X } from "lucide-react";
+import { Calendar, Check, ChevronLeft, ChevronRight, Eye, FilterX, Inbox, Pencil, RefreshCw, Search, SlidersHorizontal, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
 import { getPathname, useRouter } from "@/navigation";
@@ -11,10 +11,14 @@ import type { OtFormApprovalSummaryItemDto, OtFormListItemDto, PendingApprovalDa
 import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
 import type { ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
+import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
-import { otFormStatusClasses, otFormStatusDotClasses, otFormStatusLabels } from "@/modules/attendance/types/enums";
+import { otFormStatusClasses, otFormStatusDotClasses } from "@/modules/attendance/types/enums";
+import OtCaseBadge from "@/modules/attendance/components/OtCaseBadge";
+import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -104,9 +108,12 @@ function ApprovalSummaryCell({
 
 // docs/attendance-module.md §API — my-forms (đơn do chính mình tạo) và pending-approvals (đơn chờ chính
 // mình duyệt, BE tự lọc theo cấp/scope) dùng chung shape OtFormListItemDto + phân trang.
+type FormTypeFilter = "" | "office" | "production";
+
 export default function OtFormListPage({ mode, hideHeading = false }: OtFormListPageProps) {
     const t = useTranslations("Attendance.OtFormList");
     const tCommon = useTranslations("Common");
+    const enumLabels = useEnumLabels();
     const router = useRouter();
     const locale = useLocale();
     const { user } = useAuth();
@@ -140,6 +147,9 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const [statusInput, setStatusInput] = useState("");
     // Lọc theo Bộ phận/Nhóm (đơn văn phòng) và Line/Team/Nhóm ca (đơn dưới chuyền) — 2026-09-04, BE hỗ
     // trợ cả 5 param ở MỌI endpoint danh sách (xem GetOtFormListParams), nên hiện cùng lúc ở mọi tab.
+    // "" = all; "production" = floor forms (by line), "office" = office forms (by group).
+    const [formTypeInput, setFormTypeInput] = useState<FormTypeFilter>("");
+    const [workshopId, setWorkshopId] = useState<number | "">("");
     const [departmentId, setDepartmentId] = useState<number | "">("");
     const [groupId, setGroupId] = useState<number | "">("");
     const [productionTeamId, setProductionTeamId] = useState<number | "">("");
@@ -149,12 +159,27 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         fromDate: "",
         toDate: "",
         status: "",
+        formType: "" as FormTypeFilter,
+        workshopId: "" as number | "",
         departmentId: "" as number | "",
         groupId: "" as number | "",
         productionTeamId: "" as number | "",
         productionLineId: "" as number | "",
         productionShiftTeamId: "" as number | "",
     });
+
+    // Switching type drops the filters that no longer apply (snapshot compare in render, frontend-conventions.md §3).
+    const [prevFormTypeInput, setPrevFormTypeInput] = useState(formTypeInput);
+    if (prevFormTypeInput !== formTypeInput) {
+        setPrevFormTypeInput(formTypeInput);
+        if (formTypeInput === "production") {
+            setGroupId("");
+        } else {
+            setProductionTeamId("");
+            setProductionLineId("");
+            setProductionShiftTeamId("");
+        }
+    }
 
     // Đổi mode (chuyển menu) → về trang 1 + xoá bộ lọc, phát hiện bằng so sánh snapshot ngay trong
     // render (React khuyến khích thay effect chỉ để "phản ứng" theo prop/state khác đổi).
@@ -165,6 +190,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         setFromDateInput("");
         setToDateInput("");
         setStatusInput("");
+        setFormTypeInput("");
+        setWorkshopId("");
         setDepartmentId("");
         setGroupId("");
         setProductionTeamId("");
@@ -174,6 +201,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             fromDate: "",
             toDate: "",
             status: "",
+            formType: "",
+            workshopId: "",
             departmentId: "",
             groupId: "",
             productionTeamId: "",
@@ -188,6 +217,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         fromDate: appliedFilters.fromDate || undefined,
         toDate: appliedFilters.toDate || undefined,
         status: appliedFilters.status !== "" ? Number(appliedFilters.status) : undefined,
+        isProductionForm: appliedFilters.formType === "" ? undefined : appliedFilters.formType === "production",
+        workshopId: appliedFilters.workshopId !== "" ? appliedFilters.workshopId : undefined,
         departmentId: appliedFilters.departmentId !== "" ? appliedFilters.departmentId : undefined,
         groupId: appliedFilters.groupId !== "" ? appliedFilters.groupId : undefined,
         productionTeamId: appliedFilters.productionTeamId !== "" ? appliedFilters.productionTeamId : undefined,
@@ -201,16 +232,20 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const [groupOptions, setGroupOptions] = useState<GroupDto[]>([]);
 
     useFetchEffect(() => DepartmentApi.getAllDepartments(), [], setDepartmentOptions, t("officeFilterLoadError"));
+    const [workshopOptions, setWorkshopOptions] = useState<WorkshopDto[]>([]);
+    useFetchEffect(() => WorkshopApi.getAllWorkshops(), [], setWorkshopOptions, t("officeFilterLoadError"));
 
     const [prevFilterDepartmentId, setPrevFilterDepartmentId] = useState(departmentId);
-    if (prevFilterDepartmentId !== departmentId) {
+    const [prevFilterWorkshopId, setPrevFilterWorkshopId] = useState(workshopId);
+    if (prevFilterDepartmentId !== departmentId || prevFilterWorkshopId !== workshopId) {
         setPrevFilterDepartmentId(departmentId);
+        setPrevFilterWorkshopId(workshopId);
         setGroupId("");
     }
 
     useFetchEffect(
-        () => (departmentId === "" ? Promise.resolve([]) : GroupApi.getGroupsByDepartment(departmentId)),
-        [departmentId],
+        () => (departmentId === "" ? Promise.resolve([]) : GroupApi.getGroupsByDepartment(departmentId, workshopId === "" ? undefined : workshopId)),
+        [departmentId, workshopId],
         setGroupOptions,
         t("officeFilterLoadError")
     );
@@ -220,9 +255,9 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
     const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
     const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
-    // Trước đây chỉ hiện ở "Chờ tôi duyệt" — mở rộng ra mọi tab (kể cả "Tất cả đơn") theo yêu cầu
-    // người dùng (2026-09-04), BE đã hỗ trợ filter này ở mọi endpoint danh sách.
-    const showProductionFilter = true;
+    // Team/Line/Nhóm ca chỉ có nghĩa với đơn xưởng; chọn loại khác thì không hiện và không tải options.
+    const showProductionFilter = formTypeInput === "production";
+    const showOfficeGroupFilter = formTypeInput !== "production";
 
     useFetchEffect(
         () => (showProductionFilter ? ProductionEmployeeApi.getTeamOptions() : Promise.resolve([])),
@@ -336,6 +371,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             fromDate: fromDateInput,
             toDate: toDateInput,
             status: statusInput,
+            formType: formTypeInput,
+            workshopId,
             departmentId,
             groupId,
             productionTeamId,
@@ -348,6 +385,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         setFromDateInput("");
         setToDateInput("");
         setStatusInput("");
+        setFormTypeInput("");
+        setWorkshopId("");
         setDepartmentId("");
         setGroupId("");
         setProductionTeamId("");
@@ -358,6 +397,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             fromDate: "",
             toDate: "",
             status: "",
+            formType: "",
+            workshopId: "",
             departmentId: "",
             groupId: "",
             productionTeamId: "",
@@ -449,13 +490,16 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             ? t("titleAllForms")
             : t("titleMyParticipations");
     const advancedFilterCount = [
+        appliedFilters.workshopId,
         appliedFilters.departmentId,
         appliedFilters.groupId,
         appliedFilters.productionTeamId,
         appliedFilters.productionLineId,
         appliedFilters.productionShiftTeamId,
     ].filter((value) => value !== "").length;
-    const columnCount = (mode === "my-forms" ? 9 : 8) + (canBulkApprove ? 1 : 0);
+    // The Line / Nhóm ca column only applies to floor forms, so it is hidden for the office-only view.
+    const showLineColumn = appliedFilters.formType !== "office";
+    const columnCount = (mode === "my-forms" ? 9 : 8) + (canBulkApprove ? 1 : 0) - (showLineColumn ? 0 : 1);
 
     return (
         <div className="space-y-4">
@@ -499,11 +543,26 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                             triggerClassName="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                             options={[
                                 { value: "", label: t("filterAllStatus") },
-                                ...Object.entries(otFormStatusLabels).map(([value, label]) => ({
+                                ...Object.entries(enumLabels.otFormStatus).map(([value, label]) => ({
                                     value,
                                     label,
                                     dotClassName: otFormStatusDotClasses[Number(value)],
                                 })),
+                            ]}
+                        />
+                    </label>
+                    <label className="block">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                            {t("filterTypeLabel")}
+                        </span>
+                        <StyledSelect
+                            value={formTypeInput}
+                            onChange={setFormTypeInput}
+                            triggerClassName="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            options={[
+                                { value: "", label: t("filterAllType") },
+                                { value: "office", label: t("typeOffice") },
+                                { value: "production", label: t("typeProduction") },
                             ]}
                         />
                     </label>
@@ -548,6 +607,21 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                     <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-2 border-t border-[#f1f5f9] pt-2.5 [&>label]:w-full sm:[&>label]:w-48">
                     <label className="block">
                         <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                            {t("filterWorkshopLabel")}
+                        </span>
+                        <SearchableSelect
+                            value={workshopId}
+                            onChange={setWorkshopId}
+                            placeholder={t("filterAllWorkshop")}
+                            options={workshopOptions.map((option) => ({
+                                value: option.id,
+                                label: option.workshopNameVn,
+                                searchText: option.workshopNameVn.toLowerCase(),
+                            }))}
+                        />
+                    </label>
+                    <label className="block">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterDepartmentLabel")}
                         </span>
                         <SearchableSelect
@@ -561,6 +635,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                             }))}
                         />
                     </label>
+                    {showOfficeGroupFilter && (
                     <label className="block">
                         <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterGroupLabel")}
@@ -577,6 +652,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                             }))}
                         />
                     </label>
+                    )}
                     {showProductionFilter && (
                         <>
                             <label className="block">
@@ -740,7 +816,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                     </th>
                                 )}
                                 <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colDepartmentGroup")}</th>
-                                <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colProductionLine")}</th>
+                                {showLineColumn && <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colProductionLine")}</th>}
                                 <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colOtCase")}</th>
                                 <th className="whitespace-nowrap px-3 py-2.5">{t("colDate")}</th>
                                 <th className="whitespace-nowrap px-3 py-2.5">{t("colTotalHour")}</th>
@@ -781,9 +857,11 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                     <td className="whitespace-nowrap px-3 py-2.5 align-top">
                                         <div className="text-sm font-semibold text-[#191c1e]">
                                             {bilingualText(form.departmentNameVn, form.departmentNameJp)}
+                                            <span className="block text-xs text-[#8a8f94]">{form.workshopNameVn}</span>
                                         </div>
                                         <div className="text-xs text-[#5e3f3a]">{bilingualText(form.groupNameVn, form.groupNameJp)}</div>
                                     </td>
+                                    {showLineColumn && (
                                     <td className="px-3 py-2.5 align-top text-xs text-[#5e3f3a]">
                                         {form.isProductionForm ? (
                                             <>
@@ -796,7 +874,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                             "—"
                                         )}
                                     </td>
-                                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]">{form.otCaseCode}</td>
+                                    )}
+                                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]"><OtCaseBadge code={form.otCaseCode} description={form.otCaseDescription} descriptionJp={form.otCaseDescriptionJp} /></td>
                                     <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
                                     <td className="px-3 py-2.5 align-top text-sm text-[#191c1e]">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
@@ -812,7 +891,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                             <span
                                                 className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
                                             >
-                                                {otFormStatusLabels[form.status] ?? t("unknownStatus")}
+                                                {enumLabels.otFormStatus[form.status] ?? t("unknownStatus")}
                                             </span>
                                             <ApprovalSummaryCell
                                                 summary={form.approvalSummary}
@@ -893,10 +972,8 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                         </div>
 
                         <div className="space-y-4">
-                            {/* Xem/sửa từng đơn trước khi xác nhận hàng loạt (2026-09-04, theo yêu cầu người
-                                dùng) — "Sửa" mở đúng màn Sửa đơn (đã gộp thêm/xóa NV, Phần 1) ở TAB MỚI để
-                                không mất lựa chọn/modal hàng loạt đang mở; sửa xong tự refetch danh sách khi
-                                đóng modal như bình thường. */}
+                            {/* Xem/sửa từng đơn trước khi xác nhận hàng loạt — mở ở TAB MỚI để không mất lựa chọn
+                                và modal đang mở. */}
                             <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
                                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                     {t("bulkReviewTitle", { count: selectedIds.length })}
@@ -914,19 +991,31 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                                     {form.groupNameVn ? ` / ${bilingualText(form.groupNameVn, form.groupNameJp)}` : ""}{" "}
                                                     ({formatDate(form.date)})
                                                 </span>
-                                                {form.isEditable && (
+                                                <div className="flex shrink-0 items-center">
                                                     <a
-                                                        href={getPathname({ href: { pathname: "/ot/forms/edit", query: { id: String(form.id) } }, locale })}
+                                                        href={getPathname({ href: { pathname: "/ot/forms", query: { id: String(form.id) } }, locale })}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        onClick={(event) => event.stopPropagation()}
-                                                        title={tCommon("edit")}
-                                                        aria-label={tCommon("edit")}
-                                                        className="shrink-0 cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                        title={tCommon("viewDetail")}
+                                                        aria-label={tCommon("viewDetail")}
+                                                        className="cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                     >
-                                                        <Pencil className="h-3.5 w-3.5" />
+                                                        <Eye className="h-3.5 w-3.5" />
                                                     </a>
-                                                )}
+                                                    {form.isEditable && (
+                                                        <a
+                                                            href={getPathname({ href: { pathname: "/ot/forms/edit", query: { id: String(form.id) } }, locale })}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            onClick={(event) => event.stopPropagation()}
+                                                            title={tCommon("edit")}
+                                                            aria-label={tCommon("edit")}
+                                                            className="cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                        >
+                                                            <Pencil className="h-3.5 w-3.5" />
+                                                        </a>
+                                                    )}
+                                                </div>
                                             </div>
                                         ))}
                                 </div>

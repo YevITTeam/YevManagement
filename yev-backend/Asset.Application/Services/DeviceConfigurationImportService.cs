@@ -21,15 +21,6 @@ namespace Asset.Application.Services
     // có Xưởng/Loại thiết bị/Nhà cung cấp/Ngày mua nên không đủ dữ liệu để tạo Device hợp lệ).
     public class DeviceConfigurationImportService : BaseService<IAssetUnitOfWork>, IDeviceConfigurationImportService
     {
-        // Chỉ 5 tiền tố này được import (2026-07-10, theo yêu cầu người dùng sau khi rà
-        // dữ liệu Tanium thật; DA bị loại bỏ hoàn toàn theo quyết định mới nhất) — mọi
-        // Computer Name không khớp 1 trong 5 "họ" dưới đây bị loại thầm lặng khỏi kết quả
-        // (không phải lỗi, chỉ ngoài phạm vi), xem ParseComputerName.
-        // "Họ" chuẩn: YDC/YLC/YDF/TYC + số (VD YDC1877, TYC08). "Họ" AC: AC + số + tối đa
-        // 1 chữ cuối (VD AC81, AC90B) — KHÔNG khớp ACLF/ACELF/ALF (khác họ, chữ ngay sau "AC").
-        private static readonly string[] StandardFamilyPrefixes = { "YDC", "YLC", "YDF", "TYC" };
-        private static readonly Regex AcFamilyPattern = new(@"^AC\d+[A-Za-z]?$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
         private static readonly Regex EmailPattern = new(@"^[^\s@]+@[^\s@]+\.[^\s@]+$", RegexOptions.Compiled);
         private const string TaniumEmailNote = "Tanium";
         private const int MaxDomainAccountLength = 150;
@@ -410,7 +401,7 @@ namespace Asset.Application.Services
         private async Task<(List<DeviceConfigurationImportRowDto> Rows, int OutOfScopeSkippedCount)> ValidateAndResolveRowsAsync(List<DeviceConfigurationImportRowDto> rawRows)
         {
             var duplicatedCodesInFile = rawRows
-                .Select(r => ParseComputerName(r.ComputerName ?? string.Empty))
+                .Select(r => ComputerNameParser.Parse(r.ComputerName ?? string.Empty))
                 .Where(c => c != null)
                 .GroupBy(c => c!, StringComparer.OrdinalIgnoreCase)
                 .Where(g => g.Count() > 1)
@@ -434,7 +425,7 @@ namespace Asset.Application.Services
             // để tra trong bộ nhớ — kết quả nghiệp vụ giữ nguyên (collation SQL vẫn không phân biệt
             // hoa/thường như query cũ, GroupBy...First giữ đúng 1 bản ghi/khoá khi trùng mã ngoài ý muốn).
             var candidateCodes = rawRows
-                .Select(r => ParseComputerName(r.ComputerName ?? string.Empty))
+                .Select(r => ComputerNameParser.Parse(r.ComputerName ?? string.Empty))
                 .Where(c => c != null)
                 .Select(c => c!)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -478,7 +469,7 @@ namespace Asset.Application.Services
 
             foreach (var row in rawRows)
             {
-                var parsedCode = ParseComputerName(row.ComputerName ?? string.Empty);
+                var parsedCode = ComputerNameParser.Parse(row.ComputerName ?? string.Empty);
                 if (parsedCode == null)
                 {
                     // Không khớp 5 họ mã cần import (YDC/YLC/YDF/AC/TYC) — loại thầm
@@ -706,38 +697,6 @@ namespace Asset.Application.Services
             InvalidRows = rows.Count(r => !r.IsValid),
             OutOfScopeSkippedCount = outOfScopeSkippedCount
         };
-
-        // Device code from a Computer Name, or null when the name is outside the 5 imported families
-        // (the row is then skipped silently). The domain suffix after the first "." is dropped.
-        // YDC/YLC/YDF/TYC + digits: the code puts "-" between letters and digits (YDC1877 -> YDC-1877).
-        // AC + digits + optional letter: the code is the first two "-" segments (AC90B-2446).
-        private static string? ParseComputerName(string rawComputerName)
-        {
-            var name = rawComputerName.Trim();
-            var dotIndex = name.IndexOf('.');
-            if (dotIndex >= 0) name = name[..dotIndex];
-
-            var segments = name.Split('-', StringSplitOptions.RemoveEmptyEntries);
-            if (segments.Length == 0) return null;
-
-            var firstSegment = segments[0];
-
-            var standardPrefix = StandardFamilyPrefixes.FirstOrDefault(p =>
-                firstSegment.StartsWith(p, StringComparison.OrdinalIgnoreCase) &&
-                firstSegment[p.Length..].All(char.IsDigit));
-            if (standardPrefix != null)
-            {
-                var digits = firstSegment[standardPrefix.Length..];
-                return digits.Length > 0 ? $"{standardPrefix}-{digits}" : standardPrefix;
-            }
-
-            if (AcFamilyPattern.IsMatch(firstSegment))
-            {
-                return segments.Length > 1 ? $"{segments[0]}-{segments[1]}" : segments[0];
-            }
-
-            return null;
-        }
 
         // Fixed columns in the order of the Tanium inventory file (10 columns, row 1 is the header):
         // A=Computer Name, B=Tanium Client IP Address, C=Last Logged In User, D=Custom Registry

@@ -37,8 +37,11 @@ namespace Attendance.Application.Services
             GroupNameJp = x.Group != null ? x.Group.GroupNameJp : null,
             IsProductionForm = x.IsProductionForm,
             DepartmentNameVn = x.Department.DepartmentNameVn,
+            WorkshopNameVn = x.Workshop.WorkshopNameVn,
             DepartmentNameJp = x.Department.DepartmentNameJp,
             OtCaseCode = x.OtCase.Code,
+            OtCaseDescription = x.OtCase.Description,
+            OtCaseDescriptionJp = x.OtCase.DescriptionJp,
             Date = x.Date,
             TotalHour = x.TotalHour,
             NumberOfEmployee = x.NumberOfEmployee,
@@ -49,7 +52,8 @@ namespace Attendance.Application.Services
             // "có bước nào Approved chưa" không còn chặn — chỉ cần đơn còn InApproval là VẪN CÓ NGƯỜI
             // sửa được (đúng là ai thì FE/Service tự kiểm khi gọi PUT). Đơn theo Nhóm giữ nguyên luật cũ.
             IsEditable = x.Status == (int)OtFormStatus.InApproval &&
-                (x.IsProductionForm || !x.ApprovalSteps.Any(s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Approved)),
+                (x.IsProductionForm || !x.ApprovalSteps.Any(s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Approved
+                    && s.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None)),
             ApprovalSummary = x.OtFormApprovalHistories
                 .OrderBy(h => h.ActionAt)
                 .Select(h => new ApprovalSummaryItemDto
@@ -81,10 +85,12 @@ namespace Attendance.Application.Services
         // Lọc theo Bộ phận/Nhóm cho đơn văn phòng (2026-09-04) — song song ApplyProductionFilterAsync
         // bên dưới, dùng chung cho mọi endpoint danh sách (trước đây không tab nào lọc được theo 2 field
         // này dù OtFormListItemDto đã hiển thị sẵn). Vô hại với đơn theo chuyền (vẫn có DepartmentId).
-        private static IQueryable<OtForm> ApplyOfficeFilter(IQueryable<OtForm> query, int? groupId, int? departmentId)
+        private static IQueryable<OtForm> ApplyOfficeFilter(IQueryable<OtForm> query, int? groupId, int? departmentId, int? workshopId, bool? isProductionForm)
         {
             if (groupId.HasValue) query = query.Where(x => x.GroupId == groupId.Value);
             if (departmentId.HasValue) query = query.Where(x => x.DepartmentId == departmentId.Value);
+            if (workshopId.HasValue) query = query.Where(x => x.WorkshopId == workshopId.Value);
+            if (isProductionForm.HasValue) query = query.Where(x => x.IsProductionForm == isProductionForm.Value);
             return query;
         }
 
@@ -174,8 +180,8 @@ namespace Attendance.Application.Services
             await NotifyEligibleApproversAsync(otForm, step);
         }
 
-        // Notify the form's creator (not the approvers) when the form is rejected or employees are removed
-        // from it. Same background-queue rationale as QueueStepApprovalNotification: callers have already
+        // Notify the form's creator (not the approvers) when the form is approved or rejected, or employees
+        // are removed from it. Same background-queue rationale as QueueStepApprovalNotification: callers have already
         // saved the business change, so a slow/failed SMTP round-trip must not affect the response.
         private void QueueRejectedNotification(int otFormId)
         {
@@ -183,6 +189,15 @@ namespace Attendance.Application.Services
             {
                 var otFormService = sp.GetRequiredService<IOtFormService>();
                 await otFormService.SendRejectedNotificationAsync(otFormId);
+            });
+        }
+
+        private void QueueApprovedNotification(int otFormId)
+        {
+            _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
+            {
+                var otFormService = sp.GetRequiredService<IOtFormService>();
+                await otFormService.SendApprovedNotificationAsync(otFormId);
             });
         }
 
@@ -219,6 +234,29 @@ namespace Attendance.Application.Services
                 introVn: "Đơn tăng ca bạn đã lập đã bị từ chối. Vui lòng xem lý do bên dưới và lập đơn mới nếu cần.",
                 introJp: "作成された残業申請が却下されました。下記の理由をご確認のうえ、必要に応じて再度申請してください。",
                 detailBlock, RejectedAccentColor);
+        }
+
+        public async Task SendApprovedNotificationAsync(int otFormId)
+        {
+            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == otFormId);
+            if (otForm == null || otForm.Status != (int)OtFormStatus.Completed) return;
+
+            var approval = (await _unitOfWork.OtFormApprovalHistories.FindAsync(
+                x => x.OtFormId == otFormId && x.Action == (int)ApprovalAction.Approved))
+                .OrderByDescending(x => x.ActionAt).FirstOrDefault();
+            if (approval == null || approval.ApproverUserName == otForm.CreatedByUserName) return;
+
+            var detailBlock = BuildRequesterDetailRow("NGƯỜI DUYỆT CUỐI", "最終承認者",
+                WebUtility.HtmlEncode(approval.ApproverFullName ?? approval.ApproverUserName), ApprovedAccentColor, ApprovedBlockBackground);
+
+            await SendRequesterNotificationAsync(
+                otForm,
+                actorFullName: approval.ApproverFullName ?? approval.ApproverUserName,
+                subject: $"[ĐÃ DUYỆT] Đơn tăng ca #{otForm.Id} đã được duyệt - YevManagement",
+                statusLabelVn: "ĐƠN TĂNG CA ĐÃ ĐƯỢC DUYỆT", statusLabelJp: "残業申請が承認されました",
+                introVn: "Đơn tăng ca bạn đã lập đã được duyệt hoàn tất.",
+                introJp: "作成された残業申請の承認が完了しました。",
+                detailBlock, ApprovedAccentColor);
         }
 
         public async Task SendEmployeesRemovedNotificationAsync(int otFormId, List<int> employeeIds)
@@ -291,11 +329,13 @@ namespace Attendance.Application.Services
 
         private const string RejectedAccentColor = "#c0182b";
         private const string EmployeesRemovedAccentColor = "#b45309";
+        private const string ApprovedAccentColor = "#15803d";
+        private const string ApprovedBlockBackground = "#f0f9f3";
 
         // 1 full-width highlighted row (accent left border) of the outcome-specific block;
         // valueHtml must already be HTML-encoded.
-        private static string BuildRequesterDetailRow(string labelVn, string labelJp, string valueHtml, string accentColor) =>
-            $"<tr><td colspan=\"2\" style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:14px 16px; background-color:#fbf3f4; border-left:4px solid {accentColor}; border-bottom:1px solid #e7e9ee;\">" +
+        private static string BuildRequesterDetailRow(string labelVn, string labelJp, string valueHtml, string accentColor, string backgroundColor = "#fbf3f4") =>
+            $"<tr><td colspan=\"2\" style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:14px 16px; background-color:{backgroundColor}; border-left:4px solid {accentColor}; border-bottom:1px solid #e7e9ee;\">" +
             "<span style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:11px; letter-spacing:0.5px; color:#9aa2b1; mso-line-height-rule:exactly; line-height:16px;\">" +
             $"{labelVn}&nbsp;/&nbsp;{labelJp}</span>" +
             $"<span style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:15px; font-weight:bold; color:{accentColor}; margin-top:4px; mso-line-height-rule:exactly; line-height:22px;\">" +
@@ -304,12 +344,12 @@ namespace Attendance.Application.Services
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null)
         {
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && x.CreatedByUserName == userName);
             query = ApplyListFilters(query, fromDate, toDate, status);
-            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = ApplyOfficeFilter(query, groupId, departmentId, workshopId, isProductionForm);
             query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
             query = query.OrderByDescending(x => x.Id);
 
@@ -321,45 +361,36 @@ namespace Attendance.Application.Services
         // Đơn đang chờ CHÍNH người gọi duyệt — "bước đang chờ xử lý" của 1 đơn là bước Pending có
         // StepOrder NHỎ NHẤT (các bước Pending StepOrder lớn hơn chưa tới lượt, chưa hiển thị cho ai —
         // xem OtFormApprovalStep). 2026-08-07, Giai đoạn 3.1 — thay thế hoàn toàn UserApprovalScope cũ.
+        // A form is "mine" when I am a candidate of its current step: the Pending step with the smallest StepOrder.
+        // Resolved in SQL so history (completed forms) never loads; this also backs the sidebar badge poll.
         private async Task<List<int>> GetMyCurrentPendingFormIdsAsync(string approverUserName)
         {
             var actingUserNames = (await GetActiveDelegatorsAsync(approverUserName)).Keys.Append(approverUserName).ToList();
-            var myCandidates = await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
-                predicate: c => actingUserNames.Contains(c.UserName),
-                selector: c => new { c.OtFormApprovalStepId, c.OtFormApprovalStep.OtFormId });
+            var pendingSteps = _unitOfWork.OtFormApprovalSteps.GetQueryable()
+                .Where(s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Pending);
 
-            if (myCandidates.Count == 0) return new List<int>();
+            var formIds = await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
+                predicate: c => actingUserNames.Contains(c.UserName)
+                    && !c.OtFormApprovalStep.IsDeleted
+                    && c.OtFormApprovalStep.Status == (int)OtFormApprovalStepStatus.Pending
+                    && !pendingSteps.Any(s => s.OtFormId == c.OtFormApprovalStep.OtFormId && s.StepOrder < c.OtFormApprovalStep.StepOrder),
+                selector: c => c.OtFormApprovalStep.OtFormId);
 
-            var myFormIds = myCandidates.Select(c => c.OtFormId).Distinct().ToList();
-
-            var pendingSteps = await _unitOfWork.OtFormApprovalSteps.SelectAsync(
-                predicate: s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Pending && myFormIds.Contains(s.OtFormId),
-                selector: s => new { s.Id, s.OtFormId, s.StepOrder });
-
-            var currentStepIds = pendingSteps
-                .GroupBy(s => s.OtFormId)
-                .Select(g => g.OrderBy(s => s.StepOrder).First().Id)
-                .ToHashSet();
-
-            return myCandidates
-                .Where(c => currentStepIds.Contains(c.OtFormApprovalStepId))
-                .Select(c => c.OtFormId)
-                .Distinct()
-                .ToList();
+            return formIds.Distinct().ToList();
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetPendingApprovalsAsync(
             string approverUserName, int pageIndex, int pageSize,
             DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null)
         {
             var myCurrentFormIds = await GetMyCurrentPendingFormIdsAsync(approverUserName);
 
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && x.Status == (int)OtFormStatus.InApproval && myCurrentFormIds.Contains(x.Id));
             query = ApplyListFilters(query, fromDate, toDate, status);
-            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = ApplyOfficeFilter(query, groupId, departmentId, workshopId, isProductionForm);
             query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
             query = query.OrderBy(x => x.Date);
 
@@ -424,7 +455,7 @@ namespace Attendance.Application.Services
         public async Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null)
         {
             var actedFormIds = await _unitOfWork.OtFormApprovalHistories.SelectAsync(
                 h => h.ApproverUserName == userName, h => h.OtFormId);
@@ -433,7 +464,7 @@ namespace Attendance.Application.Services
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id));
             query = ApplyListFilters(query, fromDate, toDate, status);
-            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = ApplyOfficeFilter(query, groupId, departmentId, workshopId, isProductionForm);
             query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
             query = query.OrderByDescending(x => x.Id);
 
@@ -445,7 +476,7 @@ namespace Attendance.Application.Services
         public async Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null)
         {
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted);
             if (employee == null)
@@ -458,7 +489,7 @@ namespace Attendance.Application.Services
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted && distinctFormIds.Contains(x.Id));
             query = ApplyListFilters(query, fromDate, toDate, status);
-            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = ApplyOfficeFilter(query, groupId, departmentId, workshopId, isProductionForm);
             query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
             query = query.OrderByDescending(x => x.Id);
 
@@ -473,12 +504,12 @@ namespace Attendance.Application.Services
         public async Task<PagedResponse<OtFormListItemDto>> GetAllFormsAsync(
             int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
-            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null)
+            int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null)
         {
             var query = _unitOfWork.OtForms.GetQueryable(false, x => x.Group!, x => x.Department, x => x.OtCase)
                 .Where(x => !x.IsDeleted);
             query = ApplyListFilters(query, fromDate, toDate, status);
-            query = ApplyOfficeFilter(query, groupId, departmentId);
+            query = ApplyOfficeFilter(query, groupId, departmentId, workshopId, isProductionForm);
             query = await ApplyProductionFilterAsync(query, productionLineId, productionTeamId, productionShiftTeamId);
             query = query.OrderByDescending(x => x.Id);
 
@@ -538,7 +569,8 @@ namespace Attendance.Application.Services
 
             // Giai đoạn 5 (2026-08-27) — xem ghi chú ở ToListItemDto.IsEditable.
             var isEditable = otForm!.Status == (int)OtFormStatus.InApproval &&
-                (otForm.IsProductionForm || orderedSteps.All(s => s.Status != (int)OtFormApprovalStepStatus.Approved));
+                (otForm.IsProductionForm || orderedSteps.All(s =>
+                    s.Status != (int)OtFormApprovalStepStatus.Approved || s.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None));
 
             var mealSettings = await _attendanceSettingService.GetAsync();
 
@@ -557,6 +589,8 @@ namespace Attendance.Application.Services
                 ReasonNameJp = otForm.Reason.ReasonNameJp,
                 OtCaseId = otForm.OtCaseId,
                 OtCaseCode = otForm.OtCase.Code,
+                OtCaseDescription = otForm.OtCase.Description,
+                OtCaseDescriptionJp = otForm.OtCase.DescriptionJp,
                 StartTime = otForm.StartTime,
                 EndTime = otForm.EndTime,
                 SubReason = otForm.SubReason,
@@ -734,7 +768,7 @@ namespace Attendance.Application.Services
             // chặn tạo đơn nếu chuỗi không đủ (plan §3 quyết định #10) — đơn vẫn tạo, kẹt ở bước thiếu
             // candidate, ApprovalChainWarning phản ánh rõ cho FE hiển thị cảnh báo.
             var chainResult = await _jobTitleApprovalChainService.ResolveChainForCreationAsync(
-                creatorEmployee?.Id, groupId, request.DepartmentId, request.OtCaseId);
+                creatorEmployee?.Id, groupId, request.DepartmentId, group.WorkshopId, request.OtCaseId);
 
             var creatorSignatureImage = await ResolveCreatorSelfSignAsync(createdByUserName, chainResult);
 
@@ -743,6 +777,7 @@ namespace Attendance.Application.Services
                 GroupId = groupId,
                 IsProductionForm = false,
                 DepartmentId = request.DepartmentId,
+                WorkshopId = group.WorkshopId,
                 ReasonId = request.ReasonId,
                 OtCaseId = request.OtCaseId,
                 StartTime = request.StartTime,
@@ -782,6 +817,21 @@ namespace Attendance.Application.Services
         // OtFormController.Create, cấu hình theo Chức vụ/từng user) — không còn ép "phải là Line Leader
         // của Line trong đơn" như trước (2026-09-26). Người thường vẫn cần liên kết với 1 Employee để
         // suy luận chuỗi duyệt.
+        // A production form has no group of its own: its workshop is the one all participants belong to.
+        private async Task<int> ResolveProductionWorkshopIdAsync(List<int> employeeIds)
+        {
+            var workshopIds = (await _unitOfWork.Employees.SelectAsync(
+                predicate: x => employeeIds.Contains(x.Id) && x.Group != null,
+                selector: x => x.Group!.WorkshopId))
+                .Distinct()
+                .ToList();
+            if (workshopIds.Count == 0)
+                throw new DomainException("Không xác định được Xưởng của các nhân viên trong đơn.");
+            if (workshopIds.Count > 1)
+                throw new DomainException("Đơn theo chuyền chỉ được gồm nhân viên cùng một Xưởng.");
+            return workshopIds[0];
+        }
+
         private async Task<OtFormDto> CreateProductionFormAsync(
             string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
         {
@@ -845,8 +895,10 @@ namespace Attendance.Application.Services
             await EnsureNoOverlappingOtFormsAsync(
                 validatedEmployees, request.Date, employeeTimes, excludeFormId: null);
 
+            var workshopId = await ResolveProductionWorkshopIdAsync(employeeIds);
+
             var chainResult = await _jobTitleApprovalChainService.ResolveChainForProductionCreationAsync(
-                creatorEmployee?.Id, request.DepartmentId, employeeIds, request.OtCaseId);
+                creatorEmployee?.Id, request.DepartmentId, workshopId, employeeIds, request.OtCaseId);
 
             var creatorSignatureImage = await ResolveCreatorSelfSignAsync(createdByUserName, chainResult);
 
@@ -855,6 +907,7 @@ namespace Attendance.Application.Services
                 GroupId = null,
                 IsProductionForm = true,
                 DepartmentId = request.DepartmentId,
+                WorkshopId = workshopId,
                 ReasonId = request.ReasonId,
                 OtCaseId = request.OtCaseId,
                 StartTime = request.StartTime,
@@ -1121,9 +1174,21 @@ namespace Attendance.Application.Services
 
         public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request)
         {
-            var dates = await _unitOfWork.OtForms.SelectAsync(x => x.Id == id && !x.IsDeleted, x => x.Date);
-            using var dateLock = dates.Count > 0 ? await AcquireDateLockAsync(dates[0]) : null;
-            return await UpdateCoreAsync(id, currentUserName, currentFullName, isAdmin, request);
+            var dates = (await _unitOfWork.OtForms.SelectAsync(x => x.Id == id && !x.IsDeleted, x => x.Date)).ToList();
+            if (request.Header != null) dates.Add(request.Header.Date);
+
+            // Ascending order keeps two-date locks deadlock-free.
+            var locks = new List<IDisposable>();
+            try
+            {
+                foreach (var date in dates.Distinct().Order())
+                    locks.Add(await AcquireDateLockAsync(date));
+                return await UpdateCoreAsync(id, currentUserName, currentFullName, isAdmin, request);
+            }
+            finally
+            {
+                foreach (var gate in locks) gate.Dispose();
+            }
         }
 
         private async Task<OtFormDto> UpdateCoreAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request)
@@ -1135,23 +1200,16 @@ namespace Attendance.Application.Services
             if (otForm!.Status != (int)OtFormStatus.InApproval)
                 throw new DomainException("Đơn đã xử lý xong (hoàn tất/từ chối), không thể sửa.");
 
-            // Bước Pending hiện tại — dùng cho check quyền đơn theo chuyền bên dưới VÀ cho
-            // RemovedAtLevel khi loại nhân viên (2026-09-04, xem GetCurrentPendingStepAsync).
             var currentStep = await GetCurrentPendingStepAsync(id);
+            var isOfficeForm = !otForm.IsProductionForm;
+            Employee? creatorEmployee = null;
 
-            // Giai đoạn 5 (2026-08-27, theo yêu cầu người dùng — xem attendance-module.md §Cây chức vụ & Cây duyệt):
-            // quyền sửa đơn "theo chuyền" đi theo TỪNG BƯỚC duyệt — ai đang là candidate của bước
-            // Pending hiện tại thì sửa được (giống hệt ai được duyệt bước đó), KHÔNG còn giới hạn "chỉ
-            // người tạo, chỉ trước khi có bước nào Approved" như đơn theo Nhóm. Bước trước đã ký thì
-            // GIỮ NGUYÊN chữ ký cũ khi có sửa ở bước sau (đã chốt với người dùng — không huỷ/bắt ký
-            // lại), nhưng chính bước ĐÃ ký đó bị khoá lại — chỉ bước đang Pending mới sửa được (khớp
-            // đúng "Line Leader ký xong không sửa được nữa" nhưng Group Leader/Team Leader ở bước sau
-            // vẫn sửa được cho tới khi TỰ HỌ ký). Không có Admin bypass — cùng nguyên tắc với
-            // LoadFormAndCurrentStepAsync (Approve/Reject). Quyền này giờ ÁP DỤNG LUÔN cho thêm/xóa
-            // nhân viên (2026-09-04, đã gộp vào đây — không còn quyền riêng "candidate bước hiện tại
-            // cho mọi loại đơn" như 2 action AddEmployeeAsync/RemoveEmployeeCoreAsync cũ).
+            // Production forms: whoever holds the current pending step may edit (no Admin bypass), earlier
+            // signatures stay. Office forms: only the creator, until a Manager-level step has approved.
             if (otForm.IsProductionForm)
             {
+                if (request.Header != null)
+                    throw new DomainException("Đơn theo chuyền không sửa được thông tin chung của đơn.");
                 if (currentStep == null)
                     throw new DomainException("Đơn không còn bước duyệt nào đang chờ xử lý (dữ liệu không nhất quán, liên hệ Admin).");
                 if (!MatchStepActor(currentStep, currentUserName, await GetActiveDelegatorsAsync(currentUserName)).IsActor)
@@ -1162,19 +1220,31 @@ namespace Attendance.Application.Services
                 if (otForm.CreatedByUserName != currentUserName)
                     throw new DomainException("Bạn chỉ có thể sửa đơn do chính mình tạo.");
 
-                var hasApprovedStep = (await _unitOfWork.OtFormApprovalSteps.FindAsync(
-                    x => x.OtFormId == otForm.Id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved)).Count > 0;
-                if (hasApprovedStep)
-                    throw new DomainException("Đơn đã có bước duyệt được xử lý, không thể sửa nữa.");
+                var hasManagerLevelApproval = (await _unitOfWork.OtFormApprovalSteps.FindAsync(
+                    x => x.OtFormId == otForm.Id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved
+                        && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None)).Count > 0;
+                if (hasManagerLevelApproval)
+                    throw new DomainException("Đơn đã được cấp Manager trở lên duyệt, không thể sửa nữa.");
 
                 if (otForm.GroupId.HasValue)
-                    await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, otForm.GroupId.Value);
+                    creatorEmployee = await EnsureCanCreateOrEditForScopeAsync(currentUserName, isAdmin, otForm.GroupId.Value);
             }
 
-            // Mật khẩu cấp 2 bắt buộc khi lưu sửa đơn (2026-08-28, theo yêu cầu người dùng) — cùng cơ
-            // chế với ApproveAsync/RejectAsync. 1 LẦN cho toàn bộ thay đổi trong lượt lưu này (thêm/xóa/
-            // sửa giờ), không hỏi lại riêng cho từng thao tác như trước 2026-09-04.
             await _secondaryPasswordService.VerifyAsync(currentUserName, request.SecondaryPassword);
+
+            var header = request.Header;
+            var formDate = header?.Date ?? otForm.Date;
+            var formStart = header?.StartTime ?? otForm.StartTime;
+            var formEnd = header?.EndTime ?? otForm.EndTime;
+            if (formEnd <= formStart)
+                throw new DomainException("Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).");
+
+            Reason? newReason = null;
+            if (header != null)
+            {
+                newReason = await _unitOfWork.Reasons.FirstOrDefaultAsync(x => x.Id == header.ReasonId && !x.IsDeleted);
+                newReason.OrThrowNotFound("Lý do", header.ReasonId);
+            }
 
             var activeEmployees = otForm.OtFormEmployees.Where(x => !x.IsRemoved).ToList();
             var activeEmployeeIds = activeEmployees.Select(x => x.EmployeeId).ToHashSet();
@@ -1184,9 +1254,7 @@ namespace Attendance.Application.Services
             if (requestedEmployeeIds.Count != request.Employees.Count)
                 throw new DomainException("Danh sách nhân viên có mã trùng lặp.");
 
-            // Diff giữa danh sách active hiện có và danh sách gửi lên (2026-09-04 — gộp thêm/xóa NV vào
-            // đây, xem UpdateOtFormDto.RemovedEmployees). toAdd = NV hoàn toàn mới hoặc trước đó đã bị
-            // loại khỏi CHÍNH đơn này; toKeep = NV vẫn còn, chỉ có thể đổi thực tích.
+            // toAdd = brand-new or previously removed from this form; toKeep = still on the form.
             var removedEmployeeIds = request.RemovedEmployees.Select(x => x.EmployeeId).ToHashSet();
             if (removedEmployeeIds.Count != request.RemovedEmployees.Count)
                 throw new DomainException("Danh sách nhân viên bị loại có mã trùng lặp.");
@@ -1222,17 +1290,16 @@ namespace Attendance.Application.Services
             // Per-employee StartTime: null keeps the row's current value (new rows: the form's StartTime).
             var startTimeByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId,
-                x => x.StartTime ?? (activeByEmployeeId.TryGetValue(x.EmployeeId, out var row) ? row.StartTime : otForm.StartTime));
+                x => x.StartTime ?? (activeByEmployeeId.TryGetValue(x.EmployeeId, out var row) ? row.StartTime : formStart));
 
             foreach (var item in request.Employees)
             {
                 var code = employeeCodeById.GetValueOrDefault(item.EmployeeId, item.EmployeeId.ToString());
-                EnsureEmployeeTimeWithinForm(code, startTimeByEmployeeId[item.EmployeeId], item.EndTime, otForm.StartTime, otForm.EndTime);
+                EnsureEmployeeTimeWithinForm(code, startTimeByEmployeeId[item.EmployeeId], item.EndTime, formStart, formEnd);
             }
 
-            // Nhân viên MỚI thêm vào đơn theo chuyền phải cùng Line/Nhóm ca với NV còn lại của đơn
-            // (2026-09-04, theo yêu cầu người dùng — trước đó không hề kiểm tra). Đơn theo Nhóm giữ
-            // nguyên check GroupId cũ.
+            // Added employees of a production form must share a Line/shift team with the rest of the form;
+            // office forms keep every member inside the form's Group.
             Dictionary<int, ProductionEmployee> productionEmployeesByEmployeeId = new();
             if (otForm.IsProductionForm && toAddIds.Count > 0)
             {
@@ -1255,7 +1322,7 @@ namespace Attendance.Application.Services
                     EnsureAddedEmployeeMatchesFormScope(employee, productionEmployee, baselinePairs);
                 }
             }
-            else if (!otForm.IsProductionForm && otForm.GroupId.HasValue)
+            else if (isOfficeForm && otForm.GroupId.HasValue)
             {
                 foreach (var employeeId in toAddIds)
                 {
@@ -1267,52 +1334,63 @@ namespace Attendance.Application.Services
 
             var mealSettings = await _attendanceSettingService.GetAsync();
 
-            // Ăn uống bắt buộc cho MỌI đơn (2026-09-28) — đơn Theo chuyền hardcode DidEat=true bất kể
-            // FE gửi gì, xem ResolveDidEat. Đơn Theo Nhóm giữ nguyên field như FE gửi lên (chỉ đổi
-            // nhãn/default hiển thị "Ăn sau" ở FE).
+            // Meal is mandatory on every form: production forms force DidEat, office forms keep the request value.
             var didEatByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => ResolveDidEat(otForm.IsProductionForm, x.DidEat));
 
-            // Chặn CỨNG nếu giờ sửa lại khiến ai đó vượt giới hạn ngày — excludeFormId: otForm.Id vì
-            // các dòng OtFormEmployee hiện có của CHÍNH đơn này đang bị thay thế/sửa, không được cộng
-            // dồn ngược lại với giá trị cũ của chính nó (xem ValidateOtHourLimitsAsync). Áp dụng cho cả
-            // NV giữ nguyên lẫn NV mới thêm.
+            // excludeFormId: this form's own rows are being replaced, so they must not count against their new hours.
             var newHoursByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => CalculateOtHours(startTimeByEmployeeId[x.EmployeeId], x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
-            // One read serves the daily check, the month/year check and the "before" snapshot of added employees.
-            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, otForm.Date, mealSettings, excludeFormId: otForm.Id);
-            await ValidateOtHourLimitsAsync(otForm.Date, newHoursByEmployeeId, mealSettings, accumulated);
+            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, formDate, mealSettings, excludeFormId: otForm.Id);
+            await ValidateOtHourLimitsAsync(formDate, newHoursByEmployeeId, mealSettings, accumulated);
 
-            // The OT case is fixed after creation, so edited hours may not push a non-TH3 form past the month/year limit.
-            var currentOtCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otForm.OtCaseId);
-            if (currentOtCase?.Code != "TH3"
-                && await ExceedsMonthYearLimitAsync(newHoursByEmployeeId, mealSettings, accumulated))
-                throw new DomainException("Giờ sửa khiến có nhân viên vượt giới hạn OT tháng/năm, đơn này phải là TH3. Vui lòng giảm giờ hoặc tạo đơn TH3 mới.");
-
-            // NV mới cần thêm 2 check chỉ áp dụng lúc THÊM (không áp dụng cho NV giữ nguyên — ngày/giờ
-            // của họ không đổi nên đã được validate từ lúc tạo/lần thêm trước): trùng giờ với đơn khác,
-            // và snapshot lũy kế trước đó (MonthToDate/YearToDate).
-            var projectedByEmployee = accumulated;
-            if (toAddIds.Count > 0)
+            // Office forms re-derive the OT case from date + hours (as at creation); production forms keep
+            // theirs and may not be pushed past the month/year limit unless already TH3.
+            OtCase? newOtCase = null;
+            if (isOfficeForm)
             {
-                var toAddEmployees = toAddIds.Select(eid => employeesById[eid]).ToList();
-                var toAddTimes = request.Employees.Where(x => toAddIds.Contains(x.EmployeeId))
-                    .ToDictionary(x => x.EmployeeId, x => (startTimeByEmployeeId[x.EmployeeId], x.EndTime));
-                await EnsureNoOverlappingOtFormsAsync(toAddEmployees, otForm.Date, toAddTimes, excludeFormId: otForm.Id);
+                var exceedsTh3 = await ExceedsMonthYearLimitAsync(newHoursByEmployeeId, mealSettings, accumulated);
+                var expectedCode = exceedsTh3 ? "TH3" : (await IsNonWorkingDayAsync(formDate) ? "TH2" : "TH1");
+                newOtCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Code == expectedCode && !x.IsDeleted);
+                if (newOtCase == null)
+                    throw new DomainException($"Chưa cấu hình Trường hợp OT '{expectedCode}'.");
+            }
+            else
+            {
+                var currentOtCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otForm.OtCaseId);
+                if (currentOtCase?.Code != "TH3"
+                    && await ExceedsMonthYearLimitAsync(newHoursByEmployeeId, mealSettings, accumulated))
+                    throw new DomainException("Giờ sửa khiến có nhân viên vượt giới hạn OT tháng/năm, đơn này phải là TH3. Vui lòng giảm giờ hoặc tạo đơn TH3 mới.");
             }
 
-            // === Áp dụng: xóa trước, thêm sau, rồi sửa NV giữ nguyên — thứ tự không quan trọng vì mỗi
-            // nhóm động vào ID khác nhau, chỉ gộp lại đúng roster cuối để tính NumberOfEmployee/phiếu ăn. ===
+            // Office forms re-check every member (date/time may have moved); production only the added ones.
+            var overlapEmployeeIds = isOfficeForm ? requestedEmployeeIds : toAddIds;
+            if (overlapEmployeeIds.Count > 0)
+            {
+                var overlapEmployees = overlapEmployeeIds.Select(eid => employeesById[eid]).ToList();
+                var overlapTimes = request.Employees.Where(x => overlapEmployeeIds.Contains(x.EmployeeId))
+                    .ToDictionary(x => x.EmployeeId, x => (startTimeByEmployeeId[x.EmployeeId], x.EndTime));
+                await EnsureNoOverlappingOtFormsAsync(overlapEmployees, formDate, overlapTimes, excludeFormId: otForm.Id);
+            }
 
+            // === Apply: removals, additions, then kept rows (each touches different rows). ===
+
+            // The creator takes someone off their own form without a reason; anyone else must give one.
+            var isCreator = otForm.CreatedByUserName == currentUserName;
             foreach (var employeeId in removedEmployeeIds)
             {
                 var target = activeByEmployeeId[employeeId];
-                var reason = request.RemovedEmployees.First(x => x.EmployeeId == employeeId).Reason;
+                var reason = request.RemovedEmployees.First(x => x.EmployeeId == employeeId).Reason?.Trim();
+                if (string.IsNullOrEmpty(reason))
+                {
+                    if (!isCreator) throw new DomainException("Lý do loại nhân viên khỏi đơn không được để trống.");
+                    reason = null;
+                }
 
                 target.IsRemoved = true;
                 target.RemovedByUserName = currentUserName;
                 target.RemovedByFullName = currentFullName;
-                target.RemovedAtLevel = currentStep?.StepOrder;
+                target.RemovedAtLevel = isCreator ? null : currentStep?.StepOrder;
                 target.RemovedAt = TimeHelper.GetCurrentUtcTime();
                 target.RemoveReason = reason;
                 _unitOfWork.OtFormEmployees.Update(target);
@@ -1329,10 +1407,9 @@ namespace Attendance.Application.Services
                 var addRequest = request.Employees.First(x => x.EmployeeId == employeeId);
                 var productionEmployee = productionEmployeesByEmployeeId.GetValueOrDefault(employeeId);
                 var (_, projectedMonthBefore, projectedYearBefore) =
-                    projectedByEmployee.TryGetValue(employeeId, out var projected) ? projected : (0m, 0m, 0m);
+                    accumulated.TryGetValue(employeeId, out var projected) ? projected : (0m, 0m, 0m);
 
-                // NV trước đó đã bị loại khỏi CHÍNH đơn này (IsRemoved=true) được thêm lại bằng cách tái
-                // dùng đúng dòng cũ (giữ nguyên khoá chính OtFormId+EmployeeId), không tạo dòng mới.
+                // Re-adding someone removed from this same form reuses the old row (keeps the OtFormId+EmployeeId key).
                 var existingRow = otForm.OtFormEmployees.FirstOrDefault(x => x.EmployeeId == employeeId);
                 OtFormEmployee affectedRow;
                 if (existingRow != null)
@@ -1348,6 +1425,8 @@ namespace Attendance.Application.Services
                     existingRow.DidEat = didEatByEmployeeId[employeeId];
                     existingRow.NoteVn = addRequest.NoteVn;
                     existingRow.NoteJp = addRequest.NoteJp;
+                    existingRow.MonthToDate = projectedMonthBefore;
+                    existingRow.YearToDate = projectedYearBefore;
                     _unitOfWork.OtFormEmployees.Update(existingRow);
                     affectedRow = existingRow;
                 }
@@ -1383,7 +1462,6 @@ namespace Attendance.Application.Services
                 var existing = activeByEmployeeId[item.EmployeeId];
                 var code = employeeCodeById.GetValueOrDefault(item.EmployeeId, item.EmployeeId.ToString());
 
-                // Log lại từng field thực sự đổi (2026-08-28, theo yêu cầu người dùng — xem OtFormEditLog).
                 var newStartTime = startTimeByEmployeeId[item.EmployeeId];
                 if (existing.StartTime != newStartTime)
                     await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.TimeChanged,
@@ -1407,23 +1485,170 @@ namespace Attendance.Application.Services
                 existing.DidEat = resolvedDidEat;
                 existing.NoteVn = item.NoteVn;
                 existing.NoteJp = item.NoteJp;
+                // Office forms: the "before" accumulation follows the (possibly new) date; production keeps its snapshot.
+                if (isOfficeForm && accumulated.TryGetValue(item.EmployeeId, out var before))
+                {
+                    existing.MonthToDate = before.Month;
+                    existing.YearToDate = before.Year;
+                }
                 _unitOfWork.OtFormEmployees.Update(existing);
             }
 
             var finalActiveEmployees = activeEmployees.Where(x => toKeepIds.Contains(x.EmployeeId))
                 .Concat(addedOrReactivatedRows)
                 .ToList();
+
+            if (header != null)
+                await ApplyOfficeHeaderAsync(otForm, header, newReason!, currentUserName, currentFullName);
+
+            var chainCompleted = false;
+            if (newOtCase != null && newOtCase.Id != otForm.OtCaseId)
+            {
+                var oldCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otForm.OtCaseId);
+                await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.FormInfoChanged,
+                    null, null, "OtCase", oldCase?.Code, newOtCase.Code);
+                otForm.OtCaseId = newOtCase.Id;
+                chainCompleted = await ReconcileApprovalChainAsync(otForm, creatorEmployee?.Id);
+            }
+
             await RecalculateMealTicketCountsAsync(otForm.Id, finalActiveEmployees, mealSettings);
 
             otForm.NumberOfEmployee = finalActiveEmployees.Count;
+            if (chainCompleted)
+            {
+                otForm.Status = (int)OtFormStatus.Completed;
+                await AccumulateEmployeeHoursAsync(otForm, finalActiveEmployees);
+            }
             _unitOfWork.OtForms.Update(otForm);
 
             await _unitOfWork.SaveChangesAsync();
+
+            if (chainCompleted) QueueApprovedNotification(otForm.Id);
 
             // Skipped in the background job when the remover is the form's own creator.
             QueueEmployeesRemovedNotification(otForm.Id, removedEmployeeIds.ToList());
 
             return await GetByIdAsync(otForm.Id);
+        }
+
+        // Applies the editable general info of an office form and logs each field that really changed.
+        private async Task ApplyOfficeHeaderAsync(
+            OtForm otForm, UpdateOtFormHeaderDto header, Reason newReason, string userName, string? fullName)
+        {
+            Task Log(string field, string? oldValue, string? newValue) =>
+                oldValue == newValue
+                    ? Task.CompletedTask
+                    : LogEditAsync(otForm.Id, userName, fullName, OtFormEditActionType.FormInfoChanged, null, null, field, oldValue, newValue);
+
+            await Log("Date", otForm.Date.ToString("dd/MM/yyyy"), header.Date.ToString("dd/MM/yyyy"));
+            await Log("FormStartTime", otForm.StartTime.ToString("HH:mm"), header.StartTime.ToString("HH:mm"));
+            await Log("FormEndTime", otForm.EndTime.ToString("HH:mm"), header.EndTime.ToString("HH:mm"));
+
+            var newSubReason = string.IsNullOrWhiteSpace(header.SubReason) ? null : header.SubReason.Trim();
+            if (otForm.ReasonId != newReason.Id)
+            {
+                var oldReason = await _unitOfWork.Reasons.FirstOrDefaultAsync(x => x.Id == otForm.ReasonId);
+                await Log("Reason", oldReason?.ReasonNameVn, newReason.ReasonNameVn);
+            }
+            await Log("SubReason", otForm.SubReason, newSubReason);
+
+            otForm.Date = header.Date;
+            otForm.StartTime = header.StartTime;
+            otForm.EndTime = header.EndTime;
+            otForm.ReasonId = newReason.Id;
+            otForm.SubReason = newSubReason;
+            otForm.TotalHour = Math.Round((decimal)(header.EndTime - header.StartTime).TotalHours, 2);
+
+            var processPart = await _unitOfWork.ProcessParts.FirstOrDefaultAsync(x => x.OtFormId == otForm.Id);
+            if (processPart == null || header.ProcessPart == null) return;
+
+            var requested = header.ProcessPart;
+            await Log("MilkCount", processPart.MilkCount.ToString(), requested.MilkCount.ToString());
+            await Log("IsTransportation", processPart.IsTransportation ? "Có" : "Không", requested.IsTransportation ? "Có" : "Không");
+            await Log("IsUseCopyRoom", processPart.IsUseCopyRoom ? "Có" : "Không", requested.IsUseCopyRoom ? "Có" : "Không");
+            await Log("AnotherSuggestionVn", processPart.AnotherSuggestionVn, requested.AnotherSuggestionVn);
+            await Log("AnotherSuggestionJp", processPart.AnotherSuggestionJp, requested.AnotherSuggestionJp);
+
+            processPart.MilkCount = requested.MilkCount;
+            processPart.IsTransportation = requested.IsTransportation;
+            processPart.IsUseCopyRoom = requested.IsUseCopyRoom;
+            processPart.AnotherSuggestionVn = requested.AnotherSuggestionVn;
+            processPart.AnotherSuggestionJp = requested.AnotherSuggestionJp;
+            _unitOfWork.ProcessParts.Update(processPart);
+        }
+
+        // Re-resolves the chain after the OT case (hence the required approval level) changed. Approved steps
+        // are kept as they are, pending ones are refreshed/added/dropped. True = nothing is left to approve.
+        private async Task<bool> ReconcileApprovalChainAsync(OtForm otForm, int? creatorEmployeeId)
+        {
+            var chain = await _jobTitleApprovalChainService.ResolveChainForCreationAsync(
+                creatorEmployeeId, otForm.GroupId!.Value, otForm.DepartmentId, otForm.WorkshopId, otForm.OtCaseId);
+            otForm.ApprovalChainWarning = chain.Warning;
+
+            // No configured chain: leave the existing steps instead of stranding the form without any.
+            if (chain.Steps.Count == 0 && !chain.IsComplete) return false;
+
+            var existingSteps = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
+                x => x.OtFormId == otForm.Id && !x.IsDeleted, x => x.Candidates)).ToList();
+            var stepByJobTitleId = existingSteps.GroupBy(x => x.JobTitleId).ToDictionary(g => g.Key, g => g.OrderBy(x => x.StepOrder).First());
+
+            var keptStepIds = new HashSet<int>();
+            var pendingCount = 0;
+            foreach (var step in chain.Steps)
+            {
+                if (stepByJobTitleId.TryGetValue(step.JobTitleId, out var row))
+                {
+                    keptStepIds.Add(row.Id);
+                    row.StepOrder = step.StepOrder;
+                    if (row.Status == (int)OtFormApprovalStepStatus.Approved)
+                    {
+                        _unitOfWork.OtFormApprovalSteps.Update(row);
+                        continue;
+                    }
+
+                    row.RequiresSignatureSnapshot = step.RequiresSignature;
+                    row.IsResponsibleSnapshot = step.IsResponsible;
+                    row.TerminalLevelSnapshot = step.TerminalLevel;
+                    _unitOfWork.OtFormApprovalSteps.Update(row);
+                    foreach (var candidate in row.Candidates) _unitOfWork.OtFormApprovalStepCandidates.Delete(candidate);
+                    foreach (var candidate in step.Candidates)
+                        await _unitOfWork.OtFormApprovalStepCandidates.AddAsync(new OtFormApprovalStepCandidate
+                        {
+                            OtFormApprovalStepId = row.Id, EmployeeId = candidate.EmployeeId, UserName = candidate.UserName, FullName = candidate.FullName
+                        });
+                    pendingCount++;
+                    continue;
+                }
+
+                var newStep = new OtFormApprovalStep
+                {
+                    OtForm = otForm,
+                    StepOrder = step.StepOrder,
+                    JobTitleId = step.JobTitleId,
+                    JobTitleCodeSnapshot = step.JobTitleCode,
+                    JobTitleNameSnapshot = step.JobTitleName,
+                    RequiresSignatureSnapshot = step.RequiresSignature,
+                    IsResponsibleSnapshot = step.IsResponsible,
+                    TerminalLevelSnapshot = step.TerminalLevel,
+                    Status = (int)OtFormApprovalStepStatus.Pending,
+                    IsDeleted = false
+                };
+                await _unitOfWork.OtFormApprovalSteps.AddAsync(newStep);
+                foreach (var candidate in step.Candidates)
+                    await _unitOfWork.OtFormApprovalStepCandidates.AddAsync(new OtFormApprovalStepCandidate
+                    {
+                        OtFormApprovalStep = newStep, EmployeeId = candidate.EmployeeId, UserName = candidate.UserName, FullName = candidate.FullName
+                    });
+                pendingCount++;
+            }
+
+            foreach (var row in existingSteps.Where(x => !keptStepIds.Contains(x.Id) && x.Status == (int)OtFormApprovalStepStatus.Pending))
+            {
+                row.IsDeleted = true;
+                _unitOfWork.OtFormApprovalSteps.Update(row);
+            }
+
+            return pendingCount == 0;
         }
 
         // Nhân viên MỚI thêm vào đơn theo chuyền phải cùng (Line, Nhóm ca) với ít nhất 1 nhân viên còn
@@ -1544,8 +1769,10 @@ namespace Attendance.Application.Services
             await _unitOfWork.SaveChangesAsync();
 
             // Còn bước tiếp theo — gửi mail cho candidate của bước Pending có StepOrder nhỏ nhất còn
-            // lại. Không tự thông báo gì thêm nếu đơn vừa Completed.
-            if (remainingPending.Count > 0)
+            // lại; hết bước thì báo người lập đơn đã duyệt xong.
+            if (remainingPending.Count == 0)
+                QueueApprovedNotification(otForm.Id);
+            else
             {
                 var nextStepId = remainingPending.OrderBy(x => x.StepOrder).First().Id;
                 var nextStepWithCandidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
@@ -2024,7 +2251,7 @@ namespace Attendance.Application.Services
                     .ToList();
 
                 throw new DomainException(
-                    $"Không thể tạo đơn — các nhân viên sau đã có đơn tăng ca trùng giờ trong ngày {date:dd/MM/yyyy}: " +
+                    $"Không thể lưu đơn — các nhân viên sau đã có đơn tăng ca trùng giờ trong ngày {date:dd/MM/yyyy}: " +
                     string.Join(", ", conflicts) + ".");
             }
         }
@@ -2326,12 +2553,12 @@ namespace Attendance.Application.Services
         // RunDailyBatchSweepAsync. Trả kèm DepartmentId/TerminalLevel để nhóm batch đúng phạm vi: cấp
         // DepartmentManager gom theo từng Phòng ban, 2 cấp còn lại gom company-wide (1 batch/cấp/ngày,
         // vì candidate ở 2 cấp này vốn không lọc theo Department — xem JobTitleApprovalChainService).
-        private async Task<List<(int OtFormId, int DepartmentId, int TerminalLevel)>> GetNewFormsAtManagerStepAsync()
+        private async Task<List<(int OtFormId, int DepartmentId, int WorkshopId, int TerminalLevel)>> GetNewFormsAtManagerStepAsync()
         {
             var candidateForms = await _unitOfWork.OtForms.SelectAsync(
                 predicate: x => !x.IsDeleted && x.OtFormBatchId == null && x.Status == (int)OtFormStatus.InApproval,
-                selector: x => new { x.Id, x.DepartmentId });
-            if (candidateForms.Count == 0) return new List<(int, int, int)>();
+                selector: x => new { x.Id, x.DepartmentId, x.WorkshopId });
+            if (candidateForms.Count == 0) return new List<(int, int, int, int)>();
 
             var formIds = candidateForms.Select(x => x.Id).ToHashSet();
             var pendingSteps = await _unitOfWork.OtFormApprovalSteps.SelectAsync(
@@ -2346,7 +2573,7 @@ namespace Attendance.Application.Services
 
             return candidateForms
                 .Where(f => levelByFormId.ContainsKey(f.Id))
-                .Select(f => (f.Id, f.DepartmentId, levelByFormId[f.Id]))
+                .Select(f => (f.Id, f.DepartmentId, f.WorkshopId, levelByFormId[f.Id]))
                 .ToList();
         }
 
@@ -2357,16 +2584,23 @@ namespace Attendance.Application.Services
             if (batch.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager)
             {
                 var department = batch.Department ?? await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == batch.DepartmentId!.Value);
-                return (department?.DepartmentNameVn ?? "", department?.DepartmentNameJp);
+                var workshop = batch.Workshop ?? (batch.WorkshopId.HasValue ? await _unitOfWork.Workshops.GetByIdAsync(batch.WorkshopId.Value) : null);
+                return (JoinWithWorkshop(department?.DepartmentNameVn, workshop?.WorkshopNameVn),
+                    department?.DepartmentNameJp == null ? null : JoinWithWorkshop(department.DepartmentNameJp, workshop?.WorkshopNameJp ?? workshop?.WorkshopNameVn));
             }
 
             var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.TerminalLevel == batch.TerminalLevel && !x.IsDeleted);
             return (jobTitle?.Name ?? "", null);
         }
 
+        private const int ScopeKeyFactor = ScopeKey.Factor;
+
+        private static string JoinWithWorkshop(string? name, string? workshopName) =>
+            string.IsNullOrEmpty(workshopName) ? name ?? "" : $"{name} · {workshopName}";
+
         public async Task<PagedResponse<OtFormBatchListItemDto>> GetBatchesAsync(string userName, bool isAdmin, int pageIndex, int pageSize)
         {
-            var query = _unitOfWork.OtFormBatches.GetQueryable(false, x => x.Department!);
+            var query = _unitOfWork.OtFormBatches.GetQueryable(false, x => x.Department!, x => x.Workshop!);
 
             if (!isAdmin)
             {
@@ -2377,18 +2611,19 @@ namespace Attendance.Application.Services
                 var actingUserNames = (await GetActiveDelegatorsAsync(userName)).Keys.Append(userName).ToList();
                 var myCandidacies = (await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
                     predicate: c => actingUserNames.Contains(c.UserName) && c.OtFormApprovalStep.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None,
-                    selector: c => new { c.OtFormApprovalStep.TerminalLevelSnapshot, c.OtFormApprovalStep.OtForm.DepartmentId }))
+                    selector: c => new { c.OtFormApprovalStep.TerminalLevelSnapshot, c.OtFormApprovalStep.OtForm.DepartmentId, c.OtFormApprovalStep.OtForm.WorkshopId }))
                     .Distinct().ToList();
 
-                var myDepartmentManagerDeptIds = myCandidacies
+                // (Department, Workshop) pair folded into one int so EF can translate Contains.
+                var myDepartmentManagerScopeKeys = myCandidacies
                     .Where(x => x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.DepartmentManager)
-                    .Select(x => x.DepartmentId).ToHashSet();
+                    .Select(x => x.DepartmentId * ScopeKeyFactor + x.WorkshopId).ToHashSet();
                 var myCompanyWideLevels = myCandidacies
                     .Where(x => x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.DepartmentManager)
                     .Select(x => x.TerminalLevelSnapshot).ToHashSet();
 
                 query = query.Where(x =>
-                    (x.DepartmentId != null && myDepartmentManagerDeptIds.Contains(x.DepartmentId.Value))
+                    (x.DepartmentId != null && x.WorkshopId != null && myDepartmentManagerScopeKeys.Contains(x.DepartmentId.Value * ScopeKeyFactor + x.WorkshopId.Value))
                     || (x.DepartmentId == null && myCompanyWideLevels.Contains(x.TerminalLevel)));
             }
 
@@ -2399,8 +2634,9 @@ namespace Attendance.Application.Services
                 Id = x.Id,
                 TerminalLevel = x.TerminalLevel,
                 DepartmentId = x.DepartmentId,
-                ScopeNameVn = x.Department != null ? x.Department.DepartmentNameVn : "",
-                ScopeNameJp = x.Department != null ? x.Department.DepartmentNameJp : null,
+                ScopeNameVn = x.Department != null ? x.Department.DepartmentNameVn + (x.Workshop != null ? " · " + x.Workshop.WorkshopNameVn : "") : "",
+                ScopeNameJp = x.Department != null && x.Department.DepartmentNameJp != null
+                    ? x.Department.DepartmentNameJp + (x.Workshop != null ? " · " + (x.Workshop.WorkshopNameJp ?? x.Workshop.WorkshopNameVn) : "") : null,
                 BatchDate = x.BatchDate,
                 Status = x.Status,
                 FormCount = x.OtForms.Count(f => !f.IsDeleted),
@@ -2434,7 +2670,7 @@ namespace Attendance.Application.Services
 
         public async Task<OtFormBatchDto> GetBatchByIdAsync(int id)
         {
-            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == id, x => x.Department!);
+            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == id, x => x.Department!, x => x.Workshop!);
             batch.OrThrowNotFound("Đơn tổng", id);
             return await BuildBatchDtoAsync(batch!);
         }
@@ -2492,6 +2728,8 @@ namespace Attendance.Application.Services
                     ReasonNameVn = f.Reason.ReasonNameVn,
                     ReasonNameJp = f.Reason.ReasonNameJp,
                     OtCaseCode = f.OtCase.Code,
+                    OtCaseDescription = f.OtCase.Description,
+                    OtCaseDescriptionJp = f.OtCase.DescriptionJp,
                     Date = f.Date,
                     StartTime = f.StartTime,
                     EndTime = f.EndTime,
@@ -2547,7 +2785,7 @@ namespace Attendance.Application.Services
 
         public async Task<OtFormBatchDto> ProcessBatchAsync(int batchId, string approverUserName, string? approverFullName, ProcessOtFormBatchDto request)
         {
-            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == batchId, x => x.Department!);
+            var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == batchId, x => x.Department!, x => x.Workshop!);
             batch.OrThrowNotFound("Đơn tổng", batchId);
 
             if (batch!.Status != (int)OtFormBatchStatus.Pending)
@@ -2794,7 +3032,8 @@ namespace Attendance.Application.Services
                 // đại diện "null" trong GroupBy, không ảnh hưởng gì ngoài phạm vi vòng lặp này).
                 var groups = newFormRows.GroupBy(r => (
                     TerminalLevel: r.TerminalLevel,
-                    DepartmentId: r.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager ? r.DepartmentId : (int?)null));
+                    DepartmentId: r.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager ? r.DepartmentId : (int?)null,
+                    WorkshopId: r.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager ? r.WorkshopId : (int?)null));
 
                 foreach (var group in groups)
                 {
@@ -2802,6 +3041,7 @@ namespace Attendance.Application.Services
                     {
                         TerminalLevel = group.Key.TerminalLevel,
                         DepartmentId = group.Key.DepartmentId,
+                        WorkshopId = group.Key.WorkshopId,
                         BatchDate = today,
                         Status = (int)OtFormBatchStatus.Pending,
                         CreatedAt = now

@@ -63,6 +63,8 @@ export interface GetOtFormListParams {
     productionLineId?: number;
     productionTeamId?: number;
     productionShiftTeamId?: number;
+    workshopId?: number;
+    isProductionForm?: boolean;
 }
 
 function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListParams) {
@@ -77,6 +79,8 @@ function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListPa
     if (params?.productionLineId !== undefined) query.set("ProductionLineId", String(params.productionLineId));
     if (params?.productionTeamId !== undefined) query.set("ProductionTeamId", String(params.productionTeamId));
     if (params?.productionShiftTeamId !== undefined) query.set("ProductionShiftTeamId", String(params.productionShiftTeamId));
+    if (params?.workshopId !== undefined) query.set("WorkshopId", String(params.workshopId));
+    if (params?.isProductionForm !== undefined) query.set("IsProductionForm", String(params.isProductionForm));
 }
 
 export const OtFormApi = {

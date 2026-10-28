@@ -20,6 +20,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -39,7 +40,7 @@ export default function FormDefinitionDetail({ id }: FormDefinitionDetailProps) 
 
     const [formDefinition, setFormDefinition] = useState<FormDefinitionDto | null>(null);
     const [formCategories, setFormCategories] = useState<FormCategoryDto[]>([]);
-    const [activeTab, setActiveTab] = useState<TabKey>("fields");
+    const [activeTab, setActiveTab] = usePersistedTab<TabKey>(`workflow-form-definition-tab-${id}`, ["fields", "conditions", "accesses", "routes"], "fields");
     const [editFormOpen, setEditFormOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);

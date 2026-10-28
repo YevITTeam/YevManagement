@@ -11,14 +11,16 @@ namespace Attendance.Application.Services
     {
         public GroupService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
 
-        public async Task<PagedResponse<GroupDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword)
+        public async Task<PagedResponse<GroupDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword, int? workshopId = null)
         {
-            var query = _unitOfWork.Groups.GetQueryable(false, x => x.Department).Where(x => !x.IsDeleted);
+            var query = _unitOfWork.Groups.GetQueryable(false, x => x.Department, x => x.Workshop).Where(x => !x.IsDeleted);
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {
                 query = query.Where(x => x.GroupCode.Contains(keyword) || x.GroupNameVn.Contains(keyword));
             }
+
+            if (workshopId.HasValue) query = query.Where(x => x.WorkshopId == workshopId.Value);
 
             return await _unitOfWork.Groups.ToPagedResponseAsync(
                 query.OrderBy(x => x.GroupCode),
@@ -31,7 +33,9 @@ namespace Attendance.Application.Services
                     GroupNameVn = x.GroupNameVn,
                     GroupNameJp = x.GroupNameJp,
                     DepartmentId = x.DepartmentId,
-                    DepartmentNameVn = x.Department.DepartmentNameVn
+                    DepartmentNameVn = x.Department.DepartmentNameVn,
+                    WorkshopId = x.WorkshopId,
+                    WorkshopNameVn = x.Workshop.WorkshopNameVn
                 }
             );
         }
@@ -47,16 +51,18 @@ namespace Attendance.Application.Services
                     GroupNameVn = x.GroupNameVn,
                     GroupNameJp = x.GroupNameJp,
                     DepartmentId = x.DepartmentId,
-                    DepartmentNameVn = x.Department.DepartmentNameVn
+                    DepartmentNameVn = x.Department.DepartmentNameVn,
+                    WorkshopId = x.WorkshopId,
+                    WorkshopNameVn = x.Workshop.WorkshopNameVn
                 }
             );
             return groups.OrderBy(x => x.GroupNameVn).ToList();
         }
 
-        public async Task<List<GroupDto>> GetByDepartmentIdAsync(int departmentId)
+        public async Task<List<GroupDto>> GetByDepartmentIdAsync(int departmentId, int? workshopId = null)
         {
             var groups = await _unitOfWork.Groups.SelectAsync(
-                predicate: x => !x.IsDeleted && x.DepartmentId == departmentId,
+                predicate: x => !x.IsDeleted && x.DepartmentId == departmentId && (workshopId == null || x.WorkshopId == workshopId),
                 selector: x => new GroupDto
                 {
                     Id = x.Id,
@@ -64,7 +70,9 @@ namespace Attendance.Application.Services
                     GroupNameVn = x.GroupNameVn,
                     GroupNameJp = x.GroupNameJp,
                     DepartmentId = x.DepartmentId,
-                    DepartmentNameVn = x.Department.DepartmentNameVn
+                    DepartmentNameVn = x.Department.DepartmentNameVn,
+                    WorkshopId = x.WorkshopId,
+                    WorkshopNameVn = x.Workshop.WorkshopNameVn
                 }
             );
             return groups.OrderBy(x => x.GroupNameVn).ToList();
@@ -72,7 +80,7 @@ namespace Attendance.Application.Services
 
         public async Task<GroupDto> GetByIdAsync(int id)
         {
-            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == id, x => x.Department);
+            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == id, x => x.Department, x => x.Workshop);
             group.OrThrowNotFound("Nhóm", id);
 
             return new GroupDto
@@ -82,7 +90,9 @@ namespace Attendance.Application.Services
                 GroupNameVn = group.GroupNameVn,
                 GroupNameJp = group.GroupNameJp,
                 DepartmentId = group.DepartmentId,
-                DepartmentNameVn = group.Department.DepartmentNameVn
+                DepartmentNameVn = group.Department.DepartmentNameVn,
+                WorkshopId = group.WorkshopId,
+                WorkshopNameVn = group.Workshop.WorkshopNameVn
             };
         }
 
@@ -90,6 +100,9 @@ namespace Attendance.Application.Services
         {
             var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == request.DepartmentId && !x.IsDeleted);
             department.OrThrowNotFound("Bộ phận", request.DepartmentId);
+
+            var workshop = await _unitOfWork.Workshops.FirstOrDefaultAsync(x => x.Id == request.WorkshopId && !x.IsDeleted);
+            workshop.OrThrowNotFound("Xưởng", request.WorkshopId);
 
             var exists = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.GroupCode == request.GroupCode && !x.IsDeleted);
             if (exists != null) throw new DomainException($"Mã nhóm '{request.GroupCode}' đã tồn tại.");
@@ -100,6 +113,7 @@ namespace Attendance.Application.Services
                 GroupNameVn = request.GroupNameVn,
                 GroupNameJp = request.GroupNameJp,
                 DepartmentId = request.DepartmentId,
+                WorkshopId = request.WorkshopId,
                 IsDeleted = false
             };
 
@@ -126,10 +140,17 @@ namespace Attendance.Application.Services
                 department.OrThrowNotFound("Bộ phận", request.DepartmentId);
             }
 
+            if (group.WorkshopId != request.WorkshopId)
+            {
+                var workshop = await _unitOfWork.Workshops.FirstOrDefaultAsync(x => x.Id == request.WorkshopId && !x.IsDeleted);
+                workshop.OrThrowNotFound("Xưởng", request.WorkshopId);
+            }
+
             group.GroupCode = request.GroupCode;
             group.GroupNameVn = request.GroupNameVn;
             group.GroupNameJp = request.GroupNameJp;
             group.DepartmentId = request.DepartmentId;
+            group.WorkshopId = request.WorkshopId;
 
             _unitOfWork.Groups.Update(group);
             await _unitOfWork.SaveChangesAsync();

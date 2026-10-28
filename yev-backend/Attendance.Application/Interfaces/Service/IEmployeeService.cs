@@ -1,5 +1,6 @@
 using Attendance.Application.Dtos.EmployeeAccumulationHistories;
 using Attendance.Application.Dtos.Employees;
+using Attendance.Domain.Entities;
 using Shared.Application.Wrapper;
 
 namespace Attendance.Application.Interfaces.Service
@@ -9,7 +10,7 @@ namespace Attendance.Application.Interfaces.Service
         // Không phải Admin: kết quả tự giới hạn theo phạm vi Cây chức vụ của CHÍNH người gọi (giống
         // GetInScopeAsync bên dưới — Employee.View cấp qua Chức vụ vốn TOÀN CÔNG TY, không tự scope,
         // nên phải chặn lại ở đây để 1 Staff bất kỳ không xem được lũy kế/giới hạn OT của cả công ty).
-        Task<PagedResponse<EmployeeDto>> GetPagedAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId);
+        Task<PagedResponse<EmployeeDto>> GetPagedAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId, int? workshopId);
 
         // Nhân viên trong phạm vi quản lý của người GIỮ QUYỀN DUYỆT (không nhất thiết có Employee.View)
         // — dùng cho màn "Lũy kế nhân viên" tra cứu. Xem chi tiết phạm vi ở EmployeeService.ResolveCallerScopeAsync.
@@ -22,15 +23,22 @@ namespace Attendance.Application.Interfaces.Service
         // (quyền Attendance.EmployeeAccumulation.Update, scope kiểm ở service).
         Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryForManageAsync(string callerUserName, bool isAdmin, int employeeId, int year);
 
-        Task<EmployeeAccumulationHistoryYearDto> UpdateAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, UpdateEmployeeAccumulationDto request);
+        // Overview dashboard: Admin or any title above plain staff (TerminalLevel != None).
+        Task<bool> CanViewOverviewAsync(string callerUserName, bool isAdmin);
 
-        // Không phải Admin: cũng tự giới hạn theo phạm vi Cây chức vụ của người gọi, cùng lý do với
-        // GetPagedAsync ở trên (endpoint "/all" trả nguyên DTO có lũy kế/giới hạn OT, không được để hở).
-        Task<List<EmployeeDto>> GetAllActiveAsync(string callerUserName, bool isAdmin);
+        // Active employees in the caller's scope (Admin: everyone), optionally limited to one workshop. Not materialized:
+        // callers compose it as a subquery so no id list is ever loaded.
+        Task<IQueryable<Employee>> GetOverviewEmployeeQueryAsync(string callerUserName, bool isAdmin, int? workshopId);
+
+        // Giờ OT từng ngày của 1 tháng (chỉ các ngày có đơn Hoàn tất), cùng phạm vi với 2 hàm lịch sử ở trên.
+        Task<List<EmployeeAccumulationDayDto>> GetAccumulationDaysAsync(string callerUserName, bool isAdmin, int employeeId, int year, int month);
+        Task<List<EmployeeAccumulationDayDto>> GetAccumulationDaysForManageAsync(string callerUserName, bool isAdmin, int employeeId, int year, int month);
+
+        Task<EmployeeAccumulationHistoryYearDto> UpdateAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, UpdateEmployeeAccumulationDto request);
 
         // Phạm vi xem nhân viên của người gọi (Admin/company-wide hay giới hạn theo Phòng ban/Nhóm nào)
         // — FE dùng để thu hẹp dropdown lọc ở EmployeeList.tsx, KHÔNG dùng để enforce bảo mật (đã enforce
-        // ở GetPagedAsync/GetAllActiveAsync rồi, đây chỉ phục vụ UX).
+        // ở GetPagedAsync rồi, đây chỉ phục vụ UX).
         Task<EmployeeScopeDto> GetMyScopeAsync(string callerUserName, bool isAdmin);
 
         // targetDate = ngày trên đơn OT đang tạo — Dự kiến (ProjectedMonthToDate/YearToDate) scope theo
@@ -38,7 +46,7 @@ namespace Attendance.Application.Interfaces.Service
         Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId, DateOnly? targetDate = null);
         // Toàn bộ nhân viên active thuộc Phòng ban (mọi Group con) — dùng cho màn "Cây duyệt Phòng ban"
         // để xem ai đang giữ Chức vụ nào và gán nhanh Chức vụ ngay tại đó.
-        Task<List<EmployeeDto>> GetByDepartmentIdAsync(int departmentId);
+        Task<List<EmployeeDto>> GetByDepartmentIdAsync(int departmentId, int? workshopId = null, string? keyword = null, bool jobTitledOnly = false, int? take = null);
         Task<EmployeeDto> GetByIdAsync(int id);
         Task<EmployeeDto> GetByUserNameAsync(string userName);
         // callerUserName/isAdmin dùng để SCOPE theo Bộ phận/Nhóm phụ trách (2026-09-28, theo yêu cầu
@@ -75,7 +83,7 @@ namespace Attendance.Application.Interfaces.Service
         // theo TerminalLevel của Chức vụ mới (không nhận trực tiếp từ client) — mirror
         // ApprovalStepManager.tsx.handleAssignDeptJobTitle/handleAssignGroupJobTitle nhưng validate lại
         // ở BE, không tin client.
-        Task<EmployeeDto> AssignDepartmentJobTitleAsync(string userName, bool isAdmin, int employeeId, int departmentId, int? jobTitleId);
+        Task<EmployeeDto> AssignDepartmentJobTitleAsync(string userName, bool isAdmin, int employeeId, int departmentId, int? jobTitleId, int? workshopId = null);
         Task<EmployeeDto> AssignGroupJobTitleAsync(string userName, bool isAdmin, int employeeId, int groupId, int? jobTitleId);
 
         // Sửa RIÊNG giới hạn OT/tháng/năm (2026-08-29) — permission hẹp Attendance.Employee.UpdateOtLimit,

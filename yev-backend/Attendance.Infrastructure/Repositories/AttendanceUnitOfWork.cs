@@ -11,6 +11,8 @@ namespace Attendance.Infrastructure.Repositories
             AttendanceDbContext dbContext,
             IDepartmentRepository departments,
             IGroupRepository groups,
+            IWorkshopRepository workshops,
+            IEmployeeApprovalScopeRepository employeeApprovalScopes,
             IReasonRepository reasons,
             IOtCaseRepository otCases,
             IEmployeeRepository employees,
@@ -35,6 +37,7 @@ namespace Attendance.Infrastructure.Repositories
             IJobTitlePermissionRepository jobTitlePermissions,
             IDepartmentApprovalStepCoordinatorRepository departmentApprovalStepCoordinators,
             IGroupApprovalStepCoordinatorRepository groupApprovalStepCoordinators,
+            IGroupBorrowedApproverRepository groupBorrowedApprovers,
             IEmployeeAccumulationHistoryRepository employeeAccumulationHistories,
             IProductionLineRepository productionLines,
             IProductionShiftTeamRepository productionShiftTeams,
@@ -64,8 +67,11 @@ namespace Attendance.Infrastructure.Repositories
             JobTitlePermissions = jobTitlePermissions;
             DepartmentApprovalStepCoordinators = departmentApprovalStepCoordinators;
             GroupApprovalStepCoordinators = groupApprovalStepCoordinators;
+            GroupBorrowedApprovers = groupBorrowedApprovers;
             Departments = departments;
             Groups = groups;
+            Workshops = workshops;
+            EmployeeApprovalScopes = employeeApprovalScopes;
             Reasons = reasons;
             OtCases = otCases;
             Employees = employees;
@@ -82,6 +88,10 @@ namespace Attendance.Infrastructure.Repositories
 
         public IDepartmentRepository Departments { get; }
         public IGroupRepository Groups { get; }
+
+        public IWorkshopRepository Workshops { get; }
+
+        public IEmployeeApprovalScopeRepository EmployeeApprovalScopes { get; }
         public IReasonRepository Reasons { get; }
         public IOtCaseRepository OtCases { get; }
         public IEmployeeRepository Employees { get; }
@@ -106,6 +116,7 @@ namespace Attendance.Infrastructure.Repositories
         public IJobTitlePermissionRepository JobTitlePermissions { get; }
         public IDepartmentApprovalStepCoordinatorRepository DepartmentApprovalStepCoordinators { get; }
         public IGroupApprovalStepCoordinatorRepository GroupApprovalStepCoordinators { get; }
+        public IGroupBorrowedApproverRepository GroupBorrowedApprovers { get; }
         public IEmployeeAccumulationHistoryRepository EmployeeAccumulationHistories { get; }
         public IProductionLineRepository ProductionLines { get; }
         public IProductionShiftTeamRepository ProductionShiftTeams { get; }

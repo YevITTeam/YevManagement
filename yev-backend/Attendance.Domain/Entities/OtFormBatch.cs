@@ -20,6 +20,10 @@ public partial class OtFormBatch
     // JobTitleApprovalChainService), so 1 batch per level per day covers the whole company.
     public int? DepartmentId { get; set; }
 
+    // Set together with DepartmentId (DepartmentManager level only): the same department is a separate
+    // batch per workshop because its manager differs per workshop.
+    public int? WorkshopId { get; set; }
+
     // The calendar day the daily sweep created this batch — NOT the day it gets processed.
     public DateOnly BatchDate { get; set; }
 
@@ -37,6 +41,8 @@ public partial class OtFormBatch
     public string? ProcessedByFullName { get; set; }
 
     public virtual Department? Department { get; set; }
+
+    public virtual Workshop? Workshop { get; set; }
 
     public virtual ICollection<OtForm> OtForms { get; set; } = new List<OtForm>();
 

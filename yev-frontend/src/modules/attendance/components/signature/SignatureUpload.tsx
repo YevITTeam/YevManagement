@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { cutOutSignature } from "@/lib/signatureCutout";
 
 interface SignatureUploadProps {
     // Base64 thuần (không kèm prefix data:image/...;base64,) của chữ ký đang có hiệu lực, để hiện preview
@@ -9,11 +10,6 @@ interface SignatureUploadProps {
     initialImage?: string | null;
     onChange: (base64: string | null) => void;
     disabled?: boolean;
-}
-
-function stripDataUrlPrefix(dataUrl: string) {
-    const commaIndex = dataUrl.indexOf(",");
-    return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
 
 // Upload file ảnh chữ ký tay thật (PNG/JPG chụp/scan) — KHÔNG phải canvas vẽ bằng chuột/tay
@@ -28,13 +24,12 @@ export default function SignatureUpload({ initialImage, onChange, disabled = fal
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            const base64 = stripDataUrlPrefix(String(reader.result));
-            setPreview(base64);
-            onChange(base64);
-        };
-        reader.readAsDataURL(file);
+        cutOutSignature(file)
+            .then((base64) => {
+                setPreview(base64);
+                onChange(base64);
+            })
+            .catch(console.error);
     };
 
     const handleClear = () => {

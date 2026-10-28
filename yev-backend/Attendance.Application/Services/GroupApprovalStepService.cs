@@ -118,5 +118,60 @@ namespace Attendance.Application.Services
 
             return await GetByGroupCoreAsync(groupId);
         }
+
+        public async Task<GroupBorrowedApproversDto> GetBorrowedApproversAsync(string userName, bool isAdmin, int groupId)
+        {
+            await EnsureCanManageGroupAsync(userName, isAdmin, groupId);
+            return await GetBorrowedApproversCoreAsync(groupId);
+        }
+
+        private async Task<GroupBorrowedApproversDto> GetBorrowedApproversCoreAsync(int groupId)
+        {
+            var group = await _unitOfWork.Groups.GetByIdAsync(groupId);
+            group.OrThrowNotFound("Nhóm", groupId);
+
+            var borrowedIds = (await _unitOfWork.GroupBorrowedApprovers.SelectAsync(x => x.GroupId == groupId, x => x.EmployeeId)).ToHashSet();
+
+            var teamLeaders = await _unitOfWork.Employees.SelectAsync(
+                x => !x.IsDeleted && x.JobTitle!.Code == JobTitle.TeamLeaderCode && x.GroupId != null && x.GroupId != groupId
+                    && x.Group!.DepartmentId == group!.DepartmentId,
+                x => new GroupBorrowedApproverDto
+                {
+                    EmployeeId = x.Id,
+                    EmployeeCode = x.Code,
+                    LastName = x.LastName,
+                    FirstName = x.FirstName,
+                    GroupNameVn = x.Group!.GroupNameVn,
+                    GroupNameJp = x.Group!.GroupNameJp
+                });
+
+            return new GroupBorrowedApproversDto
+            {
+                Approvers = teamLeaders.Where(x => borrowedIds.Contains(x.EmployeeId)).OrderBy(x => x.EmployeeCode).ToList(),
+                Candidates = teamLeaders.Where(x => !borrowedIds.Contains(x.EmployeeId)).OrderBy(x => x.EmployeeCode).ToList()
+            };
+        }
+
+        public async Task<GroupBorrowedApproversDto> ReplaceBorrowedApproversAsync(string userName, bool isAdmin, int groupId, ReplaceGroupBorrowedApproversDto request)
+        {
+            await EnsureCanManageGroupAsync(userName, isAdmin, groupId);
+
+            var current = await GetBorrowedApproversCoreAsync(groupId);
+            var eligibleIds = current.Approvers.Concat(current.Candidates).Select(x => x.EmployeeId).ToHashSet();
+            var requestedIds = request.EmployeeIds.Distinct().ToList();
+            if (requestedIds.Any(id => !eligibleIds.Contains(id)))
+                throw new DomainException("Chỉ được chọn Team Leader thuộc Nhóm khác trong cùng Bộ phận.");
+
+            var existing = await _unitOfWork.GroupBorrowedApprovers.FindAsync(x => x.GroupId == groupId);
+            foreach (var item in existing.Where(x => !requestedIds.Contains(x.EmployeeId)))
+                _unitOfWork.GroupBorrowedApprovers.Delete(item);
+
+            var existingIds = existing.Select(x => x.EmployeeId).ToHashSet();
+            await _unitOfWork.GroupBorrowedApprovers.AddRangeAsync(
+                requestedIds.Where(id => !existingIds.Contains(id)).Select(id => new GroupBorrowedApprover { GroupId = groupId, EmployeeId = id }));
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetBorrowedApproversCoreAsync(groupId);
+        }
     }
 }

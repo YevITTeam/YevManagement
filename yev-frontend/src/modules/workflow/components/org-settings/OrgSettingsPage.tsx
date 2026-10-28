@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Tabs } from "@/components/ui/Tabs";
+import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 import OrgLevelList from "@/modules/workflow/components/org-levels/OrgLevelList";
 import JobTitleList from "@/modules/workflow/components/job-titles/JobTitleList";
 
@@ -11,7 +11,7 @@ type SettingsTab = "levels" | "jobTitles";
 
 export default function OrgSettingsPage() {
     const t = useTranslations("Workflow.OrgSettings");
-    const [activeTab, setActiveTab] = useState<SettingsTab>("levels");
+    const [activeTab, setActiveTab] = usePersistedTab<SettingsTab>("workflow-org-settings-tab", ["levels", "jobTitles"], "levels");
 
     return (
         <div className="space-y-6">

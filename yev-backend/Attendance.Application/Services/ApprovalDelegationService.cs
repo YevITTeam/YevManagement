@@ -51,8 +51,9 @@ namespace Attendance.Application.Services
                 .ToList();
         }
 
-        // Manager delegates to the top non-terminal title (Team Leader) of the same department; any other title
-        // delegates to the same title in the same unit (Group, or Department for the top non-terminal title).
+        // Manager delegates to the top non-terminal title (Team Leader) in one of their (workshop, department) pairs;
+        // any other title delegates to the same title in the same unit (Group, or workshop + department for the top
+        // non-terminal title).
         private async Task<List<Employee>> GetEligibleDelegatesAsync(Employee me)
         {
             var myTitle = me.JobTitle ?? throw new DomainException("Bạn chưa được gán Chức vụ nên không thể ủy quyền.");
@@ -64,21 +65,25 @@ namespace Attendance.Application.Services
                 .FirstOrDefault();
 
             static int? DepartmentOf(Employee e) => e.Group?.DepartmentId ?? e.DepartmentId;
+            static int? WorkshopOf(Employee e) => e.Group?.WorkshopId;
 
             var candidates = await _unitOfWork.Employees.FindWithIncludesAsync(
                 x => !x.IsDeleted && x.UserName != null && x.Id != me.Id && x.JobTitleId != null, x => x.Group!, x => x.JobTitle!);
 
             if (myTitle.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager)
             {
-                if (topNonTerminal == null || me.DepartmentId == null) return new List<Employee>();
-                return candidates.Where(x => x.JobTitleId == topNonTerminal.Id && DepartmentOf(x) == me.DepartmentId).ToList();
+                var myPairs = (await _unitOfWork.EmployeeApprovalScopes.FindAsync(x => x.EmployeeId == me.Id))
+                    .Select(x => ScopeKey.Of(x.DepartmentId, x.WorkshopId)).ToHashSet();
+                if (topNonTerminal == null || myPairs.Count == 0) return new List<Employee>();
+                return candidates.Where(x => x.JobTitleId == topNonTerminal.Id && x.Group != null
+                    && myPairs.Contains(ScopeKey.Of(x.Group.DepartmentId, x.Group.WorkshopId))).ToList();
             }
 
             var peers = candidates.Where(x => x.JobTitleId == myTitle.Id);
             if (myTitle.TerminalLevel != (int)JobTitleTerminalLevel.None) return peers.ToList();
 
             return myTitle.Id == topNonTerminal?.Id
-                ? peers.Where(x => DepartmentOf(me) != null && DepartmentOf(x) == DepartmentOf(me)).ToList()
+                ? peers.Where(x => DepartmentOf(me) != null && DepartmentOf(x) == DepartmentOf(me) && WorkshopOf(x) == WorkshopOf(me)).ToList()
                 : peers.Where(x => me.GroupId != null && x.GroupId == me.GroupId).ToList();
         }
 

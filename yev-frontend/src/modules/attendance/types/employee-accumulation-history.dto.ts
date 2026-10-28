@@ -19,6 +19,12 @@ export interface EmployeeAccumulationHistoryYearDto {
     initialBalanceHours?: number;
 }
 
+// Giờ OT của 1 ngày — chỉ các ngày có đơn Hoàn tất; giờ nhập/chỉnh tay ở lũy kế tháng không thuộc ngày nào.
+export interface EmployeeAccumulationDayDto {
+    date: string; // yyyy-MM-dd
+    hours: number;
+}
+
 // Sửa tay lũy kế 1 năm (Attendance.EmployeeAccumulation.Update): đặt lại giờ từng tháng + số dư đầu kỳ.
 // Tổng cả năm = initialBalanceHours + tổng 12 tháng.
 export interface UpdateEmployeeAccumulationDto {

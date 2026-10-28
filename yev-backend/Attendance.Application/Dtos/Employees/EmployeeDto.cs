@@ -32,6 +32,13 @@ namespace Attendance.Application.Dtos.Employees
         public int? DepartmentId { get; set; }
         public string? DepartmentNameVn { get; set; }
 
+        // Workshop of the employee's group (null for managers — they carry ApprovalScopes instead).
+        public int? WorkshopId { get; set; }
+        public string? WorkshopNameVn { get; set; }
+
+        // (Workshop, Department) pairs a Department Manager approves for.
+        public List<EmployeeApprovalScopeDto> ApprovalScopes { get; set; } = new();
+
         // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán.
         public int? JobTitleId { get; set; }
         public string? JobTitleName { get; set; }

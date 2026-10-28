@@ -20,6 +20,9 @@ public partial class OtForm
 
     public int DepartmentId { get; set; }
 
+    // Workshop of the form: the group's workshop, or (production forms) the participants' common workshop.
+    public int WorkshopId { get; set; }
+
     public int ReasonId { get; set; }
 
     public int OtCaseId { get; set; }
@@ -85,6 +88,8 @@ public partial class OtForm
     public virtual Group? Group { get; set; }
 
     public virtual Department Department { get; set; } = null!;
+
+    public virtual Workshop Workshop { get; set; } = null!;
 
     public virtual Reason Reason { get; set; } = null!;
 

@@ -23,6 +23,9 @@ namespace Attendance.Application.Dtos.Employees
 
         public int? DepartmentId { get; set; }
 
+        // Required for Department Managers: the (Workshop, Department) pairs they approve for.
+        public List<EmployeeApprovalScopeInputDto>? ApprovalScopes { get; set; }
+
         public int? JobTitleId { get; set; }
 
         // KHÔNG có CustomMonthlyOtHourLimit/CustomYearlyOtHourLimit ở đây (2026-08-29, cố ý tách khỏi

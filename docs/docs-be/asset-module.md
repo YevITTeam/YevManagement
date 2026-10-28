@@ -12,7 +12,7 @@
 | Báo cáo / dashboard · chuyển máy · QR | §1.7, §1.8, §1.16b |
 | Import: Device · Tanium · thanh lý | §1.9, §1.10, §1.10b |
 | Cấu hình thiết bị · Nhóm/Bộ phận · AuditTrail | §1.12–§1.14, §1.17 |
-| AI Chat · ServerCheck · Kiểm kê · AppRelease | §1.18, §1.19–§1.21, §1.22, §1.23 |
+| AI Chat · ServerCheck · Kiểm kê · AppRelease · Nhật ký USB | §1.18, §1.19–§1.21, §1.22, §1.23, §1.24 |
 | **Hợp đồng API (route, quyền, luật đặc biệt)** | §4 |
 
 ## 1. Nghiệp vụ & luật
@@ -153,6 +153,17 @@ App mobile nội bộ dùng chung cho các tính năng quét tự kiểm tra b�
 - **`[AllowAnonymous]`**: `GET /latest` (app gọi trước khi đăng nhập) và `GET /download/{fileName}` (trả `PhysicalFile` `application/vnd.android.package-archive`, **không** bọc `ApiResponse`; `Path.GetFileName()` chặn path traversal, 404 nếu không có). Logic so `versionCode` nằm ở **app Flutter** — BE chỉ trả dữ liệu thô: `< minVersionCode` → bắt buộc cập nhật; giữa `minVersionCode` và `versionCode` → gợi ý; `>= versionCode` → không làm gì.
 - CRUD còn lại chỉ 1 quyền `Asset.AppRelease.Manage`; trùng `VersionCode` → 400 (`ThrowIfDuplicateCode`). FE `components/app-releases/` (`AppReleaseList` hero bản mới nhất từ `GET /latest` + danh sách có tìm kiếm/phân trang; `AppReleaseForm` có dropzone `.apk` ≤ 300MB tự điền `apkUrl`, vẫn dán link ngoài được).
 
+### 1.24. Nhật ký USB — `/api/UsbLog` (agent `external-projects/YevUsbAgent`)
+Chỉ **giám sát**, không chặn. Agent (Windows Service, đẩy qua Tanium) chạy trên mỗi PC, ghi cắm/rút ổ USB và thao tác file trên ổ đó rồi gửi về BE; BE lưu và hiển thị.
+- **Bảng** (`AddUsbLog`): `UsbDevices` (1 USB vật lý, unique `VendorId+ProductId+SerialNumber`; serial `""` nếu USB không có), `UsbSessions` (1 lần cắm; `Id` do agent sinh nên gửi lại không nhân đôi; `DeviceId` null khi tên máy không khớp Device; `WasPermitted`), `UsbFileEvents` (`EventId` unique để dedupe, `Action` 1 Created/2 Modified/3 Deleted/4 Renamed, `FilePath` ≤1000, `SizeBytes?`). Cả 3 **loại khỏi AuditTrail** (log append-only, khối lượng lớn). Không có `IsDeleted`/retention — thêm job dọn khi bảng lớn.
+- **Ingest** `POST /api/UsbLog/ingest` (`[AllowAnonymous]`, header `X-Agent-Key` = `UsbAgent:ApiKey` trong `appsettings.json`; để trống = từ chối mọi agent; so sánh constant-time). Không dùng Negotiate/tài khoản máy vì `MyClaimsTransformation` sẽ tự tạo User `DOMAIN\PC$` cho mỗi PC. Body `{machineName, events[]}` (tối đa 1000), mỗi event `type` = `Connected` | `Disconnected` | `File`; thời gian là `DateTimeOffset`, BE đổi sang giờ VN (UTC+7). Xử lý tuần tự trong 1 `SaveChanges`; event sai/không đủ field bị **bỏ qua và đếm** (`skippedCount`) thay vì 400 để agent không kẹt hàng đợi; trả `{processedCount, skippedCount, deviceMatched}`.
+- **Khớp máy:** `machineName` → mã máy bằng `ComputerNameParser.Parse` (cùng quy tắc import Tanium, vd `YDC1877.yev.vn` → `YDC-1877`) rồi so `Device.DeviceCode`; tên ngoài 5 họ mã thì so `Device.DeviceName` (kể cả bản ghi cũ còn hậu tố `.yev.vn`). Thiết bị đã xoá mềm không khớp.
+- **`IsUseUsb`:** khi nhận phiên `Connected` mới mà `Device.IsUseUsb = false` → BE tự bật `true` (audit tự động qua `Device`, người thao tác `System`) và đặt `UsbSession.WasPermitted = false`; máy đã được phép → `true`; không khớp Device → `null`. Cột này là dấu vết duy nhất của lần dùng chưa cấp phép.
+- **Giới hạn của agent:** chỉ thấy ghi vào USB (không thấy copy/mở từ USB vào máy), điện thoại MTP không phải ổ đĩa. USB được nhận biết bằng nút USB cha trong cây PnP (kể cả ổ UASP báo giao diện SCSI), không dựa vào `InterfaceType`. Chi tiết và cách triển khai: `external-projects/YevUsbAgent/README.md`.
+- **File bị bỏ qua** (agent): thư mục hệ thống (`System Volume Information`, `$RECYCLE.BIN`), file khoá/tạm của editor (`~$*`, `.~lock.*`, `*.tmp`) và `Thumbs.db`/`desktop.ini`/`.DS_Store`. Editor lưu bằng cách đổi tên file tạm đè lên file thật → ghi 1 dòng "Sửa" cho file thật, không ghi "Đổi tên".
+- **Phiên treo:** agent ghi các phiên đang mở vào `active-sessions.txt`; sau mất điện/crash, lần khởi động kế tiếp gửi `Disconnected` cho chúng (giờ rút = giờ khởi động lại) để web không hiện "Đang cắm" mãi. `IsConnectedNow` = còn phiên `DisconnectedAt` null.
+- **FE:** mục "Quản lý USB" ở nhóm "Thiết bị" của sidebar → `/pc/usb-log` (`UsbMachineList`: mỗi dòng 1 PC có USB, lọc từ khoá/ngày/"Đang cắm", badge "Đang cắm"/"Chưa cấp phép"); bấm 1 máy → `/pc/usb-log?machine=<tên máy>&deviceId=` (`UsbMachineDetail` + `UsbLogList machineName`, bấm "Xem" mở file của từng lần cắm). Tab "Nhật ký USB" ở chi tiết thiết bị dùng cùng `UsbLogList` với `deviceId`.
+
 ## 3. Repository & UnitOfWork
 `IAssetUnitOfWork`/`AssetUnitOfWork : BaseUnitOfWork<AssetDbContext>` gom mọi repo generic rỗng của module (danh sách ở file `IAssetUnitOfWork.cs`).
 
@@ -181,6 +192,7 @@ Envelope/phân trang/lỗi: `architecture-core.md §3–§4`. Mọi endpoint c�
 | `/api/ServerCheckAssignment` | `GET`, `GET me` (`null` = chưa phân công → app chặn; gọi **trước** `today`/`start`), `PUT` (`{userId, userName, fullName?, branchId}` upsert theo `userId`; lấy user từ `get-all-users-with-roles`), `DELETE {id}` (cứng) | `Assign` (`me`: `Scan`) |
 | `/api/Inventory` | `GET current` (không tham số), POST `start`, `GET {id}` (View), POST `{id}/scan`, POST `{id}/end`, `grid-list` (`fromDate toDate branchId`, `items` rỗng), `GET {id}/export` (.xlsx) | `Asset.Inventory.Scan` (current/start/scan/end), `View` (còn lại) |
 | `/api/InventoryAssignment` | như `ServerCheckAssignment`, route/quyền riêng, nhiều user chung 1 xưởng | `Asset.Inventory.Assign` (`me`: `Scan`) |
+| `/api/UsbLog` | `POST ingest` (**anonymous**, header `X-Agent-Key`, §1.24) → `{processedCount, skippedCount, deviceMatched}`; `GET machines` (`pageIndex pageSize keyword fromDate toDate connectedNowOnly` → mỗi PC 1 dòng gom theo `machineName`: `deviceId?/deviceCode?`, `lastWindowsUser`, `sessionCount`, `usbDeviceCount`, `fileEventCount`, `lastConnectedAt`, `isConnectedNow`, `unpermittedCount`; đang cắm trước rồi mới nhất; gom/phân trang trong bộ nhớ), `GET sessions` (`pageIndex pageSize deviceId machineName keyword fromDate toDate unpermittedOnly`, mới nhất trước; `keyword` ~ tên máy/user/mã máy/serial/tên USB), `GET sessions/{id}/files` (`pageIndex pageSize keyword`, theo thời gian; phiên lạ → 404) | `Asset.UsbLog.View` (trừ ingest) |
 | `/api/AppRelease` | `GET latest` (**anonymous**), `grid-list` (`keyword` ~ `versionName`), POST, `PUT {id}` (`{versionCode, versionName, minVersionCode, apkUrl, changelog?}`), `DELETE {id}`, POST `upload` (multipart `file`, ≤300MB, `.apk` → `ApiResponse<string>` URL; FE `AppReleaseApi.uploadApk` dùng `api.postForm`), `GET download/{fileName}` (**anonymous**, file nhị phân) | `Asset.AppRelease.Manage` (trừ 2 anonymous) |
 
 **Quy ước phản hồi đặc biệt:** các endpoint trả file (`export`, `missing-devices-report`, `download`) **không** bọc `ApiResponse` — FE dùng `getForBlob`/`postFormForBlob`; lỗi trước khi ghi file vẫn trả JSON `ApiResponse` thường.

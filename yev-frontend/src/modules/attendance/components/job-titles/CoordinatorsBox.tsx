@@ -35,6 +35,7 @@ export default function CoordinatorsBox({
     addOptions,
     addingValue,
     onAddChange,
+    onAddQueryChange,
     labels,
     embedded = false,
 }: {
@@ -45,6 +46,7 @@ export default function CoordinatorsBox({
     addOptions: SelectOption[];
     addingValue: number | "";
     onAddChange: (value: number | "") => void;
+    onAddQueryChange?: (query: string) => void;
     labels: CoordinatorsBoxLabels;
     // true = rendered inside a shared card (no own border/background, no "currently in charge" caption).
     embedded?: boolean;
@@ -94,6 +96,7 @@ export default function CoordinatorsBox({
                                 options={addOptions}
                                 value={addingValue}
                                 onChange={onAddChange}
+                                onQueryChange={onAddQueryChange}
                                 placeholder={labels.addPlaceholder}
                                 disabled={isSaving}
                                 triggerClassName="h-7 rounded-md border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs! text-[#5e3f3a] outline-none transition focus:border-[#e3000f]"

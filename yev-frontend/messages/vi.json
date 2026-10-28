@@ -58,12 +58,14 @@
     "softwares": "Quản lý phần mềm",
     "suppliers": "Quản lý nhà cung cấp",
     "auditTrail": "Lịch sử thao tác",
+    "usbLog": "Quản lý USB",
     "serverCheck": "Kiểm tra Server",
     "inventory": "Kiểm kê thiết bị",
     "appReleases": "Bản cập nhật app",
     "aiChat": "Trợ lý AI",
     "settings": "Cài đặt hệ thống",
     "otManagerTagline": "Quản lý tăng ca",
+    "otOverview": "Tổng quan",
     "otCreate": "Đăng ký tăng ca",
     "otAiChat": "Trợ lý AI đăng ký tăng ca",
     "otForms": "Đơn tăng ca",
@@ -169,7 +171,11 @@
       "updateError": "Cập nhật nhóm thất bại",
       "deleteSuccess": "Xoá nhóm thành công",
       "deleteError": "Xoá nhóm thất bại",
-      "loadError": "Không thể tải danh sách nhóm."
+      "loadError": "Không thể tải danh sách nhóm.",
+      "colWorkshop": "Xưởng",
+      "fieldWorkshop": "Xưởng",
+      "fieldWorkshopPlaceholder": "Chọn xưởng...",
+      "allWorkshops": "Tất cả xưởng"
     },
     "Reason": {
       "searchPlaceholder": "Tìm theo lý do...",
@@ -223,7 +229,9 @@
       "updateError": "Cập nhật trường hợp OT thất bại",
       "deleteSuccess": "Xoá trường hợp OT thành công",
       "deleteError": "Xoá trường hợp OT thất bại",
-      "loadError": "Không thể tải danh sách trường hợp OT."
+      "loadError": "Không thể tải danh sách trường hợp OT.",
+      "fieldDescriptionJp": "Mô tả (tiếng Nhật)",
+      "fieldDescriptionJpPlaceholder": "Nhập mô tả tiếng Nhật (tuỳ chọn)..."
     },
     "JobTitle": {
       "searchPlaceholder": "Tìm theo mã hoặc tên chức vụ...",
@@ -257,7 +265,8 @@
       "saveOrderButton": "Lưu thứ tự",
       "savingOrder": "Đang lưu thứ tự...",
       "reorderSuccess": "Đã cập nhật thứ tự Cấp độ",
-      "reorderError": "Cập nhật thứ tự Cấp độ thất bại"
+      "reorderError": "Cập nhật thứ tự Cấp độ thất bại",
+      "codeWithRank": "{code}, cấp {rank}"
     },
     "JobTitlePermission": {
       "selectedCount": "Đã chọn {count}/{total}",
@@ -320,7 +329,9 @@
       "coordinatorNotLinkedHint": "Nhân viên này chưa liên kết tài khoản đăng nhập (chưa gán UserName ở màn Nhân viên) — quyền thao tác Cây duyệt sẽ tự có hiệu lực ngay khi Admin liên kết tài khoản cho họ.",
       "discardChangesTitle": "Huỷ thay đổi chưa lưu?",
       "discardChangesMessage": "Bạn đang có thay đổi chưa lưu ở cây duyệt hiện tại. Đổi Bộ phận/Nhóm sẽ HUỶ các thay đổi này.",
-      "discardChangesConfirm": "Huỷ thay đổi"
+      "discardChangesConfirm": "Huỷ thay đổi",
+      "fieldWorkshop": "Xưởng",
+      "fieldWorkshopPlaceholder": "Chọn xưởng..."
     },
     "ProductionApprovalStep": {
       "sectionTitle": "Cây duyệt Chuyền",
@@ -395,7 +406,9 @@
       "colStartTime": "Giờ BĐ",
       "colEndTime": "Giờ KT",
       "noData": "Không có đơn dưới chuyền nào hoàn tất đúng ngày này.",
-      "emptyStateHint": "Chọn ngày rồi bấm \"Xem báo cáo phiếu\" để xem số liệu."
+      "emptyStateHint": "Chọn ngày rồi bấm \"Xem báo cáo phiếu\" để xem số liệu.",
+      "fieldWorkshopLabel": "Xưởng",
+      "filterAllWorkshop": "Tất cả xưởng"
     },
     "GroupApprovalStep": {
       "sectionTitle": "Cấp trung gian (theo Nhóm)",
@@ -615,7 +628,14 @@
       "otLimitEditAction": "Giới hạn OT",
       "otLimitDialogTitle": "Sửa giới hạn OT",
       "otLimitSaveSuccess": "Cập nhật giới hạn OT thành công",
-      "otLimitSaveError": "Cập nhật giới hạn OT thất bại"
+      "otLimitSaveError": "Cập nhật giới hạn OT thất bại",
+      "colWorkshop": "Xưởng",
+      "filterWorkshopPlaceholder": "Tất cả xưởng",
+      "fieldWorkshop": "Xưởng",
+      "fieldWorkshopPlaceholder": "Chọn xưởng...",
+      "fieldApprovalScopes": "Xưởng - Phòng ban quản lý",
+      "addApprovalScope": "Thêm xưởng - phòng ban",
+      "removeApprovalScope": "Bỏ dòng này"
     },
     "ProductionEmployeeImport": {
       "title": "Import nhân sự dưới chuyền",
@@ -738,7 +758,13 @@
       "invalidYear": "Tổng cả năm không được nhỏ hơn tổng các tháng.",
       "invalidNumber": "Số giờ không hợp lệ.",
       "saved": "Đã cập nhật lũy kế.",
-      "saveError": "Không thể cập nhật lũy kế."
+      "saveError": "Không thể cập nhật lũy kế.",
+      "daysError": "Không thể tải giờ tăng ca theo ngày.",
+      "daysTitle": "Tháng {month}/{year}",
+      "daysBack": "Quay lại",
+      "daysTotal": "Tổng tháng",
+      "daysOther": "Nhập/điều chỉnh tay (không theo ngày)",
+      "weekdays": "T2|T3|T4|T5|T6|T7|CN"
     },
     "CategoryManagement": {
       "title": "Danh mục tăng ca",
@@ -757,7 +783,9 @@
       "addReasons": "+ Thêm lý do",
       "addOtCases": "+ Thêm trường hợp OT",
       "addJobTitles": "+ Thêm chức vụ",
-      "addEmployees": "+ Thêm nhân viên"
+      "addEmployees": "+ Thêm nhân viên",
+      "tabWorkshops": "Xưởng",
+      "addWorkshops": "+ Thêm xưởng"
     },
     "AttendanceSetting": {
       "loading": "Đang tải cấu hình...",
@@ -933,7 +961,13 @@
       "calendarNextMonth": "Tháng sau",
       "calendarMonthLabel": "Tháng {month}/{year}",
       "calendarEmpty": "Tháng này không có đơn chưa duyệt.",
-      "calendarLoadError": "Không thể tải lịch đơn chưa duyệt."
+      "calendarLoadError": "Không thể tải lịch đơn chưa duyệt.",
+      "filterWorkshopLabel": "Xưởng",
+      "filterAllWorkshop": "Tất cả xưởng",
+      "filterTypeLabel": "Loại đơn",
+      "filterAllType": "Tất cả loại",
+      "typeOffice": "Văn phòng (theo nhóm)",
+      "typeProduction": "Xưởng (theo chuyền)"
     },
     "OtFormDetail": {
       "titleWithId": "Đơn tăng ca #{id}",
@@ -1029,6 +1063,7 @@
       "deleteSuccess": "Đã xoá đơn.",
       "deleteError": "Xoá đơn thất bại",
       "removedInlineNote": "Đã bị loại khỏi đơn bởi {name} (cấp {level}) — Lý do: {reason}",
+      "removedInlineNoteNoReason": "Đã bị loại khỏi đơn bởi {name} (cấp {level})",
       "addEmployeeButton": "Thêm nhân viên",
       "addEmployeeModalTitle": "Thêm nhân viên vào đơn",
       "addSearchPlaceholder": "Tìm theo mã hoặc tên nhân viên",
@@ -1055,6 +1090,18 @@
       "editLogFieldDidEat": "Sửa \"Có ăn\"",
       "editLogFieldNoteVn": "Sửa ghi chú (VN)",
       "editLogFieldNoteJp": "Sửa ghi chú (JP)",
+      "editLogFieldStartTime": "Sửa giờ bắt đầu",
+      "editLogFieldDate": "Sửa ngày tăng ca",
+      "editLogFieldFormStartTime": "Sửa giờ bắt đầu của đơn",
+      "editLogFieldFormEndTime": "Sửa giờ kết thúc của đơn",
+      "editLogFieldReason": "Sửa lý do",
+      "editLogFieldSubReason": "Sửa lý do chi tiết",
+      "editLogFieldOtCase": "Trường hợp OT (tự xác định lại)",
+      "editLogFieldMilkCount": "Sửa số suất sữa",
+      "editLogFieldTransportation": "Sửa xe đưa đón",
+      "editLogFieldCopyRoom": "Sửa phòng photo",
+      "editLogFieldAnotherSuggestionVn": "Sửa đề nghị khác (VN)",
+      "editLogFieldAnotherSuggestionJp": "Sửa đề nghị khác (JP)",
       "colBlockCode": "Line",
       "colTeamCode": "Team",
       "colShiftTeam": "Nhóm ca",
@@ -1065,7 +1112,7 @@
       "titleEdit": "Sửa đơn tăng ca #{id}",
       "descCreate": "Điền thông tin đơn, chọn nhân viên làm ngoài giờ. Đơn tạo ra ở trạng thái Nháp — cần Trưởng nhóm phê duyệt riêng (\"Chờ tôi phê duyệt\") mới vào luồng duyệt.",
       "descEdit": "Sửa giờ kết thúc thực tế, thêm/loại nhân viên của đơn. Các thông tin khác của đơn đã khoá, chỉ sửa được khi đơn đang Nháp hoặc chờ Trưởng phòng phê duyệt.",
-      "notEditableError": "Đơn đã qua ít nhất 1 cấp duyệt, không thể sửa nữa.",
+      "notEditableError": "Đơn không còn sửa được (đã xử lý xong hoặc đã được cấp Manager trở lên duyệt).",
       "loadEditError": "Không thể tải đơn tăng ca để sửa.",
       "blockedNoScopeMessage": "Tài khoản chưa được cấp quyền đăng ký tăng ca cho Nhóm nào — liên hệ Admin để được gán phân quyền (\"Phân quyền duyệt\") hoặc liên kết hồ sơ nhân viên tương ứng.",
       "scopeRestrictedMessage": "Tài khoản chỉ được đăng ký tăng ca cho các Nhóm sau: {groupNames}.",
@@ -1167,6 +1214,7 @@
       "colTeamCode": "Team",
       "removeEmployeeButton": "Không phê duyệt nhân viên",
       "willBeRemovedNote": "sẽ bị loại khỏi đơn khi Lưu (lý do: {reason})",
+      "willBeRemovedNoteNoReason": "sẽ bị loại khỏi đơn khi Lưu",
       "undoRemoveButton": "Hoàn tác",
       "newlyAddedBadge": "Mới thêm",
       "cancelAddButton": "Bỏ chọn",
@@ -1179,12 +1227,15 @@
       "confirmRemove": "Xác nhận không phê duyệt",
       "workCalendarLoadError": "Không thể tải lịch ngày nghỉ.",
       "otCaseAutoHintWorking": "Tự động theo ngày: ngày làm việc → TH1.",
+      "otCaseAutoHintEdit": "Hệ thống tự xác định lại khi lưu, theo ngày và giờ OT.",
       "otCaseAutoHintNonWorking": "Tự động theo ngày: ngày nghỉ theo lịch → TH2.",
       "otCaseAutoHintTh3": "Tự động: có nhân viên vượt giới hạn OT tháng/năm → bắt buộc TH3.",
       "badgeOverDaily": "Quá giới hạn ngày",
       "badgeOverDailyTooltip": "Tổng giờ OT trong ngày vượt giới hạn — không tạo được đơn, hãy bỏ chọn hoặc giảm giờ.",
       "badgeTh3Tooltip": "Lũy kế tháng/năm vượt giới hạn — đơn bắt buộc là TH3.",
-      "employeeTimeOutOfRange": "Ngoài giờ của đơn ({start}–{end})"
+      "employeeTimeOutOfRange": "Ngoài giờ của đơn ({start}–{end})",
+      "lineOptionsLoadError": "Không thể tải danh sách Line.",
+      "shiftTeamOptionsLoadError": "Không thể tải danh sách Nhóm ca."
     },
     "OtFormPrint": {
       "loadError": "Không thể tải đơn tăng ca để in.",
@@ -1194,7 +1245,8 @@
       "paperSizeA5Short": "A5 ngang",
       "paperSizeA4": "A4 (tối đa 10 người/trang đầu, 30 người/trang sau)",
       "paperSizeA5": "A5 ngang (2 mặt — mặt sau tối đa 12 người/trang)",
-      "printButton": "In"
+      "printButton": "In",
+      "rejectedBy": "Đơn bị từ chối bởi {name}: \"{comment}\""
     },
     "OtFormEmailConfirm": {
       "missingTokenError": "Thiếu token trong đường link.",
@@ -1319,6 +1371,87 @@
       "expired": "Đã hết hạn",
       "daysLeft": "còn {count} ngày",
       "startsOn": "từ {date}"
+    },
+    "Workshop": {
+      "searchPlaceholder": "Tìm theo mã hoặc tên xưởng...",
+      "clearSearch": "Xoá tìm kiếm",
+      "colCode": "Mã xưởng",
+      "colNameVn": "Tên (VN)",
+      "colNameJp": "Tên (JP)",
+      "noData": "Không có dữ liệu xưởng.",
+      "createTitle": "Thêm xưởng",
+      "editTitle": "Cập nhật xưởng",
+      "fieldCode": "Mã xưởng",
+      "fieldCodePlaceholder": "Nhập mã xưởng...",
+      "fieldNameVn": "Tên xưởng (VN)",
+      "fieldNameVnPlaceholder": "Nhập tên xưởng...",
+      "fieldNameJp": "Tên xưởng (JP)",
+      "fieldNameJpPlaceholder": "Nhập tên tiếng Nhật (tuỳ chọn)...",
+      "saving": "Đang lưu...",
+      "createSubmit": "Tạo mới",
+      "updateSubmit": "Lưu thay đổi",
+      "deleteTitle": "Xoá xưởng",
+      "deleteMessage": "Bạn có chắc muốn xoá xưởng <b>{name}</b> không? Hành động này không thể hoàn tác.",
+      "createSuccess": "Tạo xưởng thành công",
+      "updateSuccess": "Cập nhật xưởng thành công",
+      "createError": "Tạo xưởng thất bại",
+      "updateError": "Cập nhật xưởng thất bại",
+      "deleteSuccess": "Xoá xưởng thành công",
+      "deleteError": "Xoá xưởng thất bại",
+      "loadError": "Không thể tải danh sách xưởng."
+    },
+    "Enums": {
+      "levelGroupLeader": "Trưởng nhóm",
+      "levelDepartmentManager": "Trưởng phòng",
+      "levelWorkshopManager": "Trưởng xưởng",
+      "levelGeneralDirector": "Tổng Giám Đốc",
+      "levelDepartmentHead": "Trưởng Bộ phận",
+      "levelNone": "Không (cấp trung gian)",
+      "statusPending": "Đang chờ phê duyệt",
+      "statusCompleted": "Hoàn tất",
+      "statusRejected": "Không phê duyệt",
+      "actionSubmitted": "Đã đề nghị (ký)",
+      "actionApproved": "Đã phê duyệt",
+      "actionRejected": "Không phê duyệt"
+    },
+    "OtHome": {
+      "title": "Quản lý tăng ca",
+      "subtitle": "Lập và duyệt Giấy đề nghị làm ngoài giờ.",
+      "createTitle": "Đăng ký tăng ca",
+      "createDesc": "Lập đơn đề nghị làm ngoài giờ cho nhân viên của bạn.",
+      "listTitle": "Đơn tăng ca",
+      "listDesc": "Đơn của tôi, chờ ký duyệt, chờ duyệt, đã xử lý và đơn bạn tham gia — theo tab.",
+      "aiChatTitle": "Trợ lý AI đăng ký tăng ca",
+      "aiChatDesc": "Trò chuyện để AI tự đăng ký tăng ca (nháp) cho bạn.",
+      "noAccess": "Bạn không có quyền truy cập mục này."
+    },
+    "OtOverview": {
+      "pageTitle": "Tổng quan tăng ca",
+      "loadError": "Không thể tải dữ liệu tổng quan.",
+      "filterMonth": "Tháng",
+      "allWorkshops": "Tất cả xưởng",
+      "kpiEmployees": "Nhân viên trong phạm vi",
+      "kpiMonthHours": "Giờ OT trong tháng",
+      "kpiVsPrevious": "{delta} so với tháng trước",
+      "kpiForms": "Đơn trong tháng",
+      "kpiOverLimit": "Vượt giới hạn lũy kế",
+      "kpiOverLimitSub": "Tháng {monthly} · Năm {yearly} · Gần mốc (≥80%) {near}",
+      "chartDaily": "Giờ OT theo ngày",
+      "chartDailyHint": "Chỉ tính đơn Hoàn tất",
+      "chartTrend": "Lũy kế 12 tháng năm {year}",
+      "chartTrendHint": "Gồm giờ nhập/chỉnh tay",
+      "chartStatus": "Trạng thái đơn",
+      "chartOtCase": "Đơn theo trường hợp OT",
+      "chartDepartment": "Giờ OT theo phòng ban",
+      "chartWorkshop": "Giờ OT theo xưởng",
+      "overBadge": "{count} vượt",
+      "riskTitle": "Nhân viên gần/vượt giới hạn lũy kế",
+      "colCode": "Mã NV",
+      "colName": "Họ và tên",
+      "colDepartment": "Phòng ban",
+      "colMonth": "Tháng",
+      "colYear": "Năm",
+      "empty": "Chưa có dữ liệu"
     }
   },
   "Home": {

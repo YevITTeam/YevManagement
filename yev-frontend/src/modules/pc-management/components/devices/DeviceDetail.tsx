@@ -12,17 +12,19 @@ import DeviceConfigurationPanel from "./DeviceConfigurationPanel";
 import DeviceSoftwarePanel from "./DeviceSoftwarePanel";
 import DeviceTransferHistoryPanel from "./DeviceTransferHistoryPanel";
 import DeviceAuditHistoryPanel from "./DeviceAuditHistoryPanel";
+import UsbLogList from "@/modules/pc-management/components/usb-log/UsbLogList";
 import TransferDeviceDialog from "./TransferDeviceDialog";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 
 interface DeviceDetailProps {
     deviceId: number;
 }
 
-type DetailTab = "configuration" | "software" | "transfer-history" | "audit-history";
+type DetailTab = "configuration" | "software" | "transfer-history" | "audit-history" | "usb-log";
 
 function formatDate(value: string | null) {
     if (!value) return "-";
@@ -34,8 +36,19 @@ const infoLabelClassName = "text-xs font-semibold uppercase tracking-[0.15em] te
 export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
     const { user } = useAuth();
     const canViewAuditTrail = hasPermission(user, "Asset.AuditTrail.View");
+    const canViewUsbLog = hasPermission(user, "Asset.UsbLog.View");
     const [detail, setDetail] = useState<DeviceDetailDto | null>(null);
-    const [activeTab, setActiveTab] = useState<DetailTab>("configuration");
+    const [activeTab, setActiveTab] = usePersistedTab<DetailTab>(
+        `pc-device-tab-${deviceId}`,
+        [
+            "configuration",
+            "software",
+            "transfer-history",
+            ...(canViewAuditTrail ? (["audit-history"] as const) : []),
+            ...(canViewUsbLog ? (["usb-log"] as const) : []),
+        ],
+        "configuration"
+    );
 
     const [formOpen, setFormOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -221,6 +234,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                     { key: "configuration" as const, label: "Cấu hình phần cứng" },
                     { key: "software" as const, label: "Phần mềm" },
                     { key: "transfer-history" as const, label: "Lịch sử chuyển máy" },
+                    ...(canViewUsbLog ? [{ key: "usb-log" as const, label: "Nhật ký USB" }] : []),
                     ...(canViewAuditTrail ? [{ key: "audit-history" as const, label: "Lịch sử thao tác" }] : []),
                 ].map((tab) => (
                     <button
@@ -249,6 +263,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                 <DeviceSoftwarePanel deviceId={device.id} deviceStatus={device.status} softwares={detail.softwares} onChanged={fetchDetail} />
             )}
             {activeTab === "transfer-history" && <DeviceTransferHistoryPanel deviceId={device.id} />}
+            {activeTab === "usb-log" && canViewUsbLog && <UsbLogList deviceId={device.id} />}
             {activeTab === "audit-history" && canViewAuditTrail && <DeviceAuditHistoryPanel deviceId={device.id} />}
 
             <DeviceForm

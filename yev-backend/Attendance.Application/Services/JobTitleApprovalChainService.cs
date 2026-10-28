@@ -1,5 +1,6 @@
 using Attendance.Application.Dtos.JobTitles;
 using Attendance.Application.Interfaces.Service;
+using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
@@ -19,9 +20,9 @@ namespace Attendance.Application.Services
     //     cùng Bộ phận — 2026-08-08, trước đó gộp chung theo cả Bộ phận).
     //   - Chức vụ TerminalLevel=WorkshopManager/GeneralDirector (Factory Manager/Director) → dùng
     //     chung toàn công ty, KHÔNG lọc theo Department.
-    //   - Chức vụ TerminalLevel=DepartmentManager (Manager) → chỉ tính người có
-    //     Employee.Group.DepartmentId hoặc Employee.DepartmentId khớp đúng Department của người tạo
-    //     đơn (Trưởng phòng không thuộc Group cụ thể nào, dùng thẳng Employee.DepartmentId).
+    //   - Chức vụ TerminalLevel=DepartmentManager (Manager) → chỉ tính người có phạm vi
+    //     EmployeeApprovalScope khớp đúng cặp (Xưởng, Phòng ban) của đơn (1 Trưởng phòng có thể giữ
+    //     nhiều cặp, vd cùng Phòng ban ở nhiều Xưởng).
     public class JobTitleApprovalChainService : BaseService<IAttendanceUnitOfWork>, IJobTitleApprovalChainService
     {
         public JobTitleApprovalChainService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
@@ -40,10 +41,10 @@ namespace Attendance.Application.Services
             if (creator.Group is null)
                 throw new DomainException($"Nhân viên '{creator.Code}' không thuộc Nhóm nào (Trưởng phòng/Trưởng Xưởng/Giám đốc) — không áp dụng cho việc tạo đơn OT.");
 
-            return await ResolveChainCoreAsync(creator.JobTitle.RankOrder, creator.Group.Id, creator.Group.DepartmentId, otCaseId);
+            return await ResolveChainCoreAsync(creator.JobTitle.RankOrder, creator.Group.Id, creator.Group.DepartmentId, creator.Group.WorkshopId, otCaseId);
         }
 
-        public async Task<ResolveApprovalChainResultDto> ResolveChainForCreationAsync(int? creatorEmployeeId, int groupId, int departmentId, int otCaseId)
+        public async Task<ResolveApprovalChainResultDto> ResolveChainForCreationAsync(int? creatorEmployeeId, int groupId, int departmentId, int workshopId, int otCaseId)
         {
             var creatorRank = 0;
 
@@ -55,7 +56,7 @@ namespace Attendance.Application.Services
                     creatorRank = creator.JobTitle.RankOrder;
             }
 
-            return await ResolveChainCoreAsync(creatorRank, groupId, departmentId, otCaseId);
+            return await ResolveChainCoreAsync(creatorRank, groupId, departmentId, workshopId, otCaseId);
         }
 
         private class ConfiguredStepRow
@@ -74,7 +75,7 @@ namespace Attendance.Application.Services
             public bool IsLineScoped { get; set; }
         }
 
-        private async Task<ResolveApprovalChainResultDto> ResolveChainCoreAsync(int creatorRank, int groupId, int departmentId, int otCaseId)
+        private async Task<ResolveApprovalChainResultDto> ResolveChainCoreAsync(int creatorRank, int groupId, int departmentId, int workshopId, int otCaseId)
         {
             var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otCaseId && !x.IsDeleted);
             otCase.OrThrowNotFound("Trường hợp OT", otCaseId);
@@ -194,23 +195,26 @@ namespace Attendance.Application.Services
 
             // Cấp trung gian: CHỈ đúng Nhóm của người tạo đơn (2026-08-08, thắt chặt so với trước —
             // trước đây lọc theo cả Bộ phận nên lẫn ứng viên giữa các Nhóm không liên quan).
+            // Plus Team Leaders of other Groups lent to this Group (GroupBorrowedApprover).
+            var borrowedApproverIds = intermediateJobTitleIds.Count == 0
+                ? new List<int>()
+                : await _unitOfWork.GroupBorrowedApprovers.SelectAsync(x => x.GroupId == groupId, x => x.EmployeeId);
             var intermediateCandidates = intermediateJobTitleIds.Count == 0
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
                 : (await _unitOfWork.Employees.SelectAsync(
-                    predicate: x => !x.IsDeleted && x.UserName != null && x.GroupId == groupId
+                    predicate: x => !x.IsDeleted && x.UserName != null
+                        && (x.GroupId == groupId || (borrowedApproverIds.Contains(x.Id) && x.JobTitle!.Code == JobTitle.TeamLeaderCode))
                         && x.JobTitleId != null && intermediateJobTitleIds.Contains(x.JobTitleId.Value),
                     selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
                     .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
                     .ToList();
 
-            // Khớp cả 2 đường tới Department: qua Group (nhân viên thường giữ Chức vụ trung gian) hoặc
-            // trực tiếp Employee.DepartmentId (Trưởng phòng — TerminalLevel=DepartmentManager, không
-            // thuộc Nhóm cụ thể nào).
+            // Trưởng phòng được chọn theo phạm vi (Xưởng, Phòng ban) của đơn, không theo Employee.DepartmentId.
             var deptCandidates = deptScopedJobTitleIds.Count == 0
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
                 : (await _unitOfWork.Employees.SelectAsync(
                     predicate: x => !x.IsDeleted && x.UserName != null
-                        && ((x.Group != null && x.Group.DepartmentId == departmentId) || x.DepartmentId == departmentId)
+                        && x.ApprovalScopes.Any(s => s.DepartmentId == departmentId && s.WorkshopId == workshopId)
                         && x.JobTitleId != null && deptScopedJobTitleIds.Contains(x.JobTitleId.Value),
                     selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
                     .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
@@ -271,7 +275,7 @@ namespace Attendance.Application.Services
         }
 
         public async Task<ResolveApprovalChainResultDto> ResolveChainForProductionCreationAsync(
-            int? creatorEmployeeId, int departmentId, List<int> employeeIds, int otCaseId)
+            int? creatorEmployeeId, int departmentId, int workshopId, List<int> employeeIds, int otCaseId)
         {
             var creatorRank = 0;
             if (creatorEmployeeId.HasValue)
@@ -427,7 +431,7 @@ namespace Attendance.Application.Services
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
                 : (await _unitOfWork.Employees.SelectAsync(
                     predicate: x => !x.IsDeleted && x.UserName != null
-                        && ((x.Group != null && x.Group.DepartmentId == departmentId) || x.DepartmentId == departmentId)
+                        && x.Group != null && x.Group.DepartmentId == departmentId && x.Group.WorkshopId == workshopId
                         && x.JobTitleId != null && groupScopedJobTitleIds.Contains(x.JobTitleId.Value),
                     selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
                     .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
@@ -437,7 +441,7 @@ namespace Attendance.Application.Services
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
                 : (await _unitOfWork.Employees.SelectAsync(
                     predicate: x => !x.IsDeleted && x.UserName != null
-                        && ((x.Group != null && x.Group.DepartmentId == departmentId) || x.DepartmentId == departmentId)
+                        && x.ApprovalScopes.Any(s => s.DepartmentId == departmentId && s.WorkshopId == workshopId)
                         && x.JobTitleId != null && deptScopedJobTitleIds.Contains(x.JobTitleId.Value),
                     selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
                     .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))

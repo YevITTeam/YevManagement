@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, usePathname } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasModuleAccess } from "@/modules/auth/lib/permissions";
@@ -10,6 +11,8 @@ import { OT_ROUTE_PERMISSIONS } from "@/modules/attendance/lib/otRoutePermission
 // mirror PcAccessGuard.tsx (src/app/[locale]/(pc-manager)/PcAccessGuard.tsx).
 export default function OtAccessGuard({ children }: { children: ReactNode }) {
     const router = useRouter();
+    const t = useTranslations("Attendance.OtHome");
+    const tCommon = useTranslations("Common");
     const { user, isLoading } = useAuth();
     const pathname = usePathname() || "";
     // Ngoài quyền module, từng trang còn phải đủ quyền riêng của nó (vào thẳng URL cũng bị chặn, không
@@ -28,7 +31,7 @@ export default function OtAccessGuard({ children }: { children: ReactNode }) {
         // [locale]/layout.tsx; khai 100vh ở đây sẽ dôi ra đúng bằng chiều cao Header.
         return (
             <div className="flex min-h-full items-center justify-center bg-[#f8fafc] text-sm text-[#5e3f3a]">
-                {isLoading ? "Đang tải..." : "Bạn không có quyền truy cập mục này."}
+                {isLoading ? tCommon("loading") : t("noAccess")}
             </div>
         );
     }

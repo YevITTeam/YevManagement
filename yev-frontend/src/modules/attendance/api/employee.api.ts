@@ -1,17 +1,25 @@
 import { api } from "@/lib/client";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
-import type { EmployeeAccumulationHistoryYearDto, UpdateEmployeeAccumulationDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
+import type { EmployeeAccumulationDayDto, EmployeeAccumulationHistoryYearDto, UpdateEmployeeAccumulationDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
+import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
     EMPLOYEE: {
         getEmployeePageNation: "/Employee/grid-list",
-        getAllEmployees: "/Employee/all",
         getEmployeeById: (id: number) => `/Employee/${id}`,
         getEmployeesByGroup: (groupId: number, date?: string) => `/Employee/by-group/${groupId}${date ? `?date=${date}` : ""}`,
-        getEmployeesByDepartment: (departmentId: number) => `/Employee/by-department/${departmentId}`,
+        getEmployeesByDepartment: (departmentId: number, workshopId?: number, options?: EmployeesByDepartmentOptions) => {
+            const query = new URLSearchParams();
+            if (workshopId) query.set("workshopId", String(workshopId));
+            if (options?.keyword) query.set("keyword", options.keyword);
+            if (options?.jobTitled) query.set("jobTitled", "true");
+            if (options?.take) query.set("take", String(options.take));
+            const queryString = query.toString();
+            return `/Employee/by-department/${departmentId}${queryString ? `?${queryString}` : ""}`;
+        },
         getEmployeeByUsername: (userName: string) => `/Employee/by-username/${encodeURIComponent(userName)}`,
         createEmployee: "/Employee",
         updateEmployee: (id: number) => `/Employee/${id}`,
@@ -22,6 +30,8 @@ const ENDPOINTS = {
         getInMyScope: "/Employee/in-my-scope",
         getAccumulationHistory: (id: number, year: number) => `/Employee/${id}/accumulation-history?year=${year}`,
         getAccumulationHistoryForManage: (id: number, year: number) => `/Employee/${id}/accumulation-history/manage?year=${year}`,
+        getAccumulationDays: (id: number, year: number, month: number, manage: boolean) =>
+            `/Employee/${id}/accumulation-history/days${manage ? "/manage" : ""}?year=${year}&month=${month}`,
         updateAccumulationHistory: (id: number) => `/Employee/${id}/accumulation-history`,
         getMyScope: "/Employee/my-scope",
     },
@@ -36,6 +46,7 @@ export interface EmployeeScopeDto {
     companyWide: boolean;
     departments: DepartmentDto[];
     groups: GroupDto[];
+    workshops: WorkshopDto[];
 }
 
 export interface GetEmployeePageNationParams {
@@ -44,6 +55,15 @@ export interface GetEmployeePageNationParams {
     keyword?: string;
     departmentId?: number;
     groupId?: number;
+    workshopId?: number;
+}
+
+// A department can hold thousands of employees: the server always caps the list, so pass jobTitled (holders only)
+// and/or keyword + take instead of loading everyone.
+export interface EmployeesByDepartmentOptions {
+    keyword?: string;
+    jobTitled?: boolean;
+    take?: number;
 }
 
 // Params cho GET /in-my-scope — không có departmentId/groupId (phạm vi tự suy theo Cây chức vụ của
@@ -63,6 +83,8 @@ export interface CreateUpdateEmployeeDto {
     userName?: string | null;
     groupId: number | null;
     departmentId: number | null;
+    // Department Managers: the (workshop, department) pairs they approve for.
+    approvalScopes?: { workshopId: number; departmentId: number }[];
     jobTitleId?: number | null;
     // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — null = dùng mặc định chung (2026-08-26, xem
     // EmployeeForm.tsx).
@@ -87,14 +109,11 @@ export const EmployeeApi = {
         if (params?.keyword) query.set("Keyword", params.keyword);
         if (params?.departmentId) query.set("DepartmentId", String(params.departmentId));
         if (params?.groupId) query.set("GroupId", String(params.groupId));
+        if (params?.workshopId) query.set("WorkshopId", String(params.workshopId));
 
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.EMPLOYEE.getEmployeePageNation}?${queryString}` : ENDPOINTS.EMPLOYEE.getEmployeePageNation;
         const response = await api.get<ApiResponseWithPageNation<EmployeeDto>>(url);
-        return response.data;
-    },
-    getAllEmployees: async () => {
-        const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getAllEmployees);
         return response.data;
     },
     getEmployeeById: async (id: number) => {
@@ -110,8 +129,8 @@ export const EmployeeApi = {
     },
     // Toàn bộ nhân viên active thuộc Phòng ban (mọi Bộ phận con) — dùng ở màn "Cây duyệt Phòng ban"
     // để xem ai đang giữ Chức vụ nào và gán nhanh Chức vụ ngay tại đó.
-    getEmployeesByDepartment: async (departmentId: number) => {
-        const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByDepartment(departmentId));
+    getEmployeesByDepartment: async (departmentId: number, workshopId?: number, options?: EmployeesByDepartmentOptions) => {
+        const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByDepartment(departmentId, workshopId, options));
         return response.data;
     },
     // Tra Group của 1 userName bất kỳ — gợi ý cho Admin ở màn "Phân quyền duyệt" (docs §3.5). 404 là
@@ -142,8 +161,8 @@ export const EmployeeApi = {
     // — Người phụ trách Cây duyệt (không phải Admin) gọi được, BE tự chặn nếu Employee không thuộc
     // đúng Bộ phận/Nhóm họ phụ trách. BE tự tính lại groupId/departmentId theo Chức vụ mới, FE chỉ gửi
     // jobTitleId (null = gỡ chức vụ).
-    assignDepartmentJobTitle: async (id: number, departmentId: number, jobTitleId: number | null) => {
-        const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.assignDepartmentJobTitle(id, departmentId), { jobTitleId });
+    assignDepartmentJobTitle: async (id: number, departmentId: number, jobTitleId: number | null, workshopId?: number) => {
+        const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.assignDepartmentJobTitle(id, departmentId), { jobTitleId, workshopId: workshopId ?? null });
         return response.data;
     },
     assignGroupJobTitle: async (id: number, groupId: number, jobTitleId: number | null) => {
@@ -169,6 +188,10 @@ export const EmployeeApi = {
     },
     getAccumulationHistoryForManage: async (id: number, year: number) => {
         const response = await api.get<ApiResponse<EmployeeAccumulationHistoryYearDto>>(ENDPOINTS.EMPLOYEE.getAccumulationHistoryForManage(id, year));
+        return response.data;
+    },
+    getAccumulationDays: async (id: number, year: number, month: number, manage: boolean) => {
+        const response = await api.get<ApiResponse<EmployeeAccumulationDayDto[]>>(ENDPOINTS.EMPLOYEE.getAccumulationDays(id, year, month, manage));
         return response.data;
     },
     updateAccumulationHistory: async (id: number, data: UpdateEmployeeAccumulationDto) => {

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
-import { jobTitleTerminalLevelLabels } from "@/modules/attendance/types/enums";
+import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 import { StyledSelect } from "@/components/ui/StyledSelect";
@@ -36,6 +36,7 @@ const fieldClassName =
 export default function JobTitleForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: JobTitleFormProps) {
     const t = useTranslations("Attendance.JobTitle");
     const tCommon = useTranslations("Common");
+    const enumLabels = useEnumLabels();
     const [values, setValues] = useState<JobTitleFormValues>(emptyValues);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const permissionRef = useRef<JobTitlePermissionSectionHandle>(null);
@@ -131,7 +132,7 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                                     onChange={(level) => setValues((current) => ({ ...current, terminalLevel: level }))}
                                     disabled={loading || isSubmitting}
                                     triggerClassName={`${fieldClassName} pr-8`}
-                                    options={terminalLevelOptions.map((level) => ({ value: level, label: jobTitleTerminalLevelLabels[level] }))}
+                                    options={terminalLevelOptions.map((level) => ({ value: level, label: enumLabels.terminalLevel[level] }))}
                                 />
                             </label>
                         </div>

@@ -88,6 +88,10 @@ namespace Attendance.Application.Services
                     result.CreatedDepartmentCount++;
                 }
 
+                // The Excel has no workshop column, so new groups land in the default (first) workshop.
+                var defaultWorkshop = usedGroupCodes.Any(c => !groupPlans[c].ExistingId.HasValue)
+                    ? (await _unitOfWork.Workshops.FirstOrDefaultAsync(x => !x.IsDeleted)).OrThrowNotFound("Xưởng", "mặc định")
+                    : null;
                 var newGroupsByCode = new Dictionary<string, Group>(StringComparer.OrdinalIgnoreCase);
                 foreach (var code in usedGroupCodes)
                 {
@@ -98,6 +102,7 @@ namespace Attendance.Application.Services
                     {
                         GroupCode = code,
                         GroupNameVn = plan.Name,
+                        WorkshopId = defaultWorkshop!.Id,
                         IsDeleted = false
                     };
 

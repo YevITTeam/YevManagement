@@ -4,7 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
-import { approvalLevelLabels } from "@/modules/attendance/types/enums";
+import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 import { StyledSelect } from "@/components/ui/StyledSelect";
@@ -12,6 +12,7 @@ import { StyledSelect } from "@/components/ui/StyledSelect";
 export interface OtCaseFormValues {
     code: string;
     description: string | null;
+    descriptionJp: string | null;
     requireSignature: boolean;
     requiredApprovalLevel: number;
 }
@@ -28,7 +29,7 @@ interface OtCaseFormProps {
 // Chỉ 1/2/3 — 0=Submitter không dùng làm cấp cuối (docs/attendance-module.md §API).
 const approvalLevelOptions = [1, 2, 3];
 
-const emptyValues: OtCaseFormValues = { code: "", description: null, requireSignature: false, requiredApprovalLevel: 1 };
+const emptyValues: OtCaseFormValues = { code: "", description: null, descriptionJp: null, requireSignature: false, requiredApprovalLevel: 1 };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -37,6 +38,7 @@ const fieldClassName =
 export default function OtCaseForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: OtCaseFormProps) {
     const t = useTranslations("Attendance.OtCase");
     const tCommon = useTranslations("Common");
+    const enumLabels = useEnumLabels();
     const [values, setValues] = useState<OtCaseFormValues>(emptyValues);
 
     useDialogReset(isOpen, initial, (current) => {
@@ -45,6 +47,7 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
                 ? {
                       code: current.code,
                       description: current.description,
+                      descriptionJp: current.descriptionJp,
                       requireSignature: current.requireSignature,
                       requiredApprovalLevel: current.requiredApprovalLevel,
                   }
@@ -57,7 +60,11 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
         if (!values.code.trim() || !values.requiredApprovalLevel) return;
-        onSubmit({ ...values, description: values.description?.trim() ? values.description.trim() : null });
+        onSubmit({
+            ...values,
+            description: values.description?.trim() ? values.description.trim() : null,
+            descriptionJp: values.descriptionJp?.trim() ? values.descriptionJp.trim() : null,
+        });
     };
 
     return (
@@ -111,13 +118,24 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
                         </label>
 
                         <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldDescriptionJp")}</span>
+                            <input
+                                value={values.descriptionJp ?? ""}
+                                onChange={(event) => setValues((current) => ({ ...current, descriptionJp: event.target.value }))}
+                                placeholder={t("fieldDescriptionJpPlaceholder")}
+                                disabled={loading}
+                                className={fieldClassName}
+                            />
+                        </label>
+
+                        <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldRequiredLevel")}<RequiredMark /></span>
                             <StyledSelect
                                 value={values.requiredApprovalLevel}
                                 onChange={(level) => setValues((current) => ({ ...current, requiredApprovalLevel: level }))}
                                 disabled={loading}
                                 triggerClassName={`${fieldClassName} pr-9`}
-                                options={approvalLevelOptions.map((level) => ({ value: level, label: approvalLevelLabels[level] }))}
+                                options={approvalLevelOptions.map((level) => ({ value: level, label: enumLabels.approvalLevel[level] }))}
                             />
                         </label>
                     </div>

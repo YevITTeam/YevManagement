@@ -15,6 +15,8 @@ namespace Attendance.Application.Dtos.OtFormBatches
         public string ReasonNameVn { get; set; } = null!;
         public string? ReasonNameJp { get; set; }
         public string OtCaseCode { get; set; } = null!;
+        public string? OtCaseDescription { get; set; }
+        public string? OtCaseDescriptionJp { get; set; }
         public DateOnly Date { get; set; }
         public TimeOnly StartTime { get; set; }
         public TimeOnly EndTime { get; set; }

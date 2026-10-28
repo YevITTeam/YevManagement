@@ -9,6 +9,8 @@ import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
+import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import GroupForm, { type GroupFormValues } from "./GroupForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
@@ -37,6 +39,8 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
 
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [departmentFilter, setDepartmentFilter] = useState<string>("");
+    const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
+    const [workshopFilter, setWorkshopFilter] = useState<string>("");
 
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -57,7 +61,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
     const { isLoading, error, refetch: fetchGroups } = useFetchEffect<GroupPageResult>(
         async () => {
             if (departmentFilter) {
-                const all = await GroupApi.getGroupsByDepartment(Number(departmentFilter));
+                const all = await GroupApi.getGroupsByDepartment(Number(departmentFilter), workshopFilter ? Number(workshopFilter) : undefined);
                 const filtered = appliedKeyword
                     ? all.filter(
                           (group) =>
@@ -81,10 +85,11 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                 pageIndex,
                 pageSize: PAGE_SIZE,
                 keyword: appliedKeyword || undefined,
+                workshopId: workshopFilter ? Number(workshopFilter) : undefined,
             });
             return { ...result, safePageIndex: pageIndex };
         },
-        [pageIndex, appliedKeyword, departmentFilter],
+        [pageIndex, appliedKeyword, departmentFilter, workshopFilter],
         (result) => {
             setGroups(result.data);
             setTotalCount(result.totalCount);
@@ -101,6 +106,9 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
     useEffect(() => {
         DepartmentApi.getAllDepartments()
             .then((data) => setDepartments(data))
+            .catch((err) => console.error(err));
+        WorkshopApi.getAllWorkshops()
+            .then((data) => setWorkshops(data))
             .catch((err) => console.error(err));
     }, []);
 
@@ -173,6 +181,12 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
         }
     };
 
+    const workshopOptions: SelectOption[] = workshops.map((w) => ({
+        value: w.id,
+        label: w.workshopNameVn,
+        searchText: w.workshopNameVn.toLowerCase(),
+    }));
+
     const departmentOptions: SelectOption[] = departments.map((d) => ({
         value: d.id,
         label: d.departmentNameVn,
@@ -190,6 +204,16 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
                             className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
+                        <SearchableSelect
+                            options={workshopOptions}
+                            value={workshopFilter === "" ? "" : Number(workshopFilter)}
+                            onChange={(v) => {
+                                setPageIndex(1);
+                                setWorkshopFilter(v === "" ? "" : String(v));
+                            }}
+                            placeholder={t("allWorkshops")}
+                            triggerClassName="h-9 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <SearchableSelect
                             options={departmentOptions}
@@ -226,6 +250,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
                                 <th className="px-3 py-2">{t("colCode")}</th>
                                 <th className="px-3 py-2">{t("colNameVn")}</th>
+                                <th className="px-3 py-2">{t("colWorkshop")}</th>
                                 <th className="px-3 py-2">{t("colDepartment")}</th>
                                 <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
                             </tr>
@@ -233,7 +258,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                         <tbody>
                             {!isLoading && groups.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-4 py-12">
+                                    <td colSpan={5} className="px-4 py-12">
                                         <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                             <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                             {t("noData")}
@@ -245,6 +270,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                                 <tr key={group.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{group.groupCode}</td>
                                     <td className="px-3 py-2 text-sm text-[#5e3f3a]">{group.groupNameVn}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{group.workshopNameVn}</td>
                                     <td className="px-3 py-2 text-sm">
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
                                             {group.departmentNameVn}

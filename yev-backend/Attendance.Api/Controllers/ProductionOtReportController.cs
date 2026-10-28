@@ -18,9 +18,9 @@ namespace Attendance.Api.Controllers
 
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("ticket-report")]
-        public async Task<ActionResult<ApiResponse<ProductionTicketReportDto>>> GetTicketReport([FromQuery] DateOnly date, [FromQuery] int? departmentId)
+        public async Task<ActionResult<ApiResponse<ProductionTicketReportDto>>> GetTicketReport([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
         {
-            var result = await _productionOtReportService.GetTicketReportAsync(date, departmentId);
+            var result = await _productionOtReportService.GetTicketReportAsync(date, departmentId, workshopId);
             return Success(result);
         }
 
@@ -28,17 +28,17 @@ namespace Attendance.Api.Controllers
         // ProductionEmployeeExportController.Export.
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("hours-report-excel")]
-        public async Task<IActionResult> ExportHoursReport([FromQuery] DateOnly date, [FromQuery] int? departmentId)
+        public async Task<IActionResult> ExportHoursReport([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
         {
-            var (content, fileName) = await _productionOtReportService.ExportHoursReportAsync(date, departmentId);
+            var (content, fileName) = await _productionOtReportService.ExportHoursReportAsync(date, departmentId, workshopId);
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("times-report-excel")]
-        public async Task<IActionResult> ExportTimesReport([FromQuery] DateOnly date, [FromQuery] int? departmentId)
+        public async Task<IActionResult> ExportTimesReport([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
         {
-            var (content, fileName) = await _productionOtReportService.ExportTimesReportAsync(date, departmentId);
+            var (content, fileName) = await _productionOtReportService.ExportTimesReportAsync(date, departmentId, workshopId);
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
@@ -46,17 +46,17 @@ namespace Attendance.Api.Controllers
         // (xem ProductionOtReportService.BuildRealFileNameAsync).
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("qry-export-excel")]
-        public async Task<IActionResult> ExportQryExportExcel([FromQuery] DateOnly date, [FromQuery] int? departmentId)
+        public async Task<IActionResult> ExportQryExportExcel([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
         {
-            var (content, fileName) = await _productionOtReportService.ExportQryExportExcelAsync(date, departmentId);
+            var (content, fileName) = await _productionOtReportService.ExportQryExportExcelAsync(date, departmentId, workshopId);
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("sum-export-data")]
-        public async Task<IActionResult> ExportSumExportData([FromQuery] DateOnly date, [FromQuery] int? departmentId)
+        public async Task<IActionResult> ExportSumExportData([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
         {
-            var (content, fileName) = await _productionOtReportService.ExportSumExportDataAsync(date, departmentId);
+            var (content, fileName) = await _productionOtReportService.ExportSumExportDataAsync(date, departmentId, workshopId);
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
@@ -64,9 +64,9 @@ namespace Attendance.Api.Controllers
         // cho phần chữ ký/lý do, chỉ lấy danh sách nhân viên gộp từ đây (2026-09-03c).
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("ticket-batch")]
-        public async Task<ActionResult<ApiResponse<List<ProductionTicketBatchGroupDto>>>> GetTicketBatch([FromQuery] DateOnly date, [FromQuery] int? departmentId)
+        public async Task<ActionResult<ApiResponse<List<ProductionTicketBatchGroupDto>>>> GetTicketBatch([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
         {
-            var result = await _productionOtReportService.GetTicketBatchAsync(date, departmentId);
+            var result = await _productionOtReportService.GetTicketBatchAsync(date, departmentId, workshopId);
             return Success(result);
         }
     }

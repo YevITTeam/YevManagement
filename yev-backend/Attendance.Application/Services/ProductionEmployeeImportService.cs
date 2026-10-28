@@ -106,11 +106,15 @@ namespace Attendance.Application.Services
                         x => !x.IsDeleted && x.GroupCode == UnclassifiedGroupCode && x.DepartmentId == department.Id);
                     if (unclassifiedGroup == null)
                     {
+                        // The Excel has no workshop column, so the group lands in the default (first) workshop.
+                        var defaultWorkshop = (await _unitOfWork.Workshops.FirstOrDefaultAsync(x => !x.IsDeleted))
+                            .OrThrowNotFound("Xưởng", "mặc định");
                         unclassifiedGroup = new Group
                         {
                             GroupCode = UnclassifiedGroupCode,
                             GroupNameVn = UnclassifiedGroupNameVn,
                             DepartmentId = department.Id,
+                            WorkshopId = defaultWorkshop.Id,
                             IsDeleted = false
                         };
                         await _unitOfWork.Groups.AddAsync(unclassifiedGroup);

@@ -34,7 +34,7 @@ npx tsc --noEmit    # chạy sau mỗi thay đổi .ts/.tsx, trước khi báo x
 | Auth / User / Role / Permission / email người dùng | `docs/docs-be/identity-module.md` |
 | Chấm công / OT Form / phiếu ăn / lũy kế | `docs/docs-be/attendance-module.md` |
 | In PDF phiếu tăng ca | `docs/docs-be/attendance-otform-pdf-mapping.md` |
-| Quản lý tài sản / ServerCheck / Inventory / AppRelease / AI Chat Asset | `docs/docs-be/asset-module.md` |
+| Quản lý tài sản / ServerCheck / Inventory / AppRelease / Nhật ký USB / AI Chat Asset | `docs/docs-be/asset-module.md` |
 | Workflow: form builder, quy trình duyệt, tổ chức/nhân sự | `docs/docs-be/workflow-module.md` |
 | Gọi API từ FE, viết `*.api.ts`/`*.dto.ts`, pattern component, i18n | `docs/docs-fe/frontend-conventions.md` |
 | Giao diện / UI | `docs/docs-fe/DESIGN_SYSTEM.md`, làm UI bằng command `/yev-ui` |

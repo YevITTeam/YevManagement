@@ -1,6 +1,8 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { FolderOpen, Plus } from "lucide-react";
@@ -11,15 +13,17 @@ import { ProductionApprovalStepApi } from "@/modules/attendance/api/production-a
 import { DepartmentApprovalStepCoordinatorApi } from "@/modules/attendance/api/department-approval-step-coordinator.api";
 import { GroupApprovalStepCoordinatorApi } from "@/modules/attendance/api/group-approval-step-coordinator.api";
 import { GroupApi } from "@/modules/attendance/api/group.api";
+import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { DepartmentApprovalStepDto } from "@/modules/attendance/types/department-approval-step.dto";
-import type { GroupApprovalStepDto } from "@/modules/attendance/types/group-approval-step.dto";
+import type { GroupApprovalStepDto, GroupBorrowedApproversDto } from "@/modules/attendance/types/group-approval-step.dto";
 import type { ProductionApprovalStepDto } from "@/modules/attendance/types/production-approval-step.dto";
 import type { DepartmentApprovalStepCoordinatorDto } from "@/modules/attendance/types/department-approval-step-coordinator.dto";
 import type { GroupApprovalStepCoordinatorDto } from "@/modules/attendance/types/group-approval-step-coordinator.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
+import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -33,15 +37,18 @@ import StepCard, { type StepCardLabels } from "./StepCard";
 import StepHolders, { type StepHoldersLabels } from "./StepHolders";
 import CoordinatorsBox, { type CoordinatorsBoxLabels } from "./CoordinatorsBox";
 
+const TEAM_LEADER_CODE = "TL";
+const EMPTY_BORROWED: GroupBorrowedApproversDto = { approvers: [], candidates: [] };
+
 const sectionTitleClassName = "text-sm font-semibold text-[#191c1e]";
 // Compact trigger for the selects in this screen (default input trigger is too tall/wide for a tree UI).
 const compactSelectClassName =
     "h-8 w-full rounded-md border border-[#e0e3e5] bg-white px-2.5 pr-8 text-xs! text-[#191c1e] outline-none transition focus:border-[#e3000f]";
 
-const toJobTitleOptions = (jobTitles: JobTitleDto[]): SelectOption[] =>
+const toJobTitleOptions = (jobTitles: JobTitleDto[], codeWithRank: (code: string, rank: number) => string): SelectOption[] =>
     jobTitles.map((jt) => ({
         value: jt.id,
-        label: `${jt.name} (${jt.code}, cấp ${jt.rankOrder})`,
+        label: `${jt.name} (${codeWithRank(jt.code, jt.rankOrder)})`,
         searchText: `${jt.name} ${jt.code}`.toLowerCase(),
     }));
 
@@ -66,6 +73,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const tDept = useTranslations("Attendance.DepartmentApprovalStep");
     const tGroup = useTranslations("Attendance.GroupApprovalStep");
     const tProd = useTranslations("Attendance.ProductionApprovalStep");
+    const tJobTitle = useTranslations("Attendance.JobTitle");
+    const codeWithRank = (code: string, rank: number) => tJobTitle("codeWithRank", { code, rank });
     const { user } = useAuth();
     // Chỉ Admin (hoặc người được cấp riêng — không xảy ra trong thực tế) mới quản lý ĐƯỢC danh sách
     // Người phụ trách — bản thân 1 Người phụ trách khi mở màn này (được cho vào từ 2026-08-11 qua
@@ -82,6 +91,10 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     // không lọc theo terminalLevel như 2 khối trên (xem ProductionApprovalStepService.ReplaceAsync).
     const [allJobTitles, setAllJobTitles] = useState<JobTitleDto[]>([]);
     const [departmentId, setDepartmentId] = useState<number | "">("");
+    // Workshop scoping Manager holders and groups; defaults to the first workshop until one is picked.
+    const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
+    const [pickedWorkshopId, setPickedWorkshopId] = useState<number | "">("");
+    const workshopId: number | "" = pickedWorkshopId === "" ? (workshops.length > 0 ? workshops[0].id : "") : pickedWorkshopId;
     const [isLoadingOptions, setIsLoadingOptions] = useState(true);
     // 2 tab (2026-08-25): "Theo Nhóm" = 2 khối cũ (Nhóm + Bộ phận, dùng cho đơn OT thường) gộp
     // chung 1 tab vì đơn đi xuyên qua CẢ 2 liền mạch (Nhóm trước, Bộ phận sau); "Theo chuyền" = khối
@@ -89,7 +102,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     // 1 luồng độc lập, không liên quan gì tới cấu hình Nhóm/Bộ phận — khớp đúng 2 chế độ tạo đơn ở
     // CreateOtFormPage.tsx (formMode "group"/"production"). Đổi tab CHỈ đổi phần hiển thị — state của
     // cả 2 tab đều nằm ở component này (không mất gì khi đổi qua lại), nên KHÔNG cần xác nhận huỷ.
-    const [activeTab, setActiveTab] = useState<"group" | "production">("group");
+    const [activeTab, setActiveTab] = usePersistedTab<"group" | "production">("ot-approval-steps-tab", ["group", "production"], "group");
 
     // ── Khối Chuyền (Bộ phận, 1 danh sách duy nhất — 2026-08-24) ─────────────
     const [productionSteps, setProductionSteps] = useState<ProductionApprovalStepDto[]>([]);
@@ -104,7 +117,13 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [isLoadingDeptSteps, setIsLoadingDeptSteps] = useState(false);
     const [isSavingDept, setIsSavingDept] = useState(false);
     const [isDeptDirty, setIsDeptDirty] = useState(false);
+    // Holders = employees of the department that hold a Job Title (small); search results feed the "add" pickers
+    // (a department can have thousands of employees, so they are searched on the server, not preloaded).
     const [deptEmployees, setDeptEmployees] = useState<EmployeeDto[]>([]);
+    const [deptSearchResults, setDeptSearchResults] = useState<EmployeeDto[]>([]);
+    const [deptSearchQuery, setDeptSearchQuery] = useState("");
+    const deptSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const deptPool = [...deptEmployees, ...deptSearchResults.filter((r) => !deptEmployees.some((e) => e.id === r.id))];
     const [isLoadingDeptEmployees, setIsLoadingDeptEmployees] = useState(false);
     const [assigningDeptEmployeeId, setAssigningDeptEmployeeId] = useState<number | null>(null);
     const [addingDeptHolderByJobTitle, setAddingDeptHolderByJobTitle] = useState<Record<number, number | "">>({});
@@ -121,6 +140,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [isSavingGroup, setIsSavingGroup] = useState(false);
     const [isGroupDirty, setIsGroupDirty] = useState(false);
     const [groupEmployees, setGroupEmployees] = useState<EmployeeDto[]>([]);
+    const [groupBorrowed, setGroupBorrowed] = useState<GroupBorrowedApproversDto>(EMPTY_BORROWED);
     const [isLoadingGroupEmployees, setIsLoadingGroupEmployees] = useState(false);
     const [assigningGroupEmployeeId, setAssigningGroupEmployeeId] = useState<number | null>(null);
     const [addingGroupHolderByJobTitle, setAddingGroupHolderByJobTitle] = useState<Record<number, number | "">>({});
@@ -146,8 +166,14 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         // getMyDepartments (không phải DepartmentApi.getAllDepartments()) — Admin thấy toàn bộ, người
         // được gán phụ trách (Coordinator, không phải Admin) chỉ thấy đúng Bộ phận mình quản, tránh
         // chọn nhầm Bộ phận không thuộc quyền rồi bị 403 khi gọi các API bên dưới (2026-08-25).
-        Promise.all([DepartmentApprovalStepApi.getMyDepartments(), GroupApi.getAllGroups(), JobTitleApi.getAllJobTitles()])
-            .then(([departmentData, groupData, jobTitleData]) => {
+        Promise.all([
+            DepartmentApprovalStepApi.getMyDepartments(),
+            GroupApi.getAllGroups(),
+            JobTitleApi.getAllJobTitles(),
+            WorkshopApi.getAllWorkshops().catch(() => [] as WorkshopDto[]),
+        ])
+            .then(([departmentData, groupData, jobTitleData, workshopData]) => {
+                setWorkshops(workshopData);
                 setDepartments(departmentData);
                 setGroups(groupData);
                 // Cấp cuối (Manager/Factory Manager/Director) cho khối Bộ phận; cấp trung gian
@@ -196,9 +222,9 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             .finally(() => setIsLoadingProductionSteps(false));
     };
 
-    const fetchDeptEmployees = (targetDepartmentId: number) => {
+    const fetchDeptEmployees = (targetDepartmentId: number, targetWorkshopId: number | "" = workshopId) => {
         setIsLoadingDeptEmployees(true);
-        EmployeeApi.getEmployeesByDepartment(targetDepartmentId)
+        EmployeeApi.getEmployeesByDepartment(targetDepartmentId, typeof targetWorkshopId === "number" ? targetWorkshopId : undefined, { jobTitled: true })
             .then((data) => setDeptEmployees(data))
             .catch((err) => {
                 console.error(err);
@@ -206,6 +232,22 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             })
             .finally(() => setIsLoadingDeptEmployees(false));
     };
+
+    const handleDeptPickerQuery = (query: string) => {
+        if (deptSearchTimer.current) clearTimeout(deptSearchTimer.current);
+        deptSearchTimer.current = setTimeout(() => setDeptSearchQuery(query.trim()), 300);
+    };
+
+    useFetchEffect(
+        () =>
+            typeof departmentId === "number"
+                ? EmployeeApi.getEmployeesByDepartment(departmentId, typeof workshopId === "number" ? workshopId : undefined, { keyword: deptSearchQuery || undefined, take: 30 })
+                : Promise.resolve([]),
+        [departmentId, workshopId, deptSearchQuery],
+        setDeptSearchResults,
+        tDept("loadEmployeesError"),
+        (message) => toast.error(message)
+    );
 
     const fetchDeptCoordinators = (targetDepartmentId: number) => {
         if (!canManageDeptCoordinators) return;
@@ -242,6 +284,15 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 toast.error(getApiErrorMessage(err, tGroup("loadEmployeesError")));
             })
             .finally(() => setIsLoadingGroupEmployees(false));
+    };
+
+    const fetchGroupBorrowed = (targetGroupId: number) => {
+        GroupApprovalStepApi.getBorrowedApprovers(targetGroupId)
+            .then((data) => setGroupBorrowed(data))
+            .catch((err) => {
+                console.error(err);
+                toast.error(getApiErrorMessage(err, tGroup("loadEmployeesError")));
+            });
     };
 
     const fetchGroupCoordinators = (targetGroupId: number) => {
@@ -287,6 +338,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setGroupId("");
         setGroupSteps([]);
         setGroupEmployees([]);
+        setGroupBorrowed(EMPTY_BORROWED);
         setGroupCoordinators([]);
         setAddingGroupJobTitleId("");
         setIsGroupDirty(false);
@@ -306,12 +358,14 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setGroupId(value);
         setGroupSteps([]);
         setGroupEmployees([]);
+        setGroupBorrowed(EMPTY_BORROWED);
         setGroupCoordinators([]);
         setAddingGroupJobTitleId("");
         setIsGroupDirty(false);
         if (typeof value === "number") {
             fetchGroupSteps(value);
             fetchGroupEmployees(value);
+            fetchGroupBorrowed(value);
             fetchGroupCoordinators(value);
         }
     };
@@ -341,8 +395,9 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
         setAssigningDeptEmployeeId(employee.id);
         try {
-            const updated = await EmployeeApi.assignDepartmentJobTitle(employee.id, departmentId, nextJobTitleId);
-            setDeptEmployees((current) => current.map((e) => (e.id === employee.id ? updated : e)));
+            const updated = await EmployeeApi.assignDepartmentJobTitle(employee.id, departmentId, nextJobTitleId, typeof workshopId === "number" ? workshopId : undefined);
+            setDeptEmployees((current) => (current.some((e) => e.id === employee.id) ? current.map((e) => (e.id === employee.id ? updated : e)) : [...current, updated]));
+            setDeptSearchResults((current) => current.map((e) => (e.id === employee.id ? updated : e)));
             toast.success(tDept("assignSuccess"));
         } catch (err) {
             console.error(err);
@@ -372,10 +427,32 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
+    const saveBorrowedApprovers = async (employeeId: number, nextEmployeeIds: number[]) => {
+        if (typeof groupId !== "number") return;
+        setAssigningGroupEmployeeId(employeeId);
+        try {
+            setGroupBorrowed(await GroupApprovalStepApi.replaceBorrowedApprovers(groupId, nextEmployeeIds));
+            toast.success(tGroup("assignSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, tGroup("assignError")));
+        } finally {
+            setAssigningGroupEmployeeId(null);
+        }
+    };
+
+    const handleRemoveGroupHolder = (holder: { id: number }) => {
+        if (groupBorrowed.approvers.some((a) => a.employeeId === holder.id)) {
+            return saveBorrowedApprovers(holder.id, groupBorrowed.approvers.filter((a) => a.employeeId !== holder.id).map((a) => a.employeeId));
+        }
+        const employee = groupEmployees.find((e) => e.id === holder.id);
+        return employee ? handleAssignGroupJobTitle(employee, "") : undefined;
+    };
+
     const handlePickDeptHolder = async (jobTitleId: number, employeeId: number | "") => {
         setAddingDeptHolderByJobTitle((current) => ({ ...current, [jobTitleId]: employeeId }));
         if (employeeId === "") return;
-        const employee = deptEmployees.find((e) => e.id === employeeId);
+        const employee = deptPool.find((e) => e.id === employeeId);
         if (!employee) return;
         await handleAssignDeptJobTitle(employee, jobTitleId);
         setAddingDeptHolderByJobTitle((current) => ({ ...current, [jobTitleId]: "" }));
@@ -384,6 +461,11 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const handlePickGroupHolder = async (jobTitleId: number, employeeId: number | "") => {
         setAddingGroupHolderByJobTitle((current) => ({ ...current, [jobTitleId]: employeeId }));
         if (employeeId === "") return;
+        if (groupBorrowed.candidates.some((c) => c.employeeId === employeeId)) {
+            await saveBorrowedApprovers(employeeId, [...groupBorrowed.approvers.map((a) => a.employeeId), employeeId]);
+            setAddingGroupHolderByJobTitle((current) => ({ ...current, [jobTitleId]: "" }));
+            return;
+        }
         const employee = groupEmployees.find((e) => e.id === employeeId);
         if (!employee) return;
         await handleAssignGroupJobTitle(employee, jobTitleId);
@@ -400,7 +482,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const handleAddDeptCoordinator = async (employeeId: number | "") => {
         setAddingDeptCoordinatorEmployeeId(employeeId);
         if (employeeId === "" || typeof departmentId !== "number") return;
-        const employee = deptEmployees.find((e) => e.id === employeeId);
+        const employee = deptPool.find((e) => e.id === employeeId);
         if (!employee || deptCoordinators.some((c) => c.employeeId === employee.id)) {
             setAddingDeptCoordinatorEmployeeId("");
             return;
@@ -498,6 +580,27 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                     .toLowerCase(),
             }));
 
+    // Team Leader step: own-group holders plus Team Leaders borrowed from other Groups of the Department.
+    const buildGroupHolders = (step: GroupApprovalStepDto) => {
+        const own = groupEmployees.filter((e) => e.jobTitleId === step.jobTitleId);
+        if (step.jobTitleCode !== TEAM_LEADER_CODE) return own;
+        const borrowed = groupBorrowed.approvers.map((a) => ({
+            id: a.employeeId,
+            lastName: a.lastName,
+            firstName: a.firstName,
+            code: a.employeeCode,
+            badge: a.groupNameVn,
+        }));
+        return [...own, ...borrowed];
+    };
+
+    const buildBorrowCandidateOptions = (): SelectOption[] =>
+        groupBorrowed.candidates.map((c) => ({
+            value: c.employeeId,
+            label: `${c.lastName} ${c.firstName} (${c.employeeCode}) — ${c.groupNameVn ?? ""}`,
+            searchText: [c.lastName, c.firstName, `${c.firstName} ${c.lastName}`, c.employeeCode, c.groupNameVn ?? ""].join(" ").toLowerCase(),
+        }));
+
     // ── Options cho 2 combobox cấp trên: Bộ phận (toàn công ty) + Nhóm (lọc theo Bộ phận đã chọn) —
     // cả 2 đều dùng SearchableSelect vì số lượng Bộ phận/Nhóm thực tế có thể khá nhiều, cuộn <select>
     // thường sẽ khó dùng hơn gõ tìm (quy tắc chung — xem docs/docs-fe/DESIGN_SYSTEM.md §4.3).
@@ -507,7 +610,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         searchText: `${d.departmentNameVn} ${d.departmentCode}`.toLowerCase(),
     }));
     const groupOptions: SelectOption[] = groups
-        .filter((g) => g.departmentId === departmentId)
+        .filter((g) => g.departmentId === departmentId && (workshopId === "" || g.workshopId === workshopId))
         .map((g) => ({
             value: g.id,
             label: g.groupNameVn,
@@ -841,6 +944,30 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         triggerClassName={compactSelectClassName}
                     />
                 </div>
+                {workshops.length > 0 && (
+                    <>
+                        <span className="ml-2 shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tDept("fieldWorkshop")}</span>
+                        <div className="w-44">
+                            <SearchableSelect
+                                options={workshops.map((w) => ({ value: w.id, label: w.workshopNameVn, searchText: w.workshopNameVn.toLowerCase() }))}
+                                value={workshopId}
+                                onChange={(v) => {
+                                    setPickedWorkshopId(v);
+                                    setGroupId("");
+                                    setGroupSteps([]);
+                                    setGroupEmployees([]);
+                                    setGroupBorrowed(EMPTY_BORROWED);
+                                    setGroupCoordinators([]);
+                                    setIsGroupDirty(false);
+                                    if (typeof departmentId === "number") fetchDeptEmployees(departmentId, v);
+                                }}
+                                placeholder={tDept("fieldWorkshopPlaceholder")}
+                                disabled={isLoadingOptions}
+                                triggerClassName={compactSelectClassName}
+                            />
+                        </div>
+                    </>
+                )}
                 {activeTab === "group" && typeof departmentId === "number" && (
                     <>
                         <span className="ml-2 shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tGroup("fieldGroup")}</span>
@@ -935,11 +1062,14 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                             labels={groupStepLabels}
                                                             footer={
                                                                 <StepHolders
-                                                                    holders={groupEmployees.filter((e) => e.jobTitleId === step.jobTitleId)}
+                                                                    holders={buildGroupHolders(step)}
                                                                     isLoadingEmployees={isLoadingGroupEmployees}
                                                                     removingHolderId={assigningGroupEmployeeId}
-                                                                    onRemoveHolder={(holder) => handleAssignGroupJobTitle(holder as EmployeeDto, "")}
-                                                                    addOptions={buildHolderOptions(groupEmployees, step.jobTitleId)}
+                                                                    onRemoveHolder={handleRemoveGroupHolder}
+                                                                    addOptions={[
+                                                                        ...buildHolderOptions(groupEmployees, step.jobTitleId),
+                                                                        ...(step.jobTitleCode === TEAM_LEADER_CODE ? buildBorrowCandidateOptions() : []),
+                                                                    ]}
                                                                     addingValue={addingGroupHolderByJobTitle[step.jobTitleId] ?? ""}
                                                                     onAddChange={(v) => handlePickGroupHolder(step.jobTitleId, v)}
                                                                     labels={groupHoldersLabels}
@@ -953,7 +1083,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                             <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-3">
                                                 <div className="w-64 max-w-full">
                                                     <SearchableSelect
-                                                        options={toJobTitleOptions(availableGroupJobTitles)}
+                                                        options={toJobTitleOptions(availableGroupJobTitles, codeWithRank)}
                                                         value={addingGroupJobTitleId}
                                                         onChange={setAddingGroupJobTitleId}
                                                         placeholder={tGroup("fieldAddJobTitlePlaceholder")}
@@ -1014,7 +1144,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                                     isLoadingEmployees={isLoadingDeptEmployees}
                                                                     removingHolderId={assigningDeptEmployeeId}
                                                                     onRemoveHolder={(holder) => handleAssignDeptJobTitle(holder as EmployeeDto, "")}
-                                                                    addOptions={buildHolderOptions(deptEmployees, step.jobTitleId)}
+                                                                    addOptions={buildHolderOptions(deptPool, step.jobTitleId)}
+                                                                    onAddQueryChange={handleDeptPickerQuery}
                                                                     addingValue={addingDeptHolderByJobTitle[step.jobTitleId] ?? ""}
                                                                     onAddChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
                                                                     labels={deptHoldersLabels}
@@ -1028,7 +1159,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                             <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-3">
                                                 <div className="w-64 max-w-full">
                                                     <SearchableSelect
-                                                        options={toJobTitleOptions(availableDeptJobTitles)}
+                                                        options={toJobTitleOptions(availableDeptJobTitles, codeWithRank)}
                                                         value={addingDeptJobTitleId}
                                                         onChange={setAddingDeptJobTitleId}
                                                         placeholder={tDept("fieldAddJobTitlePlaceholder")}
@@ -1074,7 +1205,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                         coordinators={deptCoordinators}
                                         onRemove={handleRemoveDeptCoordinator}
                                         isSaving={isSavingDeptCoordinators}
-                                        addOptions={buildCoordinatorOptions(deptEmployees, new Set(deptCoordinators.map((c) => c.employeeId)))}
+                                        addOptions={buildCoordinatorOptions(deptPool, new Set(deptCoordinators.map((c) => c.employeeId)))}
+                                        onAddQueryChange={handleDeptPickerQuery}
                                         addingValue={addingDeptCoordinatorEmployeeId}
                                         onAddChange={handleAddDeptCoordinator}
                                         labels={deptCoordinatorLabels}
@@ -1128,7 +1260,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                             isLoadingEmployees={isLoadingDeptEmployees}
                                                             removingHolderId={assigningDeptEmployeeId}
                                                             onRemoveHolder={(holder) => handleAssignDeptJobTitle(holder as EmployeeDto, "")}
-                                                            addOptions={buildHolderOptions(deptEmployees, step.jobTitleId)}
+                                                            addOptions={buildHolderOptions(deptPool, step.jobTitleId)}
+                                                                    onAddQueryChange={handleDeptPickerQuery}
                                                             addingValue={addingDeptHolderByJobTitle[step.jobTitleId] ?? ""}
                                                             onAddChange={(v) => handlePickDeptHolder(step.jobTitleId, v)}
                                                             labels={deptHoldersLabels}
@@ -1143,7 +1276,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                 <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-3">
                                     <div className="w-64 max-w-full">
                                         <SearchableSelect
-                                            options={toJobTitleOptions(availableProductionJobTitles)}
+                                            options={toJobTitleOptions(availableProductionJobTitles, codeWithRank)}
                                             value={addingProductionJobTitleId}
                                             onChange={setAddingProductionJobTitleId}
                                             placeholder={tProd("fieldAddJobTitlePlaceholder")}

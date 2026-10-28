@@ -9,8 +9,11 @@ namespace Attendance.Application.Dtos.OtForms
         public string? GroupNameJp { get; set; }
         public bool IsProductionForm { get; set; }
         public string DepartmentNameVn { get; set; } = null!;
+        public string WorkshopNameVn { get; set; } = null!;
         public string? DepartmentNameJp { get; set; }
         public string OtCaseCode { get; set; } = null!;
+        public string? OtCaseDescription { get; set; }
+        public string? OtCaseDescriptionJp { get; set; }
         public DateOnly Date { get; set; }
         public decimal TotalHour { get; set; }
         public int NumberOfEmployee { get; set; }

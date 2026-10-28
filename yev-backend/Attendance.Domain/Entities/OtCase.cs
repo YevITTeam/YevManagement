@@ -10,6 +10,8 @@ public partial class OtCase
 
     public string? Description { get; set; }
 
+    public string? DescriptionJp { get; set; }
+
     // Determines whether the approval flow of an OtForm using this OtCase requires a handwritten signature (SignatureImage).
     public bool RequireSignature { get; set; }
 

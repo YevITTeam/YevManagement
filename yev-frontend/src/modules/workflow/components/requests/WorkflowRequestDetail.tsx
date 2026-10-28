@@ -623,7 +623,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
             )}
 
             {request.status === RequestStatus.Draft && (
-                <div className="flex justify-end gap-2">
+                <div className="sticky bottom-0 z-20 flex justify-end gap-2 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
                     <button
                         onClick={handleSaveDraft}
                         disabled={isSavingDraft || isSubmitting}
@@ -642,7 +642,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
             )}
 
             {canEditAndResubmit && (
-                <div className="flex justify-end gap-2">
+                <div className="sticky bottom-0 z-20 flex justify-end gap-2 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
                     <button
                         onClick={handleSaveDraft}
                         disabled={isSavingDraft || isResubmitting}

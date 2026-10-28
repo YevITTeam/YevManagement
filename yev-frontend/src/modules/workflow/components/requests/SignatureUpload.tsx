@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { cutOutSignature } from "@/lib/signatureCutout";
 
 interface SignatureUploadProps {
     onChange: (base64: string | null) => void;
@@ -10,11 +11,6 @@ interface SignatureUploadProps {
     // tự đồng bộ lại nếu đổi sau khi mount. Cha (WorkflowRequestDetail) tự set state của mình bằng giá
     // trị này lúc fetch xong, tại đây chỉ cần hiển thị đúng — tránh phải gọi onChange trong effect.
     initialBase64?: string | null;
-}
-
-function stripDataUrlPrefix(dataUrl: string) {
-    const commaIndex = dataUrl.indexOf(",");
-    return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
 
 // Upload file ảnh chữ ký (PNG/JPG) → base64 gửi qua ApproveRequestDto.SignatureImageBase64 — mirror Y
@@ -28,13 +24,12 @@ export default function SignatureUpload({ onChange, disabled = false, initialBas
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            const base64 = stripDataUrlPrefix(String(reader.result));
-            setPreview(base64);
-            onChange(base64);
-        };
-        reader.readAsDataURL(file);
+        cutOutSignature(file)
+            .then((base64) => {
+                setPreview(base64);
+                onChange(base64);
+            })
+            .catch(console.error);
     };
 
     const handleClear = () => {

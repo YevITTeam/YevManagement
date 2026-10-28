@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import { Tabs } from "@/components/ui/Tabs";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 
@@ -46,7 +47,7 @@ export default function WorkflowRequestList() {
     const canViewAll = hasPermission(user, "Workflow.Request.ViewAll");
     const router = useRouter();
 
-    const [tab, setTab] = useState<TabKey>("mine");
+    const [tab, setTab] = usePersistedTab<TabKey>("workflow-requests-tab", ["mine", "pending", "all"], "mine");
     const [statusFilter, setStatusFilter] = useState<number | "">("");
     const [items, setItems] = useState<WorkflowRequestListItemDto[]>([]);
     const [pageIndex, setPageIndex] = useState(1);

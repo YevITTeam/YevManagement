@@ -31,6 +31,8 @@ interface SearchableSelectProps {
     disabled?: boolean;
     /** Override className của ô trigger — mặc định dùng kích thước chuẩn (h-10). */
     triggerClassName?: string;
+    /** Fired as the user types (and with "" on open/close) so a caller can fetch matching options from the server. */
+    onQueryChange?: (query: string) => void;
 }
 
 interface PanelPosition {
@@ -40,8 +42,17 @@ interface PanelPosition {
     maxHeight: number;
 }
 
-export function SearchableSelect({ options, value, onChange, placeholder, disabled, triggerClassName }: SearchableSelectProps) {
-    const [query, setQuery] = useState("");
+export function SearchableSelect({ options, value, onChange, placeholder, disabled, triggerClassName, onQueryChange }: SearchableSelectProps) {
+    const [query, setQueryState] = useState("");
+    // Ref keeps the callback out of close()'s identity, which the outside-click effect depends on.
+    const onQueryChangeRef = useRef(onQueryChange);
+    useEffect(() => {
+        onQueryChangeRef.current = onQueryChange;
+    });
+    const setQuery = (next: string) => {
+        setQueryState(next);
+        onQueryChangeRef.current?.(next);
+    };
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
@@ -124,7 +135,8 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
 
     function close() {
         setIsOpen(false);
-        setQuery("");
+        setQueryState("");
+        onQueryChangeRef.current?.("");
         setPanelPosition(null);
     }
 

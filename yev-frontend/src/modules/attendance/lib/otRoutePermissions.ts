@@ -26,6 +26,8 @@ export const OT_ROUTE_PERMISSIONS: { prefix: string; permissions: string[] }[] =
     // Leader chỉ có CreateProduction (không có Create) vẫn phải vào được màn này để tạo đơn theo chuyền
     // (2026-09-28, sửa lỗi thật: route guard trước đây chỉ khớp Create, chặn thẳng trước khi kịp vào
     // trang dù CreateOtFormPage.tsx đã tự chuyển sang tab "Theo chuyền" đúng cho trường hợp này).
+    // Manager-and-above is enforced by the API (OtOverview/access); Approve is only the cheap UI gate.
+    { prefix: "/ot/overview", permissions: ["Attendance.OTForm.Approve"] },
     { prefix: "/ot/create", permissions: ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"] },
     { prefix: "/ot/ai-chat", permissions: ["Attendance.AiChat.Use"] },
     { prefix: "/ot/list", permissions: ["Attendance.OTForm.View"] },

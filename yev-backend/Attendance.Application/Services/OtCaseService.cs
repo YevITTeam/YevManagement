@@ -24,7 +24,7 @@ namespace Attendance.Application.Services
                 query.OrderBy(x => x.Code),
                 pageIndex,
                 pageSize,
-                x => new OtCaseDto { Id = x.Id, Code = x.Code, Description = x.Description, RequireSignature = x.RequireSignature, RequiredApprovalLevel = x.RequiredApprovalLevel }
+                x => new OtCaseDto { Id = x.Id, Code = x.Code, Description = x.Description, DescriptionJp = x.DescriptionJp, RequireSignature = x.RequireSignature, RequiredApprovalLevel = x.RequiredApprovalLevel }
             );
         }
 
@@ -32,7 +32,7 @@ namespace Attendance.Application.Services
         {
             var items = await _unitOfWork.OtCases.SelectAsync(
                 predicate: x => !x.IsDeleted,
-                selector: x => new OtCaseDto { Id = x.Id, Code = x.Code, Description = x.Description, RequireSignature = x.RequireSignature, RequiredApprovalLevel = x.RequiredApprovalLevel }
+                selector: x => new OtCaseDto { Id = x.Id, Code = x.Code, Description = x.Description, DescriptionJp = x.DescriptionJp, RequireSignature = x.RequireSignature, RequiredApprovalLevel = x.RequiredApprovalLevel }
             );
             return items.OrderBy(x => x.Code).ToList();
         }
@@ -42,7 +42,7 @@ namespace Attendance.Application.Services
             var otCase = await _unitOfWork.OtCases.GetByIdAsync(id);
             otCase.OrThrowNotFound("Trường hợp OT", id);
 
-            return new OtCaseDto { Id = otCase!.Id, Code = otCase.Code, Description = otCase.Description, RequireSignature = otCase.RequireSignature, RequiredApprovalLevel = otCase.RequiredApprovalLevel };
+            return new OtCaseDto { Id = otCase!.Id, Code = otCase.Code, Description = otCase.Description, DescriptionJp = otCase.DescriptionJp, RequireSignature = otCase.RequireSignature, RequiredApprovalLevel = otCase.RequiredApprovalLevel };
         }
 
         public async Task<OtCaseDto> CreateAsync(CreateOtCaseDto request)
@@ -54,6 +54,7 @@ namespace Attendance.Application.Services
             {
                 Code = request.Code,
                 Description = request.Description,
+                DescriptionJp = request.DescriptionJp,
                 RequireSignature = request.RequireSignature,
                 RequiredApprovalLevel = request.RequiredApprovalLevel,
                 IsDeleted = false
@@ -62,7 +63,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.OtCases.AddAsync(newOtCase);
             await _unitOfWork.SaveChangesAsync();
 
-            return new OtCaseDto { Id = newOtCase.Id, Code = newOtCase.Code, Description = newOtCase.Description, RequireSignature = newOtCase.RequireSignature, RequiredApprovalLevel = newOtCase.RequiredApprovalLevel };
+            return new OtCaseDto { Id = newOtCase.Id, Code = newOtCase.Code, Description = newOtCase.Description, DescriptionJp = newOtCase.DescriptionJp, RequireSignature = newOtCase.RequireSignature, RequiredApprovalLevel = newOtCase.RequiredApprovalLevel };
         }
 
         public async Task UpdateAsync(UpdateOtCaseDto request)
@@ -78,6 +79,7 @@ namespace Attendance.Application.Services
 
             otCase.Code = request.Code;
             otCase.Description = request.Description;
+            otCase.DescriptionJp = request.DescriptionJp;
             otCase.RequireSignature = request.RequireSignature;
             otCase.RequiredApprovalLevel = request.RequiredApprovalLevel;
 

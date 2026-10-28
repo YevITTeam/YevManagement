@@ -2,11 +2,12 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, Layers, UserCheck } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, Layers, UserCheck, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
+import { useOverviewAccess } from "@/modules/attendance/hooks/useOverviewAccess";
 import { OT_CATEGORIES_PERMISSIONS } from "@/modules/attendance/lib/otRoutePermissions";
 import BrandLogo from "@/components/common/BrandLogo";
 
@@ -17,10 +18,13 @@ interface OtNavItem {
     // Có 1 TRONG các permission này là thấy mục — mảng 1 phần tử cho hầu hết mục, nhiều phần tử khi
     // có thêm diện phụ trách riêng (xem "otCategories").
     permissions?: string[];
+    // Shown only to Admin / Manager-and-above (see useOverviewAccess).
+    requiresOverviewAccess?: boolean;
 }
 
 // Permission theo từng mục — bảng Vai trò → Menu (docs/attendance-module.md §API).
 const navItems: OtNavItem[] = [
+    { key: "otOverview", href: "/ot/overview", icon: LayoutDashboard, permissions: ["Attendance.OTForm.Approve"], requiresOverviewAccess: true },
     // Create/CreateProduction tách rời — Line Leader chỉ có CreateProduction vẫn cần thấy mục này
     // (2026-09-28, đồng bộ với otRoutePermissions.ts).
     { key: "otCreate", href: "/ot/create", icon: FilePlus2, permissions: ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"] },
@@ -76,6 +80,7 @@ export default function OtManagerSidebar() {
     // Badge số đơn "Chờ tôi duyệt" trên mục "Đơn tăng ca" (otForms) — chỉ gọi API khi user có quyền
     // duyệt, tự poll mỗi 60s (usePendingApprovalsCount).
     const pendingApprovalsCount = usePendingApprovalsCount(hasPermission(user, "Attendance.OTForm.Approve"));
+    const canViewOverview = useOverviewAccess(hasPermission(user, "Attendance.OTForm.Approve"));
 
     return (
         <aside
@@ -121,7 +126,7 @@ export default function OtManagerSidebar() {
                 scroll container nên không thể bị cuộn ngang nữa. */}
             <nav className="mt-5 flex-1 space-y-1 overflow-y-auto overflow-x-clip">
                 {navItems
-                    .filter((item) => !item.permissions || hasAnyPermission(user, item.permissions))
+                    .filter((item) => (!item.permissions || hasAnyPermission(user, item.permissions)) && (!item.requiresOverviewAccess || canViewOverview))
                     .map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                         const badgeCount = item.key === "otForms" ? pendingApprovalsCount : 0;

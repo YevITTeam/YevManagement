@@ -5,12 +5,15 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
+import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface GroupFormValues {
+    workshopId: number;
     departmentId: number;
     groupCode: string;
     groupNameVn: string;
@@ -27,6 +30,7 @@ interface GroupFormProps {
 }
 
 const emptyValues: GroupFormValues = {
+    workshopId: 0,
     departmentId: 0,
     groupCode: "",
     groupNameVn: "",
@@ -43,11 +47,18 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
     const tCommon = useTranslations("Common");
     const [values, setValues] = useState<GroupFormValues>(emptyValues);
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+    const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
 
     useEffect(() => {
         if (!isOpen) return;
         DepartmentApi.getAllDepartments()
             .then(setDepartments)
+            .catch((err) => console.error(err));
+        WorkshopApi.getAllWorkshops()
+            .then((list) => {
+                setWorkshops(list);
+                if (list.length === 1) setValues((current) => (current.workshopId ? current : { ...current, workshopId: list[0].id }));
+            })
             .catch((err) => console.error(err));
     }, [isOpen]);
 
@@ -55,6 +66,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
         setValues(
             current
                 ? {
+                      workshopId: current.workshopId,
                       departmentId: current.departmentId,
                       groupCode: current.groupCode,
                       groupNameVn: current.groupNameVn,
@@ -72,9 +84,15 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
         searchText: d.departmentNameVn.toLowerCase(),
     }));
 
+    const workshopOptions: SelectOption[] = workshops.map((w) => ({
+        value: w.id,
+        label: w.workshopNameVn,
+        searchText: w.workshopNameVn.toLowerCase(),
+    }));
+
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!values.departmentId || !values.groupCode.trim() || !values.groupNameVn.trim()) return;
+        if (!values.workshopId || !values.departmentId || !values.groupCode.trim() || !values.groupNameVn.trim()) return;
         onSubmit({ ...values, groupNameJp: values.groupNameJp?.trim() ? values.groupNameJp.trim() : null });
     };
 
@@ -104,6 +122,17 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
 
                 <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
                     <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldWorkshop")}<RequiredMark /></span>
+                            <SearchableSelect
+                                options={workshopOptions}
+                                value={values.workshopId || ""}
+                                onChange={(v) => setValues((current) => ({ ...current, workshopId: v === "" ? 0 : v }))}
+                                placeholder={t("fieldWorkshopPlaceholder")}
+                                disabled={loading}
+                            />
+                        </label>
+
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldDepartment")}<RequiredMark /></span>
                             <SearchableSelect

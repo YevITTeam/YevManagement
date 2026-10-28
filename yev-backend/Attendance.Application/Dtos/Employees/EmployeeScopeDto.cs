@@ -1,5 +1,6 @@
 using Attendance.Application.Dtos.Departments;
 using Attendance.Application.Dtos.Groups;
+using Attendance.Application.Dtos.Workshops;
 
 namespace Attendance.Application.Dtos.Employees
 {
@@ -26,5 +27,8 @@ namespace Attendance.Application.Dtos.Employees
         // đủ lựa chọn khi lọc theo 1 Phòng ban cụ thể) LẪN Nhóm đang là Coordinator trực tiếp (có thể
         // thuộc Phòng ban KHÁC những Phòng ban ở trên, dù hiếm).
         public List<GroupDto> Groups { get; set; } = new();
+
+        // Workshops of the groups/pairs above, for the workshop filter.
+        public List<WorkshopDto> Workshops { get; set; } = new();
     }
 }

@@ -18,9 +18,9 @@ namespace Attendance.Api.Controllers
         [RequirePermission("Attendance.Group.View")]
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<GroupDto>>>> GetPaged(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null)
+            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null, [FromQuery] int? workshopId = null)
         {
-            var result = await _groupService.GetPagedAsync(pageIndex, pageSize, keyword);
+            var result = await _groupService.GetPagedAsync(pageIndex, pageSize, keyword, workshopId);
             return Success(result);
         }
 
@@ -35,9 +35,9 @@ namespace Attendance.Api.Controllers
         // Used by FE for the "Group" dropdown depending on the selected "Department".
         [RequirePermission("Attendance.Group.View")]
         [HttpGet("by-department/{departmentId}")]
-        public async Task<ActionResult<ApiResponse<List<GroupDto>>>> GetByDepartment(int departmentId)
+        public async Task<ActionResult<ApiResponse<List<GroupDto>>>> GetByDepartment(int departmentId, [FromQuery] int? workshopId = null)
         {
-            var result = await _groupService.GetByDepartmentIdAsync(departmentId);
+            var result = await _groupService.GetByDepartmentIdAsync(departmentId, workshopId);
             return Success(result);
         }
 

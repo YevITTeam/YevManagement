@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
+import WorkshopList from "./workshops/WorkshopList";
 import DepartmentList from "./departments/DepartmentList";
 import GroupList from "./groups/GroupList";
 import ReasonList from "./reasons/ReasonList";
@@ -15,8 +16,10 @@ import EmployeeList from "./employees/EmployeeList";
 import ProductionOtReportPanel from "./reports/ProductionOtReportPanel";
 import AttendanceSettingPanel from "./settings/AttendanceSettingPanel";
 import type { ListHandle } from "./list-toolbar";
+import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 
 type CategoryTab =
+    | "workshops"
     | "departments"
     | "groups"
     | "reasons"
@@ -40,6 +43,7 @@ export default function CategoryManagement() {
     // "settings" không có addLabel — tab này không phải danh sách CRUD nên không có nút "Thêm mới"
     // (xem chỗ ẩn nút bên dưới).
     const allTabs: { key: CategoryTab; label: string; addLabel: string | null; visible: boolean }[] = [
+        { key: "workshops", label: t("tabWorkshops"), addLabel: t("addWorkshops"), visible: hasPermission(user, "Attendance.Workshop.Create") },
         { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments"), visible: hasPermission(user, "Attendance.Department.Create") },
         { key: "groups", label: t("tabGroups"), addLabel: t("addGroups"), visible: hasPermission(user, "Attendance.Group.Create") },
         { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons"), visible: hasPermission(user, "Attendance.Reason.Create") },
@@ -73,28 +77,18 @@ export default function CategoryManagement() {
     ];
     const tabs = allTabs.filter((tab) => tab.visible);
     const defaultTabKey: CategoryTab = tabs[0]?.key ?? "departments";
-    const [activeTab, setActiveTabState] = useState<CategoryTab>(defaultTabKey);
-    // Nếu tab đang chọn không còn nằm trong danh sách thấy được (vd permission user thay đổi giữa
-    // chừng, hoặc lần render đầu "user" từ AuthContext chưa kịp có) thì tự chuyển về tab mặc định phù
-    // hợp — so sánh snapshot ngay trong render, không dùng effect (xem AGENTS.md "Reset state khi 1
-    // giá trị đổi").
-    const [prevDefaultTabKey, setPrevDefaultTabKey] = useState(defaultTabKey);
-    if (prevDefaultTabKey !== defaultTabKey && !tabs.some((tab) => tab.key === activeTab)) {
-        setPrevDefaultTabKey(defaultTabKey);
-        setActiveTabState(defaultTabKey);
-    } else if (prevDefaultTabKey !== defaultTabKey) {
-        setPrevDefaultTabKey(defaultTabKey);
-    }
-    const setActiveTab = setActiveTabState;
+    const [activeTab, setActiveTab] = usePersistedTab<CategoryTab>("ot-category-tab", tabs.map((tab) => tab.key), defaultTabKey);
     // Tab nào đã từng được xem thì mới mount (và giữ mounted luôn sau đó) — chỉ tab mặc định mount
     // ngay từ đầu. Tránh gọi song song cả 10 API mỗi lần vào màn "Danh mục" trong khi đa số user chỉ
     // xem 1-2 tab/lượt, nhưng vẫn giữ được lợi ích "chuyển tab tức thì, không tải lại" cho những tab
     // đã ghé qua trong phiên này.
-    const [visitedTabs, setVisitedTabs] = useState<Set<CategoryTab>>(() => new Set([defaultTabKey]));
+    const [visitedTabs, setVisitedTabs] = useState<Set<CategoryTab>>(() => new Set());
+    const isMounted = (key: CategoryTab) => key === activeTab || visitedTabs.has(key);
     // Cả 9 tab giờ mounted song song (xem ghi chú bên dưới) nên mỗi tab phải báo loading vào
     // đúng slot riêng của nó — nếu dùng chung 1 state boolean, tab nào báo xong (setLoading(false))
     // sau cùng sẽ đè mất trạng thái loading thật của tab đang xem.
     const [loadingByTab, setLoadingByTab] = useState<Record<CategoryTab, boolean>>({
+        workshops: false,
         departments: false,
         groups: false,
         reasons: false,
@@ -107,6 +101,7 @@ export default function CategoryManagement() {
     });
     const loading = loadingByTab[activeTab];
 
+    const workshopRef = useRef<ListHandle>(null);
     const departmentRef = useRef<ListHandle>(null);
     const groupRef = useRef<ListHandle>(null);
     const reasonRef = useRef<ListHandle>(null);
@@ -118,6 +113,7 @@ export default function CategoryManagement() {
     const settingRef = useRef<ListHandle>(null);
 
     const refByTab: Record<CategoryTab, React.RefObject<ListHandle | null>> = {
+        workshops: workshopRef,
         departments: departmentRef,
         groups: groupRef,
         reasons: reasonRef,
@@ -138,6 +134,10 @@ export default function CategoryManagement() {
     // arrow function, effect trong mỗi List (dep [isLoading, onLoadingChange]) sẽ nghĩ prop
     // đổi mỗi lần CategoryManagement render lại, chạy lại effect, gọi setLoadingByTab, khiến
     // CategoryManagement render lại... lặp vô hạn ("Maximum update depth exceeded").
+    const handleWorkshopLoadingChange = useCallback(
+        (value: boolean) => setLoadingByTab((current) => ({ ...current, workshops: value })),
+        []
+    );
     const handleDepartmentLoadingChange = useCallback(
         (value: boolean) => setLoadingByTab((current) => ({ ...current, departments: value })),
         []
@@ -229,47 +229,52 @@ export default function CategoryManagement() {
                 lại tức thì, không tải lại. Khác với mount cả 5 song song ngay từ đầu (bản cũ): tránh gọi
                 5 API cùng lúc khi phần lớn lượt vào màn "Danh mục" chỉ cần xem 1-2 tab.
             */}
-            {visitedTabs.has("departments") && (
+            {isMounted("workshops") && (
+                <div className={activeTab === "workshops" ? "" : "hidden"}>
+                    <WorkshopList ref={workshopRef} onLoadingChange={handleWorkshopLoadingChange} />
+                </div>
+            )}
+            {isMounted("departments") && (
                 <div className={activeTab === "departments" ? "" : "hidden"}>
                     <DepartmentList ref={departmentRef} onLoadingChange={handleDepartmentLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("groups") && (
+            {isMounted("groups") && (
                 <div className={activeTab === "groups" ? "" : "hidden"}>
                     <GroupList ref={groupRef} onLoadingChange={handleGroupLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("reasons") && (
+            {isMounted("reasons") && (
                 <div className={activeTab === "reasons" ? "" : "hidden"}>
                     <ReasonList ref={reasonRef} onLoadingChange={handleReasonLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("ot-cases") && (
+            {isMounted("ot-cases") && (
                 <div className={activeTab === "ot-cases" ? "" : "hidden"}>
                     <OtCaseList ref={otCaseRef} onLoadingChange={handleOtCaseLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("job-titles") && (
+            {isMounted("job-titles") && (
                 <div className={activeTab === "job-titles" ? "" : "hidden"}>
                     <JobTitleList ref={jobTitleRef} onLoadingChange={handleJobTitleLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("approval-steps") && (
+            {isMounted("approval-steps") && (
                 <div className={activeTab === "approval-steps" ? "" : "hidden"}>
                     <ApprovalStepManager ref={approvalStepRef} onLoadingChange={handleApprovalStepLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("employees") && (
+            {isMounted("employees") && (
                 <div className={activeTab === "employees" ? "" : "hidden"}>
                     <EmployeeList ref={employeeRef} onLoadingChange={handleEmployeeLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("reports") && (
+            {isMounted("reports") && (
                 <div className={activeTab === "reports" ? "" : "hidden"}>
                     <ProductionOtReportPanel ref={reportsRef} onLoadingChange={handleReportsLoadingChange} />
                 </div>
             )}
-            {visitedTabs.has("settings") && (
+            {isMounted("settings") && (
                 <div className={activeTab === "settings" ? "" : "hidden"}>
                     <AttendanceSettingPanel ref={settingRef} onLoadingChange={handleSettingLoadingChange} />
                 </div>
