@@ -12,11 +12,13 @@ import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { formatHours } from "@/modules/attendance/lib/time";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Pagination } from "@/components/ui/Pagination";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { BarChart, ChartCard, Donut, EmptyChart, HBarList } from "./OverviewCharts";
 
 const now = new Date();
 const CURRENT_PERIOD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+const RISK_PAGE_SIZE = 10;
 
 function KpiCard({ icon, label, value, sub, tone = "default" }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "default" | "danger" }) {
     return (
@@ -39,7 +41,7 @@ function LimitBar({ value, limit, over }: { value: number; limit: number; over: 
                 {formatHours(value)} / {formatHours(limit)}
             </div>
             <div className="mt-1 h-1.5 rounded-full bg-[#f2f4f6]">
-                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: over ? "#e3000f" : pct >= 80 ? "#f59e0b" : "#191c1e" }} />
+                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: over ? "#e3000f" : pct >= 80 ? "#f59e0b" : "#16a34a" }} />
             </div>
         </div>
     );
@@ -56,6 +58,7 @@ export default function OtOverviewPage() {
     const [workshopId, setWorkshopId] = useState<number | "">("");
     const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
     const [data, setData] = useState<OtOverviewDto | null>(null);
+    const [riskPage, setRiskPage] = useState(1);
 
     const [year, month] = period.split("-").map(Number);
     const pick = (vn: string, jp: string | null | undefined) => (locale === "ja" && jp ? jp : vn);
@@ -71,7 +74,12 @@ export default function OtOverviewPage() {
 
     const delta = data && data.previousMonthHours > 0 ? Math.round(((data.monthHours - data.previousMonthHours) / data.previousMonthHours) * 100) : null;
 
-    const renderRiskRow = (row: OtOverviewEmployeeRowDto) => (
+    const riskEmployees = data?.riskEmployees ?? [];
+    const riskTotalPages = Math.max(1, Math.ceil(riskEmployees.length / RISK_PAGE_SIZE));
+    const currentRiskPage = Math.min(riskPage, riskTotalPages);
+    const riskRows = riskEmployees.slice((currentRiskPage - 1) * RISK_PAGE_SIZE, currentRiskPage * RISK_PAGE_SIZE);
+
+    const renderRiskRow =(row: OtOverviewEmployeeRowDto) => (
         <tr key={row.employeeId} className="border-b border-[#f1f5f9] last:border-0">
             <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{row.code}</td>
             <td className="px-3 py-2 text-sm font-medium text-[#191c1e]">{row.fullName}</td>
@@ -141,11 +149,12 @@ export default function OtOverviewPage() {
 
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                         <ChartCard title={t("chartDaily")} hint={t("chartDailyHint")}>
-                            <BarChart data={data.dailyHours.map((d) => ({ label: String(Number(d.date.slice(8, 10))), value: d.hours }))} />
+                            <BarChart data={data.dailyHours.map((d) => ({ label: String(Number(d.date.slice(8, 10))), value: d.hours }))} color="#3b82f6" />
                         </ChartCard>
                         <ChartCard title={t("chartTrend", { year: data.year })} hint={t("chartTrendHint")}>
                             <BarChart
                                 data={data.monthlyTrend.map((m) => ({ label: tAcc("monthShort", { month: m.month }), value: m.hours }))}
+                                color="#93c5fd"
                                 highlightIndex={data.month - 1}
                             />
                         </ChartCard>
@@ -162,7 +171,7 @@ export default function OtOverviewPage() {
                             {data.byOtCase.length === 0 ? (
                                 <EmptyChart text={t("empty")} />
                             ) : (
-                                <Donut slices={data.byOtCase.map((c, i) => ({ label: c.code, value: c.formCount, color: ["#191c1e", "#f59e0b", "#e3000f", "#8a8f94"][i % 4] }))} />
+                                <Donut slices={data.byOtCase.map((c, i) => ({ label: c.code, value: c.formCount, color: ["#3b82f6", "#8b5cf6", "#14b8a6", "#ec4899", "#f97316", "#64748b"][i % 6] }))} />
                             )}
                         </ChartCard>
                         <ChartCard title={t("chartDepartment")} hint={t("chartDailyHint")}>
@@ -201,9 +210,18 @@ export default function OtOverviewPage() {
                                             <th className="px-3 py-2">{t("colYear")}</th>
                                         </tr>
                                     </thead>
-                                    <tbody>{data.riskEmployees.map(renderRiskRow)}</tbody>
+                                    <tbody>{riskRows.map(renderRiskRow)}</tbody>
                                 </table>
                             </div>
+                        )}
+                        {data.riskEmployees.length > RISK_PAGE_SIZE && (
+                            <Pagination
+                                pageIndex={currentRiskPage}
+                                totalPages={riskTotalPages}
+                                onPageChange={setRiskPage}
+                                summary={tCommon("showingRecords", { shown: riskRows.length, total: data.riskEmployees.length })}
+                                compactSummary={data.riskEmployees.length}
+                            />
                         )}
                     </section>
                 </div>

@@ -12,7 +12,6 @@ import { GroupApprovalStepApi } from "@/modules/attendance/api/group-approval-st
 import { ProductionApprovalStepApi } from "@/modules/attendance/api/production-approval-step.api";
 import { DepartmentApprovalStepCoordinatorApi } from "@/modules/attendance/api/department-approval-step-coordinator.api";
 import { GroupApprovalStepCoordinatorApi } from "@/modules/attendance/api/group-approval-step-coordinator.api";
-import { GroupApi } from "@/modules/attendance/api/group.api";
 import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
@@ -84,6 +83,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const canManageGroupCoordinators = hasPermission(user, "Attendance.GroupApprovalStepCoordinator.View");
 
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+    // Departments the user coordinates (or all, for Admin); the rest of the picker is there only to reach their groups.
+    const [managedDepartmentIds, setManagedDepartmentIds] = useState<Set<number>>(new Set());
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [deptJobTitles, setDeptJobTitles] = useState<JobTitleDto[]>([]);
     const [groupJobTitles, setGroupJobTitles] = useState<JobTitleDto[]>([]);
@@ -91,18 +92,20 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     // không lọc theo terminalLevel như 2 khối trên (xem ProductionApprovalStepService.ReplaceAsync).
     const [allJobTitles, setAllJobTitles] = useState<JobTitleDto[]>([]);
     const [departmentId, setDepartmentId] = useState<number | "">("");
+    const canEditDept = typeof departmentId === "number" && managedDepartmentIds.has(departmentId);
     // Workshop scoping Manager holders and groups; defaults to the first workshop until one is picked.
     const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
     const [pickedWorkshopId, setPickedWorkshopId] = useState<number | "">("");
     const workshopId: number | "" = pickedWorkshopId === "" ? (workshops.length > 0 ? workshops[0].id : "") : pickedWorkshopId;
-    const [isLoadingOptions, setIsLoadingOptions] = useState(true);
-    // 2 tab (2026-08-25): "Theo Nhóm" = 2 khối cũ (Nhóm + Bộ phận, dùng cho đơn OT thường) gộp
+    const [isLoadingOptions, setIsLoadingOptions] = useState(true);    // 2 tab (2026-08-25): "Theo Nhóm" = 2 khối cũ (Nhóm + Bộ phận, dùng cho đơn OT thường) gộp
     // chung 1 tab vì đơn đi xuyên qua CẢ 2 liền mạch (Nhóm trước, Bộ phận sau); "Theo chuyền" = khối
     // Chuyền (1 danh sách duy nhất, dùng cho đơn OT "theo chuyền" Chế tạo) tách tab riêng vì đây là
     // 1 luồng độc lập, không liên quan gì tới cấu hình Nhóm/Bộ phận — khớp đúng 2 chế độ tạo đơn ở
     // CreateOtFormPage.tsx (formMode "group"/"production"). Đổi tab CHỈ đổi phần hiển thị — state của
     // cả 2 tab đều nằm ở component này (không mất gì khi đổi qua lại), nên KHÔNG cần xác nhận huỷ.
     const [activeTab, setActiveTab] = usePersistedTab<"group" | "production">("ot-approval-steps-tab", ["group", "production"], "group");
+    // The production tab is department-scoped, so a group-only coordinator stays on the group tab.
+    const viewTab = canEditDept ? activeTab : "group";
 
     // ── Khối Chuyền (Bộ phận, 1 danh sách duy nhất — 2026-08-24) ─────────────
     const [productionSteps, setProductionSteps] = useState<ProductionApprovalStepDto[]>([]);
@@ -168,13 +171,18 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         // chọn nhầm Bộ phận không thuộc quyền rồi bị 403 khi gọi các API bên dưới (2026-08-25).
         Promise.all([
             DepartmentApprovalStepApi.getMyDepartments(),
-            GroupApi.getAllGroups(),
+            GroupApprovalStepApi.getMyGroups(),
             JobTitleApi.getAllJobTitles(),
             WorkshopApi.getAllWorkshops().catch(() => [] as WorkshopDto[]),
         ])
             .then(([departmentData, groupData, jobTitleData, workshopData]) => {
                 setWorkshops(workshopData);
-                setDepartments(departmentData);
+                // A group-only coordinator still needs their group's department in the picker.
+                const extraDepartments = groupData
+                    .filter((g) => !departmentData.some((d) => d.id === g.departmentId))
+                    .map((g) => ({ id: g.departmentId, departmentCode: "", departmentNameVn: g.departmentNameVn, departmentNameJp: null }));
+                setManagedDepartmentIds(new Set(departmentData.map((d) => d.id)));
+                setDepartments([...departmentData, ...extraDepartments.filter((d, i, all) => all.findIndex((x) => x.id === d.id) === i)]);
                 setGroups(groupData);
                 // Cấp cuối (Manager/Factory Manager/Director) cho khối Bộ phận; cấp trung gian
                 // (Staff/Group Leader/Team Leader) cho khối Nhóm.
@@ -240,10 +248,10 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
     useFetchEffect(
         () =>
-            typeof departmentId === "number"
+            canEditDept && typeof departmentId === "number"
                 ? EmployeeApi.getEmployeesByDepartment(departmentId, typeof workshopId === "number" ? workshopId : undefined, { keyword: deptSearchQuery || undefined, take: 30 })
                 : Promise.resolve([]),
-        [departmentId, workshopId, deptSearchQuery],
+        [departmentId, workshopId, deptSearchQuery, canEditDept],
         setDeptSearchResults,
         tDept("loadEmployeesError"),
         (message) => toast.error(message)
@@ -309,7 +317,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
     useImperativeHandle(ref, () => ({
         refresh: () => {
-            if (typeof departmentId === "number") {
+            if (canEditDept && typeof departmentId === "number") {
                 fetchDeptSteps(departmentId);
                 fetchDeptEmployees(departmentId);
                 fetchDeptCoordinators(departmentId);
@@ -342,7 +350,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setGroupCoordinators([]);
         setAddingGroupJobTitleId("");
         setIsGroupDirty(false);
-        if (typeof value === "number") {
+        if (typeof value === "number" && managedDepartmentIds.has(value)) {
             fetchDeptSteps(value);
             fetchDeptEmployees(value);
             fetchDeptCoordinators(value);
@@ -959,7 +967,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                     setGroupBorrowed(EMPTY_BORROWED);
                                     setGroupCoordinators([]);
                                     setIsGroupDirty(false);
-                                    if (typeof departmentId === "number") fetchDeptEmployees(departmentId, v);
+                                    if (canEditDept && typeof departmentId === "number") fetchDeptEmployees(departmentId, v);
                                 }}
                                 placeholder={tDept("fieldWorkshopPlaceholder")}
                                 disabled={isLoadingOptions}
@@ -968,7 +976,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         </div>
                     </>
                 )}
-                {activeTab === "group" && typeof departmentId === "number" && (
+                {viewTab === "group" && typeof departmentId === "number" && (
                     <>
                         <span className="ml-2 shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tGroup("fieldGroup")}</span>
                         <div className="w-64">
@@ -983,7 +991,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         </div>
                     </>
                 )}
-                {activeTab === "group" && typeof departmentId === "number" && (
+                {viewTab === "group" && typeof departmentId === "number" && (
                     <button
                         type="button"
                         onClick={handleSaveAll}
@@ -997,6 +1005,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
             {typeof departmentId === "number" && (
                 <>
+                    {canEditDept && (
                     <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">
                         {(["group", "production"] as const).map((tab) => (
                             <button
@@ -1013,8 +1022,9 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                             </button>
                         ))}
                     </div>
+                    )}
 
-                    {activeTab === "group" && (
+                    {viewTab === "group" && (
                         // Layout 2 cột "canvas + inspector" (2026-09-16): pipeline hợp nhất Nhóm → Bộ
                         // phận bên trái là trọng tâm (đọc liền mạch thành 1 hành trình duyệt, đánh số
                         // xuyên suốt qua deptStepNumberOffset — không đổi gì ở phần state/logic, chỉ gộp
@@ -1107,6 +1117,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                 </div>
 
                                 {/* Cấp cuối — theo chính Bộ phận đang chọn (đơn đi qua khối này SAU khối Nhóm) */}
+                                {canEditDept && (
                                 <div>
                                     <div className="mb-2 flex items-center gap-1.5">
                                         <FolderOpen className="h-4 w-4 text-[#e3000f]" />
@@ -1179,6 +1190,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                         </>
                                     )}
                                 </div>
+                                )}
                             </div>
 
                             {/* Sidebar cấu hình — người phụ trách 2 cấp gộp 1 thẻ, cố định khi cuộn */}
@@ -1217,7 +1229,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         </div>
                     )}
 
-                    {activeTab === "production" && (
+                    {viewTab === "production" && (
                     /* Khối Chuyền — 1 danh sách duy nhất (Line Leader -> ... -> Director) theo chính
                         Bộ phận đang chọn, dùng cho đơn OT "theo chuyền" (2026-08-24). Khác 2 khối trên:
                         không tách Group/Department, không hiển thị "ai đang giữ Chức vụ" (dữ liệu

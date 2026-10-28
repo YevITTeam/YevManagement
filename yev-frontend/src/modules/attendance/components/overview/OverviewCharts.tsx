@@ -25,7 +25,7 @@ export function EmptyChart({ text }: { text: string }) {
 }
 
 // Vertical bars; `limit` draws a dashed reference line. Labels are thinned out when there are many bars.
-export function BarChart({ data, color = "#191c1e", highlightIndex, limit }: { data: ChartDatum[]; color?: string; highlightIndex?: number; limit?: number }) {
+export function BarChart({ data, color = "#3b82f6", highlightIndex, limit }: { data: ChartDatum[]; color?: string; highlightIndex?: number; limit?: number }) {
     const max = Math.max(...data.map((d) => d.value), limit ?? 0, 1);
     const labelEvery = data.length > 14 ? 5 : 1;
 
@@ -42,8 +42,7 @@ export function BarChart({ data, color = "#191c1e", highlightIndex, limit }: { d
                             style={{
                                 height: `${(d.value / max) * 100}%`,
                                 minHeight: d.value > 0 ? 2 : 0,
-                                backgroundColor: i === highlightIndex ? "#e3000f" : color,
-                                opacity: i === highlightIndex || highlightIndex === undefined ? 1 : 0.55,
+                                backgroundColor: i === highlightIndex ? "#2563eb" : color,
                             }}
                         />
                     </div>
@@ -61,7 +60,7 @@ export function BarChart({ data, color = "#191c1e", highlightIndex, limit }: { d
 }
 
 // Horizontal bars with the value (and an optional badge) on the right.
-export function HBarList({ rows, color = "#191c1e" }: { rows: (ChartDatum & { badge?: string })[]; color?: string }) {
+export function HBarList({ rows, color = "#3b82f6" }: { rows: (ChartDatum & { badge?: string })[]; color?: string }) {
     const max = Math.max(...rows.map((r) => r.value), 1);
 
     return (

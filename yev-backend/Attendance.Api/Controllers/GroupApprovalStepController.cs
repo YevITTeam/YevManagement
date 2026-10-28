@@ -1,4 +1,5 @@
 using Attendance.Application.Dtos.GroupApprovalSteps;
+using Attendance.Application.Dtos.Groups;
 using Attendance.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Mvc;
 using Shared.Application.Authorization;
@@ -14,6 +15,14 @@ namespace Attendance.Api.Controllers
         public GroupApprovalStepController(IGroupApprovalStepService groupApprovalStepService)
         {
             _groupApprovalStepService = groupApprovalStepService;
+        }
+
+        [RequirePermission("Attendance.GroupApprovalStep.View")]
+        [HttpGet("my-groups")]
+        public async Task<ActionResult<ApiResponse<List<GroupDto>>>> GetMyGroups()
+        {
+            var result = await _groupApprovalStepService.GetMyManagedGroupsAsync(CurrentUserName, User.IsInRole(AdminRole));
+            return Success(result);
         }
 
         [RequirePermission("Attendance.GroupApprovalStep.View")]

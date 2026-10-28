@@ -1,4 +1,5 @@
 using Attendance.Application.Dtos.GroupApprovalSteps;
+using Attendance.Application.Dtos.Groups;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
@@ -29,6 +30,29 @@ namespace Attendance.Application.Services
                 x => x.GroupId == groupId && x.Employee.UserName == userName && !x.IsDeleted)).Count > 0;
             if (!isCoordinator)
                 throw new DomainException("Bạn không được phân công phụ trách Cây duyệt của Nhóm này.");
+        }
+
+        public async Task<List<GroupDto>> GetMyManagedGroupsAsync(string userName, bool isAdmin)
+        {
+            var myGroupIds = isAdmin
+                ? null
+                : (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(x => x.Employee.UserName == userName && !x.IsDeleted))
+                    .Select(x => x.GroupId).ToHashSet();
+
+            var items = await _unitOfWork.Groups.SelectAsync(
+                predicate: x => !x.IsDeleted && (myGroupIds == null || myGroupIds.Contains(x.Id)),
+                selector: x => new GroupDto
+                {
+                    Id = x.Id,
+                    GroupCode = x.GroupCode,
+                    GroupNameVn = x.GroupNameVn,
+                    GroupNameJp = x.GroupNameJp,
+                    DepartmentId = x.DepartmentId,
+                    DepartmentNameVn = x.Department.DepartmentNameVn,
+                    WorkshopId = x.WorkshopId,
+                    WorkshopNameVn = x.Workshop.WorkshopNameVn
+                });
+            return items.OrderBy(x => x.GroupNameVn).ToList();
         }
 
         public async Task<List<GroupApprovalStepDto>> GetByGroupAsync(string userName, bool isAdmin, int groupId)
