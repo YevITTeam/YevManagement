@@ -9,5 +9,6 @@ public enum OtFormEditActionType
     NoteChanged = 1,
     EmployeeAdded = 2,
     EmployeeRemoved = 3,
-    FormInfoChanged = 4
+    FormInfoChanged = 4,
+    Resubmitted = 5
 }

@@ -183,6 +183,11 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
             ? hasPermission(user, "Attendance.OTForm.CreateProduction")
             : hasPermission(user, "Attendance.OTForm.Create") && form?.createdByUserName === user?.userName);
 
+    const canResubmit =
+        !canEdit &&
+        form?.resubmitKind != null &&
+        (form.resubmitUserNames.includes(user?.userName ?? "") || (form.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
+
     // Nút "Xoá đơn" (Admin only, mới 2026-08-08) — chặn khi đã Completed (status=1, đã cộng lũy kế thật).
     const canDelete = hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;
 
@@ -331,6 +336,7 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     const editLogActionLabel = (log: OtFormEditLogDto) => {
         if (log.actionType === 2) return t("editLogEmployeeAdded");
         if (log.actionType === 3) return t("editLogEmployeeRemoved");
+        if (log.actionType === 5) return t("editLogResubmitted");
         return (log.fieldName && editLogFieldLabels[log.fieldName]) || log.fieldName || "";
     };
 
@@ -401,6 +407,15 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                             className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
                             {t("editButton")}
+                        </button>
+                    )}
+                    {canResubmit && (
+                        <button
+                            onClick={() => router.push({ pathname: "/ot/forms/edit", query: { id: String(form.id) } })}
+                            title={form.resubmitDeadline ? t("resubmitDeadline", { date: new Date(form.resubmitDeadline).toLocaleString("vi-VN") }) : undefined}
+                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                        >
+                            {t("resubmitButton")}
                         </button>
                     )}
                     <button
@@ -830,7 +845,9 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
                                                     <td className="px-3 py-2 text-[#191c1e]">{log.employeeCodeSnapshot ?? "-"}</td>
                                                     <td className="px-3 py-2 text-[#5e3f3a]">{editLogActionLabel(log)}</td>
                                                     <td className="px-3 py-2 text-[#191c1e]">
-                                                        {log.oldValue != null || log.newValue != null
+                                                        {log.actionType === 5
+                                                            ? log.newValue
+                                                            : log.oldValue != null || log.newValue != null
                                                             ? t("editLogChangeValue", { oldValue: log.oldValue ?? "-", newValue: log.newValue ?? "-" })
                                                             : "-"}
                                                     </td>

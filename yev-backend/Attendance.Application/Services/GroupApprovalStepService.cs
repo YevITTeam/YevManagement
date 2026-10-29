@@ -79,6 +79,7 @@ namespace Attendance.Application.Services
                     RankOrder = x.JobTitle.RankOrder,
                     RequiresSignature = x.RequiresSignature,
                     IsResponsible = x.IsResponsible,
+                    CanResubmit = x.CanResubmit,
                     TerminalLevel = x.JobTitle.TerminalLevel
                 });
 
@@ -133,6 +134,7 @@ namespace Attendance.Application.Services
                     JobTitleId = item.JobTitleId,
                     RequiresSignature = item.RequiresSignature,
                     IsResponsible = item.IsResponsible,
+                    CanResubmit = item.CanResubmit,
                     IsDeleted = false
                 })
                 .ToList();

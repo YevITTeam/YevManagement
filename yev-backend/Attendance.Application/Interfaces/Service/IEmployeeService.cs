@@ -12,6 +12,9 @@ namespace Attendance.Application.Interfaces.Service
         // nên phải chặn lại ở đây để 1 Staff bất kỳ không xem được lũy kế/giới hạn OT của cả công ty).
         Task<PagedResponse<EmployeeDto>> GetPagedAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId, int? workshopId);
 
+        // Same employees as the grid for that filter (caller scope applied); hours are for year/month, default today.
+        Task<List<EmployeeExportRowDto>> GetForExportAsync(string callerUserName, bool isAdmin, EmployeeExportFilterDto filter, int? year = null, int? month = null);
+
         // Nhân viên trong phạm vi quản lý của người GIỮ QUYỀN DUYỆT (không nhất thiết có Employee.View)
         // — dùng cho màn "Lũy kế nhân viên" tra cứu. Xem chi tiết phạm vi ở EmployeeService.ResolveCallerScopeAsync.
         Task<PagedResponse<EmployeeDto>> GetInScopeAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword);

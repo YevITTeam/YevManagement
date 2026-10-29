@@ -11,19 +11,22 @@ import type {
     EmployeeIdentityLinkImportPreviewResultDto,
     EmployeeIdentityLinkImportRowDto,
 } from "@/modules/attendance/types/employee-identity-link-import.dto";
+import ExportFilteredButton from "./ExportFilteredButton";
+import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 interface EmployeeIdentityLinkImportDialogProps {
     isOpen: boolean;
     onClose: () => void;
     onImported: () => void;
+    exportFilter: EmployeeExportFilter;
 }
 
 // Import Excel hàng loạt liên kết Employee ↔ User Identity + tự tạo tài khoản nếu chưa có + gán chữ ký
 // — Admin-only (2026-09-03). Pattern Preview → Confirm giống EmployeeImportDialog, NHƯNG Confirm gửi
 // lại NGUYÊN file (không phải rows) — mỗi dòng có thể kèm 1 ảnh chữ ký nhúng, không tiện round-trip
 // qua JSON. `file` giữ nguyên trong state nên Confirm tái dùng đúng File object đã Preview.
-export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onImported }: EmployeeIdentityLinkImportDialogProps) {
+export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onImported, exportFilter }: EmployeeIdentityLinkImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const [file, setFile] = useState<File | null>(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
@@ -92,6 +95,7 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                 t("identityLinkConfirmSuccess", {
                     success: confirmResult.successCount,
                     created: confirmResult.createdIdentityUserCount,
+                    emails: confirmResult.emailSetCount,
                     signatures: confirmResult.signatureSetCount,
                 }) + (confirmResult.skippedCount > 0 ? t("identityLinkConfirmSuccessSkipped", { skipped: confirmResult.skippedCount }) : ".")
             );
@@ -165,6 +169,7 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                                 {t("identityLinkConfirmSuccess", {
                                     success: result.successCount,
                                     created: result.createdIdentityUserCount,
+                                    emails: result.emailSetCount,
                                     signatures: result.signatureSetCount,
                                 })}
                             </span>
@@ -224,6 +229,7 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                             >
                                 <Download className="h-3.5 w-3.5" /> {t("identityLinkDownloadTemplate")}
                             </button>
+                            <ExportFilteredButton download={() => EmployeeIdentityLinkImportApi.exportLinks(exportFilter)} fallbackFileName="LienKetTaiKhoan.xlsx" />
                         </div>
 
                         {preview && (
@@ -254,7 +260,7 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                                             <th className="whitespace-nowrap px-3 py-2">{t("importColRow")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("importColCode")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("identityLinkColUserName")}</th>
-                                            <th className="whitespace-nowrap px-3 py-2">{t("identityLinkColRole")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColEmail")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("identityLinkColJobTitle")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("identityLinkColCoordinator")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("identityLinkColSignature")}</th>
@@ -273,7 +279,7 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                                                     {row.employeeCode} {row.resolvedEmployeeFullName ? `— ${row.resolvedEmployeeFullName}` : ""}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.userName ?? "-"}</td>
-                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.roleName ?? "Basic"}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.email ?? "-"}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.resolvedJobTitleName ?? "-"}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
                                                     {row.isCoordinator ? (row.coordinatorScopeDescription ?? t("identityLinkSignatureYes")) : "-"}

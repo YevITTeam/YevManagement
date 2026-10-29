@@ -10,18 +10,21 @@ import type {
     EmployeeImportConfirmResultDto,
     EmployeeImportPreviewRowDto,
 } from "@/modules/attendance/types/employee-import.dto";
+import ExportFilteredButton from "./ExportFilteredButton";
+import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 interface EmployeeImportDialogProps {
     isOpen: boolean;
     onClose: () => void;
     onImported: () => void;
+    exportFilter: EmployeeExportFilter;
 }
 
 // Pattern Preview → Confirm giống hệt import Device bên module Asset
 // (src/modules/pc-management/components/devices/ImportDeviceConfigurationDialog.tsx) —
 // docs/attendance-module.md §API/§8.
-export default function EmployeeImportDialog({ isOpen, onClose, onImported }: EmployeeImportDialogProps) {
+export default function EmployeeImportDialog({ isOpen, onClose, onImported, exportFilter }: EmployeeImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const [file, setFile] = useState<File | null>(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
@@ -233,6 +236,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                             >
                                 <Download className="h-3.5 w-3.5" /> {t("importDownloadTemplate")}
                             </button>
+                            <ExportFilteredButton download={() => EmployeeImportApi.exportEmployees(exportFilter)} fallbackFileName="NhanVien.xlsx" />
                         </div>
 
                         {summary && (
@@ -294,7 +298,9 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported }: Em
                                                         .filter(Boolean)
                                                         .join(", ") || "-"}
                                                 </td>
-                                                <td className="px-3 py-2 text-[#930006]">{row.errors.join("; ") || "-"}</td>
+                                                <td className="px-3 py-2">
+                                                    {row.errors.length === 0 ? "-" : <div className="text-[#930006]">{row.errors.join("; ")}</div>}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>

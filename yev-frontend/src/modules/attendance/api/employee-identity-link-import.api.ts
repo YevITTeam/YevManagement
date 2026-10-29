@@ -4,12 +4,15 @@ import type {
     EmployeeIdentityLinkImportPreviewResultDto,
 } from "@/modules/attendance/types/employee-identity-link-import.dto";
 import { ApiResponse } from "@/types/api";
+import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
+import { toExportQuery } from "./employee-import.api";
 
 const ENDPOINTS = {
     EMPLOYEE_IDENTITY_LINK_IMPORT: {
         preview: "/EmployeeIdentityLinkImport/preview",
         confirm: "/EmployeeIdentityLinkImport/confirm",
         template: "/EmployeeIdentityLinkImport/template",
+        export: "/EmployeeIdentityLinkImport/export",
     },
 } as const;
 
@@ -37,4 +40,6 @@ export const EmployeeIdentityLinkImportApi = {
     downloadTemplate: async (): Promise<BlobDownloadResult> => {
         return getForBlob(ENDPOINTS.EMPLOYEE_IDENTITY_LINK_IMPORT.template);
     },
+    exportLinks: (filter: EmployeeExportFilter): Promise<BlobDownloadResult> =>
+        getForBlob(ENDPOINTS.EMPLOYEE_IDENTITY_LINK_IMPORT.export + toExportQuery(filter)),
 };

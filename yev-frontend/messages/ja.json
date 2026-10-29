@@ -456,7 +456,10 @@
       "saveCoordinatorSuccess": "担当者を更新しました",
       "saveCoordinatorError": "担当者の更新に失敗しました",
       "coordinatorNotLinked": "アカウント未連携",
-      "coordinatorNotLinkedHint": "この社員はまだログインアカウントが連携されていません — 上の部署セクションの説明を参照してください。"
+      "coordinatorNotLinkedHint": "この社員はまだログインアカウントが連携されていません — 上の部署セクションの説明を参照してください。",
+      "toggleResubmitHint": "クリックで、マネージャー承認後にこのステップの担当者が申請を編集・再申請できるか切り替え",
+      "canResubmitYes": "再申請可",
+      "canResubmitNo": "再申請不可"
     },
     "Employee": {
       "searchPlaceholder": "社員コードまたは氏名で検索...",
@@ -514,7 +517,7 @@
       "createSubmit": "作成",
       "updateSubmit": "変更を保存",
       "importTitle": "Excelから社員情報をインポート",
-      "importDescription": ".xlsxファイルを選択してください（列：No./Employee code/Full name/Department/Department Name/Group/Group Name）— 社員コードでUpsert、未登録の部署/グループは自動作成します。",
+      "importDescription": ".xlsxファイルを選択してください（列：Employee code/Full name/Department code/Department name/Group code/Group name）— 社員コードでUpsert、未登録の部署/グループは自動作成します（管理者のみ）。",
       "importChooseErrorNoFile": "先に社員情報のExcelファイルを選択してください。",
       "importPreviewButton": "プレビュー",
       "importPreviewing": "プレビュー中...",
@@ -534,6 +537,11 @@
       "importColRow": "行",
       "importColCode": "社員コード",
       "importColError": "エラー",
+      "exportFilteredButton": "絞り込み中のデータを出力",
+      "exportFilteredBusy": "出力中...",
+      "exportFilteredHint": "一覧で絞り込み中の社員の現在データをダウンロードし、編集して再インポートします",
+      "exportFilteredError": "データの出力に失敗しました。",
+      "importColEmail": "メール",
       "importClose": "閉じる",
       "importCancel": "キャンセル",
       "importConfirmButton": "インポートを確定",
@@ -590,7 +598,7 @@
       "monthlyAccumulationTemplateError": "テンプレートファイルをダウンロードできません。",
       "identityLinkMenuLabel": "ログインアカウントの連携",
       "identityLinkImportTitle": "ログインアカウント連携のインポート",
-      "identityLinkImportDescription": ".xlsxファイル: B列=社員番号、C列=UserName、D列=RoleName（空欄=Basic）、E列=役職コード（空欄=変更なし）、F列=承認ツリー担当者（1=はい、空欄=いいえ）。役職/担当者は社員の現在の部署/グループに従って適用されます。署名画像を対象社員の行のセルに貼り付けると同時に設定できます。UserNameが未登録の場合は自動でアカウントを作成し、インポート後すぐにシステムを利用できます。",
+      "identityLinkImportDescription": ".xlsxファイル: B列=社員番号、C列=UserName、D列=Email（残業通知の受信先、空欄=変更なし）、E列=役職コード（リストから選択、空欄=変更なし）、F列=承認ツリー担当者（1=はい）。役職/担当者は社員の現在の部署/グループに従って適用されます。署名画像を対象社員の行のセルに貼り付けると同時に設定できます。未登録のアカウントは自動作成され（ラベル「Quản lý tăng ca」）、インポート後すぐにシステムを利用できます。",
       "identityLinkChooseErrorNoFile": "先にExcelファイルを選択してください。",
       "identityLinkPreviewButton": "プレビュー",
       "identityLinkPreviewing": "プレビュー中...",
@@ -602,14 +610,13 @@
       "identityLinkNoPreviewYet": "プレビューデータがありません。ファイルを選択して「プレビュー」を押してください。",
       "identityLinkConfirmButton": "インポートを確認",
       "identityLinkConfirming": "インポート中...",
-      "identityLinkConfirmSuccess": "{success}名を連携しました（新規アカウント{created}件、署名{signatures}件）",
+      "identityLinkConfirmSuccess": "{success}名を連携しました（新規アカウント{created}件、メール{emails}件、署名{signatures}件）",
       "identityLinkConfirmSuccessSkipped": "、{skipped}行のエラーをスキップしました。",
       "identityLinkConfirmSuccessExtra": "役職を{jobTitles}件、承認ツリー担当者を{coordinators}件追加しました。",
       "identityLinkConfirmError": "インポートの確認に失敗しました。",
       "identityLinkDownloadTemplate": "テンプレートをダウンロード",
       "identityLinkTemplateError": "テンプレートファイルをダウンロードできません。",
       "identityLinkColUserName": "UserName",
-      "identityLinkColRole": "Role",
       "identityLinkColJobTitle": "役職",
       "identityLinkColCoordinator": "承認ツリー担当者",
       "identityLinkColSignature": "署名",
@@ -847,7 +854,13 @@
       "calendarTypeSpecialHoliday": "特別休日",
       "calendarView": "カレンダーを見る",
       "calendarDialogTitle": "{year}年の休日カレンダー",
-      "calendarClose": "閉じる"
+      "calendarClose": "閉じる",
+      "formTimingSectionTitle": "申請の期限",
+      "formTimingSectionDesc": "過去日付で申請できる日数と、完了済み申請を再申請できる期間。",
+      "fieldBackdateDays": "過去日付の申請（最大）",
+      "fieldResubmitWindowDays": "再申請の期限",
+      "fieldResubmitWindowDaysHint": "申請完了時点から起算。マネージャー承認済みの事務所申請は、この日数内のみ編集・再申請できます。",
+      "unitDay": "日"
     },
     "UserSignature": {
       "title": "自分の署名",
@@ -1105,7 +1118,10 @@
       "colBlockCode": "ライン",
       "colTeamCode": "チーム",
       "colShiftTeam": "シフト班",
-      "onBehalfOf": "{name}の代理"
+      "onBehalfOf": "{name}の代理",
+      "resubmitButton": "再申請",
+      "resubmitDeadline": "再申請期限：{date}",
+      "editLogResubmitted": "再申請"
     },
     "CreateOtForm": {
       "titleCreate": "残業を登録",
@@ -1135,7 +1151,6 @@
       "fieldEndTime": "終了時刻",
       "endTimeBeforeStartError": "終了時刻は開始時刻より後にしてください(日をまたぐ勤務は非対応)。",
       "fieldTotalHour": "合計時間",
-      "totalHourOverLimitWarning": "1日の残業時間上限({limit}時間)を超えています。",
       "employeeOverDailyLimit": "社員番号{code}は1日の残業時間上限を超えています({hours}時間 > {limit}時間) — 申請を作成できません。",
       "employeeOverMonthlyLimit": "社員番号{code}は月間残業時間上限を超えています({hours}時間 > {limit}時間) — TH3が必須です。",
       "employeeOverYearlyLimit": "社員番号{code}は年間残業時間上限を超えています({hours}時間 > {limit}時間) — TH3が必須です。",
@@ -1235,7 +1250,10 @@
       "badgeTh3Tooltip": "月/年の累計が上限を超えています — TH3が必須です。",
       "employeeTimeOutOfRange": "申請時間外({start}–{end})",
       "lineOptionsLoadError": "ラインの一覧を読み込めませんでした。",
-      "shiftTeamOptionsLoadError": "シフトグループの一覧を読み込めませんでした。"
+      "shiftTeamOptionsLoadError": "シフトグループの一覧を読み込めませんでした。",
+      "resubmitReasonPlaceholder": "再申請の理由 *",
+      "resubmitReasonRequiredError": "再申請の理由を入力してください。",
+      "resubmitSubmit": "再申請"
     },
     "OtFormPrint": {
       "loadError": "印刷する残業申請を読み込めませんでした。",

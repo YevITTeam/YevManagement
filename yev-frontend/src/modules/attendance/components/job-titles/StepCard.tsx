@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, GripVertical, PenLine, Star, Trash2 } from "lucide-react";
+import { Check, GripVertical, PenLine, RotateCcw, Star, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 // Thẻ 1 bước duyệt — tách dùng chung cho cả 3 khối (Nhóm/Bộ phận/Chuyền) của ApprovalStepManager.tsx
@@ -23,6 +23,9 @@ export interface StepCardLabels {
     toggleResponsibleHint?: string;
     isResponsibleYes?: string;
     isResponsibleNo?: string;
+    toggleResubmitHint?: string;
+    canResubmitYes?: string;
+    canResubmitNo?: string;
 }
 
 interface StepCardProps {
@@ -40,9 +43,13 @@ interface StepCardProps {
     // undefined = khối này không có khái niệm "Người chịu trách nhiệm" (khối Bộ phận).
     isResponsible?: boolean;
     onToggleResponsible?: () => void;
+    // undefined = the block has no re-submit flag (only the Group block does).
+    canResubmit?: boolean;
+    onToggleResubmit?: () => void;
     onRemove: () => void;
     labels: StepCardLabels;
     footer?: React.ReactNode;
+    readOnly?: boolean;
 }
 
 export default function StepCard({
@@ -59,9 +66,12 @@ export default function StepCard({
     onToggleSignature,
     isResponsible,
     onToggleResponsible,
+    canResubmit,
+    onToggleResubmit,
     onRemove,
     labels,
     footer,
+    readOnly = false,
 }: StepCardProps) {
     const tJobTitle = useTranslations("Attendance.JobTitle");
     const codeWithRank = tJobTitle("codeWithRank", { code: jobTitleCode, rank: rankOrder });
@@ -69,7 +79,7 @@ export default function StepCard({
     return (
         <li
             ref={registerNodeRef}
-            draggable
+            draggable={!readOnly}
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDragEnd={onDragEnd}
@@ -84,9 +94,11 @@ export default function StepCard({
                 }`}
             >
                 <div className="flex flex-wrap items-center gap-2 rounded-md px-1.5 py-1 hover:bg-[#f2f4f7] lg:flex-nowrap">
-                    <span title={labels.dragHandleLabel} aria-label={labels.dragHandleLabel} className="shrink-0 cursor-grab text-[#b6bbc0] hover:text-[#5e3f3a] active:cursor-grabbing">
-                        <GripVertical className="h-4 w-4" />
-                    </span>
+                    {!readOnly && (
+                        <span title={labels.dragHandleLabel} aria-label={labels.dragHandleLabel} className="shrink-0 cursor-grab text-[#b6bbc0] hover:text-[#5e3f3a] active:cursor-grabbing">
+                            <GripVertical className="h-4 w-4" />
+                        </span>
+                    )}
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#191c1e] text-[11px] font-bold text-white">
                         {displayNumber}
                     </span>
@@ -99,13 +111,14 @@ export default function StepCard({
                     <button
                         type="button"
                         onClick={onToggleSignature}
+                        disabled={readOnly}
                         title={`${requiresSignature ? labels.requiresSignatureYes : labels.requiresSignatureNo} — ${labels.toggleSignatureHint}`}
                         aria-pressed={requiresSignature}
                         className={`inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border text-[11px]! font-semibold! transition ${
                             requiresSignature
                                 ? "border-emerald-200 bg-emerald-50 px-2 text-emerald-700 hover:bg-emerald-100"
                                 : "w-6 border-transparent text-[#b6bbc0] hover:border-[#e0e3e5] hover:bg-[#f2f4f6] hover:text-[#5e3f3a]"
-                        }`}
+                        } disabled:pointer-events-none`}
                     >
                         {requiresSignature ? <Check size={11} /> : <PenLine size={12} />}
                         {requiresSignature && labels.requiresSignatureYes}
@@ -126,7 +139,24 @@ export default function StepCard({
                             {isResponsible && labels.isResponsibleYes}
                         </button>
                     )}
-                    <button
+                    {onToggleResubmit && (
+                        <button
+                            type="button"
+                            onClick={onToggleResubmit}
+                            disabled={readOnly}
+                            title={`${canResubmit ? labels.canResubmitYes : labels.canResubmitNo} — ${labels.toggleResubmitHint}`}
+                            aria-pressed={canResubmit}
+                            className={`inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border text-[11px]! font-semibold! transition ${
+                                canResubmit
+                                    ? "border-sky-200 bg-sky-50 px-2 text-sky-700 hover:bg-sky-100"
+                                    : "w-6 border-transparent text-[#b6bbc0] hover:border-[#e0e3e5] hover:bg-[#f2f4f6] hover:text-[#5e3f3a]"
+                            } disabled:pointer-events-none`}
+                        >
+                            <RotateCcw size={11} />
+                            {canResubmit && labels.canResubmitYes}
+                        </button>
+                    )}
+                    {!readOnly && <button
                         type="button"
                         onClick={onRemove}
                         title={labels.removeStep}
@@ -134,7 +164,7 @@ export default function StepCard({
                         className="ml-auto shrink-0 cursor-pointer rounded-md p-1.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006]"
                     >
                         <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    </button>}
                 </div>
 
                 {footer}

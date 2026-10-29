@@ -31,12 +31,16 @@ namespace Shared.Application.Interfaces
         //     Admin cấp tay qua "Tuỳ chỉnh quyền" (IsAutoGranted=false), dù trùng permission.
         Task SyncAutoGrantedPermissionsAsync(string? userName, IReadOnlyCollection<string> desiredPermissionCodes);
 
-        // Tạo User Identity mới nếu UserName CHƯA tồn tại (2026-09-03, dùng bởi import liên kết
-        // Identity↔Attendance hàng loạt) — idempotent: UserName đã có sẵn thì no-op, GIỮ NGUYÊN Role
-        // hiện tại (không ghi đè), trả về false. roleName rỗng/null → mặc định "Basic" (khớp đúng hành
-        // vi JIT-provision hiện tại khi 1 tài khoản Windows đăng nhập lần đầu chưa có sẵn User row).
-        // Trả về true nếu vừa tạo User mới.
+        // Creates the user with roleName (null = "Basic", like first Windows login); returns true only then.
+        // An existing user keeps its roles and just gains roleName when one is given and missing.
         Task<bool> EnsureUserExistsAsync(string userName, string? fullName, string? roleName);
+
+        // Routes moduleCode mail of userName to email, adding it as a manual address when missing (it only
+        // becomes primary if the user had no address). Returns false when the UserName has no Identity user.
+        Task<bool> SetModuleEmailAsync(string userName, string moduleCode, string email);
+
+        // Effective moduleCode recipient (routed address, else primary) per UserName; unknown users are left out.
+        Task<IReadOnlyDictionary<string, string>> GetModuleEmailsAsync(IReadOnlyCollection<string> userNames, string moduleCode);
 
         // Read-only check of DOMAIN\user accounts: already in Identity, or active in the directory (WillCreate),
         // or not eligible. Duplicates are collapsed (case-insensitive); the directory is queried only for

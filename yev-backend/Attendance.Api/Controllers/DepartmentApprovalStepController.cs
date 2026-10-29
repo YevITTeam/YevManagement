@@ -17,11 +17,10 @@ namespace Attendance.Api.Controllers
             _departmentApprovalStepService = departmentApprovalStepService;
         }
 
-        // Danh sách Bộ phận cho dropdown chọn ở màn "Cây duyệt" — Admin thấy hết, Coordinator chỉ thấy
-        // đúng Bộ phận mình phụ trách (2026-08-25).
+        // Departments for the approval-tree picker: all for Admin, else the ones the caller coordinates directly or via a Group.
         [RequirePermission("Attendance.DepartmentApprovalStep.View")]
         [HttpGet("my-departments")]
-        public async Task<ActionResult<ApiResponse<List<DepartmentDto>>>> GetMyDepartments()
+        public async Task<ActionResult<ApiResponse<List<ApprovalTreeDepartmentDto>>>> GetMyDepartments()
         {
             var result = await _departmentApprovalStepService.GetMyManagedDepartmentsAsync(CurrentUserName, User.IsInRole(AdminRole));
             return Success(result);

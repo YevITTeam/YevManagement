@@ -32,5 +32,9 @@ namespace Attendance.Application.Dtos.AttendanceSettings
 
         // Giờ hằng ngày OtFormBatchBackgroundService chạy gom "Đơn tổng" gửi Trưởng phòng (giờ VN).
         public TimeOnly BatchAutoSendTime { get; set; }
+
+        public int ResubmitWindowDays { get; set; }
+
+        public int BackdateDays { get; set; }
     }
 }

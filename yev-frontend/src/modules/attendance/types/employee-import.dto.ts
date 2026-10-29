@@ -1,5 +1,13 @@
 // docs/attendance-module.md §API — import Excel nhân sự hàng loạt (Admin), pattern Preview → Confirm.
 
+// Filters of the employee list, sent to the "export filtered" endpoints.
+export interface EmployeeExportFilter {
+    keyword?: string;
+    departmentId?: number;
+    groupId?: number;
+    workshopId?: number;
+}
+
 export interface EmployeeImportPreviewRowDto {
     rowNumber: number;
     employeeCode: string;

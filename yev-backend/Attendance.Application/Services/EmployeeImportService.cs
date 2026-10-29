@@ -1,9 +1,12 @@
 using Attendance.Application.Dtos.EmployeeImports;
+using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Dtos.ProductionEmployeeImports;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
+using Attendance.Domain.Enums;
 using ClosedXML.Excel;
 using Shared.Application.Helper;
+using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 
@@ -16,17 +19,20 @@ namespace Attendance.Application.Services
     public class EmployeeImportService : BaseService<IAttendanceUnitOfWork>, IEmployeeImportService
     {
         private readonly IDepartmentAccessGuard _departmentAccessGuard;
+        private readonly IEmployeeService _employeeService;
 
-        public EmployeeImportService(IAttendanceUnitOfWork unitOfWork, IDepartmentAccessGuard departmentAccessGuard)
+        public EmployeeImportService(IAttendanceUnitOfWork unitOfWork, IDepartmentAccessGuard departmentAccessGuard,
+            IEmployeeService employeeService)
             : base(unitOfWork)
         {
             _departmentAccessGuard = departmentAccessGuard;
+            _employeeService = employeeService;
         }
 
-        public async Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream)
+        public async Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string userName, bool isAdmin)
         {
             var rawRows = ParseXlsx(excelFileStream);
-            var (validatedRows, departmentPlans, groupPlans) = await ValidateAndResolveRowsAsync(rawRows);
+            var (validatedRows, departmentPlans, groupPlans) = await ValidateAndResolveRowsAsync(rawRows, userName, isAdmin);
 
             return new EmployeeImportPreviewResultDto
             {
@@ -39,11 +45,11 @@ namespace Attendance.Application.Services
             };
         }
 
-        public async Task<EmployeeImportConfirmResultDto> ConfirmAsync(ConfirmEmployeeImportDto request)
+        public async Task<EmployeeImportConfirmResultDto> ConfirmAsync(ConfirmEmployeeImportDto request, string userName, bool isAdmin)
         {
             // Re-validate from scratch against the current DB data (don't trust the Resolved*/IsNew*
             // fields sent by the client) — in case the data has changed since the user viewed the Preview.
-            var (validatedRows, departmentPlans, groupPlans) = await ValidateAndResolveRowsAsync(request.Rows);
+            var (validatedRows, departmentPlans, groupPlans) = await ValidateAndResolveRowsAsync(request.Rows, userName, isAdmin);
 
             var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
             var validRows = validatedRows.Where(x => x.IsValid).ToList();
@@ -188,20 +194,39 @@ namespace Attendance.Application.Services
         private sealed class GroupResolution
         {
             public int? ExistingId { get; set; }
+            public int? ExistingDepartmentId { get; set; }
             public string Name { get; set; } = null!;
             public string DepartmentCode { get; set; } = null!;
             public bool HasConflict { get; set; }
         }
 
         private async Task<(List<EmployeeImportRowDto> Rows, Dictionary<string, DepartmentResolution> Departments, Dictionary<string, GroupResolution> Groups)>
-            ValidateAndResolveRowsAsync(List<EmployeeImportRowDto> rawRows)
+            ValidateAndResolveRowsAsync(List<EmployeeImportRowDto> rawRows, string userName, bool isAdmin)
         {
             var existingDepartments = await _unitOfWork.Departments.SelectAsync(
                 x => !x.IsDeleted, x => new { x.Id, x.DepartmentCode, x.DepartmentNameVn });
             var existingGroups = await _unitOfWork.Groups.SelectAsync(
-                x => !x.IsDeleted, x => new { x.Id, x.GroupCode, x.GroupNameVn, DepartmentCode = x.Department.DepartmentCode });
-            var existingEmployeeCodes = (await _unitOfWork.Employees.SelectAsync(x => !x.IsDeleted, x => x.Code))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                x => !x.IsDeleted, x => new { x.Id, x.GroupCode, x.GroupNameVn, x.DepartmentId, DepartmentCode = x.Department.DepartmentCode });
+            var codesInFile = rawRows.Where(r => !string.IsNullOrWhiteSpace(r.EmployeeCode))
+                .Select(r => r.EmployeeCode!.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var existingEmployees = (await _unitOfWork.Employees.SelectAsync(
+                x => !x.IsDeleted && codesInFile.Contains(x.Code),
+                x => new
+                {
+                    x.Code,
+                    x.GroupId,
+                    DepartmentId = x.DepartmentId ?? (x.Group != null ? (int?)x.Group.DepartmentId : null),
+                    TerminalLevel = x.JobTitle != null ? x.JobTitle.TerminalLevel : (int)JobTitleTerminalLevel.None
+                }))
+                .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
+
+            // Non-admins (coordinators) may only touch employees and groups inside the units they manage.
+            var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
+            var managedGroupIds = isAdmin ? null : (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                x => x.Employee.UserName == userName && !x.IsDeleted)).Select(x => x.GroupId).ToHashSet();
+            bool InCallerScope(int? departmentId, int? groupId) => isAdmin
+                || (departmentId.HasValue && managedDepartmentIds!.Contains(departmentId.Value))
+                || (groupId.HasValue && managedGroupIds!.Contains(groupId.Value));
 
             var duplicatedEmployeeCodesInFile = FindDuplicates(rawRows, r => r.EmployeeCode);
 
@@ -242,6 +267,7 @@ namespace Attendance.Application.Services
                         groupPlans[groupCode] = new GroupResolution
                         {
                             ExistingId = existing?.Id,
+                            ExistingDepartmentId = existing?.DepartmentId,
                             Name = existing?.GroupNameVn ?? groupName,
                             DepartmentCode = existing?.DepartmentCode ?? deptCode,
                             HasConflict = existing != null && !string.Equals(existing.DepartmentCode, deptCode, StringComparison.OrdinalIgnoreCase)
@@ -268,6 +294,7 @@ namespace Attendance.Application.Services
                 var deptName = row.DepartmentNameVn?.Trim();
                 var groupCode = row.GroupCode?.Trim();
                 var groupName = row.GroupNameVn?.Trim();
+                var existingEmployee = string.IsNullOrWhiteSpace(employeeCode) ? null : existingEmployees.GetValueOrDefault(employeeCode);
 
                 var isNewEmployee = false;
                 if (string.IsNullOrWhiteSpace(employeeCode))
@@ -282,7 +309,7 @@ namespace Attendance.Application.Services
                     // EmployeeImportRowDto.IsNewEmployee).
                     if (duplicatedEmployeeCodesInFile.Contains(employeeCode))
                         errors.Add($"Mã nhân viên '{employeeCode}' bị lặp lại nhiều dòng trong file.");
-                    isNewEmployee = !existingEmployeeCodes.Contains(employeeCode);
+                    isNewEmployee = existingEmployee == null;
                 }
 
                 string? resolvedFirstName = null;
@@ -322,7 +349,19 @@ namespace Attendance.Application.Services
                     if (groupPlan.HasConflict)
                         errors.Add($"Nhóm mã '{groupCode}' có tên hoặc phòng ban không nhất quán giữa các dòng trong file, hoặc đã thuộc 1 phòng ban khác trong hệ thống.");
                     isNewGroup = groupPlan.ExistingId == null;
+                    if (!isNewGroup && !InCallerScope(groupPlan.ExistingDepartmentId, groupPlan.ExistingId))
+                        errors.Add($"Nhóm '{groupCode}' không thuộc phạm vi bạn phụ trách.");
                 }
+
+                if (!isAdmin && isNewDepartment)
+                    errors.Add($"Chỉ Admin được tạo Bộ phận mới '{deptCode}'.");
+                if (!isAdmin && isNewGroup)
+                    errors.Add($"Chỉ Admin được tạo Nhóm mới '{groupCode}'.");
+                if (existingEmployee != null && !InCallerScope(existingEmployee.DepartmentId, existingEmployee.GroupId))
+                    errors.Add($"Nhân viên '{employeeCode}' đang thuộc đơn vị ngoài phạm vi bạn phụ trách.");
+                // Import would put a manager into a Group, breaking the job-title organisation rules.
+                if (existingEmployee != null && existingEmployee.TerminalLevel != (int)JobTitleTerminalLevel.None)
+                    errors.Add("Nhân viên giữ chức vụ Trưởng phòng trở lên — sửa ở màn Nhân viên, không qua import.");
 
                 result.Add(new EmployeeImportRowDto
                 {
@@ -776,79 +815,106 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // File mẫu cho import Nhân viên đầy đủ (2026-08-27, theo yêu cầu người dùng — cột khớp ĐÚNG
-        // ParseXlsx ở trên: B=Employee code, C=Full name, D=Department code, E=Department name,
-        // F=Group code, G=Group name; cột A bỏ trống theo đúng quy ước các file import khác trong
-        // module). Kèm 1 dòng ví dụ để người dùng dễ hình dung, không phải dữ liệu thật.
-        public (byte[] Content, string FileName) GenerateTemplate()
+        private static readonly string[] EmployeeNotes =
         {
-            using var workbook = new XLWorkbook();
-            var sheet = workbook.Worksheets.Add("Nhan vien");
+            "Mỗi dòng 1 nhân viên. Mã NV đã có → cập nhật họ tên, Nhóm; chưa có → tạo mới.",
+            "Bộ phận/Nhóm chưa có trong hệ thống sẽ được tạo mới (chỉ Admin). Người phụ trách chỉ import được vào đơn vị mình phụ trách.",
+            "Nhân viên giữ chức vụ Trưởng phòng trở lên không import được — sửa ở màn Nhân viên.",
+            "Tài khoản đăng nhập, email nhận thông báo, Chức vụ, chữ ký: dùng import Liên kết tài khoản.",
+        };
 
-            string[] headers = { "", "Employee code", "Full name", "Department code", "Department name", "Group code", "Group name" };
-            for (var col = 0; col < headers.Length; col++)
-                sheet.Cell(1, col + 1).Value = headers[col];
-            sheet.Row(1).Style.Font.Bold = true;
+        private static readonly ImportTemplateColumn[] EmployeeColumns =
+        {
+            new("Employee code", 16, true, "@"),
+            new("Full name", 28, true),
+            new("Department code", 16, true),
+            new("Department name", 26, true),
+            new("Group code", 14, true),
+            new("Group name", 26, true),
+        };
 
-            sheet.Cell(2, 2).Value = "NV001";
-            sheet.Cell(2, 3).Value = "Nguyễn Văn A";
-            sheet.Cell(2, 4).Value = "CT";
-            sheet.Cell(2, 5).Value = "Chế tạo";
-            sheet.Cell(2, 6).Value = "CT-A";
-            sheet.Cell(2, 7).Value = "Nhóm A";
-
-            sheet.Columns().AdjustToContents();
-
-            using var stream = new MemoryStream();
-            workbook.SaveAs(stream);
-            return (stream.ToArray(), "Mau_Import_NhanVien.xlsx");
+        private async Task<ImportTemplateColumn[]> EmployeeColumnsWithOptionsAsync()
+        {
+            var departments = await _unitOfWork.Departments.SelectAsync(x => !x.IsDeleted,
+                x => new ImportTemplateOption(x.DepartmentCode, x.DepartmentNameVn));
+            var groups = await _unitOfWork.Groups.SelectAsync(x => !x.IsDeleted,
+                x => new ImportTemplateOption(x.GroupCode, x.GroupNameVn));
+            var columns = EmployeeColumns.ToArray();
+            columns[2] = columns[2] with { Options = departments.OrderBy(x => x.Value).ToList(), AllowOtherValues = true };
+            columns[4] = columns[4] with { Options = groups.OrderBy(x => x.Value).ToList(), AllowOtherValues = true };
+            return columns;
         }
 
-        // File mẫu cho import giới hạn OT tháng/năm (mục 5, 2026-08-27) — cột khớp ĐÚNG
-        // ImportOtHourLimitsAsync ở trên: B=MNV, C=Giới hạn Tháng, D=Giới hạn Năm.
-        public (byte[] Content, string FileName) GenerateOtHourLimitTemplate()
+        private static readonly string[] OtHourLimitNotes =
         {
-            using var workbook = new XLWorkbook();
-            var sheet = workbook.Worksheets.Add("Gioi han OT");
+            "Mỗi dòng 1 nhân viên đã có trong hệ thống. Áp dụng ngay khi import, không có bước xem trước.",
+            "Ô để trống = giữ nguyên giới hạn hiện tại của nhân viên đó. Ví dụ: NV001 | 30 | 320.",
+        };
 
-            string[] headers = { "", "MNV", "Giới hạn Tháng", "Giới hạn Năm" };
-            for (var col = 0; col < headers.Length; col++)
-                sheet.Cell(1, col + 1).Value = headers[col];
-            sheet.Row(1).Style.Font.Bold = true;
+        private static readonly ImportTemplateColumn[] OtHourLimitColumns =
+        {
+            new("MNV", 16, true, "@"),
+            new("Giới hạn tháng (giờ)", 20, false, "0.##"),
+            new("Giới hạn năm (giờ)", 20, false, "0.##"),
+        };
 
-            sheet.Cell(2, 2).Value = "NV001";
-            sheet.Cell(2, 3).Value = 25;
-            sheet.Cell(2, 4).Value = 300;
+        private static readonly string[] MonthlyAccumulationNotes =
+        {
+            "Chọn Năm/Tháng áp dụng trên màn import. Áp dụng ngay, không có bước xem trước; chạy lại cùng file không cộng trùng.",
+            "Tổng giờ OT tháng: tổng giờ của tháng đã chọn. Tổng giờ OT năm (tuỳ chọn): tổng giờ từ đầu năm tới hết tháng đã chọn.",
+            "Ví dụ: NV001 | 16.25 | 120.5.",
+        };
 
-            sheet.Columns().AdjustToContents();
+        private static readonly ImportTemplateColumn[] MonthlyAccumulationColumns =
+        {
+            new("MNV", 16, true, "@"),
+            new("Tổng giờ OT tháng", 20, true, "0.00"),
+            new("Tổng giờ OT năm", 20, false, "0.00"),
+        };
 
-            using var stream = new MemoryStream();
-            workbook.SaveAs(stream);
-            return (stream.ToArray(), "Mau_Import_GioiHanOT.xlsx");
+        private static string ExportStamp() => TimeHelper.GetCurrentUtcTime().AddHours(7).ToString("yyyyMMdd_HHmm");
+
+        public async Task<(byte[] Content, string FileName)> GenerateTemplateAsync() => ImportTemplateBuilder.Build(
+            "Nhan vien", "MẪU IMPORT NHÂN SỰ", EmployeeNotes, await EmployeeColumnsWithOptionsAsync(),
+            new[] { new object?[] { "NV001", "Nguyễn Văn A", "CT", "Chế tạo", "CT-A", "Nhóm A" } },
+            "Mau_Import_NhanVien.xlsx");
+
+        public (byte[] Content, string FileName) GenerateOtHourLimitTemplate() => ImportTemplateBuilder.Build(
+            "Gioi han OT", "MẪU IMPORT GIỚI HẠN GIỜ TĂNG CA RIÊNG", OtHourLimitNotes, OtHourLimitColumns,
+            Array.Empty<object?[]>(), "Mau_Import_GioiHanOT.xlsx");
+
+        public (byte[] Content, string FileName) GenerateMonthlyAccumulationTemplate() => ImportTemplateBuilder.Build(
+            "Luy ke OT", "MẪU IMPORT LŨY KẾ GIỜ TĂNG CA", MonthlyAccumulationNotes, MonthlyAccumulationColumns,
+            Array.Empty<object?[]>(), "Mau_Import_LuyKeOT.xlsx");
+
+        public async Task<(byte[] Content, string FileName)> ExportEmployeesAsync(EmployeeExportFilterDto filter, string userName, bool isAdmin)
+        {
+            // Managers and above have no Group and are rejected by this import, so they are not exported.
+            var rows = (await _employeeService.GetForExportAsync(userName, isAdmin, filter))
+                .Where(x => x.GroupCode != null && x.TerminalLevel == (int)JobTitleTerminalLevel.None)
+                .Select(x => new object?[] { x.Code, x.FullName, x.DepartmentCode, x.DepartmentNameVn, x.GroupCode, x.GroupNameVn })
+                .ToList();
+            return ImportTemplateBuilder.Build("Nhan vien", "IMPORT NHÂN SỰ", EmployeeNotes, await EmployeeColumnsWithOptionsAsync(), rows,
+                $"NhanVien_{ExportStamp()}.xlsx", rowsAreSamples: false);
         }
 
-        // File mẫu cho import lũy kế OT theo tháng và năm (2026-09-04) — cột khớp ĐÚNG
-        // ImportMonthlyAccumulationAsync ở trên: B=MNV, C=Tổng giờ OT tháng, D=Tổng giờ OT năm.
-        // Năm/Tháng áp dụng chọn riêng ở màn import (không phải cột trong file).
-        public (byte[] Content, string FileName) GenerateMonthlyAccumulationTemplate()
+        public async Task<(byte[] Content, string FileName)> ExportOtHourLimitsAsync(EmployeeExportFilterDto filter, string userName, bool isAdmin)
         {
-            using var workbook = new XLWorkbook();
-            var sheet = workbook.Worksheets.Add("Luy ke OT");
+            var rows = (await _employeeService.GetForExportAsync(userName, isAdmin, filter))
+                .Select(x => new object?[] { x.Code, x.CustomMonthlyOtHourLimit, x.CustomYearlyOtHourLimit })
+                .ToList();
+            return ImportTemplateBuilder.Build("Gioi han OT", "IMPORT GIỚI HẠN GIỜ TĂNG CA RIÊNG", OtHourLimitNotes, OtHourLimitColumns, rows,
+                $"GioiHanOT_{ExportStamp()}.xlsx", rowsAreSamples: false);
+        }
 
-            string[] headers = { "", "MNV", "Tổng giờ OT tháng", "Tổng giờ OT năm" };
-            for (var col = 0; col < headers.Length; col++)
-                sheet.Cell(1, col + 1).Value = headers[col];
-            sheet.Row(1).Style.Font.Bold = true;
-
-            sheet.Cell(2, 2).Value = "NV001";
-            sheet.Cell(2, 3).Value = 16.25;
-            sheet.Cell(2, 4).Value = 120.50;
-
-            sheet.Columns().AdjustToContents();
-
-            using var stream = new MemoryStream();
-            workbook.SaveAs(stream);
-            return (stream.ToArray(), "Mau_Import_LuyKeOT.xlsx");
+        public async Task<(byte[] Content, string FileName)> ExportMonthlyAccumulationAsync(
+            EmployeeExportFilterDto filter, int year, int month, string userName, bool isAdmin)
+        {
+            var rows = (await _employeeService.GetForExportAsync(userName, isAdmin, filter, year, month))
+                .Select(x => new object?[] { x.Code, x.MonthHours, x.YearHours })
+                .ToList();
+            return ImportTemplateBuilder.Build("Luy ke OT", $"IMPORT LŨY KẾ GIỜ TĂNG CA — THÁNG {month:00}/{year}", MonthlyAccumulationNotes,
+                MonthlyAccumulationColumns, rows, $"LuyKeOT_{year}{month:00}_{ExportStamp()}.xlsx", rowsAreSamples: false);
         }
     }
 }

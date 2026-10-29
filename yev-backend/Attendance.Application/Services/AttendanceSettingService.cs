@@ -28,6 +28,8 @@ namespace Attendance.Application.Services
         public const decimal DefaultYearlyOtHourLimit = 300m;
         public const decimal DefaultDailyOtHourLimitHoliday = 12m;
         public static readonly TimeOnly DefaultBatchAutoSendTime = new(15, 0);
+        public const int DefaultResubmitWindowDays = 3;
+        public const int DefaultBackdateDays = 7;
 
         public AttendanceSettingService(
             IAttendanceUnitOfWork unitOfWork,
@@ -57,6 +59,8 @@ namespace Attendance.Application.Services
             setting.YearlyOtHourLimit = request.YearlyOtHourLimit;
             setting.DailyOtHourLimitHoliday = request.DailyOtHourLimitHoliday;
             setting.BatchAutoSendTime = request.BatchAutoSendTime;
+            setting.ResubmitWindowDays = request.ResubmitWindowDays;
+            setting.BackdateDays = request.BackdateDays;
 
             _unitOfWork.AttendanceSettings.Update(setting);
             await _unitOfWork.SaveChangesAsync();
@@ -93,6 +97,8 @@ namespace Attendance.Application.Services
             YearlyOtHourLimit = setting.YearlyOtHourLimit,
             DailyOtHourLimitHoliday = setting.DailyOtHourLimitHoliday,
             BatchAutoSendTime = setting.BatchAutoSendTime,
+            ResubmitWindowDays = setting.ResubmitWindowDays,
+            BackdateDays = setting.BackdateDays,
         };
 
         // Bảng luôn chỉ có đúng 1 dòng (seed ở migration). Tự tạo lại dòng mặc định nếu vì lý do nào đó
@@ -115,6 +121,8 @@ namespace Attendance.Application.Services
                 YearlyOtHourLimit = DefaultYearlyOtHourLimit,
                 DailyOtHourLimitHoliday = DefaultDailyOtHourLimitHoliday,
                 BatchAutoSendTime = DefaultBatchAutoSendTime,
+                ResubmitWindowDays = DefaultResubmitWindowDays,
+                BackdateDays = DefaultBackdateDays,
             };
             await _unitOfWork.AttendanceSettings.AddAsync(setting);
             await _unitOfWork.SaveChangesAsync();

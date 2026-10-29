@@ -1,5 +1,6 @@
 using Identity.Application.Interfaces.Service;
 using Identity.Domain.Entities;
+using Identity.Domain.Enums;
 using Shared.Application.Helper;
 using Shared.Application.Interfaces;
 using Shared.Application.Services;
@@ -106,13 +107,22 @@ namespace Identity.Application.Services
         public async Task<bool> EnsureUserExistsAsync(string userName, string? fullName, string? roleName)
         {
             var trimmedUserName = userName.Trim();
-            var existingUser = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == trimmedUserName);
-            if (existingUser != null) return false;
-
             var resolvedRoleName = string.IsNullOrWhiteSpace(roleName) ? "Basic" : roleName.Trim();
+            var existingUser = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == trimmedUserName, x => x.Roles);
+            if (existingUser != null && (roleName == null || existingUser.Roles.Any(r => r.RoleName == resolvedRoleName)))
+                return false;
+
             var role = await _unitOfWork.Roles.FirstOrDefaultAsync(r => r.RoleName == resolvedRoleName && !r.IsDeleted);
             if (role == null)
                 throw new DomainException($"Không tìm thấy Role '{resolvedRoleName}'.");
+
+            // An existing account keeps its roles; the requested one is only added.
+            if (existingUser != null)
+            {
+                existingUser.Roles.Add(role);
+                await _unitOfWork.SaveChangesAsync();
+                return false;
+            }
 
             var newUser = new User
             {
@@ -124,6 +134,73 @@ namespace Identity.Application.Services
             await _unitOfWork.Users.AddAsync(newUser);
             await _unitOfWork.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<bool> SetModuleEmailAsync(string userName, string moduleCode, string email)
+        {
+            var user = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == userName);
+            if (user == null) return false;
+
+            var normalized = email.Trim().ToLowerInvariant();
+            var emails = await _unitOfWork.UserEmails.FindAsync(x => x.UserId == user.Id);
+            var target = emails.FirstOrDefault(x => x.Email == normalized);
+            if (target == null)
+            {
+                target = new UserEmail
+                {
+                    UserId = user.Id,
+                    Email = normalized,
+                    Source = (int)UserEmailSource.Manual,
+                    CreatedAt = TimeHelper.GetCurrentUtcTime()
+                };
+                // Keeps the UserEmailService invariant: a user's first address is its primary.
+                if (emails.Count == 0)
+                {
+                    target.IsPrimary = true;
+                    user.Email = normalized;
+                    _unitOfWork.Users.Update(user);
+                }
+                await _unitOfWork.UserEmails.AddAsync(target);
+            }
+
+            var route = await _unitOfWork.UserEmailModules.FirstOrDefaultAsync(x => x.UserId == user.Id && x.ModuleCode == moduleCode);
+            // Unrouted modules already go to the primary address; adding a route would pin it if the primary later changes.
+            if (route == null && target.IsPrimary)
+            {
+                await _unitOfWork.SaveChangesAsync();
+                return true;
+            }
+            if (route == null)
+            {
+                await _unitOfWork.UserEmailModules.AddAsync(new UserEmailModule { UserId = user.Id, ModuleCode = moduleCode, UserEmail = target });
+            }
+            else
+            {
+                route.UserEmail = target;
+                _unitOfWork.UserEmailModules.Update(route);
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<IReadOnlyDictionary<string, string>> GetModuleEmailsAsync(IReadOnlyCollection<string> userNames, string moduleCode)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (userNames.Count == 0) return result;
+
+            var users = await _unitOfWork.Users.SelectAsync(x => userNames.Contains(x.UserName), x => new { x.Id, x.UserName, x.Email });
+            var userIds = users.Select(x => x.Id).ToList();
+            var routed = (await _unitOfWork.UserEmailModules.SelectAsync(
+                    x => userIds.Contains(x.UserId) && x.ModuleCode == moduleCode, x => new { x.UserId, x.UserEmail.Email }))
+                .ToDictionary(x => x.UserId, x => x.Email);
+
+            foreach (var user in users)
+            {
+                var email = routed.GetValueOrDefault(user.Id) ?? user.Email;
+                if (!string.IsNullOrWhiteSpace(email)) result[user.UserName] = email;
+            }
+            return result;
         }
 
         public async Task<IReadOnlyList<DomainAccountInfo>> ResolveDomainAccountsAsync(IEnumerable<string> accounts)

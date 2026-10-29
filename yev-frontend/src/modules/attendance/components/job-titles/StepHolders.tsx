@@ -33,6 +33,7 @@ export default function StepHolders({
     onAddChange,
     onAddQueryChange,
     labels,
+    readOnly = false,
 }: {
     holders: HolderItem[];
     isLoadingEmployees: boolean;
@@ -43,6 +44,7 @@ export default function StepHolders({
     onAddChange: (value: number | "") => void;
     onAddQueryChange?: (query: string) => void;
     labels: StepHoldersLabels;
+    readOnly?: boolean;
 }) {
     return (
         <div className="relative ml-[1.35rem] pb-1 pl-5" title={labels.holdersLabel}>
@@ -62,7 +64,7 @@ export default function StepHolders({
                                 {holder.lastName} {holder.firstName}
                                 <span className="rounded bg-[#f2f4f6] px-1.5 py-px text-[11px] text-[#5e3f3a]">{holder.code}</span>
                                 {holder.badge && <span className="rounded bg-[#fff4f2] px-1.5 py-px text-[11px] text-[#930006]">{holder.badge}</span>}
-                                <button
+                                {!readOnly && <button
                                     type="button"
                                     onClick={() => onRemoveHolder(holder)}
                                     disabled={removingHolderId === holder.id}
@@ -71,11 +73,11 @@ export default function StepHolders({
                                     className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
                                 >
                                     <X size={11} />
-                                </button>
+                                </button>}
                             </span>
                         </TreeLeaf>
                     ))}
-                    <TreeLeaf>
+                    {!readOnly && <TreeLeaf>
                         <div className="w-44">
                             <SearchableSelect
                                 options={addOptions}
@@ -87,7 +89,7 @@ export default function StepHolders({
                                 triggerClassName="h-6 rounded-md border border-dashed border-[#e0e3e5] bg-white px-2 pr-6 text-[11px]! text-[#8a8f94] outline-none transition hover:border-[#e3000f] focus:border-[#e3000f]"
                             />
                         </div>
-                    </TreeLeaf>
+                    </TreeLeaf>}
                 </ul>
             )}
         </div>

@@ -1,6 +1,5 @@
 import { api } from "@/lib/client";
-import type { DepartmentApprovalStepDto, ReplaceDepartmentApprovalStepItem } from "@/modules/attendance/types/department-approval-step.dto";
-import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
+import type { ApprovalTreeDepartmentDto, DepartmentApprovalStepDto, ReplaceDepartmentApprovalStepItem } from "@/modules/attendance/types/department-approval-step.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
@@ -15,7 +14,7 @@ export const DepartmentApprovalStepApi = {
     // Bộ phận cho dropdown chọn ở màn "Cây duyệt" — Admin thấy hết, Coordinator chỉ thấy đúng Bộ
     // phận mình phụ trách (2026-08-25, thay cho DepartmentApi.getAllDepartments() không lọc trước đó).
     getMyDepartments: async () => {
-        const response = await api.get<ApiResponse<DepartmentDto[]>>(ENDPOINTS.DEPARTMENT_APPROVAL_STEP.myDepartments);
+        const response = await api.get<ApiResponse<ApprovalTreeDepartmentDto[]>>(ENDPOINTS.DEPARTMENT_APPROVAL_STEP.myDepartments);
         return response.data;
     },
     getByDepartment: async (departmentId: number) => {

@@ -11,6 +11,9 @@ namespace Attendance.Application.Interfaces.Service
 
         Task<EmployeeIdentityLinkImportConfirmResultDto> ConfirmAsync(Stream excelFileStream);
 
-        (byte[] Content, string FileName) GenerateTemplate();
+        Task<(byte[] Content, string FileName)> GenerateTemplateAsync();
+
+        // Current links of the filtered employees in the template layout, to edit and re-import.
+        Task<(byte[] Content, string FileName)> ExportAsync(Dtos.Employees.EmployeeExportFilterDto filter, string userName, bool isAdmin);
     }
 }

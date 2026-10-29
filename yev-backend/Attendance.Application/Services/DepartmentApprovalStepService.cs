@@ -23,16 +23,14 @@ namespace Attendance.Application.Services
             _departmentAccessGuard = departmentAccessGuard;
         }
 
-        // Admin xem/sửa được mọi Bộ phận; không phải Admin thì phải có tên trong
-        // DepartmentApprovalStepCoordinators của ĐÚNG Bộ phận này (gán tay bởi Admin — xem
-        // docs/docs-be/attendance-module.md §Cây chức vụ, mục "Người phụ trách Cây duyệt"). KHÔNG suy
-        // luận theo Chức vụ (Trưởng phòng không tự động có quyền — thực tế việc này thường giao cho
-        // người khác phụ trách). Logic chuyển sang IDepartmentAccessGuard (2026-08-29) để dùng chung với
-        // các tính năng khác cũng scope theo Phòng ban — xem docs/docs-be/attendance-module.md §Phân
-        // quyền theo Phòng ban.
+        // Access comes only from the explicit coordinator list, never from job title (managers often delegate this).
         public async Task<List<DepartmentApprovalStepDto>> GetByDepartmentAsync(string userName, bool isAdmin, int departmentId)
         {
-            await _departmentAccessGuard.EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId);
+            // A group coordinator may read the department steps that finish their group's chain, never edit them.
+            var coordinatesGroupHere = !isAdmin && (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                x => x.Employee.UserName == userName && !x.IsDeleted && x.Group.DepartmentId == departmentId)).Count > 0;
+            if (!coordinatesGroupHere)
+                await _departmentAccessGuard.EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId);
             return await GetByDepartmentCoreAsync(departmentId);
         }
 
@@ -107,24 +105,25 @@ namespace Attendance.Application.Services
             return await GetByDepartmentCoreAsync(departmentId);
         }
 
-        public async Task<List<DepartmentDto>> GetMyManagedDepartmentsAsync(string userName, bool isAdmin)
+        public async Task<List<ApprovalTreeDepartmentDto>> GetMyManagedDepartmentsAsync(string userName, bool isAdmin)
         {
-            if (isAdmin)
-            {
-                var all = await _unitOfWork.Departments.SelectAsync(
-                    predicate: x => !x.IsDeleted,
-                    selector: x => new DepartmentDto { Id = x.Id, DepartmentCode = x.DepartmentCode, DepartmentNameVn = x.DepartmentNameVn, DepartmentNameJp = x.DepartmentNameJp });
-                return all.OrderBy(x => x.DepartmentNameVn).ToList();
-            }
-
-            var myDepartmentIds = (await _unitOfWork.DepartmentApprovalStepCoordinators.FindAsync(
-                x => x.Employee.UserName == userName && !x.IsDeleted))
-                .Select(x => x.DepartmentId)
-                .ToHashSet();
+            var managedIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
+            var coordinatedGroups = isAdmin
+                ? new List<(int GroupId, int DepartmentId)>()
+                : (await _unitOfWork.GroupApprovalStepCoordinators.SelectAsync(
+                    x => x.Employee.UserName == userName && !x.IsDeleted && !x.Group.IsDeleted,
+                    x => new { x.GroupId, x.Group.DepartmentId }))
+                    .Select(x => (x.GroupId, x.DepartmentId)).ToList();
+            var visibleIds = managedIds?.Union(coordinatedGroups.Select(x => x.DepartmentId)).ToHashSet();
 
             var items = await _unitOfWork.Departments.SelectAsync(
-                predicate: x => !x.IsDeleted && myDepartmentIds.Contains(x.Id),
-                selector: x => new DepartmentDto { Id = x.Id, DepartmentCode = x.DepartmentCode, DepartmentNameVn = x.DepartmentNameVn, DepartmentNameJp = x.DepartmentNameJp });
+                predicate: x => !x.IsDeleted && (visibleIds == null || visibleIds.Contains(x.Id)),
+                selector: x => new ApprovalTreeDepartmentDto { Id = x.Id, DepartmentCode = x.DepartmentCode, DepartmentNameVn = x.DepartmentNameVn, DepartmentNameJp = x.DepartmentNameJp });
+            foreach (var item in items)
+            {
+                item.CanManage = managedIds == null || managedIds.Contains(item.Id);
+                item.GroupIds = coordinatedGroups.Where(x => x.DepartmentId == item.Id).Select(x => x.GroupId).ToList();
+            }
             return items.OrderBy(x => x.DepartmentNameVn).ToList();
         }
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { CalendarDays, Download, Mail, Save, Send, Ticket, TrendingUp, Upload } from "lucide-react";
+import { CalendarDays, Download, History, Mail, Save, Send, Ticket, TrendingUp, Upload } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -29,7 +29,7 @@ function fromTimeInputValue(value: string): string {
 const fieldLabelClassName = "mb-1 block whitespace-nowrap text-[11px]! font-semibold! uppercase tracking-[0.06em] text-[#5e3f3a]";
 const secondaryButtonClassName =
     "inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 text-xs! font-semibold! text-[#191c1e] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50";
-type NumberKey = "noMealTicketMaxHours" | "mainMealTicketMinHours" | "mealBreakDeductionHours" | "dailyOtHourLimit" | "monthlyOtHourLimit" | "yearlyOtHourLimit" | "dailyOtHourLimitHoliday";
+type NumberKey = "noMealTicketMaxHours" | "mainMealTicketMinHours" | "mealBreakDeductionHours" | "dailyOtHourLimit" | "monthlyOtHourLimit" | "yearlyOtHourLimit" | "dailyOtHourLimitHoliday" | "resubmitWindowDays" | "backdateDays";
 type TimeKey = "earlyMealWindowStartTime" | "earlyMealWindowEndTime" | "batchAutoSendTime";
 // Width is per-field, matched to the data it holds (DESIGN_SYSTEM.md §4.3) — never w-full in an
 // even-split grid, which stretches a 1-digit value across the whole column.
@@ -82,7 +82,11 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
             values.dailyOtHourLimit <= 0 ||
             values.monthlyOtHourLimit <= 0 ||
             values.yearlyOtHourLimit <= 0 ||
-            values.dailyOtHourLimitHoliday <= 0
+            values.dailyOtHourLimitHoliday <= 0 ||
+            !Number.isInteger(values.resubmitWindowDays) ||
+            values.resubmitWindowDays < 0 ||
+            !Number.isInteger(values.backdateDays) ||
+            values.backdateDays < 0
         ) {
             toast.error(t("invalidValueError"));
             return;
@@ -184,6 +188,17 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                         </Field>
                         <Field label={t("fieldYearlyOtHourLimit")} hint={t("accumulationHint")}>
                             <HourInput step="1" min={1} value={values.yearlyOtHourLimit} onChange={setNumber("yearlyOtHourLimit")} disabled={isSaving} unit={t("unitHour")} />
+                        </Field>
+                    </div>
+                </SettingCard>
+
+                <SettingCard icon={<History size={15} />} title={t("formTimingSectionTitle")} desc={t("formTimingSectionDesc")}>
+                    <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
+                        <Field label={t("fieldBackdateDays")}>
+                            <HourInput step="1" min={0} max={31} value={values.backdateDays} onChange={setNumber("backdateDays")} disabled={isSaving} unit={t("unitDay")} />
+                        </Field>
+                        <Field label={t("fieldResubmitWindowDays")} hint={t("fieldResubmitWindowDaysHint")}>
+                            <HourInput step="1" min={0} max={31} value={values.resubmitWindowDays} onChange={setNumber("resubmitWindowDays")} disabled={isSaving} unit={t("unitDay")} />
                         </Field>
                     </div>
                 </SettingCard>

@@ -28,6 +28,9 @@ namespace Attendance.Application.Dtos.OtForms
         // chỉnh sửa cũng phải nhập mật khẩu cấp 2), cùng cơ chế với ApproveOtFormDto.SecondaryPassword.
         [Required(ErrorMessage = "Mật khẩu cấp 2 không được để trống")]
         public string SecondaryPassword { get; set; } = null!;
+
+        // Required when the save re-submits a rejected or Manager-signed form.
+        public string? ResubmitReason { get; set; }
     }
 
     public class UpdateOtFormHeaderDto

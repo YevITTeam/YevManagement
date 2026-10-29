@@ -1,3 +1,4 @@
+// Mirrored by yev-backend Attendance.Application/Services/SignatureCutout.cs (Excel import); change both together.
 const MAX_WIDTH = 800;
 const PADDING = 8;
 const PAPER_RADIUS = 20;

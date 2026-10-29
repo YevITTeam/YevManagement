@@ -161,18 +161,16 @@ namespace Attendance.Application.Services
             return new EmployeeScopeDto { Departments = departments, Groups = groups, Workshops = workshops };
         }
 
-        public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(
-            string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId, int? workshopId)
+        // Shared by the grid and the import-dialog exports so both list exactly the same employees.
+        private async Task<IQueryable<Employee>> BuildListQueryAsync(
+            string callerUserName, bool isAdmin, string? keyword, int? departmentId, int? groupId, int? workshopId)
         {
-            var (todayYear, todayMonth) = GetTodayYearMonth();
             var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group!, x => x.Department!, x => x.JobTitle!).Where(x => !x.IsDeleted);
 
             if (!isAdmin)
                 query = ApplyScope(query, await ResolveCallerScopeAsync(callerUserName));
 
-            // Khớp cả 2 đường tới Department: trực tiếp (Trưởng phòng, xem Employee.DepartmentId) hoặc
-            // qua Group (nhân viên thường) — Trưởng Xưởng/Giám đốc (cả GroupId lẫn DepartmentId đều
-            // null, dùng chung toàn công ty) sẽ không khớp bộ lọc theo Phòng ban nào cả, đúng ý nghĩa.
+            // Managers match a department through their approval scopes; workshop managers/directors match none.
             if (departmentId.HasValue)
                 query = query.Where(x => x.ApprovalScopes.Any(s => s.DepartmentId == departmentId.Value) || (x.Group != null && x.Group.DepartmentId == departmentId.Value));
             if (workshopId.HasValue)
@@ -180,22 +178,26 @@ namespace Attendance.Application.Services
             if (groupId.HasValue)
                 query = query.Where(x => x.GroupId == groupId.Value);
 
-            var orderedQuery = query.OrderBy(x => x.Code.Length).ThenBy(x => x.Code);
-
             if (!string.IsNullOrWhiteSpace(keyword))
-            {
-                // "Họ và tên" hiển thị theo quy ước "{LastName} {FirstName}" (giống OtFormService) —
-                // so khớp cả chuỗi ghép để tìm được khi người dùng gõ đủ họ tên, không chỉ từng phần riêng lẻ.
                 query = query.Where(x =>
                     x.Code.Contains(keyword) ||
                     x.FirstName.Contains(keyword) ||
                     x.LastName.Contains(keyword) ||
                     (x.LastName + " " + x.FirstName).Contains(keyword));
 
-                // Khớp đúng tuyệt đối Code (vd tìm "50" ra ngay mã "50") được ưu tiên lên đầu,
-                // thay vì lẫn giữa các mã chỉ chứa keyword (vd "150", "250", "500").
-                orderedQuery = query.OrderBy(x => x.Code == keyword ? 0 : 1).ThenBy(x => x.Code.Length).ThenBy(x => x.Code);
-            }
+            return query;
+        }
+
+        public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(
+            string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId, int? workshopId)
+        {
+            var (todayYear, todayMonth) = GetTodayYearMonth();
+            var query = await BuildListQueryAsync(callerUserName, isAdmin, keyword, departmentId, groupId, workshopId);
+
+            // An exact code match goes first instead of being buried among codes that merely contain the keyword.
+            var orderedQuery = string.IsNullOrWhiteSpace(keyword)
+                ? query.OrderBy(x => x.Code.Length).ThenBy(x => x.Code)
+                : query.OrderBy(x => x.Code == keyword ? 0 : 1).ThenBy(x => x.Code.Length).ThenBy(x => x.Code);
 
             return await _unitOfWork.Employees.ToPagedResponseAsync(
                 orderedQuery,
@@ -229,6 +231,34 @@ namespace Attendance.Application.Services
                     CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit
                 }
             );
+        }
+
+        public async Task<List<EmployeeExportRowDto>> GetForExportAsync(
+            string callerUserName, bool isAdmin, EmployeeExportFilterDto filter, int? year = null, int? month = null)
+        {
+            var (todayYear, todayMonth) = GetTodayYearMonth();
+            var y = year ?? todayYear;
+            var m = month ?? todayMonth;
+            var query = await BuildListQueryAsync(callerUserName, isAdmin, filter.Keyword?.Trim(), filter.DepartmentId, filter.GroupId, filter.WorkshopId);
+
+            return await _unitOfWork.Employees.ToListAsync(
+                query.OrderBy(x => x.Code.Length).ThenBy(x => x.Code),
+                x => new EmployeeExportRowDto
+                {
+                    Code = x.Code,
+                    FullName = x.LastName + " " + x.FirstName,
+                    UserName = x.UserName,
+                    DepartmentCode = x.Group != null ? x.Group.Department.DepartmentCode : x.Department != null ? x.Department.DepartmentCode : null,
+                    DepartmentNameVn = x.Group != null ? x.Group.Department.DepartmentNameVn : x.Department != null ? x.Department.DepartmentNameVn : null,
+                    GroupCode = x.Group != null ? x.Group.GroupCode : null,
+                    GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    JobTitleCode = x.JobTitle != null ? x.JobTitle.Code : null,
+                    TerminalLevel = x.JobTitle != null ? x.JobTitle.TerminalLevel : (int)JobTitleTerminalLevel.None,
+                    CustomMonthlyOtHourLimit = x.CustomMonthlyOtHourLimit,
+                    CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit,
+                    MonthHours = x.EmployeeAccumulationHistories.Where(h => h.Year == y && h.Month == m).Sum(h => (decimal?)h.TotalHours) ?? 0m,
+                    YearHours = x.EmployeeAccumulationHistories.Where(h => h.Year == y && h.Month <= m).Sum(h => (decimal?)h.TotalHours) ?? 0m
+                });
         }
 
         // Toàn bộ nhân viên active (mọi Group) — dùng cho các dropdown/công cụ cần chọn 1 nhân viên bất

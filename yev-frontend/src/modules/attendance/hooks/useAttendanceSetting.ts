@@ -20,6 +20,8 @@ export const DEFAULT_ATTENDANCE_SETTING: AttendanceSettingDto = {
     yearlyOtHourLimit: 300,
     dailyOtHourLimitHoliday: 12,
     batchAutoSendTime: "15:00:00",
+    resubmitWindowDays: 3,
+    backdateDays: 7,
 };
 
 // Cấu hình này gần như không đổi nhưng lại cần ở RẤT nhiều màn (tạo đơn, chi tiết đơn, danh sách nhân

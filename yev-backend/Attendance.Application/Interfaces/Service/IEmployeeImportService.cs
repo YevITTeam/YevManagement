@@ -1,13 +1,14 @@
 using Attendance.Application.Dtos.EmployeeImports;
+using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Dtos.ProductionEmployeeImports;
 
 namespace Attendance.Application.Interfaces.Service
 {
     public interface IEmployeeImportService
     {
-        Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream);
+        Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string userName, bool isAdmin);
 
-        Task<EmployeeImportConfirmResultDto> ConfirmAsync(ConfirmEmployeeImportDto request);
+        Task<EmployeeImportConfirmResultDto> ConfirmAsync(ConfirmEmployeeImportDto request, string userName, bool isAdmin);
 
         // Mục 5 (2026-08-27) — xem EmployeeOtHourLimitImportResultDto. userName/isAdmin (2026-08-29) —
         // scope THEO TỪNG DÒNG qua IDepartmentAccessGuard, xem docs/docs-be/attendance-module.md §Phân
@@ -24,10 +25,15 @@ namespace Attendance.Application.Interfaces.Service
 
         // File mẫu tải xuống cho 3 kiểu import trên (2026-08-27, mở rộng 2026-09-03) — không đụng
         // DB nên KHÔNG async, chỉ dựng workbook tĩnh trong bộ nhớ.
-        (byte[] Content, string FileName) GenerateTemplate();
+        Task<(byte[] Content, string FileName)> GenerateTemplateAsync();
 
         (byte[] Content, string FileName) GenerateOtHourLimitTemplate();
 
         (byte[] Content, string FileName) GenerateMonthlyAccumulationTemplate();
+
+        // Current data of the filtered employees in the matching template, to edit and re-import.
+        Task<(byte[] Content, string FileName)> ExportEmployeesAsync(EmployeeExportFilterDto filter, string userName, bool isAdmin);
+        Task<(byte[] Content, string FileName)> ExportOtHourLimitsAsync(EmployeeExportFilterDto filter, string userName, bool isAdmin);
+        Task<(byte[] Content, string FileName)> ExportMonthlyAccumulationAsync(EmployeeExportFilterDto filter, int year, int month, string userName, bool isAdmin);
     }
 }

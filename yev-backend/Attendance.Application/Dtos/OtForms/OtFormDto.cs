@@ -44,9 +44,16 @@ namespace Attendance.Application.Dtos.OtForms
         // Enum Attendance.Domain.Enums.OtFormStatus.
         public int Status { get; set; }
 
-        // true when Status == InApproval and no step has been approved yet (2026-08-07, Giai đoạn 3.1)
-        // — only then can PUT /api/OtForm/{id} be called.
+        // Normal edit is open (InApproval, office forms: no Manager-level step approved yet).
         public bool IsEditable { get; set; }
+
+        // OtFormResubmitKind when the form can only be changed through a re-submission (PUT with ResubmitReason).
+        public int? ResubmitKind { get; set; }
+
+        // Accounts allowed to re-submit; Admin may also re-sign (ResubmitKind = Resign).
+        public List<string> ResubmitUserNames { get; set; } = new();
+
+        public DateTime? ResubmitDeadline { get; set; }
 
         // Cảnh báo suy luận chuỗi lúc tạo đơn (null nếu chuỗi đầy đủ) — xem OtForm.ApprovalChainWarning.
         public string? ApprovalChainWarning { get; set; }

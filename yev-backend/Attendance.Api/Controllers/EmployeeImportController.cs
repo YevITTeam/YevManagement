@@ -1,4 +1,5 @@
 using Attendance.Application.Dtos.EmployeeImports;
+using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Dtos.ProductionEmployeeImports;
 using Attendance.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Http;
@@ -31,7 +32,7 @@ namespace Attendance.Api.Controllers
                 return Fail<EmployeeImportPreviewResultDto>("Vui lòng chọn file Excel để import.");
 
             await using var stream = file.OpenReadStream();
-            var result = await _employeeImportService.PreviewAsync(stream);
+            var result = await _employeeImportService.PreviewAsync(stream, CurrentUserName, User.IsInRole(AdminRole));
             return Success(result, "Đọc file thành công, vui lòng xem lại bản xem trước bên dưới.");
         }
 
@@ -39,7 +40,7 @@ namespace Attendance.Api.Controllers
         [HttpPost("confirm")]
         public async Task<ActionResult<ApiResponse<EmployeeImportConfirmResultDto>>> Confirm([FromBody] ConfirmEmployeeImportDto request)
         {
-            var result = await _employeeImportService.ConfirmAsync(request);
+            var result = await _employeeImportService.ConfirmAsync(request, CurrentUserName, User.IsInRole(AdminRole));
             var message = $"Import thành công: {result.CreatedEmployeeCount} nhân viên mới, {result.UpdatedEmployeeCount} nhân viên cập nhật " +
                 $"({result.CreatedDepartmentCount} phòng ban mới, {result.CreatedGroupCount} nhóm mới)" +
                 (result.SkippedCount > 0 ? $", bỏ qua {result.SkippedCount} dòng lỗi." : ".");
@@ -93,10 +94,36 @@ namespace Attendance.Api.Controllers
         // File mẫu tải xuống (2026-08-27) — trả file .xlsx trực tiếp, KHÔNG bọc ApiResponse<T>, cùng
         // pattern ProductionEmployeeExportController.Export.
         [RequirePermission("Attendance.Employee.Create")]
-        [HttpGet("template")]
-        public IActionResult DownloadTemplate()
+        [HttpGet("export")]
+        public async Task<IActionResult> Export([FromQuery] EmployeeExportFilterDto filter)
         {
-            var (content, fileName) = _employeeImportService.GenerateTemplate();
+            var (content, fileName) = await _employeeImportService.ExportEmployeesAsync(filter, CurrentUserName, User.IsInRole(AdminRole));
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        [RequirePermission("Attendance.Employee.UpdateOtLimit")]
+        [HttpGet("ot-hour-limits/export")]
+        public async Task<IActionResult> ExportOtHourLimits([FromQuery] EmployeeExportFilterDto filter)
+        {
+            var (content, fileName) = await _employeeImportService.ExportOtHourLimitsAsync(filter, CurrentUserName, User.IsInRole(AdminRole));
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        [RequirePermission("Attendance.EmployeeAccumulation.Import")]
+        [HttpGet("monthly-accumulation/export")]
+        public async Task<IActionResult> ExportMonthlyAccumulation([FromQuery] EmployeeExportFilterDto filter, [FromQuery] int year, [FromQuery] int month)
+        {
+            if (month < 1 || month > 12)
+                return BadRequest("Tháng không hợp lệ.");
+            var (content, fileName) = await _employeeImportService.ExportMonthlyAccumulationAsync(filter, year, month, CurrentUserName, User.IsInRole(AdminRole));
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        [RequirePermission("Attendance.Employee.Create")]
+        [HttpGet("template")]
+        public async Task<IActionResult> DownloadTemplate()
+        {
+            var (content, fileName) = await _employeeImportService.GenerateTemplateAsync();
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 

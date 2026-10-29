@@ -66,6 +66,9 @@ namespace Attendance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("BackdateDays")
+                        .HasColumnType("int");
+
                     b.Property<TimeOnly>("BatchAutoSendTime")
                         .HasColumnType("time");
 
@@ -92,6 +95,9 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<decimal>("NoMealTicketMaxHours")
                         .HasColumnType("decimal(5, 2)");
+
+                    b.Property<int>("ResubmitWindowDays")
+                        .HasColumnType("int");
 
                     b.Property<decimal>("YearlyOtHourLimit")
                         .HasColumnType("decimal(10, 2)");
@@ -370,6 +376,9 @@ namespace Attendance.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("CanResubmit")
+                        .HasColumnType("bit");
 
                     b.Property<int>("GroupId")
                         .HasColumnType("int");

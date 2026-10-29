@@ -182,6 +182,8 @@ export interface UpdateOtFormDto {
     employees: UpdateOtFormEmployeeTimeDto[];
     removedEmployees: UpdateOtFormRemovedEmployeeDto[];
     secondaryPassword: string;
+    // Required when the save re-submits a rejected or Manager-signed form (resubmitKind set).
+    resubmitReason?: string | null;
 }
 
 // Rút gọn của OtFormApprovalHistoryDto — có mặt trên cả 5 endpoint danh sách (my-forms/
@@ -330,6 +332,11 @@ export interface OtFormDto {
     creatorSignatureImage: string | null;
     status: number;
     isEditable: boolean;
+    // OtFormResubmitKind: 1 = rejected, creator fixes and restarts the chain; 2 = Manager-signed, re-sign up to the Manager.
+    resubmitKind: number | null;
+    // Accounts allowed to re-submit; Admin may also re-sign (kind 2).
+    resubmitUserNames: string[];
+    resubmitDeadline: string | null;
     // Cảnh báo suy luận chuỗi lúc tạo đơn (null nếu chuỗi đầy đủ) — hiện banner cảnh báo trên UI nếu có.
     approvalChainWarning: string | null;
     employees: OtFormEmployeeDto[];

@@ -1,5 +1,6 @@
 import { api, getForBlob, type BlobDownloadResult } from "@/lib/client";
 import type {
+    EmployeeExportFilter,
     EmployeeImportConfirmResultDto,
     EmployeeImportPreviewResultDto,
     EmployeeImportPreviewRowDto,
@@ -17,8 +18,20 @@ const ENDPOINTS = {
         otHourLimitsTemplate: "/EmployeeImport/ot-hour-limits/template",
         monthlyAccumulation: "/EmployeeImport/monthly-accumulation",
         monthlyAccumulationTemplate: "/EmployeeImport/monthly-accumulation/template",
+        export: "/EmployeeImport/export",
+        otHourLimitsExport: "/EmployeeImport/ot-hour-limits/export",
+        monthlyAccumulationExport: "/EmployeeImport/monthly-accumulation/export",
     },
 } as const;
+
+export const toExportQuery = (filter: EmployeeExportFilter, extra: Record<string, number> = {}) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries({ ...filter, ...extra })) {
+        if (value !== undefined && value !== "") query.set(key, String(value));
+    }
+    const queryString = query.toString();
+    return queryString ? `?${queryString}` : "";
+};
 
 export const EmployeeImportApi = {
     // multipart/form-data — field "file". Chỉ đọc, không ghi DB (docs/attendance-module.md §API).
@@ -69,6 +82,12 @@ export const EmployeeImportApi = {
     downloadMonthlyAccumulationTemplate: async (): Promise<BlobDownloadResult> => {
         return getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.monthlyAccumulationTemplate);
     },
+    exportEmployees: (filter: EmployeeExportFilter): Promise<BlobDownloadResult> =>
+        getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.export + toExportQuery(filter)),
+    exportOtHourLimits: (filter: EmployeeExportFilter): Promise<BlobDownloadResult> =>
+        getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.otHourLimitsExport + toExportQuery(filter)),
+    exportMonthlyAccumulation: (filter: EmployeeExportFilter, year: number, month: number): Promise<BlobDownloadResult> =>
+        getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.monthlyAccumulationExport + toExportQuery(filter, { year, month })),
 };
 
 export { ENDPOINTS };

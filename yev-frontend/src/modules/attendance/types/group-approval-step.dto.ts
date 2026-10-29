@@ -14,6 +14,8 @@ export interface GroupApprovalStepDto {
     requiresSignature: boolean;
     // "Người chịu trách nhiệm" trên form in — Admin tự đánh dấu tường minh tối đa 1 bước/Nhóm.
     isResponsible: boolean;
+    // Holders of this step may edit and re-sign a form after a Manager signed it.
+    canResubmit: boolean;
     // JobTitleTerminalLevel — luôn = 0 (None) cho bước ở đây.
     terminalLevel: number;
 }
@@ -55,4 +57,5 @@ export interface ReplaceGroupApprovalStepItem {
     jobTitleId: number;
     requiresSignature: boolean;
     isResponsible: boolean;
+    canResubmit: boolean;
 }

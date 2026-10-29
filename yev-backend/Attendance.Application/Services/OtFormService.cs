@@ -55,6 +55,7 @@ namespace Attendance.Application.Services
                 (x.IsProductionForm || !x.ApprovalSteps.Any(s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Approved
                     && s.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None)),
             ApprovalSummary = x.OtFormApprovalHistories
+                .Where(h => !h.OtFormApprovalStep.IsDeleted)
                 .OrderBy(h => h.ActionAt)
                 .Select(h => new ApprovalSummaryItemDto
                 {
@@ -529,8 +530,9 @@ namespace Attendance.Application.Services
 
             var processPart = await _unitOfWork.ProcessParts.FirstOrDefaultAsync(x => x.OtFormId == id);
 
+            // History of steps dropped by a re-submission stays in the DB but no longer shows on the form.
             var histories = await _unitOfWork.OtFormApprovalHistories.SelectAsync(
-                predicate: x => x.OtFormId == id,
+                predicate: x => x.OtFormId == id && !x.OtFormApprovalStep.IsDeleted,
                 selector: x => new OtFormApprovalHistoryDto
                 {
                     ApproverUserName = x.ApproverUserName,
@@ -573,6 +575,7 @@ namespace Attendance.Application.Services
                     s.Status != (int)OtFormApprovalStepStatus.Approved || s.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None));
 
             var mealSettings = await _attendanceSettingService.GetAsync();
+            var resubmit = isEditable ? null : await ResolveResubmitAsync(otForm, orderedSteps);
 
             return new OtFormDto
             {
@@ -603,6 +606,9 @@ namespace Attendance.Application.Services
                 CreatorSignatureImage = otForm.CreatorSignatureImage,
                 Status = otForm.Status,
                 IsEditable = isEditable,
+                ResubmitKind = (int?)resubmit?.Kind,
+                ResubmitUserNames = resubmit?.UserNames.ToList() ?? new List<string>(),
+                ResubmitDeadline = resubmit?.Deadline,
                 ApprovalChainWarning = otForm.ApprovalChainWarning,
                 Employees = employees.Select(x => new OtFormEmployeeDto
                 {
@@ -719,6 +725,8 @@ namespace Attendance.Application.Services
             // sẽ sai lệch (coi StartTime/EndTime của đơn như 1 mốc giờ trong ngày, không phải khoảng).
             if (request.EndTime <= request.StartTime)
                 throw new DomainException("Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).");
+
+            EnsureDateNotTooFarBack(request.Date, (await _attendanceSettingService.GetAsync()).BackdateDays);
 
             // Mật khẩu cấp 2 bắt buộc khi tạo đơn (2026-08-28, theo yêu cầu người dùng) — verify SỚM,
             // trước khi làm bất kỳ việc gì khác, cùng nguyên tắc với ApproveAsync/RejectAsync.
@@ -1197,12 +1205,30 @@ namespace Attendance.Application.Services
                 x => x.OtFormEmployees);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
 
-            if (otForm!.Status != (int)OtFormStatus.InApproval)
-                throw new DomainException("Đơn đã xử lý xong (hoàn tất/từ chối), không thể sửa.");
-
-            var currentStep = await GetCurrentPendingStepAsync(id);
-            var isOfficeForm = !otForm.IsProductionForm;
+            var steps = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
+                x => x.OtFormId == id && !x.IsDeleted, x => x.Candidates)).ToList();
+            var currentStep = steps.Where(x => x.Status == (int)OtFormApprovalStepStatus.Pending).MinBy(x => x.StepOrder);
+            var isOfficeForm = !otForm!.IsProductionForm;
             Employee? creatorEmployee = null;
+
+            var isManagerSigned = steps.Any(x => x.Status == (int)OtFormApprovalStepStatus.Approved
+                && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None);
+            var resubmit = isOfficeForm && (otForm.Status != (int)OtFormStatus.InApproval || isManagerSigned)
+                ? await ResolveResubmitAsync(otForm, steps)
+                : null;
+            if (resubmit == null && otForm.Status != (int)OtFormStatus.InApproval)
+                throw new DomainException(otForm.Status == (int)OtFormStatus.Completed && isOfficeForm
+                    ? "Đơn đã hoàn tất quá thời hạn được trình ký lại, không thể sửa."
+                    : "Đơn đã xử lý xong (hoàn tất/từ chối), không thể sửa.");
+
+            var resubmitReason = request.ResubmitReason?.Trim();
+            if (resubmit != null && string.IsNullOrEmpty(resubmitReason))
+                throw new DomainException("Vui lòng nhập lý do trình ký lại.");
+
+            // Re-sign: the editor's own flagged step is signed again when they hold it.
+            OtFormApprovalStep? resignStep = null;
+            string? resignDelegatorUserName = null, resignDelegatorFullName = null;
+            byte[]? resignSignature = null;
 
             // Production forms: whoever holds the current pending step may edit (no Admin bypass), earlier
             // signatures stay. Office forms: only the creator, until a Manager-level step has approved.
@@ -1215,15 +1241,32 @@ namespace Attendance.Application.Services
                 if (!MatchStepActor(currentStep, currentUserName, await GetActiveDelegatorsAsync(currentUserName)).IsActor)
                     throw new DomainException($"Bạn không phải người được chỉ định xử lý bước hiện tại (Chức vụ '{currentStep.JobTitleNameSnapshot}') của đơn này, không thể sửa.");
             }
+            else if (resubmit?.Kind == OtFormResubmitKind.Resign)
+            {
+                resignStep = steps.FirstOrDefault(x => x.Id == resubmit.SignStepId);
+                var match = resignStep == null
+                    ? (false, null, null)
+                    : MatchStepActor(resignStep, currentUserName, await GetActiveDelegatorsAsync(currentUserName));
+                if (!match.IsActor && !isAdmin && !resubmit.UserNames.Contains(currentUserName))
+                    throw new DomainException("Bạn không có quyền trình ký lại đơn này (chỉ người giữ bước được tích \"Trình ký lại\" trên cây duyệt Nhóm, hoặc Admin).");
+                if (!match.IsActor) resignStep = null;
+                (_, resignDelegatorUserName, resignDelegatorFullName) = match;
+
+                if (resignStep?.RequiresSignatureSnapshot == true)
+                {
+                    resignSignature = (await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == currentUserName))?.SignatureImage
+                        ?? throw new DomainException("Bước của bạn bắt buộc phải ký. Vui lòng đăng ký chữ ký trước khi trình ký lại.");
+                }
+
+                // The chain is re-resolved from the creator, whoever edits.
+                creatorEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == otForm.CreatedByUserName && !x.IsDeleted);
+            }
             else
             {
                 if (otForm.CreatedByUserName != currentUserName)
                     throw new DomainException("Bạn chỉ có thể sửa đơn do chính mình tạo.");
 
-                var hasManagerLevelApproval = (await _unitOfWork.OtFormApprovalSteps.FindAsync(
-                    x => x.OtFormId == otForm.Id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved
-                        && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None)).Count > 0;
-                if (hasManagerLevelApproval)
+                if (resubmit == null && isManagerSigned)
                     throw new DomainException("Đơn đã được cấp Manager trở lên duyệt, không thể sửa nữa.");
 
                 if (otForm.GroupId.HasValue)
@@ -1238,6 +1281,8 @@ namespace Attendance.Application.Services
             var formEnd = header?.EndTime ?? otForm.EndTime;
             if (formEnd <= formStart)
                 throw new DomainException("Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).");
+            if (formDate != otForm.Date)
+                EnsureDateNotTooFarBack(formDate, (await _attendanceSettingService.GetAsync()).BackdateDays);
 
             Reason? newReason = null;
             if (header != null)
@@ -1333,6 +1378,10 @@ namespace Attendance.Application.Services
             }
 
             var mealSettings = await _attendanceSettingService.GetAsync();
+
+            // A completed form leaves the ledger until it is signed off again; a later rejection then counts nothing.
+            if (otForm.Status == (int)OtFormStatus.Completed)
+                await AccumulateEmployeeHoursAsync(otForm, activeEmployees, sign: -1);
 
             // Meal is mandatory on every form: production forms force DidEat, office forms keep the request value.
             var didEatByEmployeeId = request.Employees.ToDictionary(
@@ -1501,15 +1550,46 @@ namespace Attendance.Application.Services
             if (header != null)
                 await ApplyOfficeHeaderAsync(otForm, header, newReason!, currentUserName, currentFullName);
 
-            var chainCompleted = false;
-            if (newOtCase != null && newOtCase.Id != otForm.OtCaseId)
+            var caseChanged = newOtCase != null && newOtCase.Id != otForm.OtCaseId;
+            if (caseChanged)
             {
                 var oldCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otForm.OtCaseId);
                 await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.FormInfoChanged,
-                    null, null, "OtCase", oldCase?.Code, newOtCase.Code);
+                    null, null, "OtCase", oldCase?.Code, newOtCase!.Code);
                 otForm.OtCaseId = newOtCase.Id;
-                chainCompleted = await ReconcileApprovalChainAsync(otForm, creatorEmployee?.Id);
             }
+
+            if (resubmit != null)
+            {
+                await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.Resubmitted,
+                    null, null, null, null, resubmitReason);
+                otForm.Status = (int)OtFormStatus.InApproval;
+                // Back into the next daily "Đơn tổng" sweep for the Manager.
+                otForm.OtFormBatchId = null;
+                if (resubmit.Kind == OtFormResubmitKind.AfterReject)
+                    foreach (var step in steps) SoftDeleteStep(step);
+                else
+                    await ResetManagerStepAsync(steps);
+
+                if (resignStep != null)
+                    await _unitOfWork.OtFormApprovalHistories.AddAsync(new OtFormApprovalHistory
+                    {
+                        OtFormId = otForm.Id,
+                        OtFormApprovalStepId = resignStep.Id,
+                        ApproverUserName = currentUserName,
+                        ApproverFullName = currentFullName,
+                        OnBehalfOfUserName = resignDelegatorUserName,
+                        OnBehalfOfFullName = resignDelegatorFullName,
+                        Action = (int)ApprovalAction.Approved,
+                        Comment = resubmitReason,
+                        SignatureImage = resignSignature,
+                        ActionAt = TimeHelper.GetCurrentUtcTime()
+                    });
+            }
+
+            var chainCompleted = caseChanged || resubmit?.Kind == OtFormResubmitKind.AfterReject
+                ? await ReconcileApprovalChainAsync(otForm, creatorEmployee?.Id, steps)
+                : false;
 
             await RecalculateMealTicketCountsAsync(otForm.Id, finalActiveEmployees, mealSettings);
 
@@ -1524,6 +1604,13 @@ namespace Attendance.Application.Services
             await _unitOfWork.SaveChangesAsync();
 
             if (chainCompleted) QueueApprovedNotification(otForm.Id);
+            else if (resubmit != null)
+            {
+                // Manager-level steps are reached by the daily batch mail instead.
+                var nextStep = await GetCurrentPendingStepAsync(otForm.Id);
+                if (nextStep != null && nextStep.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None)
+                    QueueStepApprovalNotification(otForm.Id, nextStep.Id);
+            }
 
             // Skipped in the background job when the remover is the form's own creator.
             QueueEmployeesRemovedNotification(otForm.Id, removedEmployeeIds.ToList());
@@ -1579,7 +1666,7 @@ namespace Attendance.Application.Services
 
         // Re-resolves the chain after the OT case (hence the required approval level) changed. Approved steps
         // are kept as they are, pending ones are refreshed/added/dropped. True = nothing is left to approve.
-        private async Task<bool> ReconcileApprovalChainAsync(OtForm otForm, int? creatorEmployeeId)
+        private async Task<bool> ReconcileApprovalChainAsync(OtForm otForm, int? creatorEmployeeId, List<OtFormApprovalStep> steps)
         {
             var chain = await _jobTitleApprovalChainService.ResolveChainForCreationAsync(
                 creatorEmployeeId, otForm.GroupId!.Value, otForm.DepartmentId, otForm.WorkshopId, otForm.OtCaseId);
@@ -1588,8 +1675,7 @@ namespace Attendance.Application.Services
             // No configured chain: leave the existing steps instead of stranding the form without any.
             if (chain.Steps.Count == 0 && !chain.IsComplete) return false;
 
-            var existingSteps = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
-                x => x.OtFormId == otForm.Id && !x.IsDeleted, x => x.Candidates)).ToList();
+            var existingSteps = steps.Where(x => !x.IsDeleted).ToList();
             var stepByJobTitleId = existingSteps.GroupBy(x => x.JobTitleId).ToDictionary(g => g.Key, g => g.OrderBy(x => x.StepOrder).First());
 
             var keptStepIds = new HashSet<int>();
@@ -1610,11 +1696,13 @@ namespace Attendance.Application.Services
                     row.IsResponsibleSnapshot = step.IsResponsible;
                     row.TerminalLevelSnapshot = step.TerminalLevel;
                     _unitOfWork.OtFormApprovalSteps.Update(row);
-                    foreach (var candidate in row.Candidates) _unitOfWork.OtFormApprovalStepCandidates.Delete(candidate);
+                    foreach (var candidate in row.Candidates.ToList()) _unitOfWork.OtFormApprovalStepCandidates.Delete(candidate);
+                    row.Candidates.Clear();
+                    // Navigation, not Id: the row may be a not-yet-saved re-sign copy.
                     foreach (var candidate in step.Candidates)
                         await _unitOfWork.OtFormApprovalStepCandidates.AddAsync(new OtFormApprovalStepCandidate
                         {
-                            OtFormApprovalStepId = row.Id, EmployeeId = candidate.EmployeeId, UserName = candidate.UserName, FullName = candidate.FullName
+                            OtFormApprovalStep = row, EmployeeId = candidate.EmployeeId, UserName = candidate.UserName, FullName = candidate.FullName
                         });
                     pendingCount++;
                     continue;
@@ -1649,6 +1737,83 @@ namespace Attendance.Application.Services
             }
 
             return pendingCount == 0;
+        }
+
+        private void SoftDeleteStep(OtFormApprovalStep step)
+        {
+            step.IsDeleted = true;
+            _unitOfWork.OtFormApprovalSteps.Update(step);
+        }
+
+        // Re-sign goes straight back to the first signed Manager-level step; steps after it keep their approval.
+        // The old row is dropped (with its signature) and a pending copy takes its place.
+        private async Task ResetManagerStepAsync(List<OtFormApprovalStep> steps)
+        {
+            var signed = steps.Where(x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved
+                && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None).MinBy(x => x.StepOrder);
+            if (signed == null) return;
+
+            SoftDeleteStep(signed);
+            var copy = new OtFormApprovalStep
+            {
+                OtFormId = signed.OtFormId,
+                StepOrder = signed.StepOrder,
+                JobTitleId = signed.JobTitleId,
+                JobTitleCodeSnapshot = signed.JobTitleCodeSnapshot,
+                JobTitleNameSnapshot = signed.JobTitleNameSnapshot,
+                RequiresSignatureSnapshot = signed.RequiresSignatureSnapshot,
+                IsResponsibleSnapshot = signed.IsResponsibleSnapshot,
+                TerminalLevelSnapshot = signed.TerminalLevelSnapshot,
+                Status = (int)OtFormApprovalStepStatus.Pending,
+                Candidates = signed.Candidates.Select(c => new OtFormApprovalStepCandidate
+                {
+                    EmployeeId = c.EmployeeId, UserName = c.UserName, FullName = c.FullName
+                }).ToList()
+            };
+            await _unitOfWork.OtFormApprovalSteps.AddAsync(copy);
+            steps.Add(copy);
+        }
+
+        private sealed record ResubmitInfo(OtFormResubmitKind Kind, HashSet<string> UserNames, DateTime? Deadline, int? SignStepId);
+
+        // Office form that normal editing no longer covers: rejected (creator restarts the chain) or Manager-signed
+        // (holders of the group's CanResubmit step, or the creator when that step was skipped for their rank; Admin
+        // too). A completed form only within ResubmitWindowDays of its last approval. Null = no re-submission.
+        private async Task<ResubmitInfo?> ResolveResubmitAsync(OtForm otForm, IReadOnlyList<OtFormApprovalStep> steps)
+        {
+            if (otForm.IsProductionForm || !otForm.GroupId.HasValue) return null;
+
+            if (otForm.Status == (int)OtFormStatus.Rejected)
+                return new ResubmitInfo(OtFormResubmitKind.AfterReject, new HashSet<string> { otForm.CreatedByUserName }, null, null);
+
+            if (!steps.Any(x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved
+                    && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None))
+                return null;
+
+            DateTime? deadline = null;
+            if (otForm.Status == (int)OtFormStatus.Completed)
+            {
+                var approvedAt = await _unitOfWork.OtFormApprovalHistories.SelectAsync(
+                    x => x.OtFormId == otForm.Id && x.Action == (int)ApprovalAction.Approved, x => (DateTime?)x.ActionAt);
+                deadline = (approvedAt.Max() ?? otForm.CreatedAt).AddDays((await _attendanceSettingService.GetAsync()).ResubmitWindowDays);
+                if (TimeHelper.GetCurrentUtcTime() > deadline) return null;
+            }
+
+            var flaggedJobTitleIds = (await _unitOfWork.GroupApprovalSteps.SelectAsync(
+                x => x.GroupId == otForm.GroupId.Value && !x.IsDeleted && x.CanResubmit, x => x.JobTitleId)).ToHashSet();
+            var signStep = steps.Where(x => !x.IsDeleted && flaggedJobTitleIds.Contains(x.JobTitleId)
+                && x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None).MinBy(x => x.StepOrder);
+            var userNames = signStep != null
+                ? signStep.Candidates.Select(c => c.UserName).ToHashSet()
+                : flaggedJobTitleIds.Count > 0 ? new HashSet<string> { otForm.CreatedByUserName } : new HashSet<string>();
+            return new ResubmitInfo(OtFormResubmitKind.Resign, userNames, deadline, signStep?.Id);
+        }
+
+        private static void EnsureDateNotTooFarBack(DateOnly date, int backdateDays)
+        {
+            var earliest = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime()).AddDays(-backdateDays);
+            if (date < earliest)
+                throw new DomainException($"Chỉ được làm đơn cho ngày từ {earliest:dd/MM/yyyy} trở đi (lùi tối đa {backdateDays} ngày).");
         }
 
         // Nhân viên MỚI thêm vào đơn theo chuyền phải cùng (Line, Nhóm ca) với ít nhất 1 nhân viên còn
@@ -2349,7 +2514,8 @@ namespace Attendance.Application.Services
         // — nên 1 đơn dán ngày tương lai chỉ "hiện" ra khi tới đúng tháng đó, không cộng sớm dù
         // Completed từ trước (xem docs/docs-be/attendance-module.md §Lũy kế).
         // Takes the rows explicitly so a form that completes at creation can accumulate in the same save as its insert.
-        private async Task AccumulateEmployeeHoursAsync(OtForm otForm, IReadOnlyCollection<OtFormEmployee> otFormEmployees)
+        // sign = -1 takes a completed form back out of the ledger before it is re-submitted.
+        private async Task AccumulateEmployeeHoursAsync(OtForm otForm, IReadOnlyCollection<OtFormEmployee> otFormEmployees, int sign = 1)
         {
             var mealSettings = await _attendanceSettingService.GetAsync();
 
@@ -2361,7 +2527,7 @@ namespace Attendance.Application.Services
 
             foreach (var otFormEmployee in otFormEmployees)
             {
-                var hours = CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mealSettings);
+                var hours = sign * CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mealSettings);
 
                 if (existingLedgerRows.TryGetValue(otFormEmployee.EmployeeId, out var ledgerRow))
                 {

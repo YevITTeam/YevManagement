@@ -54,8 +54,9 @@ function toMinutes(time: string): number {
     return h * 60 + m;
 }
 
-function getTodayStr(): string {
+function getTodayStr(offsetDays = 0): string {
     const now = new Date();
+    now.setDate(now.getDate() + offsetDays);
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const day = String(now.getDate()).padStart(2, "0");
@@ -391,6 +392,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
     const [tableScrollRef, onTableScrollMouseDown] = useDragScroll<HTMLDivElement>();
 
+    const [resubmitKind, setResubmitKind] = useState<number | null>(null);
+    const [resubmitReason, setResubmitReason] = useState("");
+
     const [isLoadingInitial, setIsLoadingInitial] = useState(isEditMode);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -627,10 +631,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         if (!isEditMode || !otFormId) return;
         OtFormApi.getOtFormById(otFormId)
             .then((data) => {
-                if (!data.isEditable) {
+                const canResubmit =
+                    data.resubmitKind != null &&
+                    (data.resubmitUserNames.includes(user?.userName ?? "") || (data.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
+                if (!data.isEditable && !canResubmit) {
                     setLoadError(t("notEditableError"));
                     return;
                 }
+                setResubmitKind(data.isEditable ? null : data.resubmitKind);
                 // Đồng bộ lại chế độ hiển thị đúng theo đơn (2026-08-28, sửa lỗi thiếu sót — comment ở
                 // khai báo formMode nói rõ ý định "giữ nguyên chế độ ban đầu" nhưng trước đó chưa từng
                 // set lại state này khi tải đơn để sửa, khiến form luôn hiện lại đúng UI "Theo Nhóm" mặc
@@ -986,6 +994,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             toast.error(t("secondaryPasswordMissingError"));
             return;
         }
+        if (resubmitKind != null && !resubmitReason.trim()) {
+            toast.error(t("resubmitReasonRequiredError"));
+            return;
+        }
 
         // Không hỗ trợ ca qua đêm (2026-08-26) — giờ kết thúc của mỗi người luôn nằm trong CÙNG ngày,
         // giữa giờ bắt đầu và giờ kết thúc của đơn, không còn cộng thêm 24h như trước.
@@ -1053,6 +1065,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     employees,
                     removedEmployees,
                     secondaryPassword,
+                    resubmitReason: resubmitKind != null ? resubmitReason.trim() : null,
                 });
             } else {
                 const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
@@ -1259,23 +1272,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 onChange={(event) => setDate(event.target.value)}
                                 disabled={isSubmitting || isHeaderLocked}
                                 required
-                                min={isEditMode ? undefined : getTodayStr()}
+                                min={isEditMode ? undefined : getTodayStr(-setting.backdateDays)}
                                 className={fieldClassName}
                             />
                         </label>
 
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldTotalHour")}</span>
+                            {/* The form's hours are only the outer frame; the daily limit is warned per employee row. */}
                             <input value={totalHour} disabled className={fieldClassName} />
-                            {/* Cảnh báo SỚM, không tự chặn ở đây — người tạo có thể set giờ kết thúc riêng ngắn
-                                hơn cho từng nhân viên (employeeOverrides), nên tổng giờ CẢ đơn dài hơn ngưỡng/ngày
-                                không hẳn đã sai (2026-08-26). */}
-                            {!isTimeRangeInvalid && totalHour > dailyOtHourLimit && (
-                                <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#930006]">
-                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                    {t("totalHourOverLimitWarning", { limit: dailyOtHourLimit })}
-                                </p>
-                            )}
                         </label>
 
                         {/* Gộp Giờ bắt đầu + Giờ kết thúc chung 1 ô lưới (2026-08-26) — ô nhập giờ đã đổi
@@ -2160,6 +2165,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 </div>
 
                                 <div className="sticky bottom-0 z-20 flex justify-end gap-3 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
+                    {resubmitKind != null && (
+                        <input
+                            value={resubmitReason}
+                            onChange={(event) => setResubmitReason(event.target.value)}
+                            placeholder={t("resubmitReasonPlaceholder")}
+                            disabled={isSubmitting}
+                            className="h-10 min-w-0 flex-1 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                        />
+                    )}
                     <button
                         type="button"
                         onClick={() => router.back()}
@@ -2173,7 +2187,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         disabled={isSubmitting}
                         className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {isSubmitting ? t("saving") : isEditMode ? t("updateSubmit") : t("createSubmit")}
+                        {isSubmitting ? t("saving") : resubmitKind != null ? t("resubmitSubmit") : isEditMode ? t("updateSubmit") : t("createSubmit")}
                     </button>
                 </div>
             </form>

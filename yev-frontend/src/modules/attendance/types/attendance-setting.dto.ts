@@ -23,6 +23,10 @@ export interface AttendanceSettingDto {
     dailyOtHourLimitHoliday: number;
     // TimeOnly "HH:mm:ss" — giờ hằng ngày hệ thống tự gom "Đơn tổng" gửi Trưởng phòng.
     batchAutoSendTime: string;
+    // Days after completion a Manager-signed office form may still be re-submitted.
+    resubmitWindowDays: number;
+    // How many days back a new form's date may be.
+    backdateDays: number;
 }
 
 // Body PUT /api/AttendanceSetting — cùng shape với AttendanceSettingDto (không có field server tự tính).

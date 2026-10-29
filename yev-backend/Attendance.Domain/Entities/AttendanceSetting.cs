@@ -51,4 +51,10 @@ public partial class AttendanceSetting
     // TimeHelper.GetCurrentUtcTime()). Default 15:00 — trước đây hardcode trong background service,
     // chuyển vào đây để Admin tự đổi không cần build lại (2026-08-08).
     public TimeOnly BatchAutoSendTime { get; set; }
+
+    // Days after completion during which an office form signed by a Manager can still be edited and re-signed. Default 3.
+    public int ResubmitWindowDays { get; set; }
+
+    // How many days back a new form's date may be. Default 7.
+    public int BackdateDays { get; set; }
 }

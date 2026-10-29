@@ -456,7 +456,10 @@
       "saveCoordinatorSuccess": "Đã cập nhật người phụ trách",
       "saveCoordinatorError": "Cập nhật người phụ trách thất bại",
       "coordinatorNotLinked": "chưa liên kết tài khoản",
-      "coordinatorNotLinkedHint": "Nhân viên này chưa liên kết tài khoản đăng nhập — xem ghi chú tương tự ở khối Bộ phận phía dưới."
+      "coordinatorNotLinkedHint": "Nhân viên này chưa liên kết tài khoản đăng nhập — xem ghi chú tương tự ở khối Bộ phận phía dưới.",
+      "toggleResubmitHint": "Bấm để cho/không cho người giữ bước này sửa và trình ký lại đơn sau khi Manager đã ký",
+      "canResubmitYes": "Trình ký lại",
+      "canResubmitNo": "Không được trình ký lại"
     },
     "Employee": {
       "searchPlaceholder": "Tìm theo mã hoặc tên nhân viên...",
@@ -514,7 +517,7 @@
       "createSubmit": "Tạo mới",
       "updateSubmit": "Lưu thay đổi",
       "importTitle": "Import nhân sự từ Excel",
-      "importDescription": "Chọn file .xlsx (cột: No./Employee code/Full name/Department/Department Name/Group/Group Name) — upsert theo mã nhân viên, tự tạo Bộ phận/Nhóm mới nếu chưa có.",
+      "importDescription": "Chọn file .xlsx (cột: Employee code/Full name/Department code/Department name/Group code/Group name) — upsert theo mã nhân viên, tự tạo Bộ phận/Nhóm mới nếu chưa có (chỉ Admin).",
       "importChooseErrorNoFile": "Vui lòng chọn file Excel nhân sự trước.",
       "importPreviewButton": "Xem trước",
       "importPreviewing": "Đang xem trước...",
@@ -534,6 +537,11 @@
       "importColRow": "Dòng",
       "importColCode": "Mã NV",
       "importColError": "Lỗi",
+      "exportFilteredButton": "Xuất dữ liệu đang lọc",
+      "exportFilteredBusy": "Đang xuất...",
+      "exportFilteredHint": "Tải dữ liệu hiện tại của nhân viên đang lọc ở danh sách, sửa rồi import lại",
+      "exportFilteredError": "Xuất dữ liệu thất bại.",
+      "importColEmail": "Email",
       "importClose": "Đóng",
       "importCancel": "Huỷ",
       "importConfirmButton": "Xác nhận import",
@@ -590,7 +598,7 @@
       "monthlyAccumulationTemplateError": "Không thể tải file mẫu.",
       "identityLinkMenuLabel": "Liên kết tài khoản đăng nhập",
       "identityLinkImportTitle": "Import liên kết tài khoản đăng nhập",
-      "identityLinkImportDescription": "File Excel .xlsx: cột B=MNV, C=UserName, D=RoleName (để trống = Basic), E=MaChucVu (để trống = không đổi), F=NguoiPhuTrach (nhập 1 = có, để trống = không). Chức vụ/Người phụ trách áp theo đúng Bộ phận/Nhóm hiện tại của nhân viên. Dán ảnh chữ ký vào đúng ô cạnh dòng nhân viên nếu muốn gán luôn. Tự tạo tài khoản đăng nhập nếu UserName chưa tồn tại — người đó dùng được hệ thống ngay sau khi import.",
+      "identityLinkImportDescription": "File Excel .xlsx: cột B=MNV, C=UserName, D=Email (nhận thông báo Tăng ca, để trống = giữ nguyên), E=MaChucVu (chọn trong danh sách, để trống = không đổi), F=NguoiPhuTrach (1 = có). Chức vụ/Người phụ trách áp theo đúng Bộ phận/Nhóm hiện tại của nhân viên. Dán ảnh chữ ký vào đúng ô cạnh dòng nhân viên nếu muốn gán luôn. Tài khoản chưa có được tạo tự động (nhãn Quản lý tăng ca) — người đó dùng được hệ thống ngay sau khi import.",
       "identityLinkChooseErrorNoFile": "Vui lòng chọn file Excel trước.",
       "identityLinkPreviewButton": "Xem trước",
       "identityLinkPreviewing": "Đang xem trước...",
@@ -602,14 +610,13 @@
       "identityLinkNoPreviewYet": "Chưa có dữ liệu xem trước. Chọn file rồi bấm \"Xem trước\".",
       "identityLinkConfirmButton": "Xác nhận import",
       "identityLinkConfirming": "Đang import...",
-      "identityLinkConfirmSuccess": "Đã liên kết {success} nhân viên ({created} tài khoản mới, {signatures} chữ ký)",
+      "identityLinkConfirmSuccess": "Đã liên kết {success} nhân viên ({created} tài khoản mới, {emails} email, {signatures} chữ ký)",
       "identityLinkConfirmSuccessSkipped": ", bỏ qua {skipped} dòng lỗi.",
       "identityLinkConfirmSuccessExtra": "Đã gán {jobTitles} Chức vụ, thêm {coordinators} người phụ trách Cây duyệt.",
       "identityLinkConfirmError": "Xác nhận import thất bại.",
       "identityLinkDownloadTemplate": "Tải file mẫu",
       "identityLinkTemplateError": "Không thể tải file mẫu.",
       "identityLinkColUserName": "UserName",
-      "identityLinkColRole": "Role",
       "identityLinkColJobTitle": "Chức vụ",
       "identityLinkColCoordinator": "Người phụ trách",
       "identityLinkColSignature": "Chữ ký",
@@ -847,7 +854,13 @@
       "calendarTypeSpecialHoliday": "Nghỉ đặc biệt",
       "calendarView": "Xem lịch",
       "calendarDialogTitle": "Lịch ngày nghỉ năm {year}",
-      "calendarClose": "Đóng"
+      "calendarClose": "Đóng",
+      "formTimingSectionTitle": "Thời hạn đơn",
+      "formTimingSectionDesc": "Giới hạn ngày được làm đơn lùi và thời gian được trình ký lại đơn đã hoàn tất.",
+      "fieldBackdateDays": "Làm đơn lùi tối đa",
+      "fieldResubmitWindowDays": "Trình ký lại trong",
+      "fieldResubmitWindowDaysHint": "Tính từ lúc đơn hoàn tất. Đơn văn phòng đã có Manager ký chỉ được sửa và trình ký lại trong số ngày này.",
+      "unitDay": "ngày"
     },
     "UserSignature": {
       "title": "Chữ ký của tôi",
@@ -1105,7 +1118,10 @@
       "colBlockCode": "Line",
       "colTeamCode": "Team",
       "colShiftTeam": "Nhóm ca",
-      "onBehalfOf": "thay mặt {name}"
+      "onBehalfOf": "thay mặt {name}",
+      "resubmitButton": "Trình ký lại",
+      "resubmitDeadline": "Hạn trình ký lại: {date}",
+      "editLogResubmitted": "Trình ký lại"
     },
     "CreateOtForm": {
       "titleCreate": "Đăng ký tăng ca",
@@ -1135,7 +1151,6 @@
       "fieldEndTime": "Giờ kết thúc",
       "endTimeBeforeStartError": "Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).",
       "fieldTotalHour": "Tổng số giờ",
-      "totalHourOverLimitWarning": "Vượt giới hạn OT/ngày ({limit}h).",
       "employeeOverDailyLimit": "Nhân viên mã {code} quá giới hạn OT ngày ({hours}h > {limit}h) — không tạo được đơn.",
       "employeeOverMonthlyLimit": "Nhân viên mã {code} vượt giới hạn OT tháng ({hours}h > {limit}h) — đơn bắt buộc là TH3.",
       "employeeOverYearlyLimit": "Nhân viên mã {code} vượt giới hạn OT năm ({hours}h > {limit}h) — đơn bắt buộc là TH3.",
@@ -1235,7 +1250,10 @@
       "badgeTh3Tooltip": "Lũy kế tháng/năm vượt giới hạn — đơn bắt buộc là TH3.",
       "employeeTimeOutOfRange": "Ngoài giờ của đơn ({start}–{end})",
       "lineOptionsLoadError": "Không thể tải danh sách Line.",
-      "shiftTeamOptionsLoadError": "Không thể tải danh sách Nhóm ca."
+      "shiftTeamOptionsLoadError": "Không thể tải danh sách Nhóm ca.",
+      "resubmitReasonPlaceholder": "Lý do trình ký lại *",
+      "resubmitReasonRequiredError": "Vui lòng nhập lý do trình ký lại.",
+      "resubmitSubmit": "Trình ký lại"
     },
     "OtFormPrint": {
       "loadError": "Không thể tải đơn tăng ca để in.",

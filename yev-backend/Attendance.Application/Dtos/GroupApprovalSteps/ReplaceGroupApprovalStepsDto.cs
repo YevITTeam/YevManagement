@@ -14,6 +14,8 @@ namespace Attendance.Application.Dtos.GroupApprovalSteps
         // Đánh dấu bước này là "người chịu trách nhiệm" trên form in — tối đa 1 phần tử trong Steps
         // được đặt true (validate ở GroupApprovalStepService.ReplaceAsync).
         public bool IsResponsible { get; set; }
+
+        public bool CanResubmit { get; set; }
     }
 
     // Thay NGUYÊN danh sách bước duyệt trung gian của 1 Group — thứ tự phần tử trong Steps chính là

@@ -14,6 +14,6 @@ namespace Attendance.Application.Interfaces.Service
         // Danh sách Bộ phận để hiện lên dropdown chọn ở màn "Cây duyệt" — Admin thấy TOÀN BỘ, người
         // phụ trách (Coordinator) chỉ thấy đúng (các) Bộ phận mình được gán, tránh chọn nhầm rồi bị
         // 403 khi gọi GetByDepartment/Replace (2026-08-25, yêu cầu người dùng).
-        Task<List<DepartmentDto>> GetMyManagedDepartmentsAsync(string userName, bool isAdmin);
+        Task<List<ApprovalTreeDepartmentDto>> GetMyManagedDepartmentsAsync(string userName, bool isAdmin);
     }
 }

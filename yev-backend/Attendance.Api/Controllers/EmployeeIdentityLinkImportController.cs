@@ -1,4 +1,5 @@
 using Attendance.Application.Dtos.EmployeeIdentityLinkImports;
+using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -49,10 +50,18 @@ namespace Attendance.Api.Controllers
         }
 
         [RequirePermission("Identity.User.BulkImport")]
-        [HttpGet("template")]
-        public IActionResult DownloadTemplate()
+        [HttpGet("export")]
+        public async Task<IActionResult> Export([FromQuery] EmployeeExportFilterDto filter)
         {
-            var (content, fileName) = _employeeIdentityLinkImportService.GenerateTemplate();
+            var (content, fileName) = await _employeeIdentityLinkImportService.ExportAsync(filter, CurrentUserName, User.IsInRole("Admin"));
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        [RequirePermission("Identity.User.BulkImport")]
+        [HttpGet("template")]
+        public async Task<IActionResult> DownloadTemplate()
+        {
+            var (content, fileName) = await _employeeIdentityLinkImportService.GenerateTemplateAsync();
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
     }

@@ -41,7 +41,8 @@ export function formatDateTime(value: string | null | undefined) {
 // Tra lịch sử ký/duyệt theo StepOrder (2026-08-07, Giai đoạn 3.1) — trước đây tra theo ApprovalLevel
 // cố định, nay chuỗi bước là động theo Cây chức vụ, xem docs §Cây chức vụ.
 export function findHistory(histories: OtFormApprovalHistoryDto[], stepOrder: number) {
-    return histories.find((item) => item.stepOrder === stepOrder && item.action !== 2) ?? null;
+    // Latest wins: a re-submitted form is signed again on the same step.
+    return [...histories].reverse().find((item) => item.stepOrder === stepOrder && item.action !== 2) ?? null;
 }
 
 // 3 ô ký cuối trên giấy in (Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc) vẫn là 3 Chức vụ CỐ ĐỊNH

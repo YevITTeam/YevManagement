@@ -31,6 +31,7 @@ import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableS
 import ActionMenu from "@/components/ui/ActionMenu";
 import { Badge } from "@/components/ui/Badge";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
+import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import EmployeeImportDialog from "./EmployeeImportDialog";
 import EmployeeOtHourLimitImportDialog from "./EmployeeOtHourLimitImportDialog";
 import EmployeeMonthlyAccumulationImportDialog from "./EmployeeMonthlyAccumulationImportDialog";
@@ -369,12 +370,21 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     // view "Nhân viên" (2026-09-04, theo yêu cầu người dùng "làm lại giao diện cho đẹp lại"). Mục lũy kế
     // trước đó CHỈ có ở menu Excel của tab "Nhân viên dưới chuyền" dù BE đã tổng quát cho mọi Phòng ban
     // (kể cả văn phòng) — thiếu sót phát hiện khi người dùng hỏi lại, bổ sung nốt ở đây.
+    const exportFilter: EmployeeExportFilter = {
+        keyword: appliedKeyword || undefined,
+        departmentId: departmentId || undefined,
+        groupId: groupId || undefined,
+        workshopId: workshopId || undefined,
+    };
     const employeeExcelItems = [
         ...(canCreateEmployee
             ? [{ label: t("importExcel"), onClick: () => setImportOpen(true), icon: <Upload className="h-3.5 w-3.5" /> }]
             : []),
         ...(canImportIdentityLink
             ? [{ label: t("identityLinkMenuLabel"), onClick: () => setIdentityLinkImportOpen(true), icon: <Link2 className="h-3.5 w-3.5" /> }]
+            : []),
+        ...(canUpdateOtLimit
+            ? [{ label: t("otHourLimitImportMenuLabel"), onClick: () => setOtHourLimitImportOpen(true), icon: <Clock className="h-3.5 w-3.5" /> }]
             : []),
         ...(canImportMonthlyAccumulation
             ? [
@@ -622,12 +632,14 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 isOpen={importOpen}
                 onClose={() => setImportOpen(false)}
                 onImported={fetchEmployees}
+                exportFilter={exportFilter}
             />
 
             <EmployeeIdentityLinkImportDialog
                 isOpen={identityLinkImportOpen}
                 onClose={() => setIdentityLinkImportOpen(false)}
                 onImported={fetchEmployees}
+                exportFilter={exportFilter}
             />
 
             <ProductionEmployeeImportDialog
@@ -643,12 +655,14 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 isOpen={otHourLimitImportOpen}
                 onClose={() => setOtHourLimitImportOpen(false)}
                 onImported={fetchEmployees}
+                exportFilter={exportFilter}
             />
 
             <EmployeeMonthlyAccumulationImportDialog
                 isOpen={monthlyAccumulationImportOpen}
                 onClose={() => setMonthlyAccumulationImportOpen(false)}
                 onImported={fetchEmployees}
+                exportFilter={exportFilter}
             />
 
             <EmployeeForm

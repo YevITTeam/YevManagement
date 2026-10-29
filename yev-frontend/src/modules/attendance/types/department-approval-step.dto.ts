@@ -16,6 +16,14 @@ export interface DepartmentApprovalStepDto {
     terminalLevel: number;
 }
 
+import type { DepartmentDto } from "./department.dto";
+
+// canManage = Admin or department coordinator; otherwise only groupIds inside it are the caller's, read-only above.
+export interface ApprovalTreeDepartmentDto extends DepartmentDto {
+    canManage: boolean;
+    groupIds: number[];
+}
+
 // Payload PUT /by-department/{departmentId} — thứ tự phần tử trong mảng chính là StepOrder.
 export interface ReplaceDepartmentApprovalStepItem {
     jobTitleId: number;

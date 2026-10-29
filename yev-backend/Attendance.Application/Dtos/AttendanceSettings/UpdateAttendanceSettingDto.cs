@@ -40,5 +40,11 @@ namespace Attendance.Application.Dtos.AttendanceSettings
 
         [Required(ErrorMessage = "Giờ tự động gửi đơn tổng không được để trống")]
         public TimeOnly BatchAutoSendTime { get; set; }
+
+        [Range(0, 31, ErrorMessage = "Số ngày được trình ký lại phải từ 0 đến 31")]
+        public int ResubmitWindowDays { get; set; }
+
+        [Range(0, 31, ErrorMessage = "Số ngày được tạo đơn lùi phải từ 0 đến 31")]
+        public int BackdateDays { get; set; }
     }
 }

@@ -7,12 +7,15 @@ import { useTranslations } from "next-intl";
 
 import { EmployeeImportApi } from "@/modules/attendance/api/employee-import.api";
 import type { ProductionEmployeeAccumulationResultDto } from "@/modules/attendance/types/production-employee-import.dto";
+import ExportFilteredButton from "./ExportFilteredButton";
+import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 interface EmployeeMonthlyAccumulationImportDialogProps {
     isOpen: boolean;
     onClose: () => void;
     onImported: () => void;
+    exportFilter: EmployeeExportFilter;
 }
 
 // Import lũy kế OT theo tháng, tổng quát cho MỌI Phòng ban (2026-09-03) — KHÔNG có bước Preview/Confirm
@@ -24,6 +27,7 @@ export default function EmployeeMonthlyAccumulationImportDialog({
     isOpen,
     onClose,
     onImported,
+    exportFilter,
 }: EmployeeMonthlyAccumulationImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const now = new Date();
@@ -151,6 +155,7 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                         >
                             <Download className="h-3.5 w-3.5" /> {t("monthlyAccumulationDownloadTemplate")}
                         </button>
+                        <ExportFilteredButton download={() => EmployeeImportApi.exportMonthlyAccumulation(exportFilter, year, month)} fallbackFileName="LuyKeOT.xlsx" />
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={handleClose}

@@ -24,6 +24,9 @@ public partial class GroupApprovalStep
     // người chịu trách nhiệm luôn là 1 người ở cấp trung gian sát người tạo đơn nhất.
     public bool IsResponsible { get; set; }
 
+    // Holders of this step may edit and re-sign a form after a Manager signed it (read live, not snapshotted).
+    public bool CanResubmit { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual Group Group { get; set; } = null!;

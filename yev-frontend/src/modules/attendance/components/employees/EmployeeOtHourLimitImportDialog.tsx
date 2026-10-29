@@ -7,18 +7,21 @@ import { useTranslations } from "next-intl";
 
 import { EmployeeImportApi } from "@/modules/attendance/api/employee-import.api";
 import type { EmployeeOtHourLimitImportResultDto } from "@/modules/attendance/types/employee-import.dto";
+import ExportFilteredButton from "./ExportFilteredButton";
+import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 interface EmployeeOtHourLimitImportDialogProps {
     isOpen: boolean;
     onClose: () => void;
     onImported: () => void;
+    exportFilter: EmployeeExportFilter;
 }
 
 // Mục 5 (2026-08-27) — KHÔNG có bước Preview/Confirm như EmployeeImportDialog (chỉ update 2 field số
 // trên nhân viên đã tồn tại, không tạo mới/không có Department-Group phụ thuộc cần rà trước) — chọn
 // file rồi áp dụng thẳng, xem lại kết quả từng dòng ngay trong dialog này.
-export default function EmployeeOtHourLimitImportDialog({ isOpen, onClose, onImported }: EmployeeOtHourLimitImportDialogProps) {
+export default function EmployeeOtHourLimitImportDialog({ isOpen, onClose, onImported, exportFilter }: EmployeeOtHourLimitImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const [file, setFile] = useState<File | null>(null);
     const [isImporting, setIsImporting] = useState(false);
@@ -118,6 +121,7 @@ export default function EmployeeOtHourLimitImportDialog({ isOpen, onClose, onImp
                         >
                             <Download className="h-3.5 w-3.5" /> {t("otHourLimitDownloadTemplate")}
                         </button>
+                        <ExportFilteredButton download={() => EmployeeImportApi.exportOtHourLimits(exportFilter)} fallbackFileName="GioiHanOT.xlsx" />
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={handleClose}

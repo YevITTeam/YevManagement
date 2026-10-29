@@ -1,26 +1,24 @@
 using Attendance.Application.Dtos.EmployeeIdentityLinkImports;
+using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Interfaces.Service;
+using Attendance.Domain.Enums;
 using ClosedXML.Excel;
+using System.Net.Mail;
+using Shared.Application.Helper;
 using Shared.Application.Interfaces;
 using Shared.Application.Services;
 using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Import Excel hàng loạt liên kết Employee (Attendance) ↔ User (Identity), tự tạo tài khoản Identity
-    // nếu chưa có + gán chữ ký thẳng — Admin-only (2026-09-03, xem
-    // docs/docs-be/attendance-module.md §Import liên kết Identity + chữ ký). Cột A bỏ trống (quy ước
-    // chung), B=MNV, C=UserName, D=RoleName (để trống = "Basic"), E=MaChucVu (để trống = không đổi),
-    // F=NguoiPhuTrach ("1" = có, mirror quy ước cột LEADER của ProductionEmployeeImportService), ảnh
-    // chữ ký nhúng trực tiếp vào Excel neo theo đúng hàng của mỗi nhân viên.
-    //
-    // Mở rộng 2026-09-03b: Chức vụ/Người phụ trách LUÔN áp theo phạm vi Bộ phận/Nhóm HIỆN TẠI của
-    // Employee (Employee.DepartmentId/GroupId, đã có từ import nhân sự trước đó) — file này KHÔNG cho
-    // đổi Bộ phận/Nhóm của ai, chỉ gán Chức vụ/người phụ trách ĐÚNG nơi họ đang thuộc về.
+    // One-stop setup of an OT system user: B=MNV, C=UserName, D=Email, E=MaChucVu, F=NguoiPhuTrach, G=signature
+    // image anchored on the row. Job title/coordinator apply to the employee's current Group/Department only.
     public class EmployeeIdentityLinkImportService : BaseService<IAttendanceUnitOfWork>, IEmployeeIdentityLinkImportService
     {
         private const string HeaderMarkerCellB = "MNV";
         private const string CoordinatorFlagTrueValue = "1";
+        // Label-only role (no permissions); OT rights come from the job title and coordinator role.
+        private const string OtRoleName = "Quản lý tăng ca";
 
         private readonly IUserDirectoryService _userDirectoryService;
         private readonly IEmployeeService _employeeService;
@@ -84,16 +82,15 @@ namespace Attendance.Application.Services
 
                 try
                 {
-                    // Tạo tài khoản Identity TRƯỚC (nếu chưa có) — nếu bước này lỗi (VD RoleName không
-                    // tồn tại) thì KHÔNG ghi gì xuống Attendance DB cho dòng này, tránh trạng thái nửa
-                    // vời (Employee.UserName đã set nhưng không có User Identity tương ứng) — 2 DB khác
-                    // nhau nên không có transaction chung.
+                    // Identity first: if it fails nothing is written to Attendance (two DBs, no shared transaction).
                     var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Code == row.EmployeeCode && !x.IsDeleted);
                     employee.OrThrowNotFound("Nhân viên", row.EmployeeCode!);
 
                     var fullName = $"{employee!.LastName} {employee.FirstName}".Trim();
-                    var createdUser = await _userDirectoryService.EnsureUserExistsAsync(row.UserName!, fullName, row.RoleName);
+                    var createdUser = await _userDirectoryService.EnsureUserExistsAsync(row.UserName!, fullName, OtRoleName);
                     if (createdUser) result.CreatedIdentityUserCount++;
+                    if (row.Email != null && await _userDirectoryService.SetModuleEmailAsync(row.UserName!, EmailModules.Attendance, row.Email))
+                        result.EmailSetCount++;
 
                     var oldUserName = employee.UserName;
                     if (oldUserName != row.UserName)
@@ -148,7 +145,7 @@ namespace Attendance.Application.Services
 
                     if (imagesByRow.TryGetValue(row.RowNumber, out var signatureImage))
                     {
-                        await _userSignatureService.AdminSetSignatureAsync(row.UserName!, signatureImage);
+                        await _userSignatureService.AdminSetSignatureAsync(row.UserName!, SignatureCutout.Process(signatureImage));
                         result.SignatureSetCount++;
                     }
 
@@ -170,7 +167,7 @@ namespace Attendance.Application.Services
         }
 
         private async Task<List<EmployeeIdentityLinkImportRowDto>> ValidateRowsAsync(
-            List<(int RowNumber, string? EmployeeCode, string? UserName, string? RoleName, string? JobTitleCode, bool IsCoordinator, bool HasSignatureImage)> rawRows)
+            List<(int RowNumber, string? EmployeeCode, string? UserName, string? Email, string? JobTitleCode, bool IsCoordinator, bool HasSignatureImage)> rawRows)
         {
             var employeeCodes = rawRows.Where(r => !string.IsNullOrWhiteSpace(r.EmployeeCode))
                 .Select(r => r.EmployeeCode!.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -212,11 +209,11 @@ namespace Attendance.Application.Services
             var jobTitleCodes = rawRows.Where(r => !string.IsNullOrWhiteSpace(r.JobTitleCode))
                 .Select(r => r.JobTitleCode!.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var jobTitlesByCode = jobTitleCodes.Count == 0
-                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                ? new Dictionary<string, (string Name, int TerminalLevel)>(StringComparer.OrdinalIgnoreCase)
                 : (await _unitOfWork.JobTitles.SelectAsync(
                     x => !x.IsDeleted && jobTitleCodes.Contains(x.Code),
-                    x => new { x.Code, x.Name }))
-                    .ToDictionary(x => x.Code, x => x.Name, StringComparer.OrdinalIgnoreCase);
+                    x => new { x.Code, x.Name, x.TerminalLevel }))
+                    .ToDictionary(x => x.Code, x => (x.Name, x.TerminalLevel), StringComparer.OrdinalIgnoreCase);
 
             var result = new List<EmployeeIdentityLinkImportRowDto>();
             foreach (var row in rawRows)
@@ -224,7 +221,7 @@ namespace Attendance.Application.Services
                 var errors = new List<string>();
                 var employeeCode = row.EmployeeCode?.Trim();
                 var userName = row.UserName?.Trim();
-                var roleName = string.IsNullOrWhiteSpace(row.RoleName) ? null : row.RoleName.Trim();
+                var email = string.IsNullOrWhiteSpace(row.Email) ? null : row.Email.Trim().ToLowerInvariant();
                 var jobTitleCode = string.IsNullOrWhiteSpace(row.JobTitleCode) ? null : row.JobTitleCode.Trim();
 
                 (int Id, string FullName, string? UserName, int? GroupId, string? GroupNameVn, int? DepartmentId, string? DepartmentNameVn)? employee = null;
@@ -247,6 +244,8 @@ namespace Attendance.Application.Services
                 }
                 else
                 {
+                    if (!userName.Contains('\\'))
+                        errors.Add($"UserName '{userName}' phải có dạng DOMAIN\\tên đăng nhập, ví dụ YEV\\n.van.a.");
                     if (duplicatedUserNamesInFile.Contains(userName))
                         errors.Add($"UserName '{userName}' bị lặp lại nhiều dòng trong file.");
                     if (employeesHoldingUserNames.TryGetValue(userName, out var holderCode)
@@ -254,13 +253,18 @@ namespace Attendance.Application.Services
                         errors.Add($"UserName '{userName}' đã được gán cho nhân viên khác (mã '{holderCode}').");
                 }
 
+                if (email != null && !MailAddress.TryCreate(email, out _))
+                    errors.Add($"Email '{email}' không hợp lệ.");
+
                 string? resolvedJobTitleName = null;
                 if (jobTitleCode != null)
                 {
-                    if (!jobTitlesByCode.TryGetValue(jobTitleCode, out var jobTitleName))
+                    if (!jobTitlesByCode.TryGetValue(jobTitleCode, out var jobTitle))
                         errors.Add($"Không tìm thấy Chức vụ có mã '{jobTitleCode}'.");
+                    else if (jobTitle.TerminalLevel != (int)JobTitleTerminalLevel.None)
+                        errors.Add($"Chức vụ '{jobTitleCode}' là cấp Trưởng phòng trở lên — gán ở màn Nhân viên, không qua import.");
                     else
-                        resolvedJobTitleName = jobTitleName;
+                        resolvedJobTitleName = jobTitle.Name;
                 }
 
                 string? coordinatorScopeDescription = null;
@@ -282,7 +286,7 @@ namespace Attendance.Application.Services
                     RowNumber = row.RowNumber,
                     EmployeeCode = employeeCode,
                     UserName = userName,
-                    RoleName = roleName,
+                    Email = email,
                     JobTitleCode = jobTitleCode,
                     IsCoordinator = row.IsCoordinator,
                     HasSignatureImage = row.HasSignatureImage,
@@ -303,7 +307,7 @@ namespace Attendance.Application.Services
         }
 
         private static (
-            List<(int RowNumber, string? EmployeeCode, string? UserName, string? RoleName, string? JobTitleCode, bool IsCoordinator, bool HasSignatureImage)> Rows,
+            List<(int RowNumber, string? EmployeeCode, string? UserName, string? Email, string? JobTitleCode, bool IsCoordinator, bool HasSignatureImage)> Rows,
             Dictionary<int, byte[]> ImagesByRow)
             ParseXlsx(Stream stream)
         {
@@ -344,13 +348,13 @@ namespace Attendance.Application.Services
                 string.Equals(worksheet.Cell(r.RowNumber(), 2).GetString().Trim(), HeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
             if (headerRow == null)
                 throw new DomainException(
-                    $"Không tìm thấy dòng tiêu đề (cột B = \"{HeaderMarkerCellB}\") trong file — đúng mẫu là cột B=MNV, C=UserName, D=RoleName, E=MaChucVu, F=NguoiPhuTrach.");
+                    $"Không tìm thấy dòng tiêu đề (cột B = \"{HeaderMarkerCellB}\") trong file — đúng mẫu là cột B=MNV, C=UserName, D=Email, E=MaChucVu, F=NguoiPhuTrach.");
 
             foreach (var xlRow in allUsedRows.Where(r => r.RowNumber() > headerRow.RowNumber()))
             {
                 var employeeCode = worksheet.Cell(xlRow.RowNumber(), 2).GetString().Trim();
                 var userName = worksheet.Cell(xlRow.RowNumber(), 3).GetString().Trim();
-                var roleName = worksheet.Cell(xlRow.RowNumber(), 4).GetString().Trim();
+                var email = worksheet.Cell(xlRow.RowNumber(), 4).GetString().Trim();
                 var jobTitleCode = worksheet.Cell(xlRow.RowNumber(), 5).GetString().Trim();
                 var isCoordinator = worksheet.Cell(xlRow.RowNumber(), 6).GetString().Trim() == CoordinatorFlagTrueValue;
                 var hasImage = imagesByRow.ContainsKey(xlRow.RowNumber());
@@ -362,7 +366,7 @@ namespace Attendance.Application.Services
                     xlRow.RowNumber(),
                     string.IsNullOrWhiteSpace(employeeCode) ? null : employeeCode,
                     string.IsNullOrWhiteSpace(userName) ? null : userName,
-                    string.IsNullOrWhiteSpace(roleName) ? null : roleName,
+                    string.IsNullOrWhiteSpace(email) ? null : email,
                     string.IsNullOrWhiteSpace(jobTitleCode) ? null : jobTitleCode,
                     isCoordinator,
                     hasImage));
@@ -371,25 +375,57 @@ namespace Attendance.Application.Services
             return (rows, imagesByRow);
         }
 
-        public (byte[] Content, string FileName) GenerateTemplate()
+        private static readonly string[] Notes =
         {
-            using var workbook = new XLWorkbook();
-            var sheet = workbook.Worksheets.Add("Lien ket tai khoan");
+            "Mỗi dòng 1 nhân viên đã có trong hệ thống (người mới: import nhân sự trước). Tài khoản chưa có sẽ được tạo tự động, kèm nhãn Quản lý tăng ca.",
+            "UserName: tài khoản Windows đầy đủ dạng YEV\\tên.đăng.nhập.",
+            "Email (tuỳ chọn): địa chỉ nhận thông báo của hệ thống Tăng ca. Để trống = giữ nguyên.",
+            "MaChucVu: chọn trong danh sách, chỉ chức vụ cấp trung gian; quyền theo Chức vụ được cấp ngay. Trưởng phòng/Trưởng xưởng/Giám đốc gán ở màn Nhân viên.",
+            "NguoiPhuTrach = 1: thêm làm Người phụ trách Cây duyệt của Nhóm/Bộ phận hiện tại của nhân viên.",
+            "Ảnh chữ ký (tuỳ chọn): chèn ảnh nằm gọn trong đúng dòng của nhân viên.",
+        };
 
-            string[] headers = { "", "MNV", "UserName", "RoleName", "MaChucVu", "NguoiPhuTrach" };
-            for (var col = 0; col < headers.Length; col++)
-                sheet.Cell(1, col + 1).Value = headers[col];
-            sheet.Row(1).Style.Font.Bold = true;
+        private static readonly ImportTemplateColumn[] Columns =
+        {
+            new("MNV", 14, true, "@"),
+            new("UserName", 24, true, "@"),
+            new("Email", 30, false),
+            new("MaChucVu", 12, false),
+            new("NguoiPhuTrach", 14, false, "@", new[] { new ImportTemplateOption(CoordinatorFlagTrueValue, "Là Người phụ trách") }),
+            new("Ảnh chữ ký", 24, false),
+        };
 
-            sheet.Cell(2, 2).Value = "NV001";
-            sheet.Cell(2, 3).Value = "n.van.a";
-            sheet.Cell(2, 6).Value = "1";
+        private async Task<ImportTemplateColumn[]> ColumnsWithOptionsAsync()
+        {
+            var jobTitles = await _unitOfWork.JobTitles.SelectAsync(
+                x => !x.IsDeleted && x.TerminalLevel == (int)JobTitleTerminalLevel.None,
+                x => new ImportTemplateOption(x.Code, x.Name));
+            var columns = Columns.ToArray();
+            columns[3] = columns[3] with { Options = jobTitles.OrderBy(x => x.Value).ToList() };
+            return columns;
+        }
 
-            sheet.Columns().AdjustToContents();
+        public async Task<(byte[] Content, string FileName)> GenerateTemplateAsync() => ImportTemplateBuilder.Build(
+            "Lien ket tai khoan", "MẪU LIÊN KẾT TÀI KHOẢN ĐĂNG NHẬP", Notes, await ColumnsWithOptionsAsync(),
+            new[] { new object?[] { "NV001", "YEV\\n.van.a", "n.van.a@yev.vn", "TL", "1" } },
+            "Mau_Import_LienKetTaiKhoan.xlsx",
+            dataRowHeight: 45);
 
-            using var stream = new MemoryStream();
-            workbook.SaveAs(stream);
-            return (stream.ToArray(), "Mau_Import_LienKetTaiKhoan.xlsx");
+        // Job titles of managers and above are left blank: this import refuses them.
+        public async Task<(byte[] Content, string FileName)> ExportAsync(EmployeeExportFilterDto filter, string userName, bool isAdmin)
+        {
+            var employees = await _employeeService.GetForExportAsync(userName, isAdmin, filter);
+            var emails = await _userDirectoryService.GetModuleEmailsAsync(
+                employees.Where(x => x.UserName != null).Select(x => x.UserName!).ToList(), EmailModules.Attendance);
+            var rows = employees
+                .Select(x => new object?[]
+                {
+                    x.Code, x.UserName, x.UserName != null ? emails.GetValueOrDefault(x.UserName) : null,
+                    x.TerminalLevel == (int)JobTitleTerminalLevel.None ? x.JobTitleCode : null, null
+                })
+                .ToList();
+            return ImportTemplateBuilder.Build("Lien ket tai khoan", "LIÊN KẾT TÀI KHOẢN ĐĂNG NHẬP", Notes, await ColumnsWithOptionsAsync(), rows,
+                $"LienKetTaiKhoan_{TimeHelper.GetCurrentUtcTime().AddHours(7):yyyyMMdd_HHmm}.xlsx", rowsAreSamples: false);
         }
     }
 }
