@@ -177,16 +177,18 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // (Line Leader chỉ có quyền này vẫn phải sửa được đơn theo chuyền của họ, khớp OtFormService.
     // UpdateAsync tự check lại theo candidate bước hiện tại), đơn "theo Nhóm" vẫn đúng quyền Create +
     // phải là chính người tạo — không dùng chung 1 điều kiện `Create` cho cả 2 như trước nữa.
+    // Account names differ only in case between login ("YEV\x") and imported data ("yev\x").
+    const myUserName = user?.userName.toLowerCase();
     const canEdit =
         Boolean(form?.isEditable) &&
         (form?.isProductionForm
             ? hasPermission(user, "Attendance.OTForm.CreateProduction")
-            : hasPermission(user, "Attendance.OTForm.Create") && form?.createdByUserName === user?.userName);
+            : hasPermission(user, "Attendance.OTForm.Create") && form?.createdByUserName.toLowerCase() === myUserName);
 
     const canResubmit =
         !canEdit &&
         form?.resubmitKind != null &&
-        (form.resubmitUserNames.includes(user?.userName ?? "") || (form.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
+        (form.resubmitUserNames.some((n) => n.toLowerCase() === myUserName) || (form.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
 
     // Nút "Xoá đơn" (Admin only, mới 2026-08-08) — chặn khi đã Completed (status=1, đã cộng lũy kế thật).
     const canDelete = hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;

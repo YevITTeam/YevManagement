@@ -1263,7 +1263,7 @@ namespace Attendance.Application.Services
             }
             else
             {
-                if (otForm.CreatedByUserName != currentUserName)
+                if (!string.Equals(otForm.CreatedByUserName, currentUserName, StringComparison.OrdinalIgnoreCase))
                     throw new DomainException("Bạn chỉ có thể sửa đơn do chính mình tạo.");
 
                 if (resubmit == null && isManagerSigned)
@@ -1425,7 +1425,7 @@ namespace Attendance.Application.Services
             // === Apply: removals, additions, then kept rows (each touches different rows). ===
 
             // The creator takes someone off their own form without a reason; anyone else must give one.
-            var isCreator = otForm.CreatedByUserName == currentUserName;
+            var isCreator = string.Equals(otForm.CreatedByUserName, currentUserName, StringComparison.OrdinalIgnoreCase);
             foreach (var employeeId in removedEmployeeIds)
             {
                 var target = activeByEmployeeId[employeeId];
@@ -1784,7 +1784,7 @@ namespace Attendance.Application.Services
             if (otForm.IsProductionForm || !otForm.GroupId.HasValue) return null;
 
             if (otForm.Status == (int)OtFormStatus.Rejected)
-                return new ResubmitInfo(OtFormResubmitKind.AfterReject, new HashSet<string> { otForm.CreatedByUserName }, null, null);
+                return new ResubmitInfo(OtFormResubmitKind.AfterReject, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { otForm.CreatedByUserName }, null, null);
 
             if (!steps.Any(x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved
                     && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None))
@@ -1804,8 +1804,10 @@ namespace Attendance.Application.Services
             var signStep = steps.Where(x => !x.IsDeleted && flaggedJobTitleIds.Contains(x.JobTitleId)
                 && x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None).MinBy(x => x.StepOrder);
             var userNames = signStep != null
-                ? signStep.Candidates.Select(c => c.UserName).ToHashSet()
-                : flaggedJobTitleIds.Count > 0 ? new HashSet<string> { otForm.CreatedByUserName } : new HashSet<string>();
+                ? signStep.Candidates.Select(c => c.UserName).ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : flaggedJobTitleIds.Count > 0
+                    ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { otForm.CreatedByUserName }
+                    : new HashSet<string>();
             return new ResubmitInfo(OtFormResubmitKind.Resign, userNames, deadline, signStep?.Id);
         }
 
@@ -1843,10 +1845,6 @@ namespace Attendance.Application.Services
             return pendingSteps.OrderBy(x => x.StepOrder).FirstOrDefault();
         }
 
-        // Tìm đơn + bước duyệt HIỆN TẠI, validate approverUserName là 1 trong các candidate của bước đó
-        // (2026-08-07, Giai đoạn 3.1 — thay LoadFormAndValidateAuthorityAsync cũ). Không có Admin bypass
-        // ở đây — giữ đúng hành vi cũ (ApproveAsync/RejectAsync trước đây cũng không cho Admin bypass,
-        // chỉ Submitter mới có).
         // Active delegators of userName (account -> full name); the delegate may act wherever a delegator is a candidate.
         private async Task<Dictionary<string, string>> GetActiveDelegatorsAsync(string userName)
         {
@@ -1855,19 +1853,22 @@ namespace Attendance.Application.Services
                 predicate: d => !d.IsDeleted && d.DelegateEmployee.UserName == userName
                     && d.DelegatorEmployee.UserName != null && d.FromDate <= today && d.ToDate >= today,
                 selector: d => new { UserName = d.DelegatorEmployee.UserName!, d.DelegatorEmployee.LastName, d.DelegatorEmployee.FirstName });
-            return rows.GroupBy(r => r.UserName).ToDictionary(g => g.Key, g => $"{g.First().LastName} {g.First().FirstName}");
+            return rows.GroupBy(r => r.UserName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => $"{g.First().LastName} {g.First().FirstName}", StringComparer.OrdinalIgnoreCase);
         }
 
         // A direct candidacy wins over delegation; otherwise the covered candidate (delegator) is returned.
+        // Case-insensitive: Windows login yields "YEV\x" while imported accounts are often stored as "yev\x".
         private static (bool IsActor, string? DelegatorUserName, string? DelegatorFullName) MatchStepActor(
             OtFormApprovalStep step, string userName, Dictionary<string, string> delegators)
         {
-            if (step.Candidates.Any(c => c.UserName == userName)) return (true, null, null);
+            if (step.Candidates.Any(c => string.Equals(c.UserName, userName, StringComparison.OrdinalIgnoreCase))) return (true, null, null);
 
             var covered = step.Candidates.FirstOrDefault(c => delegators.ContainsKey(c.UserName));
             return covered == null ? (false, null, null) : (true, covered.UserName, covered.FullName);
         }
 
+        // No Admin bypass: only a candidate of the current step (or their delegate) may approve or reject.
         private async Task<(OtForm otForm, OtFormApprovalStep currentStep, string? delegatorUserName, string? delegatorFullName)> LoadFormAndCurrentStepAsync(
             int id, string approverUserName)
         {

@@ -631,9 +631,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         if (!isEditMode || !otFormId) return;
         OtFormApi.getOtFormById(otFormId)
             .then((data) => {
+                // Account names differ only in case between login ("YEV\x") and imported data ("yev\x").
+                const myUserName = user?.userName.toLowerCase();
                 const canResubmit =
                     data.resubmitKind != null &&
-                    (data.resubmitUserNames.includes(user?.userName ?? "") || (data.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
+                    (data.resubmitUserNames.some((n) => n.toLowerCase() === myUserName) || (data.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
                 if (!data.isEditable && !canResubmit) {
                     setLoadError(t("notEditableError"));
                     return;
@@ -649,7 +651,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 setGroupId(data.groupId);
                 setReasonId(data.reasonId);
                 setLoadedOtCaseId(data.otCaseId);
-                setIsFormCreator(data.createdByUserName === user?.userName);
+                setIsFormCreator(data.createdByUserName.toLowerCase() === myUserName);
                 setDate(data.date);
                 setStartTime(data.startTime.slice(0, 5));
                 setEndTime(data.endTime.slice(0, 5));
