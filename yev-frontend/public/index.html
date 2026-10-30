@@ -2,9 +2,14 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8" />
-<meta http-equiv="refresh" content="0; url=/vi/" />
+<noscript><meta http-equiv="refresh" content="0; url=/vi/" /></noscript>
 <title>YEV Management</title>
-<script>location.replace("/vi/");</script>
+<script>
+  // Same detection as LanguageSwitcher, done here so a Japanese machine skips loading /vi/ first.
+  var o = Intl.DateTimeFormat().resolvedOptions();
+  var ja = /^ja/i.test(navigator.language) || /^ja/i.test(o.locale) || o.timeZone === "Asia/Tokyo";
+  location.replace(ja ? "/ja/" : "/vi/");
+</script>
 </head>
 <body></body>
 </html>

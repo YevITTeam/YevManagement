@@ -46,8 +46,7 @@ export function computeActualHours(startTime: string, endTime: string, didEat: b
 export function computeMealTicketType(startTime: string, endTime: string, didEat: boolean, setting: AttendanceSettingDto): number {
     if (isEarlyMealWindowOt(startTime, endTime, setting)) return MEAL_TICKET_SECONDARY;
 
-    // Loại phiếu luôn tính như có trừ nghỉ ăn (không phụ thuộc didEat) — khớp MealTicketCalculator BE.
-    const actualHours = computeActualHours(startTime, endTime, true, setting);
+    const actualHours = computeActualHours(startTime, endTime, didEat, setting);
     if (actualHours < setting.noMealTicketMaxHours) return MEAL_TICKET_NONE;
     if (actualHours < setting.mainMealTicketMinHours) return MEAL_TICKET_SECONDARY;
     return MEAL_TICKET_MAIN;
