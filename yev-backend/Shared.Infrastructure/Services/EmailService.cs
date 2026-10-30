@@ -52,9 +52,12 @@ namespace Shared.Infrastructure.Services
                 if (!string.IsNullOrWhiteSpace(username))
                     await client.AuthenticateAsync(username, password);
 
-                await client.SendAsync(message);
+                var response = await client.SendAsync(message);
                 await client.DisconnectAsync(true);
 
+                // Exchange queue response + Message-Id let admins trace the mail in Message Tracking.
+                _logger.LogInformation("Đã gửi email. To={ToEmail}, Subject={Subject}, MessageId={MessageId}, Response={Response}",
+                    toEmail, subject, message.MessageId, response);
                 return true;
             }
             catch (Exception ex)
