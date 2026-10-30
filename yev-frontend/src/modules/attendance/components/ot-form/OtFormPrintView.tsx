@@ -725,8 +725,11 @@ export function EmployeeRowFields({
             {layout.rows.map((row, index) => {
                 const employee = employees[index];
                 if (!employee) return null;
-                const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
-                const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
+                // The snapshot is taken before this form; the printed figure includes this form's own hours.
+                const monthAfter = Math.round((employee.monthToDate + employee.actualHours) * 100) / 100;
+                const yearAfter = Math.round((employee.yearToDate + employee.actualHours) * 100) / 100;
+                const isMonthOverLimit = monthAfter > setting.monthlyOtHourLimit;
+                const isYearOverLimit = yearAfter > setting.yearlyOtHourLimit;
                 return (
                     <div key={employee.employeeId}>
                         <AutoFitLine box={columnBox(layout.columns.hoTen, row)} fontPt={8} wrapperClassName="pl-1" text={employee.fullName} />
@@ -742,14 +745,14 @@ export function EmployeeRowFields({
                             fontPt={8}
                             align="center"
                             textClassName={isMonthOverLimit ? "font-bold text-[#930006] underline" : ""}
-                            text={employee.monthToDate}
+                            text={monthAfter}
                         />
                         <AutoFitLine
                             box={columnBox(layout.columns.nam, row)}
                             fontPt={8}
                             align="center"
                             textClassName={isYearOverLimit ? "font-bold text-[#930006] underline" : ""}
-                            text={employee.yearToDate}
+                            text={yearAfter}
                         />
                         <AutoFitLine box={columnBox(layout.columns.ghiChu, row)} fontPt={8} wrapperClassName="pl-1" text={employee.noteVn || ""} />
                     </div>

@@ -13,6 +13,7 @@ import {
     Inbox,
     Link2,
     Pencil,
+    PenLine,
     Search,
     SlidersHorizontal,
     Trash2,
@@ -37,6 +38,7 @@ import EmployeeOtHourLimitImportDialog from "./EmployeeOtHourLimitImportDialog";
 import EmployeeMonthlyAccumulationImportDialog from "./EmployeeMonthlyAccumulationImportDialog";
 import EmployeeIdentityLinkImportDialog from "./EmployeeIdentityLinkImportDialog";
 import EmployeeOtLimitDialog from "./EmployeeOtLimitDialog";
+import EmployeeSignatureDialog from "./EmployeeSignatureDialog";
 import ProductionEmployeeImportDialog from "./ProductionEmployeeImportDialog";
 import ProductionEmployeeList, { type ProductionEmployeeListHandle } from "./ProductionEmployeeList";
 import AccumulationHistoryModal from "./AccumulationHistoryModal";
@@ -66,6 +68,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     // Import liên kết Identity ↔ Attendance + tự tạo tài khoản + chữ ký (2026-09-03) — permission riêng
     // CHỈ Admin có sẵn (không auto-grant qua JobTitle/Coordinator), xem docs/docs-be/attendance-module.md.
     const canImportIdentityLink = hasPermission(user, "Identity.User.BulkImport");
+    const isAdmin = Boolean(user?.roles.includes("Admin"));
+    const [signatureEmployee, setSignatureEmployee] = useState<EmployeeDto | null>(null);
     const [employees, setEmployees] = useState<EmployeeDto[]>([]);
 
     const [keyword, setKeyword] = useState("");
@@ -577,6 +581,16 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                                     <SlidersHorizontal className="h-3.5 w-3.5" />
                                                 </button>
                                             )}
+                                            {isAdmin && employee.userName && (
+                                                <button
+                                                    onClick={() => setSignatureEmployee(employee)}
+                                                    className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                    title={t("signatureEditAction")}
+                                                    aria-label={t("signatureEditAction")}
+                                                >
+                                                    <PenLine className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
                                             {canUpdateEmployee && (
                                                 <button
                                                     onClick={() => openEditForm(employee)}
@@ -699,6 +713,10 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     canEdit={canUpdateAccumulation}
                     onClose={() => setHistoryEmployee(null)}
                 />
+            )}
+
+            {signatureEmployee && (
+                <EmployeeSignatureDialog employee={signatureEmployee} onClose={() => setSignatureEmployee(null)} />
             )}
 
             <EmployeeOtLimitDialog

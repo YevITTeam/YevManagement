@@ -18,6 +18,7 @@ import { GroupApi } from "@/modules/attendance/api/group.api";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { otFormStatusClasses, otFormStatusDotClasses } from "@/modules/attendance/types/enums";
 import OtCaseBadge from "@/modules/attendance/components/OtCaseBadge";
+import OtFormDetail from "@/modules/attendance/components/ot-form/OtFormDetail";
 import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
@@ -128,6 +129,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     // riêng từng đơn nếu người bấm không phải candidate hợp lệ.
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [bulkAction, setBulkAction] = useState<"approve" | "reject" | null>(null);
+    const [previewFormId, setPreviewFormId] = useState<number | null>(null);
     const [bulkComment, setBulkComment] = useState("");
     const [bulkSecondaryPassword, setBulkSecondaryPassword] = useState("");
     const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
@@ -972,8 +974,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                         </div>
 
                         <div className="space-y-4">
-                            {/* Xem/sửa từng đơn trước khi xác nhận hàng loạt — mở ở TAB MỚI để không mất lựa chọn
-                                và modal đang mở. */}
+                            {/* View opens a popup and edit a new tab, so the selection and this dialog survive. */}
                             <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
                                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                     {t("bulkReviewTitle", { count: selectedIds.length })}
@@ -992,16 +993,15 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                                     ({formatDate(form.date)})
                                                 </span>
                                                 <div className="flex shrink-0 items-center">
-                                                    <a
-                                                        href={getPathname({ href: { pathname: "/ot/forms", query: { id: String(form.id) } }, locale })}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPreviewFormId(form.id)}
                                                         title={tCommon("viewDetail")}
                                                         aria-label={tCommon("viewDetail")}
                                                         className="cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                     >
                                                         <Eye className="h-3.5 w-3.5" />
-                                                    </a>
+                                                    </button>
                                                     {form.isEditable && (
                                                         <a
                                                             href={getPathname({ href: { pathname: "/ot/forms/edit", query: { id: String(form.id) } }, locale })}
@@ -1068,6 +1068,29 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                     {isBulkSubmitting ? tCommon("processing") : tCommon("confirm")}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {previewFormId !== null && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                    <div className="fixed inset-0 bg-black/40" onClick={() => setPreviewFormId(null)} />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        className="relative max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-xl border border-[#e0e3e5] bg-[#f7f9fb] p-5 shadow-xl"
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setPreviewFormId(null)}
+                            className="absolute right-3 top-3 z-10 cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                            aria-label={tCommon("close")}
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                        <div className="pr-8">
+                            <OtFormDetail id={previewFormId} readOnly />
                         </div>
                     </div>
                 </div>

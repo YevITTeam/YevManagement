@@ -45,6 +45,15 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
+        // Admin role only (not a grantable permission): it skips the email confirmation that protects self-service changes.
+        [Authorize(Roles = "Admin")]
+        [HttpPut("{userName}")]
+        public async Task<ActionResult<ApiResponse<UserSignatureDto>>> AdminSet(string userName, [FromBody] UpsertUserSignatureDto request)
+        {
+            var result = await _userSignatureService.AdminSetSignatureAsync(userName, request.SignatureImage);
+            return Success(result, "Đã cập nhật chữ ký.");
+        }
+
         // 2 action công khai bên dưới phục vụ trang xác nhận nhỏ mà FE mở khi người dùng bấm link
         // trong email (KHÔNG cần đăng nhập SPA) — token tự nó là thông tin xác thực duy nhất, xem
         // docs/attendance-module.md. Đây là bề mặt [AllowAnonymous] đầu tiên của toàn hệ thống.

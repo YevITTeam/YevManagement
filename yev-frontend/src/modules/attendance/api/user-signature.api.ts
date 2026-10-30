@@ -35,6 +35,11 @@ export const UserSignatureApi = {
         );
         return response.data;
     },
+    // Admin role only; applies immediately, no confirmation email.
+    adminSetSignature: async (userName: string, data: UpsertUserSignatureDto) => {
+        const response = await api.put<ApiResponse<UserSignatureDto>>(ENDPOINTS.USER_SIGNATURE.getUserSignature(userName), data);
+        return response.data;
+    },
     // Public, [AllowAnonymous] — trang "Xác nhận cập nhật chữ ký" mở qua link email (docs §6b).
     getSignatureConfirmation: async (token: string) => {
         const response = await api.get<ApiResponse<SignatureConfirmationPreviewDto>>(

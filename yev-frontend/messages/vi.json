@@ -642,7 +642,11 @@
       "fieldWorkshopPlaceholder": "Chọn xưởng...",
       "fieldApprovalScopes": "Xưởng - Phòng ban quản lý",
       "addApprovalScope": "Thêm xưởng - phòng ban",
-      "removeApprovalScope": "Bỏ dòng này"
+      "removeApprovalScope": "Bỏ dòng này",
+      "signatureEditAction": "Cập nhật chữ ký",
+      "signatureDialogTitle": "Chữ ký",
+      "signatureSaveSuccess": "Đã cập nhật chữ ký.",
+      "signatureSaveError": "Cập nhật chữ ký thất bại"
     },
     "ProductionEmployeeImport": {
       "title": "Import nhân sự dưới chuyền",

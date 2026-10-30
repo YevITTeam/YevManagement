@@ -28,6 +28,8 @@ import OtFormPrintView from "@/modules/attendance/components/ot-form/OtFormPrint
 
 interface OtFormDetailProps {
     id: number;
+    // Shown inside another screen's popup: hide every action that navigates away or changes the form.
+    readOnly?: boolean;
 }
 
 function formatDate(value: string) {
@@ -113,7 +115,7 @@ function InfoField({ label, children, wide = false }: { label: string; children:
     );
 }
 
-export default function OtFormDetail({ id }: OtFormDetailProps) {
+export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps) {
     const t = useTranslations("Attendance.OtFormDetail");
     const tCommon = useTranslations("Common");
     const enumLabels = useEnumLabels();
@@ -162,11 +164,11 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // §Loại nhân viên khỏi đơn) — permission riêng, KHÔNG dùng chung canEdit
     // (canEdit đơn theo Nhóm chỉ đúng cho người tạo; loại người ở đây đi qua endpoint riêng dùng luật
     // "candidate bước Pending hiện tại" cho CẢ 2 loại đơn, BE là nguồn chặn thật nếu bấm sai lượt).
-    const canRemoveEmployee = hasPermission(user, "Attendance.OTForm.RemoveEmployee");
+    const canRemoveEmployee = !readOnly && hasPermission(user, "Attendance.OTForm.RemoveEmployee");
     // Bước đang chờ xử lý — StepOrder nhỏ nhất còn Pending trong chuỗi đã snapshot (xem docs §Cây
     // chức vụ). null khi đơn đã Hoàn tất/Từ chối hoặc chuỗi rỗng (đơn tự Hoàn tất ngay lúc tạo).
     const currentStep = form?.approvalSteps.find((s) => s.status === 0) ?? null;
-    const showApprovalActions = canApprove && form?.status === 0 && currentStep !== null;
+    const showApprovalActions = !readOnly && canApprove && form?.status === 0 && currentStep !== null;
     const requireSignatureToApprove = currentStep?.requiresSignatureSnapshot ?? false;
 
     // Nút "Sửa" (docs §1.2): isEditable=true + có quyền tạo đơn. Đơn theo Nhóm còn phải là chính người
@@ -180,18 +182,20 @@ export default function OtFormDetail({ id }: OtFormDetailProps) {
     // Account names differ only in case between login ("YEV\x") and imported data ("yev\x").
     const myUserName = user?.userName.toLowerCase();
     const canEdit =
+        !readOnly &&
         Boolean(form?.isEditable) &&
         (form?.isProductionForm
             ? hasPermission(user, "Attendance.OTForm.CreateProduction")
             : hasPermission(user, "Attendance.OTForm.Create") && form?.createdByUserName.toLowerCase() === myUserName);
 
     const canResubmit =
+        !readOnly &&
         !canEdit &&
         form?.resubmitKind != null &&
         (form.resubmitUserNames.some((n) => n.toLowerCase() === myUserName) || (form.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
 
     // Nút "Xoá đơn" (Admin only, mới 2026-08-08) — chặn khi đã Completed (status=1, đã cộng lũy kế thật).
-    const canDelete = hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;
+    const canDelete = !readOnly && hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;
 
     // Đơn "theo chuyền": hiện Line/Team/Nhóm ca ở cả khối "Thông tin đơn" (giá trị phân biệt gộp từ
     // toàn bộ nhân viên còn active) lẫn từng dòng trong bảng danh sách — trước đó màn Chi tiết đơn

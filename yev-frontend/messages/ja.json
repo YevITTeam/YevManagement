@@ -642,7 +642,11 @@
       "fieldWorkshopPlaceholder": "工場を選択してください...",
       "fieldApprovalScopes": "管轄する工場・部署",
       "addApprovalScope": "工場・部署を追加",
-      "removeApprovalScope": "この行を削除"
+      "removeApprovalScope": "この行を削除",
+      "signatureEditAction": "署名を更新",
+      "signatureDialogTitle": "署名",
+      "signatureSaveSuccess": "署名を更新しました。",
+      "signatureSaveError": "署名の更新に失敗しました"
     },
     "ProductionEmployeeImport": {
       "title": "ライン人員インポート",

@@ -65,8 +65,8 @@ Phiếu giấy không có ô cho số phiếu ăn. Khi `isEat=true`, ô "Ăn" **
 | Họ và tên / 氏名 | `employees[i].fullName` |
 | Mã NV / 社員コード | `employees[i].employeeCode` |
 | Thời gian / 時間 | `startTime – endTime` (`HH:mm - HH:mm`); `startTime` = giờ đầu đơn |
-| Lũy kế — Tháng / 月間 | `employees[i].monthToDate` |
-| Lũy kế — Năm / 年間 | `employees[i].yearToDate` |
+| Lũy kế — Tháng / 月間 | `employees[i].monthToDate + actualHours` (lũy kế **sau** khi cộng đơn này) |
+| Lũy kế — Năm / 年間 | `employees[i].yearToDate + actualHours` |
 | Ghi chú / 備考 | `employees[i].noteVn` (+ `noteJp`) |
 
 ## 6. Chú thích TH1/TH2/TH3 (footer)

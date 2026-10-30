@@ -1931,6 +1931,17 @@ namespace Attendance.Application.Services
                 var activeRows = await _unitOfWork.OtFormEmployees.FindAsync(x => x.OtFormId == otForm.Id && !x.IsRemoved);
                 await AccumulateEmployeeHoursAsync(otForm, activeRows);
             }
+            else
+            {
+                // Moving up to another manager level (TH2/TH3): leave the old batch so the next sweep gathers it for that level.
+                var nextLevel = remainingPending.MinBy(x => x.StepOrder)!.TerminalLevelSnapshot;
+                if (nextLevel != (int)JobTitleTerminalLevel.None && nextLevel != currentStep.TerminalLevelSnapshot)
+                {
+                    otForm.OtFormBatch = null;
+                    otForm.OtFormBatchId = null;
+                    _unitOfWork.OtForms.Update(otForm);
+                }
+            }
 
             await _unitOfWork.SaveChangesAsync();
 
