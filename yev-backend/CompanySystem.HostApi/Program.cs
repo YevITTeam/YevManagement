@@ -90,6 +90,7 @@ builder.Services.AddHostedService<DeviceLiquidationBackgroundService>();
 builder.Services.AddHostedService<OtFormBatchBackgroundService>();
 // Gửi email duyệt OT chạy nền, không chặn response Create/Approve (2026-09-03) — xem IBackgroundTaskQueue.
 builder.Services.AddHostedService<QueuedHostedService>();
+builder.Services.AddHostedService<EmailOutboxBackgroundService>();
 
 var app = builder.Build();
 

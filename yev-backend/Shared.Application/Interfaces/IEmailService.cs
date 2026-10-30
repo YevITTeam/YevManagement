@@ -2,10 +2,11 @@ namespace Shared.Application.Interfaces
 {
     public interface IEmailService
     {
-        // Catches SMTP errors internally within the implementation, does NOT throw — returns false + logs
-        // if sending fails. Sending email is only a supplementary channel (notification/confirmation)
-        // and must never break the main business logic (form creation/approval/signature update must
-        // still succeed even if SMTP is failing).
+        // Queues the mail on disk; EmailOutboxBackgroundService delivers it spaced out and retries transient
+        // failures. Never throws: returns false only when SMTP is not configured or the mail could not be queued.
         Task<bool> SendAsync(string toEmail, string subject, string htmlBody);
+
+        // Bypasses the queue, for the SMTP test button whose whole point is the live result.
+        Task<bool> SendNowAsync(string toEmail, string subject, string htmlBody);
     }
 }

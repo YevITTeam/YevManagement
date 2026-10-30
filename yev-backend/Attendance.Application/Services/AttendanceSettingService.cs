@@ -82,7 +82,7 @@ namespace Attendance.Application.Services
                 ["SentAtText"] = TimeHelper.GetCurrentUtcTime().ToString("dd/MM/yyyy HH:mm:ss"),
             });
 
-            return await _emailService.SendAsync(request.Email, "Email kiểm tra - YevManagement", html);
+            return await _emailService.SendNowAsync(request.Email, "Email kiểm tra - YevManagement", html);
         }
 
         private static AttendanceSettingDto ToDto(AttendanceSetting setting) => new()

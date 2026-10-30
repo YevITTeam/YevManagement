@@ -46,7 +46,7 @@ Trình duyệt ──► IIS site FE (web tĩnh: yev-frontend/out)
 | DB Asset | `YevPCManagement` (cố ý) | `YevPCManagement_Production` |
 
 - `dotnet run` không bật Windows Authentication → SSO chỉ test được khi chạy dưới IIS; dev dùng `/login` hoặc tài khoản `TEST\…`.
-- Phát hành: `Release.bat` (gốc repo) build cả hai, đẩy lên share server; `AutoDeploy.ps1` trên server tự dừng pool, chép, bật lại. Biến thể và lệnh cụ thể: `AGENTS.md §1`.
+- Phát hành: `Release.bat` (gốc repo) build cả hai, đẩy lên share server; `AutoDeploy.ps1` trên server tự dừng pool, chép, bật lại; giữ nguyên `logs/`, `App_Data/` (hàng đợi mail, file upload) và `appsettings*.json`. Biến thể và lệnh cụ thể: `AGENTS.md §1`.
 - Thay schema: tạo migration mới theo module (`dotnet ef … --project <M>.Infrastructure`); BE **không tự migrate** lúc khởi động, phải chạy `dotnet ef database update` lên DB đích. Permission mới seed trong migration.
 
 ## 5. Đọc gì tiếp

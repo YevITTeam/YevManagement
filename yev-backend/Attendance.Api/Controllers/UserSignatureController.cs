@@ -36,10 +36,10 @@ namespace Attendance.Api.Controllers
             return Success(true, "Đã gửi email xác nhận cập nhật chữ ký — vui lòng kiểm tra hộp thư trong 30 phút.");
         }
 
-        // Admin xem chữ ký đã đăng ký của người khác.
+        // userName travels in the query: "YEV\x" in a path segment is rewritten to "YEV/x" by IIS.
         [RequirePermission("Attendance.UserSignature.View")]
-        [HttpGet("{userName}")]
-        public async Task<ActionResult<ApiResponse<UserSignatureDto>>> GetByUserName(string userName)
+        [HttpGet("user")]
+        public async Task<ActionResult<ApiResponse<UserSignatureDto>>> GetByUserName([FromQuery] string userName)
         {
             var result = await _userSignatureService.GetByUserNameAsync(userName);
             return Success(result);
@@ -47,8 +47,8 @@ namespace Attendance.Api.Controllers
 
         // Admin role only (not a grantable permission): it skips the email confirmation that protects self-service changes.
         [Authorize(Roles = "Admin")]
-        [HttpPut("{userName}")]
-        public async Task<ActionResult<ApiResponse<UserSignatureDto>>> AdminSet(string userName, [FromBody] UpsertUserSignatureDto request)
+        [HttpPut("user")]
+        public async Task<ActionResult<ApiResponse<UserSignatureDto>>> AdminSet([FromQuery] string userName, [FromBody] UpsertUserSignatureDto request)
         {
             var result = await _userSignatureService.AdminSetSignatureAsync(userName, request.SignatureImage);
             return Success(result, "Đã cập nhật chữ ký.");

@@ -10,7 +10,7 @@ const ENDPOINTS = {
     USER_SIGNATURE: {
         getMySignature: "/UserSignature/me",
         upsertMySignature: "/UserSignature/me",
-        getUserSignature: (userName: string) => `/UserSignature/${encodeURIComponent(userName)}`,
+        getUserSignature: (userName: string) => `/UserSignature/user?userName=${encodeURIComponent(userName)}`,
         confirmGet: (token: string) => `/UserSignature/confirm/${encodeURIComponent(token)}`,
         confirmPost: (token: string) => `/UserSignature/confirm/${encodeURIComponent(token)}`,
     },

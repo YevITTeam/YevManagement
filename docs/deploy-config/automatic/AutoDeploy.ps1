@@ -19,7 +19,8 @@ $LogFile = "$BaseDir\deploy.log"
 # appsettings.json chua connection string / JWT secret / SMTP that cua production.
 # File nay KHONG duoc source-control (gitignored) va co the khac nhau giua cac may build,
 # nen KHONG BAO GIO ghi de no tu goi Pending - phai sua truc tiep tren server neu can doi.
-$BackendProtectedPatterns = @("logs", "appsettings.json", "appsettings.*.json")
+# App_Data chua du lieu luc chay (hang doi email, file upload) - deploy khong duoc xoa.
+$BackendProtectedPatterns = @("logs", "App_Data", "appsettings.json", "appsettings.*.json")
 # =====================================================
 
 function Write-Log {
@@ -93,7 +94,7 @@ try {
             Stop-WebAppPool -Name $BackendAppPool
             Wait-AppPoolStopped -Name $BackendAppPool -TimeoutSeconds 30
 
-            Write-Log "  Dang xoa code cu (giu lai logs/ va appsettings*.json)..."
+            Write-Log "  Dang xoa code cu (giu lai logs/, App_Data/ va appsettings*.json)..."
             Remove-LiveContent -Path $BackendLive -ExcludePatterns $BackendProtectedPatterns
 
             Write-Log "  Dang copy code moi tu Pending..."
