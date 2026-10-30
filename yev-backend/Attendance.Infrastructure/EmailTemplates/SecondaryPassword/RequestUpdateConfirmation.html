@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
 <meta name="supported-color-schemes" content="light">
-<title>Xác nhận thiết lập mật khẩu cấp 2 / 第2パスワード設定の確認</title>
+<title>Yêu cầu cập nhật mã ký duyệt cấp 2 / 第2承認コード更新のご案内</title>
 <!--[if mso]>
 <style type="text/css">
 table { border-collapse: collapse; }
@@ -14,7 +14,7 @@ table { border-collapse: collapse; }
 </head>
 <body style="margin:0; padding:0; background-color:#eef0f2; font-family:'Times New Roman', 'Liberation Serif', Georgia, serif;">
 <div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#eef0f2;">
-Xác nhận yêu cầu thiết lập mật khẩu cấp 2 cho tài khoản của bạn. / 第2パスワード設定リクエストの確認をお願いします。
+Yêu cầu cập nhật mã ký duyệt cấp 2 đang chờ bạn hoàn tất. / 第2承認コードの更新手続きをお願いします。
 </div>
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#eef0f2" style="background-color:#eef0f2;">
@@ -52,7 +52,7 @@ Yev<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, seri
 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
 <tr>
 <td style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; border:1px solid #16233d; padding:5px 14px;">
-<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; font-size:11px; font-weight:bold; color:#16233d; letter-spacing:0.5px; mso-line-height-rule:exactly; line-height:16px;">XÁC NHẬN BẢO MẬT&nbsp;&nbsp;·&nbsp;&nbsp;セキュリティ確認</span>
+<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; font-size:11px; font-weight:bold; color:#16233d; letter-spacing:0.5px; mso-line-height-rule:exactly; line-height:16px;">MÃ KÝ DUYỆT&nbsp;&nbsp;·&nbsp;&nbsp;承認コード</span>
 </td>
 </tr>
 </table>
@@ -66,8 +66,8 @@ Yev<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, seri
 Xin chào {{UserName}} 様,
 </p>
 <p style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; margin:0 0 22px 0; font-size:14px; line-height:23px; color:#4a5266; mso-line-height-rule:exactly;">
-Hệ thống ghi nhận một yêu cầu thiết lập/cập nhật mật khẩu cấp 2 (dùng để ký/duyệt đơn tăng ca) trên tài khoản của bạn vào lúc <strong style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#16233d;">{{RequestedAt}}</strong>. Mật khẩu mới sẽ chỉ có hiệu lực sau khi bạn xác nhận yêu cầu này.<br>
-<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#8b93a3;">あなたのアカウントで第2パスワード（残業申請書の署名・承認に使用）の設定・更新リクエストが<strong style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#6b7280;">{{RequestedAt}}</strong>に登録されました。新しいパスワードは、このリクエストを確認した後にのみ有効になります。</span>
+Hệ thống ghi nhận yêu cầu thiết lập/cập nhật mã ký duyệt cấp 2 (dùng để ký/duyệt đơn tăng ca) của bạn vào lúc<strong style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#16233d;">{{RequestedAt}}</strong>. Vui lòng hoàn tất để mã mới được áp dụng.<br>
+<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#8b93a3;">第2承認コード（残業申請書の署名・承認に使用）の設定・更新リクエストが<strong style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#6b7280;">{{RequestedAt}}</strong>に登録されました。新しいコードを適用するには、手続きを完了してください。</span>
 </p>
 </td>
 </tr>
@@ -78,7 +78,7 @@ Hệ thống ghi nhận một yêu cầu thiết lập/cập nhật mật khẩu
 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
 <tr>
 <td align="center" bgcolor="#16233d" style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; background-color:#16233d; border-radius:24px;">
-<a href="{{ConfirmLink}}" target="_blank" style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; padding:14px 36px; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; letter-spacing:0.3px; border-radius:24px; mso-line-height-rule:exactly; line-height:18px;">Xác nhận thiết lập mật khẩu cấp 2 / 第2パスワード設定を確認</a>
+<a href="{{ConfirmLink}}" target="_blank" style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; padding:14px 36px; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; letter-spacing:0.3px; border-radius:24px; mso-line-height-rule:exactly; line-height:18px;">Hoàn tất thiết lập mã ký duyệt / 承認コードの設定を完了する</a>
 </td>
 </tr>
 </table>
@@ -91,21 +91,6 @@ Hệ thống ghi nhận một yêu cầu thiết lập/cập nhật mật khẩu
 * Liên kết sẽ hết hạn sau {{ExpiryMinutes}} phút.<br>
 * リンクの有効期限は{{ExpiryMinutes}}分間です。
 </p>
-</td>
-</tr>
-
-<!-- Notice -->
-<tr>
-<td style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:0 40px 32px 40px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #e7e9ee; border-bottom:1px solid #e7e9ee;">
-<tr>
-<td style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:16px 4px; font-size:13px; line-height:21px; color:#4a5266; mso-line-height-rule:exactly;">
-<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:11px; letter-spacing:0.5px; color:#8a2432; font-weight:bold; margin-bottom:6px; mso-line-height-rule:exactly; line-height:16px;">LƯU Ý&nbsp;/&nbsp;ご注意</span>
-Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email — mật khẩu cấp 2 hiện tại của bạn sẽ không thay đổi cho đến khi có xác nhận.<br>
-<span style="font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; color:#8b93a3;">このリクエストに心当たりがない場合は、このメールを無視してください。確認されるまで、現在の第2パスワードは変更されません。</span>
-</td>
-</tr>
-</table>
 </td>
 </tr>
 

@@ -84,7 +84,7 @@ namespace Attendance.Application.Services
                     ["ExpiryMinutes"] = ConfirmationExpiryMinutes.ToString()
                 });
 
-                await _emailService.SendAsync(email, "Xác nhận thiết lập mật khẩu cấp 2 - YevManagement", html);
+                await _emailService.SendAsync(email, "Yêu cầu cập nhật mã ký duyệt cấp 2 - YevManagement", html);
             }
             catch (FileNotFoundException)
             {
