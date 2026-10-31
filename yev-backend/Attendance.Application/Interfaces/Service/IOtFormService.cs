@@ -80,10 +80,7 @@ namespace Attendance.Application.Interfaces.Service
         Task ApproveByEmailTokenAsync(string token, ApproveOtFormDto request);
         Task RejectByEmailTokenAsync(string token, RejectOtFormDto request);
 
-        // Batch forms ("Don tong").
-        Task<PagedResponse<OtFormBatchListItemDto>> GetBatchesAsync(string userName, bool isAdmin, int pageIndex, int pageSize);
-        Task<OtFormBatchDto> GetBatchByIdAsync(int id);
-        Task<OtFormBatchDto> ProcessBatchAsync(int batchId, string approverUserName, string? approverFullName, ProcessOtFormBatchDto request);
+        // Batch forms ("Don tong"): approved only through the emailed link; in-app approval uses pending-approvals.
         Task<OtFormBatchDto> GetBatchByEmailTokenAsync(string token);
         Task<OtFormBatchDto> ProcessBatchByEmailTokenAsync(string token, ProcessOtFormBatchDto request);
 

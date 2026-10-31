@@ -13,7 +13,6 @@ import { formatHours } from "@/modules/attendance/lib/time";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
-import { useRouter } from "@/navigation";
 import { MEAL_TICKET_MAIN, MEAL_TICKET_SECONDARY } from "@/modules/attendance/lib/mealTicket";
 import OtCaseBadge from "@/modules/attendance/components/OtCaseBadge";
 import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
@@ -41,7 +40,7 @@ function buildInitialDecisions(batch: OtFormBatchDto): Record<number, FormDecisi
     return result;
 }
 
-type OtFormBatchDetailProps = { variant: "app"; id: number } | { variant: "email"; token: string };
+type OtFormBatchDetailProps = { token: string };
 
 // Compact on/off pill for one "other support" item inside an expanded form row.
 function ProcessChip({ icon, label, active, activeLabel, inactiveLabel }: {
@@ -63,13 +62,12 @@ function ProcessChip({ icon, label, active, activeLabel, inactiveLabel }: {
     );
 }
 
-// Shared by both channels (app via JWT, public via email link). Every form and employee defaults to
-// approve; the approver rejects a form or unticks employees, then submits the whole batch once.
-export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
+// Public page behind the emailed token. Every form and employee defaults to approve; the approver
+// rejects a form or unticks employees, then submits the whole batch once.
+export default function OtFormBatchDetail({ token }: OtFormBatchDetailProps) {
     const t = useTranslations("Attendance.OtFormBatchDetail");
     const tDetail = useTranslations("Attendance.OtFormDetail");
     const tCommon = useTranslations("Common");
-    const router = useRouter();
     const { setting } = useAttendanceSetting();
 
     const [batch, setBatch] = useState<OtFormBatchDto | null>(null);
@@ -91,11 +89,9 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
         });
     };
 
-    const fetchKey = props.variant === "app" ? props.id : props.token;
-
     const { isLoading, error: loadError } = useFetchEffect(
-        () => (props.variant === "app" ? OtFormBatchApi.getById(props.id) : OtFormBatchApi.getByEmailToken(props.token)),
-        [props.variant, fetchKey],
+        () => OtFormBatchApi.getByEmailToken(token),
+        [token],
         (data) => {
             setBatch(data);
             setDecisions(buildInitialDecisions(data));
@@ -164,12 +160,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                         state.decision === 0 && state.excludedEmployeeIds.size > 0 ? Array.from(state.excludedEmployeeIds) : null,
                 };
             });
-            if (props.variant === "app") {
-                await OtFormBatchApi.approve(props.id, { secondaryPassword, forms });
-                toast.success(t("processSuccess"));
-            } else {
-                await OtFormBatchApi.approveByEmailToken(props.token, { secondaryPassword, forms });
-            }
+            await OtFormBatchApi.approveByEmailToken(token, { secondaryPassword, forms });
             setIsProcessModalOpen(false);
             setProcessedResult(true);
         } catch (err) {
@@ -196,7 +187,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
     const totalHours = batch.otForms.reduce((sum, form) => sum + form.employees.reduce((acc, e) => acc + e.actualHours, 0), 0);
 
     return (
-        <div className={`space-y-4 ${props.variant === "email" ? "mx-auto max-w-[1400px] px-4 py-5 md:px-6" : ""}`}>
+        <div className="mx-auto max-w-[1400px] space-y-4 px-4 py-5 md:px-6">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-xl font-semibold text-[#191c1e]">{t("titleWithId", { id: batch.id })}</h1>
@@ -473,17 +464,6 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
                         </button>
                     </div>
                 </>
-            )}
-
-            {props.variant === "app" && isDone && (
-                <div>
-                    <button
-                        onClick={() => router.push({ pathname: "/ot/batches" })}
-                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm! font-semibold! text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                    >
-                        {t("backToListButton")}
-                    </button>
-                </div>
             )}
 
             {isProcessModalOpen && (

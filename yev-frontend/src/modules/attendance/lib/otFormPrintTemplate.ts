@@ -285,11 +285,12 @@ function headerBlock(form: OtFormDto, paperSize: PaperSize) {
     const lastRequester = isSingleRequester ? null : findHistory(form.approvalHistories, intermediate[intermediate.length - 1].stepOrder);
 
     const sigWidths = scaleWidths([21.45, 22.75, 23.49, 9.91, 9.91], W);
+    // The paper ranks right to left from lowest, so the first (lowest) step signs in the right half.
     const requesterCells: Cell[] = isSingleRequester
         ? [{ html: signatureHtml(firstRequester, sigWidths[3] + sigWidths[4], S.sigRow, false), colspan: 2, align: "center" }]
         : [
-              { html: signatureHtml(firstRequester, sigWidths[3], S.sigRow, true), align: "center" },
-              { html: signatureHtml(lastRequester, sigWidths[4], S.sigRow, true), align: "center" },
+              { html: signatureHtml(lastRequester, sigWidths[3], S.sigRow, true), align: "center" },
+              { html: signatureHtml(firstRequester, sigWidths[4], S.sigRow, true), align: "center" },
           ];
     const signatureTable = table(
         sigWidths,
@@ -316,10 +317,12 @@ function headerBlock(form: OtFormDto, paperSize: PaperSize) {
         { marginTopPt: S.gap + 4 }
     );
 
-    // The step Admin flagged IsResponsible; falls back to the creator while unsigned or unconfigured.
+    // The step Admin flagged IsResponsible: whoever signed it, else its candidates while unsigned; the creator only when unconfigured.
     const responsibleStep = form.approvalSteps.find((s) => s.isResponsibleSnapshot);
     const responsible = responsibleStep ? findHistory(form.approvalHistories, responsibleStep.stepOrder) : null;
-    const responsibleName = responsible?.approverFullName ?? responsible?.approverUserName ?? form.createdByFullName ?? form.createdByUserName ?? "";
+    const responsibleName = responsibleStep
+        ? responsible?.approverFullName ?? responsible?.approverUserName ?? responsibleStep.candidates.map((c) => c.fullName || c.userName).join(" / ")
+        : form.createdByFullName ?? form.createdByUserName ?? "";
     const congDoan = form.isProductionForm ? getProductionCongDoanLabel(form) : `${form.departmentNameVn} — ${form.groupNameVn ?? ""}`;
 
     const infoWidths = [W * 0.31, W * 0.69];

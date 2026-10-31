@@ -12,6 +12,7 @@ namespace Attendance.Application.Dtos.GroupApprovalSteps
         public bool RequiresSignature { get; set; }
         public bool IsResponsible { get; set; }
         public bool CanResubmit { get; set; }
+        public bool ResubmitSkipsIntermediate { get; set; }
 
         // Always None here; kept so the FE shares display logic with DepartmentApprovalStepDto.
         public int TerminalLevel { get; set; }

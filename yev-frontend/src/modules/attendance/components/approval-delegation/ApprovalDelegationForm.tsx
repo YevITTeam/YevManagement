@@ -29,6 +29,7 @@ const emptyValues: ApprovalDelegationFormValues = { delegateEmployeeId: "", from
 const fieldLabelClassName = "mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]";
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+const dateFieldClassName = fieldClassName.replace("w-full", "w-40");
 
 export default function ApprovalDelegationForm({ isOpen, mode, initial, employeeOptions, loading = false, onClose, onSubmit }: ApprovalDelegationFormProps) {
     const t = useTranslations("Attendance.ApprovalDelegation");
@@ -74,28 +75,28 @@ export default function ApprovalDelegationForm({ isOpen, mode, initial, employee
                         />
                     </label>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fromLabel")}</span>
+                    <div>
+                        <span className={fieldLabelClassName}>{t("periodLabel")}</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
                             <input
                                 type="date"
                                 required
+                                aria-label={t("fromLabel")}
                                 value={values.fromDate}
                                 onChange={(e) => setValues((c) => ({ ...c, fromDate: e.target.value }))}
-                                className={fieldClassName}
+                                className={dateFieldClassName}
                             />
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("toLabel")}</span>
+                            <span className="text-xs text-[#8a8f94]">&ndash;</span>
                             <input
                                 type="date"
                                 required
+                                aria-label={t("toLabel")}
                                 min={values.fromDate || undefined}
                                 value={values.toDate}
                                 onChange={(e) => setValues((c) => ({ ...c, toDate: e.target.value }))}
-                                className={fieldClassName}
+                                className={dateFieldClassName}
                             />
-                        </label>
+                        </div>
                     </div>
 
                     <label className="block">

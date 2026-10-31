@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, GripVertical, PenLine, RotateCcw, Star, Trash2 } from "lucide-react";
+import { Check, ChevronsUp, GripVertical, PenLine, RotateCcw, Star, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 // Shared by the group/department/production blocks; the "current holders" part differs per block, so it comes in via `footer`.
@@ -17,6 +17,9 @@ export interface StepCardLabels {
     toggleResubmitHint?: string;
     canResubmitYes?: string;
     canResubmitNo?: string;
+    toggleResubmitSkipHint?: string;
+    resubmitSkipYes?: string;
+    resubmitSkipNo?: string;
 }
 
 interface StepCardProps {
@@ -37,6 +40,9 @@ interface StepCardProps {
     // undefined = the block has no re-submit flag (only the Group block does).
     canResubmit?: boolean;
     onToggleResubmit?: () => void;
+    // Only shown while canResubmit is on.
+    resubmitSkipsIntermediate?: boolean;
+    onToggleResubmitSkip?: () => void;
     onRemove: () => void;
     labels: StepCardLabels;
     footer?: React.ReactNode;
@@ -59,6 +65,8 @@ export default function StepCard({
     onToggleResponsible,
     canResubmit,
     onToggleResubmit,
+    resubmitSkipsIntermediate,
+    onToggleResubmitSkip,
     onRemove,
     labels,
     footer,
@@ -145,6 +153,23 @@ export default function StepCard({
                         >
                             <RotateCcw size={11} />
                             {canResubmit && labels.canResubmitYes}
+                        </button>
+                    )}
+                    {onToggleResubmitSkip && canResubmit && (
+                        <button
+                            type="button"
+                            onClick={onToggleResubmitSkip}
+                            disabled={readOnly}
+                            title={`${resubmitSkipsIntermediate ? labels.resubmitSkipYes : labels.resubmitSkipNo} — ${labels.toggleResubmitSkipHint}`}
+                            aria-pressed={resubmitSkipsIntermediate}
+                            className={`inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full border text-[11px]! font-semibold! transition ${
+                                resubmitSkipsIntermediate
+                                    ? "border-sky-200 bg-sky-50 px-2 text-sky-700 hover:bg-sky-100"
+                                    : "w-6 border-transparent text-[#b6bbc0] hover:border-[#e0e3e5] hover:bg-[#f2f4f6] hover:text-[#5e3f3a]"
+                            } disabled:pointer-events-none`}
+                        >
+                            <ChevronsUp size={12} />
+                            {resubmitSkipsIntermediate && labels.resubmitSkipYes}
                         </button>
                     )}
                     {!readOnly && <button

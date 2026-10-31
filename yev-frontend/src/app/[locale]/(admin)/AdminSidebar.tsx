@@ -3,7 +3,7 @@
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
 import { LayoutGrid, PanelLeftClose } from "lucide-react";
-import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
+import { sidebarDrawerClass, useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { adminNavItems } from "@/modules/auth/lib/adminNav";
@@ -13,7 +13,7 @@ export default function AdminSidebar() {
   const t = useTranslations("Navigation");
   const pathname = usePathname() || "";
   const { user } = useAuth();
-  const { collapsed, toggle } = useSidebarCollapse();
+  const { collapsed, toggle, mobileOpen } = useSidebarCollapse();
 
   const items = [
     { key: "adminOverview" as const, href: "/admin", icon: LayoutGrid },
@@ -33,7 +33,7 @@ export default function AdminSidebar() {
 
   return (
     <aside
-      className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-4 transition-[width] duration-200 ${
+      className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-4 transition-[width,transform] duration-200 ${sidebarDrawerClass(mobileOpen)} ${
         collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
       }`}
     >

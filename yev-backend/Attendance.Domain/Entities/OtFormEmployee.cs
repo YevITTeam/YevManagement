@@ -20,8 +20,7 @@ public partial class OtFormEmployee
 
     public string? NoteJp { get; set; }
 
-    // Snapshot of the projected totals before this form's own hours were reserved, so old forms keep showing
-    // what was pending at the time.
+    // Actual accumulation before this form, written at sign-off so the signed figure never changes; unused before then.
     public decimal MonthToDate { get; set; }
 
     public decimal YearToDate { get; set; }

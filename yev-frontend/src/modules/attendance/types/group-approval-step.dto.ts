@@ -11,8 +11,10 @@ export interface GroupApprovalStepDto {
     requiresSignature: boolean;
     // "Responsible person" on the printed form; at most one step per group.
     isResponsible: boolean;
-    // Holders of this step may edit and re-sign a form after a Manager signed it.
+    // Holders of this step may edit and re-sign a form after a Manager signed or rejected it.
     canResubmit: boolean;
+    // With canResubmit: re-submission goes straight to the Manager, group steps re-signed with the current time.
+    resubmitSkipsIntermediate: boolean;
     // JobTitleTerminalLevel, always 0 (None) here.
     terminalLevel: number;
 }
@@ -55,4 +57,5 @@ export interface ReplaceGroupApprovalStepItem {
     requiresSignature: boolean;
     isResponsible: boolean;
     canResubmit: boolean;
+    resubmitSkipsIntermediate: boolean;
 }

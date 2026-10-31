@@ -149,18 +149,18 @@ export default function JobTitlePermissionSection({ jobTitleId, ref }: JobTitleP
                                     onClick={() => handleToggle(permission.code)}
                                     title={permission.code}
                                     aria-pressed={checked}
-                                    className={`flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-[13px]! transition hover:bg-[#f2f4f7] ${
+                                    className={`flex w-full cursor-pointer items-start gap-2 rounded-md px-2 py-1 text-left text-[13px]! transition hover:bg-[#f2f4f7] ${
                                         checked ? "bg-[#fff4f2]" : ""
                                     }`}
                                 >
                                     <span
-                                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                                             checked ? "border-[#e3000f] bg-[#e3000f] text-white" : "border-[#c7ccd1] bg-white"
                                         }`}
                                     >
                                         {checked && <Check size={11} />}
                                     </span>
-                                    <span className="min-w-0 truncate text-[#191c1e]">{permission.description}</span>
+                                    <span className="min-w-0 break-words text-[#191c1e]">{permission.description}</span>
                                 </button>
                             </li>
                         );

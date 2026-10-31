@@ -11,14 +11,14 @@ public partial class OtFormBatch
     // Stores Attendance.Domain.Enums.JobTitleTerminalLevel — which manager level this batch is for.
     public int TerminalLevel { get; set; }
 
-    // DepartmentManager level only; WorkshopManager/GeneralDirector are company-wide, so one batch per level per day.
+    // DepartmentManager level only; WorkshopManager/GeneralDirector are company-wide, so one open batch per level.
     public int? DepartmentId { get; set; }
 
     // Set together with DepartmentId (DepartmentManager level only): the same department is a separate
     // batch per workshop because its manager differs per workshop.
     public int? WorkshopId { get; set; }
 
-    // The sweep day, not the processing day.
+    // Sweep day the batch was opened; later sweeps keep adding forms until it is processed.
     public DateOnly BatchDate { get; set; }
 
     public int Status { get; set; }

@@ -8,6 +8,7 @@ import { History, Inbox, Search } from "lucide-react";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Pagination } from "@/components/ui/Pagination";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import AccumulationHistoryModal from "./AccumulationHistoryModal";
@@ -27,8 +28,7 @@ export default function AccumulationLookupPage() {
     const [pageIndex, setPageIndex] = useState(1);
     const [employees, setEmployees] = useState<EmployeeDto[]>([]);
     const [totalCount, setTotalCount] = useState(0);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
+    const [totalPages, setTotalPages] = useState(1);
     const [selectedEmployee, setSelectedEmployee] = useState<EmployeeDto | null>(null);
 
     // Reset to page 1 on keyword change by comparing a snapshot during render instead of an effect.
@@ -44,8 +44,7 @@ export default function AccumulationLookupPage() {
         (result) => {
             setEmployees(result.data);
             setTotalCount(result.totalCount);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
+            setTotalPages(result.totalPages);
         },
         t("loadEmployeesError"),
         (message) => toast.error(message)
@@ -78,9 +77,6 @@ export default function AccumulationLookupPage() {
                         >
                             <Search className="h-4 w-4" />
                         </button>
-                    </div>
-                    <div className="shrink-0 whitespace-nowrap text-sm text-[#5e3f3a]">
-                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
                     </div>
                 </div>
 
@@ -136,23 +132,14 @@ export default function AccumulationLookupPage() {
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        {tCommon("prevPage")}
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">{pageIndex}</div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        {tCommon("nextPage")}
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
+                    compactSummary={totalCount}
+                />
             </section>
 
             {selectedEmployee && (

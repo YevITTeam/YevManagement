@@ -43,6 +43,7 @@ Mẫu: `src/app/[locale]/layout.tsx` (root), `(pc-manager)/layout.tsx` + `PcMana
 - Sidebar `fixed left-0 top-0 z-40 h-screen w-[13.75rem]`, viền phải `#e0e3e5`, nền `#f7f9fb`; logo ô vuông đỏ; nội dung cột chính `mx-auto max-w-[1600px]`.
 - **Khung chiều cao + vùng cuộn chỉ khai ở root layout** (`body flex h-screen flex-col overflow-hidden` + `<main min-h-0 flex-1 overflow-y-auto>`). Layout con CHỈ `min-h-full`: cấm `h-screen`/`min-h-screen`/`calc(100vh-…)`, cấm `overflow-y-auto` bọc toàn trang, cấm lồng `<main>`. Vi phạm → 2 thanh cuộn chồng nhau cắt nội dung (Header `h-16` nằm trong luồng nên `100vh` + header tràn viewport).
 - Mọi flex item làm vùng cuộn (`flex-1 overflow-y-auto`) phải có `min-h-0`. Bảng luôn bọc `overflow-x-auto`.
+- **Dưới `md` sidebar là ngăn kéo**: ẩn sẵn, mở bằng nút ☰ trên `Header`, đóng khi chuyển trang hoặc bấm lớp phủ; `--sidebar-w` về 0 (`globals.css`). Sidebar mới phải gắn `sidebarDrawerClass(mobileOpen)` từ `useSidebarCollapse`. Logo trên `Header` luôn là link về trang chủ (logo trong sidebar chỉ là nút mở rộng); trang có sidebar thì dưới `md` chỉ hiện logo, không kèm chữ.
 - Nav item sidebar: `border-l-4`, active = `border-[#e3000f] bg-[#eceef0] text-[#191c1e]` + icon đỏ; thường = `border-transparent text-[#5e3f3a] hover:bg-[#eceef0]`. Mẫu `WorkflowManagerSidebar.tsx` (nhóm có overline, `aria-current`).
 
 ## 4. Component
@@ -86,7 +87,8 @@ Mẫu `BranchList.tsx`: `overflow-x-auto` > `table.min-w-full.text-left.text-sm`
 
 ### 4.5. Phân trang
 Dùng `ui/Pagination.tsx` (`pageIndex totalPages onPageChange summary compactSummary`): đếm bên trái, `‹ 1 2 3 … ›` bên phải (7 ô, dưới `sm` còn `‹ 2 / 9 ›`), ẩn khi 1 trang. Mẫu `WorkflowRequestList`, `AppReleaseList`. Luôn phân trang server-side.
-**Danh sách đọc nhiều:** tab + bộ lọc chung 1 hàng đầu card (`px-4 py-2.5`), ô bảng `px-4 py-2.5` một dòng, ẩn cột chỉ lặp một giá trị, dưới `md` đổi thành danh sách thẻ.
+**Danh sách đọc nhiều:** tab + bộ lọc ở đầu card (`px-4 py-2.5`; tab và bộ lọc không vừa một hàng ở 1366px thì tab nằm hàng riêng ngay trên bộ lọc, cùng card), ô bảng `px-4 py-2.5` một dòng, ẩn cột chỉ lặp một giá trị, dưới `md` đổi thành danh sách thẻ (mẫu `OtFormListPage`).
+Hàng tab không `flex-wrap`: `overflow-x-auto` + nút `shrink-0` để cuộn ngang trên điện thoại.
 
 ### 4.6. Badge
 `ui/Badge.tsx` (`variant` + `withDot`): `neutral` (draft/huỷ) · `info` (đã nộp/đang xử lý) · `success` (duyệt/hoạt động) · `warning` (trả về/cảnh báo) · `danger` (từ chối/lỗi). Ca đặc thù tự viết `rounded-full` với 1 bộ border/bg/text.
@@ -100,6 +102,7 @@ Xoá/nguy hiểm **luôn** `common/ConfirmDialog.tsx`. Thông báo **luôn** `re
 
 ### 4.9. Tabs
 `ui/Tabs.tsx` (`tabs activeKey onChange`, controlled, dạng viên thuốc).
+Chọn 1 trong 2–3 tuỳ chọn ngắn trên thanh công cụ (khổ giấy…): nhóm nút liền `rounded-lg border bg-[#f2f4f6] p-0.5`, nút chọn `rounded-md bg-white text-[#e3000f] shadow-sm`, `role="radiogroup"`; mẫu `OtFormPrintView.tsx`.
 
 ### 4.10. Chữ thừa
 - Nhãn là TÊN (≤ 3–4 từ), không phải câu mô tả; không `truncate` trên nhãn (cắt = nhãn quá dài → rút ngắn).

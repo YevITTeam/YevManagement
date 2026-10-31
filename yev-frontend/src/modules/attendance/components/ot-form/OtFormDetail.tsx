@@ -419,9 +419,9 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                 </div>
             </div>
 
-            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
-                {/* Left column: form info, support items and approval progress. */}
-                <div className="space-y-4">
+            {/* Two columns only at 2xl: below that the employee table (8-11 cols) needs the full width to avoid scrolling. */}
+            <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+                <div className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-1">
                     <section className="space-y-3.5 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                         <div className="grid grid-cols-2 gap-x-3 gap-y-3">
                             <InfoField label={t("otCaseLabel")}>
@@ -454,7 +454,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                         {/* Always shown even when processPart is null (defaults to "No"), otherwise users assume info is missing. */}
                         <div className="space-y-2 border-t border-[#e0e3e5] pt-3.5">
                             <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
-                            <div className="flex flex-nowrap gap-1.5">
+                            <div className="flex flex-wrap gap-1.5">
                                 <ProcessPartTile
                                     icon={<Utensils size={12} />}
                                     label={t("eatFieldLabel")}
@@ -514,11 +514,11 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                 </span>
                                 <div className="min-w-0 flex-1 space-y-0.5 pt-0.5">
                                     <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-                                        <span className="text-sm font-semibold text-[#191c1e]">{t("requesterStep")}</span>
+                                        <span className="text-sm font-semibold text-[#191c1e]">{t("createdByLabel")}</span>
                                         <span className="text-[11px] text-[#8a8f94]">{formatDateTime(form.createdAt)}</span>
                                     </div>
                                     <div className="text-xs text-[#5e3f3a]">
-                                        {form.createdByFullName ?? form.createdByUserName} · {t("createdAction")}
+                                        {form.createdByFullName ?? form.createdByUserName}
                                     </div>
                                     {form.creatorSignatureImage && (
                                         // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image can't optimize it
@@ -928,27 +928,15 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                 />
                             </label>
 
-                            <div
-                                className={`rounded-lg border px-3 py-2 text-xs ${
-                                    hasSecondaryPassword === false
-                                        ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                        : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                                }`}
-                            >
-                                {hasSecondaryPassword === false ? t("secondaryPasswordMissingHint") : t("secondaryPasswordOkHint")}
-                            </div>
+                            {hasSecondaryPassword === false && (
+                                <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-xs text-[#930006]">
+                                    {t("secondaryPasswordMissingHint")}
+                                </div>
+                            )}
 
-                            {actionOpen === "approve" && (
-                                <div
-                                    className={`rounded-lg border px-3 py-2 text-xs ${
-                                        requireSignatureToApprove && hasMySignature === false
-                                            ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                            : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                                    }`}
-                                >
-                                    {requireSignatureToApprove && hasMySignature === false
-                                        ? t("approveSignatureMissingHint")
-                                        : t("approveSignatureOkHint")}
+                            {actionOpen === "approve" && requireSignatureToApprove && hasMySignature === false && (
+                                <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-xs text-[#930006]">
+                                    {t("approveSignatureMissingHint")}
                                 </div>
                             )}
 
@@ -984,7 +972,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                     <div id="ot-print-portal" className="fixed inset-0 z-50 flex justify-center bg-black/40 p-4">
                         {/* Print only the popup: hide the rest of the page and un-fix the overlay */}
                         <style>{`@media print{body>*:not(#ot-print-portal){display:none!important}#ot-print-portal,#ot-print-portal>div{position:static!important;display:block!important;overflow:visible!important;max-height:none!important;padding:0!important;background:none!important;box-shadow:none!important}}`}</style>
-                        <div className="max-h-full w-full max-w-5xl overflow-y-auto rounded-xl shadow-xl">
+                        <div className="max-h-full w-full max-w-5xl overflow-y-auto rounded-xl bg-white shadow-xl">
                             <OtFormPrintView id={form.id} onClose={() => setIsPrintOpen(false)} />
                         </div>
                     </div>,

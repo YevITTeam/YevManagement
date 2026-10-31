@@ -10,7 +10,8 @@ namespace Attendance.Application.Dtos.OtForms
         public string? NoteVn { get; set; }
         public string? NoteJp { get; set; }
 
-        // Frozen accumulation from when the row was added, plus this form's own hours (not today's live total).
+        // Accumulation up to the form's date plus its own hours: live incl. other pending forms until Completed,
+        // then the actual figure frozen at sign-off.
         public decimal MonthToDate { get; set; }
         public decimal YearToDate { get; set; }
 

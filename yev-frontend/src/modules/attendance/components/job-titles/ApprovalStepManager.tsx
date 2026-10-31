@@ -756,6 +756,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 requiresSignature: false,
                 isResponsible: false,
                 canResubmit: false,
+                resubmitSkipsIntermediate: false,
                 terminalLevel: jobTitle.terminalLevel,
             },
         ]);
@@ -788,7 +789,16 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     };
 
     const handleToggleGroupResubmit = (index: number) => {
-        setGroupSteps((current) => current.map((step, i) => (i === index ? { ...step, canResubmit: !step.canResubmit } : step)));
+        setGroupSteps((current) =>
+            current.map((step, i) => (i === index ? { ...step, canResubmit: !step.canResubmit, resubmitSkipsIntermediate: !step.canResubmit && step.resubmitSkipsIntermediate } : step))
+        );
+        setIsGroupDirty(true);
+    };
+
+    const handleToggleGroupResubmitSkip = (index: number) => {
+        setGroupSteps((current) =>
+            current.map((step, i) => (i === index ? { ...step, resubmitSkipsIntermediate: !step.resubmitSkipsIntermediate } : step))
+        );
         setIsGroupDirty(true);
     };
 
@@ -804,7 +814,13 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         try {
             const data = await GroupApprovalStepApi.replaceByGroup(
                 groupId,
-                groupSteps.map((s) => ({ jobTitleId: s.jobTitleId, requiresSignature: s.requiresSignature, isResponsible: s.isResponsible, canResubmit: s.canResubmit }))
+                groupSteps.map((s) => ({
+                    jobTitleId: s.jobTitleId,
+                    requiresSignature: s.requiresSignature,
+                    isResponsible: s.isResponsible,
+                    canResubmit: s.canResubmit,
+                    resubmitSkipsIntermediate: s.resubmitSkipsIntermediate,
+                }))
             );
             setGroupSteps(data);
             setIsGroupDirty(false);
@@ -829,6 +845,9 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         toggleResubmitHint: tGroup("toggleResubmitHint"),
         canResubmitYes: tGroup("canResubmitYes"),
         canResubmitNo: tGroup("canResubmitNo"),
+        toggleResubmitSkipHint: tGroup("toggleResubmitSkipHint"),
+        resubmitSkipYes: tGroup("resubmitSkipYes"),
+        resubmitSkipNo: tGroup("resubmitSkipNo"),
     };
     const deptStepLabels: StepCardLabels = {
         dragHandleLabel: tDept("dragHandleLabel"),
@@ -896,9 +915,9 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
     return (
         <div className="space-y-4">
-            <section className="flex items-center gap-3 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 shadow-sm">
+            <section className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 shadow-sm">
                 <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tDept("fieldDepartment")}</span>
-                <div className="w-64">
+                <div className="w-64 max-w-full">
                     <SearchableSelect
                         options={departmentOptions}
                         value={departmentId}
@@ -911,7 +930,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 {workshops.length > 0 && (
                     <>
                         <span className="ml-2 shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tDept("fieldWorkshop")}</span>
-                        <div className="w-44">
+                        <div className="w-44 max-w-full">
                             <SearchableSelect
                                 options={workshops.map((w) => ({ value: w.id, label: w.workshopNameVn, searchText: w.workshopNameVn.toLowerCase() }))}
                                 value={workshopId}
@@ -935,7 +954,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 {activeTab === "group" && typeof departmentId === "number" && (
                     <>
                         <span className="ml-2 shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tGroup("fieldGroup")}</span>
-                        <div className="w-64">
+                        <div className="w-64 max-w-full">
                             <SearchableSelect
                                 options={groupOptions}
                                 value={groupId}
@@ -1018,6 +1037,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                             onToggleResponsible={() => handleSetGroupResponsible(index)}
                                                             canResubmit={step.canResubmit}
                                                             onToggleResubmit={() => handleToggleGroupResubmit(index)}
+                                                            resubmitSkipsIntermediate={step.resubmitSkipsIntermediate}
+                                                            onToggleResubmitSkip={() => handleToggleGroupResubmitSkip(index)}
                                                             onRemove={() => handleRemoveGroupStep(index)}
                                                             labels={groupStepLabels}
                                                             footer={
@@ -1060,7 +1081,11 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                 </button>
                                             </div>
                                             {groupSigningMinNotMet && <p className="text-xs text-[#930006]">{tGroup("intermediateMinHint")}</p>}
-                                            {groupSigningLimitReached && <p className="text-xs text-[#9a5b00]">{tGroup("intermediateLimitHint")}</p>}
+                                            {groupSigningLimitReached && (
+                                                <p className="cursor-help text-xs text-[#9a5b00]" title={tGroup("intermediateLimitHint")}>
+                                                    {tGroup("intermediateLimitShort")}
+                                                </p>
+                                            )}
 
                                         </>
                                     )}
@@ -1259,7 +1284,11 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                     </button>
                                 </div>
                                 {productionSigningMinNotMet && <p className="text-xs text-[#930006]">{tProd("intermediateMinHint")}</p>}
-                                {productionSigningLimitReached && <p className="text-xs text-[#9a5b00]">{tProd("intermediateLimitHint")}</p>}
+                                {productionSigningLimitReached && (
+                                    <p className="cursor-help text-xs text-[#9a5b00]" title={tProd("intermediateLimitHint")}>
+                                        {tProd("intermediateLimitShort")}
+                                    </p>
+                                )}
 
                             </>
                         )}

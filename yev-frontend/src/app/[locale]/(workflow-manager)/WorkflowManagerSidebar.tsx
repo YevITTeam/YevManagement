@@ -3,7 +3,7 @@
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
 import { Network, Layers, Users, FolderCog, Database, FileStack, PanelLeftClose, ClipboardList, Repeat, PenTool, Settings } from "lucide-react";
-import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
+import { sidebarDrawerClass, useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission } from "@/modules/auth/lib/permissions";
 import BrandLogo from "@/components/common/BrandLogo";
@@ -49,7 +49,7 @@ export default function WorkflowManagerSidebar() {
   const t = useTranslations("Navigation");
   const pathname = usePathname() || "";
   const { user } = useAuth();
-  const { collapsed, toggle } = useSidebarCollapse();
+  const { collapsed, toggle, mobileOpen } = useSidebarCollapse();
 
   // Groups with no item the user may see are dropped, so their header never shows up empty.
   const visibleGroups = navGroups
@@ -58,7 +58,7 @@ export default function WorkflowManagerSidebar() {
 
   return (
     <aside
-      className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
+      className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-6 transition-[width,transform] duration-200 ${sidebarDrawerClass(mobileOpen)} ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
         }`}
     >
       <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>

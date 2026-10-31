@@ -3,24 +3,6 @@
 
 import type { OtFormEmployeeDto, ProcessPartDto } from "@/modules/attendance/types/ot-form.dto";
 
-// OtFormBatchStatus: 0=Pending, 1=Processed (done or auto-closed when no valid forms remain).
-// departmentId is null for company-wide batches; scopeNameVn is then the job title name.
-export interface OtFormBatchListItemDto {
-    id: number;
-    terminalLevel: number;
-    departmentId: number | null;
-    scopeNameVn: string;
-    scopeNameJp: string | null;
-    batchDate: string;
-    status: number;
-    formCount: number;
-    employeeCount: number;
-    totalHour: number;
-    createdAt: string;
-    processedAt: string | null;
-    processedByFullName: string | null;
-}
-
 // Only active (not removed) employees.
 export interface OtFormBatchItemDto {
     otFormId: number;
@@ -45,6 +27,7 @@ export interface OtFormBatchItemDto {
     employees: OtFormEmployeeDto[];
 }
 
+// status: 0=Pending, 1=Processed. departmentId null = company-wide batch (scopeNameVn is the job title).
 // otForms only lists forms whose current pending step is still this batch's level.
 export interface OtFormBatchDto {
     id: number;

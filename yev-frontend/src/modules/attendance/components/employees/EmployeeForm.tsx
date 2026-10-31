@@ -72,6 +72,7 @@ const emptyValues: EmployeeFormValues = {
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+const hourFieldClassName = fieldClassName.replace("w-full", "w-24");
 
 export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit, scope, canEditOtLimit = false }: EmployeeFormProps) {
     const t = useTranslations("Attendance.Employee");
@@ -227,9 +228,9 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="employee-form-title"
-                className="z-60 mx-4 w-full max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 flex max-h-[88vh] w-full max-w-2xl flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl"
             >
-                <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                <div className="flex items-center justify-between border-b border-[#e0e3e5] px-6 py-4">
                     <h3 id="employee-form-title" className="text-lg font-semibold text-[#191c1e]">
                         {mode === "create" ? t("createTitle") : t("editTitle")}
                     </h3>
@@ -243,7 +244,8 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+                <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
                     <div className="grid gap-4 sm:grid-cols-2">
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
@@ -332,8 +334,8 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             <div className="space-y-2 sm:col-span-2">
                                 <span className={fieldLabelClassName}>{t("fieldApprovalScopes")}<RequiredMark /></span>
                                 {values.approvalScopes.map((scopeRow, index) => (
-                                    <div key={index} className="flex items-center gap-2">
-                                        <div className="w-44 shrink-0">
+                                    <div key={index} className="flex flex-wrap items-center gap-2">
+                                        <div className="w-44 max-w-full">
                                             <SearchableSelect
                                                 options={workshopOptions}
                                                 value={scopeRow.workshopId || ""}
@@ -342,7 +344,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                                                 disabled={loading}
                                             />
                                         </div>
-                                        <div className="min-w-0 flex-1">
+                                        <div className="min-w-40 flex-1">
                                             <SearchableSelect
                                                 options={departmentOptions}
                                                 value={scopeRow.departmentId || ""}
@@ -413,51 +415,57 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             </label>
                         )}
 
-                        {/* Per-employee OT limits (override the shared default). Saved apart from the main PUT:
-                            on create they ride along with POST, on edit EmployeeList calls PUT /{id}/ot-limit. */}
+                        {/* Saved apart from the main PUT: POST carries them on create, edit goes through PUT /{id}/ot-limit. */}
                         {(mode === "create" || canEditOtLimit) && (
-                            <>
+                            <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5 sm:col-span-2">
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("fieldCustomMonthlyOtHourLimit")}</span>
-                                    <input
-                                        type="number"
-                                        step="1"
-                                        min={1}
-                                        value={values.customMonthlyOtHourLimit ?? ""}
-                                        onChange={(event) =>
-                                            setValues((current) => ({
-                                                ...current,
-                                                customMonthlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
-                                            }))
-                                        }
-                                        placeholder={String(setting.monthlyOtHourLimit)}
-                                        disabled={loading}
-                                        className={fieldClassName}
-                                    />
+                                    <span className="flex items-center gap-1.5">
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            min={1}
+                                            value={values.customMonthlyOtHourLimit ?? ""}
+                                            onChange={(event) =>
+                                                setValues((current) => ({
+                                                    ...current,
+                                                    customMonthlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
+                                                }))
+                                            }
+                                            placeholder={String(setting.monthlyOtHourLimit)}
+                                            disabled={loading}
+                                            className={hourFieldClassName}
+                                        />
+                                        <span className="text-xs text-[#8a8f94]">{t("unitHour")}</span>
+                                    </span>
                                 </label>
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("fieldCustomYearlyOtHourLimit")}</span>
-                                    <input
-                                        type="number"
-                                        step="1"
-                                        min={1}
-                                        value={values.customYearlyOtHourLimit ?? ""}
-                                        onChange={(event) =>
-                                            setValues((current) => ({
-                                                ...current,
-                                                customYearlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
-                                            }))
-                                        }
-                                        placeholder={String(setting.yearlyOtHourLimit)}
-                                        disabled={loading}
-                                        className={fieldClassName}
-                                    />
+                                    <span className="flex items-center gap-1.5">
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            min={1}
+                                            value={values.customYearlyOtHourLimit ?? ""}
+                                            onChange={(event) =>
+                                                setValues((current) => ({
+                                                    ...current,
+                                                    customYearlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
+                                                }))
+                                            }
+                                            placeholder={String(setting.yearlyOtHourLimit)}
+                                            disabled={loading}
+                                            className={hourFieldClassName}
+                                        />
+                                        <span className="text-xs text-[#8a8f94]">{t("unitHour")}</span>
+                                    </span>
                                 </label>
-                            </>
+                            </div>
                         )}
                     </div>
+                    </div>
 
-                    <div className="flex justify-end gap-3 pt-2">
+                    <div className="flex justify-end gap-3 border-t border-[#e0e3e5] px-6 py-4">
                         <button
                             type="button"
                             onClick={onClose}

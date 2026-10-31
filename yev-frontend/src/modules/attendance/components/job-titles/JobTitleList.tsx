@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Pagination } from "@/components/ui/Pagination";
 import { useDragReorder } from "./useDragReorder";
 
 const PAGE_SIZE = 20;
@@ -163,7 +164,7 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
@@ -176,9 +177,6 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                         </button>
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className="text-sm text-[#5e3f3a]">
-                            {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: jobTitles.length, total: totalCount })}
-                        </div>
                         {isOrderDirty && (
                             <button
                                 onClick={handleSaveOrder}
@@ -195,9 +193,6 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                {!canReorder && jobTitles.length > 1 && (
-                    <div className="border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-2 text-xs text-[#8a8f94]">{t("dragDisabledHint")}</div>
-                )}
 
                 <div className="overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
@@ -277,25 +272,14 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        {tCommon("prevPage")}
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        {tCommon("nextPage")}
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: jobTitles.length, total: totalCount })}
+                    compactSummary={totalCount}
+                />
             </section>
 
             <JobTitleForm

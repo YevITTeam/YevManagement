@@ -19,7 +19,7 @@ interface EmployeeOtLimitDialogProps {
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
-    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+    "h-10 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 // Uses the narrow Attendance.Employee.UpdateOtLimit permission for coordinators who can't open EmployeeForm.
 export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: EmployeeOtLimitDialogProps) {
@@ -76,32 +76,38 @@ export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: Em
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldCustomMonthlyOtHourLimit")}</span>
-                            <input
-                                type="number"
-                                step="1"
-                                min={1}
-                                value={monthly ?? ""}
-                                onChange={(event) => setMonthly(event.target.value === "" ? null : Number(event.target.value))}
-                                placeholder={String(setting.monthlyOtHourLimit)}
-                                disabled={isSaving}
-                                className={fieldClassName}
-                            />
+                            <span className={fieldLabelClassName}>{t("otLimitMonthly")}</span>
+                            <span className="flex items-center gap-1.5">
+                                <input
+                                    type="number"
+                                    step="1"
+                                    min={1}
+                                    value={monthly ?? ""}
+                                    onChange={(event) => setMonthly(event.target.value === "" ? null : Number(event.target.value))}
+                                    placeholder={String(setting.monthlyOtHourLimit)}
+                                    disabled={isSaving}
+                                    className={fieldClassName}
+                                />
+                                <span className="text-xs text-[#8a8f94]">{t("unitHour")}</span>
+                            </span>
                         </label>
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldCustomYearlyOtHourLimit")}</span>
-                            <input
-                                type="number"
-                                step="1"
-                                min={1}
-                                value={yearly ?? ""}
-                                onChange={(event) => setYearly(event.target.value === "" ? null : Number(event.target.value))}
-                                placeholder={String(setting.yearlyOtHourLimit)}
-                                disabled={isSaving}
-                                className={fieldClassName}
-                            />
+                            <span className={fieldLabelClassName}>{t("otLimitYearly")}</span>
+                            <span className="flex items-center gap-1.5">
+                                <input
+                                    type="number"
+                                    step="1"
+                                    min={1}
+                                    value={yearly ?? ""}
+                                    onChange={(event) => setYearly(event.target.value === "" ? null : Number(event.target.value))}
+                                    placeholder={String(setting.yearlyOtHourLimit)}
+                                    disabled={isSaving}
+                                    className={fieldClassName}
+                                />
+                                <span className="text-xs text-[#8a8f94]">{t("unitHour")}</span>
+                            </span>
                         </label>
                     </div>
 

@@ -395,6 +395,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<bool>("RequiresSignature")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("ResubmitSkipsIntermediate")
+                        .HasColumnType("bit");
+
                     b.Property<int>("StepOrder")
                         .HasColumnType("int");
 

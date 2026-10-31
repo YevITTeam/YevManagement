@@ -46,6 +46,7 @@ export interface OtFormEmployeeDto {
     endTime: string;
     noteVn: string | null;
     noteJp: string | null;
+    // Up to the form's date incl. its own hours: live incl. other pending forms until Completed, then frozen actual.
     monthToDate: number;
     yearToDate: number;
     // Read live (not snapshotted like monthToDate/yearToDate); null = global default.

@@ -13,6 +13,7 @@ import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Pagination } from "@/components/ui/Pagination";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -70,8 +71,6 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     useEffect(() => {
         ProductionEmployeeApi.getTeamOptions().then(setTeamOptions).catch((err) => console.error(err));
@@ -137,8 +136,6 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
             setItems(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
         (message) => toast.error(message)
@@ -191,33 +188,30 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                         value={departmentId}
                         onChange={handleSelectDepartment}
                         placeholder={t("filterDepartmentPlaceholder")}
-                        triggerClassName="h-9 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        triggerClassName="h-9 w-36 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     <SearchableSelect
                         options={teamSelectOptions}
                         value={teamId}
                         onChange={handleSelectTeam}
                         placeholder={t("filterTeamPlaceholder")}
-                        triggerClassName="h-9 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        triggerClassName="h-9 w-36 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     <SearchableSelect
                         options={lineSelectOptions}
                         value={productionLineId}
                         onChange={handleSelectLine}
                         placeholder={t("filterBlockPlaceholder")}
-                        triggerClassName="h-9 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        triggerClassName="h-9 w-36 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     <SearchableSelect
                         options={shiftTeamSelectOptions}
                         value={shiftTeamId}
                         onChange={handleSelectShiftTeam}
                         placeholder={t("filterShiftTeamPlaceholder")}
-                        triggerClassName="h-9 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        triggerClassName="h-9 w-36 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
                     {actions}
-                </div>
-                <div className="shrink-0 whitespace-nowrap text-sm text-[#5e3f3a]">
-                    {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: items.length, total: totalCount })}
                 </div>
             </div>
 
@@ -333,25 +327,14 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                 </table>
             </div>
 
-            <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
-                <button
-                    className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                    disabled={!hasPreviousPage || isLoading}
-                    onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                >
-                    {tCommon("prevPage")}
-                </button>
-                <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                    {tCommon("pageOf", { current: pageIndex, total: totalPages })}
-                </div>
-                <button
-                    className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                    disabled={!hasNextPage || isLoading}
-                    onClick={() => setPageIndex((current) => current + 1)}
-                >
-                    {tCommon("nextPage")}
-                </button>
-            </div>
+            <Pagination
+                pageIndex={pageIndex}
+                totalPages={totalPages}
+                onPageChange={setPageIndex}
+                disabled={isLoading}
+                summary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: items.length, total: totalCount })}
+                compactSummary={totalCount}
+            />
 
             {historyItem && (
                 <AccumulationHistoryModal

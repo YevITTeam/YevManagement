@@ -2,10 +2,10 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, Layers, UserCheck, LayoutDashboard } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, UserCheck, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
-import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
+import { sidebarDrawerClass, useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
 import { useOverviewAccess } from "@/modules/attendance/hooks/useOverviewAccess";
 import { OT_CATEGORIES_PERMISSIONS } from "@/modules/attendance/lib/otRoutePermissions";
@@ -29,7 +29,6 @@ const navItems: OtNavItem[] = [
     { key: "otAiChat", href: "/ot/ai-chat", icon: Bot, permissions: ["Attendance.AiChat.Use"] },
     // One screen with tabs; each tab gates itself on finer permissions (OtFormTabsPage.tsx).
     { key: "otForms", href: "/ot/list", icon: ClipboardList, permissions: ["Attendance.OTForm.View"] },
-    { key: "otBatches", href: "/ot/batches", icon: Layers, permissions: ["Attendance.OTForm.Approve"] },
     { key: "otDelegations", href: "/ot/delegations", icon: UserCheck, permissions: ["Attendance.OTForm.Delegate"] },
     // Gated on .Create, not .View: staff roles get .View just to load dropdowns. Approval-tree coordinators
     // (*ApprovalStep.Update) and Group Leaders (ProductionOtReport.View only) need it for their own tab.
@@ -52,13 +51,13 @@ export default function OtManagerSidebar() {
     const t = useTranslations("Navigation");
     const pathname = usePathname() || "";
     const { user } = useAuth();
-    const { collapsed, toggle } = useSidebarCollapse();
+    const { collapsed, toggle, mobileOpen } = useSidebarCollapse();
     const pendingApprovalsCount = usePendingApprovalsCount(hasPermission(user, "Attendance.OTForm.Approve"));
     const canViewOverview = useOverviewAccess(hasPermission(user, "Attendance.OTForm.Approve"));
 
     return (
         <aside
-            className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-4 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
+            className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-4 transition-[width,transform] duration-200 ${sidebarDrawerClass(mobileOpen)} ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
                 }`}
         >
             <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>

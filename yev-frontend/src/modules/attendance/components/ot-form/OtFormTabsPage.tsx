@@ -52,42 +52,44 @@ export default function OtFormTabsPage() {
         return null;
     }
 
+    // Same pill look as ui/Tabs, hand-rolled only because the pending tab carries a count badge.
+    const tabBar = (
+        <div role="tablist" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg bg-[#f8fafc] p-1">
+            {visibleTabs.map((tab) => {
+                const isActive = activeTab === tab.key;
+                const badgeCount = tab.key === "pending-approvals" ? pendingApprovalsCount : 0;
+                return (
+                    <button
+                        key={tab.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => selectTab(tab.key)}
+                        className={`flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+                            isActive ? "bg-white text-[#191c1e] shadow-sm" : "text-[#5e3f3a] hover:text-[#191c1e]"
+                        }`}
+                    >
+                        {tab.label}
+                        {badgeCount > 0 && (
+                            <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#e3000f] px-1.5 text-xs font-semibold text-white">
+                                {badgeCount > 99 ? "99+" : badgeCount}
+                            </span>
+                        )}
+                    </button>
+                );
+            })}
+        </div>
+    );
+
     return (
         <div className="space-y-4">
-            <div>
-                <h1 className="text-xl font-semibold text-[#191c1e]">{t("title")}</h1>
-            </div>
-
-            <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">
-                {visibleTabs.map((tab) => {
-                    const isActive = activeTab === tab.key;
-                    const badgeCount = tab.key === "pending-approvals" ? pendingApprovalsCount : 0;
-                    return (
-                        <button
-                            key={tab.key}
-                            onClick={() => selectTab(tab.key)}
-                            className={`cursor-pointer flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
-                                isActive
-                                    ? "border-[#e3000f] text-[#191c1e]"
-                                    : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
-                            }`}
-                        >
-                            {tab.label}
-                            {badgeCount > 0 && (
-                                <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#e3000f] px-1.5 text-xs font-semibold text-white">
-                                    {badgeCount > 99 ? "99+" : badgeCount}
-                                </span>
-                            )}
-                        </button>
-                    );
-                })}
-            </div>
+            <h1 className="text-xl font-semibold text-[#191c1e]">{t("title")}</h1>
 
             {/* Lazy-mount and keep mounted so switching tabs doesn't refetch. */}
             {visibleTabs.map((tab) =>
                 visitedTabs.has(tab.key) || activeTab === tab.key ? (
                     <div key={tab.key} className={activeTab === tab.key ? "" : "hidden"}>
-                        <OtFormListPage mode={tab.key} hideHeading />
+                        <OtFormListPage mode={tab.key} hideHeading tabs={tabBar} />
                     </div>
                 ) : null
             )}

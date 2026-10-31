@@ -147,7 +147,7 @@ export default function OtOverviewPage() {
                         />
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
                         <ChartCard title={t("chartDaily")} hint={t("chartDailyHint")}>
                             <BarChart data={data.dailyHours.map((d) => ({ label: String(Number(d.date.slice(8, 10))), value: d.hours }))} color="#3b82f6" />
                         </ChartCard>
@@ -174,7 +174,12 @@ export default function OtOverviewPage() {
                                 <Donut slices={data.byOtCase.map((c, i) => ({ label: c.code, value: c.formCount, color: ["#3b82f6", "#8b5cf6", "#14b8a6", "#ec4899", "#f97316", "#64748b"][i % 6] }))} />
                             )}
                         </ChartCard>
-                        <ChartCard title={t("chartDepartment")} hint={t("chartDailyHint")}>
+                        {/* Without the workshop chart the department bars take the leftover slots so no card sits alone on a row. */}
+                        <ChartCard
+                            title={t("chartDepartment")}
+                            hint={t("chartDailyHint")}
+                            className={data.byWorkshop.length > 1 ? "" : "lg:col-span-2"}
+                        >
                             {data.byDepartment.length === 0 ? (
                                 <EmptyChart text={t("empty")} />
                             ) : (

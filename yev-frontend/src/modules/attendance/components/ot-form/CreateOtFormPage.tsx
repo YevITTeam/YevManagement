@@ -31,6 +31,7 @@ import type {
 } from "@/modules/attendance/types/ot-form.dto";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import InfoTooltip from "@/components/ui/InfoTooltip";
 import TimePicker24h from "@/components/ui/TimePicker24h";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import SecondaryPasswordDialog from "@/modules/attendance/components/secondary-password/SecondaryPasswordDialog";
@@ -1148,35 +1149,36 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             </>
                         )}
 
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldDate")}<RequiredMark /></span>
-                            <input
-                                type="date"
-                                value={date}
-                                onChange={(event) => setDate(event.target.value)}
-                                disabled={isSubmitting || isHeaderLocked}
-                                required
-                                min={isEditMode ? undefined : getTodayStr(-setting.backdateDays)}
-                                className={fieldClassName}
-                            />
-                        </label>
-
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldTotalHour")}</span>
-                            {/* The form's hours are only the outer frame; the daily limit is warned per employee row. */}
-                            <input value={totalHour} disabled className={fieldClassName} />
-                        </label>
-
-                        <div className="block sm:col-span-2">
-                            <div className="grid grid-cols-2 gap-3">
+                        <div className="sm:col-span-2">
+                            <div className="flex flex-wrap items-end gap-3">
                                 <label className="block">
-                                    <span className={fieldLabelClassName}>{t("fieldStartTime")}<RequiredMark /></span>
-                                    <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting || isHeaderLocked} />
+                                    <span className={fieldLabelClassName}>{t("fieldDate")}<RequiredMark /></span>
+                                    <input
+                                        type="date"
+                                        value={date}
+                                        onChange={(event) => setDate(event.target.value)}
+                                        disabled={isSubmitting || isHeaderLocked}
+                                        required
+                                        min={isEditMode ? undefined : getTodayStr(-setting.backdateDays)}
+                                        className={fieldClassName.replace("w-full", "w-40")}
+                                    />
                                 </label>
-                                <label className="block">
-                                    <span className={fieldLabelClassName}>{t("fieldEndTime")}<RequiredMark /></span>
-                                    <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting || isHeaderLocked} />
-                                </label>
+                                <div className="flex items-end gap-3">
+                                    <label className="block">
+                                        <span className={fieldLabelClassName}>{t("fieldStartTime")}<RequiredMark /></span>
+                                        <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting || isHeaderLocked} />
+                                    </label>
+                                    <label className="block">
+                                        <span className={fieldLabelClassName}>{t("fieldEndTime")}<RequiredMark /></span>
+                                        <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting || isHeaderLocked} />
+                                    </label>
+                                    {/* Form hours are only the outer frame; the daily limit is warned per employee row. */}
+                                    <span className="flex h-9 items-center" title={t("fieldTotalHour")}>
+                                        <span className="rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-semibold tabular-nums text-[#5e3f3a]">
+                                            {totalHour}h
+                                        </span>
+                                    </span>
+                                </div>
                             </div>
                             {isTimeRangeInvalid && (
                                 <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#930006]">
@@ -1198,7 +1200,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </label>
 
                         <label className="block sm:col-span-2">
-                            <span className={fieldLabelClassName}>{t("fieldOtCase")}<RequiredMark /></span>
+                            <span className={`${fieldLabelClassName.replace("block", "flex")} items-center gap-1`}>
+                                {t("fieldOtCase")}<RequiredMark />
+                                {!isEditMode && otCaseCode && (
+                                    <InfoTooltip
+                                        text={t(exceedsTh3 ? "otCaseAutoHintTh3" : isNonWorkingDay ? "otCaseAutoHintNonWorking" : "otCaseAutoHintWorking")}
+                                    />
+                                )}
+                                {isOfficeEdit && <InfoTooltip text={t("otCaseAutoHintEdit")} />}
+                            </span>
                             <SearchableSelect
                                 options={otCases.map((otCase) => ({
                                     value: otCase.id,
@@ -1210,19 +1220,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 placeholder={t("fieldOtCasePlaceholder")}
                                 disabled
                             />
-                            {!isEditMode && otCaseCode && (
-                                <p className="mt-1 text-xs text-[#8a8f94]">
-                                    {t(exceedsTh3 ? "otCaseAutoHintTh3" : isNonWorkingDay ? "otCaseAutoHintNonWorking" : "otCaseAutoHintWorking")}
-                                </p>
-                            )}
-                            {isOfficeEdit && <p className="mt-1 text-xs text-[#8a8f94]">{t("otCaseAutoHintEdit")}</p>}
                         </label>
 
                         
                     </div>
 
                     <label className="block">
-                        <span className="mb-1 block text-xs font-semibold text-[#5e3f3a]">{t("fieldSubReason")}</span>
+                        <span className={fieldLabelClassName}>{t("fieldSubReason")}</span>
                         <textarea
                             value={subReason}
                             onChange={(event) => setSubReason(event.target.value)}
@@ -1234,7 +1238,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
                     <div className="space-y-2.5 border-t border-[#e0e3e5] pt-3">
                     {/* Always shown: meals are mandatory, only shuttle/photo room are optional. */}
-                    <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                    <span className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                         {t("otherSupportLabel")}
                     </span>
 
@@ -1259,7 +1263,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <div className="space-y-1.5">
                             {/* Counts are auto-filled from each person's OT hours; once overridden, "Recalculate" restores them. */}
                             <div className="flex items-center justify-between gap-2 text-xs">
-                                <span className="text-xs font-semibold text-[#5e3f3a]">{t("mealTicketCountsTitle")}</span>
+                                <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("mealTicketCountsTitle")}</span>
                                 {!isEditMode &&
                                     (autoMealTicket ? (
                                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-semibold text-emerald-700">
@@ -1277,9 +1281,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     ))}
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
                             <label className="block">
-                                <span className="mb-1 block whitespace-nowrap text-xs font-semibold text-[#5e3f3a]">{t("mainTicketLabel")}</span>
+                                <span className={fieldLabelClassName}>{t("mainTicketLabel")}</span>
                                 <input
                                     type="number"
                                     min={0}
@@ -1291,11 +1295,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         setProcessPart((current) => ({ ...current, mainTicketCount: Number(event.target.value) }));
                                     }}
                                     disabled={isSubmitting || isEditMode}
-                                    className={`${compactFieldClassName} text-center`}
+                                    className={`${compactFieldClassName.replace("w-full", "w-20")} text-center`}
                                 />
                             </label>
                             <label className="block">
-                                <span className="mb-1 block whitespace-nowrap text-xs font-semibold text-[#5e3f3a]">{t("secondaryTicketLabel")}</span>
+                                <span className={fieldLabelClassName}>{t("secondaryTicketLabel")}</span>
                                 <input
                                     type="number"
                                     min={0}
@@ -1308,11 +1312,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         }));
                                     }}
                                     disabled={isSubmitting || isEditMode}
-                                    className={`${compactFieldClassName} text-center`}
+                                    className={`${compactFieldClassName.replace("w-full", "w-20")} text-center`}
                                 />
                             </label>
                             <label className="block">
-                                <span className="mb-1 block whitespace-nowrap text-xs font-semibold text-[#5e3f3a]">{t("milkLabel")}</span>
+                                <span className={fieldLabelClassName}>{t("milkLabel")}</span>
                                 <input
                                     type="number"
                                     min={0}
@@ -1321,14 +1325,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         setProcessPart((current) => ({ ...current, milkCount: Number(event.target.value) }))
                                     }
                                     disabled={isSubmitting || isHeaderLocked}
-                                    className={`${compactFieldClassName} text-center`}
+                                    className={`${compactFieldClassName.replace("w-full", "w-20")} text-center`}
                                 />
                             </label>
                             </div>
                         </div>
 
                         <label className="block">
-                            <span className="mb-1 block whitespace-nowrap text-xs font-semibold text-[#5e3f3a]">{t("anotherSuggestionVnLabel")}</span>
+                            <span className={fieldLabelClassName}>{t("anotherSuggestionVnLabel")}</span>
                             <input
                                 value={processPart.anotherSuggestionVn ?? ""}
                                 onChange={(event) =>
@@ -1343,13 +1347,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 </section>
 
                 <section className="flex flex-col gap-4 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm lg:h-0 lg:min-h-full">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                         <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                             {t("employeeListTitle")}
                         </h2>
-                        <div className="flex flex-wrap items-center justify-end gap-2">
+                        <div className={`flex flex-wrap items-center justify-end gap-2 ${isEditMode ? "w-full sm:w-auto" : ""}`}>
                             {isEditMode && (
-                                <div className="w-64">
+                                <div className="w-full sm:w-64">
                                     <SearchableSelect
                                         options={addSearchResults
                                             .filter((item) => !selectedEmployeeIds.includes(item.employeeId))
@@ -1658,9 +1662,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </div>
                     ) : formMode === "production" ? (
                         <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
-                            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                            <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
                                 {/* Team first: Line is its FK child, so Line stays locked until a Team is picked. */}
-                                <label className="block">
+                                <label className="block w-full sm:w-44">
                                     <span className={fieldLabelClassName}>{t("productionFilterTeamLabel")}</span>
                                     <SearchableSelect
                                         options={visibleTeamOptions.map((option) => ({
@@ -1674,7 +1678,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         disabled={!isCoreFormInfoFilled || isProductionScopeLocked}
                                     />
                                 </label>
-                                <label className="block">
+                                <label className="block w-full sm:w-44">
                                     <span className={fieldLabelClassName}>{t("productionFilterLineLabel")}</span>
                                     <SearchableSelect
                                         options={visibleLineOptions.map((option) => ({
@@ -1690,7 +1694,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         disabled={!isCoreFormInfoFilled || productionTeamId === "" || isProductionScopeLocked}
                                     />
                                 </label>
-                                <label className="block">
+                                <label className="block w-full sm:w-44">
                                     <span className={fieldLabelClassName}>{t("productionFilterShiftTeamLabel")}</span>
                                     <SearchableSelect
                                         options={visibleShiftTeamOptions.map((option) => ({
@@ -1704,7 +1708,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         disabled={!isCoreFormInfoFilled || isProductionScopeLocked}
                                     />
                                 </label>
-                                <label className="block">
+                                <label className="block w-full sm:w-64">
                                     <span className={fieldLabelClassName}>{t("productionFilterKeywordLabel")}</span>
                                     <input
                                         value={productionKeyword}
@@ -2038,10 +2042,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
             <SecondaryPasswordDialog
                 isOpen={isPasswordDialogOpen}
-                title={t("secondaryPasswordLabel")}
+                title={t("confirmSaveTitle")}
                 label={t("secondaryPasswordLabel")}
-                hint={hasSecondaryPassword === false ? t("secondaryPasswordMissingHint") : t("secondaryPasswordOkHint")}
-                hintIsWarning={hasSecondaryPassword === false}
+                hint={hasSecondaryPassword === false ? t("secondaryPasswordMissingHint") : ""}
+                hintIsWarning
                 value={secondaryPassword}
                 onChange={setSecondaryPassword}
                 confirmLabel={isSubmitting ? tCommon("processing") : tCommon("confirm")}

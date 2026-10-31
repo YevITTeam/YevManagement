@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Pagination } from "@/components/ui/Pagination";
 
 const PAGE_SIZE = 10;
 
@@ -28,8 +29,6 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -46,8 +45,6 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
             setOtCases(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
         (message) => toast.error(message),
@@ -145,9 +142,6 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                             <Search className="h-4 w-4" />
                         </button>
                     </div>
-                    <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: otCases.length, total: totalCount })}
-                    </div>
                 </div>
 
                 {error && (
@@ -226,25 +220,14 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        {tCommon("prevPage")}
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        {tCommon("nextPage")}
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: otCases.length, total: totalCount })}
+                    compactSummary={totalCount}
+                />
             </section>
 
             <OtCaseForm

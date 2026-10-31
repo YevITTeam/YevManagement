@@ -1,5 +1,7 @@
 "use client";
 
+import InfoTooltip from "@/components/ui/InfoTooltip";
+
 // Dependency-free charts for the OT overview: flex bars and a conic-gradient donut.
 export interface ChartDatum {
     label: string;
@@ -8,13 +10,13 @@ export interface ChartDatum {
 
 const round = (value: number) => Math.round(value * 100) / 100;
 
-export function ChartCard({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+export function ChartCard({ title, hint, className = "", children }: { title: string; hint?: string; className?: string; children: React.ReactNode }) {
     return (
-        <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-baseline justify-between gap-2">
-                <h2 className="text-sm font-semibold text-[#191c1e]">{title}</h2>
-                {hint && <span className="text-[11px] text-[#8a8f94]">{hint}</span>}
-            </div>
+        <section className={`rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm ${className}`}>
+            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-[#191c1e]">
+                {title}
+                {hint && <InfoTooltip text={hint} />}
+            </h2>
             {children}
         </section>
     );
@@ -66,7 +68,7 @@ export function HBarList({ rows, color = "#3b82f6" }: { rows: (ChartDatum & { ba
     return (
         <div className="space-y-2">
             {rows.map((row) => (
-                <div key={row.label} className="grid grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-2 text-xs">
+                <div key={row.label} className="grid grid-cols-[minmax(0,14rem)_1fr_auto] items-center gap-2 text-xs">
                     <span className="truncate text-[#191c1e]" title={row.label}>
                         {row.label}
                     </span>

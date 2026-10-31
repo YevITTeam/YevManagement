@@ -4,6 +4,13 @@
   --sidebar-w: 13.75rem;
 }
 
+/* Sidebar becomes an off-canvas drawer below md; !important beats the inline value set by useSidebarCollapse. */
+@media (max-width: 767.98px) {
+  :root {
+    --sidebar-w: 0px !important;
+  }
+}
+
 body {
   margin: 0;
   background-color: #f7f9fb;

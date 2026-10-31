@@ -85,8 +85,8 @@ export default function DepartmentForm({ isOpen, mode, initial, loading = false,
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-3">
-                        <label className="block">
+                    <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
+                        <label className="block w-32">
                             <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
                             <input
                                 value={values.departmentCode}
@@ -99,7 +99,7 @@ export default function DepartmentForm({ isOpen, mode, initial, loading = false,
                             />
                         </label>
 
-                        <label className="block">
+                        <label className="block min-w-48 flex-1">
                             <span className={fieldLabelClassName}>{t("fieldNameVn")}<RequiredMark /></span>
                             <input
                                 value={values.departmentNameVn}
@@ -111,7 +111,7 @@ export default function DepartmentForm({ isOpen, mode, initial, loading = false,
                             />
                         </label>
 
-                        <label className="block">
+                        <label className="block min-w-48 flex-1">
                             <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
                             <input
                                 value={values.departmentNameJp ?? ""}

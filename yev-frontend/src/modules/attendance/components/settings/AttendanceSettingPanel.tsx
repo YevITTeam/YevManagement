@@ -16,6 +16,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import TimePicker24h from "@/components/ui/TimePicker24h";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 
 // BE sends TimeOnly as "HH:mm:ss"; TimePicker24h reads and writes "HH:mm". Trimmed and re-appended at
 // the UI boundary so the DTO keeps its shape.
@@ -251,6 +252,7 @@ function WorkCalendarCard() {
     const [days, setDays] = useState<WorkCalendarDayDto[]>([]);
     const [isBusy, setIsBusy] = useState(false);
     const [isViewOpen, setIsViewOpen] = useState(false);
+    const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
 
     const { refetch } = useFetchEffect(
         () => WorkCalendarApi.getByYear(year),
@@ -277,11 +279,16 @@ function WorkCalendarCard() {
         }
     };
 
-    const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handlePickImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         event.target.value = "";
+        if (file) setPendingImportFile(file);
+    };
+
+    const handleImport = async () => {
+        const file = pendingImportFile;
         if (!file) return;
-        if (!window.confirm(t("calendarImportConfirm", { year }))) return;
+        setPendingImportFile(null);
         setIsBusy(true);
         try {
             const result = await WorkCalendarApi.importYear(year, file);
@@ -319,10 +326,17 @@ function WorkCalendarCard() {
                 <label className={`${secondaryButtonClassName} ${isBusy ? "pointer-events-none opacity-50" : ""}`}>
                     <Upload className="h-3.5 w-3.5" />
                     {t("calendarImport")}
-                    <input type="file" accept=".xlsx" className="hidden" onChange={handleImport} disabled={isBusy} />
+                    <input type="file" accept=".xlsx" className="hidden" onChange={handlePickImportFile} disabled={isBusy} />
                 </label>
             </div>
             {isViewOpen && <WorkCalendarDialog year={year} days={days} onClose={() => setIsViewOpen(false)} />}
+            <ConfirmDialog
+                isOpen={pendingImportFile !== null}
+                title={t("calendarImport")}
+                message={t("calendarImportConfirm", { year })}
+                onApprove={handleImport}
+                onDenied={() => setPendingImportFile(null)}
+            />
         </SettingCard>
     );
 }

@@ -73,6 +73,7 @@ namespace Attendance.Application.Services
                     RequiresSignature = x.RequiresSignature,
                     IsResponsible = x.IsResponsible,
                     CanResubmit = x.CanResubmit,
+                    ResubmitSkipsIntermediate = x.ResubmitSkipsIntermediate,
                     TerminalLevel = x.JobTitle.TerminalLevel
                 });
 
@@ -125,6 +126,7 @@ namespace Attendance.Application.Services
                     RequiresSignature = item.RequiresSignature,
                     IsResponsible = item.IsResponsible,
                     CanResubmit = item.CanResubmit,
+                    ResubmitSkipsIntermediate = item.CanResubmit && item.ResubmitSkipsIntermediate,
                     IsDeleted = false
                 })
                 .ToList();

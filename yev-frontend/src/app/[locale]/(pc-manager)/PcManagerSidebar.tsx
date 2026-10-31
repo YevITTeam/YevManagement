@@ -27,7 +27,7 @@ import {
   SlidersHorizontal,
   Usb,
 } from "lucide-react";
-import { useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
+import { sidebarDrawerClass, useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import BrandLogo from "@/components/common/BrandLogo";
@@ -66,13 +66,13 @@ export default function PcManagerSidebar() {
   const t = useTranslations("Navigation");
   const pathname = usePathname() || "";
   const { user } = useAuth();
-  const { collapsed, toggle } = useSidebarCollapse();
+  const { collapsed, toggle, mobileOpen } = useSidebarCollapse();
   // User toggles override the default open state.
   const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({});
 
   return (
     <aside
-      className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-4 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
+      className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-4 transition-[width,transform] duration-200 ${sidebarDrawerClass(mobileOpen)} ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
         }`}
     >
       <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-5"}`}>

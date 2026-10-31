@@ -12,7 +12,6 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { DEFAULT_ATTENDANCE_SETTING } from "@/modules/attendance/hooks/useAttendanceSetting";
 import {
-    approvalActionLabelsBilingual,
     bilingualText,
     bilingualYesNo,
     createBilingualTranslator,
@@ -75,22 +74,17 @@ function ProcessPartTile({ icon, label, active, activeLabel, inactiveLabel }: {
     inactiveLabel: string;
 }) {
     return (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5">
-            <span className="flex items-center gap-2 text-sm text-[#191c1e]">
-                <span className="text-[#5e3f3a]">{icon}</span>
-                {label}
-            </span>
-            <span
-                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                    active
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-[#e0e3e5] bg-white text-[#8a8f94]"
-                }`}
-            >
-                {active ? <Check size={12} /> : <X size={12} />}
-                {active ? activeLabel : inactiveLabel}
-            </span>
-        </div>
+        <span
+            title={active ? activeLabel : inactiveLabel}
+            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                active
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-[#e0e3e5] bg-white text-[#9aa0a6] line-through"
+            }`}
+        >
+            {icon}
+            {label}
+        </span>
     );
 }
 
@@ -293,12 +287,20 @@ export default function OtFormEmailConfirmPage() {
                         <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-emerald-500 bg-emerald-500 text-white">
                             <Check size={16} />
                         </div>
-                        <div className="mt-2 text-center text-xs font-semibold text-[#191c1e]">{t("requesterStep")}</div>
+                        <div className="mt-2 text-center text-xs font-semibold text-[#191c1e]">{t("createdByLabel")}</div>
                         <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
                             {form.createdByFullName ?? form.createdByUserName}
                             <br />
                             {formatDateTime(form.createdAt)}
                         </div>
+                        {form.creatorSignatureImage && (
+                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image can't optimize it
+                            <img
+                                src={`data:image/png;base64,${form.creatorSignatureImage}`}
+                                alt={t("signatureAlt", { name: form.createdByFullName ?? form.createdByUserName })}
+                                className="mt-1 h-10 w-24 rounded border border-[#e0e3e5] bg-white object-contain"
+                            />
+                        )}
                     </div>
                     {approvalStepViews.map((view, index) => (
                         <div key={view.step.id} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
@@ -338,11 +340,26 @@ export default function OtFormEmailConfirmPage() {
                                 {view.step.jobTitleNameSnapshot}
                             </div>
                             {view.history ? (
-                                <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
-                                    {view.history.approverFullName ?? view.history.approverUserName}
-                                    <br />
-                                    {formatDateTime(view.history.actionAt)}
-                                </div>
+                                <>
+                                    <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
+                                        {view.history.approverFullName ?? view.history.approverUserName}
+                                        <br />
+                                        {formatDateTime(view.history.actionAt)}
+                                    </div>
+                                    {view.history.comment && (
+                                        <div title={view.history.comment} className="mt-1 line-clamp-3 max-w-[10rem] text-center text-[11px] italic text-[#191c1e]">
+                                            &quot;{view.history.comment}&quot;
+                                        </div>
+                                    )}
+                                    {view.history.hasSignature && view.history.signatureImage && (
+                                        // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image can't optimize it
+                                        <img
+                                            src={`data:image/png;base64,${view.history.signatureImage}`}
+                                            alt={t("signatureAlt", { name: view.history.approverFullName ?? view.history.approverUserName })}
+                                            className="mt-1 h-10 w-24 rounded border border-[#e0e3e5] bg-white object-contain"
+                                        />
+                                    )}
+                                </>
                             ) : view.state === "current" ? (
                                 <div
                                     className="mt-0.5 text-center text-[11px] text-[#9a5b00]"
@@ -397,57 +414,52 @@ export default function OtFormEmailConfirmPage() {
                         <div className="mt-1 text-sm text-[#191c1e]">{form.subReason}</div>
                     </div>
                 )}
-            </section>
-
-            {/* Always shown even when processPart is null (defaults to "No"), otherwise users assume info is missing. */}
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                {/* Built from bilingual literals, not createBilingualTranslator: {value} is already bilingual and t() would duplicate it. */}
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{processPartTitleBilingual}</h2>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                    <ProcessPartTile
-                        icon={<Utensils size={16} />}
-                        label={processPartFieldLabelsBilingual.eat}
-                        active={Boolean(form.processPart?.isEat)}
-                        activeLabel={bilingualYesNo(true)}
-                        inactiveLabel={bilingualYesNo(false)}
-                    />
-                    <ProcessPartTile
-                        icon={<Car size={16} />}
-                        label={processPartFieldLabelsBilingual.transportation}
-                        active={Boolean(form.processPart?.isTransportation)}
-                        activeLabel={bilingualYesNo(true)}
-                        inactiveLabel={bilingualYesNo(false)}
-                    />
-                    <ProcessPartTile
-                        icon={<Printer size={16} />}
-                        label={processPartFieldLabelsBilingual.copyRoom}
-                        active={Boolean(form.processPart?.isUseCopyRoom)}
-                        activeLabel={bilingualYesNo(true)}
-                        inactiveLabel={bilingualYesNo(false)}
-                    />
+                {/* Always shown even when processPart is null (defaults to "No"), otherwise users assume info is missing. */}
+                <div className="space-y-2 border-t border-[#e0e3e5] pt-4 md:col-span-2 lg:col-span-3">
+                    {/* Bilingual literal, not createBilingualTranslator: that would duplicate an already-bilingual value. */}
+                    <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{processPartTitleBilingual}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                        <ProcessPartTile
+                            icon={<Utensils size={12} />}
+                            label={processPartFieldLabelsBilingual.eat}
+                            active={Boolean(form.processPart?.isEat)}
+                            activeLabel={bilingualYesNo(true)}
+                            inactiveLabel={bilingualYesNo(false)}
+                        />
+                        <ProcessPartTile
+                            icon={<Car size={12} />}
+                            label={processPartFieldLabelsBilingual.transportation}
+                            active={Boolean(form.processPart?.isTransportation)}
+                            activeLabel={bilingualYesNo(true)}
+                            inactiveLabel={bilingualYesNo(false)}
+                        />
+                        <ProcessPartTile
+                            icon={<Printer size={12} />}
+                            label={processPartFieldLabelsBilingual.copyRoom}
+                            active={Boolean(form.processPart?.isUseCopyRoom)}
+                            activeLabel={bilingualYesNo(true)}
+                            inactiveLabel={bilingualYesNo(false)}
+                        />
+                    </div>
+                    {form.processPart?.isEat && (
+                        <p className="text-xs font-semibold text-[#191c1e]">
+                            {[
+                                t("mainTicketLabel", { count: form.processPart.mainTicketCount }),
+                                t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount }),
+                                t("milkLabel", { count: form.processPart.milkCount }),
+                            ].join("  ·  ")}
+                        </p>
+                    )}
+                    {form.processPart?.anotherSuggestionVn && (
+                        <div className="flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
+                            <MessageCircle size={14} className="mt-0.5 shrink-0" />
+                            <span>
+                                <span className="font-semibold text-[#191c1e]">{processPartFieldLabelsBilingual.anotherSuggestion}: </span>
+                                {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
+                            </span>
+                        </div>
+                    )}
                 </div>
-                {form.processPart?.isEat && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
-                            {t("mainTicketLabel", { count: form.processPart.mainTicketCount })}
-                        </span>
-                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
-                            {t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount })}
-                        </span>
-                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
-                            {t("milkLabel", { count: form.processPart.milkCount })}
-                        </span>
-                    </div>
-                )}
-                {form.processPart?.anotherSuggestionVn && (
-                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2.5 text-sm text-[#5e3f3a]">
-                        <MessageCircle size={16} className="mt-0.5 shrink-0 text-[#5e3f3a]" />
-                        <span>
-                            <span className="font-semibold text-[#191c1e]">{processPartFieldLabelsBilingual.anotherSuggestion}: </span>
-                            {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
-                        </span>
-                    </div>
-                )}
             </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
@@ -463,20 +475,20 @@ export default function OtFormEmailConfirmPage() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colEmployeeCode")}</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colFullName")}</th>
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colTime")}</th>
-                                <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colHours")}</th>
-                                <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
-                                <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colMeal")}</th>
+                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colEmployeeCode")}</th>
+                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colFullName")}</th>
+                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colTime")}</th>
+                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 text-center align-bottom">{t("colHours")}</th>
+                                <th colSpan={2} className="whitespace-nowrap border-b border-[#e0e3e5] px-3 py-1.5 text-center">{t("colAccumulation")}</th>
+                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 text-center align-bottom">{t("colMeal")}</th>
                                 {/* Production-line forms always eat (DidEat true), so this column doesn't apply. */}
-                                {!form.isProductionForm && <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colDidEat")}</th>}
-                                <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colNote")}</th>
-                                {!actionResult && <th rowSpan={2} className="px-6 py-3 align-bottom" />}
+                                {!form.isProductionForm && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 text-center align-bottom">{t("colDidEat")}</th>}
+                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colNote")}</th>
+                                {!actionResult && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom" />}
                             </tr>
                             <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <th className="px-6 py-2 text-center">{t("colMonth")}</th>
-                                <th className="px-6 py-2 text-center">{t("colYear")}</th>
+                                <th className="whitespace-nowrap px-3 py-1.5 text-center">{t("colMonth")}</th>
+                                <th className="whitespace-nowrap px-3 py-1.5 text-center">{t("colYear")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -485,15 +497,15 @@ export default function OtFormEmailConfirmPage() {
                                 if (employee.isRemoved) {
                                     return (
                                         <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#f8fafc] opacity-60">
-                                            <td className="px-6 py-3 text-sm">
+                                            <td className="whitespace-nowrap px-3 py-2.5 text-sm">
                                                 <span className="inline-flex items-center rounded-md border border-[#d5dade] bg-white px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e] line-through">
                                                     {employee.employeeCode}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-3 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
+                                            <td className="whitespace-nowrap px-3 py-2.5 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
                                             <td
                                                 colSpan={(!actionResult ? 7 : 6) - (form.isProductionForm ? 1 : 0)}
-                                                className="px-6 py-3 text-sm text-[#930006]"
+                                                className="px-3 py-2.5 text-sm text-[#930006]"
                                             >
                                                 {removedByLabelBilingual}: {employee.removedByFullName ?? employee.removedByUserName}
                                                 {employee.removedAtLevel !== null && <> ({stepNameByOrder(form, employee.removedAtLevel)})</>}
@@ -520,31 +532,31 @@ export default function OtFormEmailConfirmPage() {
                                             isOverLimit ? "bg-[#fff4f2] hover:bg-[#ffe9e6]" : "bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
                                         }`}
                                     >
-                                        <td className="px-6 py-3 text-sm">
+                                        <td className="whitespace-nowrap px-3 py-2.5 text-sm">
                                             <span className="inline-flex items-center whitespace-nowrap rounded-md border border-[#d5dade] bg-white px-3 py-1 font-mono text-xs font-semibold text-[#191c1e]">
                                                 {employee.employeeCode}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-3 text-sm font-medium whitespace-nowrap text-[#191c1e]">{employee.fullName}</td>
-                                        <td className="px-6 py-3 text-sm whitespace-nowrap text-[#5e3f3a]">
+                                        <td className="px-3 py-2.5 text-sm font-medium whitespace-nowrap text-[#191c1e]">{employee.fullName}</td>
+                                        <td className="px-3 py-2.5 text-sm whitespace-nowrap text-[#5e3f3a]">
                                             <TimeRange start={formatTime(employee.startTime)} end={formatTime(employee.endTime)} />
                                         </td>
-                                        <td className="px-6 py-3 text-center text-sm">
+                                        <td className="px-3 py-2.5 text-center text-sm">
                                             <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
                                                 {formatHours(hours)}
                                             </span>
                                         </td>
-                                        <td className={`px-6 py-3 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                        <td className={`px-3 py-2.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                             {employee.monthToDate}h
                                         </td>
-                                        <td className={`px-6 py-3 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                        <td className={`px-3 py-2.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                             {employee.yearToDate}h
                                         </td>
-                                        <td className="px-6 py-3 text-center text-sm">
+                                        <td className="px-3 py-2.5 text-center text-sm">
                                             <MealTicketTypeBadge type={employee.mealTicketType} t={t} />
                                         </td>
                                         {!form.isProductionForm && (
-                                            <td className="px-6 py-3 text-center text-sm">
+                                            <td className="px-3 py-2.5 text-center text-sm">
                                                 {employee.didEat ? (
                                                     <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                                                         <Check size={12} /> {t("didEatYes")}
@@ -559,9 +571,9 @@ export default function OtFormEmailConfirmPage() {
                                                 )}
                                             </td>
                                         )}
-                                        <td className="px-6 py-3 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
+                                        <td className="px-3 py-2.5 text-sm text-[#5e3f3a]">{bilingualText(employee.noteVn, employee.noteJp)}</td>
                                         {!actionResult && (
-                                            <td className="px-6 py-3 text-right">
+                                            <td className="px-3 py-2.5 text-right">
                                                 {activeEmployees.length > 1 && (
                                                     <button
                                                         type="button"
@@ -583,65 +595,12 @@ export default function OtFormEmailConfirmPage() {
                 </div>
             </section>
 
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalHistoryTitle")}</h2>
-                <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-                    <div className="rounded-lg border border-[#e0e3e5] p-4">
-                        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("requesterStep")}</div>
-                        <div className="mt-2 space-y-2">
-                            <div className="text-sm font-semibold text-[#191c1e]">{form.createdByFullName ?? form.createdByUserName}</div>
-                            <div className="text-xs text-[#5e3f3a]">{t("createdAction")}</div>
-                            <div className="text-xs text-[#5e3f3a]">{formatDateTime(form.createdAt)}</div>
-                            {form.creatorSignatureImage && (
-                                // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image can't optimize it
-                                <img
-                                    src={`data:image/png;base64,${form.creatorSignatureImage}`}
-                                    alt={t("signatureAlt", { name: form.createdByFullName ?? form.createdByUserName })}
-                                    className="h-16 w-full rounded border border-[#e0e3e5] object-contain"
-                                />
-                            )}
-                        </div>
-                    </div>
-                    {form.approvalSteps.map((step) => {
-                        const history = form.approvalHistories.find((item) => item.stepOrder === step.stepOrder);
-                        return (
-                            <div key={step.id} className="rounded-lg border border-[#e0e3e5] p-4">
-                                <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {step.jobTitleNameSnapshot}
-                                </div>
-                                {history ? (
-                                    <div className="mt-2 space-y-2">
-                                        <div className="text-sm font-semibold text-[#191c1e]">
-                                            {history.approverFullName ?? history.approverUserName}
-                                        </div>
-                                        <div className="text-xs text-[#5e3f3a]">{approvalActionLabelsBilingual[history.action]}</div>
-                                        <div className="text-xs text-[#5e3f3a]">{formatDateTime(history.actionAt)}</div>
-                                        {history.comment && <div className="text-xs text-[#191c1e]">&quot;{history.comment}&quot;</div>}
-                                        {history.hasSignature && history.signatureImage && (
-                                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URI; next/image can't optimize it and needs fixed width/height
-                                            <img
-                                                src={`data:image/png;base64,${history.signatureImage}`}
-                                                alt={t("signatureAlt", { name: history.approverFullName ?? history.approverUserName })}
-                                                className="h-16 w-full rounded border border-[#e0e3e5] object-contain"
-                                            />
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="mt-2 text-xs text-[#9aa0a6]">{t("notProcessedYet")}</div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            </section>
-
             {actionResult ? (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                     {actionResult === "approved" ? tConfirm("approvedResultMessage") : tConfirm("rejectedResultMessage")}
                 </div>
             ) : (
-                <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                    <div className="flex justify-end gap-3">
+                <div className="sticky bottom-0 z-20 flex justify-end gap-3 border-t border-[#e0e3e5] bg-white py-3">
                         <button
                             onClick={openRejectModal}
                             disabled={isSubmitting}
@@ -656,8 +615,7 @@ export default function OtFormEmailConfirmPage() {
                         >
                             {t("approveButton")}
                         </button>
-                    </div>
-                </section>
+                </div>
             )}
 
             {isApproveModalOpen && (

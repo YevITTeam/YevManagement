@@ -28,7 +28,6 @@ export const OT_ROUTE_PERMISSIONS: { prefix: string; permissions: string[] }[] =
     { prefix: "/ot/ai-chat", permissions: ["Attendance.AiChat.Use"] },
     { prefix: "/ot/list", permissions: ["Attendance.OTForm.View"] },
     { prefix: "/ot/forms", permissions: ["Attendance.OTForm.View"] },
-    { prefix: "/ot/batches", permissions: ["Attendance.OTForm.Approve"] },
     { prefix: "/ot/delegations", permissions: ["Attendance.OTForm.Delegate"] },
     { prefix: "/ot/accumulation", permissions: ["Attendance.OTForm.Approve"] },
     { prefix: "/ot/categories", permissions: OT_CATEGORIES_PERMISSIONS },

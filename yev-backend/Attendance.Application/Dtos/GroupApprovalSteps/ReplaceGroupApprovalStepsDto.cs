@@ -13,6 +13,9 @@ namespace Attendance.Application.Dtos.GroupApprovalSteps
         public bool IsResponsible { get; set; }
 
         public bool CanResubmit { get; set; }
+
+        // Ignored unless CanResubmit.
+        public bool ResubmitSkipsIntermediate { get; set; }
     }
 
     // Replaces the whole list; element order is StepOrder. Empty clears the Group's tree.

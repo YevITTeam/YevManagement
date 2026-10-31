@@ -1,6 +1,6 @@
 # attendance-otform-pdf-mapping.md — Ô trên phiếu giấy ↔ field dữ liệu (in PDF)
 
-FE dựng phiếu từ `GET /api/OtForm/{id}` bằng **một mẫu HTML** `yev-frontend/src/modules/attendance/lib/otFormPrintTemplate.ts` (A4 + A5, đơn vị pt): in đơn lẻ hiển thị thẳng HTML (`OtFormPrintView.tsx`, `window.print()`), xuất ZIP chuyển cùng HTML sang PDF (`otFormPdf.ts`, html-to-pdfmake + pdfmake). Sửa mẫu chỉ sửa file template; chỉ dùng thẻ/CSS inline mà html-to-pdfmake hiểu (bảng, `font-size/weight`, `color`, `text-align`, `vertical-align`, `margin-top`, `<img>` `max-width/max-height`), viền/đệm ô nằm ở `pageCss` và `GRID_LAYOUT` (phải khớp nhau). File này chỉ ghi **ô nào trên phiếu giấy lấy field nào**. Hợp đồng API ở `attendance-module.md §API`, nghiệp vụ ở `attendance-module.md`.
+FE dựng phiếu từ `GET /api/OtForm/{id}` bằng **một mẫu HTML** `yev-frontend/src/modules/attendance/lib/otFormPrintTemplate.ts` (A4 + A5, đơn vị pt): in đơn lẻ hiển thị thẳng HTML (`OtFormPrintView.tsx`, `window.print()`, nút "Xuất PDF" tải đúng khổ đang chọn), xuất PDF/ZIP chuyển cùng HTML sang PDF (`otFormPdf.ts`, html-to-pdfmake + pdfmake). Sửa mẫu chỉ sửa file template; chỉ dùng thẻ/CSS inline mà html-to-pdfmake hiểu (bảng, `font-size/weight`, `color`, `text-align`, `vertical-align`, `margin-top`, `<img>` `max-width/max-height`), viền/đệm ô nằm ở `pageCss` và `GRID_LAYOUT` (phải khớp nhau). File này chỉ ghi **ô nào trên phiếu giấy lấy field nào**. Hợp đồng API ở `attendance-module.md §API`, nghiệp vụ ở `attendance-module.md`.
 
 ## 0. Phiếu đang mapping
 
@@ -23,14 +23,14 @@ Chữ ký là `approvalHistories[].signatureImage`, lọc theo `approvalLevel`. 
 | Tổng giám đốc / 社長 | `approvalLevel == 3` (GeneralDirector) — chỉ có khi đơn đã đi tới cấp này |
 | Trưởng xưởng / 工場長 | `approvalLevel == 2` (WorkshopManager) |
 | Trưởng phòng / 部長 | `approvalLevel == 1` (DepartmentManager) |
-| Người đề nghị / 申請者 | **Cả 2** vào chung một ô: `approvalLevel == 0` (Submitter = Trưởng nhóm, không phải người tạo đơn) và `== 4` (GroupHead). Xếp cạnh nhau theo `actionAt` (Submitter trước) |
+| Người đề nghị / 申請者 | Các bước trung gian `terminalLevelSnapshot == 0` + `requiresSignatureSnapshot` (1–2 bước). 1 bước → cả ô; 2 bước → chia đôi, phiếu xếp **phải → trái từ cấp thấp lên cao**: bước sau (cấp cao) ô trái, bước đầu (cấp thấp) ô phải. 0 bước → người tạo tự ký (`creatorSignatureImage`) |
 
 ## 2. Khối thông tin chính
 
 | Ô | Nguồn |
 |---|---|
 | Số lượng nhân viên / 人数 | `numberOfEmployee` |
-| Người chịu trách nhiệm / 責任者 | Bước trong `approvalSteps[]` có `isResponsibleSnapshot == true` → `approvalHistories[stepOrder].approverFullName` (fallback `approverUserName`, rồi `createdByFullName`/`createdByUserName` nếu bước chưa duyệt hoặc chuỗi chưa đánh dấu IsResponsible). Dùng chung cho đơn Nhóm và đơn chuyền |
+| Người chịu trách nhiệm / 責任者 | Bước trong `approvalSteps[]` có `isResponsibleSnapshot == true` → người đã ký bước đó (`approvalHistories[stepOrder].approverFullName`, fallback `approverUserName`); chưa ký thì `candidates[].fullName` của bước (nối ` / `); chỉ khi chuỗi không có bước IsResponsible mới lấy `createdByFullName`/`createdByUserName`. Dùng chung cho đơn Nhóm và đơn chuyền |
 | Thời gian — Từ / から | `startTime` (`HH:mm`) |
 | Thời gian — Đến / まで | `endTime` (`HH:mm`) — giờ kết thúc tối đa của đơn; từng NV có thể sớm hơn (§5) |
 | Ngày / 日付 | `date` (`dd/MM/yyyy`) |

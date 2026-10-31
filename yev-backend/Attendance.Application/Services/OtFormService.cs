@@ -396,6 +396,7 @@ namespace Attendance.Application.Services
 
             var mealSettings = await _attendanceSettingService.GetAsync();
             var resubmit = isEditable ? null : await ResolveResubmitAsync(otForm, orderedSteps);
+            var accumulation = await GetFormAccumulationAsync(otForm, employees, mealSettings);
 
             return new OtFormDto
             {
@@ -439,9 +440,8 @@ namespace Attendance.Application.Services
                     EndTime = x.EndTime,
                     NoteVn = x.NoteVn,
                     NoteJp = x.NoteJp,
-                    // The row stores the total before this form; forms and prints show it including this form's own hours.
-                    MonthToDate = x.MonthToDate + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
-                    YearToDate = x.YearToDate + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
+                    MonthToDate = accumulation[x.EmployeeId].Month + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
+                    YearToDate = accumulation[x.EmployeeId].Year + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                     CustomMonthlyOtHourLimit = x.Employee.CustomMonthlyOtHourLimit,
                     CustomYearlyOtHourLimit = x.Employee.CustomYearlyOtHourLimit,
                     MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
@@ -764,14 +764,9 @@ namespace Attendance.Application.Services
                 x => x.EmployeeId, x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
             await ValidateOtHourLimitsAsync(request.Date, newHoursByEmployeeId, mealSettings, accumulated);
 
-            // `accumulated` was read before this form was added, so it is the "before" snapshot stored on each row.
-            var projectedByEmployee = accumulated;
-
             var createdRows = new List<OtFormEmployee>();
             foreach (var item in request.Employees)
             {
-                var (_, projectedMonthBefore, projectedYearBefore) =
-                    projectedByEmployee.TryGetValue(item.EmployeeId, out var projected) ? projected : (0m, 0m, 0m);
                 ProductionEmployee? pe = null;
                 productionEmployeesByEmployeeId?.TryGetValue(item.EmployeeId, out pe);
 
@@ -784,8 +779,6 @@ namespace Attendance.Application.Services
                     DidEat = didEatByEmployeeId[item.EmployeeId],
                     NoteVn = item.NoteVn,
                     NoteJp = item.NoteJp,
-                    MonthToDate = projectedMonthBefore,
-                    YearToDate = projectedYearBefore,
                     CongDoanSnapshot = pe?.CongDoan,
                     TaskNameSnapshot = pe?.TaskName,
                     BlockCodeSnapshot = pe?.BlockCode,
@@ -1006,7 +999,8 @@ namespace Attendance.Application.Services
                     : MatchStepActor(resignStep, currentUserName, await GetActiveDelegatorsAsync(currentUserName));
                 if (!match.IsActor && !isAdmin && !resubmit.UserNames.Contains(currentUserName))
                     throw new DomainException("Bạn không có quyền trình ký lại đơn này (chỉ người giữ bước được tích \"Trình ký lại\" trên cây duyệt Nhóm, hoặc Admin).");
-                if (!match.IsActor) resignStep = null;
+                // Restarting the chain: the editor approves again in turn instead of signing now.
+                if (!match.IsActor || !resubmit.SkipsIntermediate) resignStep = null;
                 (_, resignDelegatorUserName, resignDelegatorFullName) = match;
 
                 if (resignStep?.RequiresSignatureSnapshot == true)
@@ -1212,8 +1206,6 @@ namespace Attendance.Application.Services
                 var employee = employeesById[employeeId];
                 var addRequest = request.Employees.First(x => x.EmployeeId == employeeId);
                 var productionEmployee = productionEmployeesByEmployeeId.GetValueOrDefault(employeeId);
-                var (_, projectedMonthBefore, projectedYearBefore) =
-                    accumulated.TryGetValue(employeeId, out var projected) ? projected : (0m, 0m, 0m);
 
                 // Re-adding someone removed from this same form reuses the old row (keeps the OtFormId+EmployeeId key).
                 var existingRow = otForm.OtFormEmployees.FirstOrDefault(x => x.EmployeeId == employeeId);
@@ -1231,8 +1223,6 @@ namespace Attendance.Application.Services
                     existingRow.DidEat = didEatByEmployeeId[employeeId];
                     existingRow.NoteVn = addRequest.NoteVn;
                     existingRow.NoteJp = addRequest.NoteJp;
-                    existingRow.MonthToDate = projectedMonthBefore;
-                    existingRow.YearToDate = projectedYearBefore;
                     _unitOfWork.OtFormEmployees.Update(existingRow);
                     affectedRow = existingRow;
                 }
@@ -1247,8 +1237,6 @@ namespace Attendance.Application.Services
                         DidEat = didEatByEmployeeId[employeeId],
                         NoteVn = addRequest.NoteVn,
                         NoteJp = addRequest.NoteJp,
-                        MonthToDate = projectedMonthBefore,
-                        YearToDate = projectedYearBefore,
                         CongDoanSnapshot = productionEmployee?.CongDoan,
                         TaskNameSnapshot = productionEmployee?.TaskName,
                         BlockCodeSnapshot = productionEmployee?.BlockCode,
@@ -1291,12 +1279,6 @@ namespace Attendance.Application.Services
                 existing.DidEat = resolvedDidEat;
                 existing.NoteVn = item.NoteVn;
                 existing.NoteJp = item.NoteJp;
-                // Office forms: the "before" accumulation follows the (possibly new) date; production keeps its snapshot.
-                if (isOfficeForm && accumulated.TryGetValue(item.EmployeeId, out var before))
-                {
-                    existing.MonthToDate = before.Month;
-                    existing.YearToDate = before.Year;
-                }
                 _unitOfWork.OtFormEmployees.Update(existing);
             }
 
@@ -1316,35 +1298,33 @@ namespace Attendance.Application.Services
                 otForm.OtCaseId = newOtCase.Id;
             }
 
+            var restartsChain = resubmit != null && (resubmit.Kind == OtFormResubmitKind.AfterReject || !resubmit.SkipsIntermediate);
             if (resubmit != null)
             {
                 await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.Resubmitted,
                     null, null, null, null, resubmitReason);
+                var wasRejected = otForm.Status == (int)OtFormStatus.Rejected;
                 otForm.Status = (int)OtFormStatus.InApproval;
                 // Back into the next daily batch sweep for the Manager.
                 otForm.OtFormBatchId = null;
-                if (resubmit.Kind == OtFormResubmitKind.AfterReject)
+                if (restartsChain)
                     foreach (var step in steps) SoftDeleteStep(step);
                 else
-                    await ResetManagerStepAsync(steps);
-
-                if (resignStep != null)
-                    await _unitOfWork.OtFormApprovalHistories.AddAsync(new OtFormApprovalHistory
+                {
+                    await ReopenManagerStepsAsync(steps, wasRejected);
+                    await ResignGroupStepsAsync(otForm.Id, steps, resubmitReason!, resignStep == null ? null : new OtFormApprovalHistory
                     {
-                        OtFormId = otForm.Id,
                         OtFormApprovalStepId = resignStep.Id,
                         ApproverUserName = currentUserName,
                         ApproverFullName = currentFullName,
                         OnBehalfOfUserName = resignDelegatorUserName,
                         OnBehalfOfFullName = resignDelegatorFullName,
-                        Action = (int)ApprovalAction.Approved,
-                        Comment = resubmitReason,
-                        SignatureImage = resignSignature,
-                        ActionAt = TimeHelper.GetCurrentUtcTime()
+                        SignatureImage = resignSignature
                     });
+                }
             }
 
-            var chainCompleted = caseChanged || resubmit?.Kind == OtFormResubmitKind.AfterReject
+            var chainCompleted = caseChanged || restartsChain
                 ? await ReconcileApprovalChainAsync(otForm, creatorEmployee?.Id, steps)
                 : false;
 
@@ -1502,48 +1482,102 @@ namespace Attendance.Application.Services
             _unitOfWork.OtFormApprovalSteps.Update(step);
         }
 
-        // Re-sign goes straight back to the first signed Manager-level step; steps after it keep their approval.
-        // The old row is dropped (with its signature) and a pending copy takes its place.
-        private async Task ResetManagerStepAsync(List<OtFormApprovalStep> steps)
+        // Straight-to-Manager re-submission: the first signed Manager-level step reopens and later ones keep their
+        // approval; after a rejection every Manager-level step reopens. A reopened row is dropped with its signature.
+        private async Task ReopenManagerStepsAsync(List<OtFormApprovalStep> steps, bool afterReject)
         {
-            var signed = steps.Where(x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved
-                && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None).MinBy(x => x.StepOrder);
-            if (signed == null) return;
+            var terminalSteps = steps.Where(x => !x.IsDeleted && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None)
+                .OrderBy(x => x.StepOrder).ToList();
+            var toReopen = afterReject
+                ? terminalSteps.Where(x => x.Status != (int)OtFormApprovalStepStatus.Pending).ToList()
+                : terminalSteps.Where(x => x.Status == (int)OtFormApprovalStepStatus.Approved).Take(1).ToList();
 
-            SoftDeleteStep(signed);
-            var copy = new OtFormApprovalStep
+            foreach (var signed in toReopen)
             {
-                OtFormId = signed.OtFormId,
-                StepOrder = signed.StepOrder,
-                JobTitleId = signed.JobTitleId,
-                JobTitleCodeSnapshot = signed.JobTitleCodeSnapshot,
-                JobTitleNameSnapshot = signed.JobTitleNameSnapshot,
-                RequiresSignatureSnapshot = signed.RequiresSignatureSnapshot,
-                IsResponsibleSnapshot = signed.IsResponsibleSnapshot,
-                TerminalLevelSnapshot = signed.TerminalLevelSnapshot,
-                Status = (int)OtFormApprovalStepStatus.Pending,
-                Candidates = signed.Candidates.Select(c => new OtFormApprovalStepCandidate
+                SoftDeleteStep(signed);
+                var copy = new OtFormApprovalStep
                 {
-                    EmployeeId = c.EmployeeId, UserName = c.UserName, FullName = c.FullName
-                }).ToList()
-            };
-            await _unitOfWork.OtFormApprovalSteps.AddAsync(copy);
-            steps.Add(copy);
+                    OtFormId = signed.OtFormId,
+                    StepOrder = signed.StepOrder,
+                    JobTitleId = signed.JobTitleId,
+                    JobTitleCodeSnapshot = signed.JobTitleCodeSnapshot,
+                    JobTitleNameSnapshot = signed.JobTitleNameSnapshot,
+                    RequiresSignatureSnapshot = signed.RequiresSignatureSnapshot,
+                    IsResponsibleSnapshot = signed.IsResponsibleSnapshot,
+                    TerminalLevelSnapshot = signed.TerminalLevelSnapshot,
+                    Status = (int)OtFormApprovalStepStatus.Pending,
+                    Candidates = signed.Candidates.Select(c => new OtFormApprovalStepCandidate
+                    {
+                        EmployeeId = c.EmployeeId, UserName = c.UserName, FullName = c.FullName
+                    }).ToList()
+                };
+                await _unitOfWork.OtFormApprovalSteps.AddAsync(copy);
+                steps.Add(copy);
+            }
         }
 
-        private sealed record ResubmitInfo(OtFormResubmitKind Kind, HashSet<string> UserNames, DateTime? Deadline, int? SignStepId);
+        // Straight-to-Manager re-submission skips the group steps, so each approved one is signed again now: by the
+        // editor on their own step (editorEntry), otherwise by its last signer with their current signature.
+        private async Task ResignGroupStepsAsync(int otFormId, List<OtFormApprovalStep> steps, string reason, OtFormApprovalHistory? editorEntry)
+        {
+            var groupSteps = steps.Where(x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved
+                && x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None).ToList();
+            var stepIds = groupSteps.Select(x => x.Id).ToHashSet();
+            var lastSigned = (await _unitOfWork.OtFormApprovalHistories.FindAsync(
+                    x => x.OtFormId == otFormId && x.Action == (int)ApprovalAction.Approved && stepIds.Contains(x.OtFormApprovalStepId)))
+                .GroupBy(x => x.OtFormApprovalStepId)
+                .ToDictionary(g => g.Key, g => g.MaxBy(x => x.ActionAt)!);
+            var signerNames = lastSigned.Values.Select(x => x.ApproverUserName).Distinct().ToList();
+            var currentSignatures = (await _unitOfWork.UserSignatures.SelectAsync(
+                    x => signerNames.Contains(x.UserName), x => new { x.UserName, x.SignatureImage }))
+                .ToDictionary(x => x.UserName, x => x.SignatureImage, StringComparer.OrdinalIgnoreCase);
 
-        // Office form that normal editing no longer covers: rejected (creator restarts the chain) or Manager-signed
-        // (holders of the group's CanResubmit step, or the creator when that step was skipped for their rank; Admin
-        // too). A completed form only within ResubmitWindowDays of its last approval. Null = no re-submission.
+            var now = TimeHelper.GetCurrentUtcTime();
+            foreach (var step in groupSteps)
+            {
+                var entry = editorEntry?.OtFormApprovalStepId == step.Id ? editorEntry : null;
+                if (entry == null)
+                {
+                    if (!lastSigned.TryGetValue(step.Id, out var previous)) continue;
+                    entry = new OtFormApprovalHistory
+                    {
+                        OtFormApprovalStepId = step.Id,
+                        ApproverUserName = previous.ApproverUserName,
+                        ApproverFullName = previous.ApproverFullName,
+                        OnBehalfOfUserName = previous.OnBehalfOfUserName,
+                        OnBehalfOfFullName = previous.OnBehalfOfFullName,
+                        SignatureImage = step.RequiresSignatureSnapshot
+                            ? currentSignatures.GetValueOrDefault(previous.ApproverUserName) ?? previous.SignatureImage
+                            : null
+                    };
+                }
+                entry.OtFormId = otFormId;
+                entry.Action = (int)ApprovalAction.Approved;
+                entry.Comment = reason;
+                entry.ActionAt = now;
+                await _unitOfWork.OtFormApprovalHistories.AddAsync(entry);
+            }
+        }
+
+        private sealed record ResubmitInfo(OtFormResubmitKind Kind, HashSet<string> UserNames, DateTime? Deadline, int? SignStepId, bool SkipsIntermediate);
+
+        // Office form that normal editing no longer covers. Manager-signed, or rejected at a Manager-level step in a group
+        // with a CanResubmit step: holders of that step (the creator when it was skipped for their rank; Admin too).
+        // Any other rejection: the creator restarts the chain. Completed: only within ResubmitWindowDays. Null = none.
         private async Task<ResubmitInfo?> ResolveResubmitAsync(OtForm otForm, IReadOnlyList<OtFormApprovalStep> steps)
         {
             if (otForm.IsProductionForm || !otForm.GroupId.HasValue) return null;
 
-            if (otForm.Status == (int)OtFormStatus.Rejected)
-                return new ResubmitInfo(OtFormResubmitKind.AfterReject, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { otForm.CreatedByUserName }, null, null);
-
-            if (!steps.Any(x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved
+            var creatorRestart = new ResubmitInfo(OtFormResubmitKind.AfterReject,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { otForm.CreatedByUserName }, null, null, false);
+            var isRejected = otForm.Status == (int)OtFormStatus.Rejected;
+            if (isRejected)
+            {
+                if (!steps.Any(x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Rejected
+                        && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None))
+                    return creatorRestart;
+            }
+            else if (!steps.Any(x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Approved
                     && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None))
                 return null;
 
@@ -1556,8 +1590,13 @@ namespace Attendance.Application.Services
                 if (TimeHelper.GetCurrentUtcTime() > deadline) return null;
             }
 
-            var flaggedJobTitleIds = (await _unitOfWork.GroupApprovalSteps.SelectAsync(
-                x => x.GroupId == otForm.GroupId.Value && !x.IsDeleted && x.CanResubmit, x => x.JobTitleId)).ToHashSet();
+            var flagged = (await _unitOfWork.GroupApprovalSteps.SelectAsync(
+                    x => x.GroupId == otForm.GroupId.Value && !x.IsDeleted && x.CanResubmit,
+                    x => new { x.JobTitleId, x.StepOrder, x.ResubmitSkipsIntermediate }))
+                .OrderBy(x => x.StepOrder).ToList();
+            if (isRejected && flagged.Count == 0) return creatorRestart;
+
+            var flaggedJobTitleIds = flagged.Select(x => x.JobTitleId).ToHashSet();
             var signStep = steps.Where(x => !x.IsDeleted && flaggedJobTitleIds.Contains(x.JobTitleId)
                 && x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None).MinBy(x => x.StepOrder);
             var userNames = signStep != null
@@ -1565,7 +1604,10 @@ namespace Attendance.Application.Services
                 : flaggedJobTitleIds.Count > 0
                     ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { otForm.CreatedByUserName }
                     : new HashSet<string>();
-            return new ResubmitInfo(OtFormResubmitKind.Resign, userNames, deadline, signStep?.Id);
+            // A group without any flagged step (Admin only) keeps going straight back to the Manager.
+            var skipsIntermediate = flagged.Count == 0
+                || (flagged.FirstOrDefault(x => x.JobTitleId == signStep?.JobTitleId) ?? flagged[0]).ResubmitSkipsIntermediate;
+            return new ResubmitInfo(OtFormResubmitKind.Resign, userNames, deadline, signStep?.Id, skipsIntermediate);
         }
 
         private static void EnsureDateNotTooFarBack(DateOnly date, int backdateDays)
@@ -2089,6 +2131,17 @@ namespace Attendance.Application.Services
 
             // Keyed by EmployeeId only: every row belongs to the same form, hence the same Year/Month.
             var employeeIds = otFormEmployees.Select(x => x.EmployeeId).ToList();
+
+            // Sign-off freezes the actual accumulation before this form; must run before the ledger takes its hours.
+            if (sign > 0)
+            {
+                var frozen = await ComputeFormAccumulationAsync(employeeIds, otForm.Date, otForm.Id, mealSettings, includePending: false);
+                foreach (var row in otFormEmployees)
+                {
+                    row.MonthToDate = frozen[row.EmployeeId].Month;
+                    row.YearToDate = frozen[row.EmployeeId].Year;
+                }
+            }
             var existingLedgerRows = (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
                 x => employeeIds.Contains(x.EmployeeId) && x.Year == otForm.Date.Year && x.Month == otForm.Date.Month))
                 .ToDictionary(x => x.EmployeeId);
@@ -2113,6 +2166,51 @@ namespace Attendance.Application.Services
                     });
                 }
             }
+        }
+
+        // Accumulation up to `date`, excluding the form itself: ledger minus completed forms dated after `date` in that month
+        // (the ledger has no per-day figure, so imported hours count from the start of their month), plus, when includePending,
+        // other in-approval forms dated on or before `date`.
+        private async Task<Dictionary<int, (decimal Month, decimal Year)>> ComputeFormAccumulationAsync(
+            IEnumerable<int> employeeIds, DateOnly date, int excludeFormId, AttendanceSettingDto mealSettings, bool includePending)
+        {
+            var ids = employeeIds.Distinct().ToList();
+            var rows = await _unitOfWork.OtFormEmployees.SelectAsync(
+                predicate: x => ids.Contains(x.EmployeeId) && !x.IsRemoved && x.OtFormId != excludeFormId && !x.OtForm.IsDeleted
+                    && x.OtForm.Date.Year == date.Year && x.OtForm.Date.Month <= date.Month
+                    && ((x.OtForm.Status == (int)OtFormStatus.InApproval && x.OtForm.Date <= date)
+                        || (x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date > date && x.OtForm.Date.Month == date.Month)),
+                selector: x => new { x.EmployeeId, x.OtFormId, x.StartTime, x.EndTime, x.DidEat, x.OtForm.Date, x.OtForm.Status });
+            // Tracking query on purpose: an edited Completed form has already been taken out of the ledger in memory.
+            var ledger = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
+                x => ids.Contains(x.EmployeeId) && x.Year == date.Year && x.Month <= date.Month);
+
+            var rowsByEmployee = rows.ToLookup(x => x.EmployeeId);
+            var ledgerByEmployee = ledger.ToLookup(x => x.EmployeeId);
+            return ids.ToDictionary(id => id, id =>
+            {
+                var forms = rowsByEmployee[id]
+                    .Select(x => (x.Date, x.Status, Hours: CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)))
+                    .ToList();
+                // Completed rows here are only those dated after `date`, so they are subtracted.
+                var completedLater = forms.Where(x => x.Status == (int)OtFormStatus.Completed).Sum(x => x.Hours);
+                var pending = includePending ? forms.Where(x => x.Status == (int)OtFormStatus.InApproval).ToList() : new();
+                var employeeLedger = ledgerByEmployee[id].ToList();
+                return (
+                    employeeLedger.Where(x => x.Month == date.Month).Sum(x => x.TotalHours) - completedLater
+                        + pending.Where(x => x.Date.Month == date.Month).Sum(x => x.Hours),
+                    employeeLedger.Sum(x => x.TotalHours) - completedLater + pending.Sum(x => x.Hours));
+            });
+        }
+
+        // Completed forms keep the actual figure frozen at sign-off; any other form is computed live including other
+        // pending forms, so rejecting one of those never leaves a stale number on a form still being approved.
+        private async Task<Dictionary<int, (decimal Month, decimal Year)>> GetFormAccumulationAsync(
+            OtForm otForm, IReadOnlyCollection<OtFormEmployee> rows, AttendanceSettingDto mealSettings)
+        {
+            if (otForm.Status == (int)OtFormStatus.Completed)
+                return rows.ToDictionary(x => x.EmployeeId, x => (x.MonthToDate, x.YearToDate));
+            return await ComputeFormAccumulationAsync(rows.Select(x => x.EmployeeId), otForm.Date, otForm.Id, mealSettings, includePending: true);
         }
 
         // Projected accumulation of a batch of employees around targetDate (the date on the form being checked,
@@ -2269,8 +2367,8 @@ namespace Attendance.Application.Services
                 .ToList();
         }
 
-        // Forms not yet batched whose current step is a manager level; DepartmentManager batches per department,
-        // the two company-wide levels batch once per level per day since their candidates aren't department-filtered.
+        // Forms not yet batched whose current step is a manager level; DepartmentManager batches per (department, workshop),
+        // the two company-wide levels have one batch per level since their candidates aren't department-filtered.
         private async Task<List<(int OtFormId, int DepartmentId, int WorkshopId, int TerminalLevel)>> GetNewFormsAtManagerStepAsync()
         {
             var candidateForms = await _unitOfWork.OtForms.SelectAsync(
@@ -2310,77 +2408,10 @@ namespace Attendance.Application.Services
             return (jobTitle?.Name ?? "", null);
         }
 
-        private const int ScopeKeyFactor = ScopeKey.Factor;
-
         private static string JoinWithWorkshop(string? name, string? workshopName) =>
             string.IsNullOrEmpty(workshopName) ? name ?? "" : $"{name} · {workshopName}";
 
-        public async Task<PagedResponse<OtFormBatchListItemDto>> GetBatchesAsync(string userName, bool isAdmin, int pageIndex, int pageSize)
-        {
-            var query = _unitOfWork.OtFormBatches.GetQueryable(false, x => x.Department!, x => x.Workshop!);
-
-            if (!isAdmin)
-            {
-                // Non-Admins see batches where they are or were a candidate at that level; company-wide levels match TerminalLevel only.
-                var actingUserNames = (await GetActiveDelegatorsAsync(userName)).Keys.Append(userName).ToList();
-                var myCandidacies = (await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
-                    predicate: c => actingUserNames.Contains(c.UserName) && c.OtFormApprovalStep.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None,
-                    selector: c => new { c.OtFormApprovalStep.TerminalLevelSnapshot, c.OtFormApprovalStep.OtForm.DepartmentId, c.OtFormApprovalStep.OtForm.WorkshopId }))
-                    .Distinct().ToList();
-
-                // (Department, Workshop) pair folded into one int so EF can translate Contains.
-                var myDepartmentManagerScopeKeys = myCandidacies
-                    .Where(x => x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.DepartmentManager)
-                    .Select(x => x.DepartmentId * ScopeKeyFactor + x.WorkshopId).ToHashSet();
-                var myCompanyWideLevels = myCandidacies
-                    .Where(x => x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.DepartmentManager)
-                    .Select(x => x.TerminalLevelSnapshot).ToHashSet();
-
-                query = query.Where(x =>
-                    (x.DepartmentId != null && x.WorkshopId != null && myDepartmentManagerScopeKeys.Contains(x.DepartmentId.Value * ScopeKeyFactor + x.WorkshopId.Value))
-                    || (x.DepartmentId == null && myCompanyWideLevels.Contains(x.TerminalLevel)));
-            }
-
-            query = query.OrderByDescending(x => x.Id);
-
-            var page = await _unitOfWork.OtFormBatches.ToPagedResponseAsync(query, pageIndex, pageSize, x => new OtFormBatchListItemDto
-            {
-                Id = x.Id,
-                TerminalLevel = x.TerminalLevel,
-                DepartmentId = x.DepartmentId,
-                ScopeNameVn = x.Department != null ? x.Department.DepartmentNameVn + (x.Workshop != null ? " · " + x.Workshop.WorkshopNameVn : "") : "",
-                ScopeNameJp = x.Department != null && x.Department.DepartmentNameJp != null
-                    ? x.Department.DepartmentNameJp + (x.Workshop != null ? " · " + (x.Workshop.WorkshopNameJp ?? x.Workshop.WorkshopNameVn) : "") : null,
-                BatchDate = x.BatchDate,
-                Status = x.Status,
-                FormCount = x.OtForms.Count(f => !f.IsDeleted),
-                EmployeeCount = x.OtForms.Where(f => !f.IsDeleted).SelectMany(f => f.OtFormEmployees).Count(e => !e.IsRemoved),
-                TotalHour = x.OtForms.Where(f => !f.IsDeleted).Sum(f => f.TotalHour),
-                CreatedAt = x.CreatedAt,
-                ProcessedAt = x.ProcessedAt,
-                ProcessedByFullName = x.ProcessedByFullName
-            });
-
-            await FillCompanyWideBatchScopeNamesAsync(page.Data);
-            return page;
-        }
-
-        // Company-wide batches have no Department to join, so names come from JobTitle in one query per page.
-        private async Task FillCompanyWideBatchScopeNamesAsync(IReadOnlyList<OtFormBatchListItemDto> items)
-        {
-            var levels = items.Where(x => x.DepartmentId == null).Select(x => x.TerminalLevel).Distinct().ToList();
-            if (levels.Count == 0) return;
-
-            var nameByLevel = (await _unitOfWork.JobTitles.SelectAsync(
-                predicate: x => !x.IsDeleted && levels.Contains(x.TerminalLevel),
-                selector: x => new { x.TerminalLevel, x.Name }))
-                .ToDictionary(x => x.TerminalLevel, x => x.Name);
-
-            foreach (var item in items.Where(x => x.DepartmentId == null))
-                item.ScopeNameVn = nameByLevel.GetValueOrDefault(item.TerminalLevel, "");
-        }
-
-        public async Task<OtFormBatchDto> GetBatchByIdAsync(int id)
+        private async Task<OtFormBatchDto> GetBatchByIdAsync(int id)
         {
             var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == id, x => x.Department!, x => x.Workshop!);
             batch.OrThrowNotFound("Đơn tổng", id);
@@ -2413,6 +2444,9 @@ namespace Attendance.Application.Services
 
             var mealSettings = await _attendanceSettingService.GetAsync();
             var (scopeNameVn, scopeNameJp) = await ResolveBatchScopeNameAsync(batch);
+            var accumulationByFormId = new Dictionary<int, Dictionary<int, (decimal Month, decimal Year)>>();
+            foreach (var f in otForms)
+                accumulationByFormId[f.Id] = await GetFormAccumulationAsync(f, employeesByFormId.GetValueOrDefault(f.Id) ?? new List<OtFormEmployee>(), mealSettings);
 
             return new OtFormBatchDto
             {
@@ -2468,9 +2502,8 @@ namespace Attendance.Application.Services
                             EndTime = x.EndTime,
                             NoteVn = x.NoteVn,
                             NoteJp = x.NoteJp,
-                            // The row stores the total before this form; forms and prints show it including this form's own hours.
-                            MonthToDate = x.MonthToDate + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
-                            YearToDate = x.YearToDate + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
+                            MonthToDate = accumulationByFormId[f.Id][x.EmployeeId].Month + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
+                            YearToDate = accumulationByFormId[f.Id][x.EmployeeId].Year + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                             CustomMonthlyOtHourLimit = x.Employee.CustomMonthlyOtHourLimit,
                             CustomYearlyOtHourLimit = x.Employee.CustomYearlyOtHourLimit,
                             MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
@@ -2492,7 +2525,7 @@ namespace Attendance.Application.Services
             };
         }
 
-        public async Task<OtFormBatchDto> ProcessBatchAsync(int batchId, string approverUserName, string? approverFullName, ProcessOtFormBatchDto request)
+        private async Task<OtFormBatchDto> ProcessBatchAsync(int batchId, string approverUserName, string? approverFullName, ProcessOtFormBatchDto request)
         {
             var batch = await _unitOfWork.OtFormBatches.FirstOrDefaultAsync(x => x.Id == batchId, x => x.Department!, x => x.Workshop!);
             batch.OrThrowNotFound("Đơn tổng", batchId);
@@ -2631,23 +2664,51 @@ namespace Attendance.Application.Services
             return emailToken;
         }
 
-        // (a) Batch forms newly at a manager step and send the first mail; (b) close empty pending batches or send reminders.
-        // New forms are never added to an existing batch.
+        // New forms join the scope's still-pending batch so each approver gets one mail per scope per day;
+        // a batch that gained no forms is sent as a reminder, an empty one closes silently.
         public async Task RunDailyBatchSweepAsync()
         {
             var now = TimeHelper.GetCurrentUtcTime();
             var today = DateOnly.FromDateTime(now);
 
+            var pendingBatches = (await _unitOfWork.OtFormBatches.FindAsync(x => x.Status == (int)OtFormBatchStatus.Pending))
+                .OrderBy(x => x.Id).ToList();
+
+            // Same-scope pending batches are folded into the oldest so each approver gets one mail per scope.
+            var openBatchByScope = new Dictionary<(int, int?, int?), OtFormBatch>();
+            var keepIdByDuplicateId = new Dictionary<int, int>();
+            foreach (var batch in pendingBatches)
+            {
+                var scope = (batch.TerminalLevel, batch.DepartmentId, batch.WorkshopId);
+                if (openBatchByScope.TryGetValue(scope, out var keep)) keepIdByDuplicateId[batch.Id] = keep.Id;
+                else openBatchByScope[scope] = batch;
+            }
+            if (keepIdByDuplicateId.Count > 0)
+            {
+                var duplicateIds = keepIdByDuplicateId.Keys.ToList();
+                foreach (var form in await _unitOfWork.OtForms.FindAsync(x => x.OtFormBatchId != null && duplicateIds.Contains(x.OtFormBatchId.Value)))
+                {
+                    form.OtFormBatchId = keepIdByDuplicateId[form.OtFormBatchId!.Value];
+                    _unitOfWork.OtForms.Update(form);
+                }
+                foreach (var duplicate in pendingBatches.Where(x => keepIdByDuplicateId.ContainsKey(x.Id)))
+                {
+                    duplicate.Status = (int)OtFormBatchStatus.Processed;
+                    duplicate.ProcessedAt = now;
+                    _unitOfWork.OtFormBatches.Update(duplicate);
+                }
+                pendingBatches.RemoveAll(x => keepIdByDuplicateId.ContainsKey(x.Id));
+                await _unitOfWork.SaveChangesAsync();
+            }
+
+            var batchesWithNewForms = new HashSet<OtFormBatch>();
+
             var newFormRows = await GetNewFormsAtManagerStepAsync();
-
-            var newBatches = new List<(OtFormBatch Batch, List<OtForm> Forms)>();
-
             if (newFormRows.Count > 0)
             {
                 var newFormIds = newFormRows.Select(x => x.OtFormId).ToHashSet();
                 var newFormsById = (await _unitOfWork.OtForms.FindAsync(x => newFormIds.Contains(x.Id))).ToDictionary(x => x.Id);
 
-                // int.MinValue stands for a null DepartmentId in the GroupBy key.
                 var groups = newFormRows.GroupBy(r => (
                     TerminalLevel: r.TerminalLevel,
                     DepartmentId: r.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager ? r.DepartmentId : (int?)null,
@@ -2655,41 +2716,38 @@ namespace Attendance.Application.Services
 
                 foreach (var group in groups)
                 {
-                    var newBatch = new OtFormBatch
+                    var isNewBatch = !openBatchByScope.TryGetValue(group.Key, out var batch);
+                    if (isNewBatch)
                     {
-                        TerminalLevel = group.Key.TerminalLevel,
-                        DepartmentId = group.Key.DepartmentId,
-                        WorkshopId = group.Key.WorkshopId,
-                        BatchDate = today,
-                        Status = (int)OtFormBatchStatus.Pending,
-                        CreatedAt = now
-                    };
-                    await _unitOfWork.OtFormBatches.AddAsync(newBatch);
+                        batch = new OtFormBatch
+                        {
+                            TerminalLevel = group.Key.TerminalLevel,
+                            DepartmentId = group.Key.DepartmentId,
+                            WorkshopId = group.Key.WorkshopId,
+                            BatchDate = today,
+                            Status = (int)OtFormBatchStatus.Pending,
+                            CreatedAt = now
+                        };
+                        await _unitOfWork.OtFormBatches.AddAsync(batch);
+                        pendingBatches.Add(batch);
+                    }
 
-                    var groupForms = group.Select(r => newFormsById[r.OtFormId]).ToList();
-                    foreach (var form in groupForms)
+                    foreach (var r in group)
                     {
-                        form.OtFormBatch = newBatch;
+                        var form = newFormsById[r.OtFormId];
+                        // Existing batches are linked by id so the untracked batch isn't re-attached through the form.
+                        if (isNewBatch) form.OtFormBatch = batch; else form.OtFormBatchId = batch!.Id;
                         _unitOfWork.OtForms.Update(form);
                     }
 
-                    newBatches.Add((newBatch, groupForms));
+                    batchesWithNewForms.Add(batch!);
                 }
 
                 await _unitOfWork.SaveChangesAsync();
             }
 
-            foreach (var (batch, forms) in newBatches)
-                await _notificationService.NotifyBatchApproversAsync(batch, forms, await ResolveBatchScopeNameAsync(batch), isReminder: false);
-
-            var newBatchIds = newBatches.Select(x => x.Batch.Id).ToHashSet();
-            var pendingBatches = await _unitOfWork.OtFormBatches.FindAsync(x => x.Status == (int)OtFormBatchStatus.Pending);
-
             foreach (var batch in pendingBatches)
             {
-                // Batches created in step (a) of this run already got their first mail.
-                if (newBatchIds.Contains(batch.Id)) continue;
-
                 var activeFormIds = await GetActiveFormIdsForBatchAsync(
                     x => !x.IsDeleted && x.OtFormBatchId == batch.Id && x.Status == (int)OtFormStatus.InApproval, batch.TerminalLevel);
 
@@ -2702,7 +2760,8 @@ namespace Attendance.Application.Services
                 }
 
                 var activeForms = (await _unitOfWork.OtForms.FindAsync(x => activeFormIds.Contains(x.Id))).ToList();
-                await _notificationService.NotifyBatchApproversAsync(batch, activeForms, await ResolveBatchScopeNameAsync(batch), isReminder: true);
+                await _notificationService.NotifyBatchApproversAsync(batch, activeForms, await ResolveBatchScopeNameAsync(batch),
+                    isReminder: !batchesWithNewForms.Contains(batch));
             }
 
             // Delegations that start today were not active when earlier step mails went out.

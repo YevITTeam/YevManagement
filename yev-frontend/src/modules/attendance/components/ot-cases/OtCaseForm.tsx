@@ -92,8 +92,8 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-3">
-                        <label className="block">
+                    <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
+                        <label className="block w-32">
                             <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
                             <input
                                 value={values.code}
@@ -106,7 +106,18 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
                             />
                         </label>
 
-                        <label className="block">
+                        <label className="block w-48">
+                            <span className={fieldLabelClassName}>{t("fieldRequiredLevel")}<RequiredMark /></span>
+                            <StyledSelect
+                                value={values.requiredApprovalLevel}
+                                onChange={(level) => setValues((current) => ({ ...current, requiredApprovalLevel: level }))}
+                                disabled={loading}
+                                triggerClassName={`${fieldClassName} pr-9`}
+                                options={approvalLevelOptions.map((level) => ({ value: level, label: enumLabels.approvalLevel[level] }))}
+                            />
+                        </label>
+
+                        <label className="block w-full">
                             <span className={fieldLabelClassName}>{t("fieldDescription")}</span>
                             <input
                                 value={values.description ?? ""}
@@ -117,7 +128,7 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
                             />
                         </label>
 
-                        <label className="block">
+                        <label className="block w-full">
                             <span className={fieldLabelClassName}>{t("fieldDescriptionJp")}</span>
                             <input
                                 value={values.descriptionJp ?? ""}
@@ -125,17 +136,6 @@ export default function OtCaseForm({ isOpen, mode, initial, loading = false, onC
                                 placeholder={t("fieldDescriptionJpPlaceholder")}
                                 disabled={loading}
                                 className={fieldClassName}
-                            />
-                        </label>
-
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldRequiredLevel")}<RequiredMark /></span>
-                            <StyledSelect
-                                value={values.requiredApprovalLevel}
-                                onChange={(level) => setValues((current) => ({ ...current, requiredApprovalLevel: level }))}
-                                disabled={loading}
-                                triggerClassName={`${fieldClassName} pr-9`}
-                                options={approvalLevelOptions.map((level) => ({ value: level, label: enumLabels.approvalLevel[level] }))}
                             />
                         </label>
                     </div>

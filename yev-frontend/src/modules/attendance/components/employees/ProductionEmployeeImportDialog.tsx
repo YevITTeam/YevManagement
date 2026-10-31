@@ -15,6 +15,7 @@ import type {
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
+import InfoTooltip from "@/components/ui/InfoTooltip";
 
 interface ProductionEmployeeImportDialogProps {
     isOpen: boolean;
@@ -193,10 +194,13 @@ export default function ProductionEmployeeImportDialog({ isOpen, onClose, onImpo
             >
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] p-6 pb-4">
                     <div>
-                        <h3 id="import-production-employee-title" className="text-lg font-semibold text-[#191c1e]">
-                            {t("title")}
-                        </h3>
-                        <p className="mt-1 text-xs text-[#5e3f3a]">{t("description")}</p>
+                        <div className="flex items-center gap-2">
+                            <h3 id="import-production-employee-title" className="text-lg font-semibold text-[#191c1e]">
+                                {t("title")}
+                            </h3>
+                            <InfoTooltip text={t("description")} />
+                        </div>
+                        <p className="mt-1 text-xs text-[#930006]">{t("removeWarning")}</p>
                     </div>
                     <button
                         type="button"

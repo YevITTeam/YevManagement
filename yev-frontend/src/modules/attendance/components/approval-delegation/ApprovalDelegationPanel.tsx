@@ -167,7 +167,7 @@ export default function ApprovalDelegationPanel() {
                     <p className="mt-0.5 text-xs text-[#5e3f3a]">
                         {formatDay(item.fromDate)} → {formatDay(item.toDate)}
                     </p>
-                    {item.reason && <p className="mt-0.5 truncate text-xs text-[#8a8f94]">{item.reason}</p>}
+                    {item.reason && <p className="mt-0.5 truncate text-xs text-[#8a8f94]" title={item.reason}>{item.reason}</p>}
                 </div>
                 {item.isMine && state !== "expired" && (
                     <div className="flex shrink-0 items-center gap-1.5">
@@ -193,7 +193,7 @@ export default function ApprovalDelegationPanel() {
         );
     };
 
-    const renderSection = (title: string, items: ApprovalDelegationDto[], nameOf: (d: ApprovalDelegationDto) => string, withAdd: boolean) => (
+    const renderSection = (title: string, items: ApprovalDelegationDto[], nameOf: (d: ApprovalDelegationDto) => string) => (
         <section className="rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-2.5">
                 <h2 className="text-xs font-semibold uppercase tracking-wide text-[#5e3f3a]">
@@ -205,13 +205,6 @@ export default function ApprovalDelegationPanel() {
                     <Skeleton className="h-16 w-full" />
                 ) : items.length > 0 ? (
                     items.map((d) => renderRow(d, nameOf(d)))
-                ) : withAdd ? (
-                    <button
-                        onClick={() => openForm("create", null)}
-                        className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#c9ced3] py-5 text-sm font-medium text-[#5e3f3a] transition hover:border-[#e3000f] hover:text-[#e3000f]"
-                    >
-                        <Plus className="h-4 w-4" /> {t("add")}
-                    </button>
                 ) : (
                     <p className="py-5 text-center text-sm text-[#8a8f94]">{t("empty")}</p>
                 )}
@@ -234,8 +227,8 @@ export default function ApprovalDelegationPanel() {
             {error && <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
 
             <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-                {renderSection(t("mineTitle"), given, (d) => d.delegateName, true)}
-                {renderSection(t("toMeTitle"), received, (d) => d.delegatorName, false)}
+                {renderSection(t("mineTitle"), given, (d) => d.delegateName)}
+                {renderSection(t("toMeTitle"), received, (d) => d.delegatorName)}
             </div>
 
             <ApprovalDelegationForm

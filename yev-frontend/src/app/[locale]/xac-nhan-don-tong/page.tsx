@@ -9,7 +9,7 @@ import OtFormBatchDetail from "@/modules/attendance/components/ot-form-batch/OtF
 function OtFormBatchEmailConfirmContent() {
     const searchParams = useSearchParams();
     const token = searchParams.get("token") ?? "";
-    return <OtFormBatchDetail variant="email" token={token} />;
+    return <OtFormBatchDetail token={token} />;
 }
 
 export default function Page() {

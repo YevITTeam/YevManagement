@@ -121,8 +121,8 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                 </div>
 
                 <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <label className="block">
+                    <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
+                        <label className="block min-w-48 flex-1">
                             <span className={fieldLabelClassName}>{t("fieldWorkshop")}<RequiredMark /></span>
                             <SearchableSelect
                                 options={workshopOptions}
@@ -133,7 +133,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             />
                         </label>
 
-                        <label className="block">
+                        <label className="block min-w-48 flex-1">
                             <span className={fieldLabelClassName}>{t("fieldDepartment")}<RequiredMark /></span>
                             <SearchableSelect
                                 options={departmentOptions}
@@ -144,7 +144,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             />
                         </label>
 
-                        <label className="block">
+                        <label className="block w-32">
                             <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
                             <input
                                 value={values.groupCode}
@@ -157,7 +157,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             />
                         </label>
 
-                        <label className="block">
+                        <label className="block min-w-48 flex-1">
                             <span className={fieldLabelClassName}>{t("fieldNameVn")}<RequiredMark /></span>
                             <input
                                 value={values.groupNameVn}
@@ -169,7 +169,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             />
                         </label>
 
-                        <label className="block">
+                        <label className="block w-full">
                             <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
                             <input
                                 value={values.groupNameJp ?? ""}

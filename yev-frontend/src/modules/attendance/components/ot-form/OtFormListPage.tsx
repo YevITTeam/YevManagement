@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Calendar, Check, ChevronLeft, ChevronRight, Eye, FilterX, Inbox, Pencil, RefreshCw, Search, SlidersHorizontal, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
@@ -27,8 +27,11 @@ import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
+import { Pagination } from "@/components/ui/Pagination";
 
 const PAGE_SIZE = 10;
+const advancedTriggerClassName =
+    "h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 function toDateStr(d: Date): string {
     const year = d.getFullYear();
@@ -48,6 +51,8 @@ interface OtFormListPageProps {
     mode: OtFormListMode;
     // Embedded in OtFormTabsPage, which already has the heading.
     hideHeading?: boolean;
+    // Tab bar placed at the start of the filter row so tabs, filters and table share one card.
+    tabs?: ReactNode;
 }
 
 function formatDate(value: string) {
@@ -101,7 +106,7 @@ function ApprovalSummaryCell({
 
 type FormTypeFilter = "" | "office" | "production";
 
-export default function OtFormListPage({ mode, hideHeading = false }: OtFormListPageProps) {
+export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFormListPageProps) {
     const t = useTranslations("Attendance.OtFormList");
     const tCommon = useTranslations("Common");
     const enumLabels = useEnumLabels();
@@ -124,8 +129,6 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     // Draft filters, applied only on "Search".
     // Advanced filters collapsed by default; most searches only use date/status.
@@ -341,8 +344,6 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
             setForms(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
         (message) => toast.error(message),
@@ -484,6 +485,39 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const showLineColumn = appliedFilters.formType !== "office";
     const columnCount = (mode === "my-forms" ? 9 : 8) + (canBulkApprove ? 1 : 0) - (showLineColumn ? 0 : 1);
 
+    const openForm = (id: number) => router.push({ pathname: "/ot/forms", query: { id: String(id) } });
+
+    const renderSelectBox = (id: number) => (
+        <input
+            type="checkbox"
+            checked={selectedIds.includes(id)}
+            onChange={() => toggleSelectOne(id)}
+            aria-label={t("selectAllLabel")}
+            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+        />
+    );
+
+    const renderStatus = (status: number) => (
+        <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${otFormStatusClasses[status] ?? otFormStatusClasses[0]}`}>
+            {enumLabels.otFormStatus[status] ?? t("unknownStatus")}
+        </span>
+    );
+
+    const renderEditButton = (form: OtFormListItemDto) =>
+        form.isEditable && canCreate ? (
+            <button
+                onClick={(event) => {
+                    event.stopPropagation();
+                    router.push({ pathname: "/ot/forms/edit", query: { id: String(form.id) } });
+                }}
+                title={tCommon("edit")}
+                aria-label={tCommon("edit")}
+                className="cursor-pointer rounded-md p-1.5 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+            >
+                <Pencil className="h-4 w-4" />
+            </button>
+        ) : null;
+
     return (
         <div className="space-y-4">
             {!hideHeading && (
@@ -492,8 +526,10 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                 </div>
             )}
 
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-3 shadow-sm">
-                <div className="flex flex-wrap items-end gap-x-3 gap-y-2 [&>label]:w-full sm:[&>label]:w-40">
+            <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                {/* Own row: the five tabs never fit next to four labelled filters at laptop widths. */}
+                {tabs && <div className="px-4 pt-2.5">{tabs}</div>}
+                <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-[#e0e3e5] px-4 py-2.5 [&>label]:w-full sm:[&>label]:w-40">
                     <label className="block">
                         <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                             {t("filterFromDateLabel")}
@@ -584,138 +620,169 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                             <Search className="h-4 w-4" />
                         </button>
                     </div>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                        {canBulkApprove && selectedIds.length > 0 && (
+                            <>
+                                <span className="whitespace-nowrap text-sm font-semibold text-[#191c1e]">{t("selectedCount", { count: selectedIds.length })}</span>
+                                <button
+                                    onClick={() => openBulkAction("approve")}
+                                    className="cursor-pointer whitespace-nowrap rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                                >
+                                    {t("bulkApproveButton")}
+                                </button>
+                                <button
+                                    onClick={() => openBulkAction("reject")}
+                                    className="cursor-pointer whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                >
+                                    {t("bulkRejectButton")}
+                                </button>
+                            </>
+                        )}
+                        <button
+                            onClick={() => fetchForms()}
+                            disabled={isLoading}
+                            title={tCommon("refresh")}
+                            aria-label={tCommon("refresh")}
+                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
 
                 {showAdvancedFilter && (
-                    <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-2 border-t border-[#f1f5f9] pt-2.5 [&>label]:w-full sm:[&>label]:w-48">
-                    <label className="block">
-                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                            {t("filterWorkshopLabel")}
-                        </span>
-                        <SearchableSelect
-                            value={workshopId}
-                            onChange={setWorkshopId}
-                            placeholder={t("filterAllWorkshop")}
-                            options={workshopOptions.map((option) => ({
-                                value: option.id,
-                                label: option.workshopNameVn,
-                                searchText: option.workshopNameVn.toLowerCase(),
-                            }))}
-                        />
-                    </label>
-                    <label className="block">
-                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                            {t("filterDepartmentLabel")}
-                        </span>
-                        <SearchableSelect
-                            value={departmentId}
-                            onChange={setDepartmentId}
-                            placeholder={t("filterAllDepartment")}
-                            options={departmentOptions.map((option) => ({
-                                value: option.id,
-                                label: option.departmentNameVn,
-                                searchText: option.departmentNameVn.toLowerCase(),
-                            }))}
-                        />
-                    </label>
-                    {showOfficeGroupFilter && (
-                    <label className="block">
-                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                            {t("filterGroupLabel")}
-                        </span>
-                        <SearchableSelect
-                            value={groupId}
-                            onChange={setGroupId}
-                            disabled={departmentId === ""}
-                            placeholder={t("filterAllGroup")}
-                            options={groupOptions.map((option) => ({
-                                value: option.id,
-                                label: option.groupNameVn,
-                                searchText: option.groupNameVn.toLowerCase(),
-                            }))}
-                        />
-                    </label>
-                    )}
-                    {showProductionFilter && (
-                        <>
+                    <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-[#e0e3e5] px-4 py-2.5 [&>label]:w-full sm:[&>label]:w-48">
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                {t("filterWorkshopLabel")}
+                            </span>
+                            <SearchableSelect
+                                value={workshopId}
+                                onChange={setWorkshopId}
+                                placeholder={t("filterAllWorkshop")}
+                                triggerClassName={advancedTriggerClassName}
+                                options={workshopOptions.map((option) => ({
+                                    value: option.id,
+                                    label: option.workshopNameVn,
+                                    searchText: option.workshopNameVn.toLowerCase(),
+                                }))}
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                {t("filterDepartmentLabel")}
+                            </span>
+                            <SearchableSelect
+                                value={departmentId}
+                                onChange={setDepartmentId}
+                                placeholder={t("filterAllDepartment")}
+                                triggerClassName={advancedTriggerClassName}
+                                options={departmentOptions.map((option) => ({
+                                    value: option.id,
+                                    label: option.departmentNameVn,
+                                    searchText: option.departmentNameVn.toLowerCase(),
+                                }))}
+                            />
+                        </label>
+                        {showOfficeGroupFilter && (
                             <label className="block">
                                 <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                    {t("filterProductionTeamLabel")}
+                                    {t("filterGroupLabel")}
                                 </span>
                                 <SearchableSelect
-                                    value={productionTeamId}
-                                    onChange={setProductionTeamId}
-                                    placeholder={t("filterAllProductionTeam")}
-                                    options={teamOptions.map((option) => ({
+                                    value={groupId}
+                                    onChange={setGroupId}
+                                    disabled={departmentId === ""}
+                                    placeholder={t("filterAllGroup")}
+                                    triggerClassName={advancedTriggerClassName}
+                                    options={groupOptions.map((option) => ({
                                         value: option.id,
-                                        label: option.nameVn || option.code,
-                                        searchText: (option.nameVn || option.code).toLowerCase(),
+                                        label: option.groupNameVn,
+                                        searchText: option.groupNameVn.toLowerCase(),
                                     }))}
                                 />
                             </label>
-                            <label className="block">
-                                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                    {t("filterProductionLineLabel")}
-                                </span>
-                                <SearchableSelect
-                                    value={productionLineId}
-                                    onChange={setProductionLineId}
-                                    placeholder={t("filterAllProductionLine")}
-                                    options={lineOptions.map((option) => ({
-                                        value: option.id,
-                                        label: option.nameVn || option.code,
-                                        searchText: (option.nameVn || option.code).toLowerCase(),
-                                    }))}
-                                />
-                            </label>
-                            <label className="block">
-                                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                    {t("filterProductionShiftTeamLabel")}
-                                </span>
-                                <SearchableSelect
-                                    value={productionShiftTeamId}
-                                    onChange={setProductionShiftTeamId}
-                                    placeholder={t("filterAllProductionShiftTeam")}
-                                    options={shiftTeamOptions.map((option) => ({
-                                        value: option.id,
-                                        label: option.nameVn || option.code,
-                                        searchText: (option.nameVn || option.code).toLowerCase(),
-                                    }))}
-                                />
-                            </label>
-                        </>
-                    )}
-                
+                        )}
+                        {showProductionFilter && (
+                            <>
+                                <label className="block">
+                                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                        {t("filterProductionTeamLabel")}
+                                    </span>
+                                    <SearchableSelect
+                                        value={productionTeamId}
+                                        onChange={setProductionTeamId}
+                                        placeholder={t("filterAllProductionTeam")}
+                                        triggerClassName={advancedTriggerClassName}
+                                        options={teamOptions.map((option) => ({
+                                            value: option.id,
+                                            label: option.nameVn || option.code,
+                                            searchText: (option.nameVn || option.code).toLowerCase(),
+                                        }))}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                        {t("filterProductionLineLabel")}
+                                    </span>
+                                    <SearchableSelect
+                                        value={productionLineId}
+                                        onChange={setProductionLineId}
+                                        placeholder={t("filterAllProductionLine")}
+                                        triggerClassName={advancedTriggerClassName}
+                                        options={lineOptions.map((option) => ({
+                                            value: option.id,
+                                            label: option.nameVn || option.code,
+                                            searchText: (option.nameVn || option.code).toLowerCase(),
+                                        }))}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                        {t("filterProductionShiftTeamLabel")}
+                                    </span>
+                                    <SearchableSelect
+                                        value={productionShiftTeamId}
+                                        onChange={setProductionShiftTeamId}
+                                        placeholder={t("filterAllProductionShiftTeam")}
+                                        triggerClassName={advancedTriggerClassName}
+                                        options={shiftTeamOptions.map((option) => ({
+                                            value: option.id,
+                                            label: option.nameVn || option.code,
+                                            searchText: (option.nameVn || option.code).toLowerCase(),
+                                        }))}
+                                    />
+                                </label>
+                            </>
+                        )}
                     </div>
                 )}
 
                 {mode === "pending-approvals" && (
-                    <div className="mt-4 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                            <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                <Calendar className="h-3.5 w-3.5" /> {t("calendarTitle")}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-2.5">
+                        <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                            <Calendar className="h-3.5 w-3.5" /> {t("calendarTitle")}
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={goToPreviousMonth}
+                                className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                aria-label={t("calendarPrevMonth")}
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <span className="min-w-[80px] text-center text-sm font-semibold text-[#191c1e]">
+                                {t("calendarMonthLabel", { month: calendarMonthIndex + 1, year: calendarYear })}
                             </span>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={goToPreviousMonth}
-                                    className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
-                                    aria-label={t("calendarPrevMonth")}
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
-                                </button>
-                                <span className="min-w-[80px] text-center text-sm font-semibold text-[#191c1e]">
-                                    {t("calendarMonthLabel", { month: calendarMonthIndex + 1, year: calendarYear })}
-                                </span>
-                                <button
-                                    type="button"
-                                    onClick={goToNextMonth}
-                                    className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
-                                    aria-label={t("calendarNextMonth")}
-                                >
-                                    <ChevronRight className="h-4 w-4" />
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={goToNextMonth}
+                                className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                aria-label={t("calendarNextMonth")}
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
                         </div>
                         {calendarCounts.length === 0 ? (
                             <p className="text-xs text-[#9aa0a6]">{t("calendarEmpty")}</p>
@@ -742,48 +809,12 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                         )}
                     </div>
                 )}
-            </section>
-
-            <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] p-3">
-                    <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: forms.length, total: totalCount })}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        {canBulkApprove && selectedIds.length > 0 && (
-                            <>
-                                <span className="text-sm font-semibold text-[#191c1e]">{t("selectedCount", { count: selectedIds.length })}</span>
-                                <button
-                                    onClick={() => openBulkAction("approve")}
-                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
-                                >
-                                    {t("bulkApproveButton")}
-                                </button>
-                                <button
-                                    onClick={() => openBulkAction("reject")}
-                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                                >
-                                    {t("bulkRejectButton")}
-                                </button>
-                            </>
-                        )}
-                        <button
-                            onClick={() => fetchForms()}
-                            disabled={isLoading}
-                            title={tCommon("refresh")}
-                            aria-label={tCommon("refresh")}
-                            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                        >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                        </button>
-                    </div>
-                </div>
 
                 {error && (
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <div className="hidden overflow-x-auto md:block">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
@@ -823,18 +854,12 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                             {forms.map((form) => (
                                 <tr
                                     key={form.id}
-                                    onClick={() => router.push({ pathname: "/ot/forms", query: { id: String(form.id) } })}
+                                    onClick={() => openForm(form.id)}
                                     className="cursor-pointer border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
                                 >
                                     {canBulkApprove && (
                                         <td className="px-3 py-2.5 align-top" onClick={(event) => event.stopPropagation()}>
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedIds.includes(form.id)}
-                                                onChange={() => toggleSelectOne(form.id)}
-                                                aria-label={t("selectAllLabel")}
-                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                            />
+                                            {renderSelectBox(form.id)}
                                         </td>
                                     )}
                                     <td className="whitespace-nowrap px-3 py-2.5 align-top">
@@ -845,18 +870,18 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                         <div className="text-xs text-[#5e3f3a]">{bilingualText(form.groupNameVn, form.groupNameJp)}</div>
                                     </td>
                                     {showLineColumn && (
-                                    <td className="px-3 py-2.5 align-top text-xs text-[#5e3f3a]">
-                                        {form.isProductionForm ? (
-                                            <>
-                                                <div>{form.productionLineNames || "—"}</div>
-                                                {form.productionShiftTeamNames && (
-                                                    <div className="text-[#9aa0a6]">{form.productionShiftTeamNames}</div>
-                                                )}
-                                            </>
-                                        ) : (
-                                            "—"
-                                        )}
-                                    </td>
+                                        <td className="px-3 py-2.5 align-top text-xs text-[#5e3f3a]">
+                                            {form.isProductionForm ? (
+                                                <>
+                                                    <div>{form.productionLineNames || "—"}</div>
+                                                    {form.productionShiftTeamNames && (
+                                                        <div className="text-[#9aa0a6]">{form.productionShiftTeamNames}</div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                "—"
+                                            )}
+                                        </td>
                                     )}
                                     <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]"><OtCaseBadge code={form.otCaseCode} description={form.otCaseDescription} descriptionJp={form.otCaseDescriptionJp} /></td>
                                     <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
@@ -866,16 +891,12 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                         </span>
                                     </td>
                                     <td className="px-3 py-2.5 align-top text-sm text-[#191c1e]">{form.numberOfEmployee}</td>
-                                    <td className="px-3 py-2.5 align-top text-sm text-[#5e3f3a]">
+                                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#5e3f3a]">
                                         {form.createdByFullName ?? form.createdByUserName}
                                     </td>
                                     <td className="px-3 py-2.5 align-top">
                                         <div className="space-y-1">
-                                            <span
-                                                className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
-                                            >
-                                                {enumLabels.otFormStatus[form.status] ?? t("unknownStatus")}
-                                            </span>
+                                            {renderStatus(form.status)}
                                             <ApprovalSummaryCell
                                                 summary={form.approvalSummary}
                                                 status={form.status}
@@ -883,52 +904,60 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
                                             />
                                         </div>
                                     </td>
-                                    {mode === "my-forms" && (
-                                        <td className="px-3 py-2.5 align-top text-right">
-                                            {form.isEditable && canCreate && (
-                                                <button
-                                                    onClick={(event) => {
-                                                        event.stopPropagation();
-                                                        router.push({ pathname: "/ot/forms/edit", query: { id: String(form.id) } });
-                                                    }}
-                                                    title={tCommon("edit")}
-                                                    aria-label={tCommon("edit")}
-                                                    className="cursor-pointer rounded-md p-1.5 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                >
-                                                    <Pencil className="h-4 w-4" />
-                                                </button>
-                                            )}
-                                        </td>
-                                    )}
+                                    {mode === "my-forms" && <td className="px-3 py-2.5 align-top text-right">{renderEditButton(form)}</td>}
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-3">
-                    <button
-                        title={tCommon("prevPage")}
-                        aria-label={tCommon("prevPage")}
-                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
-                    </div>
-                    <button
-                        title={tCommon("nextPage")}
-                        aria-label={tCommon("nextPage")}
-                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        <ChevronRight className="h-4 w-4" />
-                    </button>
-                </div>
+                <ul className="divide-y divide-[#f1f5f9] md:hidden">
+                    {!isLoading && forms.length === 0 && (
+                        <li className="flex flex-col items-center gap-2 px-4 py-12 text-center text-sm text-[#5e3f3a]">
+                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
+                            {t("noData")}
+                        </li>
+                    )}
+                    {forms.map((form) => (
+                        <li key={form.id} className="flex items-start gap-3 px-4 py-3">
+                            {canBulkApprove && <div className="pt-0.5">{renderSelectBox(form.id)}</div>}
+                            <button
+                                type="button"
+                                onClick={() => openForm(form.id)}
+                                className="min-w-0 flex-1 cursor-pointer text-left"
+                            >
+                                <span className="flex items-start justify-between gap-3">
+                                    <span className="min-w-0 text-sm font-semibold text-[#191c1e]">
+                                        {bilingualText(form.departmentNameVn, form.departmentNameJp)}
+                                    </span>
+                                    {renderStatus(form.status)}
+                                </span>
+                                <span className="mt-0.5 block truncate text-xs text-[#5e3f3a]">
+                                    {form.isProductionForm ? form.productionLineNames || "—" : bilingualText(form.groupNameVn, form.groupNameJp)}
+                                </span>
+                                <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[#5e3f3a]">
+                                    <span className="tabular-nums text-[#191c1e]">{formatDate(form.date)}</span>
+                                    <span className="font-semibold tabular-nums text-[#191c1e]">{form.totalHour}h</span>
+                                    <span className="inline-flex items-center gap-1 tabular-nums">
+                                        <Users size={12} />
+                                        {form.numberOfEmployee}
+                                    </span>
+                                    <span>{form.createdByFullName ?? form.createdByUserName}</span>
+                                </span>
+                            </button>
+                            {mode === "my-forms" && renderEditButton(form)}
+                        </li>
+                    ))}
+                </ul>
+
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: forms.length, total: totalCount })}
+                    compactSummary={totalCount}
+                />
             </section>
 
             {bulkAction && (

@@ -86,13 +86,15 @@ export default function SecondaryPasswordDialog({
                             className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                         />
                     </label>
-                    <p
-                        className={`rounded-lg border px-3 py-2 text-xs ${
-                            hintIsWarning ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]" : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                        }`}
-                    >
-                        {hint}
-                    </p>
+                    {hint && (
+                        <p
+                            className={`rounded-lg border px-3 py-2 text-xs ${
+                                hintIsWarning ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]" : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
+                            }`}
+                        >
+                            {hint}
+                        </p>
+                    )}
                     <div className="flex justify-end gap-3 pt-1">
                         <button
                             type="button"

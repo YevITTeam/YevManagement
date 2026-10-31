@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useRouter, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { ChevronDown, ChevronUp, LogOut, RefreshCw, Settings } from "lucide-react";
+import { ChevronDown, ChevronUp, LogOut, Menu, RefreshCw, Settings } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, IDENTITY_ADMIN_PERMISSIONS } from "@/modules/auth/lib/permissions";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import BrandLogo from "@/components/common/BrandLogo";
 import { useHeaderCollapse } from "@/modules/common/hooks/useHeaderCollapse";
+import { setSidebarMobileOpen, useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
 
 export default function Header() {
   const t = useTranslations("Header");
@@ -20,13 +21,20 @@ export default function Header() {
       !pathname.startsWith("/pc/server-check/scan") &&
       !pathname.startsWith("/pc/inventory/scan")) ||
     pathname.startsWith("/ot") ||
-    pathname.startsWith("/workflow");
+    pathname.startsWith("/workflow") ||
+    pathname.startsWith("/admin");
+  const { mobileOpen } = useSidebarCollapse();
   const { user, isLoading, refreshUser, logout } = useAuth();
   const { collapsed, toggle } = useHeaderCollapse();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const router = useRouter();
 
   const canSeeAdmin = hasAnyPermission(user, IDENTITY_ADMIN_PERMISSIONS);
+
+  // Navigating from the drawer should land on the page, not leave the drawer over it.
+  useEffect(() => {
+    setSidebarMobileOpen(false);
+  }, [pathname]);
 
   const handleLogout = () => {
     logout();
@@ -60,24 +68,41 @@ export default function Header() {
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
       )}
+      {hasSidebar && mobileOpen && (
+        <div className="print:hidden fixed inset-0 z-[35] bg-black/40 md:hidden" onClick={() => setSidebarMobileOpen(false)} aria-hidden />
+      )}
     <header
-      className={`print:hidden sticky top-0 z-30 overflow-hidden bg-[#f7f9fb]/95 backdrop-blur transition-all duration-300 ${collapsed ? "h-0 border-b-0" : "h-12 border-b border-[#e0e3e5]"} ${hasSidebar ? "w-[calc(100%-13.75rem)] ml-auto" : "w-full"
+      className={`print:hidden sticky top-0 z-30 overflow-hidden bg-[#f7f9fb]/95 backdrop-blur transition-all duration-300 ${collapsed ? "h-0 border-b-0" : "h-12 border-b border-[#e0e3e5]"} ${hasSidebar ? "ml-auto w-[calc(100%-var(--sidebar-w))]" : "w-full"
         }`}
       aria-hidden={collapsed}
     >
-      <div className="mx-auto flex h-12 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404. */}
-        <Link href="/" prefetch={false} className="flex items-center gap-3">
-          <BrandLogo className="h-8 w-10" />
-          <div className="leading-tight">
-            <div className="text-sm font-semibold text-[#191c1e]">{t("productName")}</div>
-            <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#5e3f3a]">
-              {t("tagline")}
+      <div className="mx-auto flex h-12 max-w-7xl items-center justify-between gap-2 px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-1">
+          {hasSidebar && (
+            <button
+              type="button"
+              onClick={() => setSidebarMobileOpen(true)}
+              title={t("openMenu")}
+              aria-label={t("openMenu")}
+              className="cursor-pointer rounded-md p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] md:hidden"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
+          {/* The only way back to the home page: the sidebar logo is just its expand button.
+              No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404. */}
+          <Link href="/" prefetch={false} title={t("productName")} className="flex items-center gap-3">
+            <BrandLogo className="h-8 w-10" />
+            <div className={`leading-tight ${hasSidebar ? "hidden md:block" : ""}`}>
+              <div className="text-sm font-semibold text-[#191c1e]">{t("productName")}</div>
+              <div className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-[#5e3f3a] sm:block">
+                {t("tagline")}
+              </div>
             </div>
-          </div>
-        </Link>
+          </Link>
+        </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <LanguageSwitcher />
 
           {isLoading ? (
@@ -107,8 +132,8 @@ export default function Header() {
                 </Link>
               )}
 
-              <div className="flex items-center gap-3 border-l border-[#e0e3e5] pl-3">
-                <div className="text-right">
+              <div className="flex items-center gap-2 border-l border-[#e0e3e5] pl-2 sm:gap-3 sm:pl-3">
+                <div className="hidden text-right sm:block">
                   <p className="text-xs font-semibold leading-tight text-[#191c1e]">{user.fullName}</p>
                   <p className="text-[11px] leading-tight text-[#5e3f3a]">{user.userName}</p>
                 </div>
